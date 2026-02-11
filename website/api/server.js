@@ -13,7 +13,10 @@ const PORT = process.env.PORT || 3001;
 // ===========================================
 
 // Security headers
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false
+}));
 
 // CORS - allow requests from your website
 app.use(cors({
@@ -52,6 +55,13 @@ function getClientIP(req) {
          req.connection?.remoteAddress ||
          'unknown';
 }
+
+// ===========================================
+// Serve Static Website
+// ===========================================
+app.use(express.static(path.join(__dirname, '..'), {
+  index: 'index.html'
+}));
 
 // ===========================================
 // API Routes
@@ -295,11 +305,11 @@ function isValidEmail(email) {
 // Start Server
 // ===========================================
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`
 ╔════════════════════════════════════════════╗
 ║   MailVault Website API                    ║
-║   Running on http://localhost:${PORT}          ║
+║   Running on http://0.0.0.0:${PORT}            ║
 ╚════════════════════════════════════════════╝
   `);
 });

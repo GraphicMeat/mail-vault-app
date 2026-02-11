@@ -1,106 +1,150 @@
-const Database = require('better-sqlite3');
+const fs = require('fs');
 const path = require('path');
 
-// Create database in the api directory
-const dbPath = process.env.DB_PATH || path.join(__dirname, 'data.db');
-const db = new Database(dbPath);
+const DB_FILE = process.env.DB_PATH || path.join(__dirname, 'data.json');
 
-// Enable WAL mode for better performance
-db.pragma('journal_mode = WAL');
+// Default data structure
+const defaultData = {
+  votes: [],
+  features: [
+    { id: 1, name: 'Windows Support', description: 'Native Windows application' },
+    { id: 2, name: 'Linux Support', description: 'Native Linux application' },
+    { id: 3, name: 'Calendar Integration', description: 'View and manage calendar events from emails' },
+    { id: 4, name: 'Email Templates', description: 'Save and reuse email templates' },
+    { id: 5, name: 'Smart Folders', description: 'Auto-organize emails with custom rules' },
+    { id: 6, name: 'Email Scheduling', description: 'Schedule emails to send later' },
+    { id: 7, name: 'Multiple Account Sync', description: 'Sync multiple email accounts simultaneously' },
+    { id: 8, name: 'Email Encryption', description: 'PGP/GPG encryption support' },
+    { id: 9, name: 'Mobile Companion App', description: 'Access your local archive from mobile' },
+    { id: 10, name: 'Cloud Backup Option', description: 'Optional encrypted backup to your own cloud storage' },
+  ],
+  feature_votes: [],
+  subscribers: [],
+  contacts: [],
+  _nextId: { votes: 1, feature_votes: 1, subscribers: 1, contacts: 1 }
+};
 
-// ===========================================
-// Create Tables
-// ===========================================
-
-db.exec(`
-  -- "I Want This" votes
-  CREATE TABLE IF NOT EXISTS votes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ip_hash TEXT NOT NULL,
-    user_agent TEXT,
-    created_at TEXT NOT NULL
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_votes_ip_hash ON votes(ip_hash);
-
-  -- Features for voting
-  CREATE TABLE IF NOT EXISTS features (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    description TEXT NOT NULL,
-    created_at TEXT DEFAULT (datetime('now'))
-  );
-
-  -- Feature votes
-  CREATE TABLE IF NOT EXISTS feature_votes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    feature_id INTEGER NOT NULL,
-    ip_hash TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (feature_id) REFERENCES features(id) ON DELETE CASCADE,
-    UNIQUE(feature_id, ip_hash)
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_feature_votes_feature ON feature_votes(feature_id);
-  CREATE INDEX IF NOT EXISTS idx_feature_votes_ip ON feature_votes(ip_hash);
-
-  -- Newsletter subscribers
-  CREATE TABLE IF NOT EXISTS subscribers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    email TEXT NOT NULL UNIQUE,
-    ip_hash TEXT,
-    created_at TEXT NOT NULL
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_subscribers_email ON subscribers(email);
-
-  -- Contact form submissions
-  CREATE TABLE IF NOT EXISTS contacts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    email TEXT NOT NULL,
-    category TEXT DEFAULT 'other',
-    message TEXT NOT NULL,
-    ip_hash TEXT,
-    created_at TEXT NOT NULL
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_contacts_created ON contacts(created_at);
-`);
-
-// ===========================================
-// Seed Default Features
-// ===========================================
-
-const featureCount = db.prepare('SELECT COUNT(*) as count FROM features').get();
-
-if (featureCount.count === 0) {
-  console.log('Seeding default features...');
-
-  const defaultFeatures = [
-    { name: 'Windows Support', description: 'Native Windows application' },
-    { name: 'Linux Support', description: 'Native Linux application' },
-    { name: 'Calendar Integration', description: 'View and manage calendar events from emails' },
-    { name: 'Email Templates', description: 'Save and reuse email templates' },
-    { name: 'Smart Folders', description: 'Auto-organize emails with custom rules' },
-    { name: 'Email Scheduling', description: 'Schedule emails to send later' },
-    { name: 'Multiple Account Sync', description: 'Sync multiple email accounts simultaneously' },
-    { name: 'Email Encryption', description: 'PGP/GPG encryption support' },
-    { name: 'Mobile Companion App', description: 'Access your local archive from mobile' },
-    { name: 'Cloud Backup Option', description: 'Optional encrypted backup to your own cloud storage' },
-  ];
-
-  const insert = db.prepare(`
-    INSERT INTO features (name, description) VALUES (?, ?)
-  `);
-
-  for (const feature of defaultFeatures) {
-    insert.run(feature.name, feature.description);
+// Load or initialize
+function loadData() {
+  try {
+    if (fs.existsSync(DB_FILE)) {
+      return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+    }
+  } catch (e) {
+    console.error('Error loading database, using defaults:', e.message);
   }
-
-  console.log(`Seeded ${defaultFeatures.length} features`);
+  return JSON.parse(JSON.stringify(defaultData));
 }
 
-console.log(`Database initialized at: ${dbPath}`);
+function saveData(data) {
+  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+}
+
+let data = loadData();
+if (!data._nextId) {
+  data._nextId = { votes: 1, feature_votes: 1, subscribers: 1, contacts: 1 };
+}
+saveData(data);
+
+// Expose a simple query interface matching what server.js expects
+const db = {
+  prepare(sql) {
+    return {
+      get(...params) { return execQuery(sql, params, 'get'); },
+      all(...params) { return execQuery(sql, params, 'all'); },
+      run(...params) { return execQuery(sql, params, 'run'); }
+    };
+  }
+};
+
+function execQuery(sql, params, mode) {
+  const s = sql.trim().replace(/\s+/g, ' ');
+
+  // SELECT COUNT(*) as count FROM votes
+  if (s.includes('COUNT(*)') && s.includes('FROM votes')) {
+    return { count: data.votes.length };
+  }
+
+  // SELECT id FROM votes WHERE ip_hash = ?
+  if (s.includes('FROM votes WHERE ip_hash')) {
+    return data.votes.find(v => v.ip_hash === params[0]) || null;
+  }
+
+  // INSERT INTO votes
+  if (s.includes('INSERT INTO votes')) {
+    const id = data._nextId.votes++;
+    data.votes.push({ id, ip_hash: params[0], user_agent: params[1], created_at: params[2] || new Date().toISOString() });
+    saveData(data);
+    return { changes: 1 };
+  }
+
+  // SELECT features with vote counts
+  if (s.includes('FROM features f') && s.includes('LEFT JOIN')) {
+    return data.features.map(f => ({
+      id: f.id,
+      name: f.name,
+      description: f.description,
+      votes: data.feature_votes.filter(fv => fv.feature_id === f.id).length
+    })).sort((a, b) => b.votes - a.votes || a.id - b.id);
+  }
+
+  // SELECT id FROM features WHERE id = ?
+  if (s.includes('FROM features WHERE id')) {
+    return data.features.find(f => f.id === params[0]) || null;
+  }
+
+  // SELECT id FROM feature_votes WHERE feature_id = ? AND ip_hash = ?
+  if (s.includes('FROM feature_votes') && s.includes('WHERE')) {
+    return data.feature_votes.find(fv => fv.feature_id === params[0] && fv.ip_hash === params[1]) || null;
+  }
+
+  // INSERT INTO feature_votes
+  if (s.includes('INSERT INTO feature_votes')) {
+    const id = data._nextId.feature_votes++;
+    data.feature_votes.push({ id, feature_id: params[0], ip_hash: params[1], created_at: params[2] || new Date().toISOString() });
+    saveData(data);
+    return { changes: 1 };
+  }
+
+  // SELECT id FROM subscribers WHERE email = ?
+  if (s.includes('FROM subscribers WHERE email')) {
+    return data.subscribers.find(sub => sub.email === params[0]) || null;
+  }
+
+  // INSERT INTO subscribers
+  if (s.includes('INSERT INTO subscribers')) {
+    const id = data._nextId.subscribers++;
+    data.subscribers.push({ id, email: params[0], ip_hash: params[1], created_at: params[2] || new Date().toISOString() });
+    saveData(data);
+    return { changes: 1 };
+  }
+
+  // INSERT INTO contacts
+  if (s.includes('INSERT INTO contacts')) {
+    const id = data._nextId.contacts++;
+    data.contacts.push({ id, name: params[0], email: params[1], category: params[2], message: params[3], ip_hash: params[4], created_at: params[5] || new Date().toISOString() });
+    saveData(data);
+    return { changes: 1 };
+  }
+
+  // SELECT subscribers (admin)
+  if (s.includes('FROM subscribers') && s.includes('ORDER BY')) {
+    return data.subscribers.map(({ id, email, created_at }) => ({ id, email, created_at })).sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }
+
+  // SELECT contacts (admin)
+  if (s.includes('FROM contacts') && s.includes('ORDER BY')) {
+    return data.contacts.map(({ id, name, email, category, message, created_at }) => ({ id, name, email, category, message, created_at })).sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }
+
+  // SELECT COUNT(*) as count FROM features (seed check)
+  if (s.includes('COUNT(*)') && s.includes('FROM features')) {
+    return { count: data.features.length };
+  }
+
+  return mode === 'all' ? [] : null;
+}
+
+console.log(`Database initialized at: ${DB_FILE}`);
 
 module.exports = db;
