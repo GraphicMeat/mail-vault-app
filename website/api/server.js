@@ -199,7 +199,7 @@ app.post('/api/features/:id/vote', voteLimiter, (req, res) => {
 // Newsletter Subscription
 // -------------------------------------------
 
-app.post('/api/subscribe', (req, res) => {
+app.post('/api/subscribe', async (req, res) => {
   try {
     const { email } = req.body;
 
@@ -219,6 +219,39 @@ app.post('/api/subscribe', (req, res) => {
       INSERT INTO subscribers (email, ip_hash, created_at)
       VALUES (?, ?, datetime('now'))
     `).run(email.toLowerCase(), hashIP(getClientIP(req)));
+
+    // Send emails
+    if (transporter && process.env.SMTP_USER) {
+      // Notify you about the new subscriber
+      if (process.env.NOTIFY_EMAIL) {
+        transporter.sendMail({
+          from: `"MailVault" <${process.env.SMTP_USER}>`,
+          to: process.env.NOTIFY_EMAIL,
+          subject: '[MailVault] New subscriber',
+          text: `New newsletter subscriber: ${email}`,
+          html: `<p>New newsletter subscriber: <strong>${email}</strong></p><p>Subscribed at: ${new Date().toISOString()}</p>`
+        }).catch(err => console.error('Failed to send subscriber notification:', err));
+      }
+
+      // Send welcome email to the subscriber
+      transporter.sendMail({
+        from: `"MailVault" <${process.env.SMTP_USER}>`,
+        to: email.toLowerCase(),
+        subject: 'Welcome to MailVault updates!',
+        text: `Thanks for subscribing to MailVault updates!\n\nYou'll be the first to know about new releases, features, and tips.\n\nIn the meantime:\n- Download MailVault: https://mailvaultapp.com\n- Source code: https://github.com/GraphicMeat/mail-vault-app\n- Join the discussion: https://github.com/GraphicMeat/mail-vault-app/discussions\n\n— The MailVault Team`,
+        html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto;">
+  <h2 style="color: #6366f1;">Welcome to MailVault!</h2>
+  <p>Thanks for subscribing. You'll be the first to know about new releases, features, and tips.</p>
+  <p>In the meantime:</p>
+  <ul>
+    <li><a href="https://mailvaultapp.com" style="color: #6366f1;">Download MailVault</a></li>
+    <li><a href="https://github.com/GraphicMeat/mail-vault-app" style="color: #6366f1;">Source code on GitHub</a></li>
+    <li><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" style="color: #6366f1;">Join the discussion</a></li>
+  </ul>
+  <p style="color: #94a3b8; font-size: 14px;">— The MailVault Team</p>
+</div>`
+      }).catch(err => console.error('Failed to send welcome email:', err));
+    }
 
     res.json({ success: true, message: 'Subscribed successfully' });
   } catch (error) {
