@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Tauri
+src-tauri/target/
+src-tauri/WixTools/
+src-tauri/Cargo.lock
+src-tauri/binaries/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+.claude/
+*.swp
+*.swo
+
+# Environment files
+.env
+.env.local
+.env.*.local
+.env.test
+
+# Signing credentials (contains sensitive data)
+scripts/signing-config.sh

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- App Sandbox (required for App Store) -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+
+    <!-- Network access for IMAP/SMTP -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+
+    <!-- File access - user selected files -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+
+    <!-- Downloads folder access -->
+    <key>com.apple.security.files.downloads.read-write</key>
+    <true/>
+
+    <!-- Keychain access for storing passwords -->
+    <key>com.apple.security.keychain-access-groups</key>
+    <array>
+        <string>$(AppIdentifierPrefix)com.mailvault.app</string>
+    </array>
+
+    <!-- App Groups for shared data -->
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>$(TeamIdentifierPrefix)com.mailvault.app</string>
+    </array>
+</dict>
+</plist>

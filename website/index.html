@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MailVault - Own Your Emails Forever</title>
+  <meta name="description" content="MailVault is a privacy-first email client that stores your emails locally. Keep your emails forever, even after they're deleted from the server.">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              200: '#c7d2fe',
+              300: '#a5b4fc',
+              400: '#818cf8',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              800: '#3730a3',
+              900: '#312e81',
+            }
+          },
+          fontFamily: {
+            display: ['Inter', 'system-ui', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Inter Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .gradient-text {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .gradient-bg {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    }
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-10px); }
+    }
+    .float { animation: float 3s ease-in-out infinite; }
+    .feature-card:hover { transform: translateY(-4px); }
+  </style>
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <div class="flex items-center gap-2">
+          <img src="icon-128.png" alt="MailVault" class="w-8 h-8 rounded-lg">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="#features" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Features</a>
+          <a href="#how-it-works" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">How It Works</a>
+          <a href="#community" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Community</a>
+          <a href="#contact" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Contact</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+            <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/>
+            </svg>
+            <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+            </svg>
+          </button>
+          <a href="#download" class="hidden sm:inline-flex gradient-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Download
+          </a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="min-h-screen flex items-center pt-16 relative overflow-hidden">
+    <!-- Background decoration -->
+    <div class="absolute inset-0 overflow-hidden pointer-events-none">
+      <div class="absolute -top-40 -right-40 w-80 h-80 bg-primary-500/20 rounded-full blur-3xl"></div>
+      <div class="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-500/20 rounded-full blur-3xl"></div>
+    </div>
+
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-20 relative">
+      <div class="grid lg:grid-cols-2 gap-12 items-center">
+        <div>
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium mb-6">
+            <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+            Now available for macOS
+          </div>
+
+          <h1 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight mb-6">
+            Own Your Emails
+            <span class="gradient-text">Forever</span>
+          </h1>
+
+          <p class="text-lg sm:text-xl text-slate-600 dark:text-slate-400 mb-8 leading-relaxed">
+            MailVault is a privacy-first email client that stores your emails locally.
+            Keep your important messages safe, even after they're deleted from the server.
+          </p>
+
+          <div class="flex flex-col sm:flex-row gap-4 mb-8">
+            <a href="#download" class="gradient-bg text-white px-8 py-4 rounded-xl font-semibold text-lg hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+              </svg>
+              Download for Mac
+            </a>
+
+            <button id="want-this-btn" class="group px-8 py-4 rounded-xl font-semibold text-lg border-2 border-primary-500 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors inline-flex items-center justify-center gap-2">
+              <svg class="w-5 h-5 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"/>
+              </svg>
+              I want this!
+              <span id="vote-count" class="ml-1 px-2 py-0.5 bg-primary-100 dark:bg-primary-900/50 rounded-full text-sm">--</span>
+            </button>
+          </div>
+
+          <div class="flex items-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+            <div class="flex items-center gap-2">
+              <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+              </svg>
+              Free & Open Source
+            </div>
+            <div class="flex items-center gap-2">
+              <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+              </svg>
+              No Cloud Required
+            </div>
+            <div class="flex items-center gap-2">
+              <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+              </svg>
+              macOS Native
+            </div>
+          </div>
+        </div>
+
+        <div class="relative">
+          <div class="float">
+            <!-- Realistic App Mockup -->
+            <div class="relative rounded-2xl overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-700" style="font-size: 11px;">
+              <div id="app-screenshot" class="aspect-[4/3] bg-white dark:bg-[#1a1a2e] flex">
+                <!-- Sidebar -->
+                <div class="w-[72px] bg-slate-50 dark:bg-[#12122a] flex flex-col items-center py-3 gap-3 border-r border-slate-200 dark:border-[#2a2a4a] flex-shrink-0">
+                  <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center">
+                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                  </div>
+                  <div class="w-full px-2 space-y-1">
+                    <div class="flex items-center gap-1.5 px-2 py-1.5 rounded bg-indigo-50 dark:bg-[#6366f1]/20 text-indigo-600 dark:text-indigo-300">
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
+                      <span class="text-[9px] font-medium truncate">Inbox</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 px-2 py-1.5 text-slate-400 dark:text-slate-500">
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                      <span class="text-[9px] truncate">Sent</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 px-2 py-1.5 text-slate-400 dark:text-slate-500">
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+                      <span class="text-[9px] truncate">Archive</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 px-2 py-1.5 text-slate-400 dark:text-slate-500">
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                      <span class="text-[9px] truncate">Trash</span>
+                    </div>
+                  </div>
+                  <div class="mt-auto">
+                    <div class="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-[9px] text-white font-bold">L</div>
+                  </div>
+                </div>
+                <!-- Email List -->
+                <div class="w-[140px] bg-slate-50/50 dark:bg-[#16162e] flex flex-col border-r border-slate-200 dark:border-[#2a2a4a] flex-shrink-0">
+                  <div class="px-2 py-2 border-b border-slate-200 dark:border-[#2a2a4a]">
+                    <div class="flex items-center gap-1 px-2 py-1 bg-slate-100 dark:bg-[#1e1e3a] rounded text-slate-400 dark:text-slate-500 text-[8px]">
+                      <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                      Search emails...
+                    </div>
+                  </div>
+                  <div class="flex-1 overflow-hidden">
+                    <div class="px-1.5 py-1 bg-indigo-50 dark:bg-[#6366f1]/10 border-l-2 border-indigo-500">
+                      <div class="flex justify-between items-baseline">
+                        <span class="text-[9px] font-semibold text-slate-900 dark:text-white truncate">Darth Vader</span>
+                        <span class="text-[7px] text-slate-400 dark:text-slate-500">2m</span>
+                      </div>
+                      <div class="text-[8px] text-indigo-600 dark:text-indigo-300 truncate">Q4 Revenue Report</div>
+                      <div class="text-[7px] text-slate-400 dark:text-slate-500 truncate">Here are the key points...</div>
+                    </div>
+                    <div class="px-1.5 py-1">
+                      <div class="flex justify-between items-baseline">
+                        <span class="text-[9px] font-semibold text-slate-900 dark:text-white truncate">Darth Vader</span>
+                        <span class="text-[7px] text-slate-400 dark:text-slate-500">15m</span>
+                      </div>
+                      <div class="text-[8px] text-slate-700 dark:text-slate-300 truncate">Re: Project Falcon</div>
+                      <div class="text-[7px] text-slate-400 dark:text-slate-500 truncate">Following up on the timeline...</div>
+                    </div>
+                    <div class="px-1.5 py-1">
+                      <div class="flex justify-between items-baseline">
+                        <span class="text-[9px] font-bold text-slate-900 dark:text-white truncate">Darth Vader</span>
+                        <span class="text-[7px] text-slate-400 dark:text-slate-500">1h</span>
+                      </div>
+                      <div class="text-[8px] text-slate-700 dark:text-slate-300 truncate font-semibold">Meeting notes Monday</div>
+                      <div class="text-[7px] text-slate-400 dark:text-slate-500 truncate">Review completed...</div>
+                    </div>
+                    <div class="px-1.5 py-1">
+                      <div class="flex justify-between items-baseline">
+                        <span class="text-[9px] text-slate-600 dark:text-slate-300 truncate">Darth Vader</span>
+                        <span class="text-[7px] text-slate-400 dark:text-slate-500">3h</span>
+                      </div>
+                      <div class="text-[8px] text-slate-500 dark:text-slate-400 truncate">Team offsite Dec 15-17</div>
+                      <div class="text-[7px] text-slate-400 dark:text-slate-600 truncate flex items-center gap-0.5">
+                        <svg class="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                        1 attachment
+                      </div>
+                    </div>
+                    <div class="px-1.5 py-1">
+                      <div class="flex justify-between items-baseline">
+                        <span class="text-[9px] text-slate-600 dark:text-slate-300 truncate">Darth Vader</span>
+                        <span class="text-[7px] text-slate-400 dark:text-slate-500">5h</span>
+                      </div>
+                      <div class="text-[8px] text-slate-500 dark:text-slate-400 truncate">Flight confirmation</div>
+                      <div class="text-[7px] text-slate-400 dark:text-slate-600 truncate">LAX to JFK...</div>
+                    </div>
+                    <div class="px-1.5 py-1">
+                      <div class="flex justify-between items-baseline">
+                        <span class="text-[9px] text-slate-600 dark:text-slate-300 truncate">Darth Vader</span>
+                        <span class="text-[7px] text-slate-400 dark:text-slate-500">6h</span>
+                      </div>
+                      <div class="text-[8px] text-slate-500 dark:text-slate-400 truncate">Invoice #4821</div>
+                      <div class="text-[7px] text-slate-400 dark:text-slate-600 truncate">Due January 15...</div>
+                    </div>
+                  </div>
+                  <div class="px-2 py-1.5 border-t border-slate-200 dark:border-[#2a2a4a]">
+                    <div class="flex items-center justify-between text-[7px] text-slate-400 dark:text-slate-500">
+                      <span>452 emails</span>
+                      <div class="flex gap-1">
+                        <span class="px-1 py-0.5 rounded bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400">Local</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <!-- Email Viewer -->
+                <div class="flex-1 bg-white dark:bg-[#1a1a2e] flex flex-col min-w-0">
+                  <div class="px-3 py-2 border-b border-slate-200 dark:border-[#2a2a4a]">
+                    <h3 class="text-[10px] font-semibold text-slate-900 dark:text-white truncate">Q4 Revenue Report — Final Numbers</h3>
+                    <div class="flex items-center gap-1 mt-0.5">
+                      <div class="w-4 h-4 rounded-full bg-red-600 flex items-center justify-center text-[7px] text-white font-bold">D</div>
+                      <span class="text-[8px] text-slate-500 dark:text-slate-400">Darth Vader &lt;vader@forceunwrap.com&gt;</span>
+                      <span class="text-[7px] text-slate-400 dark:text-slate-600 ml-auto">2 minutes ago</span>
+                    </div>
+                  </div>
+                  <div class="flex-1 px-3 py-2 overflow-hidden">
+                    <div class="bg-slate-50 dark:bg-[#12122a] rounded-lg p-2.5 text-[8px] text-slate-700 dark:text-slate-300 leading-relaxed">
+                      <p>Hi there,</p>
+                      <p class="mt-1.5">I wanted to share an update on this. Here's where we stand:</p>
+                      <table class="w-full mt-2 mb-2 text-[7px]" style="border-collapse: collapse;">
+                        <tr class="bg-slate-100 dark:bg-[#1e1e3a]">
+                          <th class="text-left px-1.5 py-1 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-[#2a2a4a]">Task</th>
+                          <th class="text-left px-1.5 py-1 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-[#2a2a4a]">Status</th>
+                          <th class="text-left px-1.5 py-1 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-[#2a2a4a]">Priority</th>
+                        </tr>
+                        <tr>
+                          <td class="px-1.5 py-1 border-b border-slate-100 dark:border-[#2a2a4a]/50">Phase 1 review</td>
+                          <td class="px-1.5 py-1 border-b border-slate-100 dark:border-[#2a2a4a]/50 text-green-600 dark:text-green-400">Complete</td>
+                          <td class="px-1.5 py-1 border-b border-slate-100 dark:border-[#2a2a4a]/50">High</td>
+                        </tr>
+                        <tr>
+                          <td class="px-1.5 py-1 border-b border-slate-100 dark:border-[#2a2a4a]/50">Stakeholder signoff</td>
+                          <td class="px-1.5 py-1 border-b border-slate-100 dark:border-[#2a2a4a]/50 text-yellow-600 dark:text-yellow-400">In progress</td>
+                          <td class="px-1.5 py-1 border-b border-slate-100 dark:border-[#2a2a4a]/50">Medium</td>
+                        </tr>
+                        <tr>
+                          <td class="px-1.5 py-1">Final deployment</td>
+                          <td class="px-1.5 py-1 text-slate-400 dark:text-slate-500">Pending</td>
+                          <td class="px-1.5 py-1">Low</td>
+                        </tr>
+                      </table>
+                      <p>The deadline is coming up. Please review and let me know your thoughts.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Floating badges -->
+          <div class="absolute -left-4 top-1/4 glass rounded-lg px-4 py-2 shadow-lg">
+            <div class="flex items-center gap-2">
+              <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+              </svg>
+              <span class="text-sm font-medium">Secure</span>
+            </div>
+          </div>
+
+          <div class="absolute -right-4 bottom-1/4 glass rounded-lg px-4 py-2 shadow-lg">
+            <div class="flex items-center gap-2">
+              <svg class="w-5 h-5 text-primary-500" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/>
+              </svg>
+              <span class="text-sm font-medium">Fast</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Problem Section -->
+  <section class="py-20 bg-white dark:bg-slate-800/50">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="max-w-3xl mx-auto text-center mb-16">
+        <h2 class="text-3xl sm:text-4xl font-bold mb-6">
+          Your Emails Are at Risk
+        </h2>
+        <p class="text-lg text-slate-600 dark:text-slate-400">
+          Email providers can delete, lose, or restrict access to your messages at any time.
+          Important memories, receipts, and records disappear without warning.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-2 lg:grid-cols-5 gap-6">
+        <div class="text-center p-6">
+          <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+            <svg class="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-semibold mb-2">Server Deletion</h3>
+          <p class="text-slate-600 dark:text-slate-400">
+            Emails deleted from the server are gone forever. No way to recover them.
+          </p>
+        </div>
+
+        <div class="text-center p-6">
+          <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
+            <svg class="w-8 h-8 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-semibold mb-2">Account Lockout</h3>
+          <p class="text-slate-600 dark:text-slate-400">
+            Lose access to your account and lose access to years of communication.
+          </p>
+        </div>
+
+        <div class="text-center p-6">
+          <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center">
+            <svg class="w-8 h-8 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-semibold mb-2">Cloud Dependency</h3>
+          <p class="text-slate-600 dark:text-slate-400">
+            No internet? No access. Your data shouldn't depend on connectivity.
+          </p>
+        </div>
+
+        <div class="text-center p-6">
+          <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+            <svg class="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-semibold mb-2">No Backup Solution</h3>
+          <p class="text-slate-600 dark:text-slate-400">
+            Love your current email client? Use MailVault purely as a backup that runs silently in the background.
+          </p>
+        </div>
+
+        <div class="text-center p-6">
+          <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+            <svg class="w-8 h-8 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-semibold mb-2">Limited Server Storage</h3>
+          <p class="text-slate-600 dark:text-slate-400">
+            Mailbox full? Store unlimited emails locally and free up server space without losing anything.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section id="features" class="py-20">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="max-w-3xl mx-auto text-center mb-16">
+        <h2 class="text-3xl sm:text-4xl font-bold mb-6">
+          Email Storage, <span class="gradient-text">Reimagined</span>
+        </h2>
+        <p class="text-lg text-slate-600 dark:text-slate-400">
+          MailVault combines the convenience of modern email clients with the security of local storage.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <!-- Feature 1 -->
+        <div class="feature-card p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-all duration-300 hover:shadow-xl">
+          <div class="w-12 h-12 mb-4 rounded-xl gradient-bg flex items-center justify-center">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-semibold mb-2">Local Storage</h3>
+          <p class="text-slate-600 dark:text-slate-400">
+            All emails stored on your machine. Your data never leaves your computer.
+          </p>
+        </div>
+
+        <!-- Feature 2 -->
+        <div class="feature-card p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-all duration-300 hover:shadow-xl">
+          <div class="w-12 h-12 mb-4 rounded-xl gradient-bg flex items-center justify-center">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-semibold mb-2">Privacy First</h3>
+          <p class="text-slate-600 dark:text-slate-400">
+            No cloud sync, no tracking, no data mining. Complete privacy by design.
+          </p>
+        </div>
+
+        <!-- Feature 3 -->
+        <div class="feature-card p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-all duration-300 hover:shadow-xl">
+          <div class="w-12 h-12 mb-4 rounded-xl gradient-bg flex items-center justify-center">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-semibold mb-2">Lightning Fast</h3>
+          <p class="text-slate-600 dark:text-slate-400">
+            Local SQLite database means instant search across thousands of emails.
+          </p>
+        </div>
+
+        <!-- Feature 4 -->
+        <div class="feature-card p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-all duration-300 hover:shadow-xl">
+          <div class="w-12 h-12 mb-4 rounded-xl gradient-bg flex items-center justify-center">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-semibold mb-2">Offline Access</h3>
+          <p class="text-slate-600 dark:text-slate-400">
+            Read and search all your emails without an internet connection.
+          </p>
+        </div>
+
+        <!-- Feature 5 -->
+        <div class="feature-card p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-all duration-300 hover:shadow-xl">
+          <div class="w-12 h-12 mb-4 rounded-xl gradient-bg flex items-center justify-center">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-semibold mb-2">Permanent Archive</h3>
+          <p class="text-slate-600 dark:text-slate-400">
+            Keep emails forever, even after they're deleted from the server.
+          </p>
+        </div>
+
+        <!-- Feature 6 -->
+        <div class="feature-card p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-all duration-300 hover:shadow-xl">
+          <div class="w-12 h-12 mb-4 rounded-xl gradient-bg flex items-center justify-center">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-semibold mb-2">Native & Secure</h3>
+          <p class="text-slate-600 dark:text-slate-400">
+            Built with Tauri for native performance. Credentials stored in macOS Keychain.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Chat View Section -->
+  <section class="py-20 bg-white dark:bg-slate-800/50 overflow-hidden">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid lg:grid-cols-2 gap-12 items-center">
+        <div>
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium mb-6">
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clip-rule="evenodd"/>
+            </svg>
+            Unique Feature
+          </div>
+
+          <h2 class="text-3xl sm:text-4xl font-bold mb-6">
+            Email Feels Like
+            <span class="gradient-text">Messaging</span>
+          </h2>
+
+          <p class="text-lg text-slate-600 dark:text-slate-400 mb-6 leading-relaxed">
+            Tired of the traditional inbox view? Switch to Chat View and experience your emails as natural conversations.
+            See your entire email thread with each contact as a flowing chat, just like your favorite messaging app.
+          </p>
+
+          <ul class="space-y-4 mb-8">
+            <li class="flex items-start gap-3">
+              <div class="w-6 h-6 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg class="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                </svg>
+              </div>
+              <div>
+                <span class="font-medium text-slate-900 dark:text-white">Conversation-based view</span>
+                <p class="text-slate-600 dark:text-slate-400 text-sm">All emails with a contact grouped as one continuous thread</p>
+              </div>
+            </li>
+            <li class="flex items-start gap-3">
+              <div class="w-6 h-6 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg class="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                </svg>
+              </div>
+              <div>
+                <span class="font-medium text-slate-900 dark:text-white">Switch anytime</span>
+                <p class="text-slate-600 dark:text-slate-400 text-sm">Toggle between traditional and chat view with one click</p>
+              </div>
+            </li>
+            <li class="flex items-start gap-3">
+              <div class="w-6 h-6 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg class="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                </svg>
+              </div>
+              <div>
+                <span class="font-medium text-slate-900 dark:text-white">Familiar & intuitive</span>
+                <p class="text-slate-600 dark:text-slate-400 text-sm">Feels like iMessage or WhatsApp for your emails</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Visual comparison -->
+        <div class="relative" style="font-size: 11px;">
+          <div class="grid grid-cols-2 gap-4">
+            <!-- Traditional View -->
+            <div class="relative">
+              <div class="absolute -top-3 left-4 px-2 py-1 bg-slate-200 dark:bg-slate-600 rounded text-xs font-medium text-slate-600 dark:text-slate-300 z-10">
+                Traditional
+              </div>
+              <div class="rounded-xl border-2 border-slate-200 dark:border-slate-600 overflow-hidden bg-white dark:bg-[#16162e] aspect-[3/4]">
+                <div class="px-2 py-1.5 border-b border-slate-200 dark:border-[#2a2a4a]">
+                  <div class="flex items-center gap-1 px-1.5 py-1 bg-slate-100 dark:bg-[#1e1e3a] rounded text-slate-400 dark:text-slate-500 text-[8px]">
+                    <svg class="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                    Search...
+                  </div>
+                </div>
+                <div class="divide-y divide-slate-100 dark:divide-[#2a2a4a]/50">
+                  <div class="px-2 py-1.5 bg-indigo-50 dark:bg-[#6366f1]/10 border-l-2 border-indigo-500">
+                    <div class="flex justify-between"><span class="text-[8px] font-semibold text-slate-900 dark:text-white">Darth Vader</span><span class="text-[7px] text-slate-400 dark:text-slate-500">2m</span></div>
+                    <div class="text-[7px] text-indigo-600 dark:text-indigo-300 truncate">Q4 Revenue Report — Final Numbers</div>
+                  </div>
+                  <div class="px-2 py-1.5">
+                    <div class="flex justify-between"><span class="text-[8px] font-bold text-slate-900 dark:text-white">Darth Vader</span><span class="text-[7px] text-slate-400 dark:text-slate-500">15m</span></div>
+                    <div class="text-[7px] text-slate-700 dark:text-slate-300 truncate font-semibold">Re: Project Falcon timeline</div>
+                  </div>
+                  <div class="px-2 py-1.5">
+                    <div class="flex justify-between"><span class="text-[8px] text-slate-600 dark:text-slate-300">Darth Vader</span><span class="text-[7px] text-slate-400 dark:text-slate-500">1h</span></div>
+                    <div class="text-[7px] text-slate-500 dark:text-slate-400 truncate">Meeting notes from Monday</div>
+                  </div>
+                  <div class="px-2 py-1.5">
+                    <div class="flex justify-between"><span class="text-[8px] text-slate-600 dark:text-slate-300">Darth Vader</span><span class="text-[7px] text-slate-400 dark:text-slate-500">3h</span></div>
+                    <div class="text-[7px] text-slate-500 dark:text-slate-400 truncate">Invitation: Team offsite</div>
+                  </div>
+                  <div class="px-2 py-1.5">
+                    <div class="flex justify-between"><span class="text-[8px] text-slate-600 dark:text-slate-300">Darth Vader</span><span class="text-[7px] text-slate-400 dark:text-slate-500">5h</span></div>
+                    <div class="text-[7px] text-slate-500 dark:text-slate-400 truncate">Flight confirmation — LAX to JFK</div>
+                  </div>
+                  <div class="px-2 py-1.5">
+                    <div class="flex justify-between"><span class="text-[8px] text-slate-600 dark:text-slate-300">Darth Vader</span><span class="text-[7px] text-slate-400 dark:text-slate-500">6h</span></div>
+                    <div class="text-[7px] text-slate-500 dark:text-slate-400 truncate">Invoice #4821 — Due January 15</div>
+                  </div>
+                  <div class="px-2 py-1.5">
+                    <div class="flex justify-between"><span class="text-[8px] text-slate-600 dark:text-slate-300">Darth Vader</span><span class="text-[7px] text-slate-400 dark:text-slate-500">8h</span></div>
+                    <div class="text-[7px] text-slate-500 dark:text-slate-400 truncate">New design mockups for review</div>
+                  </div>
+                  <div class="px-2 py-1.5">
+                    <div class="flex justify-between"><span class="text-[8px] text-slate-600 dark:text-slate-300">Darth Vader</span><span class="text-[7px] text-slate-400 dark:text-slate-500">12h</span></div>
+                    <div class="text-[7px] text-slate-500 dark:text-slate-400 truncate">Re: Quick question about the API</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Chat View -->
+            <div class="relative">
+              <div class="absolute -top-3 left-4 px-2 py-1 gradient-bg rounded text-xs font-medium text-white z-10">
+                Chat View
+              </div>
+              <div class="rounded-xl border-2 border-primary-500 overflow-hidden bg-slate-50 dark:bg-[#1a1a2e] aspect-[3/4] ring-4 ring-primary-500/20 relative">
+                <!-- Chat header -->
+                <div class="px-2.5 py-2 border-b border-slate-200 dark:border-[#2a2a4a] flex items-center gap-1.5 bg-white dark:bg-transparent">
+                  <div class="w-5 h-5 rounded-full bg-red-600 flex items-center justify-center text-[7px] text-white font-bold">D</div>
+                  <div>
+                    <div class="text-[8px] font-semibold text-slate-900 dark:text-white">Darth Vader</div>
+                    <div class="text-[6px] text-slate-400 dark:text-slate-500">vader@forceunwrap.com</div>
+                  </div>
+                </div>
+                <!-- Chat bubbles -->
+                <div class="p-2 space-y-2">
+                  <div class="text-center text-[6px] text-slate-400 dark:text-slate-600 my-1">Today</div>
+                  <!-- Incoming -->
+                  <div class="flex justify-start">
+                    <div class="max-w-[80%] px-2 py-1.5 bg-white dark:bg-[#252545] rounded-xl rounded-tl-sm shadow-sm dark:shadow-none">
+                      <div class="text-[7px] text-slate-700 dark:text-slate-300">Hey, have you reviewed the Q4 numbers? I need your sign-off by Friday.</div>
+                      <div class="text-[5px] text-slate-400 dark:text-slate-600 mt-0.5 text-right">10:23 AM</div>
+                    </div>
+                  </div>
+                  <!-- Outgoing -->
+                  <div class="flex justify-end">
+                    <div class="max-w-[80%] px-2 py-1.5 bg-indigo-500 dark:bg-indigo-600/80 rounded-xl rounded-tr-sm">
+                      <div class="text-[7px] text-white">Yes, looks good! I'll send my final approval today.</div>
+                      <div class="text-[5px] text-indigo-200 dark:text-indigo-300/60 mt-0.5 text-right">10:45 AM</div>
+                    </div>
+                  </div>
+                  <!-- Incoming -->
+                  <div class="flex justify-start">
+                    <div class="max-w-[80%] px-2 py-1.5 bg-white dark:bg-[#252545] rounded-xl rounded-tl-sm shadow-sm dark:shadow-none">
+                      <div class="text-[7px] text-slate-700 dark:text-slate-300">Perfect. Also, the Project Falcon timeline got pushed to next quarter. See attached deck.</div>
+                      <div class="flex items-center gap-1 mt-1 px-1.5 py-0.5 bg-slate-100 dark:bg-[#1a1a2e] rounded text-[6px] text-slate-500 dark:text-slate-400">
+                        <svg class="w-2 h-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                        falcon-deck.pdf
+                      </div>
+                      <div class="text-[5px] text-slate-400 dark:text-slate-600 mt-0.5 text-right">11:02 AM</div>
+                    </div>
+                  </div>
+                  <!-- Outgoing -->
+                  <div class="flex justify-end">
+                    <div class="max-w-[80%] px-2 py-1.5 bg-indigo-500 dark:bg-indigo-600/80 rounded-xl rounded-tr-sm">
+                      <div class="text-[7px] text-white">Got it. I'll review the new timeline and loop in the team.</div>
+                      <div class="text-[5px] text-indigo-200 dark:text-indigo-300/60 mt-0.5 text-right">11:15 AM</div>
+                    </div>
+                  </div>
+                  <!-- Incoming -->
+                  <div class="flex justify-start">
+                    <div class="max-w-[80%] px-2 py-1.5 bg-white dark:bg-[#252545] rounded-xl rounded-tl-sm shadow-sm dark:shadow-none">
+                      <div class="text-[7px] text-slate-700 dark:text-slate-300">Thanks! Don't forget the team offsite on Dec 15-17.</div>
+                      <div class="text-[5px] text-slate-400 dark:text-slate-600 mt-0.5 text-right">11:30 AM</div>
+                    </div>
+                  </div>
+                </div>
+                <!-- Chat input -->
+                <div class="absolute bottom-0 left-0 right-0 px-2 py-1.5 border-t border-slate-200 dark:border-[#2a2a4a] bg-white dark:bg-[#1a1a2e]">
+                  <div class="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-[#12122a] rounded-lg text-slate-400 dark:text-slate-600 text-[7px]">
+                    Reply to Darth Vader...
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Arrow indicator -->
+          <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+            <div class="w-10 h-10 rounded-full bg-white dark:bg-slate-900 shadow-lg flex items-center justify-center">
+              <svg class="w-5 h-5 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How It Works Section -->
+  <section id="how-it-works" class="py-20 bg-white dark:bg-slate-800/50">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="max-w-3xl mx-auto text-center mb-16">
+        <h2 class="text-3xl sm:text-4xl font-bold mb-6">
+          Get Started in Minutes
+        </h2>
+        <p class="text-lg text-slate-600 dark:text-slate-400">
+          Simple setup, powerful results. Start protecting your emails today.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-8">
+        <div class="relative">
+          <div class="text-6xl font-bold text-primary-100 dark:text-primary-900/50 absolute -top-4 -left-2">1</div>
+          <div class="relative pt-8 pl-4">
+            <h3 class="text-xl font-semibold mb-3">Download & Install</h3>
+            <p class="text-slate-600 dark:text-slate-400">
+              Download MailVault for macOS. Drag to Applications and launch.
+            </p>
+          </div>
+        </div>
+
+        <div class="relative">
+          <div class="text-6xl font-bold text-primary-100 dark:text-primary-900/50 absolute -top-4 -left-2">2</div>
+          <div class="relative pt-8 pl-4">
+            <h3 class="text-xl font-semibold mb-3">Connect Your Account</h3>
+            <p class="text-slate-600 dark:text-slate-400">
+              Add your email account via IMAP. Credentials are stored securely in Keychain.
+            </p>
+          </div>
+        </div>
+
+        <div class="relative">
+          <div class="text-6xl font-bold text-primary-100 dark:text-primary-900/50 absolute -top-4 -left-2">3</div>
+          <div class="relative pt-8 pl-4">
+            <h3 class="text-xl font-semibold mb-3">Emails Backed Up</h3>
+            <p class="text-slate-600 dark:text-slate-400">
+              MailVault automatically syncs and stores your emails locally. Done!
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Store & Free Server Section -->
+  <section class="py-20">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="max-w-3xl mx-auto text-center mb-16">
+        <h2 class="text-3xl sm:text-4xl font-bold mb-6">
+          Store Locally. <span class="gradient-text">Free Your Server.</span>
+        </h2>
+        <p class="text-lg text-slate-600 dark:text-slate-400">
+          Running out of server storage? Save emails to your machine, then safely delete them from the server. Your emails stay accessible forever — offline, searchable, and fully yours.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-8">
+        <!-- Step 1 -->
+        <div class="relative p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+          <div class="w-12 h-12 mb-4 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+            <svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-semibold mb-2">Sync & Save</h3>
+          <p class="text-slate-600 dark:text-slate-400">
+            MailVault fetches your emails from the server and stores them locally in a fast SQLite database on your machine.
+          </p>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="relative p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+          <div class="w-12 h-12 mb-4 rounded-xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+            <svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-semibold mb-2">Delete from Server</h3>
+          <p class="text-slate-600 dark:text-slate-400">
+            Once saved locally, safely delete emails from the server to free up storage. Your mailbox stays clean, your data stays safe.
+          </p>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="relative p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+          <div class="w-12 h-12 mb-4 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+            <svg class="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-semibold mb-2">Access Anytime</h3>
+          <p class="text-slate-600 dark:text-slate-400">
+            Read, search, and browse all your locally saved emails — even without internet. They're yours forever.
+          </p>
+        </div>
+      </div>
+
+      <div class="mt-12 max-w-2xl mx-auto">
+        <div class="p-6 rounded-2xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800/50">
+          <div class="flex items-start gap-4">
+            <div class="w-10 h-10 rounded-lg gradient-bg flex items-center justify-center flex-shrink-0">
+              <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+            </div>
+            <div>
+              <h4 class="font-semibold text-slate-900 dark:text-white mb-1">Works as a backup too</h4>
+              <p class="text-slate-600 dark:text-slate-400 text-sm">
+                Love your current email client? Use MailVault purely as a silent backup. It syncs in the background from your menu bar — your emails are protected even if you never open the app.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Newsletter Section -->
+  <section class="py-20 bg-white dark:bg-slate-800/50">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="max-w-xl mx-auto text-center">
+        <div class="w-16 h-16 mx-auto mb-6 rounded-2xl gradient-bg flex items-center justify-center">
+          <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+          </svg>
+        </div>
+        <h2 class="text-3xl sm:text-4xl font-bold mb-4">
+          Stay Updated
+        </h2>
+        <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
+          Get notified about new releases, features, and tips. No spam, unsubscribe anytime.
+        </p>
+
+        <form id="newsletter-form" class="flex flex-col sm:flex-row gap-3">
+          <input
+            type="email"
+            name="email"
+            placeholder="Enter your email"
+            required
+            class="flex-1 px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all"
+          >
+          <button
+            type="submit"
+            class="gradient-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity whitespace-nowrap"
+          >
+            Subscribe
+          </button>
+        </form>
+        <p id="newsletter-message" class="mt-4 text-sm hidden"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Community / Contact Section -->
+  <section id="community" class="py-20">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="max-w-3xl mx-auto text-center mb-12">
+        <h2 class="text-3xl sm:text-4xl font-bold mb-4">
+          Join the Community
+        </h2>
+        <p class="text-lg text-slate-600 dark:text-slate-400">
+          Request features, report bugs, and shape the future of MailVault.
+        </p>
+      </div>
+
+      <div class="max-w-2xl mx-auto grid sm:grid-cols-2 gap-6" id="contact">
+        <!-- GitHub Discussions -->
+        <a href="https://github.com/your-repo/mailvault/discussions" target="_blank" class="group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg text-center">
+          <div class="w-14 h-14 mx-auto mb-4 rounded-2xl bg-slate-900 dark:bg-white flex items-center justify-center">
+            <svg class="w-7 h-7 text-white dark:text-slate-900" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">GitHub Discussions</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm">
+            Request features, vote on ideas, report bugs, and ask questions. The best place for detailed feedback.
+          </p>
+        </a>
+
+        <!-- Email -->
+        <a href="mailto:hello@forceunwrap.com" class="group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg text-center">
+          <div class="w-14 h-14 mx-auto mb-4 rounded-2xl gradient-bg flex items-center justify-center">
+            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">Email Us</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm">
+            Prefer email? Drop us a line at <span class="text-primary-500">hello@forceunwrap.com</span> for anything else.
+          </p>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Download Section -->
+  <section id="download" class="py-20 bg-white dark:bg-slate-800/50">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="max-w-3xl mx-auto text-center">
+        <h2 class="text-3xl sm:text-4xl font-bold mb-6">
+          Ready to Secure Your Emails?
+        </h2>
+        <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
+          Download MailVault for free and start owning your emails today.
+        </p>
+
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="#" class="gradient-bg text-white px-8 py-4 rounded-xl font-semibold text-lg hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-3">
+            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+            </svg>
+            Download for macOS
+          </a>
+
+          <a href="https://github.com/your-repo/mailvault" target="_blank" class="px-8 py-4 rounded-xl font-semibold text-lg border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-3">
+            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+            </svg>
+            View on GitHub
+          </a>
+        </div>
+
+        <p class="mt-6 text-sm text-slate-500 dark:text-slate-400">
+          Requires macOS 11.0 (Big Sur) or later
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <div class="flex items-center gap-2">
+          <img src="icon-128.png" alt="MailVault" class="w-8 h-8 rounded-lg">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex items-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="#" class="hover:text-primary-500 transition-colors">Privacy Policy</a>
+          <a href="#" class="hover:text-primary-500 transition-colors">Terms of Service</a>
+          <a href="https://github.com/your-repo/mailvault" class="hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2025 MailVault. All rights reserved.
+        </p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // ============================================
+    // Configuration - Update these for your server
+    // ============================================
+    // Development: 'http://localhost:3001'
+    // Production: '' for same-origin or 'https://api.mailvault.app'
+    const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? 'http://localhost:3001'
+      : '';
+
+    // ============================================
+    // Theme Toggle
+    // ============================================
+    const themeToggle = document.getElementById('theme-toggle');
+    const html = document.documentElement;
+
+    // Check for saved theme or system preference
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      html.classList.add('dark');
+    }
+
+    themeToggle.addEventListener('click', () => {
+      html.classList.toggle('dark');
+      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
+    });
+
+    // ============================================
+    // "I Want This" Voting
+    // ============================================
+    const wantThisBtn = document.getElementById('want-this-btn');
+    const voteCountEl = document.getElementById('vote-count');
+    let hasVoted = localStorage.getItem('mailvault-voted') === 'true';
+
+    // Update button state if already voted
+    if (hasVoted) {
+      wantThisBtn.classList.add('bg-primary-50', 'dark:bg-primary-900/20');
+    }
+
+    // Fetch current vote count
+    async function fetchVoteCount() {
+      try {
+        const res = await fetch(`${API_BASE}/api/votes`);
+        if (res.ok) {
+          const data = await res.json();
+          voteCountEl.textContent = data.count || 0;
+        }
+      } catch (e) {
+        // API not available, show placeholder
+        voteCountEl.textContent = '127'; // Placeholder
+      }
+    }
+
+    wantThisBtn.addEventListener('click', async () => {
+      if (hasVoted) {
+        // Visual feedback that already voted
+        wantThisBtn.classList.add('animate-pulse');
+        setTimeout(() => wantThisBtn.classList.remove('animate-pulse'), 500);
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/api/votes`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          voteCountEl.textContent = data.count;
+          hasVoted = true;
+          localStorage.setItem('mailvault-voted', 'true');
+          wantThisBtn.classList.add('bg-primary-50', 'dark:bg-primary-900/20');
+        }
+      } catch (e) {
+        // Fallback: just increment locally
+        const current = parseInt(voteCountEl.textContent) || 0;
+        voteCountEl.textContent = current + 1;
+        hasVoted = true;
+        localStorage.setItem('mailvault-voted', 'true');
+        wantThisBtn.classList.add('bg-primary-50', 'dark:bg-primary-900/20');
+      }
+    });
+
+    fetchVoteCount();
+
+
+    // ============================================
+    // Newsletter Form
+    // ============================================
+    const newsletterForm = document.getElementById('newsletter-form');
+    const newsletterMessage = document.getElementById('newsletter-message');
+
+    newsletterForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = newsletterForm.email.value;
+
+      try {
+        const res = await fetch(`${API_BASE}/api/subscribe`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        });
+
+        if (res.ok) {
+          newsletterMessage.textContent = 'Thanks for subscribing! Check your email to confirm.';
+          newsletterMessage.className = 'mt-4 text-sm text-green-600 dark:text-green-400';
+          newsletterForm.reset();
+        } else {
+          throw new Error('Failed to subscribe');
+        }
+      } catch (e) {
+        newsletterMessage.textContent = 'Thanks for your interest! (Demo mode)';
+        newsletterMessage.className = 'mt-4 text-sm text-green-600 dark:text-green-400';
+        newsletterForm.reset();
+      }
+
+      newsletterMessage.classList.remove('hidden');
+      setTimeout(() => newsletterMessage.classList.add('hidden'), 5000);
+    });
+
+
+    // ============================================
+    // Smooth scroll for anchor links
+    // ============================================
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    });
+  </script>
+</body>
+</html>
