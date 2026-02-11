@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Terms of Service - MailVault</title>
+  <meta name="description" content="MailVault terms of service.">
+
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc',
+              400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca',
+              800: '#3730a3', 900: '#312e81',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .gradient-text {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .gradient-bg { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); }
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+  </style>
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/" class="flex items-center gap-2">
+          <img src="icon-128.png" alt="MailVault" class="w-8 h-8 rounded-lg">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+        <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+          <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/>
+          </svg>
+          <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Content -->
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      <h1 class="text-4xl font-bold mb-2">Terms of Service</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">Last updated: February 11, 2026</p>
+
+      <div class="prose prose-slate dark:prose-invert max-w-none space-y-8">
+
+        <section>
+          <h2 class="text-2xl font-semibold mb-3">1. Agreement</h2>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            By using the MailVault application or visiting mailvaultapp.com, you agree to these Terms of Service. MailVault is provided by MB Modernios Aplikacijos, registered in Lithuania. If you do not agree with these terms, please do not use our services.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-semibold mb-3">2. Description of Service</h2>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            MailVault is a free, open-source desktop email client that stores emails locally on your computer. The application connects to your email provider via standard IMAP/SMTP protocols to sync and send emails.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-semibold mb-3">3. License</h2>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            MailVault is open-source software. The source code is available on <a href="https://github.com/GraphicMeat/mail-vault-app" class="text-primary-500 hover:underline" target="_blank">GitHub</a>. Your use of the source code is governed by the license specified in the repository.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-semibold mb-3">4. Your Data</h2>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            MailVault stores your emails and account data locally on your computer. We do not have access to your emails, credentials, or any data stored in the application. You are solely responsible for:
+          </p>
+          <ul class="list-disc pl-6 mt-3 space-y-2 text-slate-600 dark:text-slate-400">
+            <li>Backing up your local data.</li>
+            <li>Keeping your computer and credentials secure.</li>
+            <li>Ensuring you have the right to access and store the emails in your accounts.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-semibold mb-3">5. Email Provider Terms</h2>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            MailVault connects to third-party email providers (Gmail, Outlook, etc.) using your credentials. You must comply with your email provider's terms of service. We are not responsible for any actions taken by your email provider, including account restrictions or data loss on their servers.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-semibold mb-3">6. No Warranty</h2>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            MailVault is provided "as is" without warranty of any kind, express or implied. We do not guarantee that the application will be error-free, uninterrupted, or compatible with all email providers. Specifically:
+          </p>
+          <ul class="list-disc pl-6 mt-3 space-y-2 text-slate-600 dark:text-slate-400">
+            <li>We are not responsible for data loss, whether caused by application bugs, hardware failure, or user error.</li>
+            <li>We are not responsible for emails that fail to send, sync, or display correctly.</li>
+            <li>The application is not a substitute for a proper backup strategy.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-semibold mb-3">7. Limitation of Liability</h2>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            To the maximum extent permitted by law, MB Modernios Aplikacijos and its contributors shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of MailVault, including but not limited to loss of data, loss of revenue, or inability to access your emails.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-semibold mb-3">8. Website Services</h2>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            The MailVault website provides newsletter subscriptions, a contact form, and community voting features. We reserve the right to modify or discontinue any website feature at any time. Abuse of website services (spam, automated submissions, etc.) may result in your access being restricted.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-semibold mb-3">9. Modifications</h2>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            We may update these terms from time to time. Continued use of MailVault or the website after changes constitutes acceptance of the updated terms. Material changes will be communicated through our website or newsletter.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-semibold mb-3">10. Governing Law</h2>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            These terms are governed by the laws of the Republic of Lithuania. Any disputes shall be resolved in the courts of Lithuania, without prejudice to your rights under EU consumer protection regulations.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-semibold mb-3">11. Contact</h2>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            MB Modernios Aplikacijos<br>
+            Lithuania<br>
+            Website: <a href="https://mailvaultapp.com/#contact" class="text-primary-500 hover:underline">mailvaultapp.com/#contact</a>
+          </p>
+        </section>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <a href="/" class="flex items-center gap-2">
+          <img src="icon-128.png" alt="MailVault" class="w-8 h-8 rounded-lg">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+        <div class="flex items-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacy Policy</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Terms of Service</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. All rights reserved.
+        </p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const themeToggle = document.getElementById('theme-toggle');
+    const html = document.documentElement;
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      html.classList.add('dark');
+    }
+    themeToggle.addEventListener('click', () => {
+      html.classList.toggle('dark');
+      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
+    });
+  </script>
+</body>
+</html>

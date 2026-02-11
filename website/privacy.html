@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy - MailVault</title>
+  <meta name="description" content="MailVault privacy policy. Learn how we handle your data.">
+
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc',
+              400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca',
+              800: '#3730a3', 900: '#312e81',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .gradient-text {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .gradient-bg { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); }
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+  </style>
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/" class="flex items-center gap-2">
+          <img src="icon-128.png" alt="MailVault" class="w-8 h-8 rounded-lg">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+        <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+          <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/>
+          </svg>
+          <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Content -->
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      <h1 class="text-4xl font-bold mb-2">Privacy Policy</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">Last updated: February 11, 2026</p>
+
+      <div class="prose prose-slate dark:prose-invert max-w-none space-y-8">
+
+        <section>
+          <h2 class="text-2xl font-semibold mb-3">Who We Are</h2>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            MailVault is operated by MB Modernios Aplikacijos, a company registered in Lithuania. We are committed to protecting your privacy and handling your data in accordance with the General Data Protection Regulation (GDPR) and Lithuanian data protection laws.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-semibold mb-3">The MailVault Desktop Application</h2>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            MailVault is a privacy-first desktop email client. The application:
+          </p>
+          <ul class="list-disc pl-6 mt-3 space-y-2 text-slate-600 dark:text-slate-400">
+            <li><strong>Stores all data locally</strong> on your computer. Your emails, attachments, and account data never leave your machine.</li>
+            <li><strong>Does not transmit data to our servers.</strong> The app connects directly to your email provider via IMAP/SMTP. We have no access to your emails.</li>
+            <li><strong>Stores credentials in your operating system's keychain</strong> (macOS Keychain). We never see or store your passwords.</li>
+            <li><strong>Does not include analytics, tracking, or telemetry</strong> of any kind.</li>
+            <li><strong>Is open source.</strong> You can verify all of the above by inspecting the source code.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-semibold mb-3">The MailVault Website</h2>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            When you visit mailvaultapp.com or interact with our website, we may collect the following:
+          </p>
+
+          <h3 class="text-lg font-semibold mt-6 mb-2">Newsletter Subscription</h3>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            If you subscribe to our newsletter, we collect your <strong>email address</strong>. We use this solely to send you updates about MailVault (new releases, features, tips). You can unsubscribe at any time by contacting us. Legal basis: your consent (GDPR Art. 6(1)(a)).
+          </p>
+
+          <h3 class="text-lg font-semibold mt-6 mb-2">Contact Form</h3>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            If you contact us through the website form, we collect your <strong>name, email address, and message</strong>. We use this to respond to your inquiry. Legal basis: your consent and our legitimate interest in communicating with users (GDPR Art. 6(1)(a) and (f)).
+          </p>
+
+          <h3 class="text-lg font-semibold mt-6 mb-2">"I Want This" Votes</h3>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            If you click the voting button, we store a <strong>hashed (anonymized) version of your IP address</strong> to prevent duplicate votes. We do not store your actual IP address. Legal basis: legitimate interest (GDPR Art. 6(1)(f)).
+          </p>
+
+          <h3 class="text-lg font-semibold mt-6 mb-2">What We Do NOT Collect</h3>
+          <ul class="list-disc pl-6 mt-2 space-y-2 text-slate-600 dark:text-slate-400">
+            <li>We do not use cookies for tracking or advertising.</li>
+            <li>We do not use third-party analytics (no Google Analytics, no tracking pixels).</li>
+            <li>We do not sell, rent, or share your personal data with third parties.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-semibold mb-3">Data Storage and Security</h2>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            Website data (newsletter subscriptions, contact messages, votes) is stored on our web server. IP addresses are hashed using SHA-256 before storage for privacy. We take reasonable measures to protect your data, but no system is 100% secure.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-semibold mb-3">Your Rights (GDPR)</h2>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            As an EU/EEA resident, you have the right to:
+          </p>
+          <ul class="list-disc pl-6 mt-3 space-y-2 text-slate-600 dark:text-slate-400">
+            <li><strong>Access</strong> your personal data we hold.</li>
+            <li><strong>Rectify</strong> inaccurate data.</li>
+            <li><strong>Erase</strong> your data ("right to be forgotten").</li>
+            <li><strong>Restrict</strong> processing of your data.</li>
+            <li><strong>Data portability</strong> — receive your data in a structured format.</li>
+            <li><strong>Object</strong> to processing based on legitimate interests.</li>
+            <li><strong>Withdraw consent</strong> at any time.</li>
+          </ul>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed mt-3">
+            To exercise any of these rights, contact us using the details below. We will respond within 30 days.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-semibold mb-3">Data Retention</h2>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            Newsletter subscriptions are retained until you unsubscribe. Contact form messages are retained for up to 12 months. Vote data is anonymized and retained indefinitely.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-semibold mb-3">Third-Party Services</h2>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            Our website loads resources from:
+          </p>
+          <ul class="list-disc pl-6 mt-3 space-y-2 text-slate-600 dark:text-slate-400">
+            <li><strong>Google Fonts</strong> — to serve the Inter typeface. Google may collect your IP address. See <a href="https://policies.google.com/privacy" class="text-primary-500 hover:underline" target="_blank">Google's Privacy Policy</a>.</li>
+            <li><strong>Tailwind CSS CDN</strong> — to serve stylesheets. No personal data is collected.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-semibold mb-3">Changes to This Policy</h2>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            We may update this policy from time to time. Changes will be posted on this page with an updated date.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-semibold mb-3">Contact</h2>
+          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
+            MB Modernios Aplikacijos<br>
+            Lithuania<br>
+            Website: <a href="https://mailvaultapp.com/#contact" class="text-primary-500 hover:underline">mailvaultapp.com/#contact</a>
+          </p>
+        </section>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <a href="/" class="flex items-center gap-2">
+          <img src="icon-128.png" alt="MailVault" class="w-8 h-8 rounded-lg">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+        <div class="flex items-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacy Policy</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Terms of Service</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. All rights reserved.
+        </p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const themeToggle = document.getElementById('theme-toggle');
+    const html = document.documentElement;
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      html.classList.add('dark');
+    }
+    themeToggle.addEventListener('click', () => {
+      html.classList.toggle('dark');
+      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
+    });
+  </script>
+</body>
+</html>
