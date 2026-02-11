@@ -58,6 +58,13 @@ const voteLimiter = rateLimit({
   message: { error: 'Too many votes, please try again later.' }
 });
 
+// Strict rate limit for contact form
+const contactLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 3, // 3 messages per hour per IP
+  message: { error: 'Too many messages. Please try again later.' }
+});
+
 // ===========================================
 // Helper: Get client IP
 // ===========================================
@@ -224,9 +231,19 @@ app.post('/api/subscribe', (req, res) => {
 // Contact Form
 // -------------------------------------------
 
-app.post('/api/contact', async (req, res) => {
+app.post('/api/contact', contactLimiter, async (req, res) => {
   try {
-    const { name, email, category, message } = req.body;
+    const { name, email, category, message, website: honeypot, _t } = req.body;
+
+    // Honeypot: if the hidden field is filled, it's a bot
+    if (honeypot) {
+      return res.json({ success: true, message: 'Message sent successfully' });
+    }
+
+    // Timing: reject if submitted faster than 3 seconds
+    if (_t && (Date.now() - parseInt(_t)) < 3000) {
+      return res.json({ success: true, message: 'Message sent successfully' });
+    }
 
     // Validation
     if (!name || !email || !message) {

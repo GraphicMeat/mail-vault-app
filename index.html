@@ -886,49 +886,18 @@
           </p>
         </a>
 
-        <!-- Contact Form -->
-        <div class="p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-          <h3 class="text-lg font-semibold mb-4 text-center">Send Us a Message</h3>
-          <form id="contact-form" class="space-y-3">
-            <input
-              type="text"
-              name="name"
-              placeholder="Your name"
-              required
-              class="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all text-sm"
-            >
-            <input
-              type="email"
-              name="email"
-              placeholder="Your email"
-              required
-              class="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all text-sm"
-            >
-            <select
-              name="category"
-              class="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all text-sm"
-            >
-              <option value="general">General Inquiry</option>
-              <option value="bug">Bug Report</option>
-              <option value="feature">Feature Request</option>
-              <option value="other">Other</option>
-            </select>
-            <textarea
-              name="message"
-              placeholder="Your message"
-              required
-              rows="3"
-              class="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all text-sm resize-none"
-            ></textarea>
-            <button
-              type="submit"
-              class="w-full gradient-bg text-white px-4 py-2 rounded-lg font-semibold text-sm hover:opacity-90 transition-opacity"
-            >
-              Send Message
-            </button>
-          </form>
-          <p id="contact-message" class="mt-3 text-sm text-center hidden"></p>
-        </div>
+        <!-- Contact Us Button -->
+        <button id="open-contact-btn" class="group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg text-center flex flex-col items-center justify-center cursor-pointer w-full">
+          <div class="w-14 h-14 mx-auto mb-4 rounded-2xl gradient-bg flex items-center justify-center">
+            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">Contact Us</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm">
+            Have a question or feedback? Send us a message directly.
+          </p>
+        </button>
       </div>
     </div>
   </section>
@@ -988,6 +957,74 @@
       </div>
     </div>
   </footer>
+
+  <!-- Contact Modal -->
+  <div id="contact-modal" class="fixed inset-0 z-50 hidden">
+    <div id="contact-backdrop" class="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+      <div class="relative w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 p-6">
+        <button id="close-contact-btn" class="absolute top-4 right-4 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+          <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+
+        <div class="text-center mb-6">
+          <div class="w-12 h-12 mx-auto mb-3 rounded-xl gradient-bg flex items-center justify-center">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-bold">Send Us a Message</h3>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">We'll get back to you as soon as possible.</p>
+        </div>
+
+        <form id="contact-form" class="space-y-3">
+          <!-- Honeypot: hidden from humans, bots fill it -->
+          <input type="text" name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px;opacity:0;height:0;width:0;">
+          <input type="hidden" name="_t" value="">
+
+          <input
+            type="text"
+            name="name"
+            placeholder="Your name"
+            required
+            class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all text-sm"
+          >
+          <input
+            type="email"
+            name="email"
+            placeholder="Your email"
+            required
+            class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all text-sm"
+          >
+          <select
+            name="category"
+            class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all text-sm"
+          >
+            <option value="general">General Inquiry</option>
+            <option value="bug">Bug Report</option>
+            <option value="feature">Feature Request</option>
+            <option value="other">Other</option>
+          </select>
+          <textarea
+            name="message"
+            placeholder="Your message"
+            required
+            rows="4"
+            class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all text-sm resize-none"
+          ></textarea>
+          <button
+            type="submit"
+            class="w-full gradient-bg text-white px-4 py-2.5 rounded-lg font-semibold text-sm hover:opacity-90 transition-opacity"
+          >
+            Send Message
+          </button>
+        </form>
+        <p id="contact-message" class="mt-3 text-sm text-center hidden"></p>
+      </div>
+    </div>
+  </div>
 
   <script>
     // ============================================
@@ -1111,10 +1148,35 @@
 
 
     // ============================================
-    // Contact Form
+    // Contact Modal
     // ============================================
+    const contactModal = document.getElementById('contact-modal');
+    const openContactBtn = document.getElementById('open-contact-btn');
+    const closeContactBtn = document.getElementById('close-contact-btn');
+    const contactBackdrop = document.getElementById('contact-backdrop');
     const contactForm = document.getElementById('contact-form');
     const contactMessage = document.getElementById('contact-message');
+
+    function openContactModal() {
+      contactModal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+      // Set timestamp when modal opens (for timing check)
+      contactForm._t.value = Date.now().toString();
+    }
+
+    function closeContactModal() {
+      contactModal.classList.add('hidden');
+      document.body.style.overflow = '';
+      contactForm.reset();
+      contactMessage.classList.add('hidden');
+    }
+
+    openContactBtn.addEventListener('click', openContactModal);
+    closeContactBtn.addEventListener('click', closeContactModal);
+    contactBackdrop.addEventListener('click', closeContactModal);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !contactModal.classList.contains('hidden')) closeContactModal();
+    });
 
     contactForm.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -1122,7 +1184,9 @@
         name: contactForm.name.value,
         email: contactForm.email.value,
         category: contactForm.category.value,
-        message: contactForm.message.value
+        message: contactForm.message.value,
+        website: contactForm.website.value,
+        _t: contactForm._t.value
       };
 
       try {
@@ -1135,7 +1199,9 @@
         if (res.ok) {
           contactMessage.textContent = 'Message sent! We\'ll get back to you soon.';
           contactMessage.className = 'mt-3 text-sm text-center text-green-600 dark:text-green-400';
+          contactMessage.classList.remove('hidden');
           contactForm.reset();
+          setTimeout(() => closeContactModal(), 2000);
         } else {
           const data = await res.json();
           throw new Error(data.error || 'Failed to send');
@@ -1143,10 +1209,9 @@
       } catch (e) {
         contactMessage.textContent = e.message || 'Something went wrong. Please try again.';
         contactMessage.className = 'mt-3 text-sm text-center text-red-600 dark:text-red-400';
+        contactMessage.classList.remove('hidden');
+        setTimeout(() => contactMessage.classList.add('hidden'), 5000);
       }
-
-      contactMessage.classList.remove('hidden');
-      setTimeout(() => contactMessage.classList.add('hidden'), 5000);
     });
 
 
