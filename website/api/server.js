@@ -2,11 +2,23 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const nodemailer = require('nodemailer');
 const path = require('path');
 const db = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Email transporter (configured via env vars)
+const transporter = process.env.SMTP_HOST ? nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: parseInt(process.env.SMTP_PORT) || 465,
+  secure: (parseInt(process.env.SMTP_PORT) || 465) === 465,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS
+  }
+}) : null;
 
 // ===========================================
 // Middleware
@@ -212,7 +224,7 @@ app.post('/api/subscribe', (req, res) => {
 // Contact Form
 // -------------------------------------------
 
-app.post('/api/contact', (req, res) => {
+app.post('/api/contact', async (req, res) => {
   try {
     const { name, email, category, message } = req.body;
 
@@ -230,6 +242,22 @@ app.post('/api/contact', (req, res) => {
       INSERT INTO contacts (name, email, category, message, ip_hash, created_at)
       VALUES (?, ?, ?, ?, ?, datetime('now'))
     `).run(name, email.toLowerCase(), category || 'other', message, hashIP(getClientIP(req)));
+
+    // Send email notification
+    if (transporter && process.env.NOTIFY_EMAIL) {
+      transporter.sendMail({
+        from: `"MailVault Contact" <${process.env.SMTP_USER}>`,
+        to: process.env.NOTIFY_EMAIL,
+        replyTo: email,
+        subject: `[MailVault] ${category || 'general'}: New message from ${name}`,
+        text: `Name: ${name}\nEmail: ${email}\nCategory: ${category || 'general'}\n\nMessage:\n${message}`,
+        html: `<p><strong>Name:</strong> ${name}</p>
+<p><strong>Email:</strong> ${email}</p>
+<p><strong>Category:</strong> ${category || 'general'}</p>
+<hr>
+<p>${message.replace(/\n/g, '<br>')}</p>`
+      }).catch(err => console.error('Failed to send notification email:', err));
+    }
 
     res.json({ success: true, message: 'Message sent successfully' });
   } catch (error) {
