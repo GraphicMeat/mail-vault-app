@@ -8,8 +8,31 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+      body { margin: 0; background: #0a0a0f; }
+      #splash {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #0a0a0f;
+        z-index: 9999;
+        font-family: 'Instrument Sans', system-ui, sans-serif;
+        transition: opacity 0.3s ease;
+      }
+      #splash.fade-out { opacity: 0; pointer-events: none; }
+      #splash h1 { font-size: 2.25rem; font-weight: 700; color: #e4e4e7; }
+      #splash h1 span { color: #6366f1; }
+      @media (prefers-color-scheme: light) {
+        body { background: #f8fafc; }
+        #splash { background: #f8fafc; }
+        #splash h1 { color: #18181b; }
+      }
+    </style>
   </head>
   <body>
+    <div id="splash"><h1><span>Mail</span>Vault</h1></div>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

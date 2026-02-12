@@ -33,3 +33,4 @@ Thumbs.db
 
 # Signing credentials (contains sensitive data)
 scripts/signing-config.sh
+*.key

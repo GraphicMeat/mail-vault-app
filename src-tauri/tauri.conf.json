@@ -1,103 +1,19 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "productName": "MailVault",
+  "version": "1.0.2",
+  "identifier": "com.mailvault.app",
   "build": {
     "beforeBuildCommand": "npm run build",
     "beforeDevCommand": "npm run dev",
-    "devPath": "http://localhost:5173/app.html",
-    "distDir": "../dist",
-    "withGlobalTauri": true
+    "devUrl": "http://localhost:5173/app.html",
+    "frontendDist": "../dist"
   },
-  "package": {
-    "productName": "MailVault",
-    "version": "1.0.2"
-  },
-  "tauri": {
-    "allowlist": {
-      "all": false,
-      "shell": {
-        "all": false,
-        "open": true,
-        "sidecar": true,
-        "scope": [
-          {
-            "name": "mailvault-server",
-            "sidecar": true
-          }
-        ]
-      },
-      "dialog": {
-        "all": true,
-        "ask": true,
-        "confirm": true,
-        "message": true,
-        "open": true,
-        "save": true
-      },
-      "fs": {
-        "all": true,
-        "readFile": true,
-        "writeFile": true,
-        "readDir": true,
-        "copyFile": true,
-        "createDir": true,
-        "removeDir": true,
-        "removeFile": true,
-        "renameFile": true,
-        "exists": true,
-        "scope": ["$APPDATA/*", "$DOCUMENT/*", "$DOWNLOAD/*", "$HOME/*"]
-      },
-      "path": {
-        "all": true
-      },
-      "process": {
-        "all": true,
-        "exit": true,
-        "relaunch": true
-      },
-      "window": {
-        "all": true
-      }
-    },
-    "bundle": {
-      "active": true,
-      "category": "Productivity",
-      "copyright": "© 2024 MailVault",
-      "externalBin": ["binaries/mailvault-server"],
-      "icon": [
-        "icons/32x32.png",
-        "icons/128x128.png",
-        "icons/128x128@2x.png",
-        "icons/icon.icns",
-        "icons/icon.ico"
-      ],
-      "identifier": "com.mailvault.app",
-      "longDescription": "A modern, reactive email client that supports local email storage. Save your emails locally forever, even after they're deleted from the server.",
-      "macOS": {
-        "entitlements": "entitlements.plist",
-        "exceptionDomain": "",
-        "frameworks": [],
-        "providerShortName": null,
-        "signingIdentity": null,
-        "minimumSystemVersion": "10.15",
-        "hardenedRuntime": true
-      },
-      "resources": [],
-      "shortDescription": "Reactive Email Client with Local Storage",
-      "targets": ["app"],
-      "windows": {
-        "certificateThumbprint": null,
-        "digestAlgorithm": "sha256",
-        "timestampUrl": ""
-      }
-    },
-    "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://localhost:* https://*; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'"
-    },
-    "updater": {
-      "active": false
-    },
+  "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
+        "url": "app.html",
         "fullscreen": false,
         "height": 800,
         "width": 1200,
@@ -111,10 +27,48 @@
         "hiddenTitle": true
       }
     ],
-    "systemTray": {
-      "iconPath": "icons/tray-icon.png",
-      "iconAsTemplate": true,
-      "menuOnLeftClick": false
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' http://localhost:* https://*; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "category": "Productivity",
+    "copyright": "© 2024 MailVault",
+    "externalBin": ["binaries/mailvault-server"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "longDescription": "A modern, reactive email client that supports local email storage. Save your emails locally forever, even after they're deleted from the server.",
+    "macOS": {
+      "entitlements": "entitlements.plist",
+      "exceptionDomain": "",
+      "frameworks": [],
+      "providerShortName": null,
+      "signingIdentity": null,
+      "minimumSystemVersion": "10.15",
+      "hardenedRuntime": true
+    },
+    "resources": [],
+    "shortDescription": "Reactive Email Client with Local Storage",
+    "createUpdaterArtifacts": true,
+    "targets": ["app"],
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ2MjMzMjc3NTdBMDZBMDQKUldRRWFxQlhkeklqUmxzdDJFVTlvWmIxYzlzcUszVWZ5anE2NDRZNmRZRG5kaE5YZEppZzFOZUIK",
+      "endpoints": [
+        "https://github.com/GraphicMeat/mail-vault-app/releases/latest/download/latest.json"
+      ]
     }
   }
 }

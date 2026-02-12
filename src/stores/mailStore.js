@@ -318,7 +318,7 @@ export const useMailStore = create((set, get) => ({
     const account = get().accounts.find(a => a.id === accountId);
     if (!account) return;
 
-    const invoke = window.__TAURI__?.tauri?.invoke || window.__TAURI__?.invoke;
+    const invoke = window.__TAURI__?.core?.invoke;
     const { activeAccountId: currentAccountId, emails: currentEmails, totalEmails: currentTotalEmails } = get();
 
     // Check if we're switching to the same account that already has data loaded
@@ -593,7 +593,7 @@ export const useMailStore = create((set, get) => ({
     const account = accounts.find(a => a.id === activeAccountId);
     if (!account) return;
 
-    const invoke = window.__TAURI__?.tauri?.invoke || window.__TAURI__?.invoke;
+    const invoke = window.__TAURI__?.core?.invoke;
 
     // Get local emails first (always available)
     const localEmails = await db.getLocalEmails(activeAccountId, activeMailbox);
@@ -1490,7 +1490,7 @@ export const useMailStore = create((set, get) => ({
     const account = accounts.find(a => a.id === activeAccountId);
     if (!account) return false;
 
-    const invoke = window.__TAURI__?.tauri?.invoke || window.__TAURI__?.invoke;
+    const invoke = window.__TAURI__?.core?.invoke;
     if (!invoke) return false;
 
     console.log('[mailStore] Retrying keychain access for account:', account.email);

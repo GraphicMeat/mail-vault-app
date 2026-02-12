@@ -4,8 +4,8 @@ const DB_NAME = 'mailvault-db';
 const DB_VERSION = 2;
 
 // Use global Tauri API (more reliable in production builds)
-// In Tauri v1 with withGlobalTauri, invoke is at window.__TAURI__.tauri.invoke
-const invoke = window.__TAURI__?.tauri?.invoke || window.__TAURI__?.invoke;
+// In Tauri v2, invoke is at window.__TAURI__.core.invoke
+const invoke = window.__TAURI__?.core?.invoke;
 
 // Debug logging
 console.log('[db.js] Initializing...');

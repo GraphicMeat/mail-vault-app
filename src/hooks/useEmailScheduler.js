@@ -3,7 +3,7 @@ import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 
 // Tauri invoke for notifications and badge
-const invoke = window.__TAURI__?.tauri?.invoke || window.__TAURI__?.invoke;
+const invoke = window.__TAURI__?.core?.invoke;
 
 export function useEmailScheduler() {
   const { refreshAllAccounts, accounts, emails, totalUnreadCount } = useMailStore();

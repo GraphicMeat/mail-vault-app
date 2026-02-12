@@ -1,14 +1,14 @@
 // Prevents additional console window on Windows in release
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::{
-    CustomMenuItem, Manager, Menu, MenuItem, Submenu, SystemTray, SystemTrayEvent,
-    SystemTrayMenu, SystemTrayMenuItem,
-};
+use tauri::Manager;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri_plugin_updater::UpdaterExt;
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Child, Stdio};
+use std::process::{Command, Child};
 use std::sync::Mutex;
 use keyring::Entry;
 use tracing::{info, warn, error, Level};
@@ -32,9 +32,9 @@ struct LogDir(PathBuf);
 
 fn get_log_dir(app_handle: &tauri::AppHandle) -> PathBuf {
     app_handle
-        .path_resolver()
+        .path()
         .app_log_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
+        .unwrap_or_else(|_| PathBuf::from("."))
 }
 
 fn setup_logging(log_dir: &PathBuf) -> tracing_appender::non_blocking::WorkerGuard {
@@ -96,7 +96,8 @@ fn cleanup_old_logs(log_dir: &PathBuf) {
     }
 }
 
-fn start_backend_server() -> Option<Child> {
+#[allow(unused_variables)]
+fn start_backend_server(app_handle: &tauri::AppHandle) -> Option<Child> {
     info!("Starting backend server...");
 
     #[cfg(debug_assertions)]
@@ -135,19 +136,20 @@ fn start_backend_server() -> Option<Child> {
 
     #[cfg(not(debug_assertions))]
     {
-        use tauri::api::process::{Command as TauriCommand, CommandEvent};
+        use tauri_plugin_shell::ShellExt;
+        use tauri_plugin_shell::process::CommandEvent;
 
         info!("Running in release mode, using sidecar");
 
-        match TauriCommand::new_sidecar("mailvault-server") {
+        match app_handle.shell().sidecar("mailvault-server") {
             Ok(cmd) => {
                 match cmd.spawn() {
                     Ok((mut rx, _child)) => {
                         tauri::async_runtime::spawn(async move {
                             while let Some(event) = rx.recv().await {
                                 match event {
-                                    CommandEvent::Stdout(line) => info!("[Server] {}", line),
-                                    CommandEvent::Stderr(line) => warn!("[Server] {}", line),
+                                    CommandEvent::Stdout(line) => info!("[Server] {}", String::from_utf8_lossy(&line)),
+                                    CommandEvent::Stderr(line) => warn!("[Server] {}", String::from_utf8_lossy(&line)),
                                     CommandEvent::Error(e) => error!("[Server Error] {}", e),
                                     CommandEvent::Terminated(p) => {
                                         info!("[Server] Terminated: {:?}", p.code);
@@ -169,99 +171,14 @@ fn start_backend_server() -> Option<Child> {
     }
 }
 
-fn create_app_menu() -> Menu {
-    let export_logs = CustomMenuItem::new("export_logs", "Export Logs...");
-
-    let logs_menu = Submenu::new(
-        "Logs",
-        Menu::new()
-            .add_item(export_logs),
-    );
-
-    #[cfg(target_os = "macos")]
-    {
-        Menu::os_default("MailVault")
-            .add_submenu(logs_menu)
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        let file_menu = Submenu::new(
-            "File",
-            Menu::new().add_native_item(MenuItem::Quit),
-        );
-
-        Menu::new()
-            .add_submenu(file_menu)
-            .add_submenu(logs_menu)
-    }
-}
-
-fn create_system_tray() -> SystemTray {
-    let show = CustomMenuItem::new("show".to_string(), "Show MailVault");
-    let view_logs = CustomMenuItem::new("tray_view_logs".to_string(), "View Logs");
-    let quit = CustomMenuItem::new("quit".to_string(), "Quit");
-
-    let tray_menu = SystemTrayMenu::new()
-        .add_item(show)
-        .add_native_item(SystemTrayMenuItem::Separator)
-        .add_item(view_logs)
-        .add_native_item(SystemTrayMenuItem::Separator)
-        .add_item(quit);
-
-    SystemTray::new().with_menu(tray_menu)
-}
-
-fn handle_system_tray_event(app: &tauri::AppHandle, event: SystemTrayEvent) {
-    match event {
-        SystemTrayEvent::LeftClick { .. } => {
-            if let Some(window) = app.get_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
-        }
-        SystemTrayEvent::MenuItemClick { id, .. } => match id.as_str() {
-            "show" => {
-                if let Some(window) = app.get_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
-            }
-            "tray_view_logs" => {
-                if let Some(log_dir) = app.try_state::<LogDir>() {
-                    #[cfg(target_os = "macos")]
-                    let _ = std::process::Command::new("open").arg(&log_dir.0).spawn();
-                    #[cfg(target_os = "windows")]
-                    let _ = std::process::Command::new("explorer").arg(&log_dir.0).spawn();
-                    #[cfg(target_os = "linux")]
-                    let _ = std::process::Command::new("xdg-open").arg(&log_dir.0).spawn();
-                }
-            }
-            "quit" => {
-                info!("Application quitting via tray menu");
-                if let Some(state) = app.try_state::<ServerState>() {
-                    if let Ok(mut guard) = state.0.lock() {
-                        if let Some(ref mut child) = *guard {
-                            let _ = child.kill();
-                        }
-                    }
-                }
-                std::process::exit(0);
-            }
-            _ => {}
-        },
-        _ => {}
-    }
-}
-
 #[tauri::command]
 fn get_app_data_dir(app_handle: tauri::AppHandle) -> Result<String, String> {
     info!("get_app_data_dir called");
     app_handle
-        .path_resolver()
+        .path()
         .app_data_dir()
         .map(|p| p.to_string_lossy().to_string())
-        .ok_or_else(|| "Could not get app data directory".to_string())
+        .map_err(|e| format!("Could not get app data directory: {}", e))
 }
 
 // Use a more specific service name with bundle ID for persistence across builds
@@ -542,8 +459,6 @@ fn request_notification_permission() -> Result<bool, String> {
 
     #[cfg(target_os = "macos")]
     {
-        // On macOS, we need to trigger a notification to request permission
-        // The first notification will prompt for permission
         let script = r#"
             tell application "System Events"
                 display notification "MailVault notifications are now enabled" with title "Notifications Enabled"
@@ -670,9 +585,9 @@ fn send_notification(title: String, body: String) -> Result<(), String> {
 #[tauri::command]
 fn save_email_cache(app_handle: tauri::AppHandle, account_id: String, mailbox: String, data: String) -> Result<(), String> {
     let cache_dir = app_handle
-        .path_resolver()
+        .path()
         .app_data_dir()
-        .ok_or("Could not get app data directory")?
+        .map_err(|e| format!("Could not get app data directory: {}", e))?
         .join("email_cache");
 
     // Create cache directory if it doesn't exist
@@ -698,9 +613,9 @@ fn save_email_cache(app_handle: tauri::AppHandle, account_id: String, mailbox: S
 #[tauri::command]
 fn load_email_cache(app_handle: tauri::AppHandle, account_id: String, mailbox: String) -> Result<Option<String>, String> {
     let cache_dir = app_handle
-        .path_resolver()
+        .path()
         .app_data_dir()
-        .ok_or("Could not get app data directory")?
+        .map_err(|e| format!("Could not get app data directory: {}", e))?
         .join("email_cache");
 
     let safe_name = format!("{}_{}.json",
@@ -726,9 +641,9 @@ fn load_email_cache(app_handle: tauri::AppHandle, account_id: String, mailbox: S
 #[tauri::command]
 fn clear_email_cache(app_handle: tauri::AppHandle, account_id: Option<String>) -> Result<(), String> {
     let cache_dir = app_handle
-        .path_resolver()
+        .path()
         .app_data_dir()
-        .ok_or("Could not get app data directory")?
+        .map_err(|e| format!("Could not get app data directory: {}", e))?
         .join("email_cache");
 
     if !cache_dir.exists() {
@@ -845,9 +760,9 @@ fn save_attachment(
     info!("save_attachment called for: {}", filename);
 
     let cache_dir = app_handle
-        .path_resolver()
+        .path()
         .app_data_dir()
-        .ok_or("Could not get app data directory")?
+        .map_err(|e| format!("Could not get app data directory: {}", e))?
         .join("attachment_cache");
 
     fs::create_dir_all(&cache_dir)
@@ -1005,75 +920,21 @@ fn open_with_dialog(path: String) -> Result<(), String> {
 }
 
 fn main() {
-    // We need to initialize logging after we have the app handle for the log directory
-    // So we'll use a temporary directory first, then set up proper logging in setup
-
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             // When a second instance is launched, focus the main window
-            if let Some(window) = app.get_window("main") {
+            if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_focus();
                 let _ = window.unminimize();
                 let _ = window.show();
             }
         }))
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(ServerState(Mutex::new(None)))
-        .menu(create_app_menu())
-        .system_tray(create_system_tray())
-        .on_system_tray_event(handle_system_tray_event)
-        .on_menu_event(|event| {
-            let app = event.window().app_handle();
-            match event.menu_item_id() {
-                "export_logs" => {
-                    use tauri::api::dialog;
-                    let log_dir = get_log_dir(&app);
-                    dialog::FileDialogBuilder::default()
-                        .set_directory(&log_dir)
-                        .set_file_name("mailvault-logs.txt")
-                        .save_file(move |path| {
-                            if let Some(path) = path {
-                                if let Ok(logs) = read_logs(app.clone(), None) {
-                                    let _ = fs::write(path, logs);
-                                }
-                            }
-                        });
-                }
-                _ => {}
-            }
-        })
-        .setup(|app| {
-            // Set up logging to app log directory
-            let log_dir = get_log_dir(&app.handle());
-            let _guard = setup_logging(&log_dir);
-
-            // Store the guard to keep logging alive
-            // Note: In a real app, you'd want to store this guard properly
-            std::mem::forget(_guard);
-
-            // Clean up old logs
-            cleanup_old_logs(&log_dir);
-
-            // Store log directory for later use
-            app.manage(LogDir(log_dir));
-
-            info!("MailVault application starting");
-            info!("App version: {}", env!("CARGO_PKG_VERSION"));
-
-            // Start the backend server
-            let server_child = start_backend_server();
-
-            // Store server process handle for cleanup
-            if let Some(child) = server_child {
-                if let Some(state) = app.try_state::<ServerState>() {
-                    if let Ok(mut guard) = state.0.lock() {
-                        *guard = Some(child);
-                    }
-                }
-            }
-
-            info!("Application setup complete");
-            Ok(())
-        })
         .invoke_handler(tauri::generate_handler![
             get_app_data_dir,
             store_credentials,
@@ -1098,14 +959,297 @@ fn main() {
             open_file,
             open_with_dialog
         ])
-        .on_window_event(|event| match event.event() {
-            tauri::WindowEvent::CloseRequested { api, .. } => {
+        .setup(|app| {
+            // Set up logging to app log directory
+            let log_dir = get_log_dir(&app.handle());
+            let _guard = setup_logging(&log_dir);
+
+            // Store the guard to keep logging alive
+            std::mem::forget(_guard);
+
+            // Clean up old logs
+            cleanup_old_logs(&log_dir);
+
+            // Store log directory for later use
+            app.manage(LogDir(log_dir));
+
+            info!("MailVault application starting");
+            info!("App version: {}", env!("CARGO_PKG_VERSION"));
+
+            // --- Set up app menu ---
+            let check_updates = MenuItem::with_id(app, "check_updates", "Check for Updates...", true, None::<&str>)?;
+            let export_logs = MenuItem::with_id(app, "export_logs", "Export Logs...", true, None::<&str>)?;
+            let logs_submenu = Submenu::with_id(app, "logs_submenu", "Logs", true)?;
+            logs_submenu.append(&export_logs)?;
+
+            #[cfg(target_os = "macos")]
+            {
+                let menu = Menu::default(app.handle())?;
+                // Insert "Check for Updates..." into the app submenu (first submenu)
+                if let Ok(items) = menu.items() {
+                    if let Some(first) = items.first() {
+                        if let Some(app_submenu) = first.as_submenu() {
+                            let sep = PredefinedMenuItem::separator(app)?;
+                            let _ = app_submenu.append(&sep);
+                            let _ = app_submenu.append(&check_updates);
+                        }
+                    }
+                }
+                menu.append(&logs_submenu)?;
+                app.set_menu(menu)?;
+            }
+
+            #[cfg(not(target_os = "macos"))]
+            {
+                let quit_item = PredefinedMenuItem::quit(app, Some("Quit"))?;
+                let file_submenu = Submenu::with_id(app, "file_submenu", "File", true)?;
+                file_submenu.append(&quit_item)?;
+
+                let menu = Menu::with_items(app, &[
+                    &file_submenu as &dyn tauri::menu::IsMenuItem<_>,
+                    &logs_submenu as &dyn tauri::menu::IsMenuItem<_>,
+                ])?;
+                app.set_menu(menu)?;
+            }
+
+            // Handle app menu events
+            let app_handle_for_menu = app.handle().clone();
+            app.on_menu_event(move |_app, event| {
+                if event.id().as_ref() == "check_updates" {
+                    let handle = app_handle_for_menu.clone();
+                    tauri::async_runtime::spawn(async move {
+                        use tauri_plugin_updater::UpdaterExt;
+                        use tauri_plugin_dialog::DialogExt;
+                        info!("Manual update check triggered");
+                        let updater = match handle.updater() {
+                            Ok(u) => u,
+                            Err(e) => {
+                                error!("Failed to create updater: {}", e);
+                                handle.dialog()
+                                    .message(format!("Failed to check for updates: {}", e))
+                                    .title("Update Error")
+                                    .show(|_| {});
+                                return;
+                            }
+                        };
+                        match updater.check().await {
+                            Ok(Some(update)) => {
+                                info!("Update available: {}", update.version);
+                                let version = update.version.clone();
+                                let body = update.body.clone().unwrap_or_default();
+                                let handle_clone = handle.clone();
+                                handle.dialog()
+                                    .message(format!(
+                                        "A new version of MailVault is available!\n\nCurrent: v{}\nNew: v{}\n\n{}",
+                                        env!("CARGO_PKG_VERSION"), version, body
+                                    ))
+                                    .title("Update Available")
+                                    .buttons(tauri_plugin_dialog::MessageDialogButtons::OkCancelCustom("Update Now".to_string(), "Later".to_string()))
+                                    .show(move |confirmed| {
+                                        if confirmed {
+                                            let h = handle_clone.clone();
+                                            tauri::async_runtime::spawn(async move {
+                                                match update.download_and_install(|_, _| {}, || {}).await {
+                                                    Ok(_) => { h.restart(); }
+                                                    Err(e) => { error!("Failed to install update: {}", e); }
+                                                }
+                                            });
+                                        }
+                                    });
+                            }
+                            Ok(None) => {
+                                handle.dialog()
+                                    .message(format!("You're running the latest version (v{}).", env!("CARGO_PKG_VERSION")))
+                                    .title("No Updates Available")
+                                    .show(|_| {});
+                            }
+                            Err(e) => {
+                                error!("Update check failed: {}", e);
+                                handle.dialog()
+                                    .message(format!("Failed to check for updates: {}", e))
+                                    .title("Update Error")
+                                    .show(|_| {});
+                            }
+                        }
+                    });
+                } else if event.id().as_ref() == "export_logs" {
+                    use tauri_plugin_dialog::DialogExt;
+                    let app_clone = app_handle_for_menu.clone();
+                    let log_dir = get_log_dir(&app_clone);
+                    app_clone.dialog()
+                        .file()
+                        .set_directory(&log_dir)
+                        .set_file_name("mailvault-logs.txt")
+                        .save_file(move |file_path| {
+                            if let Some(file_path) = file_path {
+                                if let Some(path) = file_path.as_path() {
+                                    if let Ok(logs) = read_logs(app_clone.clone(), None) {
+                                        let _ = fs::write(path, logs);
+                                    }
+                                }
+                            }
+                        });
+                }
+            });
+
+            // --- Set up system tray ---
+            let tray_show = MenuItem::with_id(app, "show", "Show MailVault", true, None::<&str>)?;
+            let tray_view_logs = MenuItem::with_id(app, "tray_view_logs", "View Logs", true, None::<&str>)?;
+            let tray_quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let sep1 = PredefinedMenuItem::separator(app)?;
+            let sep2 = PredefinedMenuItem::separator(app)?;
+
+            let tray_menu = Menu::with_items(app, &[
+                &tray_show as &dyn tauri::menu::IsMenuItem<_>,
+                &sep1 as &dyn tauri::menu::IsMenuItem<_>,
+                &tray_view_logs as &dyn tauri::menu::IsMenuItem<_>,
+                &sep2 as &dyn tauri::menu::IsMenuItem<_>,
+                &tray_quit as &dyn tauri::menu::IsMenuItem<_>,
+            ])?;
+
+            let tray_icon_image = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-icon.png"))
+                .expect("Failed to load tray icon");
+
+            TrayIconBuilder::new()
+                .icon(tray_icon_image)
+                .icon_as_template(true)
+                .menu(&tray_menu)
+                .show_menu_on_left_click(false)
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
+                .on_menu_event(|app, event| {
+                    match event.id().as_ref() {
+                        "show" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        "tray_view_logs" => {
+                            if let Some(log_dir) = app.try_state::<LogDir>() {
+                                #[cfg(target_os = "macos")]
+                                let _ = std::process::Command::new("open").arg(&log_dir.0).spawn();
+                                #[cfg(target_os = "windows")]
+                                let _ = std::process::Command::new("explorer").arg(&log_dir.0).spawn();
+                                #[cfg(target_os = "linux")]
+                                let _ = std::process::Command::new("xdg-open").arg(&log_dir.0).spawn();
+                            }
+                        }
+                        "quit" => {
+                            info!("Application quitting via tray menu");
+                            if let Some(state) = app.try_state::<ServerState>() {
+                                if let Ok(mut guard) = state.0.lock() {
+                                    if let Some(ref mut child) = *guard {
+                                        let _ = child.kill();
+                                    }
+                                }
+                            }
+                            std::process::exit(0);
+                        }
+                        _ => {}
+                    }
+                })
+                .build(app)?;
+
+            // Start the backend server
+            let server_child = start_backend_server(&app.handle());
+
+            // Store server process handle for cleanup
+            if let Some(child) = server_child {
+                if let Some(state) = app.try_state::<ServerState>() {
+                    if let Ok(mut guard) = state.0.lock() {
+                        *guard = Some(child);
+                    }
+                }
+            }
+
+            // Check for updates in background
+            let update_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                // Delay update check to let the app initialize first
+                std::thread::sleep(std::time::Duration::from_secs(5));
+
+                info!("Checking for updates...");
+                let updater = match update_handle.updater() {
+                    Ok(u) => u,
+                    Err(e) => {
+                        warn!("Failed to create updater: {}", e);
+                        return;
+                    }
+                };
+                match updater.check().await {
+                    Ok(Some(update)) => {
+                        info!("Update available: {} -> {}", env!("CARGO_PKG_VERSION"), update.version);
+
+                        use tauri_plugin_dialog::DialogExt;
+                        let version = update.version.clone();
+                        let body = update.body.clone().unwrap_or_default();
+
+                        let handle_clone = update_handle.clone();
+                        update_handle.dialog()
+                            .message(format!(
+                                "A new version of MailVault is available!\n\nCurrent: v{}\nNew: v{}\n\n{}",
+                                env!("CARGO_PKG_VERSION"),
+                                version,
+                                body
+                            ))
+                            .title("Update Available")
+                            .buttons(tauri_plugin_dialog::MessageDialogButtons::OkCancelCustom("Update Now".to_string(), "Later".to_string()))
+                            .show(move |confirmed| {
+                                if confirmed {
+                                    info!("User accepted update, downloading...");
+                                    let handle = handle_clone.clone();
+                                    tauri::async_runtime::spawn(async move {
+                                        match update.download_and_install(|_, _| {}, || {}).await {
+                                            Ok(_) => {
+                                                info!("Update installed successfully, restarting...");
+                                                handle.restart();
+                                            }
+                                            Err(e) => {
+                                                error!("Failed to install update: {}", e);
+                                            }
+                                        }
+                                    });
+                                } else {
+                                    info!("User deferred update");
+                                }
+                            });
+                    }
+                    Ok(None) => {
+                        info!("No updates available");
+                    }
+                    Err(e) => {
+                        warn!("Failed to check for updates: {}", e);
+                    }
+                }
+            });
+
+            info!("Application setup complete");
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 info!("Window close requested, hiding to tray");
-                let _ = event.window().hide();
+                let _ = window.hide();
                 api.prevent_close();
             }
-            _ => {}
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::Reopen { .. } = event {
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                }
+            }
+        });
 }

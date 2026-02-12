@@ -204,7 +204,7 @@ function AttachmentItem({ attachment, account, folder }) {
 
     try {
       if (isTauri) {
-        const { invoke } = window.__TAURI__.tauri;
+        const { invoke } = window.__TAURI__.core;
         const base64Content = getCleanBase64(attachment.content);
         const savedPath = await invoke('save_attachment', {
           filename: attachment.filename || 'attachment',
@@ -230,8 +230,8 @@ function AttachmentItem({ attachment, account, folder }) {
     if (!attachment.content || !isTauri) return;
 
     try {
-      const { save } = window.__TAURI__.dialog;
-      const { invoke } = window.__TAURI__.tauri;
+      const { save } = await import('@tauri-apps/plugin-dialog');
+      const { invoke } = window.__TAURI__.core;
       const fname = attachment.filename || 'attachment';
 
       const destPath = await save({
@@ -269,7 +269,7 @@ function AttachmentItem({ attachment, account, folder }) {
     setContextMenu(null);
     if (downloadedPath) {
       try {
-        const { invoke } = window.__TAURI__.tauri;
+        const { invoke } = window.__TAURI__.core;
         await invoke('open_file', { path: downloadedPath });
       } catch (err) {
         console.error('[Attachment] Failed to open:', err);
@@ -281,7 +281,7 @@ function AttachmentItem({ attachment, account, folder }) {
     setContextMenu(null);
     if (downloadedPath) {
       try {
-        const { invoke } = window.__TAURI__.tauri;
+        const { invoke } = window.__TAURI__.core;
         await invoke('open_with_dialog', { path: downloadedPath });
       } catch (err) {
         console.error('[Attachment] Failed to open with:', err);
@@ -293,7 +293,7 @@ function AttachmentItem({ attachment, account, folder }) {
     setContextMenu(null);
     if (downloadedPath) {
       try {
-        const { invoke } = window.__TAURI__.tauri;
+        const { invoke } = window.__TAURI__.core;
         await invoke('show_in_folder', { path: downloadedPath });
       } catch (err) {
         console.error('[Attachment] Failed to show in folder:', err);
@@ -391,7 +391,7 @@ function DownloadAllButton({ attachments, account, folder }) {
 
         try {
           if (isTauri) {
-            const { invoke } = window.__TAURI__.tauri;
+            const { invoke } = window.__TAURI__.core;
             const base64Content = getCleanBase64(attachment.content);
             await invoke('save_attachment', {
               filename: attachment.filename || `attachment_${i + 1}`,

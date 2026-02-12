@@ -315,6 +315,14 @@ export function EmailList({ layoutMode = 'three-column' }) {
   const visibleCount = Math.ceil(containerHeight / ROW_HEIGHT) + 2 * BUFFER_SIZE;
   const endIndex = Math.min(rowCount, startIndex + visibleCount);
 
+  // Reset scroll position when switching mailbox
+  useEffect(() => {
+    setScrollTop(0);
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
+    }
+  }, [activeMailbox]);
+
   // Track container height
   useEffect(() => {
     if (!scrollContainerRef.current) return;

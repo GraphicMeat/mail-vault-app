@@ -129,7 +129,7 @@ function App() {
   // Check if running from DMG and warn user
   const [dmgWarning, setDmgWarning] = useState(null);
   useEffect(() => {
-    const invoke = window.__TAURI__?.tauri?.invoke || window.__TAURI__?.invoke;
+    const invoke = window.__TAURI__?.core?.invoke;
     if (invoke) {
       invoke('check_running_from_dmg')
         .then(isFromDmg => {

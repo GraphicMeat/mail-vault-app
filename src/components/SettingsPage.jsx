@@ -345,7 +345,7 @@ export function SettingsPage({ onClose }) {
   ];
 
   // Tauri invoke for reading logs
-  const invoke = window.__TAURI__?.tauri?.invoke || window.__TAURI__?.invoke;
+  const invoke = window.__TAURI__?.core?.invoke;
 
   // Load logs when switching to logs tab
   useEffect(() => {
@@ -1530,9 +1530,9 @@ export function SettingsPage({ onClose }) {
                           }
                           try {
                             // Use Tauri save dialog if available
-                            if (invoke && window.__TAURI__?.dialog) {
-                              const { save } = window.__TAURI__.dialog;
-                              const { writeTextFile } = window.__TAURI__.fs;
+                            if (invoke) {
+                              const { save } = await import('@tauri-apps/plugin-dialog');
+                              const { writeTextFile } = await import('@tauri-apps/plugin-fs');
                               const filePath = await save({
                                 defaultPath: `mailvault-logs-${new Date().toISOString().split('T')[0]}.txt`,
                                 filters: [{ name: 'Text Files', extensions: ['txt'] }]
