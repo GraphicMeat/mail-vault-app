@@ -44,19 +44,23 @@ async function buildServer() {
   
   console.log('✅ Server bundled to src-tauri/binaries/server-bundle.cjs');
   
-  // Detect platform
+  // Detect platform — allow override via TAURI_TARGET env var for cross-compilation in CI
   const platform = process.platform;
   const arch = process.arch;
-  
+  const tauriTarget = process.env.TAURI_TARGET;
+
   // Tauri expects binaries named with target triple
   // macOS: mailvault-server-aarch64-apple-darwin or mailvault-server-x86_64-apple-darwin
   // Windows: mailvault-server-x86_64-pc-windows-msvc.exe
   // Linux: mailvault-server-x86_64-unknown-linux-gnu
-  
+
   let targetTriple;
   let binaryExt = '';
-  
-  if (platform === 'darwin') {
+
+  if (tauriTarget) {
+    targetTriple = tauriTarget;
+    if (tauriTarget.includes('windows')) binaryExt = '.exe';
+  } else if (platform === 'darwin') {
     targetTriple = arch === 'arm64' ? 'aarch64-apple-darwin' : 'x86_64-apple-darwin';
   } else if (platform === 'win32') {
     targetTriple = 'x86_64-pc-windows-msvc';
@@ -73,7 +77,16 @@ async function buildServer() {
   
   try {
     console.log('🔨 Attempting to compile with Bun...');
-    execSync(`bun build ${join(rootDir, 'server', 'index.js')} --compile --outfile "${sidecarPath}"`, {
+    // Map target triple to Bun's --target flag for cross-compilation
+    let bunTarget = '';
+    if (targetTriple === 'x86_64-apple-darwin') {
+      bunTarget = '--target=bun-darwin-x64';
+    } else if (targetTriple === 'aarch64-apple-darwin') {
+      bunTarget = '--target=bun-darwin-arm64';
+    } else if (targetTriple === 'x86_64-unknown-linux-gnu') {
+      bunTarget = '--target=bun-linux-x64';
+    }
+    execSync(`bun build ${join(rootDir, 'server', 'index.js')} --compile ${bunTarget} --outfile "${sidecarPath}"`, {
       stdio: 'inherit',
       cwd: rootDir
     });

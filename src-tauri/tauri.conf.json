@@ -56,7 +56,7 @@
     "resources": [],
     "shortDescription": "Reactive Email Client with Local Storage",
     "createUpdaterArtifacts": true,
-    "targets": ["app"],
+    "targets": ["app", "dmg"],
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",

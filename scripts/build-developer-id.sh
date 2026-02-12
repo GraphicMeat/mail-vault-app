@@ -81,6 +81,19 @@ fi
 echo -e "${GREEN}✅ Found: $SIGNING_NAME${NC}"
 echo -e "   Using certificate hash: ${SIGNING_HASH}"
 
+# Check for Tauri updater signing key
+echo ""
+echo -e "${YELLOW}🔍 Checking Tauri updater signing key...${NC}"
+if [ -n "$TAURI_PRIVATE_KEY" ]; then
+    echo -e "${GREEN}✅ TAURI_PRIVATE_KEY is set — updater artifacts will be signed${NC}"
+    UPDATER_SIGN=true
+else
+    echo -e "${YELLOW}⚠️  TAURI_PRIVATE_KEY not set — updater artifacts will NOT be signed${NC}"
+    echo "   To enable, add your signing key to scripts/signing-config.sh"
+    echo "   or generate one with: npx @tauri-apps/cli signer generate -w ~/.tauri/mailvault.key"
+    UPDATER_SIGN=false
+fi
+
 # Check for notarytool credentials
 echo ""
 echo -e "${YELLOW}🔍 Checking notarization credentials...${NC}"
@@ -274,6 +287,80 @@ if [ "$NOTARIZE" = true ]; then
     echo -e "${GREEN}✅ Notarization verified${NC}"
 fi
 
+# Tauri updater artifacts
+UPDATER_BUNDLE_DIR="src-tauri/target/release/bundle/macos"
+UPDATE_TAR_GZ=""
+UPDATE_SIG=""
+
+if [ "$UPDATER_SIGN" = true ]; then
+    echo ""
+    echo -e "${YELLOW}🔄 Processing Tauri updater artifacts...${NC}"
+
+    # Find the updater .tar.gz (created by tauri build when createUpdaterArtifacts is true)
+    UPDATE_TAR_GZ=$(find "$UPDATER_BUNDLE_DIR" -name "*.tar.gz" -not -name "*.sig" 2>/dev/null | head -1)
+    UPDATE_SIG=$(find "$UPDATER_BUNDLE_DIR" -name "*.tar.gz.sig" 2>/dev/null | head -1)
+
+    if [ -n "$UPDATE_TAR_GZ" ] && [ -f "$UPDATE_TAR_GZ" ]; then
+        echo -e "${GREEN}✅ Found updater archive: $(basename "$UPDATE_TAR_GZ")${NC}"
+
+        if [ -n "$UPDATE_SIG" ] && [ -f "$UPDATE_SIG" ]; then
+            echo -e "${GREEN}✅ Found updater signature: $(basename "$UPDATE_SIG")${NC}"
+        else
+            echo -e "${YELLOW}⚠️  No .sig file found — signing manually...${NC}"
+            npx @tauri-apps/cli signer sign "$UPDATE_TAR_GZ" --private-key "$TAURI_PRIVATE_KEY" --password "$TAURI_KEY_PASSWORD" 2>&1
+            UPDATE_SIG="${UPDATE_TAR_GZ}.sig"
+            if [ -f "$UPDATE_SIG" ]; then
+                echo -e "${GREEN}✅ Updater signature created${NC}"
+            else
+                echo -e "${RED}❌ Failed to create updater signature${NC}"
+                UPDATER_SIGN=false
+            fi
+        fi
+
+        # Copy updater artifacts next to DMG for easy access
+        UPDATER_OUTPUT_DIR="src-tauri/target/release/bundle/dmg"
+        cp "$UPDATE_TAR_GZ" "$UPDATER_OUTPUT_DIR/"
+        cp "$UPDATE_SIG" "$UPDATER_OUTPUT_DIR/" 2>/dev/null
+
+        # Generate latest.json for the updater endpoint
+        echo ""
+        echo -e "${YELLOW}📝 Generating latest.json updater manifest...${NC}"
+
+        SIGNATURE=$(cat "$UPDATE_SIG" 2>/dev/null || echo "")
+        PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        TAR_GZ_NAME=$(basename "$UPDATE_TAR_GZ")
+        ARCH=$(uname -m)
+
+        # Map architecture to Tauri target triple
+        if [ "$ARCH" = "arm64" ]; then
+            PLATFORM="darwin-aarch64"
+        else
+            PLATFORM="darwin-x86_64"
+        fi
+
+        LATEST_JSON="$UPDATER_OUTPUT_DIR/latest.json"
+        cat > "$LATEST_JSON" <<EOJSON
+{
+  "version": "${VERSION}",
+  "notes": "MailVault v${VERSION}",
+  "pub_date": "${PUB_DATE}",
+  "platforms": {
+    "${PLATFORM}": {
+      "signature": "${SIGNATURE}",
+      "url": "https://github.com/GraphicMeat/mail-vault-app/releases/download/v${VERSION}/${TAR_GZ_NAME}"
+    }
+  }
+}
+EOJSON
+
+        echo -e "${GREEN}✅ latest.json generated${NC}"
+    else
+        echo -e "${YELLOW}⚠️  No updater .tar.gz found in $UPDATER_BUNDLE_DIR${NC}"
+        echo "   Ensure 'createUpdaterArtifacts' is set to true in tauri.conf.json"
+        UPDATER_SIGN=false
+    fi
+fi
+
 # Summary
 echo ""
 echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
@@ -281,14 +368,22 @@ echo -e "${GREEN}  Build Complete!${NC}"
 echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
 echo ""
 echo "📦 Output:"
-echo "   App: $APP_PATH"
-echo "   DMG: $SIGNED_DMG"
+echo "   App:  $APP_PATH"
+echo "   DMG:  $SIGNED_DMG"
+if [ "$UPDATER_SIGN" = true ] && [ -n "$UPDATE_TAR_GZ" ]; then
+    echo "   Update archive:   $UPDATER_OUTPUT_DIR/$(basename "$UPDATE_TAR_GZ")"
+    echo "   Update signature: $UPDATER_OUTPUT_DIR/$(basename "$UPDATE_SIG")"
+    echo "   Update manifest:  $LATEST_JSON"
+fi
 echo ""
 if [ "$NOTARIZE" = true ]; then
     echo -e "${GREEN}✅ The DMG is signed and notarized - ready for distribution!${NC}"
 else
     echo -e "${YELLOW}⚠️  The DMG is signed but NOT notarized.${NC}"
     echo "   Users may see Gatekeeper warnings."
+fi
+if [ "$UPDATER_SIGN" = true ]; then
+    echo -e "${GREEN}✅ Updater artifacts are signed - upload latest.json and .tar.gz to your GitHub release${NC}"
 fi
 echo ""
 
