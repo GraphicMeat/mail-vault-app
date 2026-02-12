@@ -22,6 +22,7 @@ Thumbs.db
 .idea/
 .vscode/
 .claude/
+CLAUDE.md
 *.swp
 *.swo
 
@@ -34,3 +35,9 @@ Thumbs.db
 # Signing credentials (contains sensitive data)
 scripts/signing-config.sh
 *.key
+
+# Website database
+website/api/data.json
+website/api/data.db
+website/api/data.db-shm
+website/api/data.db-wal

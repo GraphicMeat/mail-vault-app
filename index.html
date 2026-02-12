@@ -1094,7 +1094,12 @@
     const voteCountEl = document.getElementById('vote-count');
     let hasVoted = localStorage.getItem('mailvault-voted') === 'true';
 
-    // Update button state if already voted
+    function markAsVoted() {
+      hasVoted = true;
+      localStorage.setItem('mailvault-voted', 'true');
+      wantThisBtn.classList.add('bg-primary-50', 'dark:bg-primary-900/20');
+    }
+
     if (hasVoted) {
       wantThisBtn.classList.add('bg-primary-50', 'dark:bg-primary-900/20');
     }
@@ -1103,19 +1108,15 @@
     async function fetchVoteCount() {
       try {
         const res = await fetch(`${API_BASE}/api/votes`);
-        if (res.ok) {
-          const data = await res.json();
-          voteCountEl.textContent = data.count || 0;
-        }
+        const data = await res.json();
+        voteCountEl.textContent = data.count || 0;
       } catch (e) {
-        // API not available, show placeholder
-        voteCountEl.textContent = '127'; // Placeholder
+        console.warn('Could not fetch vote count:', e);
       }
     }
 
     wantThisBtn.addEventListener('click', async () => {
       if (hasVoted) {
-        // Visual feedback that already voted
         wantThisBtn.classList.add('animate-pulse');
         setTimeout(() => wantThisBtn.classList.remove('animate-pulse'), 500);
         return;
@@ -1124,23 +1125,13 @@
       try {
         const res = await fetch(`${API_BASE}/api/votes`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 'Accept': 'application/json' }
         });
-
-        if (res.ok) {
-          const data = await res.json();
-          voteCountEl.textContent = data.count;
-          hasVoted = true;
-          localStorage.setItem('mailvault-voted', 'true');
-          wantThisBtn.classList.add('bg-primary-50', 'dark:bg-primary-900/20');
-        }
+        const data = await res.json();
+        voteCountEl.textContent = data.count;
+        markAsVoted();
       } catch (e) {
-        // Fallback: just increment locally
-        const current = parseInt(voteCountEl.textContent) || 0;
-        voteCountEl.textContent = current + 1;
-        hasVoted = true;
-        localStorage.setItem('mailvault-voted', 'true');
-        wantThisBtn.classList.add('bg-primary-50', 'dark:bg-primary-900/20');
+        console.error('Vote failed:', e);
       }
     });
 

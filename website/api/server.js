@@ -1,16 +1,42 @@
+// Load .env from multiple possible locations
+const fs = require('fs');
+const pathMod = require('path');
+function loadEnvFile(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) return false;
+    const lines = fs.readFileSync(filePath, 'utf8').split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx === -1) continue;
+      const key = trimmed.substring(0, eqIdx).trim();
+      const val = trimmed.substring(eqIdx + 1).trim();
+      if (!process.env[key]) process.env[key] = val;
+    }
+    return true;
+  } catch { return false; }
+}
+// Try: same dir as server.js, then project root
+loadEnvFile(pathMod.join(__dirname, '.env')) ||
+loadEnvFile(pathMod.join(process.cwd(), '.env')) ||
+loadEnvFile('/home/u369747114/domains/mailvaultapp.com/.env');
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const nodemailer = require('nodemailer');
+let nodemailer;
+try { nodemailer = require('nodemailer'); } catch { nodemailer = null; }
 const path = require('path');
-const db = require('./database');
+const { getPool, initDatabase } = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+let dbError = null;
 
 // Email transporter (configured via env vars)
-const transporter = process.env.SMTP_HOST ? nodemailer.createTransport({
+const transporter = (nodemailer && process.env.SMTP_HOST) ? nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: parseInt(process.env.SMTP_PORT) || 465,
   secure: (parseInt(process.env.SMTP_PORT) || 465) === 465,
@@ -32,7 +58,7 @@ app.use(helmet({
 
 // CORS - allow requests from your website
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*', // Set to your domain in production
+  origin: process.env.CORS_ORIGIN || '*',
   methods: ['GET', 'POST'],
   allowedHeaders: ['Content-Type']
 }));
@@ -45,23 +71,23 @@ app.set('trust proxy', 1);
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   message: { error: 'Too many requests, please try again later.' }
 });
 app.use(limiter);
 
 // Stricter rate limit for voting
 const voteLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 10, // limit each IP to 10 votes per hour
+  windowMs: 60 * 60 * 1000,
+  max: 10,
   message: { error: 'Too many votes, please try again later.' }
 });
 
 // Strict rate limit for contact form
 const contactLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 3, // 3 messages per hour per IP
+  windowMs: 60 * 60 * 1000,
+  max: 3,
   message: { error: 'Too many messages. Please try again later.' }
 });
 
@@ -96,10 +122,11 @@ app.get('/api/health', (req, res) => {
 // -------------------------------------------
 
 // Get total vote count
-app.get('/api/votes', (req, res) => {
+app.get('/api/votes', async (req, res) => {
   try {
-    const result = db.prepare('SELECT COUNT(*) as count FROM votes').get();
-    res.json({ count: result.count });
+    const db = getPool();
+    const [rows] = await db.execute('SELECT COUNT(*) as count FROM votes');
+    res.json({ count: rows[0].count });
   } catch (error) {
     console.error('Error getting votes:', error);
     res.status(500).json({ error: 'Failed to get vote count' });
@@ -107,27 +134,29 @@ app.get('/api/votes', (req, res) => {
 });
 
 // Submit a vote
-app.post('/api/votes', voteLimiter, (req, res) => {
+app.post('/api/votes', voteLimiter, async (req, res) => {
   try {
+    const db = getPool();
     const ip = getClientIP(req);
     const userAgent = req.headers['user-agent'] || '';
+    const ipHash = hashIP(ip);
 
     // Check if already voted (by IP)
-    const existing = db.prepare('SELECT id FROM votes WHERE ip_hash = ?').get(hashIP(ip));
+    const [existing] = await db.execute('SELECT id FROM votes WHERE ip_hash = ?', [ipHash]);
 
-    if (existing) {
-      const result = db.prepare('SELECT COUNT(*) as count FROM votes').get();
-      return res.json({ count: result.count, alreadyVoted: true });
+    if (existing.length > 0) {
+      const [rows] = await db.execute('SELECT COUNT(*) as count FROM votes');
+      return res.json({ count: rows[0].count, alreadyVoted: true });
     }
 
     // Insert new vote
-    db.prepare(`
-      INSERT INTO votes (ip_hash, user_agent, created_at)
-      VALUES (?, ?, datetime('now'))
-    `).run(hashIP(ip), userAgent);
+    await db.execute(
+      'INSERT INTO votes (ip_hash, user_agent) VALUES (?, ?)',
+      [ipHash, userAgent]
+    );
 
-    const result = db.prepare('SELECT COUNT(*) as count FROM votes').get();
-    res.json({ count: result.count, alreadyVoted: false });
+    const [rows] = await db.execute('SELECT COUNT(*) as count FROM votes');
+    res.json({ count: rows[0].count, alreadyVoted: false });
   } catch (error) {
     console.error('Error submitting vote:', error);
     res.status(500).json({ error: 'Failed to submit vote' });
@@ -139,9 +168,10 @@ app.post('/api/votes', voteLimiter, (req, res) => {
 // -------------------------------------------
 
 // Get all features with vote counts
-app.get('/api/features', (req, res) => {
+app.get('/api/features', async (req, res) => {
   try {
-    const features = db.prepare(`
+    const db = getPool();
+    const [features] = await db.execute(`
       SELECT
         f.id,
         f.name,
@@ -149,10 +179,9 @@ app.get('/api/features', (req, res) => {
         COUNT(fv.id) as votes
       FROM features f
       LEFT JOIN feature_votes fv ON f.id = fv.feature_id
-      GROUP BY f.id
+      GROUP BY f.id, f.name, f.description
       ORDER BY votes DESC, f.id ASC
-    `).all();
-
+    `);
     res.json(features);
   } catch (error) {
     console.error('Error getting features:', error);
@@ -161,32 +190,34 @@ app.get('/api/features', (req, res) => {
 });
 
 // Vote for a feature
-app.post('/api/features/:id/vote', voteLimiter, (req, res) => {
+app.post('/api/features/:id/vote', voteLimiter, async (req, res) => {
   try {
+    const db = getPool();
     const featureId = parseInt(req.params.id);
     const ip = getClientIP(req);
+    const ipHash = hashIP(ip);
 
     // Check if feature exists
-    const feature = db.prepare('SELECT id FROM features WHERE id = ?').get(featureId);
-    if (!feature) {
+    const [feature] = await db.execute('SELECT id FROM features WHERE id = ?', [featureId]);
+    if (feature.length === 0) {
       return res.status(404).json({ error: 'Feature not found' });
     }
 
     // Check if already voted for this feature (by IP)
-    const existing = db.prepare(`
-      SELECT id FROM feature_votes
-      WHERE feature_id = ? AND ip_hash = ?
-    `).get(featureId, hashIP(ip));
+    const [existing] = await db.execute(
+      'SELECT id FROM feature_votes WHERE feature_id = ? AND ip_hash = ?',
+      [featureId, ipHash]
+    );
 
-    if (existing) {
+    if (existing.length > 0) {
       return res.json({ success: true, alreadyVoted: true });
     }
 
     // Insert vote
-    db.prepare(`
-      INSERT INTO feature_votes (feature_id, ip_hash, created_at)
-      VALUES (?, ?, datetime('now'))
-    `).run(featureId, hashIP(ip));
+    await db.execute(
+      'INSERT INTO feature_votes (feature_id, ip_hash) VALUES (?, ?)',
+      [featureId, ipHash]
+    );
 
     res.json({ success: true, alreadyVoted: false });
   } catch (error) {
@@ -201,6 +232,7 @@ app.post('/api/features/:id/vote', voteLimiter, (req, res) => {
 
 app.post('/api/subscribe', async (req, res) => {
   try {
+    const db = getPool();
     const { email } = req.body;
 
     if (!email || !isValidEmail(email)) {
@@ -208,21 +240,20 @@ app.post('/api/subscribe', async (req, res) => {
     }
 
     // Check if already subscribed
-    const existing = db.prepare('SELECT id FROM subscribers WHERE email = ?').get(email.toLowerCase());
+    const [existing] = await db.execute('SELECT id FROM subscribers WHERE email = ?', [email.toLowerCase()]);
 
-    if (existing) {
+    if (existing.length > 0) {
       return res.json({ success: true, message: 'Already subscribed' });
     }
 
     // Insert subscriber
-    db.prepare(`
-      INSERT INTO subscribers (email, ip_hash, created_at)
-      VALUES (?, ?, datetime('now'))
-    `).run(email.toLowerCase(), hashIP(getClientIP(req)));
+    await db.execute(
+      'INSERT INTO subscribers (email, ip_hash) VALUES (?, ?)',
+      [email.toLowerCase(), hashIP(getClientIP(req))]
+    );
 
     // Send emails
     if (transporter && process.env.SMTP_USER) {
-      // Notify you about the new subscriber
       if (process.env.NOTIFY_EMAIL) {
         transporter.sendMail({
           from: `"MailVault" <${process.env.SMTP_USER}>`,
@@ -233,7 +264,6 @@ app.post('/api/subscribe', async (req, res) => {
         }).catch(err => console.error('Failed to send subscriber notification:', err));
       }
 
-      // Send welcome email to the subscriber
       transporter.sendMail({
         from: `"MailVault" <${process.env.SMTP_USER}>`,
         to: email.toLowerCase(),
@@ -266,6 +296,7 @@ app.post('/api/subscribe', async (req, res) => {
 
 app.post('/api/contact', contactLimiter, async (req, res) => {
   try {
+    const db = getPool();
     const { name, email, category, message, website: honeypot, _t } = req.body;
 
     // Honeypot: if the hidden field is filled, it's a bot
@@ -288,10 +319,10 @@ app.post('/api/contact', contactLimiter, async (req, res) => {
     }
 
     // Insert contact message
-    db.prepare(`
-      INSERT INTO contacts (name, email, category, message, ip_hash, created_at)
-      VALUES (?, ?, ?, ?, ?, datetime('now'))
-    `).run(name, email.toLowerCase(), category || 'other', message, hashIP(getClientIP(req)));
+    await db.execute(
+      'INSERT INTO contacts (name, email, category, message, ip_hash) VALUES (?, ?, ?, ?, ?)',
+      [name, email.toLowerCase(), category || 'other', message, hashIP(getClientIP(req))]
+    );
 
     // Send email notification
     if (transporter && process.env.NOTIFY_EMAIL) {
@@ -317,24 +348,18 @@ app.post('/api/contact', contactLimiter, async (req, res) => {
 });
 
 // ===========================================
-// Admin Routes (protected - add auth in production)
+// Admin Routes (protected)
 // ===========================================
 
-// Get all subscribers (for export)
-app.get('/api/admin/subscribers', (req, res) => {
-  // TODO: Add authentication
+app.get('/api/admin/subscribers', async (req, res) => {
   const adminKey = req.headers['x-admin-key'];
   if (adminKey !== process.env.ADMIN_KEY) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
   try {
-    const subscribers = db.prepare(`
-      SELECT id, email, created_at
-      FROM subscribers
-      ORDER BY created_at DESC
-    `).all();
-
+    const db = getPool();
+    const [subscribers] = await db.execute('SELECT id, email, created_at FROM subscribers ORDER BY created_at DESC');
     res.json(subscribers);
   } catch (error) {
     console.error('Error getting subscribers:', error);
@@ -342,20 +367,15 @@ app.get('/api/admin/subscribers', (req, res) => {
   }
 });
 
-// Get all contact messages
-app.get('/api/admin/contacts', (req, res) => {
+app.get('/api/admin/contacts', async (req, res) => {
   const adminKey = req.headers['x-admin-key'];
   if (adminKey !== process.env.ADMIN_KEY) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
   try {
-    const contacts = db.prepare(`
-      SELECT id, name, email, category, message, created_at
-      FROM contacts
-      ORDER BY created_at DESC
-    `).all();
-
+    const db = getPool();
+    const [contacts] = await db.execute('SELECT id, name, email, category, message, created_at FROM contacts ORDER BY created_at DESC');
     res.json(contacts);
   } catch (error) {
     console.error('Error getting contacts:', error);
@@ -367,13 +387,11 @@ app.get('/api/admin/contacts', (req, res) => {
 // Utilities
 // ===========================================
 
-// Simple hash for IP (for privacy - don't store raw IPs)
 function hashIP(ip) {
   const crypto = require('crypto');
-  return crypto.createHash('sha256').update(ip + process.env.IP_SALT || 'mailvault-salt').digest('hex').substring(0, 32);
+  return crypto.createHash('sha256').update(ip + (process.env.IP_SALT || 'mailvault-salt')).digest('hex').substring(0, 32);
 }
 
-// Email validation
 function isValidEmail(email) {
   const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return re.test(email);
@@ -384,12 +402,15 @@ function isValidEmail(email) {
 // ===========================================
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`
-╔════════════════════════════════════════════╗
-║   MailVault Website API                    ║
-║   Running on http://0.0.0.0:${PORT}            ║
-╚════════════════════════════════════════════╝
-  `);
+  console.log(`Server listening on port ${PORT}`);
+
+  // Initialize database after server is listening
+  initDatabase().then(() => {
+    console.log('Database connected');
+  }).catch(err => {
+    dbError = err.message;
+    console.error('Database initialization failed:', err.message);
+  });
 });
 
 module.exports = app;
