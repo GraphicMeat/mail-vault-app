@@ -5,6 +5,24 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MailVault - Own Your Emails Forever</title>
   <meta name="description" content="MailVault is a privacy-first email client that stores your emails locally. Keep your emails forever, even after they're deleted from the server.">
+  <link rel="canonical" href="https://mailvaultapp.com/">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/">
+  <meta property="og:title" content="MailVault - Own Your Emails Forever">
+  <meta property="og:description" content="MailVault is a privacy-first email client that stores your emails locally. Keep your emails forever, even after they're deleted from the server.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MailVault - Own Your Emails Forever">
+  <meta name="twitter:description" content="MailVault is a privacy-first email client that stores your emails locally. Keep your emails forever, even after they're deleted from the server.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/x-icon" href="favicon.ico">
@@ -72,6 +90,32 @@
     .float { animation: float 3s ease-in-out infinite; }
     .feature-card:hover { transform: translateY(-4px); }
   </style>
+
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "MailVault",
+    "description": "MailVault is a privacy-first email client that stores your emails locally. Keep your emails forever, even after they're deleted from the server.",
+    "operatingSystem": "macOS",
+    "applicationCategory": "BusinessApplication",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "downloadUrl": "https://github.com/GraphicMeat/mail-vault-app/releases/latest",
+    "featureList": [
+      "Local email storage",
+      "Privacy-first design",
+      "IMAP support",
+      "Offline access",
+      "Full-text search",
+      "Email backup"
+    ]
+  }
+  </script>
 </head>
 
 <body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
@@ -949,7 +993,7 @@
         </p>
 
         <div class="flex flex-col sm:flex-row gap-4 justify-center">
-          <a href="#" class="gradient-bg text-white px-8 py-4 rounded-xl font-semibold text-lg hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-3">
+          <a id="download-dmg" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" class="gradient-bg text-white px-8 py-4 rounded-xl font-semibold text-lg hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-3">
             <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
               <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
             </svg>
@@ -1240,6 +1284,19 @@
       }
     });
 
+
+    // ============================================
+    // Resolve latest DMG download URL from GitHub
+    // ============================================
+    fetch('https://api.github.com/repos/GraphicMeat/mail-vault-app/releases/latest')
+      .then(r => r.json())
+      .then(release => {
+        const dmg = release.assets.find(a => a.name.endsWith('.dmg'));
+        if (dmg) {
+          document.getElementById('download-dmg').href = dmg.browser_download_url;
+        }
+      })
+      .catch(() => {});
 
     // ============================================
     // Smooth scroll for anchor links
