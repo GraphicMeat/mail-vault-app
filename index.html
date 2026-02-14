@@ -3,16 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MailVault - Own Your Emails Forever</title>
-  <meta name="description" content="MailVault is a privacy-first email client that stores your emails locally. Keep your emails forever, even after they're deleted from the server.">
+  <title>MailVault — Free Local Email Backup for Mac | Store Emails Offline</title>
+  <meta name="description" content="Back up your IMAP emails locally on macOS. MailVault stores emails offline in a local archive — keep them forever, even after server deletion. Free and open source.">
+  <meta name="robots" content="index, follow">
+  <meta name="keywords" content="email backup mac, local email storage, IMAP backup, offline email archive, email client macOS, privacy email app">
   <link rel="canonical" href="https://mailvaultapp.com/">
   <meta name="theme-color" content="#6366f1">
 
   <!-- Open Graph -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mailvaultapp.com/">
-  <meta property="og:title" content="MailVault - Own Your Emails Forever">
-  <meta property="og:description" content="MailVault is a privacy-first email client that stores your emails locally. Keep your emails forever, even after they're deleted from the server.">
+  <meta property="og:title" content="MailVault — Free Local Email Backup for Mac | Store Emails Offline">
+  <meta property="og:description" content="Back up your IMAP emails locally on macOS. MailVault stores emails offline in a local archive — keep them forever, even after server deletion. Free and open source.">
   <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -20,14 +22,17 @@
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="MailVault - Own Your Emails Forever">
-  <meta name="twitter:description" content="MailVault is a privacy-first email client that stores your emails locally. Keep your emails forever, even after they're deleted from the server.">
+  <meta name="twitter:title" content="MailVault — Free Local Email Backup for Mac | Store Emails Offline">
+  <meta name="twitter:description" content="Back up your IMAP emails locally on macOS. MailVault stores emails offline in a local archive — keep them forever, even after server deletion. Free and open source.">
   <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/x-icon" href="favicon.ico">
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+
+  <!-- DNS Prefetch -->
+  <link rel="dns-prefetch" href="https://cdn.tailwindcss.com">
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -97,7 +102,7 @@
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "MailVault",
-    "description": "MailVault is a privacy-first email client that stores your emails locally. Keep your emails forever, even after they're deleted from the server.",
+    "description": "Back up your IMAP emails locally on macOS. MailVault stores emails offline in a local archive — keep them forever, even after server deletion. Free and open source.",
     "operatingSystem": "macOS",
     "applicationCategory": "BusinessApplication",
     "offers": {
@@ -113,19 +118,45 @@
       "Offline access",
       "Full-text search",
       "Email backup"
-    ]
+    ],
+    "screenshot": "https://mailvaultapp.com/og-image.png",
+    "author": {
+      "@type": "Organization",
+      "name": "MailVault"
+    }
   }
   </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "MailVault",
+    "url": "https://mailvaultapp.com",
+    "logo": "https://mailvaultapp.com/icon-128.png",
+    "sameAs": ["https://github.com/GraphicMeat/mail-vault-app"]
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "MailVault",
+    "url": "https://mailvaultapp.com"
+  }
+  </script>
+
+  <!-- Plausible Analytics -->
+  <script defer data-domain="mailvaultapp.com" src="https://plausible.io/js/script.js"></script>
 </head>
 
 <body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
 
   <!-- Navigation -->
-  <nav class="fixed top-0 left-0 right-0 z-50 glass">
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16">
         <div class="flex items-center gap-2">
-          <img src="icon-128.png" alt="MailVault" class="w-8 h-8 rounded-lg">
+          <img src="icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
           <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
         </div>
 
@@ -153,8 +184,10 @@
     </div>
   </nav>
 
+  <main>
+
   <!-- Hero Section -->
-  <section class="min-h-screen flex items-center pt-16 relative overflow-hidden">
+  <section aria-label="Hero" class="min-h-screen flex items-center pt-16 relative overflow-hidden">
     <!-- Background decoration -->
     <div class="absolute inset-0 overflow-hidden pointer-events-none">
       <div class="absolute -top-40 -right-40 w-80 h-80 bg-primary-500/20 rounded-full blur-3xl"></div>
@@ -175,8 +208,8 @@
           </h1>
 
           <p class="text-lg sm:text-xl text-slate-600 dark:text-slate-400 mb-8 leading-relaxed">
-            MailVault is a privacy-first email client that stores your emails locally.
-            Keep your important messages safe, even after they're deleted from the server.
+            Free local email backup and offline archive for Mac.
+            MailVault stores your IMAP emails locally — keep them safe forever, even after they're deleted from the server.
           </p>
 
           <div class="flex flex-col sm:flex-row gap-4 mb-8">
@@ -222,7 +255,7 @@
           <div class="float">
             <!-- Realistic App Mockup -->
             <div class="relative rounded-2xl overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-700" style="font-size: 11px;">
-              <div id="app-screenshot" class="aspect-[4/3] bg-white dark:bg-[#1a1a2e] flex">
+              <div id="app-screenshot" role="img" aria-label="MailVault desktop email client showing inbox with email list and message viewer" class="aspect-[4/3] bg-white dark:bg-[#1a1a2e] flex">
                 <!-- Sidebar -->
                 <div class="w-[72px] bg-slate-50 dark:bg-[#12122a] flex flex-col items-center py-3 gap-3 border-r border-slate-200 dark:border-[#2a2a4a] flex-shrink-0">
                   <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center">
@@ -388,7 +421,7 @@
   </section>
 
   <!-- Origin Story Section -->
-  <section class="py-20 bg-white dark:bg-slate-800/50">
+  <section aria-label="Why we built MailVault" class="py-20 bg-white dark:bg-slate-800/50">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="max-w-3xl mx-auto">
         <div class="text-center mb-10">
@@ -423,7 +456,7 @@
   </section>
 
   <!-- Problem Section -->
-  <section class="py-20">
+  <section aria-label="Email risks" class="py-20">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="max-w-3xl mx-auto text-center mb-16">
         <h2 class="text-3xl sm:text-4xl font-bold mb-6">
@@ -500,7 +533,7 @@
   </section>
 
   <!-- Features Section -->
-  <section id="features" class="py-20">
+  <section id="features" aria-label="Features" class="py-20">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="max-w-3xl mx-auto text-center mb-16">
         <h2 class="text-3xl sm:text-4xl font-bold mb-6">
@@ -594,7 +627,7 @@
   </section>
 
   <!-- Chat View Section -->
-  <section class="py-20 bg-white dark:bg-slate-800/50 overflow-hidden">
+  <section aria-label="Chat view feature" class="py-20 bg-white dark:bg-slate-800/50 overflow-hidden">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="grid lg:grid-cols-2 gap-12 items-center">
         <div>
@@ -785,7 +818,7 @@
   </section>
 
   <!-- How It Works Section -->
-  <section id="how-it-works" class="py-20 bg-white dark:bg-slate-800/50">
+  <section id="how-it-works" aria-label="How it works" class="py-20 bg-white dark:bg-slate-800/50">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="max-w-3xl mx-auto text-center mb-16">
         <h2 class="text-3xl sm:text-4xl font-bold mb-6">
@@ -831,7 +864,7 @@
   </section>
 
   <!-- Store & Free Server Section -->
-  <section class="py-20">
+  <section aria-label="Store locally and free server space" class="py-20">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="max-w-3xl mx-auto text-center mb-16">
         <h2 class="text-3xl sm:text-4xl font-bold mb-6">
@@ -904,7 +937,7 @@
   </section>
 
   <!-- Newsletter Section -->
-  <section class="py-20 bg-white dark:bg-slate-800/50">
+  <section aria-label="Newsletter signup" class="py-20 bg-white dark:bg-slate-800/50">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="max-w-xl mx-auto text-center">
         <div class="w-16 h-16 mx-auto mb-6 rounded-2xl gradient-bg flex items-center justify-center">
@@ -940,7 +973,7 @@
   </section>
 
   <!-- Community / Contact Section -->
-  <section id="community" class="py-20">
+  <section id="community" aria-label="Community and contact" class="py-20">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="max-w-3xl mx-auto text-center mb-12">
         <h2 class="text-3xl sm:text-4xl font-bold mb-4">
@@ -982,7 +1015,7 @@
   </section>
 
   <!-- Download Section -->
-  <section id="download" class="py-20 bg-white dark:bg-slate-800/50">
+  <section id="download" aria-label="Download MailVault" class="py-20 bg-white dark:bg-slate-800/50">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="max-w-3xl mx-auto text-center">
         <h2 class="text-3xl sm:text-4xl font-bold mb-6">
@@ -1015,17 +1048,20 @@
     </div>
   </section>
 
+  </main>
+
   <!-- Footer -->
   <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex flex-col md:flex-row items-center justify-between gap-6">
         <div class="flex items-center gap-2">
-          <img src="icon-128.png" alt="MailVault" class="w-8 h-8 rounded-lg">
+          <img src="icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
           <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
         </div>
 
         <div class="flex items-center gap-6 text-sm text-slate-600 dark:text-slate-400">
           <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacy Policy</a>
+          <a href="/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
           <a href="/terms.html" class="hover:text-primary-500 transition-colors">Terms of Service</a>
           <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
         </div>
@@ -1138,6 +1174,7 @@
     const voteCountEl = document.getElementById('vote-count');
     let hasVoted = localStorage.getItem('mailvault-voted') === 'true';
 
+    // Update button state if already voted
     function markAsVoted() {
       hasVoted = true;
       localStorage.setItem('mailvault-voted', 'true');
@@ -1155,6 +1192,7 @@
         const data = await res.json();
         voteCountEl.textContent = data.count || 0;
       } catch (e) {
+        // API not available
         console.warn('Could not fetch vote count:', e);
       }
     }
@@ -1176,6 +1214,7 @@
         markAsVoted();
       } catch (e) {
         console.error('Vote failed:', e);
+        // Don't mark as voted on failure — let user retry
       }
     });
 

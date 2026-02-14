@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FAQ - MailVault | Frequently Asked Questions</title>
+  <meta name="description" content="Frequently asked questions about MailVault. Learn how MailVault backs up your IMAP emails locally on macOS, supported providers, security, and more.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/faq.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/faq.html">
+  <meta property="og:title" content="FAQ - MailVault | Frequently Asked Questions">
+  <meta property="og:description" content="Frequently asked questions about MailVault. Learn how MailVault backs up your IMAP emails locally on macOS, supported providers, security, and more.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="FAQ - MailVault | Frequently Asked Questions">
+  <meta name="twitter:description" content="Frequently asked questions about MailVault. Learn how MailVault backs up your IMAP emails locally on macOS, supported providers, security, and more.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc',
+              400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca',
+              800: '#3730a3', 900: '#312e81',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .gradient-text {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .gradient-bg { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); }
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .faq-answer { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; }
+    .faq-answer.open { max-height: 500px; }
+    .faq-chevron { transition: transform 0.3s ease; }
+    .faq-chevron.open { transform: rotate(180deg); }
+  </style>
+
+  <!-- Structured Data: WebPage -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "name": "FAQ - MailVault",
+    "description": "Frequently asked questions about MailVault. Learn how MailVault backs up your IMAP emails locally on macOS.",
+    "url": "https://mailvaultapp.com/faq.html",
+    "isPartOf": {
+      "@type": "WebSite",
+      "name": "MailVault",
+      "url": "https://mailvaultapp.com/"
+    }
+  }
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What is MailVault?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "MailVault is a free, open-source desktop email client for macOS that stores your emails locally. It connects to your email accounts via IMAP and saves all messages to a local SQLite database on your computer, giving you a permanent offline backup of your emails."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How does MailVault back up emails?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "MailVault connects to your email server using the IMAP protocol and downloads all your emails to a local SQLite database on your Mac. Once synced, your emails are stored permanently on your machine. You can then safely delete emails from the server to free up space while keeping them accessible locally."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Which email providers does MailVault work with?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "MailVault works with any email provider that supports IMAP, including Gmail, Outlook, Yahoo Mail, iCloud Mail, ProtonMail (with Bridge), Fastmail, Zoho Mail, and any self-hosted or business email provider with IMAP access."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is MailVault free?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes, MailVault is completely free and open source. There are no premium plans, no subscriptions, and no feature restrictions. The full source code is available on GitHub."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Where are my emails stored?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "All emails are stored locally on your Mac in a SQLite database. Your data never leaves your computer and is never uploaded to any cloud service. MailVault does not have servers that store your email data."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I access my emails offline?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Once your emails are synced, they are stored locally and you can read, search, and browse all of them without an internet connection. You only need internet to sync new emails or send messages."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is my data secure?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "MailVault is designed with privacy first. Your email credentials are stored in the macOS Keychain, not in plain text. All data stays on your machine — there is no cloud sync, no tracking, no analytics, and no data mining. The app is open source so you can verify the code yourself."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What happens if I delete emails from the server?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "If you delete emails from your email server after MailVault has synced them, they remain safely stored in your local MailVault archive. This is one of the main use cases — back up locally, then free up server storage space without losing anything."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does MailVault work with Gmail and Outlook?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. MailVault works with Gmail, Outlook, and any other email service that supports IMAP. For Gmail, you may need to enable IMAP access and use an App Password if you have two-factor authentication enabled."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What are the system requirements?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "MailVault requires macOS 11.0 (Big Sur) or later. It runs natively on both Intel and Apple Silicon Macs. The app is lightweight and runs in the background from your menu bar with minimal resource usage."
+        }
+      }
+    ]
+  }
+  </script>
+
+  <!-- Plausible Analytics -->
+  <script defer data-domain="mailvaultapp.com" src="https://plausible.io/js/script.js"></script>
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/" class="flex items-center gap-2">
+          <img src="icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+        <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+          <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/>
+          </svg>
+          <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Content -->
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      <h1 class="text-4xl font-bold mb-2">Frequently Asked Questions</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">Everything you need to know about MailVault.</p>
+
+      <div class="space-y-3">
+
+        <!-- FAQ 1 -->
+        <div class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">What is MailVault?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              MailVault is a free, open-source desktop email client for macOS that stores your emails locally. It connects to your email accounts via IMAP and saves all messages to a local SQLite database on your computer, giving you a permanent offline backup of your emails.
+            </p>
+          </div>
+        </div>
+
+        <!-- FAQ 2 -->
+        <div class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">How does MailVault back up emails?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              MailVault connects to your email server using the IMAP protocol and downloads all your emails to a local SQLite database on your Mac. Once synced, your emails are stored permanently on your machine. You can then safely delete emails from the server to free up space while keeping them accessible locally.
+            </p>
+          </div>
+        </div>
+
+        <!-- FAQ 3 -->
+        <div class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">Which email providers does MailVault work with?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              MailVault works with any email provider that supports IMAP, including Gmail, Outlook, Yahoo Mail, iCloud Mail, ProtonMail (with Bridge), Fastmail, Zoho Mail, and any self-hosted or business email provider with IMAP access.
+            </p>
+          </div>
+        </div>
+
+        <!-- FAQ 4 -->
+        <div class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">Is MailVault free?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              Yes, MailVault is completely free and open source. There are no premium plans, no subscriptions, and no feature restrictions. The full source code is available on <a href="https://github.com/GraphicMeat/mail-vault-app" class="text-primary-500 hover:underline" target="_blank">GitHub</a>.
+            </p>
+          </div>
+        </div>
+
+        <!-- FAQ 5 -->
+        <div class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">Where are my emails stored?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              All emails are stored locally on your Mac in a SQLite database. Your data never leaves your computer and is never uploaded to any cloud service. MailVault does not have servers that store your email data.
+            </p>
+          </div>
+        </div>
+
+        <!-- FAQ 6 -->
+        <div class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">Can I access my emails offline?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              Yes. Once your emails are synced, they are stored locally and you can read, search, and browse all of them without an internet connection. You only need internet to sync new emails or send messages.
+            </p>
+          </div>
+        </div>
+
+        <!-- FAQ 7 -->
+        <div class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">Is my data secure?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              MailVault is designed with privacy first. Your email credentials are stored in the macOS Keychain, not in plain text. All data stays on your machine — there is no cloud sync, no tracking, no analytics, and no data mining. The app is open source so you can verify the code yourself.
+            </p>
+          </div>
+        </div>
+
+        <!-- FAQ 8 -->
+        <div class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">What happens if I delete emails from the server?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              If you delete emails from your email server after MailVault has synced them, they remain safely stored in your local MailVault archive. This is one of the main use cases — back up locally, then free up server storage space without losing anything.
+            </p>
+          </div>
+        </div>
+
+        <!-- FAQ 9 -->
+        <div class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">Does MailVault work with Gmail and Outlook?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              Yes. MailVault works with Gmail, Outlook, and any other email service that supports IMAP. For Gmail, you may need to enable IMAP access and use an App Password if you have two-factor authentication enabled.
+            </p>
+          </div>
+        </div>
+
+        <!-- FAQ 10 -->
+        <div class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">What are the system requirements?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              MailVault requires macOS 11.0 (Big Sur) or later. It runs natively on both Intel and Apple Silicon Macs. The app is lightweight and runs in the background from your menu bar with minimal resource usage.
+            </p>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- CTA -->
+      <div class="mt-12 text-center">
+        <p class="text-slate-600 dark:text-slate-400 mb-4">Still have questions?</p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" class="gradient-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+            Ask on GitHub
+          </a>
+          <a href="/#contact" class="px-6 py-3 rounded-xl font-semibold border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-2">
+            Contact Us
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <a href="/" class="flex items-center gap-2">
+          <img src="icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+        <div class="flex items-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacy Policy</a>
+          <a href="/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Terms of Service</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. All rights reserved.
+        </p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Theme Toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const html = document.documentElement;
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      html.classList.add('dark');
+    }
+    themeToggle.addEventListener('click', () => {
+      html.classList.toggle('dark');
+      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
+    });
+
+    // FAQ Accordion
+    document.querySelectorAll('.faq-toggle').forEach(button => {
+      button.addEventListener('click', () => {
+        const answer = button.nextElementSibling;
+        const chevron = button.querySelector('.faq-chevron');
+        const isOpen = answer.classList.contains('open');
+
+        // Close all others
+        document.querySelectorAll('.faq-answer.open').forEach(a => a.classList.remove('open'));
+        document.querySelectorAll('.faq-chevron.open').forEach(c => c.classList.remove('open'));
+        document.querySelectorAll('.faq-toggle[aria-expanded="true"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
+
+        // Toggle current
+        if (!isOpen) {
+          answer.classList.add('open');
+          chevron.classList.add('open');
+          button.setAttribute('aria-expanded', 'true');
+        }
+      });
+    });
+  </script>
+</body>
+</html>
