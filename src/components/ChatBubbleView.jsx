@@ -306,6 +306,14 @@ function MessageBubble({ email, fromUser, avatarColor, initials, isOriginalVisib
             .gmail_quote, blockquote[type="cite"] {
               display: none !important;
             }
+            ${isDarkMode ? `
+            *, *::before, *::after {
+              color: #e0e0e0 !important;
+              background-color: transparent !important;
+            }
+            html, body { background-color: transparent !important; }
+            a, a * { color: #60a5fa !important; }
+            ` : ''}
           </style>
         </head>
         <body>${email.html}</body>
@@ -337,11 +345,42 @@ function MessageBubble({ email, fromUser, avatarColor, initials, isOriginalVisib
       iframe.onload = () => {
         resizeIframe();
         setTimeout(resizeIframe, 200);
+        // Prevent native context menu, intercept links, and apply dark mode overrides
+        try {
+          const doc = iframe.contentDocument || iframe.contentWindow?.document;
+          if (doc) {
+            doc.addEventListener('contextmenu', (e) => e.preventDefault());
+            doc.addEventListener('click', (e) => {
+              const link = e.target.closest('a');
+              if (link && link.href && !link.href.startsWith('cid:')) {
+                e.preventDefault();
+                import('@tauri-apps/plugin-shell').then(({ open }) => {
+                  open(link.href);
+                }).catch(() => {
+                  window.open(link.href, '_blank');
+                });
+              }
+            });
+            // Dark mode: force light text on all elements
+            if (isDarkMode) {
+              doc.body.querySelectorAll('style').forEach(el => el.remove());
+              doc.querySelectorAll('*').forEach(el => {
+                el.style.setProperty('color', '#e0e0e0', 'important');
+                if (el.tagName !== 'HTML' && el.tagName !== 'BODY') {
+                  el.style.setProperty('background-color', 'transparent', 'important');
+                }
+              });
+              doc.querySelectorAll('a').forEach(el => {
+                el.style.setProperty('color', '#60a5fa', 'important');
+              });
+            }
+          }
+        } catch (e) { /* iframe access error */ }
       };
 
       setTimeout(resizeIframe, 100);
     }
-  }, [email.html, theme]);
+  }, [email.html, theme, isDarkMode]);
 
   return (
     <motion.div
@@ -678,6 +717,16 @@ function FullViewEmailModal({ email: initialEmail, onClose }) {
               padding-left: 12px;
               color: ${isDarkMode ? '#9ca3af' : '#6b7280'};
             }
+            ${isDarkMode ? `
+            *, *::before, *::after {
+              color: #e0e0e0 !important;
+              background-color: transparent !important;
+            }
+            html, body { background-color: #1e1e2e !important; }
+            a, a * { color: #60a5fa !important; }
+            hr { border-color: #4a5568 !important; }
+            td, th, table { border-color: #4a5568 !important; }
+            ` : ''}
           </style>
         </head>
         <body>${htmlBody}</body>
@@ -693,6 +742,46 @@ function FullViewEmailModal({ email: initialEmail, onClose }) {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
+
+  // Intercept links and prevent native context menu in full-view iframe
+  useEffect(() => {
+    if (!iframeRef.current) return;
+    const iframe = iframeRef.current;
+    const setup = () => {
+      try {
+        const doc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (!doc) return;
+        doc.addEventListener('contextmenu', (e) => e.preventDefault());
+        doc.addEventListener('click', (e) => {
+          const link = e.target.closest('a');
+          if (link && link.href && !link.href.startsWith('cid:')) {
+            e.preventDefault();
+            import('@tauri-apps/plugin-shell').then(({ open }) => {
+              open(link.href);
+            }).catch(() => {
+              window.open(link.href, '_blank');
+            });
+          }
+        });
+        // Dark mode: force light text on all elements
+        if (isDarkMode) {
+          const allElements = doc.querySelectorAll('*');
+          allElements.forEach(el => {
+            el.style.setProperty('color', '#e0e0e0', 'important');
+            if (el.tagName !== 'HTML' && el.tagName !== 'BODY') {
+              el.style.setProperty('background-color', 'transparent', 'important');
+            }
+          });
+          doc.querySelectorAll('a').forEach(el => {
+            el.style.setProperty('color', '#60a5fa', 'important');
+          });
+        }
+      } catch (e) { /* iframe access error */ }
+    };
+    iframe.addEventListener('load', setup);
+    setup(); // in case already loaded
+    return () => iframe.removeEventListener('load', setup);
+  }, [email, isDarkMode]);
 
   if (!email) return null;
 

@@ -15,6 +15,7 @@ import { ChatViewWrapper } from './components/ChatViewWrapper';
 import { useEmailScheduler } from './hooks/useEmailScheduler';
 import { useBackgroundCaching } from './hooks/useBackgroundCaching';
 import { motion, AnimatePresence } from 'framer-motion';
+import { RefreshCw } from 'lucide-react';
 
 // Resizable divider component
 function ResizeDivider({ orientation, onResize, onResizeEnd }) {
@@ -141,6 +142,22 @@ function App() {
     }
   }, []);
 
+  // Listen for server crash events from the Rust backend
+  useEffect(() => {
+    const listen = window.__TAURI__?.event?.listen;
+    if (!listen) return;
+    let unlisten;
+    listen('server-crashed', (event) => {
+      console.error('[App] Server crashed:', event.payload);
+      useMailStore.setState({
+        connectionStatus: 'error',
+        connectionError: event.payload,
+        connectionErrorType: 'serverError'
+      });
+    }).then(fn => { unlisten = fn; });
+    return () => { if (unlisten) unlisten(); };
+  }, []);
+
   // Track if quick load is done
   const [quickLoadDone, setQuickLoadDone] = useState(false);
 
@@ -150,7 +167,7 @@ function App() {
     const quickLoadAccounts = async () => {
       try {
         const db = await import('./services/db');
-        await db.initDB();
+        await db.initBasic();
         // Use getAccountsWithoutPasswords to avoid triggering keychain prompt
         const accounts = await db.getAccountsWithoutPasswords();
         if (accounts.length > 0) {
@@ -249,10 +266,25 @@ function App() {
     return <Onboarding />;
   }
 
-  // Show welcome screen if no accounts
+  // Show welcome screen only after full init confirms there are truly no accounts.
+  // Before full init, accounts.json may be empty (older installs store accounts only in keychain).
   if (accounts.length === 0) {
+    if (!initialized) {
+      // Still loading — show branded loading screen while keychain prompt may be active
+      return (
+        <div className="h-screen bg-mail-bg flex items-center justify-center pt-8">
+          <div className="text-center">
+            <h1 className="text-4xl font-display font-bold text-mail-text mb-4">
+              <span className="text-mail-accent">Mail</span>Vault
+            </h1>
+            <p className="text-mail-text-muted mb-4">Loading your accounts...</p>
+            <RefreshCw size={24} className="animate-spin text-mail-accent mx-auto" />
+          </div>
+        </div>
+      );
+    }
     return (
-      <div className="h-screen bg-mail-bg flex items-center justify-center">
+      <div className="h-screen bg-mail-bg flex items-center justify-center pt-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -266,16 +298,16 @@ function App() {
               A reactive email client with local storage
             </p>
           </div>
-          
+
           <button
             onClick={() => setShowAccountModal(true)}
-            className="px-6 py-3 bg-mail-accent hover:bg-mail-accent-hover text-white 
-                       font-medium rounded-lg transition-all duration-200 
+            className="px-6 py-3 bg-mail-accent hover:bg-mail-accent-hover text-white
+                       font-medium rounded-lg transition-all duration-200
                        shadow-glow hover:shadow-glow-lg"
           >
             Add Your First Account
           </button>
-          
+
           <AnimatePresence>
             {showAccountModal && (
               <AccountModal onClose={() => setShowAccountModal(false)} />

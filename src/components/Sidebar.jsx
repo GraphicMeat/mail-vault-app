@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { version } from '../../package.json';
 import { useMailStore } from '../stores/mailStore';
 import { useThemeStore } from '../stores/themeStore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -25,7 +26,9 @@ import {
   Wifi,
   Key,
   ServerOff,
-  RefreshCw
+  RefreshCw,
+  Info,
+  X
 } from 'lucide-react';
 
 const MAILBOX_ICONS = {
@@ -65,6 +68,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
   const { theme, toggleTheme } = useThemeStore();
   
   const [expandedFolders, setExpandedFolders] = useState(new Set(['INBOX']));
+  const [showErrorModal, setShowErrorModal] = useState(false);
   
   const activeAccount = accounts.find(a => a.id === activeAccountId);
   
@@ -81,9 +85,9 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
   };
   
   return (
-    <div className="w-64 h-full bg-mail-surface border-r border-mail-border flex flex-col">
+    <div className="w-64 h-full bg-mail-surface border-r border-mail-border flex flex-col relative">
       {/* Logo */}
-      <div className="p-4 border-b border-mail-border flex items-center justify-between">
+      <div data-tauri-drag-region className="px-4 py-3 border-b border-mail-border flex items-center justify-between flex-shrink-0">
         <h1 className="text-xl font-display font-bold">
           <span className="text-mail-accent">Mail</span>
           <span className="text-mail-text">Vault</span>
@@ -181,23 +185,36 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                     </>
                   )}
                 </div>
-                {connectionErrorType === 'passwordMissing' ? (
+                <div className="flex items-center gap-1">
                   <button
-                    onClick={retryKeychainAccess}
-                    className="p-1 hover:bg-mail-warning/20 rounded transition-colors"
-                    title="Retry keychain access"
+                    onClick={() => setShowErrorModal(true)}
+                    className={`p-1 rounded transition-colors ${
+                      connectionErrorType === 'passwordMissing'
+                        ? 'hover:bg-mail-warning/20'
+                        : 'hover:bg-mail-danger/20'
+                    }`}
+                    title="View error details"
                   >
-                    <RefreshCw size={12} />
+                    <Info size={12} />
                   </button>
-                ) : (
-                  <button
-                    onClick={() => loadEmails()}
-                    className="p-1 hover:bg-mail-danger/20 rounded transition-colors"
-                    title="Retry connection"
-                  >
-                    <RefreshCw size={12} />
-                  </button>
-                )}
+                  {connectionErrorType === 'passwordMissing' ? (
+                    <button
+                      onClick={retryKeychainAccess}
+                      className="p-1 hover:bg-mail-warning/20 rounded transition-colors"
+                      title="Retry keychain access"
+                    >
+                      <RefreshCw size={12} />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => loadEmails()}
+                      className="p-1 hover:bg-mail-danger/20 rounded transition-colors"
+                      title="Retry connection"
+                    >
+                      <RefreshCw size={12} />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -320,16 +337,52 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
       <div className="p-3 border-t border-mail-border">
         <button
           onClick={onOpenSettings}
-          className="w-full flex items-center gap-2 p-2 text-sm text-mail-text-muted 
+          className="w-full flex items-center gap-2 p-2 text-sm text-mail-text-muted
                     hover:text-mail-text hover:bg-mail-surface-hover rounded-lg transition-all"
         >
           <Settings size={16} />
           Settings
         </button>
         <div className="text-xs text-mail-text-muted text-center mt-2">
-          MailVault v1.0
+          MailVault v{version}
         </div>
       </div>
+
+      {/* Error Details Modal */}
+      <AnimatePresence>
+        {showErrorModal && connectionError && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+            onClick={() => setShowErrorModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-mail-bg border border-mail-border rounded-xl shadow-xl max-w-md w-full mx-4 overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b border-mail-border">
+                <h3 className="text-sm font-semibold text-mail-text">Error Details</h3>
+                <button
+                  onClick={() => setShowErrorModal(false)}
+                  className="p-1 hover:bg-mail-surface-hover rounded transition-colors"
+                >
+                  <X size={14} className="text-mail-text-muted" />
+                </button>
+              </div>
+              <div className="p-4">
+                <p className="text-sm text-mail-text-muted whitespace-pre-wrap break-words">
+                  {connectionError}
+                </p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

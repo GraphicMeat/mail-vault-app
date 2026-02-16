@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/schema.json",
   "productName": "MailVault",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "identifier": "com.mailvault.app",
   "build": {
     "beforeBuildCommand": "npm run build",
@@ -34,7 +34,7 @@
   "bundle": {
     "active": true,
     "category": "Productivity",
-    "copyright": "© 2024 MailVault",
+    "copyright": "© 2026 MailVault",
     "externalBin": ["binaries/mailvault-server"],
     "icon": [
       "icons/32x32.png",

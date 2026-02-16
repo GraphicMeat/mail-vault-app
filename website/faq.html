@@ -70,7 +70,7 @@
       border: 1px solid rgba(255, 255, 255, 0.05);
     }
     .faq-answer { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; }
-    .faq-answer.open { max-height: 500px; }
+    .faq-answer.open { max-height: 1200px; }
     .faq-chevron { transition: transform 0.3s ease; }
     .faq-chevron.open { transform: rotate(180deg); }
   </style>
@@ -102,7 +102,7 @@
         "name": "What is MailVault?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "MailVault is a free, open-source desktop email client for macOS that stores your emails locally. It connects to your email accounts via IMAP and saves all messages to a local SQLite database on your computer, giving you a permanent offline backup of your emails."
+          "text": "MailVault is a free, open-source desktop email client for macOS that stores your emails locally. It connects to your email accounts via IMAP and saves all messages as standard .eml files (RFC 5322) in Maildir format on your computer, giving you a permanent offline backup with no vendor lock-in."
         }
       },
       {
@@ -110,7 +110,7 @@
         "name": "How does MailVault back up emails?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "MailVault connects to your email server using the IMAP protocol and downloads all your emails to a local SQLite database on your Mac. Once synced, your emails are stored permanently on your machine. You can then safely delete emails from the server to free up space while keeping them accessible locally."
+          "text": "MailVault connects to your email server using the IMAP protocol and downloads each email as a standard .eml file stored in Maildir format on your Mac. Each email is one file on disk — human-readable, portable, and compatible with any mail client. Once synced, you can safely delete emails from the server to free up space while keeping them accessible locally."
         }
       },
       {
@@ -134,7 +134,15 @@
         "name": "Where are my emails stored?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "All emails are stored locally on your Mac in a SQLite database. Your data never leaves your computer and is never uploaded to any cloud service. MailVault does not have servers that store your email data."
+          "text": "All emails are stored locally on your Mac as standard .eml files organized in Maildir format — one file per email, no database required. Your data never leaves your computer and is never uploaded to any cloud service. Because .eml is a universal standard, your emails can be opened by Apple Mail, Thunderbird, Outlook, or any other mail client — you are never locked in to MailVault."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What are .eml files and Maildir? Why does it matter?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": ".eml (RFC 5322) is the internet standard format for email messages. Every email is stored as a single, self-contained text file that can be opened by any email client. Maildir is a proven directory structure for storing email, used by mail servers for decades. Each email is one file, so there is no single database that can corrupt. Together, .eml + Maildir mean your emails are future-proof, portable, and never locked in to any single application."
         }
       },
       {
@@ -166,7 +174,7 @@
         "name": "Does MailVault work with Gmail and Outlook?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Yes. MailVault works with Gmail, Outlook, and any other email service that supports IMAP. For Gmail, you may need to enable IMAP access and use an App Password if you have two-factor authentication enabled."
+          "text": "Yes. MailVault works with Gmail, Outlook, and any other email service that supports IMAP. For Gmail, you may need to enable IMAP access and use an App Password if you have two-factor authentication enabled. Outlook (Microsoft 365) also requires an App Password when two-factor authentication is enabled."
         }
       },
       {
@@ -174,15 +182,44 @@
         "name": "What are the system requirements?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "MailVault requires macOS 11.0 (Big Sur) or later. It runs natively on both Intel and Apple Silicon Macs. The app is lightweight and runs in the background from your menu bar with minimal resource usage."
+          "text": "MailVault requires macOS 10.15 (Catalina) or later. It runs natively on both Intel and Apple Silicon Macs. The app is lightweight and runs in the background from your menu bar with minimal resource usage."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How are attachments handled?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Attachments are embedded inside each .eml file as MIME parts — they are not stored as separate files. When you open an email, MailVault's Rust backend parses the MIME structure and extracts attachments on the fly. You can Open, Save As, or Show in Folder any attachment directly from the email viewer."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What happens when I archive an email?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Archiving downloads the full email from your server (if not already cached) and stores it as a .eml file on disk with the A (Archived) flag in the filename. Archived emails appear in the Local view mode and are included in backups. The email remains on your server unless you explicitly delete it."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What happens when I archive and delete from server?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "When you choose Archive & Delete from Server, MailVault first archives the email locally, then sets the IMAP \\Deleted flag on the server copy. The email becomes local-only — it only exists on your machine. This is the recommended workflow for freeing up server storage while keeping a permanent local backup."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How does backup and restore work?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "MailVault exports your emails as a ZIP archive containing all .eml files plus a manifest.json that maps emails to accounts by email address, making backups portable across installations. You can export all emails or archived only. Importing is idempotent — duplicates are skipped. If a backup contains emails for an unrecognized account, MailVault creates it automatically."
         }
       }
     ]
   }
   </script>
-
-  <!-- Plausible Analytics -->
-  <script defer data-domain="mailvaultapp.com" src="https://plausible.io/js/script.js"></script>
 </head>
 
 <body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
@@ -225,7 +262,7 @@
           </button>
           <div class="faq-answer">
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVault is a free, open-source desktop email client for macOS that stores your emails locally. It connects to your email accounts via IMAP and saves all messages to a local SQLite database on your computer, giving you a permanent offline backup of your emails.
+              MailVault is a free, open-source desktop email client for macOS that stores your emails locally. It connects to your email accounts via IMAP and saves all messages as standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml files (RFC 5322)</a> in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format on your computer, giving you a permanent offline backup with no vendor lock-in.
             </p>
           </div>
         </div>
@@ -240,7 +277,7 @@
           </button>
           <div class="faq-answer">
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVault connects to your email server using the IMAP protocol and downloads all your emails to a local SQLite database on your Mac. Once synced, your emails are stored permanently on your machine. You can then safely delete emails from the server to free up space while keeping them accessible locally.
+              MailVault connects to your email server using the IMAP protocol and downloads each email as a standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml file</a> stored in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format on your Mac. Each email is one file on disk — human-readable, portable, and compatible with any mail client. Once synced, you can safely delete emails from the server to free up space while keeping them accessible locally.
             </p>
           </div>
         </div>
@@ -284,9 +321,36 @@
             </svg>
           </button>
           <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              All emails are stored locally on your Mac in a SQLite database. Your data never leaves your computer and is never uploaded to any cloud service. MailVault does not have servers that store your email data.
-            </p>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4">All emails are stored locally on your Mac as standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml files</a> organized in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format — one file per email, no database required. Your data never leaves your computer and is never uploaded to any cloud service. Because .eml is a universal standard, your emails can be opened by Apple Mail, Thunderbird, Outlook, or any other mail client — you're never locked in to MailVault.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Directory structure:</p>
+              <pre class="bg-slate-100 dark:bg-slate-900 rounded-lg p-4 text-sm overflow-x-auto mb-2"><code>~/Library/Application Support/com.mailvault.app/
+└── maildir/
+    └── you@example.com/
+        └── INBOX/
+            ├── headers.json          ← cached list for fast loading
+            └── cur/
+                ├── 1234567890.eml    ← auto-cached email
+                └── 1234567891_AS.eml ← archived + seen email</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- FAQ: .eml and Maildir -->
+        <div class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">What are .eml files and Maildir? Why does it matter?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4"><a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml (RFC 5322)</a> is the internet standard format for email messages. Every email — headers, body, and attachments — is stored as a single, self-contained text file. Unlike proprietary databases, .eml files can be opened by any email client (Apple Mail, Thunderbird, Outlook) and read with any text editor.</p>
+              <p class="mb-4"><a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> is a proven directory structure for storing email, used by mail servers for decades. Each email is one file, so there's no single database that can corrupt — if one file is damaged, the rest of your archive is unaffected. Together, .eml + Maildir mean your emails are future-proof, portable, and never locked in to any single application.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Filename flags:</p>
+              <p>MailVault appends flag characters to the .eml filename to track status: <strong>A</strong> = Archived, <strong>S</strong> = Seen, <strong>R</strong> = Replied, <strong>F</strong> = Flagged. For example, <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">1234567890_AS.eml</code> means the email has been archived and seen.</p>
+            </div>
           </div>
         </div>
 
@@ -345,7 +409,7 @@
           </button>
           <div class="faq-answer">
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              Yes. MailVault works with Gmail, Outlook, and any other email service that supports IMAP. For Gmail, you may need to enable IMAP access and use an App Password if you have two-factor authentication enabled.
+              Yes. MailVault works with Gmail, Outlook, and any other email service that supports IMAP. For Gmail, you may need to enable IMAP access and use an App Password if you have two-factor authentication enabled. Outlook (Microsoft 365) also requires an App Password when two-factor authentication is enabled.
             </p>
           </div>
         </div>
@@ -360,7 +424,67 @@
           </button>
           <div class="faq-answer">
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVault requires macOS 11.0 (Big Sur) or later. It runs natively on both Intel and Apple Silicon Macs. The app is lightweight and runs in the background from your menu bar with minimal resource usage.
+              MailVault requires macOS 10.15 (Catalina) or later. It runs natively on both Intel and Apple Silicon Macs. The app is lightweight and runs in the background from your menu bar with minimal resource usage.
+            </p>
+          </div>
+        </div>
+
+        <!-- FAQ: Attachments -->
+        <div class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">How are attachments handled?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              Attachments are embedded inside each .eml file as MIME parts — they are not stored as separate files. When you open an email, MailVault's Rust backend parses the MIME structure and extracts attachments on the fly. You can <strong>Open</strong>, <strong>Save As</strong>, or <strong>Show in Folder</strong> any attachment directly from the email viewer. Extracted attachments are temporarily cached for quick re-access.
+            </p>
+          </div>
+        </div>
+
+        <!-- FAQ: Archive -->
+        <div class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">What happens when I archive an email?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              Archiving downloads the full email from your server (if not already cached) and stores it as a .eml file on disk with the <strong>A</strong> (Archived) flag in the filename. If the email was already cached locally, MailVault simply renames the file to add the archive flag. Archived emails appear in the <strong>Local</strong> view mode and are included in backups. The email remains on your server unless you explicitly delete it.
+            </p>
+          </div>
+        </div>
+
+        <!-- FAQ: Archive + Delete -->
+        <div class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">What happens when I archive and delete from server?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              When you choose "Archive &amp; Delete from Server," MailVault first archives the email locally (downloading and saving the .eml file with the archive flag), then sets the IMAP <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">\Deleted</code> flag on the server copy. The email becomes <strong>"local-only"</strong> — it only exists on your machine. This is the recommended workflow for freeing up server storage while keeping a permanent local backup.
+            </p>
+          </div>
+        </div>
+
+        <!-- FAQ: Backup & Restore -->
+        <div class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">How does backup and restore work?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              MailVault exports your emails as a ZIP archive containing all .eml files plus a <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">manifest.json</code> that maps emails to accounts by email address (not internal IDs), making backups portable across different installations. You can choose to export <strong>all emails</strong> or <strong>archived only</strong>. Importing is idempotent — if an email already exists locally, it won't be duplicated. If a backup contains emails for an account you haven't set up yet, MailVault creates it automatically (you just re-enter the password in Settings).
             </p>
           </div>
         </div>
@@ -393,6 +517,7 @@
         <div class="flex items-center gap-6 text-sm text-slate-600 dark:text-slate-400">
           <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacy Policy</a>
           <a href="/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
           <a href="/terms.html" class="hover:text-primary-500 transition-colors">Terms of Service</a>
           <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
         </div>

@@ -139,17 +139,17 @@ export function useBackgroundCaching() {
       return;
     }
 
-    // Check which emails are already in IndexedDB
+    // Check which emails are already in Maildir
     const uidsToFetch = [];
     for (const email of emailsToCache) {
-      const localEmail = await db.getLocalEmail(activeAccountId, activeMailbox, email.uid);
-      if (!localEmail) {
+      const emailExists = await db.isEmailSaved(activeAccountId, activeMailbox, email.uid);
+      if (!emailExists) {
         uidsToFetch.push(email.uid);
       }
     }
 
     if (uidsToFetch.length === 0) {
-      console.log('[BackgroundCaching] All recent emails already in IndexedDB');
+      console.log('[BackgroundCaching] All recent emails already in Maildir');
       return;
     }
 
@@ -167,7 +167,7 @@ export function useBackgroundCaching() {
             // Fetch full email from server
             const fullEmail = await api.fetchEmail(account, uid, activeMailbox);
 
-            // Save to IndexedDB
+            // Save to Maildir
             await db.saveEmail(fullEmail, activeAccountId, activeMailbox);
 
             // Add to in-memory cache
@@ -200,10 +200,11 @@ export function useBackgroundCaching() {
           console.log('[BackgroundCaching] Completed');
           setIsRunning(false);
 
-          // Update savedEmailIds in store
+          // Update savedEmailIds and archivedEmailIds in store
           const newSavedIds = await db.getSavedEmailIds(activeAccountId, activeMailbox);
+          const newArchivedIds = await db.getArchivedEmailIds(activeAccountId, activeMailbox);
           const newLocalEmails = await db.getLocalEmails(activeAccountId, activeMailbox);
-          useMailStore.setState({ savedEmailIds: newSavedIds, localEmails: newLocalEmails });
+          useMailStore.setState({ savedEmailIds: newSavedIds, archivedEmailIds: newArchivedIds, localEmails: newLocalEmails });
           useMailStore.getState().updateSortedEmails();
           break;
 

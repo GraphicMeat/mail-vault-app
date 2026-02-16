@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { ComposeModal } from './ComposeModal';
 import {
-  X,
   Reply,
   ReplyAll,
   Forward,
@@ -15,6 +14,7 @@ import {
   Paperclip,
   Download,
   Save,
+  Archive,
   HardDrive,
   Cloud,
   ExternalLink,
@@ -184,6 +184,7 @@ function AttachmentItem({ attachment, account, folder }) {
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState(null);
   const [downloadedPath, setDownloadedPath] = useState(null);
+  const [justDownloaded, setJustDownloaded] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
   const isTauri = !!window.__TAURI__;
 
@@ -213,6 +214,8 @@ function AttachmentItem({ attachment, account, folder }) {
           folder: folder || null,
         });
         setDownloadedPath(savedPath);
+        setJustDownloaded(true);
+        setTimeout(() => setJustDownloaded(false), 3000);
       } else {
         browserDownload(attachment);
       }
@@ -249,6 +252,8 @@ function AttachmentItem({ attachment, account, folder }) {
         destPath,
       });
       setDownloadedPath(savedPath);
+      setJustDownloaded(true);
+      setTimeout(() => setJustDownloaded(false), 3000);
     } catch (err) {
       console.error('[Attachment] Save As failed:', err);
       setError('Failed to save');
@@ -312,14 +317,14 @@ function AttachmentItem({ attachment, account, folder }) {
     <>
       <div
         className={`flex items-center gap-3 p-3 bg-mail-bg rounded-lg border transition-all group cursor-pointer
-                   ${error ? 'border-mail-danger' : downloadedPath ? 'border-green-500/50' : 'border-mail-border hover:border-mail-accent/50'}`}
+                   ${error ? 'border-mail-danger' : justDownloaded ? 'border-green-500/50' : 'border-mail-border hover:border-mail-accent/50'}`}
         onClick={downloadedPath && isTauri ? handleOpen : handleDownload}
         onContextMenu={handleContextMenu}
         role="button"
         tabIndex={0}
       >
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${downloadedPath ? 'bg-green-500/10' : 'bg-mail-accent/10'}`}>
-          {downloadedPath ? (
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${justDownloaded ? 'bg-green-500/10' : 'bg-mail-accent/10'}`}>
+          {justDownloaded ? (
             <Check size={20} className="text-green-500" />
           ) : (
             <FileText size={20} className="text-mail-accent" />
@@ -332,8 +337,10 @@ function AttachmentItem({ attachment, account, folder }) {
           <div className="text-xs text-mail-text-muted">
             {error ? (
               <span className="text-mail-danger">{error}</span>
-            ) : downloadedPath ? (
+            ) : justDownloaded ? (
               <span className="text-green-500">Downloaded</span>
+            ) : downloadedPath ? (
+              <span className="text-mail-text-muted">Click to open</span>
             ) : (
               formatSize(attachment.size)
             )}
@@ -341,8 +348,13 @@ function AttachmentItem({ attachment, account, folder }) {
         </div>
         {downloading ? (
           <div className="w-4 h-4 border-2 border-mail-accent border-t-transparent rounded-full animate-spin" />
-        ) : downloadedPath ? (
+        ) : justDownloaded ? (
           <Check size={16} className="text-green-500" />
+        ) : downloadedPath ? (
+          <ExternalLink
+            size={16}
+            className="text-mail-text-muted group-hover:text-mail-accent transition-colors"
+          />
         ) : (
           <Download
             size={16}
@@ -518,6 +530,7 @@ export function EmailViewer() {
     selectedEmailSource,
     loadingEmail,
     savedEmailIds,
+    archivedEmailIds,
     saveEmailLocally,
     removeLocalEmail,
     exportEmail,
@@ -534,16 +547,21 @@ export function EmailViewer() {
   const [composeMode, setComposeMode] = useState(null);
   const [togglingRead, setTogglingRead] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmUnarchive, setConfirmUnarchive] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
   const iframeRef = useRef(null);
   
-  const isLocal = selectedEmail && savedEmailIds.has(selectedEmail.uid);
+  const isCached = selectedEmail && savedEmailIds.has(selectedEmail.uid);
+  const isArchived = selectedEmail && archivedEmailIds.has(selectedEmail.uid);
   const isLocalOnly = selectedEmailSource === 'local-only';
   const isRead = selectedEmail?.flags?.includes('\\Seen');
 
-  // Reset raw view when switching emails
+  // Reset view states when switching emails
   useEffect(() => {
     setShowRaw(false);
+    setConfirmDelete(false);
+    setConfirmUnarchive(false);
   }, [selectedEmail?.uid]);
   
   const handleSave = async () => {
@@ -556,31 +574,38 @@ export function EmailViewer() {
     }
   };
   
-  const handleRemoveLocal = async () => {
+  const handleRemoveLocal = () => {
     if (!selectedEmail) return;
-    
-    const confirmed = confirm(
-      isLocalOnly 
-        ? 'This email only exists in your local storage.\n\nDeleting it will permanently remove it and cannot be undone.\n\nAre you sure you want to delete this email?'
-        : 'Remove this email from local storage?\n\nThe email will still be available on the server.'
-    );
-    
-    if (!confirmed) return;
-    
+    setConfirmUnarchive(true);
+  };
+
+  const confirmRemoveLocal = async () => {
+    setConfirmUnarchive(false);
     await removeLocalEmail(selectedEmail.uid);
   };
   
   const handleExport = async () => {
     if (!selectedEmail) return;
     const exported = await exportEmail(selectedEmail.uid);
-    if (exported) {
-      const blob = new Blob([exported.content], { type: exported.mimeType });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = exported.filename;
-      a.click();
-      URL.revokeObjectURL(url);
+    if (!exported) return;
+
+    try {
+      const { save } = await import('@tauri-apps/plugin-dialog');
+      const { invoke } = window.__TAURI__.core;
+
+      const destPath = await save({
+        defaultPath: exported.filename,
+        title: 'Export Email',
+      });
+      if (!destPath) return; // user cancelled
+
+      await invoke('save_attachment_to', {
+        filename: exported.filename,
+        contentBase64: exported.rawBase64,
+        destPath,
+      });
+    } catch (err) {
+      console.error('[Export] Save As failed:', err);
     }
   };
   
@@ -594,22 +619,13 @@ export function EmailViewer() {
     }
   };
   
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (!selectedEmail || deleting) return;
-    
-    if (isLocal) {
-      // Email exists on server AND locally
-      const confirmed = confirm(
-        'This email is saved locally and exists on the server.\n\n' +
-        'Deleting from server will keep the local copy.\n\n' +
-        'Are you sure you want to delete this email from the server?'
-      );
-      if (!confirmed) return;
-    } else {
-      // Email only on server
-      if (!confirm('Are you sure you want to delete this email?')) return;
-    }
-    
+    setConfirmDelete(true);
+  };
+
+  const confirmDeleteEmail = async () => {
+    setConfirmDelete(false);
     setDeleting(true);
     try {
       await deleteEmailFromServer(selectedEmail.uid);
@@ -620,6 +636,16 @@ export function EmailViewer() {
   
   // Build HTML content for iframe with dark mode support
   const isDarkMode = theme === 'dark';
+
+  // Extract body content from email HTML — strip outer document structure
+  // so we don't nest <html>/<body> inside our template
+  const getEmailBodyContent = (html) => {
+    if (!html) return '';
+    // Extract content between <body...> and </body>
+    const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    return bodyMatch ? bodyMatch[1] : html;
+  };
+
   const iframeContent = selectedEmail?.html ? `
     <!DOCTYPE html>
     <html>
@@ -646,32 +672,25 @@ export function EmailViewer() {
 
           /* Dark mode adjustments */
           ${isDarkMode ? `
-            /* Invert common light backgrounds in emails */
-            div[style*="background-color: #fff"],
-            div[style*="background-color: white"],
-            div[style*="background-color:#fff"],
-            div[style*="background-color:#ffffff"],
-            td[style*="background-color: #fff"],
-            td[style*="background-color: white"],
-            td[style*="background-color:#fff"],
-            td[style*="background-color:#ffffff"] {
-              background-color: #1a1a2e !important;
+            /* Force all elements to inherit light text color */
+            *, *::before, *::after {
+              color: #e2e8f0 !important;
             }
 
-            /* Force text colors for readability */
-            div[style*="color: #000"],
-            div[style*="color:#000"],
-            div[style*="color: black"],
-            span[style*="color: #000"],
-            span[style*="color:#000"],
-            span[style*="color: black"],
-            p[style*="color: #000"],
-            p[style*="color:#000"],
-            p[style*="color: black"],
-            td[style*="color: #000"],
-            td[style*="color:#000"],
-            td[style*="color: black"] {
-              color: #e2e8f0 !important;
+            /* Force all backgrounds transparent */
+            *, *::before, *::after {
+              background-color: transparent !important;
+              background-image: none !important;
+            }
+
+            /* Restore body background */
+            html, body {
+              background: #1a1a2e !important;
+            }
+
+            /* Preserve link colors */
+            a, a * {
+              color: #818cf8 !important;
             }
 
             /* Handle blockquotes */
@@ -679,7 +698,7 @@ export function EmailViewer() {
               border-left: 3px solid #4a5568;
               padding-left: 12px;
               margin-left: 0;
-              color: #a0aec0;
+              color: #a0aec0 !important;
             }
 
             /* Handle code blocks */
@@ -690,20 +709,25 @@ export function EmailViewer() {
 
             /* Handle horizontal rules */
             hr {
-              border-color: #4a5568;
+              border-color: #4a5568 !important;
+            }
+
+            /* Handle borders */
+            td, th, table {
+              border-color: #4a5568 !important;
             }
           ` : ''}
         </style>
       </head>
-      <body>${selectedEmail.html}</body>
+      <body>${getEmailBodyContent(selectedEmail.html)}</body>
     </html>
   ` : '';
   
-  // Auto-resize iframe to content height
+  // Auto-resize iframe and apply dark mode overrides
   useEffect(() => {
     if (iframeRef.current && selectedEmail?.html) {
       const iframe = iframeRef.current;
-      
+
       const resizeIframe = () => {
         try {
           const doc = iframe.contentDocument || iframe.contentWindow?.document;
@@ -720,18 +744,99 @@ export function EmailViewer() {
           console.error('Failed to resize iframe:', e);
         }
       };
-      
+
+      // Force light text and transparent backgrounds in dark mode
+      const applyDarkModeOverrides = () => {
+        if (!isDarkMode) return;
+        try {
+          const doc = iframe.contentDocument || iframe.contentWindow?.document;
+          if (!doc || !doc.body) return;
+          // Remove any <style> tags from the email content that might override our colors
+          doc.body.querySelectorAll('style').forEach(el => el.remove());
+          // Force colors on every element via inline !important
+          const allElements = doc.querySelectorAll('*');
+          allElements.forEach(el => {
+            el.style.setProperty('color', '#e2e8f0', 'important');
+            if (el.tagName !== 'HTML' && el.tagName !== 'BODY') {
+              el.style.setProperty('background-color', 'transparent', 'important');
+            }
+          });
+          // Preserve distinct link color
+          doc.querySelectorAll('a').forEach(el => {
+            el.style.setProperty('color', '#818cf8', 'important');
+          });
+        } catch (e) {
+          console.error('Failed to apply dark mode overrides:', e);
+        }
+      };
+
+      // Intercept link clicks inside iframe and open in system browser
+      const interceptLinks = () => {
+        try {
+          const doc = iframe.contentDocument || iframe.contentWindow?.document;
+          if (!doc) return;
+          doc.addEventListener('click', (e) => {
+            const link = e.target.closest('a');
+            if (link && link.href && !link.href.startsWith('cid:')) {
+              e.preventDefault();
+              e.stopPropagation();
+              const url = link.href;
+              // Use Tauri shell plugin to open in system browser
+              import('@tauri-apps/plugin-shell').then(({ open }) => {
+                open(url);
+              }).catch(() => {
+                window.open(url, '_blank');
+              });
+            }
+          });
+          // Custom context menu (replaces native "Open Frame in New Window" which doesn't work in Tauri)
+          doc.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            // Remove any existing custom menu
+            const existing = doc.getElementById('mv-ctx-menu');
+            if (existing) existing.remove();
+            // Build menu
+            const menu = doc.createElement('div');
+            menu.id = 'mv-ctx-menu';
+            menu.style.cssText = 'position:fixed;z-index:99999;background:#1e1e2e;border:1px solid #444;border-radius:6px;padding:4px 0;min-width:180px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.3);';
+            menu.style.left = e.clientX + 'px';
+            menu.style.top = e.clientY + 'px';
+            const items = [
+              { label: 'Copy', action: () => doc.execCommand('copy') },
+              { label: 'Select All', action: () => doc.execCommand('selectAll') },
+            ];
+            items.forEach(({ label, action }) => {
+              const item = doc.createElement('div');
+              item.textContent = label;
+              item.style.cssText = 'padding:6px 14px;cursor:pointer;color:#e2e8f0;';
+              item.onmouseover = () => item.style.background = '#333';
+              item.onmouseout = () => item.style.background = 'none';
+              item.onclick = () => { action(); menu.remove(); };
+              menu.appendChild(item);
+            });
+            doc.body.appendChild(menu);
+            // Close on click outside
+            const close = () => { menu.remove(); doc.removeEventListener('click', close); };
+            setTimeout(() => doc.addEventListener('click', close), 0);
+          });
+        } catch (e) {
+          console.error('Failed to intercept iframe links:', e);
+        }
+      };
+
       // Resize after load
       iframe.onload = () => {
+        applyDarkModeOverrides();
+        interceptLinks();
         resizeIframe();
         setTimeout(resizeIframe, 200);
         setTimeout(resizeIframe, 1000);
       };
-      
+
       // Initial resize
       setTimeout(resizeIframe, 100);
     }
-  }, [selectedEmail?.html, theme]);
+  }, [selectedEmail?.html, theme, isDarkMode]);
   
   if (!selectedEmail && !loadingEmail) {
     return (
@@ -757,9 +862,9 @@ export function EmailViewer() {
   }
   
   return (
-    <div className="flex-1 flex flex-col bg-mail-bg overflow-hidden min-h-0 h-full">
+    <div className="flex-1 flex flex-col bg-mail-bg overflow-hidden min-h-0 h-full relative">
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-mail-border">
+      <div data-tauri-drag-region className="flex items-center justify-between px-4 py-3 border-b border-mail-border">
         <div className="flex items-center gap-2">
           <button 
             onClick={() => setComposeMode('reply')}
@@ -775,14 +880,34 @@ export function EmailViewer() {
           >
             <ReplyAll size={18} className="text-mail-text-muted" />
           </button>
-          <button 
+          <button
             onClick={() => setComposeMode('forward')}
-            className="p-2 hover:bg-mail-surface rounded-lg transition-colors" 
+            className="p-2 hover:bg-mail-surface rounded-lg transition-colors"
             title="Forward"
           >
             <Forward size={18} className="text-mail-text-muted" />
           </button>
-          
+
+          {selectedEmail?.html && (
+            <>
+              <div className="w-px h-6 bg-mail-border mx-2" />
+              <button
+                onClick={() => {
+                  const invoke = window.__TAURI__?.core?.invoke;
+                  if (!invoke) return;
+                  invoke('open_email_window', {
+                    html: iframeContent,
+                    title: selectedEmail.subject || 'Email',
+                  });
+                }}
+                className="p-2 hover:bg-mail-surface rounded-lg transition-colors"
+                title="Open in New Window"
+              >
+                <ExternalLink size={18} className="text-mail-text-muted" />
+              </button>
+            </>
+          )}
+
           {/* Server-only actions - hidden for local-only emails */}
           {!isLocalOnly && (
             <>
@@ -812,41 +937,33 @@ export function EmailViewer() {
         </div>
         
         <div className="flex items-center gap-2">
-          {/* Local storage indicator */}
+          {/* Storage indicator */}
           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm
-                          ${isLocalOnly 
-                            ? 'bg-mail-warning/10 text-mail-warning' 
-                            : isLocal 
-                              ? 'bg-mail-local/10 text-mail-local' 
+                          ${isLocalOnly
+                            ? 'bg-mail-warning/10 text-mail-warning'
+                            : isArchived
+                              ? 'bg-mail-local/10 text-mail-local'
                               : 'bg-mail-server/10 text-mail-server'}`}>
             {isLocalOnly ? (
               <>
                 <HardDrive size={14} />
                 <span>Local only</span>
               </>
-            ) : isLocal ? (
+            ) : isArchived ? (
               <>
                 <HardDrive size={14} />
-                <span>Saved locally</span>
+                <span>Archived</span>
               </>
             ) : (
               <>
                 <Cloud size={14} />
-                <span>Server only</span>
+                <span>Server</span>
               </>
             )}
           </div>
-          
+
           {isLocalOnly ? (
             <>
-              <button
-                onClick={handleExport}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-mail-surface 
-                          hover:bg-mail-surface-hover rounded-lg text-sm transition-colors"
-              >
-                <Download size={14} />
-                Export
-              </button>
               <button
                 onClick={handleRemoveLocal}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-mail-danger/10
@@ -855,36 +972,44 @@ export function EmailViewer() {
                 <Trash2 size={14} />
                 Delete
               </button>
-            </>
-          ) : isLocal ? (
-            <>
               <button
                 onClick={handleExport}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-mail-surface 
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-mail-surface
                           hover:bg-mail-surface-hover rounded-lg text-sm transition-colors"
               >
                 <Download size={14} />
                 Export
               </button>
+            </>
+          ) : isArchived ? (
+            <>
               <button
                 onClick={handleRemoveLocal}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-mail-text-muted
                           hover:bg-mail-surface-hover rounded-lg text-sm transition-colors"
               >
-                <X size={14} />
-                Remove local
+                <Archive size={14} />
+                Unarchive
+              </button>
+              <button
+                onClick={handleExport}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-mail-surface
+                          hover:bg-mail-surface-hover rounded-lg text-sm transition-colors"
+              >
+                <Download size={14} />
+                Export
               </button>
             </>
           ) : (
             <button
               onClick={handleSave}
               disabled={saving}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-mail-local/10 
-                        text-mail-local hover:bg-mail-local/20 rounded-lg text-sm 
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-mail-local/10
+                        text-mail-local hover:bg-mail-local/20 rounded-lg text-sm
                         font-medium transition-colors disabled:opacity-50"
             >
-              <Save size={14} />
-              {saving ? 'Saving...' : 'Save Locally'}
+              <Archive size={14} />
+              {saving ? 'Archiving...' : 'Archive'}
             </button>
           )}
         </div>
@@ -963,6 +1088,96 @@ export function EmailViewer() {
             replyTo={selectedEmail}
             onClose={() => setComposeMode(null)}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Delete Confirmation */}
+      <AnimatePresence>
+        {confirmDelete && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black/40 flex items-center justify-center z-50"
+            onClick={() => setConfirmDelete(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-mail-surface border border-mail-border rounded-xl p-6 shadow-xl max-w-sm mx-4"
+            >
+              <h3 className="text-lg font-semibold text-mail-text mb-2">Delete email?</h3>
+              <p className="text-sm text-mail-text-muted mb-4">
+                {isArchived
+                  ? 'This email is archived locally. Deleting from server will keep the archived copy.'
+                  : 'This email will be permanently deleted from the server.'}
+              </p>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  className="px-4 py-2 text-sm text-mail-text bg-mail-bg border border-mail-border
+                            rounded-lg hover:bg-mail-surface-hover transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteEmail}
+                  className="px-4 py-2 text-sm text-white bg-red-600 rounded-lg
+                            hover:bg-red-700 transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Unarchive / Delete Local Confirmation */}
+      <AnimatePresence>
+        {confirmUnarchive && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black/40 flex items-center justify-center z-50"
+            onClick={() => setConfirmUnarchive(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-mail-surface border border-mail-border rounded-xl p-6 shadow-xl max-w-sm mx-4"
+            >
+              <h3 className="text-lg font-semibold text-mail-text mb-2">
+                {isLocalOnly ? 'Delete email?' : 'Unarchive email?'}
+              </h3>
+              <p className="text-sm text-mail-text-muted mb-4">
+                {isLocalOnly
+                  ? 'This email only exists in your local archive. Deleting it is permanent and cannot be undone.'
+                  : 'The cached copy will be removed. The email will still be available on the server.'}
+              </p>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setConfirmUnarchive(false)}
+                  className="px-4 py-2 text-sm text-mail-text bg-mail-bg border border-mail-border
+                            rounded-lg hover:bg-mail-surface-hover transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmRemoveLocal}
+                  className="px-4 py-2 text-sm text-white bg-red-600 rounded-lg
+                            hover:bg-red-700 transition-colors"
+                >
+                  {isLocalOnly ? 'Delete' : 'Unarchive'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

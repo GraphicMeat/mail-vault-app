@@ -1,6 +1,6 @@
 {
   "name": "mailvault",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "A reactive email client with local storage capabilities",
   "type": "module",
   "scripts": {
@@ -29,7 +29,6 @@
     "express-rate-limit": "^7.1.5",
     "framer-motion": "^10.16.16",
     "helmet": "^7.1.0",
-    "idb": "^7.1.1",
     "imapflow": "^1.0.154",
     "lucide-react": "^0.294.0",
     "mailparser": "^3.6.6",

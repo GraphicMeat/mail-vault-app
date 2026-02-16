@@ -1,413 +1,511 @@
-import { openDB } from 'idb';
+import { readTextFile, writeTextFile, readDir, mkdir, remove, exists, BaseDirectory } from '@tauri-apps/plugin-fs';
+import { parseKeychainValue, getAccountsFromKeychain } from './keychainUtils.js';
 
-const DB_NAME = 'mailvault-db';
-const DB_VERSION = 2;
+// Re-export for any consumers that import from db.js
+export { parseKeychainValue, getAccountsFromKeychain };
 
 // Use global Tauri API (more reliable in production builds)
-// In Tauri v2, invoke is at window.__TAURI__.core.invoke
 const invoke = window.__TAURI__?.core?.invoke;
 
-// Debug logging
-console.log('[db.js] Initializing...');
+console.log('[db.js] Initializing (Maildir .eml)...');
 console.log('[db.js] invoke available:', !!invoke);
 
-// Test invoke on startup (only log result, don't test keychain to avoid clutter)
 if (invoke) {
   invoke('get_app_data_dir')
     .then(result => console.log('[db.js] Tauri invoke working. App data dir:', result))
     .catch(error => console.error('[db.js] Tauri invoke failed:', error));
 }
 
-let db = null;
+let initialized = false;
 
-// Credentials cache - stores all passwords in memory after first fetch
-// This avoids multiple keychain accesses
-let credentialsCache = null;
-let credentialsCacheLoaded = false;
+// Keychain cache - stores full account objects (id, email, servers, password)
+// Each value in the HashMap is a JSON-serialized account object.
+// Format: { accountId: JSON.stringify({id, email, imapServer, smtpServer, password, createdAt}) }
+let keychainCache = null;
+let keychainLoaded = false;
 
-// Get all credentials from keychain (single access)
-async function getAllCredentials() {
-  if (credentialsCacheLoaded) {
-    return credentialsCache || {};
-  }
-
-  if (!invoke) {
-    credentialsCacheLoaded = true;
-    return {};
-  }
+async function loadKeychain() {
+  if (keychainLoaded) return keychainCache || {};
+  if (!invoke) { keychainLoaded = true; return {}; }
 
   try {
-    console.log('[db.js] Fetching all credentials from keychain...');
-    credentialsCache = await invoke('get_credentials');
-    credentialsCacheLoaded = true;
-    console.log('[db.js] Credentials loaded for', Object.keys(credentialsCache).length, 'account(s)');
-    return credentialsCache;
+    console.log('[db.js] Loading accounts from keychain...');
+    keychainCache = await invoke('get_credentials');
+    keychainLoaded = true;
+    console.log('[db.js] Keychain loaded for', Object.keys(keychainCache).length, 'account(s)');
+    return keychainCache;
   } catch (error) {
-    console.log('[db.js] No credentials found or error:', error);
-    // Try migration from old per-account format
-    credentialsCache = await migrateOldCredentials();
-    credentialsCacheLoaded = true;
-    return credentialsCache;
+    console.log('[db.js] No keychain data found or error:', error);
+    keychainCache = {};
+    keychainLoaded = true;
+    return keychainCache;
   }
 }
 
-// Migrate from old per-account password storage to new single JSON
-async function migrateOldCredentials() {
-  if (!invoke) return {};
-
-  console.log('[db.js] Attempting migration from old credential format...');
-  const database = await initDB();
-  const accounts = await database.getAll('accounts');
-  const credentials = {};
-
-  for (const account of accounts) {
-    try {
-      const password = await invoke('get_password', { accountId: account.id });
-      if (password) {
-        credentials[account.id] = password;
-        console.log('[db.js] Migrated password for account:', account.id);
-      }
-    } catch {
-      // Password not found for this account
-    }
-  }
-
-  // Store migrated credentials in new format
-  if (Object.keys(credentials).length > 0) {
-    try {
-      await invoke('store_credentials', { credentials });
-      console.log('[db.js] Migration complete. Stored', Object.keys(credentials).length, 'credential(s)');
-    } catch (error) {
-      console.error('[db.js] Failed to store migrated credentials:', error);
-    }
-  }
-
-  return credentials;
-}
-
-// Store all credentials to keychain (single access)
-async function storeAllCredentials(credentials) {
+async function saveKeychain(data) {
   if (!invoke) return;
-
   try {
-    await invoke('store_credentials', { credentials });
-    credentialsCache = credentials;
-    console.log('[db.js] Stored credentials for', Object.keys(credentials).length, 'account(s)');
+    await invoke('store_credentials', { credentials: data });
+    keychainCache = data;
+    console.log('[db.js] Keychain saved for', Object.keys(data).length, 'account(s)');
   } catch (error) {
-    console.error('[db.js] Failed to store credentials:', error);
+    console.error('[db.js] Failed to save keychain:', error);
     throw error;
   }
 }
 
-// Clear credentials cache (call this when account data might have changed externally)
 export function clearCredentialsCache() {
-  credentialsCache = null;
-  credentialsCacheLoaded = false;
+  keychainCache = null;
+  keychainLoaded = false;
+}
+
+// --- File helpers (accounts.json only) ---
+
+const ACCOUNTS_FILE = 'accounts.json';
+const MAILDIR = 'Maildir';
+
+async function ensureDir(path) {
+  try {
+    const dirExists = await exists(path, { baseDir: BaseDirectory.AppData });
+    if (!dirExists) {
+      await mkdir(path, { baseDir: BaseDirectory.AppData, recursive: true });
+    }
+  } catch {
+    await mkdir(path, { baseDir: BaseDirectory.AppData, recursive: true });
+  }
+}
+
+async function readAccountsFile() {
+  try {
+    const fileExists = await exists(ACCOUNTS_FILE, { baseDir: BaseDirectory.AppData });
+    if (!fileExists) return [];
+    const data = await readTextFile(ACCOUNTS_FILE, { baseDir: BaseDirectory.AppData });
+    return JSON.parse(data);
+  } catch (error) {
+    console.warn('[db.js] Failed to read accounts.json:', error);
+    return [];
+  }
+}
+
+async function writeAccountsFile(accounts) {
+  await writeTextFile(ACCOUNTS_FILE, JSON.stringify(accounts, null, 2), { baseDir: BaseDirectory.AppData });
+}
+
+function accountDir(accountId) {
+  return `${MAILDIR}/${accountId}`;
+}
+
+// localId format: {uuid}-{mailbox}-{uid}
+// UUID v4 is always 36 chars (8-4-4-4-12), uid is always numeric
+function parseLocalId(localId) {
+  const match = localId.match(/^(.{36})-(.+)-(\d+)$/);
+  if (!match) return null;
+  return { accountId: match[1], mailbox: match[2], uid: match[3] };
+}
+
+// --- Init ---
+
+// Lightweight init: directories + accounts.json only. NO keychain access.
+// Used by quick-load to show cached data before keychain prompt.
+let basicInitDone = false;
+
+export async function initBasic() {
+  if (basicInitDone) return;
+
+  // Ensure base directories exist
+  await ensureDir(MAILDIR);
+
+  // Ensure accounts.json exists
+  try {
+    const fileExists = await exists(ACCOUNTS_FILE, { baseDir: BaseDirectory.AppData });
+    if (!fileExists) {
+      await writeAccountsFile([]);
+    }
+  } catch {
+    await writeAccountsFile([]);
+  }
+
+  basicInitDone = true;
+  console.log('[db.js] Basic init done (no keychain)');
 }
 
 export async function initDB() {
-  if (db) return db;
-  
-  db = await openDB(DB_NAME, DB_VERSION, {
-    upgrade(database) {
-      // Accounts store
-      if (!database.objectStoreNames.contains('accounts')) {
-        const accountStore = database.createObjectStore('accounts', { keyPath: 'id' });
-        accountStore.createIndex('email', 'email', { unique: true });
-      }
-      
-      // Emails store - preserves complete email data
-      if (!database.objectStoreNames.contains('emails')) {
-        const emailStore = database.createObjectStore('emails', { keyPath: 'localId' });
-        emailStore.createIndex('accountId', 'accountId');
-        emailStore.createIndex('uid', 'uid');
-        emailStore.createIndex('messageId', 'messageId');
-        emailStore.createIndex('mailbox', 'mailbox');
-        emailStore.createIndex('accountMailbox', ['accountId', 'mailbox']);
-        emailStore.createIndex('date', 'date');
-      }
-      
-      // Saved emails index - tracks which emails are saved locally
-      if (!database.objectStoreNames.contains('savedIndex')) {
-        const savedStore = database.createObjectStore('savedIndex', { keyPath: 'key' });
-        savedStore.createIndex('accountId', 'accountId');
-      }
+  if (initialized) return;
 
-      // Email headers cache - stores email list headers for instant startup
-      if (!database.objectStoreNames.contains('emailHeaders')) {
-        const headersStore = database.createObjectStore('emailHeaders', { keyPath: 'cacheKey' });
-        headersStore.createIndex('accountId', 'accountId');
-        headersStore.createIndex('mailbox', 'mailbox');
-        headersStore.createIndex('accountMailbox', ['accountId', 'mailbox']);
-      }
-    }
-  });
-  
-  return db;
-}
+  await initBasic();
 
-// Account operations
-export async function saveAccount(account) {
-  console.log('[db.js] saveAccount called', { accountId: account.id, hasPassword: !!account.password });
-
-  const database = await initDB();
-
-  // Store password in system keychain (if Tauri is available)
-  if (invoke && account.password) {
-    console.log('[db.js] Storing password in keychain...');
+  // Run one-time migration from .json to .eml (idempotent)
+  if (invoke) {
     try {
-      // Get existing credentials and add/update this account's password
-      const credentials = await getAllCredentials();
-      credentials[account.id] = account.password;
-      await storeAllCredentials(credentials);
-      console.log('[db.js] Password stored successfully in keychain');
-    } catch (error) {
-      console.error('[db.js] Failed to store password in keychain:', error);
-      throw error;
+      const result = await invoke('maildir_migrate_json_to_eml');
+      console.log('[db.js] Migration:', result);
+    } catch (e) {
+      console.warn('[db.js] Migration failed (non-fatal):', e);
     }
-    // Store account metadata without password in IndexedDB
-    const { password, ...accountWithoutPassword } = account;
-    await database.put('accounts', accountWithoutPassword);
-    console.log('[db.js] Account metadata saved to IndexedDB (without password)');
-  } else {
-    // Fallback: store full account in IndexedDB (browser mode)
-    console.log('[db.js] Fallback: storing full account in IndexedDB');
-    await database.put('accounts', account);
   }
 
+  // Clean up legacy keychain entries that have no email (just { id, password })
+  if (invoke) {
+    try {
+      const data = await loadKeychain();
+      const allKeys = Object.keys(data);
+      const keysToRemove = [];
+
+      for (const key of allKeys) {
+        const account = parseKeychainValue(key, data[key]);
+        if (!account.email) {
+          keysToRemove.push(key);
+        }
+      }
+
+      if (keysToRemove.length > 0) {
+        console.log('[db.js] Removing', keysToRemove.length, 'legacy keychain entries without email:', keysToRemove);
+        for (const key of keysToRemove) {
+          delete data[key];
+        }
+        await saveKeychain(data);
+        console.log('[db.js] Legacy keychain cleanup complete');
+      }
+    } catch (e) {
+      console.warn('[db.js] Legacy keychain cleanup failed (non-fatal):', e);
+    }
+  }
+
+  initialized = true;
+  console.log('[db.js] Maildir .eml storage initialized');
+}
+
+// --- Account operations ---
+
+export async function saveAccount(account) {
+  console.log('[db.js] saveAccount called', { accountId: account.id, hasPassword: !!account.password });
+  await initDB();
+
+  // Store full account (including password) in keychain
+  if (invoke) {
+    try {
+      const data = await loadKeychain();
+      data[account.id] = JSON.stringify(account);
+      await saveKeychain(data);
+      console.log('[db.js] Account stored in keychain');
+    } catch (error) {
+      console.error('[db.js] Failed to store account in keychain:', error);
+      throw error;
+    }
+  }
+
+  // Also write metadata (no password) to accounts.json for quick loading
+  const { password, ...acctData } = account;
+  const accounts = await readAccountsFile();
+  const idx = accounts.findIndex(a => a.id === acctData.id);
+  if (idx >= 0) {
+    accounts[idx] = { ...accounts[idx], ...acctData };
+  } else {
+    accounts.push(acctData);
+  }
+  await writeAccountsFile(accounts);
+  console.log('[db.js] Account metadata saved to accounts.json');
   return account;
 }
 
-// Get accounts WITHOUT retrieving passwords from keychain
-// Use this for quick loading UI without triggering keychain prompts
 export async function getAccountsWithoutPasswords() {
-  const database = await initDB();
-  return database.getAll('accounts');
+  await initBasic();
+  return await readAccountsFile();
+}
+
+// Ensure account metadata (no password) exists in accounts.json for quick-load.
+// Called after full init to backfill from keychain data.
+export async function ensureAccountInFile(account) {
+  const accounts = await readAccountsFile();
+  if (accounts.some(a => a.id === account.id)) return;
+  const { password, ...acctData } = account;
+  accounts.push(acctData);
+  await writeAccountsFile(accounts);
+  console.log('[db.js] Backfilled account to accounts.json:', account.email);
 }
 
 export async function getAccounts() {
-  const database = await initDB();
-  const accounts = await database.getAll('accounts');
+  await initDB();
 
-  // Retrieve all passwords from keychain in a single call
   if (invoke) {
-    const credentials = await getAllCredentials();
-    return accounts.map(account => ({
-      ...account,
-      password: credentials[account.id] || undefined
+    const data = await loadKeychain();
+    const keychainAccounts = getAccountsFromKeychain(data);
+
+    // Filter to only valid accounts (must have email)
+    const validAccounts = keychainAccounts.filter(a => a.email);
+
+    if (validAccounts.length > 0) {
+      return validAccounts;
+    }
+
+    // Legacy fallback: keychain only has passwords, combine with accounts.json
+    const fileAccounts = await readAccountsFile();
+    return fileAccounts.map(a => ({
+      ...a,
+      password: data[a.id] || undefined
     }));
   }
-
-  return accounts;
+  return await readAccountsFile();
 }
 
 export async function getAccount(id) {
-  const database = await initDB();
-  const account = await database.get('accounts', id);
+  await initDB();
 
-  if (account && invoke) {
-    const credentials = await getAllCredentials();
-    return { ...account, password: credentials[id] || undefined };
+  if (invoke) {
+    const data = await loadKeychain();
+    if (data[id]) {
+      const account = parseKeychainValue(id, data[id]);
+      if (account.email) return account;
+    }
   }
 
-  return account;
+  // Fallback to accounts.json (no password)
+  const accounts = await readAccountsFile();
+  return accounts.find(a => a.id === id);
 }
 
 export async function deleteAccount(id) {
-  const database = await initDB();
+  await initDB();
 
-  // Remove password from credentials (if Tauri is available)
+  // Remove from keychain
   if (invoke) {
     try {
-      const credentials = await getAllCredentials();
-      delete credentials[id];
-      await storeAllCredentials(credentials);
-      console.log('[db.js] Password removed from credentials for account:', id);
+      const data = await loadKeychain();
+      delete data[id];
+      await saveKeychain(data);
+      console.log('[db.js] Account removed from keychain:', id);
     } catch (error) {
-      console.error('[db.js] Failed to remove password from credentials:', error);
-      // Continue with account deletion even if password removal fails
+      console.error('[db.js] Failed to remove account from keychain:', error);
     }
   }
 
-  // Delete all saved emails for this account
-  const tx = database.transaction(['accounts', 'emails', 'savedIndex'], 'readwrite');
-  
-  // Delete emails
-  const emailIndex = tx.objectStore('emails').index('accountId');
-  let cursor = await emailIndex.openCursor(IDBKeyRange.only(id));
-  while (cursor) {
-    await cursor.delete();
-    cursor = await cursor.continue();
+  // Remove from accounts.json
+  const accounts = await readAccountsFile();
+  const filtered = accounts.filter(a => a.id !== id);
+  await writeAccountsFile(filtered);
+
+  // Remove Maildir/{accountId}/ directory
+  try {
+    const dirPath = accountDir(id);
+    const dirExists = await exists(dirPath, { baseDir: BaseDirectory.AppData });
+    if (dirExists) {
+      await remove(dirPath, { baseDir: BaseDirectory.AppData, recursive: true });
+    }
+  } catch (error) {
+    console.warn('[db.js] Failed to remove account Maildir:', error);
   }
-  
-  // Delete saved index entries
-  const savedIndex = tx.objectStore('savedIndex').index('accountId');
-  cursor = await savedIndex.openCursor(IDBKeyRange.only(id));
-  while (cursor) {
-    await cursor.delete();
-    cursor = await cursor.continue();
+
+  // Clear email headers cache for this account
+  if (invoke) {
+    try {
+      await invoke('clear_email_cache', { accountId: id });
+    } catch (error) {
+      console.warn('[db.js] Failed to clear email cache:', error);
+    }
   }
-  
-  // Delete account
-  await tx.objectStore('accounts').delete(id);
-  await tx.done;
 }
 
-// Email operations
+// --- Email operations (Rust Maildir commands) ---
+
 export async function saveEmail(email, accountId, mailbox) {
-  const database = await initDB();
-  
-  // Create unique local ID
-  const localId = `${accountId}-${mailbox}-${email.uid}`;
-  
-  const emailData = {
-    localId,
-    accountId,
-    mailbox,
-    savedAt: new Date().toISOString(),
-    // Preserve complete email structure
-    ...email
-  };
-  
-  const tx = database.transaction(['emails', 'savedIndex'], 'readwrite');
-  
-  // Save email
-  await tx.objectStore('emails').put(emailData);
-  
-  // Update saved index
-  await tx.objectStore('savedIndex').put({
-    key: localId,
+  await initDB();
+  if (!invoke) throw new Error('Tauri invoke not available');
+
+  if (!email.rawSource) {
+    console.warn('[db.js] Email UID', email.uid, 'has no rawSource, cannot save as .eml');
+    throw new Error('Email has no rawSource for .eml storage');
+  }
+
+  await invoke('maildir_store', {
     accountId,
     mailbox,
     uid: email.uid,
-    messageId: email.messageId,
-    savedAt: emailData.savedAt
+    rawSourceBase64: email.rawSource,
+    flags: ['seen'],
   });
-  
-  await tx.done;
-  return emailData;
+
+  return { ...email, localId: `${accountId}-${mailbox}-${email.uid}` };
 }
 
 export async function saveEmails(emails, accountId, mailbox) {
-  const database = await initDB();
-  const tx = database.transaction(['emails', 'savedIndex'], 'readwrite');
-  
+  await initDB();
+  if (!invoke) throw new Error('Tauri invoke not available');
+
   const results = [];
-  
   for (const email of emails) {
-    const localId = `${accountId}-${mailbox}-${email.uid}`;
-    
-    const emailData = {
-      localId,
-      accountId,
-      mailbox,
-      savedAt: new Date().toISOString(),
-      ...email
-    };
-    
-    await tx.objectStore('emails').put(emailData);
-    
-    await tx.objectStore('savedIndex').put({
-      key: localId,
+    if (!email.rawSource) {
+      console.warn(`[db.js] Email UID ${email.uid} has no rawSource, skipping`);
+      continue;
+    }
+    await invoke('maildir_store', {
       accountId,
       mailbox,
       uid: email.uid,
-      messageId: email.messageId,
-      savedAt: emailData.savedAt
+      rawSourceBase64: email.rawSource,
+      flags: ['seen'],
     });
-    
-    results.push(emailData);
+    results.push({ ...email, localId: `${accountId}-${mailbox}-${email.uid}` });
   }
-  
-  await tx.done;
   return results;
 }
 
+export async function archiveEmail(accountId, mailbox, uid) {
+  await initDB();
+  if (!invoke) return;
+
+  try {
+    const summaries = await invoke('maildir_list', { accountId, mailbox, requireFlag: null });
+    const summary = summaries.find(s => s.uid === uid);
+    if (!summary) throw new Error(`Email UID ${uid} not found in Maildir`);
+
+    const newFlags = [...summary.flags];
+    if (!newFlags.includes('archived')) {
+      newFlags.push('archived');
+    }
+    await invoke('maildir_set_flags', { accountId, mailbox, uid, flags: newFlags });
+  } catch (error) {
+    console.warn('[db.js] Failed to archive email:', error);
+    throw error;
+  }
+}
+
 export async function getLocalEmail(accountId, mailbox, uid) {
-  const database = await initDB();
-  const localId = `${accountId}-${mailbox}-${uid}`;
-  return database.get('emails', localId);
+  await initDB();
+  if (!invoke) return undefined;
+
+  try {
+    const email = await invoke('maildir_read', { accountId, mailbox, uid: parseInt(uid, 10) });
+    return email || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export async function getLocalEmails(accountId, mailbox) {
-  const database = await initDB();
-  const index = database.transaction('emails').store.index('accountMailbox');
-  return index.getAll([accountId, mailbox]);
+  await initBasic();
+  if (!invoke) return [];
+
+  try {
+    const summaries = await invoke('maildir_list', { accountId, mailbox, requireFlag: null });
+    const emails = [];
+    for (const summary of summaries) {
+      try {
+        const email = await invoke('maildir_read', { accountId, mailbox, uid: summary.uid });
+        if (email) emails.push({ ...email, localId: `${accountId}-${mailbox}-${summary.uid}`, isArchived: summary.isArchived });
+      } catch (e) {
+        console.warn(`[db.js] Failed to read email UID ${summary.uid}:`, e);
+      }
+    }
+    return emails;
+  } catch {
+    return [];
+  }
 }
 
 export async function getAllLocalEmails(accountId) {
-  const database = await initDB();
-  const index = database.transaction('emails').store.index('accountId');
-  return index.getAll(accountId);
+  await initDB();
+  if (!invoke) return [];
+
+  const acctDir = accountDir(accountId);
+  try {
+    const dirExists = await exists(acctDir, { baseDir: BaseDirectory.AppData });
+    if (!dirExists) return [];
+
+    const mailboxDirs = await readDir(acctDir, { baseDir: BaseDirectory.AppData });
+    const allEmails = [];
+    for (const mbEntry of mailboxDirs) {
+      if (!mbEntry.name || !mbEntry.isDirectory) continue;
+      const emails = await getLocalEmails(accountId, mbEntry.name);
+      allEmails.push(...emails);
+    }
+    return allEmails;
+  } catch {
+    return [];
+  }
 }
 
 export async function deleteLocalEmail(localId) {
-  const database = await initDB();
-  const tx = database.transaction(['emails', 'savedIndex'], 'readwrite');
-  await tx.objectStore('emails').delete(localId);
-  await tx.objectStore('savedIndex').delete(localId);
-  await tx.done;
+  await initDB();
+  const parsed = parseLocalId(localId);
+  if (!parsed || !invoke) return;
+
+  try {
+    await invoke('maildir_delete', {
+      accountId: parsed.accountId,
+      mailbox: parsed.mailbox,
+      uid: parseInt(parsed.uid, 10),
+    });
+  } catch (error) {
+    console.warn('[db.js] Failed to delete email:', error);
+  }
 }
 
 export async function deleteLocalEmails(localIds) {
-  const database = await initDB();
-  const tx = database.transaction(['emails', 'savedIndex'], 'readwrite');
-  
   for (const localId of localIds) {
-    await tx.objectStore('emails').delete(localId);
-    await tx.objectStore('savedIndex').delete(localId);
+    await deleteLocalEmail(localId);
   }
-  
-  await tx.done;
 }
 
 export async function isEmailSaved(accountId, mailbox, uid) {
-  const database = await initDB();
-  const localId = `${accountId}-${mailbox}-${uid}`;
-  const entry = await database.get('savedIndex', localId);
-  return !!entry;
+  await initDB();
+  if (!invoke) return false;
+  try {
+    return await invoke('maildir_exists', { accountId, mailbox, uid: parseInt(uid, 10) });
+  } catch {
+    return false;
+  }
 }
 
 export async function getSavedEmailIds(accountId, mailbox) {
-  const database = await initDB();
-  const index = database.transaction('savedIndex').store.index('accountId');
-  const entries = await index.getAll(accountId);
-  
-  const savedIds = new Set();
-  for (const entry of entries) {
-    if (entry.mailbox === mailbox) {
-      savedIds.add(entry.uid);
-    }
+  await initBasic();
+  if (!invoke) return new Set();
+  try {
+    const summaries = await invoke('maildir_list', { accountId, mailbox, requireFlag: null });
+    return new Set(summaries.map(s => s.uid));
+  } catch {
+    return new Set();
   }
-  
-  return savedIds;
+}
+
+export async function getArchivedEmailIds(accountId, mailbox) {
+  await initBasic();
+  if (!invoke) return new Set();
+  try {
+    const summaries = await invoke('maildir_list', { accountId, mailbox, requireFlag: 'archived' });
+    return new Set(summaries.map(s => s.uid));
+  } catch {
+    return new Set();
+  }
 }
 
 export async function exportEmail(localId) {
-  const database = await initDB();
-  const email = await database.get('emails', localId);
-  
-  if (!email) return null;
-  
-  // Return the raw source if available (complete .eml format)
-  if (email.rawSource) {
+  await initDB();
+  const parsed = parseLocalId(localId);
+  if (!parsed || !invoke) return null;
+
+  try {
+    const email = await invoke('maildir_read', {
+      accountId: parsed.accountId,
+      mailbox: parsed.mailbox,
+      uid: parseInt(parsed.uid, 10),
+    });
+    if (!email) return null;
+
+    // rawSource is base64-encoded
     return {
-      filename: `${email.subject.replace(/[^a-zA-Z0-9]/g, '_')}.eml`,
+      filename: `${(email.subject || 'email').replace(/[^a-zA-Z0-9]/g, '_')}.eml`,
       content: atob(email.rawSource),
+      rawBase64: email.rawSource,
       mimeType: 'message/rfc822'
     };
+  } catch {
+    return null;
   }
-  
-  // Fallback: export as JSON with all metadata
-  return {
-    filename: `${email.subject.replace(/[^a-zA-Z0-9]/g, '_')}.json`,
-    content: JSON.stringify(email, null, 2),
-    mimeType: 'application/json'
-  };
 }
 
-// Email headers cache operations
-// Uses file-based caching via Tauri when available, with IndexedDB as fallback
+// --- Email headers cache ---
+// Uses file-based caching via Tauri commands (unchanged)
+
 export async function saveEmailHeaders(accountId, mailbox, emails, totalEmails) {
   const cacheEntry = {
     accountId,
@@ -417,31 +515,20 @@ export async function saveEmailHeaders(accountId, mailbox, emails, totalEmails) 
     lastSynced: Date.now()
   };
 
-  // Try file-based cache first (Tauri)
   if (invoke) {
     try {
       const data = JSON.stringify(cacheEntry);
       await invoke('save_email_cache', { accountId, mailbox, data });
       console.log('[db.js] Email headers saved to file cache:', emails.length, 'emails');
     } catch (error) {
-      console.warn('[db.js] Failed to save to file cache, falling back to IndexedDB:', error);
+      console.warn('[db.js] Failed to save to file cache:', error);
     }
-  }
-
-  // Also save to IndexedDB as backup
-  try {
-    const database = await initDB();
-    const cacheKey = `${accountId}-${mailbox}`;
-    await database.put('emailHeaders', { cacheKey, ...cacheEntry });
-  } catch (error) {
-    console.warn('[db.js] Failed to save to IndexedDB:', error);
   }
 
   return cacheEntry;
 }
 
 export async function getEmailHeaders(accountId, mailbox) {
-  // Try file-based cache first (Tauri) - more reliable across app restarts
   if (invoke) {
     try {
       const data = await invoke('load_email_cache', { accountId, mailbox });
@@ -455,33 +542,14 @@ export async function getEmailHeaders(accountId, mailbox) {
         };
       }
     } catch (error) {
-      console.warn('[db.js] Failed to load from file cache, trying IndexedDB:', error);
+      console.warn('[db.js] Failed to load from file cache:', error);
     }
-  }
-
-  // Fallback to IndexedDB
-  try {
-    const database = await initDB();
-    const cacheKey = `${accountId}-${mailbox}`;
-    const entry = await database.get('emailHeaders', cacheKey);
-
-    if (entry) {
-      console.log('[db.js] Email headers loaded from IndexedDB:', entry.emails?.length, 'emails');
-      return {
-        emails: entry.emails,
-        totalEmails: entry.totalEmails,
-        lastSynced: entry.lastSynced
-      };
-    }
-  } catch (error) {
-    console.warn('[db.js] Failed to load from IndexedDB:', error);
   }
 
   return null;
 }
 
 export async function clearEmailHeadersCache(accountId) {
-  // Clear file-based cache (Tauri)
   if (invoke) {
     try {
       await invoke('clear_email_cache', { accountId: accountId || null });
@@ -490,123 +558,69 @@ export async function clearEmailHeadersCache(accountId) {
       console.warn('[db.js] Failed to clear file cache:', error);
     }
   }
-
-  // Also clear IndexedDB cache
-  try {
-    const database = await initDB();
-    const tx = database.transaction('emailHeaders', 'readwrite');
-    const index = tx.store.index('accountId');
-    let cursor = await index.openCursor(IDBKeyRange.only(accountId));
-
-    while (cursor) {
-      await cursor.delete();
-      cursor = await cursor.continue();
-    }
-
-    await tx.done;
-    console.log('[db.js] IndexedDB email headers cache cleared for:', accountId);
-  } catch (error) {
-    console.warn('[db.js] Failed to clear IndexedDB cache:', error);
-  }
 }
 
-// Calculate storage usage for saved emails in IndexedDB
+// --- Storage usage ---
+
 export async function getStorageUsage() {
-  const database = await initDB();
+  await initDB();
+  if (!invoke) return { totalMB: 0, totalBytes: 0, emailCount: 0, emailsSizeMB: 0, headersSizeMB: 0 };
 
-  // Get all saved emails
-  const emails = await database.getAll('emails');
-  const headers = await database.getAll('emailHeaders');
-
-  // Calculate sizes
-  let emailsSize = 0;
-  let headersSize = 0;
-  let emailCount = emails.length;
-
-  for (const email of emails) {
-    try {
-      emailsSize += new Blob([JSON.stringify(email)]).size;
-    } catch {
-      emailsSize += 1000; // Estimate 1KB if serialization fails
-    }
+  try {
+    const stats = await invoke('maildir_storage_stats', { accountId: null });
+    return {
+      totalMB: stats.totalMB,
+      totalBytes: stats.totalBytes,
+      emailCount: stats.emailCount,
+      emailsSizeMB: stats.totalMB,
+      headersSizeMB: 0
+    };
+  } catch {
+    return { totalMB: 0, totalBytes: 0, emailCount: 0, emailsSizeMB: 0, headersSizeMB: 0 };
   }
-
-  for (const header of headers) {
-    try {
-      headersSize += new Blob([JSON.stringify(header)]).size;
-    } catch {
-      headersSize += 500;
-    }
-  }
-
-  const totalBytes = emailsSize + headersSize;
-  const totalMB = totalBytes / (1024 * 1024);
-
-  return {
-    totalMB,
-    totalBytes,
-    emailCount,
-    emailsSizeMB: emailsSize / (1024 * 1024),
-    headersSizeMB: headersSize / (1024 * 1024)
-  };
 }
 
-// Search locally saved emails in IndexedDB
-export async function searchLocalEmails(accountId, query, filters = {}) {
-  const database = await initDB();
-  const index = database.transaction('emails').store.index('accountId');
-  const allEmails = await index.getAll(accountId);
+// --- Search ---
 
-  if (!allEmails || allEmails.length === 0) {
-    return [];
+export async function searchLocalEmails(accountId, query, filters = {}) {
+  await initDB();
+
+  let emails;
+  if (filters.mailbox && filters.mailbox !== 'all') {
+    emails = await getLocalEmails(accountId, filters.mailbox);
+  } else {
+    emails = await getAllLocalEmails(accountId);
   }
 
   const queryLower = query?.toLowerCase().trim() || '';
 
-  const results = allEmails.filter(email => {
-    // Text search in sender, subject, and body
-    const senderMatch = !queryLower ||
-      email.from?.address?.toLowerCase().includes(queryLower) ||
-      email.from?.name?.toLowerCase().includes(queryLower);
+  return emails.filter(email => {
+    if (filters.sender) {
+      const senderMatch =
+        (email.from?.address || '').toLowerCase().includes(filters.sender.toLowerCase()) ||
+        (email.from?.name || '').toLowerCase().includes(filters.sender.toLowerCase());
+      if (!senderMatch) return false;
+    }
 
-    const subjectMatch = !queryLower ||
-      email.subject?.toLowerCase().includes(queryLower);
+    if (filters.dateFrom && email.date && email.date < filters.dateFrom) return false;
+    if (filters.dateTo && email.date && email.date > filters.dateTo) return false;
 
-    const bodyMatch = !queryLower ||
-      email.text?.toLowerCase().includes(queryLower) ||
-      email.html?.toLowerCase().includes(queryLower);
+    if (filters.hasAttachments && !email.hasAttachments) return false;
 
-    // Sender filter
-    const senderFilterMatch = !filters.sender ||
-      email.from?.address?.toLowerCase().includes(filters.sender.toLowerCase()) ||
-      email.from?.name?.toLowerCase().includes(filters.sender.toLowerCase());
+    if (queryLower) {
+      const searchable = [
+        email.subject,
+        email.from?.address,
+        email.from?.name,
+        email.text,
+        email.html
+      ].filter(Boolean).join(' ').toLowerCase();
+      if (!searchable.includes(queryLower)) return false;
+    }
 
-    // Date filters
-    const emailDate = new Date(email.date || email.internalDate);
-    const dateFromMatch = !filters.dateFrom ||
-      emailDate >= new Date(filters.dateFrom);
-    const dateToMatch = !filters.dateTo ||
-      emailDate <= new Date(filters.dateTo);
-
-    // Mailbox filter
-    const mailboxMatch = !filters.mailbox ||
-      filters.mailbox === 'all' ||
-      email.mailbox === filters.mailbox;
-
-    // Attachments filter
-    const attachmentMatch = !filters.hasAttachments ||
-      (email.attachments && email.attachments.length > 0) ||
-      email.hasAttachments;
-
-    // Must match query in at least one field AND all filters
-    const queryMatch = !queryLower || senderMatch || subjectMatch || bodyMatch;
-
-    return queryMatch && senderFilterMatch && dateFromMatch && dateToMatch && mailboxMatch && attachmentMatch;
-  });
-
-  // Mark as local source
-  return results.map(e => ({
-    ...e,
+    return true;
+  }).map(email => ({
+    ...email,
     isLocal: true,
     source: 'local'
   }));

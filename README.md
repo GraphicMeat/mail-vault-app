@@ -14,13 +14,14 @@ A modern, cross-platform desktop email client built with Tauri and React. Save y
 - Read, send, and manage emails
 - Full attachment support
 
-### 💾 Local Storage
-- **Save emails locally** - Preserve emails with all metadata intact
-- **Same format as server** - Emails are stored in their original format
+### 💾 Local Storage (Maildir + EML)
+- **Maildir format** - Emails stored as individual `.eml` files on disk, one file per message
+- **Standard EML files** - Industry-standard format readable by any email client
+- **Full fidelity** - Headers, body, inline images, and attachments all preserved in a single file
 - **Visual indicators** - Easily distinguish between server-only and locally saved emails
 - **Local-only display** - View emails deleted from server but saved locally
-- **Bulk save** - Select multiple emails and save them all at once
-- **Export** - Download saved emails as `.eml` files
+- **Bulk save** - Select multiple emails and archive them all at once
+- **Portable** - Back up, move, or open your `.eml` files with any tool
 
 ### 🔄 View Modes
 - **All** - See both server and local emails combined
@@ -35,10 +36,10 @@ A modern, cross-platform desktop email client built with Tauri and React. Save y
 
 ## Tech Stack
 
-- **Desktop**: Tauri (Rust-based native wrapper)
+- **Desktop**: Tauri v2 (Rust-based native wrapper)
 - **Frontend**: React 18, Zustand (state management), Framer Motion (animations)
-- **Backend**: Express.js, ImapFlow (IMAP), Nodemailer (SMTP)
-- **Storage**: IndexedDB for email data, OS keychain for credentials (via `keyring` crate)
+- **Backend**: Node.js sidecar (Express.js, ImapFlow for IMAP, Nodemailer for SMTP), bundled as native binary
+- **Storage**: Maildir format (`.eml` files on disk), OS keychain for credentials (via `keyring` crate), JSON file cache for email headers
 - **Styling**: Tailwind CSS
 - **Build**: Vite
 
@@ -90,15 +91,17 @@ npm run tauri build
 
 ## Usage Guide
 
-### Saving Emails Locally
+### Archiving Emails Locally
+
+Emails are saved as `.eml` files in Maildir format on your disk.
 
 **Single email:**
-- Hover over an email in the list and click the save icon (💾)
-- Or open an email and click "Save Locally" button
+- Hover over an email in the list and click the archive icon
+- Or open an email and click "Archive" button
 
 **Multiple emails:**
-- Check the boxes next to emails you want to save
-- Click "Save All" in the toolbar
+- Check the boxes next to emails you want to archive
+- Click "Archive All" in the toolbar
 
 ### Understanding Icons
 
@@ -118,10 +121,11 @@ Use the view mode toggle in the sidebar:
 
 ### Exporting Emails
 
-1. Save an email locally first
-2. Open the email
-3. Click "Export" button
-4. Email downloads as `.eml` file (can be opened in any email client)
+Archived emails are already stored as `.eml` files. You can:
+
+1. Open an archived email and click "Show in Finder" / "Open File" to access the `.eml` directly
+2. Copy `.eml` files from the Maildir directory for backup or transfer
+3. Open any `.eml` file with other email clients (Thunderbird, Apple Mail, etc.)
 
 ## Project Structure
 
@@ -145,7 +149,7 @@ mail-client/
 │   │   └── Toast.jsx         # Notification toasts
 │   ├── services/
 │   │   ├── api.js            # API client for backend
-│   │   └── db.js             # IndexedDB + keychain operations
+│   │   └── db.js             # Maildir + keychain operations
 │   ├── stores/
 │   │   └── mailStore.js      # Zustand state management
 │   └── styles/
@@ -154,20 +158,24 @@ mail-client/
     ├── Cargo.toml            # Rust dependencies
     ├── tauri.conf.json       # Tauri configuration
     └── src/
-        └── main.rs           # Tauri commands (keychain, etc.)
+        └── main.rs           # Tauri commands (keychain, Maildir, EML parsing)
 ```
 
 ## Data Storage
 
-Data is stored locally on your device:
+All data is stored locally on your device — nothing is sent to third-party servers.
 
-- **Credentials**: Stored securely in your operating system's keychain
+- **Credentials**: Stored securely in your operating system's native keychain
   - macOS: Keychain Access
   - Windows: Credential Manager
   - Linux: Secret Service (GNOME Keyring, KWallet)
-- **Account Settings**: Email server configurations stored in IndexedDB
-- **Emails**: Complete email data including headers, body, and attachments in IndexedDB
-- **Saved Index**: Tracks which emails are saved locally
+- **Account Settings**: Saved as JSON in the app's data directory
+- **Emails**: Stored as individual `.eml` files using Maildir format
+  - Each email is a self-contained `.eml` file with headers, body, inline images, and attachments
+  - Organized by account and mailbox: `Maildir/<account-id>/<mailbox>/cur/<uid>.eml`
+  - Flags (read, archived, etc.) encoded in the filename per Maildir convention
+  - Files are standard RFC 5322 format — portable and readable by any email client
+- **Email Header Cache**: JSON files for fast inbox loading without re-fetching from server
 
 ## Security
 
@@ -191,7 +199,8 @@ Data is stored locally on your device:
 
 ### Local Emails Not Showing
 - Make sure you're in "All" or "Local" view mode
-- The email may not have been fully saved - try saving it again
+- The email may not have been fully archived — try archiving it again
+- Check the Maildir directory in your app data folder for the `.eml` files
 
 ## Contributing
 

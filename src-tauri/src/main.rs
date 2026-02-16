@@ -8,12 +8,14 @@ use tauri_plugin_updater::UpdaterExt;
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Child};
+use std::process::{Command, Child, Stdio};
 use std::sync::Mutex;
 use keyring::Entry;
+use serde::{Deserialize, Serialize};
 use tracing::{info, warn, error, Level};
 use tracing_subscriber::fmt::writer::MakeWriterExt;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
+use walkdir::WalkDir;
 
 #[cfg(target_os = "macos")]
 use cocoa::appkit::NSApplication;
@@ -141,18 +143,37 @@ fn start_backend_server(app_handle: &tauri::AppHandle) -> Option<Child> {
 
         info!("Running in release mode, using sidecar");
 
+        let handle_for_events = app_handle.clone();
         match app_handle.shell().sidecar("mailvault-server") {
             Ok(cmd) => {
                 match cmd.spawn() {
                     Ok((mut rx, _child)) => {
                         tauri::async_runtime::spawn(async move {
+                            let mut stderr_lines: Vec<String> = Vec::new();
                             while let Some(event) = rx.recv().await {
                                 match event {
                                     CommandEvent::Stdout(line) => info!("[Server] {}", String::from_utf8_lossy(&line)),
-                                    CommandEvent::Stderr(line) => warn!("[Server] {}", String::from_utf8_lossy(&line)),
-                                    CommandEvent::Error(e) => error!("[Server Error] {}", e),
+                                    CommandEvent::Stderr(line) => {
+                                        let msg = String::from_utf8_lossy(&line).to_string();
+                                        error!("[Server stderr] {}", msg);
+                                        stderr_lines.push(msg);
+                                    }
+                                    CommandEvent::Error(e) => {
+                                        error!("[Server Error] {}", e);
+                                        stderr_lines.push(e.clone());
+                                    }
                                     CommandEvent::Terminated(p) => {
-                                        info!("[Server] Terminated: {:?}", p.code);
+                                        let last_output = if stderr_lines.is_empty() {
+                                            "no output captured".to_string()
+                                        } else {
+                                            stderr_lines.join("\n")
+                                        };
+                                        error!("[Server] Terminated with code {:?}. Last output: {}", p.code, last_output);
+                                        use tauri::Emitter;
+                                        let _ = handle_for_events.emit("server-crashed", format!(
+                                            "Backend server terminated (exit code: {:?}). {}",
+                                            p.code, last_output
+                                        ));
                                         break;
                                     }
                                     _ => {}
@@ -919,6 +940,994 @@ fn open_with_dialog(path: String) -> Result<(), String> {
     Ok(())
 }
 
+// ==========================================
+// Open email in a new window
+// ==========================================
+
+static WINDOW_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+#[tauri::command]
+async fn open_email_window(app: tauri::AppHandle, html: String, title: String) -> Result<(), String> {
+    use tauri::webview::WebviewWindowBuilder;
+    use tauri::WebviewUrl;
+
+    let n = WINDOW_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let label = format!("email-popup-{}", n);
+
+    // Write HTML to a temp file — eval on about:blank fails on macOS WKWebView
+    let cache_dir = app.path().app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("popup_cache");
+    fs::create_dir_all(&cache_dir).map_err(|e| e.to_string())?;
+    let html_file = cache_dir.join(format!("email-popup-{}.html", n));
+    fs::write(&html_file, &html).map_err(|e| e.to_string())?;
+
+    WebviewWindowBuilder::new(
+        &app,
+        &label,
+        WebviewUrl::External(
+            format!("file://{}", html_file.to_string_lossy())
+                .parse()
+                .unwrap(),
+        ),
+    )
+    .title(&title)
+    .inner_size(800.0, 600.0)
+    .center()
+    .build()
+    .map_err(|e| e.to_string())?;
+
+    info!("Opened email in new window: {}", label);
+    Ok(())
+}
+
+// ==========================================
+// Maildir .eml storage commands
+// ==========================================
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct MaildirAddress {
+    name: Option<String>,
+    address: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct MaildirAttachment {
+    filename: Option<String>,
+    #[serde(rename = "contentType")]
+    content_type: String,
+    #[serde(rename = "contentDisposition")]
+    content_disposition: Option<String>,
+    size: usize,
+    #[serde(rename = "contentId")]
+    content_id: Option<String>,
+    content: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct ParsedEmail {
+    uid: u32,
+    #[serde(rename = "messageId")]
+    message_id: Option<String>,
+    subject: String,
+    from: MaildirAddress,
+    to: Vec<MaildirAddress>,
+    cc: Vec<MaildirAddress>,
+    bcc: Vec<MaildirAddress>,
+    #[serde(rename = "replyTo")]
+    reply_to: Vec<MaildirAddress>,
+    date: Option<String>,
+    flags: Vec<String>,
+    text: Option<String>,
+    html: Option<String>,
+    attachments: Vec<MaildirAttachment>,
+    #[serde(rename = "rawSource")]
+    raw_source: String,
+    #[serde(rename = "hasAttachments")]
+    has_attachments: bool,
+    #[serde(rename = "isArchived")]
+    is_archived: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct MaildirEmailSummary {
+    uid: u32,
+    flags: Vec<String>,
+    #[serde(rename = "isArchived")]
+    is_archived: bool,
+    size: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct MaildirStorageStats {
+    #[serde(rename = "totalBytes")]
+    total_bytes: u64,
+    #[serde(rename = "totalMB")]
+    total_mb: f64,
+    #[serde(rename = "emailCount")]
+    email_count: u32,
+}
+
+fn maildir_cur_path(app_handle: &tauri::AppHandle, account_id: &str, mailbox: &str) -> Result<PathBuf, String> {
+    let safe_mailbox = mailbox.chars().map(|c| {
+        if c.is_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' }
+    }).collect::<String>();
+    let base = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not get app data directory: {}", e))?;
+    Ok(base.join("Maildir").join(account_id).join(&safe_mailbox).join("cur"))
+}
+
+fn parse_flags_from_filename(filename: &str) -> Vec<String> {
+    if let Some(flags_part) = filename.split(":2,").nth(1) {
+        let mut flags = Vec::new();
+        for c in flags_part.chars() {
+            match c {
+                'A' => flags.push("archived".to_string()),
+                'D' => flags.push("draft".to_string()),
+                'F' => flags.push("flagged".to_string()),
+                'R' => flags.push("replied".to_string()),
+                'S' => flags.push("seen".to_string()),
+                'T' => flags.push("trashed".to_string()),
+                _ => {}
+            }
+        }
+        flags
+    } else {
+        Vec::new()
+    }
+}
+
+fn build_maildir_filename(uid: u32, flags: &[String]) -> String {
+    let mut flag_chars: Vec<char> = Vec::new();
+    for f in flags {
+        match f.to_lowercase().as_str() {
+            "archived" | "a" => flag_chars.push('A'),
+            "draft" | "d" => flag_chars.push('D'),
+            "flagged" | "f" => flag_chars.push('F'),
+            "replied" | "r" => flag_chars.push('R'),
+            "seen" | "s" => flag_chars.push('S'),
+            "trashed" | "t" => flag_chars.push('T'),
+            _ => {}
+        }
+    }
+    flag_chars.sort();
+    flag_chars.dedup();
+    let flag_str: String = flag_chars.into_iter().collect();
+    format!("{}:2,{}", uid, flag_str)
+}
+
+fn find_file_by_uid(dir: &Path, uid: u32) -> Option<PathBuf> {
+    let prefix = format!("{}:", uid);
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with(&prefix) {
+                return Some(entry.path());
+            }
+        }
+    }
+    None
+}
+
+fn parse_address_str(header_value: &str) -> Vec<MaildirAddress> {
+    match mailparse::addrparse(header_value) {
+        Ok(addrs) => {
+            addrs.iter().flat_map(|a| match a {
+                mailparse::MailAddr::Single(info) => {
+                    vec![MaildirAddress {
+                        name: info.display_name.clone(),
+                        address: info.addr.clone(),
+                    }]
+                }
+                mailparse::MailAddr::Group(group) => {
+                    group.addrs.iter().map(|info| MaildirAddress {
+                        name: info.display_name.clone(),
+                        address: info.addr.clone(),
+                    }).collect()
+                }
+            }).collect()
+        }
+        Err(_) => {
+            if !header_value.trim().is_empty() {
+                vec![MaildirAddress { name: None, address: header_value.trim().to_string() }]
+            } else {
+                Vec::new()
+            }
+        }
+    }
+}
+
+fn walk_mime_parts(
+    part: &mailparse::ParsedMail,
+    text_body: &mut Option<String>,
+    html_body: &mut Option<String>,
+    attachments: &mut Vec<MaildirAttachment>,
+) {
+    let content_type = part.ctype.mimetype.to_lowercase();
+
+    if !part.subparts.is_empty() {
+        for sub in &part.subparts {
+            walk_mime_parts(sub, text_body, html_body, attachments);
+        }
+        return;
+    }
+
+    // Leaf part
+    let disposition = part.get_content_disposition();
+    let is_attachment = disposition.disposition == mailparse::DispositionType::Attachment;
+    let is_inline_non_text = disposition.disposition == mailparse::DispositionType::Inline
+        && !content_type.starts_with("text/");
+
+    if is_attachment || is_inline_non_text {
+        if let Ok(body) = part.get_body_raw() {
+            use base64::Engine;
+            let b64 = base64::engine::general_purpose::STANDARD.encode(&body);
+            let filename = disposition.params.get("filename")
+                .or_else(|| part.ctype.params.get("name"))
+                .cloned();
+            let content_id = part.headers.iter()
+                .find(|h| h.get_key().eq_ignore_ascii_case("Content-ID"))
+                .map(|h| h.get_value());
+
+            attachments.push(MaildirAttachment {
+                filename,
+                content_type: content_type.clone(),
+                content_disposition: Some(format!("{:?}", disposition.disposition)),
+                size: body.len(),
+                content_id,
+                content: b64,
+            });
+        }
+    } else if content_type == "text/plain" && text_body.is_none() {
+        *text_body = part.get_body().ok();
+    } else if content_type == "text/html" && html_body.is_none() {
+        *html_body = part.get_body().ok();
+    }
+}
+
+fn parse_eml_bytes(raw: &[u8], uid: u32, flags: Vec<String>) -> Result<ParsedEmail, String> {
+    let parsed = mailparse::parse_mail(raw)
+        .map_err(|e| format!("Failed to parse email: {}", e))?;
+
+    let headers = &parsed.headers;
+    let get_header = |name: &str| -> Option<String> {
+        headers.iter()
+            .find(|h| h.get_key().eq_ignore_ascii_case(name))
+            .map(|h| h.get_value())
+    };
+
+    let subject = get_header("Subject").unwrap_or_else(|| "(No Subject)".to_string());
+    let message_id = get_header("Message-ID");
+    let date = get_header("Date");
+
+    let from_str = get_header("From").unwrap_or_default();
+    let from_addrs = parse_address_str(&from_str);
+    let from = from_addrs.into_iter().next().unwrap_or(MaildirAddress {
+        name: Some("Unknown".to_string()),
+        address: "unknown@unknown.com".to_string(),
+    });
+
+    let to = get_header("To")
+        .map(|v| parse_address_str(&v))
+        .unwrap_or_default();
+    let cc = get_header("Cc")
+        .map(|v| parse_address_str(&v))
+        .unwrap_or_default();
+    let bcc = get_header("Bcc")
+        .map(|v| parse_address_str(&v))
+        .unwrap_or_default();
+    let reply_to = get_header("Reply-To")
+        .map(|v| parse_address_str(&v))
+        .unwrap_or_default();
+
+    let mut text_body: Option<String> = None;
+    let mut html_body: Option<String> = None;
+    let mut attachments: Vec<MaildirAttachment> = Vec::new();
+
+    walk_mime_parts(&parsed, &mut text_body, &mut html_body, &mut attachments);
+
+    let is_archived = flags.iter().any(|f| f == "archived");
+    let has_attachments = !attachments.is_empty();
+
+    use base64::Engine;
+    let raw_source = base64::engine::general_purpose::STANDARD.encode(raw);
+
+    Ok(ParsedEmail {
+        uid,
+        message_id,
+        subject,
+        from,
+        to,
+        cc,
+        bcc,
+        reply_to,
+        date,
+        flags,
+        text: text_body,
+        html: html_body,
+        attachments,
+        raw_source,
+        has_attachments,
+        is_archived,
+    })
+}
+
+#[tauri::command]
+fn maildir_store(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    mailbox: String,
+    uid: u32,
+    raw_source_base64: String,
+    flags: Vec<String>,
+) -> Result<(), String> {
+    use base64::Engine;
+
+    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
+    fs::create_dir_all(&cur_dir)
+        .map_err(|e| format!("Failed to create Maildir directory: {}", e))?;
+
+    // Remove existing file for this UID if any
+    if let Some(existing) = find_file_by_uid(&cur_dir, uid) {
+        let _ = fs::remove_file(&existing);
+    }
+
+    let filename = build_maildir_filename(uid, &flags);
+    let file_path = cur_dir.join(&filename);
+
+    let raw_bytes = base64::engine::general_purpose::STANDARD
+        .decode(&raw_source_base64)
+        .map_err(|e| format!("Failed to decode base64: {}", e))?;
+
+    fs::write(&file_path, &raw_bytes)
+        .map_err(|e| format!("Failed to write .eml file: {}", e))?;
+
+    info!("Stored email UID {} to {:?} ({} bytes)", uid, file_path, raw_bytes.len());
+    Ok(())
+}
+
+#[tauri::command]
+fn maildir_read(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    mailbox: String,
+    uid: u32,
+) -> Result<Option<ParsedEmail>, String> {
+    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
+
+    let file_path = match find_file_by_uid(&cur_dir, uid) {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+
+    let filename = file_path.file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let flags = parse_flags_from_filename(&filename);
+
+    let raw = fs::read(&file_path)
+        .map_err(|e| format!("Failed to read .eml file: {}", e))?;
+
+    let email = parse_eml_bytes(&raw, uid, flags)?;
+    Ok(Some(email))
+}
+
+#[tauri::command]
+fn maildir_exists(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    mailbox: String,
+    uid: u32,
+) -> Result<bool, String> {
+    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
+    Ok(find_file_by_uid(&cur_dir, uid).is_some())
+}
+
+#[tauri::command]
+fn maildir_list(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    mailbox: String,
+    require_flag: Option<String>,
+) -> Result<Vec<MaildirEmailSummary>, String> {
+    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
+
+    if !cur_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let entries = fs::read_dir(&cur_dir)
+        .map_err(|e| format!("Failed to read Maildir: {}", e))?;
+
+    let mut results = Vec::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+
+        let uid: u32 = match name.split(':').next().and_then(|s| s.parse().ok()) {
+            Some(u) => u,
+            None => continue,
+        };
+
+        let flags = parse_flags_from_filename(&name);
+        let is_archived = flags.iter().any(|f| f == "archived");
+
+        if let Some(ref required) = require_flag {
+            if !flags.iter().any(|f| f == required) {
+                continue;
+            }
+        }
+
+        let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+
+        results.push(MaildirEmailSummary {
+            uid,
+            flags,
+            is_archived,
+            size,
+        });
+    }
+
+    Ok(results)
+}
+
+#[tauri::command]
+fn maildir_delete(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    mailbox: String,
+    uid: u32,
+) -> Result<(), String> {
+    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
+    if let Some(path) = find_file_by_uid(&cur_dir, uid) {
+        fs::remove_file(&path)
+            .map_err(|e| format!("Failed to delete .eml file: {}", e))?;
+        info!("Deleted email UID {} from {:?}", uid, path);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn maildir_set_flags(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    mailbox: String,
+    uid: u32,
+    flags: Vec<String>,
+) -> Result<(), String> {
+    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
+    let old_path = match find_file_by_uid(&cur_dir, uid) {
+        Some(p) => p,
+        None => return Err(format!("Email UID {} not found in Maildir", uid)),
+    };
+
+    let new_filename = build_maildir_filename(uid, &flags);
+    let new_path = cur_dir.join(&new_filename);
+
+    if old_path != new_path {
+        fs::rename(&old_path, &new_path)
+            .map_err(|e| format!("Failed to rename file: {}", e))?;
+        info!("Updated flags for UID {}: {:?} -> {:?}", uid, old_path.file_name(), new_path.file_name());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn maildir_storage_stats(
+    app_handle: tauri::AppHandle,
+    account_id: Option<String>,
+) -> Result<MaildirStorageStats, String> {
+    let base = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not get app data directory: {}", e))?
+        .join("Maildir");
+
+    let scan_dir = match account_id {
+        Some(ref id) => base.join(id),
+        None => base,
+    };
+
+    if !scan_dir.exists() {
+        return Ok(MaildirStorageStats { total_bytes: 0, total_mb: 0.0, email_count: 0 });
+    }
+
+    let mut total_bytes: u64 = 0;
+    let mut email_count: u32 = 0;
+
+    for entry in WalkDir::new(&scan_dir).into_iter().flatten() {
+        if entry.file_type().is_file() {
+            let name = entry.file_name().to_string_lossy();
+            if name.contains(":2,") {
+                if let Ok(meta) = entry.metadata() {
+                    total_bytes += meta.len();
+                    email_count += 1;
+                }
+            }
+        }
+    }
+
+    Ok(MaildirStorageStats {
+        total_bytes,
+        total_mb: total_bytes as f64 / (1024.0 * 1024.0),
+        email_count,
+    })
+}
+
+#[tauri::command]
+fn maildir_migrate_json_to_eml(
+    app_handle: tauri::AppHandle,
+) -> Result<String, String> {
+    use base64::Engine;
+
+    let base = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not get app data directory: {}", e))?
+        .join("Maildir");
+
+    if !base.exists() {
+        return Ok("No Maildir directory found, nothing to migrate.".to_string());
+    }
+
+    let mut migrated = 0u32;
+    let mut skipped = 0u32;
+    let mut errors = 0u32;
+
+    for entry in WalkDir::new(&base).into_iter().flatten() {
+        if !entry.file_type().is_file() { continue; }
+        let path = entry.path().to_path_buf();
+        let ext = path.extension().and_then(|e| e.to_str());
+        if ext != Some("json") { continue; }
+
+        let json_str = match fs::read_to_string(&path) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!("Could not read {:?}: {}", path, e);
+                errors += 1;
+                continue;
+            }
+        };
+
+        let json_val: serde_json::Value = match serde_json::from_str(&json_str) {
+            Ok(v) => v,
+            Err(e) => {
+                warn!("Could not parse JSON {:?}: {}", path, e);
+                errors += 1;
+                continue;
+            }
+        };
+
+        let uid: u32 = match path.file_stem()
+            .and_then(|s| s.to_str())
+            .and_then(|s| s.parse().ok())
+        {
+            Some(u) => u,
+            None => {
+                warn!("Could not extract UID from {:?}", path);
+                errors += 1;
+                continue;
+            }
+        };
+
+        if let Some(raw_b64) = json_val.get("rawSource").and_then(|v| v.as_str()) {
+            let raw_bytes = match base64::engine::general_purpose::STANDARD.decode(raw_b64) {
+                Ok(b) => b,
+                Err(e) => {
+                    warn!("Could not decode rawSource for {:?}: {}", path, e);
+                    errors += 1;
+                    continue;
+                }
+            };
+
+            let cur_dir = path.parent().unwrap();
+            let eml_filename = build_maildir_filename(uid, &["archived".to_string(), "seen".to_string()]);
+            let eml_path = cur_dir.join(&eml_filename);
+
+            match fs::write(&eml_path, &raw_bytes) {
+                Ok(_) => {
+                    let _ = fs::remove_file(&path);
+                    migrated += 1;
+                    info!("Migrated {:?} -> {:?}", path, eml_path);
+                }
+                Err(e) => {
+                    warn!("Failed to write .eml for {:?}: {}", path, e);
+                    errors += 1;
+                }
+            }
+        } else {
+            warn!("No rawSource in {:?}, cannot migrate to .eml — removing", path);
+            let _ = fs::remove_file(&path);
+            skipped += 1;
+        }
+    }
+
+    let result = format!(
+        "Migration complete. Migrated: {}, Skipped (no rawSource): {}, Errors: {}",
+        migrated, skipped, errors
+    );
+    info!("{}", result);
+    Ok(result)
+}
+
+// ==========================================
+// Backup export/import (ZIP of .eml files)
+// ==========================================
+
+#[derive(Debug, Serialize, Deserialize)]
+struct BackupManifest {
+    version: u32,
+    #[serde(rename = "exportedAt")]
+    exported_at: String,
+    accounts: Vec<BackupAccount>,
+    settings: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct BackupAccount {
+    email: String,
+    #[serde(rename = "imapServer")]
+    imap_server: Option<String>,
+    #[serde(rename = "smtpServer")]
+    smtp_server: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ExportResult {
+    #[serde(rename = "emailCount")]
+    email_count: u32,
+    #[serde(rename = "accountCount")]
+    account_count: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ImportResult {
+    #[serde(rename = "emailCount")]
+    email_count: u32,
+    #[serde(rename = "accountCount")]
+    account_count: u32,
+    #[serde(rename = "newAccounts")]
+    new_accounts: Vec<String>,
+    #[serde(rename = "settingsJson")]
+    settings_json: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct AccountsJsonEntry {
+    id: String,
+    email: Option<String>,
+    #[serde(rename = "imapServer")]
+    imap_server: Option<String>,
+    #[serde(rename = "smtpServer")]
+    smtp_server: Option<String>,
+    #[serde(rename = "createdAt")]
+    created_at: Option<String>,
+}
+
+fn read_accounts_json(app_handle: &tauri::AppHandle) -> Result<Vec<AccountsJsonEntry>, String> {
+    let base = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not get app data directory: {}", e))?;
+    let accounts_path = base.join("accounts.json");
+    if !accounts_path.exists() {
+        return Ok(Vec::new());
+    }
+    let data = fs::read_to_string(&accounts_path)
+        .map_err(|e| format!("Failed to read accounts.json: {}", e))?;
+    serde_json::from_str(&data)
+        .map_err(|e| format!("Failed to parse accounts.json: {}", e))
+}
+
+fn write_accounts_json(app_handle: &tauri::AppHandle, accounts: &[AccountsJsonEntry]) -> Result<(), String> {
+    let base = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not get app data directory: {}", e))?;
+    let accounts_path = base.join("accounts.json");
+    let data = serde_json::to_string_pretty(accounts)
+        .map_err(|e| format!("Failed to serialize accounts: {}", e))?;
+    fs::write(&accounts_path, data)
+        .map_err(|e| format!("Failed to write accounts.json: {}", e))
+}
+
+fn sanitize_mailbox_name(mailbox: &str) -> String {
+    mailbox.chars().map(|c| {
+        if c.is_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' }
+    }).collect()
+}
+
+#[tauri::command]
+async fn export_backup(
+    app_handle: tauri::AppHandle,
+    dest_path: String,
+    archived_only: bool,
+    settings_json: String,
+    accounts_json: String,
+) -> Result<ExportResult, String> {
+    use std::io::Write;
+    use zip::write::SimpleFileOptions;
+
+    info!("export_backup called: dest={}, archived_only={}", dest_path, archived_only);
+
+    let accounts: Vec<BackupAccount> = serde_json::from_str(&accounts_json)
+        .map_err(|e| format!("Failed to parse accounts: {}", e))?;
+
+    let settings: Option<serde_json::Value> = if settings_json.is_empty() {
+        None
+    } else {
+        serde_json::from_str(&settings_json).ok()
+    };
+
+    // Read accounts.json to get accountId -> email mapping
+    let accounts_entries = read_accounts_json(&app_handle)?;
+    let mut id_to_email: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    for entry in &accounts_entries {
+        if let Some(ref email) = entry.email {
+            id_to_email.insert(entry.id.clone(), email.clone());
+        }
+    }
+
+    let base = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not get app data directory: {}", e))?;
+    let maildir_base = base.join("Maildir");
+
+    let file = fs::File::create(&dest_path)
+        .map_err(|e| format!("Failed to create ZIP file: {}", e))?;
+    let mut zip = zip::ZipWriter::new(file);
+    let options = SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+
+    let mut email_count: u32 = 0;
+    let mut account_count: u32 = 0;
+
+    if maildir_base.exists() {
+        // Walk each account directory
+        if let Ok(account_dirs) = fs::read_dir(&maildir_base) {
+            for account_dir in account_dirs.flatten() {
+                if !account_dir.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
+                    continue;
+                }
+                let account_id = account_dir.file_name().to_string_lossy().to_string();
+                let email_addr = match id_to_email.get(&account_id) {
+                    Some(e) => e.clone(),
+                    None => {
+                        warn!("No email found for account {}, skipping", account_id);
+                        continue;
+                    }
+                };
+
+                let mut account_has_emails = false;
+
+                // Walk each mailbox directory
+                if let Ok(mailbox_dirs) = fs::read_dir(account_dir.path()) {
+                    for mailbox_dir in mailbox_dirs.flatten() {
+                        if !mailbox_dir.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
+                            continue;
+                        }
+                        let mailbox_name = mailbox_dir.file_name().to_string_lossy().to_string();
+                        let cur_dir = mailbox_dir.path().join("cur");
+                        if !cur_dir.exists() {
+                            continue;
+                        }
+
+                        if let Ok(files) = fs::read_dir(&cur_dir) {
+                            for file_entry in files.flatten() {
+                                let filename = file_entry.file_name().to_string_lossy().to_string();
+                                if !filename.contains(":2,") {
+                                    continue;
+                                }
+
+                                // If archived_only, check for 'A' flag
+                                if archived_only {
+                                    if let Some(flags_part) = filename.split(":2,").nth(1) {
+                                        if !flags_part.contains('A') {
+                                            continue;
+                                        }
+                                    } else {
+                                        continue;
+                                    }
+                                }
+
+                                let zip_path = format!(
+                                    "mailvault-backup/emails/{}/{}/{}",
+                                    email_addr, mailbox_name, filename
+                                );
+
+                                let content = match fs::read(file_entry.path()) {
+                                    Ok(c) => c,
+                                    Err(e) => {
+                                        warn!("Failed to read {}: {}", file_entry.path().display(), e);
+                                        continue;
+                                    }
+                                };
+
+                                zip.start_file(&zip_path, options)
+                                    .map_err(|e| format!("Failed to add file to ZIP: {}", e))?;
+                                zip.write_all(&content)
+                                    .map_err(|e| format!("Failed to write to ZIP: {}", e))?;
+
+                                email_count += 1;
+                                account_has_emails = true;
+                            }
+                        }
+                    }
+                }
+
+                if account_has_emails {
+                    account_count += 1;
+                }
+            }
+        }
+    }
+
+    // Write manifest.json
+    let manifest = BackupManifest {
+        version: 2,
+        exported_at: chrono::Utc::now().to_rfc3339(),
+        accounts,
+        settings,
+    };
+    let manifest_json = serde_json::to_string_pretty(&manifest)
+        .map_err(|e| format!("Failed to serialize manifest: {}", e))?;
+    zip.start_file("mailvault-backup/manifest.json", options)
+        .map_err(|e| format!("Failed to add manifest to ZIP: {}", e))?;
+    zip.write_all(manifest_json.as_bytes())
+        .map_err(|e| format!("Failed to write manifest: {}", e))?;
+
+    zip.finish()
+        .map_err(|e| format!("Failed to finalize ZIP: {}", e))?;
+
+    info!("Backup exported: {} emails from {} accounts to {}", email_count, account_count, dest_path);
+
+    Ok(ExportResult {
+        email_count,
+        account_count,
+    })
+}
+
+#[tauri::command]
+async fn import_backup(
+    app_handle: tauri::AppHandle,
+    source_path: String,
+) -> Result<ImportResult, String> {
+    use std::io::Read;
+
+    info!("import_backup called: source={}", source_path);
+
+    let file = fs::File::open(&source_path)
+        .map_err(|e| format!("Failed to open ZIP file: {}", e))?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|e| format!("Failed to read ZIP archive: {}", e))?;
+
+    // Read manifest.json
+    let manifest: BackupManifest = {
+        let mut manifest_file = archive.by_name("mailvault-backup/manifest.json")
+            .map_err(|e| format!("No manifest.json found in backup: {}", e))?;
+        let mut manifest_str = String::new();
+        manifest_file.read_to_string(&mut manifest_str)
+            .map_err(|e| format!("Failed to read manifest: {}", e))?;
+        serde_json::from_str(&manifest_str)
+            .map_err(|e| format!("Failed to parse manifest: {}", e))?
+    };
+
+    info!("Backup manifest: version={}, accounts={}, exported_at={}",
+        manifest.version, manifest.accounts.len(), manifest.exported_at);
+
+    // Read existing accounts to match by email
+    let mut existing_accounts = read_accounts_json(&app_handle)?;
+    let mut email_to_id: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    for entry in &existing_accounts {
+        if let Some(ref email) = entry.email {
+            email_to_id.insert(email.clone(), entry.id.clone());
+        }
+    }
+
+    // Map manifest emails to account IDs (existing or new)
+    let mut new_accounts: Vec<String> = Vec::new();
+    for manifest_acct in &manifest.accounts {
+        if !email_to_id.contains_key(&manifest_acct.email) {
+            let new_id = uuid::Uuid::new_v4().to_string();
+            info!("Creating new account for {}: {}", manifest_acct.email, new_id);
+            email_to_id.insert(manifest_acct.email.clone(), new_id.clone());
+
+            existing_accounts.push(AccountsJsonEntry {
+                id: new_id,
+                email: Some(manifest_acct.email.clone()),
+                imap_server: manifest_acct.imap_server.clone(),
+                smtp_server: manifest_acct.smtp_server.clone(),
+                created_at: Some(chrono::Utc::now().to_rfc3339()),
+            });
+
+            new_accounts.push(manifest_acct.email.clone());
+        }
+    }
+
+    // Save updated accounts.json
+    write_accounts_json(&app_handle, &existing_accounts)?;
+
+    let base = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not get app data directory: {}", e))?;
+    let maildir_base = base.join("Maildir");
+
+    // Extract .eml files
+    let mut email_count: u32 = 0;
+    let email_prefix = "mailvault-backup/emails/";
+
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i)
+            .map_err(|e| format!("Failed to read ZIP entry: {}", e))?;
+        let entry_name = entry.name().to_string();
+
+        if !entry_name.starts_with(email_prefix) || entry.is_dir() {
+            continue;
+        }
+
+        // Parse path: emails/{email}/{mailbox}/{filename}
+        let relative = &entry_name[email_prefix.len()..];
+        let parts: Vec<&str> = relative.splitn(3, '/').collect();
+        if parts.len() != 3 {
+            warn!("Skipping malformed path: {}", entry_name);
+            continue;
+        }
+
+        let email_addr = parts[0];
+        let mailbox = parts[1];
+        let filename = parts[2];
+
+        if filename.is_empty() || !filename.contains(":2,") {
+            continue;
+        }
+
+        let account_id = match email_to_id.get(email_addr) {
+            Some(id) => id.clone(),
+            None => {
+                warn!("No account ID for email {}, skipping", email_addr);
+                continue;
+            }
+        };
+
+        let safe_mailbox = sanitize_mailbox_name(mailbox);
+        let cur_dir = maildir_base.join(&account_id).join(&safe_mailbox).join("cur");
+        fs::create_dir_all(&cur_dir)
+            .map_err(|e| format!("Failed to create directory: {}", e))?;
+
+        let dest_path = cur_dir.join(filename);
+
+        // Skip if file already exists (idempotent)
+        if dest_path.exists() {
+            info!("Skipping existing file: {:?}", dest_path);
+            continue;
+        }
+
+        let mut content = Vec::new();
+        entry.read_to_end(&mut content)
+            .map_err(|e| format!("Failed to read .eml from ZIP: {}", e))?;
+
+        fs::write(&dest_path, &content)
+            .map_err(|e| format!("Failed to write .eml file: {}", e))?;
+
+        email_count += 1;
+    }
+
+    let settings_json = manifest.settings
+        .map(|s| serde_json::to_string(&s).unwrap_or_default());
+
+    info!("Backup imported: {} emails, {} new accounts", email_count, new_accounts.len());
+
+    Ok(ImportResult {
+        email_count,
+        account_count: manifest.accounts.len() as u32,
+        new_accounts,
+        settings_json,
+    })
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
@@ -957,7 +1966,18 @@ fn main() {
             save_attachment_to,
             show_in_folder,
             open_file,
-            open_with_dialog
+            open_with_dialog,
+            open_email_window,
+            maildir_store,
+            maildir_read,
+            maildir_exists,
+            maildir_list,
+            maildir_delete,
+            maildir_set_flags,
+            maildir_storage_stats,
+            maildir_migrate_json_to_eml,
+            export_backup,
+            import_backup
         ])
         .setup(|app| {
             // Set up logging to app log directory
@@ -969,6 +1989,14 @@ fn main() {
 
             // Clean up old logs
             cleanup_old_logs(&log_dir);
+
+            // Clean up stale popup cache files from previous sessions
+            if let Ok(data_dir) = app.path().app_data_dir() {
+                let popup_cache = data_dir.join("popup_cache");
+                if popup_cache.exists() {
+                    let _ = fs::remove_dir_all(&popup_cache);
+                }
+            }
 
             // Store log directory for later use
             app.manage(LogDir(log_dir));
@@ -1236,9 +2264,12 @@ fn main() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                info!("Window close requested, hiding to tray");
-                let _ = window.hide();
-                api.prevent_close();
+                // Only hide-to-tray for the main window; popup windows close normally
+                if window.label() == "main" {
+                    info!("Main window close requested, hiding to tray");
+                    let _ = window.hide();
+                    api.prevent_close();
+                }
             }
         })
         .build(tauri::generate_context!())

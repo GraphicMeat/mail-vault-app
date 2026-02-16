@@ -1,0 +1,31 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Write .env.test from secrets
+        env:
+          TEST_EMAIL: ${{ secrets.TEST_EMAIL }}
+          TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
+          IMAP_HOST: ${{ secrets.IMAP_HOST }}
+          IMAP_PORT: ${{ secrets.IMAP_PORT }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          TEST_EMAIL2: ${{ secrets.TEST_EMAIL2 }}
+          TEST_PASSWORD2: ${{ secrets.TEST_PASSWORD2 }}
+        run: |
+          printf 'TEST_EMAIL=%s\nTEST_PASSWORD=%s\nIMAP_HOST=%s\nIMAP_PORT=%s\nSMTP_HOST=%s\nSMTP_PORT=%s\nTEST_EMAIL2=%s\nTEST_PASSWORD2=%s\n' \
+            "$TEST_EMAIL" "$TEST_PASSWORD" "$IMAP_HOST" "$IMAP_PORT" "$SMTP_HOST" "$SMTP_PORT" "$TEST_EMAIL2" "$TEST_PASSWORD2" \
+            > .env.test
+      - run: npm test

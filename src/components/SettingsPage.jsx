@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -47,7 +47,7 @@ function ToggleSwitch({ active, onClick }) {
 }
 
 export function SettingsPage({ onClose }) {
-  const { accounts, removeAccount, cacheCurrentSizeMB, clearEmailCache } = useMailStore();
+  const { accounts, removeAccount } = useMailStore();
   const { theme, toggleTheme } = useThemeStore();
   const {
     localStoragePath,
@@ -58,8 +58,6 @@ export function SettingsPage({ onClose }) {
     displayNames,
     setDisplayName,
     getDisplayName,
-    cacheLimitMB,
-    setCacheLimitMB,
     refreshInterval,
     setRefreshInterval,
     refreshOnLaunch,
@@ -100,8 +98,8 @@ export function SettingsPage({ onClose }) {
   const [movingStorage, setMovingStorage] = useState(false);
   const [supportsFileSystem, setSupportsFileSystem] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [showExportChoice, setShowExportChoice] = useState(false);
   const [importing, setImporting] = useState(false);
-  const importInputRef = useRef(null);
   const [logs, setLogs] = useState('');
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [editingPassword, setEditingPassword] = useState(false);
@@ -183,155 +181,110 @@ export function SettingsPage({ onClose }) {
     }
   };
   
-  // Export all data as JSON
-  const handleExportData = async () => {
+  // Export backup as ZIP of .eml files via Rust
+  const handleExportData = () => {
+    if (!invoke) {
+      alert('Backup export is only available in the desktop app.');
+      return;
+    }
+    setShowExportChoice(true);
+  };
+
+  const doExport = async (archivedOnly) => {
+    setShowExportChoice(false);
     setExporting(true);
     try {
-      const database = await window.indexedDB.databases();
-      
-      // Get all data from IndexedDB
-      const dbRequest = indexedDB.open('mailvault-db', 1);
-      
-      dbRequest.onsuccess = async (event) => {
-        const db = event.target.result;
-        const exportData = {
-          version: 1,
-          exportedAt: new Date().toISOString(),
-          accounts: [],
-          emails: [],
-          savedIndex: [],
-          settings: {
-            theme: localStorage.getItem('mailvault-theme'),
-            settings: localStorage.getItem('mailvault-settings')
-          }
-        };
-        
-        // Export accounts
-        const accountsTx = db.transaction('accounts', 'readonly');
-        const accountsStore = accountsTx.objectStore('accounts');
-        const accountsRequest = accountsStore.getAll();
-        
-        accountsRequest.onsuccess = () => {
-          exportData.accounts = accountsRequest.result;
-          
-          // Export emails
-          const emailsTx = db.transaction('emails', 'readonly');
-          const emailsStore = emailsTx.objectStore('emails');
-          const emailsRequest = emailsStore.getAll();
-          
-          emailsRequest.onsuccess = () => {
-            exportData.emails = emailsRequest.result;
-            
-            // Export saved index
-            const savedTx = db.transaction('savedIndex', 'readonly');
-            const savedStore = savedTx.objectStore('savedIndex');
-            const savedRequest = savedStore.getAll();
-            
-            savedRequest.onsuccess = () => {
-              exportData.savedIndex = savedRequest.result;
-              
-              // Create and download file
-              const blob = new Blob([JSON.stringify(exportData, null, 2)], { 
-                type: 'application/json' 
-              });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `mailvault-backup-${new Date().toISOString().split('T')[0]}.json`;
-              a.click();
-              URL.revokeObjectURL(url);
-              
-              setExporting(false);
-            };
-          };
-        };
-      };
-      
-      dbRequest.onerror = () => {
-        alert('Failed to export data');
+      const { save } = await import('@tauri-apps/plugin-dialog');
+
+      const destPath = await save({
+        defaultPath: `mailvault-backup-${new Date().toISOString().split('T')[0]}.zip`,
+        filters: [{ name: 'ZIP Archives', extensions: ['zip'] }],
+      });
+
+      if (!destPath) {
         setExporting(false);
+        return;
+      }
+
+      const settingsData = {
+        theme: localStorage.getItem('mailvault-theme'),
+        settings: localStorage.getItem('mailvault-settings'),
       };
+
+      const db = await import('../services/db');
+      await db.initDB();
+      const accountsList = await db.getAccountsWithoutPasswords();
+      const backupAccounts = accountsList.map(a => ({
+        email: a.email,
+        imapServer: a.imapServer,
+        smtpServer: a.smtpServer,
+      }));
+
+      const result = await invoke('export_backup', {
+        destPath,
+        archivedOnly,
+        settingsJson: JSON.stringify(settingsData),
+        accountsJson: JSON.stringify(backupAccounts),
+      });
+
+      alert(`Backup exported successfully!\n\n${result.emailCount} email(s) from ${result.accountCount} account(s).`);
     } catch (error) {
       console.error('Export error:', error);
-      alert('Failed to export data: ' + error.message);
+      alert('Failed to export backup: ' + (error.message || error));
+    } finally {
       setExporting(false);
     }
   };
-  
-  // Import data from JSON
-  const handleImportData = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    
+
+  // Import backup from ZIP via Rust
+  const handleImportData = async () => {
+    if (!invoke) {
+      alert('Backup import is only available in the desktop app.');
+      return;
+    }
+
     setImporting(true);
     try {
-      const text = await file.text();
-      const importData = JSON.parse(text);
-      
-      if (!importData.version || !importData.accounts) {
-        throw new Error('Invalid backup file format');
-      }
-      
-      const confirmImport = confirm(
-        `This will import:\n• ${importData.accounts.length} account(s)\n• ${importData.emails.length} email(s)\n\nExisting data will be merged. Continue?`
-      );
-      
-      if (!confirmImport) {
+      const { open } = await import('@tauri-apps/plugin-dialog');
+
+      const sourcePath = await open({
+        filters: [{ name: 'ZIP Archives', extensions: ['zip'] }],
+        multiple: false,
+      });
+
+      if (!sourcePath) {
         setImporting(false);
         return;
       }
-      
-      // Import to IndexedDB
-      const dbRequest = indexedDB.open('mailvault-db', 1);
-      
-      dbRequest.onsuccess = async (event) => {
-        const db = event.target.result;
-        
-        // Import accounts
-        const accountsTx = db.transaction('accounts', 'readwrite');
-        for (const account of importData.accounts) {
-          accountsTx.objectStore('accounts').put(account);
-        }
-        
-        // Import emails
-        const emailsTx = db.transaction('emails', 'readwrite');
-        for (const email of importData.emails) {
-          emailsTx.objectStore('emails').put(email);
-        }
-        
-        // Import saved index
-        const savedTx = db.transaction('savedIndex', 'readwrite');
-        for (const saved of importData.savedIndex) {
-          savedTx.objectStore('savedIndex').put(saved);
-        }
-        
-        // Restore settings
-        if (importData.settings) {
-          if (importData.settings.theme) {
-            localStorage.setItem('mailvault-theme', importData.settings.theme);
+
+      const result = await invoke('import_backup', { sourcePath });
+
+      // Restore settings if present
+      if (result.settingsJson) {
+        try {
+          const settings = JSON.parse(result.settingsJson);
+          if (settings.theme) {
+            localStorage.setItem('mailvault-theme', settings.theme);
           }
-          if (importData.settings.settings) {
-            localStorage.setItem('mailvault-settings', importData.settings.settings);
+          if (settings.settings) {
+            localStorage.setItem('mailvault-settings', settings.settings);
           }
+        } catch (e) {
+          console.warn('Failed to restore settings:', e);
         }
-        
-        alert('Import successful! The page will reload.');
-        window.location.reload();
-      };
-      
-      dbRequest.onerror = () => {
-        alert('Failed to import data');
-        setImporting(false);
-      };
+      }
+
+      let msg = `Backup imported successfully!\n\n${result.emailCount} email(s) from ${result.accountCount} account(s).`;
+      if (result.newAccounts.length > 0) {
+        msg += `\n\nNew accounts created (re-enter passwords in Settings):\n• ${result.newAccounts.join('\n• ')}`;
+      }
+
+      alert(msg + '\n\nThe page will reload.');
+      window.location.reload();
     } catch (error) {
       console.error('Import error:', error);
-      alert('Failed to import data: ' + error.message);
+      alert('Failed to import backup: ' + (error.message || error));
       setImporting(false);
-    }
-    
-    // Reset input
-    if (importInputRef.current) {
-      importInputRef.current.value = '';
     }
   };
   
@@ -600,85 +553,6 @@ export function SettingsPage({ onClose }) {
                         Conversation style
                       </span>
                     </button>
-                  </div>
-                </div>
-
-                {/* Cache Settings */}
-                <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
-                  <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-                    <Database size={18} className="text-mail-accent" />
-                    Session Cache
-                  </h4>
-
-                  <p className="text-sm text-mail-text-muted mb-4">
-                    In-memory cache for the current session. Keeps recently viewed emails in memory
-                    for instant access while browsing. Resets when you close the app.
-                  </p>
-
-                  <div className="space-y-4">
-                    <div>
-                      <div className="flex items-center justify-between mb-3">
-                        <label className="text-sm font-medium text-mail-text">
-                          Cache Size Limit
-                        </label>
-                        <span className="text-sm font-medium text-mail-accent">
-                          {cacheLimitMB === 0 ? 'Unlimited' : `${Math.round(cacheLimitMB / 1024)} GB`}
-                        </span>
-                      </div>
-
-                      {/* Slider - GB only: 1, 2, 5, 10, 20, 50, 100, Unlimited */}
-                      <div className="relative">
-                        <input
-                          type="range"
-                          min="0"
-                          max="7"
-                          value={
-                            cacheLimitMB === 0 ? 7 :
-                            cacheLimitMB <= 1024 ? 0 :
-                            cacheLimitMB <= 2048 ? 1 :
-                            cacheLimitMB <= 5120 ? 2 :
-                            cacheLimitMB <= 10240 ? 3 :
-                            cacheLimitMB <= 20480 ? 4 :
-                            cacheLimitMB <= 51200 ? 5 : 6
-                          }
-                          onChange={(e) => {
-                            // Values in MB: 1GB, 2GB, 5GB, 10GB, 20GB, 50GB, 100GB, Unlimited
-                            const steps = [1024, 2048, 5120, 10240, 20480, 51200, 102400, 0];
-                            setCacheLimitMB(steps[parseInt(e.target.value)]);
-                          }}
-                          className="w-full"
-                        />
-
-                        {/* Tick marks */}
-                        <div className="flex justify-between mt-1 px-1">
-                          <span className="text-[10px] text-mail-text-muted">1 GB</span>
-                          <span className="text-[10px] text-mail-text-muted">5 GB</span>
-                          <span className="text-[10px] text-mail-text-muted">50 GB</span>
-                          <span className="text-[10px] text-mail-text-muted">Unlimited</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between p-3 bg-mail-bg rounded-lg">
-                      <div>
-                        <div className="text-sm text-mail-text">Current session usage</div>
-                        <div className="text-xs text-mail-text-muted">
-                          {cacheCurrentSizeMB >= 1024
-                            ? `${(cacheCurrentSizeMB / 1024).toFixed(2)} GB`
-                            : `${cacheCurrentSizeMB?.toFixed(2) || '0.00'} MB`}
-                          {cacheLimitMB > 0
-                            ? ` / ${Math.round(cacheLimitMB / 1024)} GB limit`
-                            : ' (Unlimited)'}
-                        </div>
-                      </div>
-                      <button
-                        onClick={clearEmailCache}
-                        className="px-3 py-1.5 text-sm text-mail-text-muted hover:text-mail-text
-                                  hover:bg-mail-border rounded-lg transition-colors"
-                      >
-                        Clear
-                      </button>
-                    </div>
                   </div>
                 </div>
 
@@ -1120,7 +994,7 @@ export function SettingsPage({ onClose }) {
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="text-sm font-medium text-mail-text truncate">
-                                {getDisplayName(account.id) || account.name || account.email.split('@')[0]}
+                                {getDisplayName(account.id) || account.name || account.email?.split('@')[0] || 'Unknown'}
                               </div>
                               <div className="text-xs text-mail-text-muted truncate">
                                 {account.email}
@@ -1368,7 +1242,7 @@ export function SettingsPage({ onClose }) {
                   </div>
                   
                   <p className="text-sm text-mail-text-muted">
-                    All saved emails, attachments, and settings are stored locally in your browser. 
+                    All archived emails, attachments, and settings are stored locally on your device.
                     This data persists across sessions and is private to your device.
                   </p>
                 </div>
@@ -1388,7 +1262,7 @@ export function SettingsPage({ onClose }) {
                     <button
                       onClick={handleExportData}
                       disabled={exporting}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-3 
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-3
                                 bg-mail-accent/10 hover:bg-mail-accent/20 text-mail-accent
                                 rounded-lg transition-colors disabled:opacity-50"
                     >
@@ -1399,18 +1273,11 @@ export function SettingsPage({ onClose }) {
                       )}
                       {exporting ? 'Exporting...' : 'Export Backup'}
                     </button>
-                    
-                    <input
-                      type="file"
-                      ref={importInputRef}
-                      onChange={handleImportData}
-                      accept=".json"
-                      className="hidden"
-                    />
+
                     <button
-                      onClick={() => importInputRef.current?.click()}
+                      onClick={handleImportData}
                       disabled={importing}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-3 
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-3
                                 bg-mail-surface-hover hover:bg-mail-border text-mail-text
                                 rounded-lg transition-colors disabled:opacity-50"
                     >
@@ -1485,9 +1352,18 @@ export function SettingsPage({ onClose }) {
                     Clear all locally stored emails and settings. This action cannot be undone.
                   </p>
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       if (confirm('Are you sure? This will delete all locally stored emails and settings. This action cannot be undone.')) {
-                        indexedDB.deleteDatabase('mailvault-db');
+                        try {
+                          const db = await import('../services/db');
+                          // Delete each account's Maildir and data
+                          const accts = await db.getAccountsWithoutPasswords();
+                          for (const acct of accts) {
+                            await db.deleteAccount(acct.id);
+                          }
+                        } catch (e) {
+                          console.error('Failed to clear Maildir data:', e);
+                        }
                         localStorage.clear();
                         window.location.reload();
                       }
@@ -1578,8 +1454,15 @@ export function SettingsPage({ onClose }) {
                             alert('Clear logs is only available in the desktop app');
                             return;
                           }
-                          if (!confirm('Are you sure you want to clear all logs?')) {
-                            return;
+                          try {
+                            const { ask } = await import('@tauri-apps/plugin-dialog');
+                            const confirmed = await ask('Are you sure you want to clear all logs?', {
+                              title: 'Clear Logs',
+                              kind: 'warning',
+                            });
+                            if (!confirmed) return;
+                          } catch {
+                            if (!confirm('Are you sure you want to clear all logs?')) return;
                           }
                           try {
                             setLoadingLogs(true);
@@ -1635,6 +1518,55 @@ export function SettingsPage({ onClose }) {
           </div>
         </div>
       </motion.div>
+
+      {/* Export choice modal */}
+      <AnimatePresence>
+        {showExportChoice && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]"
+            onClick={() => setShowExportChoice(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-mail-bg border border-mail-border rounded-xl shadow-xl max-w-sm w-full mx-4 p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-semibold text-mail-text mb-2">Export Backup</h3>
+              <p className="text-sm text-mail-text-muted mb-5">
+                Which emails would you like to export?
+              </p>
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => doExport(true)}
+                  className="w-full px-4 py-2.5 bg-mail-accent hover:bg-mail-accent-hover
+                            text-white rounded-lg font-medium transition-colors"
+                >
+                  Archived Only
+                </button>
+                <button
+                  onClick={() => doExport(false)}
+                  className="w-full px-4 py-2.5 bg-mail-surface-hover hover:bg-mail-border
+                            text-mail-text rounded-lg font-medium transition-colors"
+                >
+                  All Emails
+                </button>
+                <button
+                  onClick={() => setShowExportChoice(false)}
+                  className="w-full px-4 py-2 text-sm text-mail-text-muted hover:text-mail-text
+                            transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

@@ -16,31 +16,45 @@ async function request(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
   console.log('[api.js] Making request to:', url);
 
+  let response;
   try {
-    const response = await fetch(url, {
+    response = await fetch(url, {
       headers: {
         'Content-Type': 'application/json',
         ...options.headers
       },
       ...options
     });
-
-    console.log('[api.js] Response status:', response.status);
-
-    const data = await response.json();
-
-    if (!response.ok || !data.success) {
-      console.error('[api.js] Request failed:', data.error);
-      throw new ApiError(data.error || 'Request failed', response.status);
-    }
-
-    return data;
   } catch (error) {
-    console.error('[api.js] Request error:', error);
-    console.error('[api.js] Error name:', error.name);
-    console.error('[api.js] Error message:', error.message);
-    throw error;
+    console.error('[api.js] Fetch failed for', endpoint, ':', error);
+    throw new ApiError(
+      `Server unreachable (${endpoint}): ${error.message}. The backend server may not be running.`,
+      0
+    );
   }
+
+  console.log('[api.js] Response status:', response.status);
+
+  let data;
+  try {
+    data = await response.json();
+  } catch (error) {
+    console.error('[api.js] Failed to parse response for', endpoint, ':', error);
+    throw new ApiError(
+      `Invalid response from server (${endpoint}): HTTP ${response.status}`,
+      response.status
+    );
+  }
+
+  if (!response.ok || !data.success) {
+    console.error('[api.js] Request failed:', data.error);
+    throw new ApiError(
+      data.error || `Request failed (${endpoint}): HTTP ${response.status}`,
+      response.status
+    );
+  }
+
+  return data;
 }
 
 export async function testConnection(account) {

@@ -1,6 +1,6 @@
 [package]
 name = "mailvault"
-version = "1.0.2"
+version = "1.1.0"
 description = "A reactive email client with local storage"
 authors = ["MailVault"]
 edition = "2021"
@@ -26,6 +26,10 @@ tracing-appender = "0.2"
 chrono = "0.4"
 base64 = "0.22"
 dirs = "5"
+mailparse = "0.15"
+walkdir = "2"
+zip = "2"
+uuid = { version = "1", features = ["v4"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 cocoa = "0.26"

@@ -9,6 +9,16 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
+// Extract detailed error info from IMAP/network errors
+function getErrorDetail(error) {
+  const parts = [error.message];
+  if (error.responseText) parts.push(`Server: ${error.responseText}`);
+  if (error.response) parts.push(`Response: ${error.response}`);
+  if (error.serverResponseCode) parts.push(`Code: ${error.serverResponseCode}`);
+  if (error.code && error.code !== error.message) parts.push(`(${error.code})`);
+  return parts.filter(Boolean).join(' | ');
+}
+
 // Store active connections - background operations
 const connections = new Map();
 // Store priority connections - user-initiated operations (viewing emails, attachments)
@@ -92,6 +102,13 @@ async function withConnection(account, operation, usePriority = false) {
     const client = await getConnection(account, usePriority);
     return await operation(client);
   } catch (error) {
+    console.error(`[withConnection] IMAP error for ${account.email}:`, {
+      message: error.message,
+      code: error.code,
+      responseText: error.responseText,
+      response: error.response,
+      serverResponseCode: error.serverResponseCode
+    });
     // Remove failed connection
     connectionPool.delete(key);
 
@@ -157,8 +174,8 @@ app.post('/api/mailboxes', async (req, res) => {
     
     res.json({ success: true, mailboxes });
   } catch (error) {
-    console.error('Error fetching mailboxes:', error.message);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('Error fetching mailboxes:', error.message, error.code || '', error.responseText || '');
+    res.status(500).json({ success: false, error: `Failed to fetch mailboxes: ${getErrorDetail(error)}` });
   }
 });
 
@@ -232,8 +249,8 @@ app.post('/api/emails-range', async (req, res) => {
 
     res.json({ success: true, ...result });
   } catch (error) {
-    console.error('Error fetching emails by range:', error.message);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('Error fetching emails by range:', error.message, error.code || '', error.responseText || '');
+    res.status(500).json({ success: false, error: `Failed to fetch emails: ${getErrorDetail(error)}` });
   }
 });
 
@@ -291,8 +308,8 @@ app.post('/api/emails', async (req, res) => {
     
     res.json({ success: true, ...result });
   } catch (error) {
-    console.error('Error fetching emails:', error.message);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('Error fetching emails:', error.message, error.code || '', error.responseText || '');
+    res.status(500).json({ success: false, error: `Failed to fetch emails: ${getErrorDetail(error)}` });
   }
 });
 
@@ -361,8 +378,8 @@ app.post('/api/email/:uid', async (req, res) => {
     
     res.json({ success: true, email });
   } catch (error) {
-    console.error('Error fetching email:', error.message);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('Error fetching email:', error.message, error.code || '', error.responseText || '');
+    res.status(500).json({ success: false, error: `Failed to fetch email: ${getErrorDetail(error)}` });
   }
 });
 
@@ -387,8 +404,8 @@ app.post('/api/email/:uid/flags', async (req, res) => {
     
     res.json({ success: true });
   } catch (error) {
-    console.error('Error updating flags:', error.message);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('Error updating flags:', error.message, error.code || '', error.responseText || '');
+    res.status(500).json({ success: false, error: `Failed to update flags: ${getErrorDetail(error)}` });
   }
 });
 
@@ -430,8 +447,8 @@ app.post('/api/email/:uid/delete', async (req, res) => {
     
     res.json({ success: true });
   } catch (error) {
-    console.error('Error deleting email:', error.message);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('Error deleting email:', error.message, error.code || '', error.responseText || '');
+    res.status(500).json({ success: false, error: `Failed to delete email: ${getErrorDetail(error)}` });
   }
 });
 
@@ -470,8 +487,8 @@ app.post('/api/send', async (req, res) => {
     
     res.json({ success: true, messageId: result.messageId });
   } catch (error) {
-    console.error('Error sending email:', error.message);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('Error sending email:', error.message, error.code || '', error.responseText || '');
+    res.status(500).json({ success: false, error: `Failed to send email: ${getErrorDetail(error)}` });
   }
 });
 
@@ -573,8 +590,8 @@ app.post('/api/search', async (req, res) => {
 
     res.json({ success: true, ...result });
   } catch (error) {
-    console.error('Error searching emails:', error.message);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('Error searching emails:', error.message, error.code || '', error.responseText || '');
+    res.status(500).json({ success: false, error: `Failed to search emails: ${getErrorDetail(error)}` });
   }
 });
 
@@ -600,8 +617,8 @@ app.post('/api/test-connection', async (req, res) => {
     
     res.json({ success: true, message: 'Connection successful' });
   } catch (error) {
-    console.error('Connection test failed:', error.message);
-    res.status(400).json({ success: false, error: error.message });
+    console.error('Connection test failed:', error.message, error.code || '', error.responseText || '');
+    res.status(400).json({ success: false, error: `Connection test failed: ${getErrorDetail(error)}` });
   }
 });
 

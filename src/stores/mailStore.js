@@ -17,6 +17,7 @@ export const useMailStore = create((set, get) => ({
   emails: [],
   localEmails: [],
   savedEmailIds: new Set(),
+  archivedEmailIds: new Set(),
   selectedEmailId: null,
   selectedEmail: null,
   selectedEmailSource: null, // 'server' | 'local' | 'local-only'
@@ -155,7 +156,7 @@ export const useMailStore = create((set, get) => ({
   
   // Update sorted emails (memoization for performance)
   updateSortedEmails: () => {
-    const { emails, localEmails, viewMode, savedEmailIds } = get();
+    const { emails, localEmails, viewMode, savedEmailIds, archivedEmailIds } = get();
 
     let result = [];
 
@@ -166,11 +167,14 @@ export const useMailStore = create((set, get) => ({
         source: 'server'
       }));
     } else if (viewMode === 'local') {
-      result = localEmails.map(e => ({
-        ...e,
-        isLocal: true,
-        source: 'local'
-      }));
+      // Show only explicitly archived emails (with 'A' flag)
+      result = localEmails
+        .filter(e => archivedEmailIds.has(e.uid))
+        .map(e => ({
+          ...e,
+          isLocal: true,
+          source: 'local'
+        }));
     } else {
       // Combine: server emails + local-only emails
       const serverUids = new Set(emails.map(e => e.uid));
@@ -226,8 +230,12 @@ export const useMailStore = create((set, get) => ({
       await db.initDB();
       const accounts = await db.getAccounts();
       set({ accounts });
-      
+
+      // Backfill accounts.json so future quick-loads find accounts without keychain
       if (accounts.length > 0) {
+        for (const account of accounts) {
+          await db.ensureAccountInFile(account);
+        }
         await get().setActiveAccount(accounts[0].id);
       }
     } catch (error) {
@@ -239,6 +247,14 @@ export const useMailStore = create((set, get) => ({
   // Account management
   addAccount: async (accountData) => {
     console.log('[mailStore] addAccount called with:', { ...accountData, password: '***' });
+
+    // Check for duplicate email address
+    const existingAccount = get().accounts.find(
+      a => a.email.toLowerCase() === accountData.email.toLowerCase()
+    );
+    if (existingAccount) {
+      throw new Error('An account with this email address already exists');
+    }
 
     const account = {
       id: uuidv4(),
@@ -257,7 +273,7 @@ export const useMailStore = create((set, get) => ({
       throw error;
     }
 
-    // Save to IndexedDB
+    // Save to Maildir
     console.log('[mailStore] Saving account to database...');
     try {
       await db.saveAccount(account);
@@ -306,6 +322,7 @@ export const useMailStore = create((set, get) => ({
           emails: [],
           localEmails: [],
           savedEmailIds: new Set(),
+          archivedEmailIds: new Set(),
           selectedEmailId: null,
           selectedEmail: null,
           selectedEmailSource: null
@@ -336,13 +353,23 @@ export const useMailStore = create((set, get) => ({
     // Different account or no data - need to reset and load
     console.log('[setActiveAccount] Switching to account:', accountId, 'from:', currentAccountId);
 
-    // Only reset selection-related state, preserve emails if switching to same account
+    // Reset all email state immediately to prevent stale data from rendering
     set({
       activeAccountId: accountId,
+      emails: [],
+      localEmails: [],
+      totalEmails: 0,
+      emailsByIndex: new Map(),
+      loadedRanges: [],
+      loadingRanges: new Set(),
+      currentPage: 1,
+      hasMoreEmails: true,
       selectedEmailId: null,
       selectedEmail: null,
       selectedEmailSource: null,
       selectedEmailIds: new Set(),
+      savedEmailIds: new Set(),
+      archivedEmailIds: new Set(),
       connectionStatus: 'disconnected',
       connectionError: null,
       connectionErrorType: null,
@@ -352,6 +379,7 @@ export const useMailStore = create((set, get) => ({
     // Get local emails first (always available)
     const localEmails = await db.getLocalEmails(accountId, 'INBOX');
     const savedEmailIds = await db.getSavedEmailIds(accountId, 'INBOX');
+    const archivedEmailIds = await db.getArchivedEmailIds(accountId, 'INBOX');
 
     // Load cached headers to check if we have data for this account
     const cachedHeaders = await db.getEmailHeaders(accountId, 'INBOX');
@@ -379,7 +407,7 @@ export const useMailStore = create((set, get) => ({
         loadingRanges: new Set(),
         totalEmails: cachedHeaders.totalEmails,
         localEmails,
-        savedEmailIds,
+        savedEmailIds, archivedEmailIds,
         loading: false,
         loadingMore: true, // Indicate background refresh is happening
         currentPage: Math.ceil(cachedHeaders.emails.length / 50) || 1,
@@ -393,7 +421,7 @@ export const useMailStore = create((set, get) => ({
         loading: true,
         emails: localEmails,
         localEmails,
-        savedEmailIds,
+        savedEmailIds, archivedEmailIds,
         emailsByIndex: new Map(),
         loadedRanges: [],
         loadingRanges: new Set(),
@@ -417,7 +445,7 @@ export const useMailStore = create((set, get) => ({
       set({
         mailboxes: defaultMailboxes,
         localEmails,
-        savedEmailIds,
+        savedEmailIds, archivedEmailIds,
         connectionStatus: 'error',
         connectionError: 'Keychain access required to fetch emails from server. Local emails are available.',
         connectionErrorType: 'passwordMissing',
@@ -437,7 +465,7 @@ export const useMailStore = create((set, get) => ({
           set({
             mailboxes: defaultMailboxes,
             localEmails,
-            savedEmailIds,
+            savedEmailIds, archivedEmailIds,
             connectionStatus: 'error',
             connectionError: 'No internet connection. Showing locally saved emails.',
             connectionErrorType: 'offline',
@@ -451,7 +479,7 @@ export const useMailStore = create((set, get) => ({
         set({
           mailboxes: defaultMailboxes,
           localEmails,
-          savedEmailIds,
+          savedEmailIds, archivedEmailIds,
           connectionStatus: 'error',
           connectionError: 'Could not check internet connection. Showing locally saved emails.',
           connectionErrorType: 'offline',
@@ -466,7 +494,7 @@ export const useMailStore = create((set, get) => ({
         set({
           mailboxes: defaultMailboxes,
           localEmails,
-          savedEmailIds,
+          savedEmailIds, archivedEmailIds,
           connectionStatus: 'error',
           connectionError: 'No internet connection. Showing locally saved emails.',
           connectionErrorType: 'offline',
@@ -477,8 +505,24 @@ export const useMailStore = create((set, get) => ({
     }
 
     try {
-      // Fetch mailboxes
-      const mailboxes = await api.fetchMailboxes(account);
+      // Fetch mailboxes with retry (sidecar may still be starting)
+      let mailboxes;
+      let lastError;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          mailboxes = await api.fetchMailboxes(account);
+          break;
+        } catch (e) {
+          lastError = e;
+          const isServerNotReady = e.message?.includes('Server unreachable') || e.message?.includes('HTTP 500') || e.status === 500;
+          if (isServerNotReady && attempt < 2) {
+            console.log(`[setActiveAccount] Server not ready, retrying in ${(attempt + 1) * 2}s... (attempt ${attempt + 1}/3)`);
+            await new Promise(r => setTimeout(r, (attempt + 1) * 2000));
+            continue;
+          }
+          throw e;
+        }
+      }
       set({
         mailboxes,
         connectionStatus: 'connected',
@@ -498,15 +542,15 @@ export const useMailStore = create((set, get) => ({
       if (error.message?.includes('password') || error.message?.includes('authentication')) {
         errorType = 'passwordMissing';
         errorMessage = 'Authentication failed. Please check your password in Settings.';
-      } else if (error.message?.includes('network') || error.message?.includes('timeout') || error.message?.includes('ENOTFOUND')) {
+      } else if (error.message?.includes('network') || error.message?.includes('timeout') || error.message?.includes('ENOTFOUND') || error.message?.includes('Server unreachable')) {
         errorType = 'offline';
-        errorMessage = 'Cannot connect to email server. Please check your internet connection.';
+        errorMessage = error.message;
       }
 
       set({
         mailboxes: defaultMailboxes,
         localEmails,
-        savedEmailIds,
+        savedEmailIds, archivedEmailIds,
         connectionStatus: 'error',
         connectionError: errorMessage,
         connectionErrorType: errorType
@@ -515,7 +559,7 @@ export const useMailStore = create((set, get) => ({
       set({ loading: false });
     }
   },
-  
+
   // Mailbox management
   setActiveMailbox: async (mailbox) => {
     const { activeAccountId } = get();
@@ -532,6 +576,7 @@ export const useMailStore = create((set, get) => ({
     // Check if we have cached data for this mailbox
     const cachedHeaders = await db.getEmailHeaders(activeAccountId, mailbox);
     const savedEmailIds = await db.getSavedEmailIds(activeAccountId, mailbox);
+    const archivedEmailIds = await db.getArchivedEmailIds(activeAccountId, mailbox);
     const localEmails = await db.getLocalEmails(activeAccountId, mailbox);
 
     if (cachedHeaders && cachedHeaders.emails.length > 0) {
@@ -554,7 +599,7 @@ export const useMailStore = create((set, get) => ({
         loadingRanges: new Set(),
         totalEmails: cachedHeaders.totalEmails,
         localEmails,
-        savedEmailIds,
+        savedEmailIds, archivedEmailIds,
         currentPage: Math.ceil(cachedHeaders.emails.length / 50) || 1,
         hasMoreEmails: cachedHeaders.emails.length < cachedHeaders.totalEmails,
         loading: false,
@@ -570,7 +615,7 @@ export const useMailStore = create((set, get) => ({
         loadingRanges: new Set(),
         totalEmails: 0,
         localEmails,
-        savedEmailIds,
+        savedEmailIds, archivedEmailIds,
         currentPage: 1,
         hasMoreEmails: true,
         loading: true
@@ -598,12 +643,13 @@ export const useMailStore = create((set, get) => ({
     // Get local emails first (always available)
     const localEmails = await db.getLocalEmails(activeAccountId, activeMailbox);
     const savedEmailIds = await db.getSavedEmailIds(activeAccountId, activeMailbox);
+    const archivedEmailIds = await db.getArchivedEmailIds(activeAccountId, activeMailbox);
 
-    // Load cached headers from IndexedDB for instant display BEFORE resetting state
+    // Load cached headers from file cache for instant display BEFORE resetting state
     const cachedHeaders = await db.getEmailHeaders(activeAccountId, activeMailbox);
 
     if (cachedHeaders && cachedHeaders.emails.length > 0) {
-      console.log('[loadEmails] Loaded', cachedHeaders.emails.length, 'cached headers from IndexedDB (total:', cachedHeaders.totalEmails, ')');
+      console.log('[loadEmails] Loaded', cachedHeaders.emails.length, 'cached headers from Maildir (total:', cachedHeaders.totalEmails, ')');
 
       // Build sparse index from cached emails
       const emailsByIndex = new Map();
@@ -631,7 +677,7 @@ export const useMailStore = create((set, get) => ({
         loadingRanges: new Set(),
         totalEmails: cachedHeaders.totalEmails,
         localEmails,
-        savedEmailIds,
+        savedEmailIds, archivedEmailIds,
         loading: false, // Show cached data immediately
         loadingMore: true, // Indicate background refresh is happening
         error: null,
@@ -653,7 +699,7 @@ export const useMailStore = create((set, get) => ({
         loadedRanges: [],
         loadingRanges: new Set(),
         localEmails,
-        savedEmailIds,
+        savedEmailIds, archivedEmailIds,
         emails: localEmails // Show local emails while loading
       });
       get().updateSortedEmails();
@@ -669,7 +715,7 @@ export const useMailStore = create((set, get) => ({
         // Keep previous/cached emails when password is missing
         emails: previousEmails,
         localEmails,
-        savedEmailIds,
+        savedEmailIds, archivedEmailIds,
         connectionStatus: 'error',
         connectionError: 'Keychain access required to fetch new emails. Local and cached emails are available.',
         connectionErrorType: 'passwordMissing',
@@ -692,7 +738,7 @@ export const useMailStore = create((set, get) => ({
             // Keep previous emails when offline
             emails: previousEmails,
             localEmails,
-            savedEmailIds,
+            savedEmailIds, archivedEmailIds,
             connectionStatus: 'error',
             connectionError: 'No internet connection. Showing cached and locally saved emails.',
             connectionErrorType: 'offline',
@@ -709,7 +755,7 @@ export const useMailStore = create((set, get) => ({
           // Keep previous emails when offline
           emails: previousEmails,
           localEmails,
-          savedEmailIds,
+          savedEmailIds, archivedEmailIds,
           connectionStatus: 'error',
           connectionError: 'Could not check internet connection. Showing cached and locally saved emails.',
           connectionErrorType: 'offline',
@@ -726,7 +772,7 @@ export const useMailStore = create((set, get) => ({
           // Keep previous emails when offline
           emails: previousEmails,
           localEmails,
-          savedEmailIds,
+          savedEmailIds, archivedEmailIds,
           connectionStatus: 'error',
           connectionError: 'No internet connection. Showing cached and locally saved emails.',
           connectionErrorType: 'offline',
@@ -796,7 +842,7 @@ export const useMailStore = create((set, get) => ({
         emailsByIndex,
         loadedRanges: [{ start: 0, end: mergedEmails.length }],
         localEmails,
-        savedEmailIds,
+        savedEmailIds, archivedEmailIds,
         connectionStatus: 'connected',
         connectionError: null,
         connectionErrorType: null,
@@ -809,7 +855,7 @@ export const useMailStore = create((set, get) => ({
       // Update sorted emails for memoization
       get().updateSortedEmails();
 
-      // Save merged headers to IndexedDB cache
+      // Save merged headers to Maildir cache
       db.saveEmailHeaders(activeAccountId, activeMailbox, mergedEmails, serverResult.total)
         .catch(e => console.warn('[loadEmails] Failed to cache headers:', e));
 
@@ -827,16 +873,16 @@ export const useMailStore = create((set, get) => ({
       if (error.message?.includes('password') || error.message?.includes('authentication') || error.message?.includes('No password')) {
         errorType = 'passwordMissing';
         errorMessage = 'Authentication failed. Please check your password in Settings.';
-      } else if (error.message?.includes('network') || error.message?.includes('timeout') || error.message?.includes('ENOTFOUND') || error.message?.includes('ECONNREFUSED')) {
+      } else if (error.message?.includes('network') || error.message?.includes('timeout') || error.message?.includes('ENOTFOUND') || error.message?.includes('ECONNREFUSED') || error.message?.includes('Server unreachable')) {
         errorType = 'offline';
-        errorMessage = 'Cannot connect to email server. Please check your internet connection.';
+        errorMessage = error.message;
       }
 
       // Keep previous/cached emails on error - don't wipe out the cache!
       set({
         emails: previousEmails.length > 0 ? previousEmails : localEmails,
         localEmails,
-        savedEmailIds,
+        savedEmailIds, archivedEmailIds,
         connectionStatus: 'error',
         connectionError: errorMessage,
         connectionErrorType: errorType
@@ -1021,54 +1067,60 @@ export const useMailStore = create((set, get) => ({
   
   // Select email
   selectEmail: async (uid, source = 'server') => {
-    const { activeAccountId, accounts, activeMailbox, localEmails } = get();
+    const { activeAccountId, accounts, activeMailbox } = get();
     const account = accounts.find(a => a.id === activeAccountId);
     const cacheKey = `${activeAccountId}-${activeMailbox}-${uid}`;
     const cacheLimitMB = useSettingsStore.getState().cacheLimitMB;
-    
+
     set({ selectedEmailId: uid, loadingEmail: true, selectedEmail: null, selectedEmailSource: source });
-    
+
     try {
       let email;
       let actualSource = source;
-      
-      // Check cache first (also updates LRU timestamp)
+
+      // 1. Check in-memory cache first (also updates LRU timestamp)
       const cachedEmail = get().getFromCache(cacheKey);
       if (cachedEmail) {
         set({ selectedEmail: cachedEmail, selectedEmailSource: source, loadingEmail: false });
         return;
       }
-      
-      // Try local storage if available
-      const localEmail = localEmails.find(e => e.uid === uid);
-      
+
+      // 2. Check Maildir for cached .eml file
+      const localEmail = await db.getLocalEmail(activeAccountId, activeMailbox, uid);
+
       if (source === 'local-only' || (localEmail && localEmail.html !== undefined)) {
-        // Local email with full content
         email = localEmail;
         actualSource = source === 'local-only' ? 'local-only' : 'local';
-        // Add to cache
         get().addToCache(cacheKey, email, cacheLimitMB);
       } else if (account) {
-        // Fetch from server
+        // 3. Fetch from server
         email = await api.fetchEmail(account, uid, activeMailbox);
         actualSource = 'server';
-        
-        // Add to cache
         get().addToCache(cacheKey, email, cacheLimitMB);
-        
+
+        // 4. Auto-cache .eml to Maildir (download once, reuse forever)
+        if (email.rawSource) {
+          try {
+            await db.saveEmail(email, activeAccountId, activeMailbox);
+            const savedEmailIds = await db.getSavedEmailIds(activeAccountId, activeMailbox);
+            set({ savedEmailIds });
+          } catch (e) {
+            console.warn('[selectEmail] Failed to auto-cache .eml:', e);
+          }
+        }
+
         // Mark as read on server (if auto mode)
         const markAsReadMode = useSettingsStore.getState().markAsReadMode;
         if (markAsReadMode === 'auto' && !email.flags?.includes('\\Seen')) {
           try {
             await api.updateEmailFlags(account, uid, ['\\Seen'], 'add', activeMailbox);
-            // Update the email flags locally
             email = { ...email, flags: [...(email.flags || []), '\\Seen'] };
           } catch (e) {
             console.warn('Failed to mark as read:', e);
           }
         }
       }
-      
+
       // Update hasAttachments on the list item based on real (non-inline) attachments
       if (email?.attachments) {
         const isEmbeddedInline = (a) => {
@@ -1091,53 +1143,75 @@ export const useMailStore = create((set, get) => ({
         set({ selectedEmail: email, selectedEmailSource: actualSource });
       }
     } catch (error) {
-      // Fallback to local if server fails
-      const localEmail = localEmails.find(e => e.uid === uid);
-      if (localEmail) {
-        set({ selectedEmail: localEmail, selectedEmailSource: 'local-only' });
-      } else {
-        set({ error: `Failed to load email: ${error.message}` });
+      console.error('[selectEmail] Failed to load email:', error);
+      console.error('[selectEmail] Error details:', { name: error.name, message: error.message, status: error.status, stack: error.stack });
+      // Fallback to Maildir if server fails
+      try {
+        const localEmail = await db.getLocalEmail(activeAccountId, activeMailbox, uid);
+        if (localEmail) {
+          set({ selectedEmail: localEmail, selectedEmailSource: 'local-only' });
+        } else {
+          const detail = error.message || String(error);
+          set({ error: `Failed to load email (UID ${uid}, ${activeMailbox}): ${detail}` });
+        }
+      } catch (fallbackError) {
+        console.error('[selectEmail] Fallback also failed:', fallbackError);
+        const detail = error.message || String(error);
+        set({ error: `Failed to load email (UID ${uid}, ${activeMailbox}): ${detail}` });
       }
     } finally {
       set({ loadingEmail: false });
     }
   },
   
-  // Save email locally
+  // Archive email locally (save .eml with 'A' flag)
   saveEmailLocally: async (uid) => {
     const { activeAccountId, accounts, activeMailbox, selectedEmail } = get();
     const account = accounts.find(a => a.id === activeAccountId);
     if (!account) return;
-    
+
     const cacheKey = `${activeAccountId}-${activeMailbox}-${uid}`;
     const cacheLimitMB = useSettingsStore.getState().cacheLimitMB;
-    
+
     try {
-      let email;
-      
-      // Check if we already have the full email in cache
-      const cachedEmail = get().getFromCache(cacheKey);
-      if (cachedEmail) {
-        email = cachedEmail;
-      } else if (selectedEmail && selectedEmail.uid === uid) {
-        // Use currently selected email
-        email = selectedEmail;
+      // Check if already cached in Maildir — just set archive flag
+      const alreadyCached = await db.isEmailSaved(activeAccountId, activeMailbox, uid);
+      if (alreadyCached) {
+        await db.archiveEmail(activeAccountId, activeMailbox, uid);
       } else {
-        // Need to fetch from server
-        email = await api.fetchEmail(account, uid, activeMailbox);
-        
-        // Add to cache
-        get().addToCache(cacheKey, email, cacheLimitMB);
+        // Need full email content to save .eml
+        let email;
+        const cachedEmail = get().getFromCache(cacheKey);
+        if (cachedEmail) {
+          email = cachedEmail;
+        } else if (selectedEmail && selectedEmail.uid === uid) {
+          email = selectedEmail;
+        } else {
+          email = await api.fetchEmail(account, uid, activeMailbox);
+          get().addToCache(cacheKey, email, cacheLimitMB);
+        }
+
+        if (!email.rawSource) {
+          throw new Error('Email has no raw source data');
+        }
+
+        // Store .eml with archived + seen flags
+        const invoke = window.__TAURI__?.core?.invoke;
+        await invoke('maildir_store', {
+          accountId: activeAccountId,
+          mailbox: activeMailbox,
+          uid: email.uid,
+          rawSourceBase64: email.rawSource,
+          flags: ['archived', 'seen'],
+        });
       }
-      
-      // Save to IndexedDB
-      await db.saveEmail(email, activeAccountId, activeMailbox);
-      
+
       // Update state
       const savedEmailIds = await db.getSavedEmailIds(activeAccountId, activeMailbox);
+      const archivedEmailIds = await db.getArchivedEmailIds(activeAccountId, activeMailbox);
       const localEmails = await db.getLocalEmails(activeAccountId, activeMailbox);
 
-      set({ savedEmailIds, localEmails });
+      set({ savedEmailIds, archivedEmailIds, localEmails });
       get().updateSortedEmails();
     } catch (error) {
       set({ error: `Failed to save email: ${error.message}` });
@@ -1203,14 +1277,15 @@ export const useMailStore = create((set, get) => ({
       });
     }
     
-    // Save all fetched emails to IndexedDB
+    // Save all fetched emails to Maildir
     if (emails.length > 0) {
       await db.saveEmails(emails, activeAccountId, activeMailbox);
-      
+
       const savedEmailIds = await db.getSavedEmailIds(activeAccountId, activeMailbox);
+      const archivedEmailIds = await db.getArchivedEmailIds(activeAccountId, activeMailbox);
       const localEmails = await db.getLocalEmails(activeAccountId, activeMailbox);
 
-      set({ savedEmailIds, localEmails });
+      set({ savedEmailIds, archivedEmailIds, localEmails });
       get().updateSortedEmails();
     }
 
@@ -1241,15 +1316,16 @@ export const useMailStore = create((set, get) => ({
     const localId = `${activeAccountId}-${activeMailbox}-${uid}`;
     
     await db.deleteLocalEmail(localId);
-    
+
     const savedEmailIds = await db.getSavedEmailIds(activeAccountId, activeMailbox);
+    const archivedEmailIds = await db.getArchivedEmailIds(activeAccountId, activeMailbox);
     const localEmails = await db.getLocalEmails(activeAccountId, activeMailbox);
-    
+
     // Clear selection if we deleted the selected email
     if (selectedEmailId === uid) {
-      set({ savedEmailIds, localEmails, selectedEmailId: null, selectedEmail: null, selectedEmailSource: null });
+      set({ savedEmailIds, archivedEmailIds, localEmails, selectedEmailId: null, selectedEmail: null, selectedEmailSource: null });
     } else {
-      set({ savedEmailIds, localEmails });
+      set({ savedEmailIds, archivedEmailIds, localEmails });
     }
     get().updateSortedEmails();
   },
@@ -1259,15 +1335,28 @@ export const useMailStore = create((set, get) => ({
     const { activeAccountId, accounts, activeMailbox, selectedEmailId } = get();
     const account = accounts.find(a => a.id === activeAccountId);
     if (!account) return;
-    
+
     await api.deleteEmail(account, uid, activeMailbox);
-    
-    // Clear selection if we deleted the selected email
+
+    // Immediately remove from emails array so displayEmails flags it as local-only
+    const filteredEmails = get().emails.filter(e => e.uid !== uid);
+    const newTotal = Math.max(0, (get().totalEmails || 0) - 1);
+    const updates = {
+      emails: filteredEmails,
+      totalEmails: newTotal,
+    };
     if (selectedEmailId === uid) {
-      set({ selectedEmailId: null, selectedEmail: null, selectedEmailSource: null });
+      updates.selectedEmailId = null;
+      updates.selectedEmail = null;
+      updates.selectedEmailSource = null;
     }
-    
-    await get().loadEmails();
+    set(updates);
+
+    // Update cached headers on disk so loadEmails doesn't restore the deleted email
+    await db.saveEmailHeaders(activeAccountId, activeMailbox, filteredEmails, newTotal);
+
+    // Background refresh to sync with server
+    get().loadEmails();
   },
   
   // Mark email as read/unread
@@ -1608,7 +1697,7 @@ export const useMailStore = create((set, get) => ({
         console.log(`[Search] Found ${inMemoryResults.length} in-memory matches`);
       }
 
-      // 2. Search locally saved emails from IndexedDB
+      // 2. Search locally saved emails from Maildir
       if (searchFilters.location !== 'server') {
         try {
           const localResults = await db.searchLocalEmails(activeAccountId, searchQuery, {
@@ -1620,7 +1709,7 @@ export const useMailStore = create((set, get) => ({
             hasAttachments: searchFilters.hasAttachments
           });
           allResults.push(...localResults);
-          console.log(`[Search] Found ${localResults.length} local IndexedDB matches`);
+          console.log(`[Search] Found ${localResults.length} local Maildir matches`);
         } catch (error) {
           console.warn('[Search] Local search failed:', error);
         }
