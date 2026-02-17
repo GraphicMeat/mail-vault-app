@@ -100,15 +100,136 @@
       <h1 class="text-4xl font-bold mb-2">Changelog</h1>
       <p class="text-slate-500 dark:text-slate-400 mb-10">New features, improvements, and fixes in every release.</p>
 
-      <!-- Version 1.1.0 -->
+      <article class="mb-16">
+        <div class="flex items-center gap-3 mb-6">
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.2.0</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">February 18, 2026</span>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            </span>
+            Added
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              Microsoft 365 OAuth2 (XOAUTH2) support — sign in with Microsoft for Outlook/Hotmail/Live/M365 accounts
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              "Sign in with Microsoft" button in account setup for Outlook provider (uses PKCE authorization code flow)
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              OAuth2 token auto-refresh — access tokens refresh automatically when expired
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              OAuth2 account status in Settings — shows "Connected" / "Token expired" badges, with Reconnect button
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              OAuth2 callback server on <code class="text-slate-500 dark:text-slate-300">localhost:19876</code> — temporary server for receiving Microsoft auth redirects
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <code class="text-slate-500 dark:text-slate-300">server/oauth2Config.js</code> — Microsoft OAuth2 endpoints and credential configuration
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <code class="text-slate-500 dark:text-slate-300">updateOAuth2Tokens()</code> helper in <code class="text-slate-500 dark:text-slate-300">db.js</code> for updating tokens after refresh
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              OAuth2 API functions in <code class="text-slate-500 dark:text-slate-300">api.js</code> — <code class="text-slate-500 dark:text-slate-300">getOAuth2AuthUrl</code>, <code class="text-slate-500 dark:text-slate-300">exchangeOAuth2Code</code>, <code class="text-slate-500 dark:text-slate-300">refreshOAuth2Token</code>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              App Password fallback — users can still choose password auth for Outlook accounts
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            </span>
+            Fixed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              Settings page blank screen — missing <code class="text-slate-500 dark:text-slate-300">AnimatePresence</code> import from framer-motion
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              Notifications now show app icon — replaced AppleScript <code class="text-slate-500 dark:text-slate-300">osascript</code> with <code class="text-slate-500 dark:text-slate-300">tauri-plugin-notification</code>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              Email content now renders with original formatting preserved — removed aggressive dark mode CSS overrides that broke email layouts, centering, and styled elements; emails now display on a light background (like Apple Mail) regardless of app theme
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              IPv6 connection hangs with Outlook — forced IPv4 on all IMAP/SMTP connections
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              Multiple sidecar server processes — added orphan cleanup on startup and kill on quit
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </span>
+            Changed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              IMAP/SMTP auth now supports <code class="text-slate-500 dark:text-slate-300">accessToken</code> (XOAUTH2) in addition to password auth
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              Outlook provider renamed to "Outlook / Microsoft 365" with OAuth2 as recommended auth method
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              Account setup for Outlook defaults to OAuth2, with "Use App Password instead" fallback link
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              Settings Authentication section shows auth type badge (Password vs Microsoft OAuth2)
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              OAuth2 now uses Mozilla Thunderbird's public client ID by default (no Azure app registration needed)
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              Specific error message for Microsoft Outlook IMAP regression with link to FAQ
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              "Sign in with Microsoft" button requires email before clicking and uses purple accent styling
+            </li>
+          </ul>
+        </div>
+
+      </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
           <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.1.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">February 16, 2026</span>
-          <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
         </div>
 
-        <!-- Changed -->
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
@@ -139,7 +260,11 @@
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
-              Backup format changed from JSON blob to ZIP archive of .eml files for portability
+              Extracted keychain parsing utilities to <code class="text-slate-500 dark:text-slate-300">src/services/keychainUtils.js</code> for testability
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              Backup format changed from JSON blob to ZIP archive of .eml files for better performance and portability
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
@@ -155,12 +280,11 @@
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
-              Import automatically creates new accounts for unrecognized email addresses
+              Import automatically creates new accounts for unrecognized email addresses (user re-enters password in Settings)
             </li>
           </ul>
         </div>
 
-        <!-- Added -->
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
@@ -183,44 +307,74 @@
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
-              "Open in New Window" — pop-out emails into separate native windows
+              Unit tests for legacy keychain migration (<code class="text-slate-500 dark:text-slate-300">parseKeychainValue</code>, <code class="text-slate-500 dark:text-slate-300">getAccountsFromKeychain</code>, cleanup logic)
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
-              ZIP-based backup export and import via Rust commands
+              GitHub Actions CI workflow — runs tests on push/PR to main
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
-              Quick-load: cached emails shown instantly while IMAP syncs in background
+              "Open in New Window" — pop-out button in toolbar + custom right-click menu in email iframes, uses <code class="text-slate-500 dark:text-slate-300">WebviewWindowBuilder</code> to open a native Tauri window
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
-              GitHub Actions CI workflow — runs tests on every push and PR
+              Email popup windows close normally (only main window hides to tray)
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
-              Comprehensive test suite (220 tests) covering backup, email list, state transitions, and IMAP integration
+              <code class="text-slate-500 dark:text-slate-300">export_backup</code> and <code class="text-slate-500 dark:text-slate-300">import_backup</code> Tauri commands (Rust) for ZIP-based backup
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <code class="text-slate-500 dark:text-slate-300">src/services/backupUtils.js</code> with testable pure utility functions
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              Unit tests for backup utilities (buildBackupEmailPath, matchAccountsByEmail, parseBackupManifest)
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              Extracted <code class="text-slate-500 dark:text-slate-300">computeDisplayEmails</code> utility (<code class="text-slate-500 dark:text-slate-300">src/services/emailListUtils.js</code>) for testability
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              Unit tests for display email computation — covers all view modes, local-only flag logic, edge cases (18 tests)
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              Unit tests for state transitions — archive→delete→local-only flow, cache restoration, quick-load state (13 tests)
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              Integration test for local-only flag detection — real IMAP flow: send → archive → delete from server → verify flag (4 tests)
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              CI workflow now writes <code class="text-slate-500 dark:text-slate-300">.env.test</code> from GitHub secrets for integration tests
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <code class="text-slate-500 dark:text-slate-300">initBasic()</code> in db.js — lightweight init that skips keychain, used by quick-load
             </li>
           </ul>
         </div>
 
-        <!-- Removed -->
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
-            <span class="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
+            <span class="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-900/30 flex items-center justify-center flex-shrink-0">
               <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/></svg>
             </span>
             Removed
           </h3>
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
             <li class="flex items-start gap-3">
-              <span class="w-1.5 h-1.5 rounded-full bg-slate-400 flex-shrink-0 mt-2"></span>
-              Session Cache settings — redundant now that Maildir auto-caches every opened email to disk
+              <span class="w-1.5 h-1.5 rounded-full bg-slate-500 flex-shrink-0 mt-2"></span>
+              Session Cache settings from Settings page — redundant now that Maildir auto-caches every opened email to disk; in-memory cache still works silently with default limit
             </li>
           </ul>
         </div>
 
-        <!-- Fixed -->
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
@@ -231,42 +385,71 @@
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
-              Dark mode email text readability
+              Dark mode email text readability — force light text via inline <code class="text-slate-500 dark:text-slate-300">!important</code> on all elements (EmailViewer + ChatBubbleView)
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
-              Logs no longer clear before confirmation dialog
+              Logs no longer clear before confirmation — replaced <code class="text-slate-500 dark:text-slate-300">confirm()</code> with Tauri dialog <code class="text-slate-500 dark:text-slate-300">ask()</code> for proper async blocking
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
-              Backup export/import compatibility with new storage format
+              Dynamic version display from package.json
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
-              "Open in New Window" now works on macOS (WKWebView temp file workaround)
+              Export/import backup compatibility with new storage format
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
-              Email list no longer shows empty placeholder cells or overlapping rows
+              Backup export now works in Tauri WebView (replaced broken blob download with native save dialog + Rust ZIP writer)
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
-              Delete confirmation no longer hides email content view
+              Backup import now correctly restores all emails (previously silently skipped every email due to missing accountId/mailbox fields)
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
-              "Local only" indicator now clearly visible with amber HardDrive icon
+              "Open in New Window" now works on macOS — popup loads HTML from a temp file instead of eval on about:blank (WKWebView ignores eval before page ready)
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
-              After deleting from server, email immediately shows as local-only
+              Email list no longer shows empty placeholder cells when scrolling — virtual scroll row count now matches loaded emails instead of server-reported total
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
-              No more black screen on app launch — quick-load shows cached emails instantly
+              Email list no longer shows overlapping rows after switching accounts — email state fully cleared on account switch + virtual scroll container keyed by account ID
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              Email list no longer shows overlapping rows after switching view modes — scroll position resets on view mode change + virtual scroll container keyed by view mode
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              Delete confirmation no longer hides the email content view — replaced native <code class="text-slate-500 dark:text-slate-300">confirm()</code> dialogs with inline React modals in EmailViewer and EmailRow
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              "Local only (deleted from server)" indicator now clearly visible — changed from tiny corner dot to amber-colored HardDrive icon; fixed local view mode to check server UIDs
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              After deleting from server, email immediately shows as local-only — <code class="text-slate-500 dark:text-slate-300">emails</code> array updated synchronously before background refresh; cached headers on disk also updated to prevent <code class="text-slate-500 dark:text-slate-300">loadEmails</code> from restoring the deleted email
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              Local-only flag now only appears for explicitly archived emails, not auto-cached ones
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              Local view mode now correctly filters to show only archived emails (not all cached emails)
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              No more black screen on app launch — quick-load uses <code class="text-slate-500 dark:text-slate-300">initBasic()</code> which skips keychain; shows cached emails + branded loading while keychain password prompt is active
             </li>
           </ul>
         </div>
+
       </article>
 
       <!-- CTA -->
