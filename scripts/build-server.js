@@ -26,7 +26,18 @@ if (!existsSync(outputDir)) {
 
 async function buildServer() {
   console.log('📦 Bundling server code...');
-  
+
+  // Embed OAuth2 credentials at build time so the sidecar doesn't need env vars
+  const define = {};
+  if (process.env.MAILVAULT_MS_CLIENT_ID) {
+    define['process.env.MAILVAULT_MS_CLIENT_ID'] = JSON.stringify(process.env.MAILVAULT_MS_CLIENT_ID);
+    console.log('   ✓ Embedding MAILVAULT_MS_CLIENT_ID');
+  }
+  if (process.env.MAILVAULT_MS_CLIENT_SECRET) {
+    define['process.env.MAILVAULT_MS_CLIENT_SECRET'] = JSON.stringify(process.env.MAILVAULT_MS_CLIENT_SECRET);
+    console.log('   ✓ Embedding MAILVAULT_MS_CLIENT_SECRET');
+  }
+
   // Bundle the server code
   await build({
     entryPoints: [join(rootDir, 'server', 'index.js')],
@@ -38,6 +49,7 @@ async function buildServer() {
     external: [
       // Native modules that can't be bundled
     ],
+    define,
     minify: true,
     sourcemap: false,
   });
@@ -86,7 +98,11 @@ async function buildServer() {
     } else if (targetTriple === 'x86_64-unknown-linux-gnu') {
       bunTarget = '--target=bun-linux-x64';
     }
-    execSync(`bun build ${join(rootDir, 'server', 'index.js')} --compile ${bunTarget} --outfile "${sidecarPath}"`, {
+    // Build --define flags to embed OAuth2 credentials in the binary
+    const bunDefines = Object.entries(define)
+      .map(([k, v]) => `--define "${k}=${v.replace(/"/g, '\\"')}"`)
+      .join(' ');
+    execSync(`bun build ${join(rootDir, 'server', 'index.js')} --compile ${bunTarget} ${bunDefines} --outfile "${sidecarPath}"`, {
       stdio: 'inherit',
       cwd: rootDir
     });

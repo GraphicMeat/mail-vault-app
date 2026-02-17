@@ -178,6 +178,11 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                       <WifiOff size={14} />
                       <span>No internet</span>
                     </>
+                  ) : connectionErrorType === 'outlookOAuth' ? (
+                    <>
+                      <ServerOff size={14} />
+                      <span>Microsoft issue</span>
+                    </>
                   ) : (
                     <>
                       <ServerOff size={14} />
@@ -378,6 +383,22 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                 <p className="text-sm text-mail-text-muted whitespace-pre-wrap break-words">
                   {connectionError}
                 </p>
+                {connectionErrorType === 'outlookOAuth' && (
+                  <button
+                    onClick={async () => {
+                      const url = 'https://mailvaultapp.com/faq.html#microsoft-outlook-oauth2';
+                      if (window.__TAURI__) {
+                        const { open } = await import('@tauri-apps/plugin-shell');
+                        await open(url);
+                      } else {
+                        window.open(url, '_blank');
+                      }
+                    }}
+                    className="mt-3 text-sm text-mail-accent hover:text-mail-accent-hover transition-colors underline"
+                  >
+                    Learn more in our FAQ
+                  </button>
+                )}
               </div>
             </motion.div>
           </motion.div>

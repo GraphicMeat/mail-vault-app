@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { getOAuth2AuthUrl, exchangeOAuth2Code } from '../services/api';
 import {
   X,
   Sun,
@@ -34,7 +35,9 @@ import {
   Clock,
   Filter,
   MessageSquare,
-  List
+  List,
+  Link,
+  Unlink
 } from 'lucide-react';
 
 function ToggleSwitch({ active, onClick }) {
@@ -105,6 +108,7 @@ export function SettingsPage({ onClose }) {
   const [editingPassword, setEditingPassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [localStorageUsage, setLocalStorageUsage] = useState(null);
+  const [oauthReconnecting, setOauthReconnecting] = useState(false);
   
   // Check for File System Access API support
   useEffect(() => {
@@ -288,8 +292,49 @@ export function SettingsPage({ onClose }) {
     }
   };
   
+  // Reconnect OAuth2 account
+  const handleOAuth2Reconnect = async () => {
+    if (!selectedAccountId) return;
+    setOauthReconnecting(true);
+
+    try {
+      const { authUrl, state } = await getOAuth2AuthUrl();
+
+      if (invoke) {
+        const { open } = await import('@tauri-apps/plugin-shell');
+        await open(authUrl);
+      } else {
+        window.open(authUrl, '_blank');
+      }
+
+      const tokenData = await exchangeOAuth2Code(state);
+
+      const { saveAccount } = await import('../services/db');
+      const account = accounts.find(a => a.id === selectedAccountId);
+      if (account) {
+        await saveAccount({
+          ...account,
+          oauth2AccessToken: tokenData.accessToken,
+          oauth2RefreshToken: tokenData.refreshToken,
+          oauth2ExpiresAt: tokenData.expiresAt,
+        });
+      }
+
+      const { init } = useMailStore.getState();
+      await init();
+
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (error) {
+      console.error('OAuth2 reconnect failed:', error);
+      alert('Reconnect failed: ' + (error.message || error));
+    } finally {
+      setOauthReconnecting(false);
+    }
+  };
+
   const selectedAccount = accounts.find(a => a.id === selectedAccountId);
-  
+
   const tabs = [
     { id: 'general', label: 'General', icon: Palette },
     { id: 'accounts', label: 'Accounts', icon: User },
@@ -993,8 +1038,11 @@ export function SettingsPage({ onClose }) {
                               <User size={16} className="text-white" />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <div className="text-sm font-medium text-mail-text truncate">
+                              <div className="text-sm font-medium text-mail-text truncate flex items-center gap-1.5">
                                 {getDisplayName(account.id) || account.name || account.email?.split('@')[0] || 'Unknown'}
+                                {account.authType === 'oauth2' && (
+                                  <Shield size={12} className="text-blue-500 flex-shrink-0" />
+                                )}
                               </div>
                               <div className="text-xs text-mail-text-muted truncate">
                                 {account.email}
@@ -1103,69 +1151,128 @@ export function SettingsPage({ onClose }) {
                           Authentication
                         </h4>
 
-                        {!selectedAccount.password && (
-                          <div className="flex items-center gap-3 p-3 bg-mail-warning/10 border border-mail-warning/20 rounded-lg mb-4">
-                            <div className="w-3 h-3 bg-mail-warning rounded-full" />
-                            <span className="text-sm text-mail-text">
-                              Password not found. Please re-enter your password to reconnect.
+                        {/* Auth type badge */}
+                        <div className="flex items-center gap-2 mb-4">
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium
+                            ${selectedAccount.authType === 'oauth2'
+                              ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20'
+                              : 'bg-mail-accent/10 text-mail-accent border border-mail-accent/20'}`}>
+                            {selectedAccount.authType === 'oauth2' ? (
+                              <><Shield size={12} /> Microsoft OAuth2</>
+                            ) : (
+                              <><Key size={12} /> Password</>
+                            )}
+                          </span>
+                          {selectedAccount.authType === 'oauth2' && (
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium
+                              ${selectedAccount.oauth2ExpiresAt && selectedAccount.oauth2ExpiresAt > Date.now()
+                                ? 'bg-mail-success/10 text-mail-success border border-mail-success/20'
+                                : 'bg-mail-warning/10 text-mail-warning border border-mail-warning/20'}`}>
+                              {selectedAccount.oauth2ExpiresAt && selectedAccount.oauth2ExpiresAt > Date.now() ? (
+                                <><Link size={12} /> Connected</>
+                              ) : (
+                                <><Unlink size={12} /> Token expired</>
+                              )}
                             </span>
-                          </div>
-                        )}
+                          )}
+                        </div>
 
-                        {editingPassword ? (
+                        {/* OAuth2 account */}
+                        {selectedAccount.authType === 'oauth2' ? (
                           <div className="space-y-4">
-                            <div>
-                              <label className="block text-sm font-medium text-mail-text mb-2">
-                                New Password
-                              </label>
-                              <input
-                                type="password"
-                                value={newPassword}
-                                onChange={(e) => setNewPassword(e.target.value)}
-                                placeholder="Enter your email password"
-                                className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
-                                          text-mail-text placeholder-mail-text-muted
-                                          focus:border-mail-accent transition-all"
-                              />
-                            </div>
-                            <div className="flex gap-2">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <div className="font-medium text-mail-text">Microsoft Account</div>
+                                <div className="text-sm text-mail-text-muted">
+                                  {selectedAccount.oauth2ExpiresAt && selectedAccount.oauth2ExpiresAt > Date.now()
+                                    ? 'Authenticated via OAuth2. Tokens refresh automatically.'
+                                    : 'Token expired. Click Reconnect to re-authenticate.'}
+                                </div>
+                              </div>
                               <button
-                                onClick={handleUpdatePassword}
-                                disabled={!newPassword.trim()}
-                                className="px-4 py-2 bg-mail-accent hover:bg-mail-accent-hover
-                                          text-white rounded-lg transition-colors disabled:opacity-50"
-                              >
-                                Save Password
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setEditingPassword(false);
-                                  setNewPassword('');
-                                }}
+                                onClick={handleOAuth2Reconnect}
+                                disabled={oauthReconnecting}
                                 className="px-4 py-2 bg-mail-surface-hover hover:bg-mail-border
-                                          text-mail-text rounded-lg transition-colors"
+                                          text-mail-text rounded-lg transition-colors flex items-center gap-2
+                                          disabled:opacity-50"
                               >
-                                Cancel
+                                {oauthReconnecting ? (
+                                  <Loader size={16} className="animate-spin" />
+                                ) : (
+                                  <RefreshCw size={16} />
+                                )}
+                                {oauthReconnecting ? 'Reconnecting...' : 'Reconnect'}
                               </button>
                             </div>
                           </div>
                         ) : (
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <div className="font-medium text-mail-text">Password</div>
-                              <div className="text-sm text-mail-text-muted">
-                                {selectedAccount.password ? 'Stored securely in system keychain' : 'Not configured'}
+                          <>
+                            {/* Password auth */}
+                            {!selectedAccount.password && (
+                              <div className="flex items-center gap-3 p-3 bg-mail-warning/10 border border-mail-warning/20 rounded-lg mb-4">
+                                <div className="w-3 h-3 bg-mail-warning rounded-full" />
+                                <span className="text-sm text-mail-text">
+                                  Password not found. Please re-enter your password to reconnect.
+                                </span>
                               </div>
-                            </div>
-                            <button
-                              onClick={() => setEditingPassword(true)}
-                              className="px-4 py-2 bg-mail-surface-hover hover:bg-mail-border
-                                        text-mail-text rounded-lg transition-colors flex items-center gap-2"
-                            >
-                              <Key size={16} />
-                              {selectedAccount.password ? 'Update' : 'Set Password'}
-                            </button>
-                          </div>
+                            )}
+
+                            {editingPassword ? (
+                              <div className="space-y-4">
+                                <div>
+                                  <label className="block text-sm font-medium text-mail-text mb-2">
+                                    New Password
+                                  </label>
+                                  <input
+                                    type="password"
+                                    value={newPassword}
+                                    onChange={(e) => setNewPassword(e.target.value)}
+                                    placeholder="Enter your email password"
+                                    className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
+                                              text-mail-text placeholder-mail-text-muted
+                                              focus:border-mail-accent transition-all"
+                                  />
+                                </div>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={handleUpdatePassword}
+                                    disabled={!newPassword.trim()}
+                                    className="px-4 py-2 bg-mail-accent hover:bg-mail-accent-hover
+                                              text-white rounded-lg transition-colors disabled:opacity-50"
+                                  >
+                                    Save Password
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setEditingPassword(false);
+                                      setNewPassword('');
+                                    }}
+                                    className="px-4 py-2 bg-mail-surface-hover hover:bg-mail-border
+                                              text-mail-text rounded-lg transition-colors"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <div className="font-medium text-mail-text">Password</div>
+                                  <div className="text-sm text-mail-text-muted">
+                                    {selectedAccount.password ? 'Stored securely in system keychain' : 'Not configured'}
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => setEditingPassword(true)}
+                                  className="px-4 py-2 bg-mail-surface-hover hover:bg-mail-border
+                                            text-mail-text rounded-lg transition-colors flex items-center gap-2"
+                                >
+                                  <Key size={16} />
+                                  {selectedAccount.password ? 'Update' : 'Set Password'}
+                                </button>
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
 

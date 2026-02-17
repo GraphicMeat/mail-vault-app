@@ -194,8 +194,8 @@ export async function saveAccount(account) {
     }
   }
 
-  // Also write metadata (no password) to accounts.json for quick loading
-  const { password, ...acctData } = account;
+  // Also write metadata (no secrets) to accounts.json for quick loading
+  const { password, oauth2AccessToken, oauth2RefreshToken, ...acctData } = account;
   const accounts = await readAccountsFile();
   const idx = accounts.findIndex(a => a.id === acctData.id);
   if (idx >= 0) {
@@ -262,6 +262,28 @@ export async function getAccount(id) {
   // Fallback to accounts.json (no password)
   const accounts = await readAccountsFile();
   return accounts.find(a => a.id === id);
+}
+
+export async function updateOAuth2Tokens(accountId, tokens) {
+  if (!invoke) return;
+
+  try {
+    const data = await loadKeychain();
+    if (!data[accountId]) return;
+
+    const account = JSON.parse(data[accountId]);
+    account.oauth2AccessToken = tokens.accessToken;
+    account.oauth2RefreshToken = tokens.refreshToken || account.oauth2RefreshToken;
+    account.oauth2ExpiresAt = tokens.expiresAt;
+
+    data[accountId] = JSON.stringify(account);
+    await saveKeychain(data);
+    console.log('[db.js] OAuth2 tokens updated for account:', accountId);
+    return account;
+  } catch (error) {
+    console.error('[db.js] Failed to update OAuth2 tokens:', error);
+    throw error;
+  }
 }
 
 export async function deleteAccount(id) {

@@ -131,3 +131,27 @@ export async function searchEmails(account, mailbox = 'INBOX', query, filters = 
   });
   return data;
 }
+
+// --- OAuth2 API functions ---
+
+export async function getOAuth2AuthUrl(email) {
+  const params = email ? `?login_hint=${encodeURIComponent(email)}` : '';
+  const data = await request(`/oauth2/auth-url${params}`, { method: 'GET' });
+  return data;
+}
+
+export async function exchangeOAuth2Code(state) {
+  const data = await request('/oauth2/exchange', {
+    method: 'POST',
+    body: JSON.stringify({ state })
+  });
+  return data;
+}
+
+export async function refreshOAuth2Token(refreshToken) {
+  const data = await request('/oauth2/refresh', {
+    method: 'POST',
+    body: JSON.stringify({ refreshToken })
+  });
+  return data;
+}

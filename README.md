@@ -10,6 +10,7 @@ A modern, cross-platform desktop email client built with Tauri and React. Save y
 
 ### 📧 Full Email Management
 - Connect multiple email accounts (Gmail, Outlook, Yahoo, iCloud, or custom IMAP)
+- **Microsoft 365 OAuth2** — Sign in with Microsoft for Outlook/Hotmail/Live accounts (no app password needed)
 - View all mailboxes and folders
 - Read, send, and manage emails
 - Full attachment support
@@ -78,7 +79,9 @@ npm run tauri build
 
 1. Click "Add Your First Account" or the "Add Account" button
 2. Select your email provider (Gmail, Outlook, Yahoo, iCloud, or Custom)
-3. Enter your email address and password
+3. Authenticate:
+   - **Outlook / Microsoft 365**: Click "Sign in with Microsoft" (recommended) — opens your browser for secure OAuth2 login. No app password needed, works with 2FA/MFA.
+   - **Other providers**: Enter your email address and password/app password.
 
 **Important for Gmail users:**
 - If you have 2-Factor Authentication enabled, you need to use an [App Password](https://support.google.com/accounts/answer/185833)
@@ -179,9 +182,11 @@ All data is stored locally on your device — nothing is sent to third-party ser
 
 ## Security
 
-- **Secure Credential Storage**: Passwords are stored in your operating system's native keychain, protected by your system's security mechanisms.
+- **Secure Credential Storage**: Passwords and OAuth2 tokens are stored in your operating system's native keychain, protected by your system's security mechanisms.
 
-- **App Passwords**: Always use app-specific passwords instead of your main account password when available.
+- **OAuth2 for Microsoft**: Outlook/Microsoft 365 accounts use secure OAuth2 (XOAUTH2) authentication with PKCE. Your Microsoft password is never stored — only short-lived access tokens and refresh tokens, encrypted in the system keychain.
+
+- **App Passwords**: For other providers, use app-specific passwords instead of your main account password when available.
 
 - **Local Storage**: Emails saved locally include all content and attachments. Be mindful of what you save on shared computers.
 

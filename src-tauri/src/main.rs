@@ -98,9 +98,36 @@ fn cleanup_old_logs(log_dir: &PathBuf) {
     }
 }
 
+/// Kill any orphaned mailvault-server processes (from previous app runs that didn't shut down cleanly)
+fn kill_orphan_servers() {
+    info!("Checking for orphaned mailvault-server processes...");
+    let my_pid = std::process::id();
+
+    // Find processes listening on port 3001 and kill them
+    if let Ok(output) = Command::new("lsof")
+        .args(["-ti", ":3001"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()
+    {
+        let pids_str = String::from_utf8_lossy(&output.stdout);
+        for pid_str in pids_str.split_whitespace() {
+            if let Ok(pid) = pid_str.trim().parse::<u32>() {
+                if pid != my_pid {
+                    info!("Killing orphaned server process on port 3001: PID {}", pid);
+                    let _ = Command::new("kill").arg(pid.to_string()).output();
+                }
+            }
+        }
+    }
+}
+
 #[allow(unused_variables)]
 fn start_backend_server(app_handle: &tauri::AppHandle) -> Option<Child> {
     info!("Starting backend server...");
+
+    // Kill any orphaned server processes before starting a new one
+    kill_orphan_servers();
 
     #[cfg(debug_assertions)]
     {
@@ -147,7 +174,13 @@ fn start_backend_server(app_handle: &tauri::AppHandle) -> Option<Child> {
         match app_handle.shell().sidecar("mailvault-server") {
             Ok(cmd) => {
                 match cmd.spawn() {
-                    Ok((mut rx, _child)) => {
+                    Ok((mut rx, child)) => {
+                        // Store the sidecar PID so we can kill it on quit
+                        let sidecar_pid = child.pid();
+                        info!("Sidecar server started with PID: {}", sidecar_pid);
+                        // Store PID in env for cleanup on quit
+                        std::env::set_var("MAILVAULT_SIDECAR_PID", sidecar_pid.to_string());
+
                         tauri::async_runtime::spawn(async move {
                             let mut stderr_lines: Vec<String> = Vec::new();
                             while let Some(event) = rx.recv().await {
@@ -180,7 +213,6 @@ fn start_backend_server(app_handle: &tauri::AppHandle) -> Option<Child> {
                                 }
                             }
                         });
-                        info!("Sidecar server started");
                         return None;
                     }
                     Err(e) => error!("Failed to spawn sidecar: {}", e),
@@ -190,6 +222,21 @@ fn start_backend_server(app_handle: &tauri::AppHandle) -> Option<Child> {
         }
         None
     }
+}
+
+/// Kill the sidecar server process on app quit
+fn kill_sidecar_server() {
+    // Kill by stored PID (sidecar)
+    if let Ok(pid_str) = std::env::var("MAILVAULT_SIDECAR_PID") {
+        if let Ok(pid) = pid_str.parse::<u32>() {
+            info!("Killing sidecar server PID: {}", pid);
+            let _ = Command::new("kill").arg(pid.to_string()).output();
+        }
+    }
+    // Also kill anything on port 3001 as a safety net
+    let _ = Command::new("sh")
+        .args(["-c", "lsof -ti :3001 | xargs kill 2>/dev/null"])
+        .output();
 }
 
 #[tauri::command]
@@ -475,41 +522,19 @@ fn clear_logs(app_handle: tauri::AppHandle) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn request_notification_permission() -> Result<bool, String> {
+fn request_notification_permission(app_handle: tauri::AppHandle) -> Result<bool, String> {
     info!("request_notification_permission called");
 
-    #[cfg(target_os = "macos")]
-    {
-        let script = r#"
-            tell application "System Events"
-                display notification "MailVault notifications are now enabled" with title "Notifications Enabled"
-            end tell
-        "#;
-        let result = std::process::Command::new("osascript")
-            .args(["-e", script])
-            .output();
-
-        match result {
-            Ok(output) => {
-                if output.status.success() {
-                    info!("Notification permission request sent");
-                    Ok(true)
-                } else {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    warn!("Notification permission may need to be enabled in System Preferences: {}", stderr);
-                    Ok(false)
-                }
-            }
-            Err(e) => {
-                error!("Failed to request notification permission: {}", e);
-                Err(format!("Failed to request notification permission: {}", e))
-            }
+    use tauri_plugin_notification::NotificationExt;
+    match app_handle.notification().request_permission() {
+        Ok(perm) => {
+            info!("Notification permission result: {:?}", perm);
+            Ok(perm == tauri_plugin_notification::PermissionState::Granted)
         }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        Ok(true)
+        Err(e) => {
+            error!("Failed to request notification permission: {}", e);
+            Err(format!("Failed to request notification permission: {}", e))
+        }
     }
 }
 
@@ -560,44 +585,17 @@ fn check_network_connectivity() -> Result<bool, String> {
 }
 
 #[tauri::command]
-fn send_notification(title: String, body: String) -> Result<(), String> {
+fn send_notification(app_handle: tauri::AppHandle, title: String, body: String) -> Result<(), String> {
     info!("send_notification called: {} - {}", title, body);
 
-    #[cfg(target_os = "macos")]
-    {
-        // Use macOS native notification via osascript
-        let script = format!(
-            r#"display notification "{}" with title "{}""#,
-            body.replace("\"", "\\\""),
-            title.replace("\"", "\\\"")
-        );
-        std::process::Command::new("osascript")
-            .args(["-e", &script])
-            .spawn()
-            .map_err(|e| format!("Failed to send notification: {}", e))?;
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        // Windows toast notification via PowerShell
-        let script = format!(
-            r#"[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null; $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02); $textNodes = $template.GetElementsByTagName('text'); $textNodes.Item(0).AppendChild($template.CreateTextNode('{}')) | Out-Null; $textNodes.Item(1).AppendChild($template.CreateTextNode('{}')) | Out-Null; $toast = [Windows.UI.Notifications.ToastNotification]::new($template); [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('MailVault').Show($toast)"#,
-            title.replace("'", "''"),
-            body.replace("'", "''")
-        );
-        std::process::Command::new("powershell")
-            .args(["-Command", &script])
-            .spawn()
-            .map_err(|e| format!("Failed to send notification: {}", e))?;
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        std::process::Command::new("notify-send")
-            .args([&title, &body])
-            .spawn()
-            .map_err(|e| format!("Failed to send notification: {}", e))?;
-    }
+    use tauri_plugin_notification::NotificationExt;
+    app_handle
+        .notification()
+        .builder()
+        .title(&title)
+        .body(&body)
+        .show()
+        .map_err(|e| format!("Failed to send notification: {}", e))?;
 
     Ok(())
 }
@@ -1943,6 +1941,7 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_notification::init())
         .manage(ServerState(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             get_app_data_dir,
@@ -2013,13 +2012,13 @@ fn main() {
             #[cfg(target_os = "macos")]
             {
                 let menu = Menu::default(app.handle())?;
-                // Insert "Check for Updates..." into the app submenu (first submenu)
+                // Insert "Check for Updates..." right below "About MailVault" in the app submenu
                 if let Ok(items) = menu.items() {
                     if let Some(first) = items.first() {
                         if let Some(app_submenu) = first.as_submenu() {
                             let sep = PredefinedMenuItem::separator(app)?;
-                            let _ = app_submenu.append(&sep);
-                            let _ = app_submenu.append(&check_updates);
+                            let _ = app_submenu.insert(&check_updates, 1);
+                            let _ = app_submenu.insert(&sep, 2);
                         }
                     }
                 }
@@ -2172,6 +2171,7 @@ fn main() {
                         }
                         "quit" => {
                             info!("Application quitting via tray menu");
+                            // Kill dev-mode server child if stored
                             if let Some(state) = app.try_state::<ServerState>() {
                                 if let Ok(mut guard) = state.0.lock() {
                                     if let Some(ref mut child) = *guard {
@@ -2179,6 +2179,8 @@ fn main() {
                                     }
                                 }
                             }
+                            // Kill sidecar server process
+                            kill_sidecar_server();
                             std::process::exit(0);
                         }
                         _ => {}
@@ -2275,12 +2277,28 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| {
-            if let tauri::RunEvent::Reopen { .. } = event {
-                if let Some(window) = app_handle.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.unminimize();
-                    let _ = window.set_focus();
+            match event {
+                tauri::RunEvent::Reopen { .. } => {
+                    if let Some(window) = app_handle.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.unminimize();
+                        let _ = window.set_focus();
+                    }
                 }
+                tauri::RunEvent::Exit => {
+                    info!("Application exiting, cleaning up server...");
+                    // Kill dev-mode server child if stored
+                    if let Some(state) = app_handle.try_state::<ServerState>() {
+                        if let Ok(mut guard) = state.0.lock() {
+                            if let Some(ref mut child) = *guard {
+                                let _ = child.kill();
+                            }
+                        }
+                    }
+                    // Kill sidecar server process
+                    kill_sidecar_server();
+                }
+                _ => {}
             }
         });
 }

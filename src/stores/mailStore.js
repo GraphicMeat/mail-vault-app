@@ -439,9 +439,10 @@ export const useMailStore = create((set, get) => ({
       { name: 'Trash', path: 'Trash', specialUse: '\\Trash', children: [] }
     ];
 
-    // Check if password is missing - local emails are still viewable
-    if (!account.password) {
-      console.error('Password missing for account:', account.email);
+    // Check if credentials are missing - local emails are still viewable
+    const hasCredentials = account.password || (account.authType === 'oauth2' && account.oauth2AccessToken);
+    if (!hasCredentials) {
+      console.error('Credentials missing for account:', account.email);
       set({
         mailboxes: defaultMailboxes,
         localEmails,
@@ -539,7 +540,10 @@ export const useMailStore = create((set, get) => ({
       let errorType = 'serverError';
       let errorMessage = error.message;
 
-      if (error.message?.includes('password') || error.message?.includes('authentication')) {
+      if (error.message?.includes('authenticated but not connected') || error.message?.includes('Command Error. 12')) {
+        errorType = 'outlookOAuth';
+        errorMessage = 'Microsoft IMAP connection failed. This is a known Microsoft server issue affecting personal Outlook.com accounts with OAuth2. See FAQ for details.';
+      } else if (error.message?.includes('password') || error.message?.includes('authentication')) {
         errorType = 'passwordMissing';
         errorMessage = 'Authentication failed. Please check your password in Settings.';
       } else if (error.message?.includes('network') || error.message?.includes('timeout') || error.message?.includes('ENOTFOUND') || error.message?.includes('Server unreachable')) {
@@ -708,11 +712,12 @@ export const useMailStore = create((set, get) => ({
     // Keep previous/cached emails for degraded modes (password missing, offline)
     const previousEmails = get().emails;
 
-    // Check if password is missing - keep cached emails visible
-    if (!account.password) {
-      console.error('[loadEmails] Password missing for account:', account.email);
+    // Check if credentials are missing - keep cached emails visible
+    const hasCredentials = account.password || (account.authType === 'oauth2' && account.oauth2AccessToken);
+    if (!hasCredentials) {
+      console.error('[loadEmails] Credentials missing for account:', account.email);
       set({
-        // Keep previous/cached emails when password is missing
+        // Keep previous/cached emails when credentials are missing
         emails: previousEmails,
         localEmails,
         savedEmailIds, archivedEmailIds,
@@ -870,7 +875,10 @@ export const useMailStore = create((set, get) => ({
       let errorType = 'serverError';
       let errorMessage = error.message;
 
-      if (error.message?.includes('password') || error.message?.includes('authentication') || error.message?.includes('No password')) {
+      if (error.message?.includes('authenticated but not connected') || error.message?.includes('Command Error. 12')) {
+        errorType = 'outlookOAuth';
+        errorMessage = 'Microsoft IMAP connection failed. This is a known Microsoft server issue affecting personal Outlook.com accounts with OAuth2. See FAQ for details.';
+      } else if (error.message?.includes('password') || error.message?.includes('authentication') || error.message?.includes('No password')) {
         errorType = 'passwordMissing';
         errorMessage = 'Authentication failed. Please check your password in Settings.';
       } else if (error.message?.includes('network') || error.message?.includes('timeout') || error.message?.includes('ENOTFOUND') || error.message?.includes('ECONNREFUSED') || error.message?.includes('Server unreachable')) {

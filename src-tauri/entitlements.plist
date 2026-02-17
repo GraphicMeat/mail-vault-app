@@ -30,6 +30,10 @@
     <key>com.apple.security.files.downloads.read-write</key>
     <true/>
 
+    <!-- User notifications -->
+    <key>com.apple.security.usernotifications.alerts</key>
+    <true/>
+
     <!-- Keychain access for storing passwords -->
     <key>com.apple.security.keychain-access-groups</key>
     <array>

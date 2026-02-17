@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useMailStore } from '../stores/mailStore';
-import { useThemeStore } from '../stores/themeStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { ComposeModal } from './ComposeModal';
@@ -540,8 +539,6 @@ export function EmailViewer() {
     activeMailbox
   } = useMailStore();
 
-  const { theme } = useThemeStore();
-  
   const [headerExpanded, setHeaderExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [composeMode, setComposeMode] = useState(null);
@@ -634,9 +631,6 @@ export function EmailViewer() {
     }
   };
   
-  // Build HTML content for iframe with dark mode support
-  const isDarkMode = theme === 'dark';
-
   // Extract body content from email HTML — strip outer document structure
   // so we don't nest <html>/<body> inside our template
   const getEmailBodyContent = (html) => {
@@ -646,6 +640,8 @@ export function EmailViewer() {
     return bodyMatch ? bodyMatch[1] : html;
   };
 
+  // Render email with its original styling on a light background (like Apple Mail)
+  // Email HTML is designed for light backgrounds — forcing dark mode breaks formatting
   const iframeContent = selectedEmail?.html ? `
     <!DOCTYPE html>
     <html>
@@ -658,65 +654,16 @@ export function EmailViewer() {
           html, body {
             margin: 0;
             padding: 16px;
-            background: ${isDarkMode ? '#1a1a2e' : '#ffffff'} !important;
-            color: ${isDarkMode ? '#e2e8f0' : '#333333'};
+            background: #ffffff;
+            color: #333333;
           }
           body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             font-size: 14px;
             line-height: 1.6;
           }
-          a { color: #6366f1; }
           img { max-width: 100%; height: auto; }
           table { max-width: 100% !important; }
-
-          /* Dark mode adjustments */
-          ${isDarkMode ? `
-            /* Force all elements to inherit light text color */
-            *, *::before, *::after {
-              color: #e2e8f0 !important;
-            }
-
-            /* Force all backgrounds transparent */
-            *, *::before, *::after {
-              background-color: transparent !important;
-              background-image: none !important;
-            }
-
-            /* Restore body background */
-            html, body {
-              background: #1a1a2e !important;
-            }
-
-            /* Preserve link colors */
-            a, a * {
-              color: #818cf8 !important;
-            }
-
-            /* Handle blockquotes */
-            blockquote {
-              border-left: 3px solid #4a5568;
-              padding-left: 12px;
-              margin-left: 0;
-              color: #a0aec0 !important;
-            }
-
-            /* Handle code blocks */
-            pre, code {
-              background: #2d3748 !important;
-              color: #e2e8f0 !important;
-            }
-
-            /* Handle horizontal rules */
-            hr {
-              border-color: #4a5568 !important;
-            }
-
-            /* Handle borders */
-            td, th, table {
-              border-color: #4a5568 !important;
-            }
-          ` : ''}
         </style>
       </head>
       <body>${getEmailBodyContent(selectedEmail.html)}</body>
@@ -742,31 +689,6 @@ export function EmailViewer() {
           }
         } catch (e) {
           console.error('Failed to resize iframe:', e);
-        }
-      };
-
-      // Force light text and transparent backgrounds in dark mode
-      const applyDarkModeOverrides = () => {
-        if (!isDarkMode) return;
-        try {
-          const doc = iframe.contentDocument || iframe.contentWindow?.document;
-          if (!doc || !doc.body) return;
-          // Remove any <style> tags from the email content that might override our colors
-          doc.body.querySelectorAll('style').forEach(el => el.remove());
-          // Force colors on every element via inline !important
-          const allElements = doc.querySelectorAll('*');
-          allElements.forEach(el => {
-            el.style.setProperty('color', '#e2e8f0', 'important');
-            if (el.tagName !== 'HTML' && el.tagName !== 'BODY') {
-              el.style.setProperty('background-color', 'transparent', 'important');
-            }
-          });
-          // Preserve distinct link color
-          doc.querySelectorAll('a').forEach(el => {
-            el.style.setProperty('color', '#818cf8', 'important');
-          });
-        } catch (e) {
-          console.error('Failed to apply dark mode overrides:', e);
         }
       };
 
@@ -798,7 +720,7 @@ export function EmailViewer() {
             // Build menu
             const menu = doc.createElement('div');
             menu.id = 'mv-ctx-menu';
-            menu.style.cssText = 'position:fixed;z-index:99999;background:#1e1e2e;border:1px solid #444;border-radius:6px;padding:4px 0;min-width:180px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.3);';
+            menu.style.cssText = 'position:fixed;z-index:99999;background:#ffffff;border:1px solid #d1d5db;border-radius:6px;padding:4px 0;min-width:180px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.15);';
             menu.style.left = e.clientX + 'px';
             menu.style.top = e.clientY + 'px';
             const items = [
@@ -808,8 +730,8 @@ export function EmailViewer() {
             items.forEach(({ label, action }) => {
               const item = doc.createElement('div');
               item.textContent = label;
-              item.style.cssText = 'padding:6px 14px;cursor:pointer;color:#e2e8f0;';
-              item.onmouseover = () => item.style.background = '#333';
+              item.style.cssText = 'padding:6px 14px;cursor:pointer;color:#333333;';
+              item.onmouseover = () => item.style.background = '#f3f4f6';
               item.onmouseout = () => item.style.background = 'none';
               item.onclick = () => { action(); menu.remove(); };
               menu.appendChild(item);
@@ -826,7 +748,6 @@ export function EmailViewer() {
 
       // Resize after load
       iframe.onload = () => {
-        applyDarkModeOverrides();
         interceptLinks();
         resizeIframe();
         setTimeout(resizeIframe, 200);
@@ -836,7 +757,7 @@ export function EmailViewer() {
       // Initial resize
       setTimeout(resizeIframe, 100);
     }
-  }, [selectedEmail?.html, theme, isDarkMode]);
+  }, [selectedEmail?.html]);
   
   if (!selectedEmail && !loadingEmail) {
     return (
@@ -1039,7 +960,7 @@ export function EmailViewer() {
               {atob(selectedEmail.rawSource)}
             </pre>
           ) : selectedEmail.html ? (
-            <div className={`rounded-lg overflow-hidden ${isDarkMode ? 'bg-[#1a1a2e]' : 'bg-white'}`}>
+            <div className="rounded-lg overflow-hidden bg-white">
               <iframe
                 ref={iframeRef}
                 srcDoc={iframeContent}

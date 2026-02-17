@@ -1,9 +1,12 @@
 import express from 'express';
 import cors from 'cors';
+import http from 'http';
+import crypto from 'crypto';
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import nodemailer from 'nodemailer';
 import { v4 as uuidv4 } from 'uuid';
+import { MICROSOFT_OAUTH, getMicrosoftCredentials } from './oauth2Config.js';
 
 const app = express();
 app.use(cors());
@@ -27,20 +30,40 @@ const priorityConnections = new Map();
 // Connection config
 const CONNECTION_TIMEOUT = 30000; // 30 seconds
 
+// Helper to build IMAP auth config (password or OAuth2)
+function buildImapAuth(account) {
+  if (account.authType === 'oauth2') {
+    return {
+      user: account.email,
+      accessToken: account.oauth2AccessToken
+    };
+  }
+  return {
+    user: account.email,
+    pass: account.password
+  };
+}
+
 // Helper to create a new IMAP connection
 async function createConnection(account) {
   const client = new ImapFlow({
     host: account.imapHost,
     port: account.imapPort || 993,
     secure: account.imapSecure !== false,
-    auth: {
-      user: account.email,
-      pass: account.password
-    },
+    auth: buildImapAuth(account),
     logger: false,
     connectTimeout: CONNECTION_TIMEOUT,
     greetingTimeout: CONNECTION_TIMEOUT,
-    socketTimeout: CONNECTION_TIMEOUT
+    socketTimeout: CONNECTION_TIMEOUT,
+    // Force IPv4 to avoid IPv6 connection hangs (especially with Outlook)
+    tls: {
+      servername: account.imapHost,
+    },
+    socketOptions: {
+      family: 4
+    },
+    // Limit to 1 connection per account
+    maxIdleTime: 30000
   });
   
   // Handle errors without crashing
@@ -457,16 +480,20 @@ app.post('/api/send', async (req, res) => {
   try {
     const { account, email } = req.body;
     
+    const smtpAuth = account.authType === 'oauth2'
+      ? { type: 'OAuth2', user: account.email, accessToken: account.oauth2AccessToken }
+      : { user: account.email, pass: account.password };
+
     const transporter = nodemailer.createTransport({
       host: account.smtpHost,
       port: account.smtpPort || 587,
       secure: account.smtpSecure || false,
-      auth: {
-        user: account.email,
-        pass: account.password
-      },
+      auth: smtpAuth,
       connectionTimeout: CONNECTION_TIMEOUT,
-      greetingTimeout: CONNECTION_TIMEOUT
+      greetingTimeout: CONNECTION_TIMEOUT,
+      socketOptions: {
+        family: 4
+      }
     });
     
     const mailOptions = {
@@ -599,22 +626,24 @@ app.post('/api/search', async (req, res) => {
 app.post('/api/test-connection', async (req, res) => {
   try {
     const { account } = req.body;
-    
+    const auth = buildImapAuth(account);
+
     const client = new ImapFlow({
       host: account.imapHost,
       port: account.imapPort || 993,
       secure: account.imapSecure !== false,
-      auth: {
-        user: account.email,
-        pass: account.password
-      },
+      auth,
       logger: false,
-      connectTimeout: CONNECTION_TIMEOUT
+      connectTimeout: CONNECTION_TIMEOUT,
+      greetingTimeout: CONNECTION_TIMEOUT,
+      socketOptions: {
+        family: 4
+      }
     });
-    
+
     await client.connect();
     await client.logout();
-    
+
     res.json({ success: true, message: 'Connection successful' });
   } catch (error) {
     console.error('Connection test failed:', error.message, error.code || '', error.responseText || '');
@@ -644,6 +673,230 @@ app.post('/api/disconnect', async (req, res) => {
   }
 });
 
+// --- OAuth2 Endpoints ---
+
+// PKCE helpers
+function generateCodeVerifier() {
+  return crypto.randomBytes(32).toString('base64url');
+}
+
+function generateCodeChallenge(verifier) {
+  return crypto.createHash('sha256').update(verifier).digest('base64url');
+}
+
+// Store pending OAuth flows (state -> { codeVerifier, resolve, reject })
+const pendingOAuthFlows = new Map();
+// Callback server instance
+let callbackServer = null;
+
+function ensureCallbackServer() {
+  if (callbackServer) return;
+
+  const server = http.createServer((req, res) => {
+    const url = new URL(req.url, `http://localhost:${MICROSOFT_OAUTH.callbackPort}`);
+
+    if (url.pathname === '/callback') {
+      const code = url.searchParams.get('code');
+      const state = url.searchParams.get('state');
+      const error = url.searchParams.get('error');
+      const errorDescription = url.searchParams.get('error_description');
+
+      // Serve a response page
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      if (error) {
+        res.end(`<html><body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#1a1a2e;color:#e0e0e0">
+          <div style="text-align:center"><h2>Authentication Failed</h2><p>${errorDescription || error}</p><p>You can close this window.</p></div></body></html>`);
+        const pending = pendingOAuthFlows.get(state);
+        if (pending) {
+          pending.reject(new Error(errorDescription || error));
+          pendingOAuthFlows.delete(state);
+        }
+      } else if (code && state) {
+        res.end(`<html><body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#1a1a2e;color:#e0e0e0">
+          <div style="text-align:center"><h2>Sign-in Successful</h2><p>You can close this window and return to MailVault.</p></div></body></html>`);
+        const pending = pendingOAuthFlows.get(state);
+        if (pending) {
+          pending.resolve(code);
+          pendingOAuthFlows.delete(state);
+        }
+      } else {
+        res.end('<html><body>Invalid request</body></html>');
+      }
+    } else {
+      res.writeHead(404);
+      res.end('Not found');
+    }
+  });
+
+  server.listen(MICROSOFT_OAUTH.callbackPort, '127.0.0.1', () => {
+    console.log(`OAuth callback server listening on port ${MICROSOFT_OAUTH.callbackPort}`);
+  });
+
+  server.on('error', (err) => {
+    console.error('OAuth callback server error:', err.message);
+    callbackServer = null;
+  });
+
+  callbackServer = server;
+}
+
+// GET /api/oauth2/auth-url — generate authorization URL with PKCE
+app.get('/api/oauth2/auth-url', (req, res) => {
+  try {
+    const { clientId } = getMicrosoftCredentials();
+    const state = crypto.randomBytes(16).toString('hex');
+    const codeVerifier = generateCodeVerifier();
+    const codeChallenge = generateCodeChallenge(codeVerifier);
+
+    // Ensure callback server is running
+    ensureCallbackServer();
+
+    // Create a promise that will be resolved by the callback server
+    const codePromise = new Promise((resolve, reject) => {
+      pendingOAuthFlows.set(state, { codeVerifier, resolve, reject });
+      // Timeout after 5 minutes
+      setTimeout(() => {
+        if (pendingOAuthFlows.has(state)) {
+          pendingOAuthFlows.delete(state);
+          reject(new Error('OAuth flow timed out'));
+        }
+      }, 5 * 60 * 1000);
+    });
+
+    // Store the promise for the exchange endpoint
+    pendingOAuthFlows.get(state).codePromise = codePromise;
+
+    const params = new URLSearchParams({
+      client_id: clientId,
+      response_type: 'code',
+      redirect_uri: MICROSOFT_OAUTH.redirectUri,
+      scope: MICROSOFT_OAUTH.scopes.join(' '),
+      response_mode: 'query',
+      state,
+      code_challenge: codeChallenge,
+      code_challenge_method: 'S256',
+    });
+
+    // Pre-fill the email on the Microsoft login page
+    if (req.query.login_hint) {
+      params.append('login_hint', req.query.login_hint);
+    }
+
+    const authUrl = `${MICROSOFT_OAUTH.authEndpoint}?${params.toString()}`;
+
+    res.json({ success: true, authUrl, state });
+  } catch (error) {
+    console.error('Error generating auth URL:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/oauth2/exchange — wait for callback and exchange code for tokens
+app.post('/api/oauth2/exchange', async (req, res) => {
+  try {
+    const { state } = req.body;
+    const pending = pendingOAuthFlows.get(state);
+
+    if (!pending) {
+      return res.status(400).json({ success: false, error: 'No pending OAuth flow for this state' });
+    }
+
+    // Wait for the authorization code from the callback server
+    const code = await pending.codePromise;
+    const { clientId, clientSecret } = getMicrosoftCredentials();
+
+    // Exchange code for tokens
+    const tokenParams = new URLSearchParams({
+      client_id: clientId,
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: MICROSOFT_OAUTH.redirectUri,
+      code_verifier: pending.codeVerifier,
+    });
+
+    if (clientSecret) {
+      tokenParams.append('client_secret', clientSecret);
+    }
+
+    console.log('[OAuth2] Exchanging code for tokens...');
+
+    const tokenResponse = await fetch(MICROSOFT_OAUTH.tokenEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: tokenParams.toString(),
+    });
+
+    const tokenData = await tokenResponse.json();
+
+    if (tokenData.error) {
+      console.error('[OAuth2] Token error:', tokenData.error_description || tokenData.error);
+      throw new Error(tokenData.error_description || tokenData.error);
+    }
+
+    const accessToken = tokenData.access_token;
+    const refreshToken = tokenData.refresh_token;
+    const expiresAt = Date.now() + (tokenData.expires_in * 1000);
+
+    res.json({
+      success: true,
+      accessToken,
+      refreshToken,
+      expiresAt,
+    });
+  } catch (error) {
+    console.error('OAuth exchange error:', error.message);
+    res.status(500).json({ success: false, error: `OAuth exchange failed: ${error.message}` });
+  }
+});
+
+// POST /api/oauth2/refresh — refresh an access token
+app.post('/api/oauth2/refresh', async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(400).json({ success: false, error: 'Missing refresh token' });
+    }
+
+    const { clientId, clientSecret } = getMicrosoftCredentials();
+
+    const tokenParams = new URLSearchParams({
+      client_id: clientId,
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      scope: MICROSOFT_OAUTH.scopes.join(' '),
+    });
+
+    if (clientSecret) {
+      tokenParams.append('client_secret', clientSecret);
+    }
+
+    const tokenResponse = await fetch(MICROSOFT_OAUTH.tokenEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: tokenParams.toString(),
+    });
+
+    const tokenData = await tokenResponse.json();
+
+    if (tokenData.error) {
+      throw new Error(tokenData.error_description || tokenData.error);
+    }
+
+    const expiresAt = Date.now() + (tokenData.expires_in * 1000);
+
+    res.json({
+      success: true,
+      accessToken: tokenData.access_token,
+      refreshToken: tokenData.refresh_token || refreshToken,
+      expiresAt,
+    });
+  } catch (error) {
+    console.error('OAuth refresh error:', error.message);
+    res.status(500).json({ success: false, error: `Token refresh failed: ${error.message}` });
+  }
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', connections: connections.size });
@@ -670,29 +923,24 @@ setInterval(() => {
 }, 60000); // Every minute
 
 // Graceful shutdown
-process.on('SIGINT', async () => {
+function cleanupAndExit() {
   console.log('Shutting down...');
+  if (callbackServer) {
+    callbackServer.close();
+    callbackServer = null;
+  }
   for (const [key, client] of connections.entries()) {
     try {
-      await client.logout();
+      client.logout();
     } catch (e) {
       // Ignore
     }
   }
   process.exit(0);
-});
+}
 
-process.on('SIGTERM', async () => {
-  console.log('Shutting down...');
-  for (const [key, client] of connections.entries()) {
-    try {
-      await client.logout();
-    } catch (e) {
-      // Ignore
-    }
-  }
-  process.exit(0);
-});
+process.on('SIGINT', cleanupAndExit);
+process.on('SIGTERM', cleanupAndExit);
 
 // Prevent unhandled rejections from crashing the server
 process.on('unhandledRejection', (reason, promise) => {

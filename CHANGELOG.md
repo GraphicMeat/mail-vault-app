@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.2.0] - 2026-02-17
+
+### Added
+- Microsoft 365 OAuth2 (XOAUTH2) support — sign in with Microsoft for Outlook/Hotmail/Live/M365 accounts
+- "Sign in with Microsoft" button in account setup for Outlook provider (uses PKCE authorization code flow)
+- OAuth2 token auto-refresh — access tokens refresh automatically when expired
+- OAuth2 account status in Settings — shows "Connected" / "Token expired" badges, with Reconnect button
+- OAuth2 callback server on `localhost:19876` — temporary server for receiving Microsoft auth redirects
+- `server/oauth2Config.js` — Microsoft OAuth2 endpoints and credential configuration
+- `updateOAuth2Tokens()` helper in `db.js` for updating tokens after refresh
+- OAuth2 API functions in `api.js` — `getOAuth2AuthUrl`, `exchangeOAuth2Code`, `refreshOAuth2Token`
+- App Password fallback — users can still choose password auth for Outlook accounts
+
+### Fixed
+- Settings page blank screen — missing `AnimatePresence` import from framer-motion
+- Notifications now show app icon — replaced AppleScript `osascript` with `tauri-plugin-notification`
+- Email content now renders with original formatting preserved — removed aggressive dark mode CSS overrides that broke email layouts, centering, and styled elements; emails now display on a light background (like Apple Mail) regardless of app theme
+- IPv6 connection hangs with Outlook — forced IPv4 on all IMAP/SMTP connections
+- Multiple sidecar server processes — added orphan cleanup on startup and kill on quit
+
+### Changed
+- IMAP/SMTP auth now supports `accessToken` (XOAUTH2) in addition to password auth
+- Outlook provider renamed to "Outlook / Microsoft 365" with OAuth2 as recommended auth method
+- Account setup for Outlook defaults to OAuth2, with "Use App Password instead" fallback link
+- Settings Authentication section shows auth type badge (Password vs Microsoft OAuth2)
+- OAuth2 now uses Mozilla Thunderbird's public client ID by default (no Azure app registration needed)
+- Specific error message for Microsoft Outlook IMAP regression with link to FAQ
+- "Sign in with Microsoft" button requires email before clicking and uses purple accent styling
+
 ## [1.1.0] - 2026-02-16
 
 ### Changed

@@ -174,7 +174,23 @@
         "name": "Does MailVault work with Gmail and Outlook?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Yes. MailVault works with Gmail, Outlook, and any other email service that supports IMAP. For Gmail, you may need to enable IMAP access and use an App Password if you have two-factor authentication enabled. Outlook (Microsoft 365) also requires an App Password when two-factor authentication is enabled."
+          "text": "Yes. MailVault works with Gmail, Outlook, and any other email service that supports IMAP. For Gmail, you may need to enable IMAP access and use an App Password if you have two-factor authentication enabled. Microsoft 365 Business and Enterprise accounts can sign in directly with your Microsoft account using OAuth2. Personal Outlook.com accounts are currently affected by a known Microsoft server issue."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Why can't I connect my Outlook.com account?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "There is a known Microsoft server-side issue affecting personal Outlook.com, Hotmail, and Live.com accounts since late 2024. After signing in with your Microsoft account, the IMAP connection fails with 'User is authenticated but not connected.' Microsoft has deprecated basic authentication (including app passwords) for personal accounts, making OAuth2 the only method, but their IMAP service has a regression. Microsoft 365 Business/Enterprise accounts are not affected. MailVault's OAuth2 implementation is ready and will work once Microsoft resolves the issue."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How do I use MailVault with Proton Mail?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Proton Mail uses end-to-end encryption, so it doesn't expose standard IMAP access directly. To use MailVault with Proton Mail, you need Proton Mail Bridge — a free desktop app from Proton that runs locally and provides IMAP/SMTP access to your encrypted mailbox. Install Proton Mail Bridge, sign in with your Proton account, then copy the IMAP/SMTP credentials from Bridge. In MailVault, add a Custom account with IMAP host 127.0.0.1 port 1143, SMTP host 127.0.0.1 port 1025, STARTTLS security, and use the Bridge-generated password (not your Proton account password). Bridge must be running in the background whenever you sync."
         }
       },
       {
@@ -409,8 +425,64 @@
           </button>
           <div class="faq-answer">
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              Yes. MailVault works with Gmail, Outlook, and any other email service that supports IMAP. For Gmail, you may need to enable IMAP access and use an App Password if you have two-factor authentication enabled. Outlook (Microsoft 365) also requires an App Password when two-factor authentication is enabled.
+              Yes. MailVault works with Gmail, Outlook, and any other email service that supports IMAP. For Gmail, you may need to enable IMAP access and use an App Password if you have two-factor authentication enabled. Microsoft 365 Business and Enterprise accounts can sign in directly with your Microsoft account using OAuth2 — no app password needed, and it works seamlessly with two-factor authentication. Personal Outlook.com accounts are currently affected by a <a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">known Microsoft server issue</a>.
             </p>
+          </div>
+        </div>
+
+        <!-- FAQ: Microsoft Outlook OAuth2 -->
+        <div id="microsoft-outlook-oauth2" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">Why can't I connect my Outlook.com account?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4">There is a <strong>known Microsoft server-side issue</strong> affecting personal Outlook.com, Hotmail, and Live.com accounts since late 2024. After signing in with your Microsoft account, the IMAP connection fails with "User is authenticated but not connected." This affects all third-party email clients that use IMAP with OAuth2 — not just MailVault.</p>
+              <p class="mb-4">Microsoft has deprecated basic authentication (including app passwords) for personal accounts, making OAuth2 the only authentication method. Unfortunately, their IMAP service has a regression that prevents OAuth2-authenticated sessions from connecting to the mailbox.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">What you can do:</p>
+              <ul class="list-disc list-inside space-y-2 mb-4">
+                <li><strong>Microsoft 365 Business/Enterprise accounts</strong> are not affected — OAuth2 works normally for organizational accounts</li>
+                <li><strong>Monitor the issue</strong> — This is a server-side problem that only Microsoft can fix. The <a href="https://learn.microsoft.com/en-us/answers/questions/5673167/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Microsoft Q&A thread</a> tracks the issue</li>
+                <li><strong>Use the Outlook web app</strong> or Microsoft's official apps in the meantime for personal accounts</li>
+                <li><strong>MailVault is ready</strong> — Once Microsoft resolves the issue, MailVault's OAuth2 sign-in will work immediately with no changes needed</li>
+              </ul>
+              <p>For technical details: MailVault uses the same OAuth2 implementation as <a href="https://www.thunderbird.net/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Mozilla Thunderbird</a>, following Microsoft's official IMAP OAuth2 documentation with PKCE and XOAUTH2 authentication.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- FAQ: Proton Mail Bridge -->
+        <div class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">How do I use MailVault with Proton Mail?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4">Proton Mail uses end-to-end encryption, so it doesn't expose standard IMAP access directly. To use MailVault with Proton Mail, you need <a href="https://proton.me/mail/bridge" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton Mail Bridge</a> — a free desktop app from Proton that runs locally and provides IMAP/SMTP access to your encrypted mailbox.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Setup steps:</p>
+              <ol class="list-decimal list-inside space-y-2 mb-4">
+                <li>Download and install <a href="https://proton.me/mail/bridge" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton Mail Bridge</a> from Proton's website</li>
+                <li>Sign in to Bridge with your Proton Mail account</li>
+                <li>In Bridge, go to your account settings and copy the <strong>IMAP/SMTP credentials</strong> (Bridge generates a unique password for each account)</li>
+                <li>In MailVault, add a new account with the <strong>Custom</strong> provider and enter the following settings:
+                  <ul class="list-disc list-inside ml-4 mt-2 space-y-1">
+                    <li>IMAP Host: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code></li>
+                    <li>IMAP Port: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">1143</code></li>
+                    <li>SMTP Host: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code></li>
+                    <li>SMTP Port: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">1025</code></li>
+                    <li>Security: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">STARTTLS</code></li>
+                  </ul>
+                </li>
+                <li>Use your Proton email address and the <strong>Bridge-generated password</strong> (not your Proton account password)</li>
+              </ol>
+              <p>Proton Mail Bridge must be running in the background whenever you use MailVault to sync your Proton emails. For more details, see <a href="https://proton.me/support/protonmail-bridge-configure-client" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton's official guide for configuring email clients</a>.</p>
+            </div>
           </div>
         </div>
 
