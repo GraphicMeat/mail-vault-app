@@ -216,23 +216,32 @@ describe('Email Integration Tests', () => {
 
   // 7. Search Emails
   it('should search for the test email', async () => {
-    // Wait for delivery
-    await new Promise((r) => setTimeout(r, 5000));
+    // Retry search — CI mail delivery can be slow
+    const maxAttempts = 6;
+    const delayMs = 5000;
+    let uids = [];
 
-    client = createImapClient();
-    await client.connect();
-    const lock = await client.getMailboxLock('INBOX');
-    try {
-      const uids = await client.search({ subject: testSubject }, { uid: true });
-      expect(uids).toBeDefined();
-      expect(uids.length).toBeGreaterThan(0);
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      await new Promise((r) => setTimeout(r, delayMs));
 
-      sentEmailUid = uids[uids.length - 1]; // save for cleanup & flag test
-    } finally {
-      lock.release();
-      await client.logout();
+      client = createImapClient();
+      await client.connect();
+      const lock = await client.getMailboxLock('INBOX');
+      try {
+        uids = await client.search({ subject: testSubject }, { uid: true });
+      } finally {
+        lock.release();
+        await client.logout();
+      }
+
+      if (uids.length > 0) break;
     }
-  });
+
+    expect(uids).toBeDefined();
+    expect(uids.length).toBeGreaterThan(0);
+
+    sentEmailUid = uids[uids.length - 1]; // save for cleanup & flag test
+  }, 60000);
 
   // 8. Flag Email
   it('should flag an email as read then unread', async () => {

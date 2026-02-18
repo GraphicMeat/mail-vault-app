@@ -903,8 +903,8 @@ app.get('/api/health', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`Mail server running on port ${PORT}`);
+app.listen(PORT, '127.0.0.1', () => {
+  console.log(`Mail server running on 127.0.0.1:${PORT}`);
 });
 
 // Cleanup stale connections periodically

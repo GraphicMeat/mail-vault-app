@@ -1,6 +1,11 @@
 # Changelog
 
-## [1.3.0] - 2026-02-19
+## [1.4.0] - 2026-02-18
+
+### Fixed
+- Server unreachable error in release builds — sidecar now explicitly binds to 127.0.0.1 to prevent IPv4/IPv6 mismatch
+
+## [1.3.0] - 2026-02-18
 
 ### Added
 - Settings menu item in macOS app menu (Cmd+,) for quick access to Settings
