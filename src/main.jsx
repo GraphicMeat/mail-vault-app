@@ -31,6 +31,7 @@ class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, errorInfo) {
     console.error('[ErrorBoundary] React rendering failed:', error, errorInfo);
+    this.setState({ stack: error?.stack || errorInfo?.componentStack || '' });
     dismissSplash();
   }
 
@@ -60,8 +61,11 @@ class ErrorBoundary extends React.Component {
             style: { color: '#71717a', marginBottom: '1rem' }
           }, 'Something went wrong. Please restart the app.'),
           React.createElement('p', {
-            style: { color: '#71717a', fontSize: '0.75rem', fontFamily: 'monospace', maxWidth: '400px', wordBreak: 'break-word' }
+            style: { color: '#71717a', fontSize: '0.75rem', fontFamily: 'monospace', maxWidth: '500px', wordBreak: 'break-word' }
           }, String(this.state.error)),
+          this.state.stack && React.createElement('pre', {
+            style: { color: '#52525b', fontSize: '0.65rem', fontFamily: 'monospace', maxWidth: '500px', wordBreak: 'break-word', whiteSpace: 'pre-wrap', textAlign: 'left', marginTop: '0.75rem', maxHeight: '200px', overflow: 'auto', background: '#18181b', padding: '0.75rem', borderRadius: '0.5rem' }
+          }, this.state.stack),
           React.createElement('button', {
             onClick: () => window.location.reload(),
             style: {

@@ -1,11 +1,11 @@
 # Changelog
 
-## [1.4.7] - 2026-02-18
+## [1.4.8] - 2026-02-19
 
 ### Fixed
-- "SecurityError: The operation is insecure" crash on sandboxed Macs — WKWebView blocking localStorage; all persistent stores now use safe storage wrapper with in-memory fallback
+- "SecurityError: The operation is insecure" crash — completely replaced localStorage with Tauri filesystem-backed storage; WKWebView in App Sandbox blocks all web storage APIs, now settings persist via JSON file on disk instead
 - Black screen on first launch — Framer Motion animations starting at opacity 0 could stay invisible if animation engine failed in WKWebView
-- Added React error boundary with visible fallback UI for rendering crashes
+- Added React error boundary with visible fallback UI and stack trace for rendering crashes
 - Splash screen now only dismisses after React successfully renders (not before)
 - Added 10-second timeout fallback if app fails to load — shows reload button instead of blank screen
 

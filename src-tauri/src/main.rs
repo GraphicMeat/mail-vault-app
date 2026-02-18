@@ -214,6 +214,34 @@ fn get_app_data_dir(app_handle: tauri::AppHandle) -> Result<String, String> {
         .map_err(|e| format!("Could not get app data directory: {}", e))
 }
 
+// Read frontend settings from JSON file on disk (replaces localStorage)
+#[tauri::command]
+fn read_settings_json(app_handle: tauri::AppHandle) -> Result<String, String> {
+    let data_dir = app_handle.path().app_data_dir()
+        .map_err(|e| format!("Could not get app data dir: {}", e))?;
+    let settings_path = data_dir.join("frontend-settings.json");
+    if settings_path.exists() {
+        fs::read_to_string(&settings_path)
+            .map_err(|e| format!("Failed to read settings: {}", e))
+    } else {
+        Ok(String::from("{}"))
+    }
+}
+
+// Write frontend settings to JSON file on disk (replaces localStorage)
+#[tauri::command]
+fn write_settings_json(app_handle: tauri::AppHandle, data: String) -> Result<(), String> {
+    let data_dir = app_handle.path().app_data_dir()
+        .map_err(|e| format!("Could not get app data dir: {}", e))?;
+    if !data_dir.exists() {
+        fs::create_dir_all(&data_dir)
+            .map_err(|e| format!("Failed to create data dir: {}", e))?;
+    }
+    let settings_path = data_dir.join("frontend-settings.json");
+    fs::write(&settings_path, &data)
+        .map_err(|e| format!("Failed to write settings: {}", e))
+}
+
 // Use a more specific service name with bundle ID for persistence across builds
 const KEYRING_SERVICE: &str = "com.mailvault.app";
 const CREDENTIALS_KEY: &str = "credentials";
@@ -1911,6 +1939,8 @@ fn main() {
         .manage(SidecarState(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             get_app_data_dir,
+            read_settings_json,
+            write_settings_json,
             store_credentials,
             get_credentials,
             store_password,
