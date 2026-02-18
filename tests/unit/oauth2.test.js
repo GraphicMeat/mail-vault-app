@@ -20,7 +20,7 @@ beforeAll(async () => {
   await new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('Server start timeout')), 10000);
     serverProcess.stdout.on('data', (data) => {
-      if (data.toString().includes('running on port')) {
+      if (data.toString().includes('running on')) {
         clearTimeout(timeout);
         resolve();
       }
