@@ -63,7 +63,7 @@ function parseChangelog(md) {
     if (itemMatch && currentSection) {
       // Convert markdown inline code and links to HTML
       let text = itemMatch[1]
-        .replace(/`([^`]+)`/g, '<code class="text-sm px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono">$1</code>')
+        .replace(/`([^`]+)`/g, '<code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">$1</code>')
         .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" class="text-primary-500 hover:underline">$1</a>')
         .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
       currentSection.items.push(text);
@@ -94,7 +94,7 @@ function renderSection(section) {
   for (const item of section.items) {
     html += `            <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-${color}-500 flex-shrink-0 mt-2"></span>
-              ${item}
+              <span>${item}</span>
             </li>\n`;
   }
 
