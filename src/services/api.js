@@ -4,6 +4,39 @@ const API_BASE = window.__TAURI__ ? 'http://localhost:3001/api' : '/api';
 console.log('[api.js] API_BASE:', API_BASE);
 console.log('[api.js] Running in Tauri:', !!window.__TAURI__);
 
+// Server readiness state — ensures sidecar is up before first API call
+let serverReady = !window.__TAURI__; // Skip wait in browser dev mode
+let serverReadyPromise = null;
+
+async function waitForServer() {
+  if (serverReady) return;
+  if (serverReadyPromise) return serverReadyPromise;
+
+  serverReadyPromise = (async () => {
+    const maxAttempts = 30;
+    const delay = 500; // ms
+    console.log('[api.js] Waiting for backend server to be ready...');
+
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        const res = await fetch(`${API_BASE}/health`);
+        if (res.ok) {
+          console.log(`[api.js] Server ready after ${i + 1} attempt(s)`);
+          serverReady = true;
+          return;
+        }
+      } catch {
+        // Server not up yet
+      }
+      await new Promise(r => setTimeout(r, delay));
+    }
+
+    console.error('[api.js] Server did not become ready after', maxAttempts, 'attempts');
+  })();
+
+  return serverReadyPromise;
+}
+
 class ApiError extends Error {
   constructor(message, status) {
     super(message);
@@ -13,6 +46,9 @@ class ApiError extends Error {
 }
 
 async function request(endpoint, options = {}) {
+  // Wait for sidecar server to be ready on first API call
+  await waitForServer();
+
   const url = `${API_BASE}${endpoint}`;
   console.log('[api.js] Making request to:', url);
 

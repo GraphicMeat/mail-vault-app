@@ -17,6 +17,9 @@ export const useSettingsStore = create(
       // Signature settings (per account)
       signatures: {}, // { [accountId]: { html: string, text: string, enabled: boolean } }
       
+      // Account order (array of account IDs for drag-to-reorder)
+      accountOrder: [],
+
       // Display settings
       displayNames: {}, // { [accountId]: string }
       
@@ -57,6 +60,19 @@ export const useSettingsStore = create(
       filterHistoryPeriodDays: 30, // Period for tracking popular filters (1-365 days)
       topFiltersLimit: 20, // Number of top filters to show (1-50)
       filterUsageHistory: [], // Array of { filter, timestamp } for tracking usage
+
+      // Account order management
+      setAccountOrder: (order) => set({ accountOrder: order }),
+      getOrderedAccounts: (accounts) => {
+        const order = get().accountOrder;
+        if (!order.length) return accounts;
+        const orderMap = new Map(order.map((id, i) => [id, i]));
+        return [...accounts].sort((a, b) => {
+          const ai = orderMap.has(a.id) ? orderMap.get(a.id) : Infinity;
+          const bi = orderMap.has(b.id) ? orderMap.get(b.id) : Infinity;
+          return ai - bi;
+        });
+      },
 
       // Set local storage path
       setLocalStoragePath: (path) => {
@@ -202,6 +218,7 @@ export const useSettingsStore = create(
           storageConfigured: false,
           cacheLimitMB: 5120,
           localCacheDurationMonths: 3,
+          accountOrder: [],
           signatures: {},
           displayNames: {},
           defaultSignatureEnabled: true,

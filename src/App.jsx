@@ -158,6 +158,17 @@ function App() {
     return () => { if (unlisten) unlisten(); };
   }, []);
 
+  // Listen for open-settings event from native menu
+  useEffect(() => {
+    const listen = window.__TAURI__?.event?.listen;
+    if (!listen) return;
+    let unlisten;
+    listen('open-settings', () => {
+      setShowSettings(true);
+    }).then(fn => { unlisten = fn; });
+    return () => { if (unlisten) unlisten(); };
+  }, []);
+
   // Track if quick load is done
   const [quickLoadDone, setQuickLoadDone] = useState(false);
 

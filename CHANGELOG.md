@@ -1,6 +1,14 @@
 # Changelog
 
-## [1.2.0] - 2026-02-17
+## [1.3.0] - 2026-02-19
+
+### Added
+- Settings menu item in macOS app menu (Cmd+,) for quick access to Settings
+- Escape key closes Settings page
+- Copy button in logs section — copies logs to clipboard with "Copied!" feedback
+- Inline confirmation modal for account removal — replaces browser confirm() dialog
+
+## [1.2.0] - 2026-02-18
 
 ### Added
 - Microsoft 365 OAuth2 (XOAUTH2) support — sign in with Microsoft for Outlook/Hotmail/Live/M365 accounts

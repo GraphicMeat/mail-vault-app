@@ -1,7 +1,7 @@
 // Prevents additional console window on Windows in release
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri_plugin_updater::UpdaterExt;
@@ -2005,6 +2005,7 @@ fn main() {
 
             // --- Set up app menu ---
             let check_updates = MenuItem::with_id(app, "check_updates", "Check for Updates...", true, None::<&str>)?;
+            let open_settings = MenuItem::with_id(app, "open_settings", "Settings...", true, Some("cmd+,"))?;
             let export_logs = MenuItem::with_id(app, "export_logs", "Export Logs...", true, None::<&str>)?;
             let logs_submenu = Submenu::with_id(app, "logs_submenu", "Logs", true)?;
             logs_submenu.append(&export_logs)?;
@@ -2012,13 +2013,16 @@ fn main() {
             #[cfg(target_os = "macos")]
             {
                 let menu = Menu::default(app.handle())?;
-                // Insert "Check for Updates..." right below "About MailVault" in the app submenu
+                // Insert items below "About MailVault" in the app submenu
                 if let Ok(items) = menu.items() {
                     if let Some(first) = items.first() {
                         if let Some(app_submenu) = first.as_submenu() {
-                            let sep = PredefinedMenuItem::separator(app)?;
-                            let _ = app_submenu.insert(&check_updates, 1);
-                            let _ = app_submenu.insert(&sep, 2);
+                            let sep1 = PredefinedMenuItem::separator(app)?;
+                            let sep2 = PredefinedMenuItem::separator(app)?;
+                            let _ = app_submenu.insert(&sep1, 1);
+                            let _ = app_submenu.insert(&check_updates, 2);
+                            let _ = app_submenu.insert(&open_settings, 3);
+                            let _ = app_submenu.insert(&sep2, 4);
                         }
                     }
                 }
@@ -2099,6 +2103,8 @@ fn main() {
                             }
                         }
                     });
+                } else if event.id().as_ref() == "open_settings" {
+                    let _ = app_handle_for_menu.emit("open-settings", ());
                 } else if event.id().as_ref() == "export_logs" {
                     use tauri_plugin_dialog::DialogExt;
                     let app_clone = app_handle_for_menu.clone();

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -37,7 +37,8 @@ import {
   MessageSquare,
   List,
   Link,
-  Unlink
+  Unlink,
+  Copy
 } from 'lucide-react';
 
 function ToggleSwitch({ active, onClick }) {
@@ -90,9 +91,20 @@ export function SettingsPage({ onClose }) {
     filterUsageHistory,
     clearFilterHistory,
     localCacheDurationMonths,
-    setLocalCacheDurationMonths
+    setLocalCacheDurationMonths,
+    getOrderedAccounts,
+    setAccountOrder
   } = useSettingsStore();
   
+  // Close on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   const [activeTab, setActiveTab] = useState('general');
   const [selectedAccountId, setSelectedAccountId] = useState(accounts[0]?.id || null);
   const [signatureText, setSignatureText] = useState('');
@@ -105,10 +117,16 @@ export function SettingsPage({ onClose }) {
   const [importing, setImporting] = useState(false);
   const [logs, setLogs] = useState('');
   const [loadingLogs, setLoadingLogs] = useState(false);
+  const [logsCopied, setLogsCopied] = useState(false);
   const [editingPassword, setEditingPassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [localStorageUsage, setLocalStorageUsage] = useState(null);
   const [oauthReconnecting, setOauthReconnecting] = useState(false);
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
+  const [settingsDragOverId, setSettingsDragOverId] = useState(null);
+  const settingsDragItemRef = useRef(null);
+
+  const orderedAccounts = getOrderedAccounts(accounts);
   
   // Check for File System Access API support
   useEffect(() => {
@@ -135,6 +153,7 @@ export function SettingsPage({ onClose }) {
       const sig = getSignature(selectedAccountId);
       setSignatureText(sig.text || '');
       setAccountDisplayName(getDisplayName(selectedAccountId) || '');
+      setShowRemoveConfirm(false);
     }
   }, [selectedAccountId]);
   
@@ -1024,16 +1043,46 @@ export function SettingsPage({ onClose }) {
                       </div>
                     ) : (
                       <div className="space-y-1">
-                        {accounts.map(account => (
+                        {orderedAccounts.map(account => (
                           <div
                             key={account.id}
+                            draggable
+                            onDragStart={(e) => {
+                              settingsDragItemRef.current = account.id;
+                              e.dataTransfer.effectAllowed = 'move';
+                            }}
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                              e.dataTransfer.dropEffect = 'move';
+                              if (account.id !== settingsDragItemRef.current) {
+                                setSettingsDragOverId(account.id);
+                              }
+                            }}
+                            onDragLeave={() => setSettingsDragOverId(null)}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              setSettingsDragOverId(null);
+                              const fromId = settingsDragItemRef.current;
+                              if (!fromId || fromId === account.id) return;
+                              const ids = orderedAccounts.map(a => a.id);
+                              const fromIdx = ids.indexOf(fromId);
+                              const toIdx = ids.indexOf(account.id);
+                              ids.splice(fromIdx, 1);
+                              ids.splice(toIdx, 0, fromId);
+                              setAccountOrder(ids);
+                            }}
+                            onDragEnd={() => {
+                              settingsDragItemRef.current = null;
+                              setSettingsDragOverId(null);
+                            }}
                             onClick={() => setSelectedAccountId(account.id)}
                             className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all
-                                       ${account.id === selectedAccountId 
-                                         ? 'bg-mail-accent/10 border border-mail-accent/30' 
-                                         : 'hover:bg-mail-surface-hover border border-transparent'}`}
+                                       ${account.id === selectedAccountId
+                                         ? 'bg-mail-accent/10 border border-mail-accent/30'
+                                         : 'hover:bg-mail-surface-hover border border-transparent'}
+                                       ${settingsDragOverId === account.id ? 'border-t-2 border-t-mail-accent' : ''}`}
                           >
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center 
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center
                                            ${account.id === selectedAccountId ? 'bg-mail-accent' : 'bg-mail-border'}`}>
                               <User size={16} className="text-white" />
                             </div>
@@ -1302,21 +1351,56 @@ export function SettingsPage({ onClose }) {
                           and cannot be recovered.
                         </p>
                         <button
-                          onClick={() => {
-                            if (confirm(`Are you sure you want to remove ${selectedAccount.email}?\n\nThis will permanently delete:\n• All locally saved emails for this account\n• All attachments\n• Account settings and signatures\n\nThis action cannot be undone.`)) {
-                              removeAccount(selectedAccountId);
-                              if (accounts.length > 1) {
-                                const nextAccount = accounts.find(a => a.id !== selectedAccountId);
-                                setSelectedAccountId(nextAccount?.id || null);
-                              }
-                            }
-                          }}
+                          onClick={() => setShowRemoveConfirm(true)}
                           className="px-4 py-2 bg-mail-danger/10 hover:bg-mail-danger/20
                                     text-mail-danger rounded-lg transition-colors flex items-center gap-2"
                         >
                           <Trash2 size={16} />
                           Remove This Account
                         </button>
+
+                        <AnimatePresence>
+                          {showRemoveConfirm && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              className="overflow-hidden mt-4"
+                            >
+                              <div className="bg-mail-danger/5 border border-mail-danger/30 rounded-lg p-4">
+                                <p className="text-sm text-mail-text mb-1 font-medium">
+                                  Are you sure you want to remove {selectedAccount.email}?
+                                </p>
+                                <p className="text-sm text-mail-text-muted mb-4">
+                                  This will permanently delete all locally saved emails, attachments, and settings for this account. This action cannot be undone.
+                                </p>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => {
+                                      removeAccount(selectedAccountId);
+                                      setShowRemoveConfirm(false);
+                                      if (accounts.length > 1) {
+                                        const nextAccount = accounts.find(a => a.id !== selectedAccountId);
+                                        setSelectedAccountId(nextAccount?.id || null);
+                                      }
+                                    }}
+                                    className="px-4 py-2 bg-mail-danger hover:bg-mail-danger/80
+                                              text-white rounded-lg transition-colors text-sm font-medium"
+                                  >
+                                    Remove
+                                  </button>
+                                  <button
+                                    onClick={() => setShowRemoveConfirm(false)}
+                                    className="px-4 py-2 bg-mail-border hover:bg-mail-border/80
+                                              text-mail-text rounded-lg transition-colors text-sm"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
                     </div>
                   ) : (
@@ -1503,6 +1587,24 @@ export function SettingsPage({ onClose }) {
                       >
                         <RefreshCw size={14} className={loadingLogs ? 'animate-spin' : ''} />
                         Refresh
+                      </button>
+                      <button
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(logs);
+                            setLogsCopied(true);
+                            setTimeout(() => setLogsCopied(false), 2000);
+                          } catch (err) {
+                            console.error('Failed to copy logs:', err);
+                          }
+                        }}
+                        disabled={!logs || loadingLogs}
+                        className="px-3 py-1.5 text-sm text-mail-text-muted hover:text-mail-text
+                                  hover:bg-mail-border rounded-lg transition-colors flex items-center gap-2
+                                  disabled:opacity-50"
+                      >
+                        {logsCopied ? <Check size={14} /> : <Copy size={14} />}
+                        {logsCopied ? 'Copied!' : 'Copy'}
                       </button>
                       <button
                         onClick={async () => {

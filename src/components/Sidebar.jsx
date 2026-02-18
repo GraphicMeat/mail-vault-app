@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { version } from '../../package.json';
 import { useMailStore } from '../stores/mailStore';
 import { useThemeStore } from '../stores/themeStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Inbox,
@@ -66,9 +67,14 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
   } = useMailStore();
   
   const { theme, toggleTheme } = useThemeStore();
-  
+  const { getOrderedAccounts, setAccountOrder } = useSettingsStore();
+
   const [expandedFolders, setExpandedFolders] = useState(new Set(['INBOX']));
   const [showErrorModal, setShowErrorModal] = useState(false);
+  const [dragOverId, setDragOverId] = useState(null);
+  const dragItemRef = useRef(null);
+
+  const orderedAccounts = getOrderedAccounts(accounts);
   
   const activeAccount = accounts.find(a => a.id === activeAccountId);
   
@@ -121,27 +127,57 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
       {/* Account Selector */}
       <div className="p-3 border-b border-mail-border">
         <div className="relative">
-          {accounts.map(account => (
+          {orderedAccounts.map(account => (
             <div
               key={account.id}
+              draggable
+              onDragStart={(e) => {
+                dragItemRef.current = account.id;
+                e.dataTransfer.effectAllowed = 'move';
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                if (account.id !== dragItemRef.current) {
+                  setDragOverId(account.id);
+                }
+              }}
+              onDragLeave={() => setDragOverId(null)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOverId(null);
+                const fromId = dragItemRef.current;
+                if (!fromId || fromId === account.id) return;
+                const ids = orderedAccounts.map(a => a.id);
+                const fromIdx = ids.indexOf(fromId);
+                const toIdx = ids.indexOf(account.id);
+                ids.splice(fromIdx, 1);
+                ids.splice(toIdx, 0, fromId);
+                setAccountOrder(ids);
+              }}
+              onDragEnd={() => {
+                dragItemRef.current = null;
+                setDragOverId(null);
+              }}
               className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all
-                         ${account.id === activeAccountId 
-                           ? 'bg-mail-accent/10 text-mail-accent' 
-                           : 'hover:bg-mail-surface-hover text-mail-text'}`}
+                         ${account.id === activeAccountId
+                           ? 'bg-mail-accent/10 text-mail-accent'
+                           : 'hover:bg-mail-surface-hover text-mail-text'}
+                         ${dragOverId === account.id ? 'border-t-2 border-mail-accent' : 'border-t-2 border-transparent'}`}
               onClick={() => setActiveAccount(account.id)}
             >
               <div className="relative">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center 
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center
                                ${account.id === activeAccountId ? 'bg-mail-accent' : 'bg-mail-border'}`}>
                   <User size={14} className="text-white" />
                 </div>
                 {/* Connection status dot */}
                 {account.id === activeAccountId && (
-                  <div 
+                  <div
                     className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-mail-surface
-                               ${connectionStatus === 'connected' ? 'bg-mail-success' : 
+                               ${connectionStatus === 'connected' ? 'bg-mail-success' :
                                  connectionStatus === 'error' ? 'bg-mail-danger' : 'bg-mail-warning'}`}
-                    title={connectionStatus === 'connected' ? 'Connected' : 
+                    title={connectionStatus === 'connected' ? 'Connected' :
                            connectionStatus === 'error' ? `Offline: ${connectionError}` : 'Connecting...'}
                   />
                 )}
