@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.4.1] - 2026-02-18
+
+### Fixed
+- "Server unreachable (/test-connection): Load failed" when auto-detecting server settings — raw fetch bypassed the API base URL in Tauri builds
+
 ## [1.4.0] - 2026-02-18
 
 ### Fixed

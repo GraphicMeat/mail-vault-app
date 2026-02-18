@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useMailStore } from '../stores/mailStore';
-import { getOAuth2AuthUrl, exchangeOAuth2Code } from '../services/api';
+import { getOAuth2AuthUrl, exchangeOAuth2Code, testConnection } from '../services/api';
 import { motion } from 'framer-motion';
 import { X, Mail, Lock, Server, Eye, EyeOff, Check, AlertCircle, Loader, Wand2, Shield } from 'lucide-react';
 
@@ -235,13 +235,7 @@ export function AccountModal({ onClose }) {
           };
 
           // Actually test the connection
-          const response = await fetch('/api/test-connection', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ account: testAccount })
-          });
-
-          const result = await response.json();
+          const result = await testConnection(testAccount);
 
           if (result.success) {
             setFormData(prev => ({
