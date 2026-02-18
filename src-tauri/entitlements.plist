@@ -22,6 +22,10 @@
     <key>com.apple.security.network.client</key>
     <true/>
 
+    <!-- Allow sidecar server to listen on localhost -->
+    <key>com.apple.security.network.server</key>
+    <true/>
+
     <!-- File access - user selected files (attachments, exports) -->
     <key>com.apple.security.files.user-selected.read-write</key>
     <true/>

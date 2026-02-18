@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.4.2] - 2026-02-18
+
+### Fixed
+- Sidecar server unable to start in sandboxed release builds — added missing `network.server` entitlement so the backend can listen on localhost
+
 ## [1.4.1] - 2026-02-18
 
 ### Fixed
