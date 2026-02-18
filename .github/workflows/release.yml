@@ -103,3 +103,23 @@ jobs:
           prerelease: false
           includeUpdaterJson: true
           args: '--target universal-apple-darwin'
+
+      - name: Re-sign sidecar with JIT entitlements
+        run: |
+          # Tauri signs the sidecar with app-sandbox entitlements which blocks Bun's JIT.
+          # Re-sign the sidecar with its own entitlements (no sandbox, JIT allowed).
+          APP_PATH="src-tauri/target/universal-apple-darwin/release/bundle/macos/MailVault.app"
+          SIDECAR_PATH="$APP_PATH/Contents/MacOS/mailvault-server"
+          if [ -f "$SIDECAR_PATH" ]; then
+            echo "Re-signing sidecar binary with JIT entitlements..."
+            codesign --force --options runtime --timestamp \
+              --entitlements src-tauri/entitlements-sidecar.plist \
+              --sign "${{ secrets.APPLE_SIGNING_IDENTITY }}" \
+              "$SIDECAR_PATH"
+            # Re-sign the main app bundle to update nested code hashes (no --deep)
+            codesign --force --options runtime --timestamp \
+              --entitlements src-tauri/entitlements.plist \
+              --sign "${{ secrets.APPLE_SIGNING_IDENTITY }}" \
+              "$APP_PATH"
+            echo "Sidecar re-signed successfully"
+          fi

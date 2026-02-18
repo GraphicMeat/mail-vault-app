@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.4] - 2026-02-18
+
+### Fixed
+- Sidecar server crashing on launch in release builds — App Sandbox blocked Bun's JIT compiler; sidecar now signed with dedicated entitlements (no sandbox, JIT allowed)
+- Removed `--deep` codesigning flag that was overwriting sidecar entitlements
+- Replaced shell-based process cleanup (lsof, kill) with Tauri CommandChild handle
+
 ## [1.4.3] - 2026-02-18
 
 ### Fixed

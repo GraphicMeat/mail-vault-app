@@ -164,16 +164,6 @@ echo -e "${YELLOW}🔏 Signing the application...${NC}"
 # Sign all nested components first (sidecar binary, frameworks, etc.)
 echo "   Signing nested components..."
 
-# Sign the sidecar binary
-SIDECAR_PATH="$APP_PATH/Contents/MacOS/mailvault-server"
-if [ -f "$SIDECAR_PATH" ]; then
-    codesign --force --options runtime --timestamp \
-        --entitlements "$ENTITLEMENTS" \
-        --sign "$SIGNING_HASH" \
-        "$SIDECAR_PATH"
-    echo "   ✓ Signed sidecar binary"
-fi
-
 # Sign any frameworks
 for framework in "$APP_PATH/Contents/Frameworks"/*.framework; do
     if [ -d "$framework" ]; then
@@ -194,9 +184,20 @@ for dylib in "$APP_PATH/Contents/Frameworks"/*.dylib; do
     fi
 done
 
-# Sign the main app bundle
+# Sign the sidecar binary with its own entitlements (no app-sandbox — Bun needs JIT)
+SIDECAR_PATH="$APP_PATH/Contents/MacOS/mailvault-server"
+SIDECAR_ENTITLEMENTS="src-tauri/entitlements-sidecar.plist"
+if [ -f "$SIDECAR_PATH" ]; then
+    codesign --force --options runtime --timestamp \
+        --entitlements "$SIDECAR_ENTITLEMENTS" \
+        --sign "$SIGNING_HASH" \
+        "$SIDECAR_PATH"
+    echo "   ✓ Signed sidecar binary (with sidecar entitlements)"
+fi
+
+# Sign the main app bundle (no --deep to preserve sidecar entitlements)
 echo "   Signing main app bundle..."
-codesign --force --deep --options runtime --timestamp \
+codesign --force --options runtime --timestamp \
     --entitlements "$ENTITLEMENTS" \
     --sign "$SIGNING_HASH" \
     "$APP_PATH"

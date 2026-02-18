@@ -1,6 +1,6 @@
 {
   "name": "mailvault",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "description": "A reactive email client with local storage capabilities",
   "type": "module",
   "scripts": {
