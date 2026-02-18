@@ -50,7 +50,7 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Set up Apple certificate for signing
+      - name: Set up Apple certificate
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -66,29 +66,21 @@ jobs:
           security list-keychains -d user -s $KEYCHAIN_PATH login.keychain-db
           echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
 
-      - name: Build server sidecar
+      - name: Build universal server sidecar
         run: |
           mkdir -p src-tauri/binaries
 
-          # Build ARM64 natively (macos-latest runs on Apple Silicon)
+          # Build ARM64 natively
           bun build server/index.js --compile --outfile src-tauri/binaries/mailvault-server-aarch64-apple-darwin
           chmod +x src-tauri/binaries/mailvault-server-aarch64-apple-darwin
 
-          # Download x86_64 Bun to build native x86_64 sidecar
+          # Download x86_64 Bun and build x86_64 sidecar
           curl -fsSL -o /tmp/bun-x64.zip "https://github.com/oven-sh/bun/releases/latest/download/bun-darwin-x64.zip"
           unzip -o /tmp/bun-x64.zip -d /tmp/bun-x64
-
-          # Build x86_64 using x86_64 Bun under Rosetta
           arch -x86_64 /tmp/bun-x64/bun-darwin-x64/bun build server/index.js --compile --outfile src-tauri/binaries/mailvault-server-x86_64-apple-darwin
           chmod +x src-tauri/binaries/mailvault-server-x86_64-apple-darwin
 
-          # Verify architectures
-          echo "ARM64 binary:"
-          file src-tauri/binaries/mailvault-server-aarch64-apple-darwin
-          echo "x86_64 binary:"
-          file src-tauri/binaries/mailvault-server-x86_64-apple-darwin
-
-          # Combine into universal binary
+          # Create universal binary
           lipo -create \
             src-tauri/binaries/mailvault-server-aarch64-apple-darwin \
             src-tauri/binaries/mailvault-server-x86_64-apple-darwin \
@@ -97,95 +89,20 @@ jobs:
 
           echo "Universal binary:"
           file src-tauri/binaries/mailvault-server-universal-apple-darwin
-          ls -lh src-tauri/binaries/mailvault-server-universal-apple-darwin
 
-      - name: Build Tauri app (no release upload)
-        uses: tauri-apps/tauri-action@v0
+      - name: Build, sign, notarize, and package
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          CI: 'true'
+          BUILD_TARGET: universal-apple-darwin
+          SKIP_SERVER_BUILD: 'true'
+          SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          KEYCHAIN_PATH: ${{ env.KEYCHAIN_PATH }}
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        with:
-          args: '--target universal-apple-darwin'
-
-      - name: Re-sign sidecar and repackage
-        run: |
-          APP_PATH="src-tauri/target/universal-apple-darwin/release/bundle/macos/MailVault.app"
-          SIDECAR_PATH="$APP_PATH/Contents/MacOS/mailvault-server"
-
-          echo "=== Before re-signing ==="
-          codesign -d --entitlements - "$SIDECAR_PATH" 2>&1 | head -5
-
-          # Re-sign sidecar with JIT entitlements (no app-sandbox)
-          echo "Re-signing sidecar binary..."
-          codesign --force --options runtime --timestamp \
-            --entitlements src-tauri/entitlements-sidecar.plist \
-            --sign "${{ secrets.APPLE_SIGNING_IDENTITY }}" \
-            --keychain "$KEYCHAIN_PATH" \
-            "$SIDECAR_PATH"
-
-          # Re-sign main app bundle (no --deep to preserve sidecar entitlements)
-          echo "Re-signing main app bundle..."
-          codesign --force --options runtime --timestamp \
-            --entitlements src-tauri/entitlements.plist \
-            --sign "${{ secrets.APPLE_SIGNING_IDENTITY }}" \
-            --keychain "$KEYCHAIN_PATH" \
-            "$APP_PATH"
-
-          echo "=== After re-signing ==="
-          codesign -d --entitlements - "$SIDECAR_PATH" 2>&1 | head -5
-          codesign --verify --verbose "$APP_PATH"
-          echo "Signature verified"
-
-          # Repackage the .tar.gz for the updater (with re-signed sidecar)
-          echo "Repackaging updater archive..."
-          BUNDLE_DIR="src-tauri/target/universal-apple-darwin/release/bundle/macos"
-          cd "$BUNDLE_DIR"
-          TAR_GZ=$(ls *.tar.gz 2>/dev/null | head -1)
-          if [ -n "$TAR_GZ" ]; then
-            # Remove old archive and signature
-            rm -f "$TAR_GZ" "${TAR_GZ}.sig"
-            # Create new archive with re-signed app
-            tar -czf "$TAR_GZ" "MailVault.app"
-            echo "Repackaged: $TAR_GZ"
-          fi
-          cd -
-
-      - name: Sign updater archive
-        if: ${{ env.TAURI_SIGNING_PRIVATE_KEY != '' }}
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          BUNDLE_DIR="src-tauri/target/universal-apple-darwin/release/bundle/macos"
-          TAR_GZ=$(ls "$BUNDLE_DIR"/*.tar.gz 2>/dev/null | head -1)
-          if [ -n "$TAR_GZ" ]; then
-            npx @tauri-apps/cli signer sign "$TAR_GZ" \
-              --private-key "$TAURI_SIGNING_PRIVATE_KEY" \
-              --password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD"
-            echo "Updater archive signed"
-          fi
-
-      - name: Notarize the DMG
-        run: |
-          DMG_DIR="src-tauri/target/universal-apple-darwin/release/bundle/dmg"
-          DMG=$(ls "$DMG_DIR"/*.dmg 2>/dev/null | head -1)
-          if [ -n "$DMG" ]; then
-            echo "Submitting DMG for notarization..."
-            xcrun notarytool submit "$DMG" \
-              --apple-id "${{ secrets.APPLE_ID }}" \
-              --password "${{ secrets.APPLE_PASSWORD }}" \
-              --team-id "${{ secrets.APPLE_TEAM_ID }}" \
-              --wait
-            xcrun stapler staple "$DMG"
-            echo "DMG notarized and stapled"
-          fi
+        run: bash scripts/build-developer-id.sh
 
       - name: Create GitHub release
         env:
@@ -193,20 +110,23 @@ jobs:
         run: |
           VERSION="${{ inputs.version }}"
           BUNDLE_DIR="src-tauri/target/universal-apple-darwin/release/bundle"
+          DMG_DIR="$BUNDLE_DIR/dmg"
 
           # Find artifacts
-          DMG=$(ls "$BUNDLE_DIR/dmg"/*.dmg 2>/dev/null | head -1)
-          TAR_GZ=$(ls "$BUNDLE_DIR/macos"/*.tar.gz 2>/dev/null | grep -v '.sig' | head -1)
+          DMG=$(ls "$DMG_DIR"/*.dmg 2>/dev/null | head -1)
+          TAR_GZ=$(ls "$DMG_DIR"/*.tar.gz 2>/dev/null | grep -v '.sig' | head -1)
           TAR_GZ_SIG="${TAR_GZ}.sig"
+          LATEST_JSON="$DMG_DIR/latest.json"
 
-          # Build latest.json for updater
-          if [ -f "$TAR_GZ_SIG" ]; then
-            SIGNATURE=$(cat "$TAR_GZ_SIG")
+          # Update latest.json URLs with the release version tag
+          if [ -f "$LATEST_JSON" ]; then
+            # Replace version placeholder with actual release tag version
             TAR_GZ_NAME=$(basename "$TAR_GZ")
-            PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
             DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/${VERSION}/${TAR_GZ_NAME}"
-
-            cat > "$BUNDLE_DIR/latest.json" <<EOJSON
+            # Rewrite latest.json with correct download URLs and version
+            SIGNATURE=$(cat "$TAR_GZ_SIG" 2>/dev/null || echo "")
+            PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+            cat > "$LATEST_JSON" <<EOJSON
           {
             "version": "${VERSION#v}",
             "notes": "See the assets to download and install this version.",
@@ -219,15 +139,15 @@ jobs:
             }
           }
           EOJSON
-            echo "Generated latest.json"
+            echo "Updated latest.json with release URLs"
           fi
 
-          # Create draft release
+          # Collect upload files
           UPLOAD_FILES=""
           [ -f "$DMG" ] && UPLOAD_FILES="$UPLOAD_FILES $DMG"
           [ -f "$TAR_GZ" ] && UPLOAD_FILES="$UPLOAD_FILES $TAR_GZ"
           [ -f "$TAR_GZ_SIG" ] && UPLOAD_FILES="$UPLOAD_FILES $TAR_GZ_SIG"
-          [ -f "$BUNDLE_DIR/latest.json" ] && UPLOAD_FILES="$UPLOAD_FILES $BUNDLE_DIR/latest.json"
+          [ -f "$LATEST_JSON" ] && UPLOAD_FILES="$UPLOAD_FILES $LATEST_JSON"
 
           gh release create "$VERSION" \
             --title "MailVault v${VERSION#v}" \

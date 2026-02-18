@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.4.5] - 2026-02-18
+
+### Fixed
+- Sidecar crashing in sandboxed release builds — sidecar now signed with dedicated entitlements (no sandbox, JIT allowed) while main app keeps App Sandbox; signing order corrected (sidecar first, no `--deep`)
+
 ## [1.4.4] - 2026-02-18
 
 ### Fixed

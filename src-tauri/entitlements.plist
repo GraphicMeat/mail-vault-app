@@ -6,7 +6,7 @@
     <key>com.apple.security.app-sandbox</key>
     <true/>
 
-    <!-- Required for notarization and sidecar -->
+    <!-- Required for Bun-compiled sidecar (JIT) under hardened runtime + sandbox -->
     <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
     <true/>
     <key>com.apple.security.cs.allow-jit</key>
@@ -14,15 +14,9 @@
     <key>com.apple.security.cs.disable-library-validation</key>
     <true/>
 
-    <!-- Hardened Runtime -->
-    <key>com.apple.security.hardened-runtime</key>
-    <true/>
-
-    <!-- Network access for IMAP/SMTP -->
+    <!-- Network access for IMAP/SMTP and sidecar server -->
     <key>com.apple.security.network.client</key>
     <true/>
-
-    <!-- Allow sidecar server to listen on localhost -->
     <key>com.apple.security.network.server</key>
     <true/>
 

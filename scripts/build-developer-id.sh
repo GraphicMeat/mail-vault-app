@@ -1,21 +1,18 @@
 #!/bin/bash
 
 # MailVault - Developer ID Build & Notarization Script
-# Use this for distributing the app outside the Mac App Store
+# Used for both local builds and CI (GitHub Actions)
 #
-# Prerequisites:
-# 1. Apple Developer Program membership ($99/year)
-# 2. "Developer ID Application" certificate installed in Keychain
-# 3. "Developer ID Installer" certificate (for pkg) installed in Keychain
-# 4. App-specific password for notarization
+# Usage:
+#   Local:  source scripts/signing-config.sh && bash scripts/build-developer-id.sh
+#   CI:     Set env vars and run: bash scripts/build-developer-id.sh
 #
-# Setup:
-# 1. Create an app-specific password at https://appleid.apple.com
-# 2. Store it in keychain:
-#    xcrun notarytool store-credentials "notarytool-profile" \
-#      --apple-id "your@email.com" \
-#      --team-id "YOUR_TEAM_ID" \
-#      --password "app-specific-password"
+# Environment variables:
+#   BUILD_TARGET        - Tauri build target (e.g. "universal-apple-darwin"). Default: local arch
+#   SKIP_SERVER_BUILD   - Set to "true" to skip sidecar build (CI builds it separately)
+#   SIGNING_IDENTITY    - Signing identity string (CI). Local uses certificate lookup.
+#   CI                  - Set to "true" to skip interactive prompts
+#   KEYCHAIN_PATH       - Path to keychain containing signing certificate (CI)
 
 set -e
 
@@ -33,16 +30,11 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 # Change to project directory so relative paths work
 cd "$PROJECT_DIR"
 
-# Load signing configuration
+# Load signing configuration (local only — CI sets env vars directly)
 CONFIG_FILE="$SCRIPT_DIR/signing-config.sh"
 if [ -f "$CONFIG_FILE" ]; then
     source "$CONFIG_FILE"
     echo -e "${GREEN}✅ Loaded signing config from $CONFIG_FILE${NC}"
-else
-    echo -e "${YELLOW}⚠️  No signing config found at $CONFIG_FILE${NC}"
-    echo "   Copy the example and fill in your credentials:"
-    echo "   cp scripts/signing-config.example.sh scripts/signing-config.sh"
-    echo ""
 fi
 
 echo ""
@@ -60,28 +52,52 @@ NOTARYTOOL_PROFILE="${NOTARYTOOL_PROFILE:-notarytool-profile}"
 # Get version from package.json
 VERSION=$(grep '"version"' package.json | head -1 | sed 's/.*"version": *"\([^"]*\)".*/\1/')
 
-# Check for signing identity - use hash to avoid ambiguity with duplicate certificates
-echo -e "${YELLOW}🔍 Looking for Developer ID certificates...${NC}"
-# Filter by TEAM_ID from signing config to get the correct certificate
-CERT_INFO=$(security find-identity -v -p codesigning | grep "Developer ID Application" | grep "($TEAM_ID)" | head -1)
-SIGNING_HASH=$(echo "$CERT_INFO" | awk '{print $2}')
-SIGNING_NAME=$(echo "$CERT_INFO" | sed 's/.*"\(.*\)".*/\1/')
-
-if [ -z "$SIGNING_HASH" ]; then
-    echo -e "${RED}❌ No 'Developer ID Application' certificate found!${NC}"
-    echo ""
-    echo "   To create one:"
-    echo "   1. Go to https://developer.apple.com/account/resources/certificates"
-    echo "   2. Create a 'Developer ID Application' certificate"
-    echo "   3. Download and install it in Keychain Access"
-    echo ""
-    exit 1
+# Determine build target and output paths
+if [ -n "$BUILD_TARGET" ]; then
+    TAURI_ARGS="--target $BUILD_TARGET"
+    TARGET_DIR="src-tauri/target/$BUILD_TARGET/release"
+else
+    TAURI_ARGS=""
+    TARGET_DIR="src-tauri/target/release"
 fi
 
-echo -e "${GREEN}✅ Found: $SIGNING_NAME${NC}"
-echo -e "   Using certificate hash: ${SIGNING_HASH}"
+# ── Signing Identity ────────────────────────────────────────────────
 
-# Check for Tauri updater signing key
+echo -e "${YELLOW}🔍 Looking for Developer ID certificates...${NC}"
+
+if [ -n "$SIGNING_IDENTITY" ]; then
+    # CI: use provided identity directly
+    SIGNING_ID="$SIGNING_IDENTITY"
+    echo -e "${GREEN}✅ Using signing identity from environment${NC}"
+else
+    # Local: find certificate by team ID
+    CERT_INFO=$(security find-identity -v -p codesigning | grep "Developer ID Application" | grep "($TEAM_ID)" | head -1)
+    SIGNING_ID=$(echo "$CERT_INFO" | awk '{print $2}')
+    SIGNING_NAME=$(echo "$CERT_INFO" | sed 's/.*"\(.*\)".*/\1/')
+
+    if [ -z "$SIGNING_ID" ]; then
+        echo -e "${RED}❌ No 'Developer ID Application' certificate found!${NC}"
+        echo ""
+        echo "   To create one:"
+        echo "   1. Go to https://developer.apple.com/account/resources/certificates"
+        echo "   2. Create a 'Developer ID Application' certificate"
+        echo "   3. Download and install it in Keychain Access"
+        echo ""
+        exit 1
+    fi
+
+    echo -e "${GREEN}✅ Found: $SIGNING_NAME${NC}"
+    echo -e "   Using certificate hash: ${SIGNING_ID}"
+fi
+
+# Build codesign args (add --keychain if specified)
+KEYCHAIN_ARG=""
+if [ -n "$KEYCHAIN_PATH" ]; then
+    KEYCHAIN_ARG="--keychain $KEYCHAIN_PATH"
+fi
+
+# ── Tauri Updater Key ──────────────────────────────────────────────
+
 echo ""
 echo -e "${YELLOW}🔍 Checking Tauri updater signing key...${NC}"
 if [ -n "$TAURI_PRIVATE_KEY" ]; then
@@ -89,17 +105,28 @@ if [ -n "$TAURI_PRIVATE_KEY" ]; then
     UPDATER_SIGN=true
 else
     echo -e "${YELLOW}⚠️  TAURI_PRIVATE_KEY not set — updater artifacts will NOT be signed${NC}"
-    echo "   To enable, add your signing key to scripts/signing-config.sh"
-    echo "   or generate one with: npx @tauri-apps/cli signer generate -w ~/.tauri/mailvault.key"
     UPDATER_SIGN=false
 fi
 
-# Check for notarytool credentials
+# ── Notarization Check ─────────────────────────────────────────────
+
 echo ""
 echo -e "${YELLOW}🔍 Checking notarization credentials...${NC}"
-if xcrun notarytool history --keychain-profile "$NOTARYTOOL_PROFILE" &>/dev/null; then
+
+if [ "$CI" = "true" ]; then
+    # CI: use direct credentials (APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID)
+    if [ -n "$APPLE_ID" ] && [ -n "$APPLE_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
+        echo -e "${GREEN}✅ Notarization credentials found (CI direct auth)${NC}"
+        NOTARIZE=true
+        NOTARIZE_METHOD="direct"
+    else
+        echo -e "${YELLOW}⚠️  Missing APPLE_ID/APPLE_PASSWORD/APPLE_TEAM_ID — skipping notarization${NC}"
+        NOTARIZE=false
+    fi
+elif xcrun notarytool history --keychain-profile "$NOTARYTOOL_PROFILE" &>/dev/null; then
     echo -e "${GREEN}✅ Notarization credentials found (profile: $NOTARYTOOL_PROFILE)${NC}"
     NOTARIZE=true
+    NOTARIZE_METHOD="profile"
 else
     echo -e "${YELLOW}⚠️  Notarization credentials not found${NC}"
 
@@ -119,6 +146,7 @@ else
                 --password "$APP_SPECIFIC_PASSWORD"
             echo -e "${GREEN}✅ Credentials stored${NC}"
             NOTARIZE=true
+            NOTARIZE_METHOD="profile"
         else
             NOTARIZE=false
         fi
@@ -127,12 +155,6 @@ else
         echo "   To set up notarization:"
         echo "   1. Edit scripts/signing-config.sh with your credentials"
         echo "   2. Run this script again"
-        echo ""
-        echo "   Or manually run:"
-        echo "      xcrun notarytool store-credentials \"$NOTARYTOOL_PROFILE\" \\"
-        echo "        --apple-id \"your@email.com\" \\"
-        echo "        --team-id \"YOUR_TEAM_ID\" \\"
-        echo "        --password \"your-app-specific-password\""
         echo ""
         read -p "   Continue without notarization? (y/n) " -n 1 -r
         echo
@@ -143,21 +165,28 @@ else
     fi
 fi
 
-# Build the app
+# ── Build ──────────────────────────────────────────────────────────
+
 echo ""
 echo -e "${YELLOW}🔨 Building the application...${NC}"
-npm run build:server
-npm run tauri build
 
-# Paths
-APP_PATH="src-tauri/target/release/bundle/macos/${APP_NAME}.app"
+if [ "$SKIP_SERVER_BUILD" != "true" ]; then
+    npm run build:server
+fi
+
+npm run tauri build -- $TAURI_ARGS
+
+# ── Paths ──────────────────────────────────────────────────────────
+
+APP_PATH="$TARGET_DIR/bundle/macos/${APP_NAME}.app"
 
 if [ ! -d "$APP_PATH" ]; then
     echo -e "${RED}❌ App bundle not found at $APP_PATH${NC}"
     exit 1
 fi
 
-# Sign the app
+# ── Sign ───────────────────────────────────────────────────────────
+
 echo ""
 echo -e "${YELLOW}🔏 Signing the application...${NC}"
 
@@ -168,7 +197,7 @@ echo "   Signing nested components..."
 for framework in "$APP_PATH/Contents/Frameworks"/*.framework; do
     if [ -d "$framework" ]; then
         codesign --force --options runtime --timestamp \
-            --sign "$SIGNING_HASH" \
+            --sign "$SIGNING_ID" $KEYCHAIN_ARG \
             "$framework"
         echo "   ✓ Signed $(basename "$framework")"
     fi
@@ -178,7 +207,7 @@ done
 for dylib in "$APP_PATH/Contents/Frameworks"/*.dylib; do
     if [ -f "$dylib" ]; then
         codesign --force --options runtime --timestamp \
-            --sign "$SIGNING_HASH" \
+            --sign "$SIGNING_ID" $KEYCHAIN_ARG \
             "$dylib"
         echo "   ✓ Signed $(basename "$dylib")"
     fi
@@ -190,7 +219,7 @@ SIDECAR_ENTITLEMENTS="src-tauri/entitlements-sidecar.plist"
 if [ -f "$SIDECAR_PATH" ]; then
     codesign --force --options runtime --timestamp \
         --entitlements "$SIDECAR_ENTITLEMENTS" \
-        --sign "$SIGNING_HASH" \
+        --sign "$SIGNING_ID" $KEYCHAIN_ARG \
         "$SIDECAR_PATH"
     echo "   ✓ Signed sidecar binary (with sidecar entitlements)"
 fi
@@ -199,7 +228,7 @@ fi
 echo "   Signing main app bundle..."
 codesign --force --options runtime --timestamp \
     --entitlements "$ENTITLEMENTS" \
-    --sign "$SIGNING_HASH" \
+    --sign "$SIGNING_ID" $KEYCHAIN_ARG \
     "$APP_PATH"
 
 echo -e "${GREEN}✅ Application signed${NC}"
@@ -210,16 +239,17 @@ echo -e "${YELLOW}🔍 Verifying signature...${NC}"
 codesign --verify --verbose "$APP_PATH"
 echo -e "${GREEN}✅ Signature verified${NC}"
 
-# Create a signed DMG with Applications folder
+# ── DMG ────────────────────────────────────────────────────────────
+
 echo ""
 echo -e "${YELLOW}📦 Creating signed DMG with Applications shortcut...${NC}"
 
-# Create the DMG output directory if it doesn't exist (Tauri no longer creates it)
-mkdir -p "src-tauri/target/release/bundle/dmg"
+DMG_DIR="$TARGET_DIR/bundle/dmg"
+mkdir -p "$DMG_DIR"
 
-SIGNED_DMG="src-tauri/target/release/bundle/dmg/${APP_NAME}-v${VERSION}.dmg"
-DMG_TEMP="src-tauri/target/release/bundle/dmg/dmg-temp"
-DMG_RW="src-tauri/target/release/bundle/dmg/${APP_NAME}-rw.dmg"
+SIGNED_DMG="$DMG_DIR/${APP_NAME}-v${VERSION}.dmg"
+DMG_TEMP="$DMG_DIR/dmg-temp"
+DMG_RW="$DMG_DIR/${APP_NAME}-rw.dmg"
 
 # Remove old files and ensure clean state
 rm -f "$SIGNED_DMG" "$DMG_RW"
@@ -248,13 +278,6 @@ if ! hdiutil create -volname "$APP_NAME" \
     "$DMG_RW" 2>&1; then
     echo ""
     echo -e "${RED}❌ DMG creation failed!${NC}"
-    echo ""
-    echo "   This is often caused by Terminal not having Full Disk Access."
-    echo "   To fix:"
-    echo "   1. Open System Settings → Privacy & Security → Full Disk Access"
-    echo "   2. Add Terminal (or your IDE) to the list"
-    echo "   3. Restart Terminal and try again"
-    echo ""
     rm -rf "$DMG_TEMP"
     exit 1
 fi
@@ -274,7 +297,7 @@ if [ -d "$MOUNT_DIR" ]; then
     # Wait for Finder to register the volume
     sleep 2
 
-    # Use AppleScript to set Finder window appearance (matches Tauri's styled DMG)
+    # Use AppleScript to set Finder window appearance
     osascript <<APPLESCRIPT
 tell application "Finder"
     tell disk "${VOL_NAME}"
@@ -310,20 +333,29 @@ rm -f "$DMG_RW"
 
 # Sign the DMG
 codesign --force --timestamp \
-    --sign "$SIGNING_HASH" \
+    --sign "$SIGNING_ID" $KEYCHAIN_ARG \
     "$SIGNED_DMG"
 
 echo -e "${GREEN}✅ Signed DMG created with styled layout${NC}"
 
-# Notarize
+# ── Notarize ───────────────────────────────────────────────────────
+
 if [ "$NOTARIZE" = true ]; then
     echo ""
     echo -e "${YELLOW}📤 Submitting for notarization...${NC}"
     echo "   This may take several minutes..."
 
-    xcrun notarytool submit "$SIGNED_DMG" \
-        --keychain-profile "$NOTARYTOOL_PROFILE" \
-        --wait
+    if [ "$NOTARIZE_METHOD" = "direct" ]; then
+        xcrun notarytool submit "$SIGNED_DMG" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+    else
+        xcrun notarytool submit "$SIGNED_DMG" \
+            --keychain-profile "$NOTARYTOOL_PROFILE" \
+            --wait
+    fi
 
     # Staple the notarization ticket
     echo ""
@@ -339,8 +371,9 @@ if [ "$NOTARIZE" = true ]; then
     echo -e "${GREEN}✅ Notarization verified${NC}"
 fi
 
-# Tauri updater artifacts
-UPDATER_BUNDLE_DIR="src-tauri/target/release/bundle/macos"
+# ── Updater Artifacts ──────────────────────────────────────────────
+
+UPDATER_BUNDLE_DIR="$TARGET_DIR/bundle/macos"
 UPDATE_TAR_GZ=""
 UPDATE_SIG=""
 
@@ -348,56 +381,55 @@ if [ "$UPDATER_SIGN" = true ]; then
     echo ""
     echo -e "${YELLOW}🔄 Processing Tauri updater artifacts...${NC}"
 
-    # Find the updater .tar.gz (created by tauri build when createUpdaterArtifacts is true)
-    UPDATE_TAR_GZ=$(find "$UPDATER_BUNDLE_DIR" -name "*.tar.gz" -not -name "*.sig" 2>/dev/null | head -1)
-    UPDATE_SIG=$(find "$UPDATER_BUNDLE_DIR" -name "*.tar.gz.sig" 2>/dev/null | head -1)
+    UPDATE_TAR_GZ="$UPDATER_BUNDLE_DIR/${APP_NAME}.app.tar.gz"
 
-    if [ -n "$UPDATE_TAR_GZ" ] && [ -f "$UPDATE_TAR_GZ" ]; then
-        echo -e "${GREEN}✅ Found updater archive: $(basename "$UPDATE_TAR_GZ")${NC}"
+    # Always recreate .tar.gz from the correctly signed app (Tauri's was signed differently)
+    echo "   Creating updater archive from signed app..."
+    rm -f "$UPDATE_TAR_GZ" "${UPDATE_TAR_GZ}.sig"
+    cd "$UPDATER_BUNDLE_DIR"
+    tar -czf "${APP_NAME}.app.tar.gz" "${APP_NAME}.app"
+    cd "$PROJECT_DIR"
 
-        if [ -n "$UPDATE_SIG" ] && [ -f "$UPDATE_SIG" ]; then
-            echo -e "${GREEN}✅ Found updater signature: $(basename "$UPDATE_SIG")${NC}"
-        else
-            echo -e "${YELLOW}⚠️  No .sig file found — signing manually...${NC}"
-            npx @tauri-apps/cli signer sign "$UPDATE_TAR_GZ" --private-key "$TAURI_PRIVATE_KEY" --password "$TAURI_KEY_PASSWORD" 2>&1
-            UPDATE_SIG="${UPDATE_TAR_GZ}.sig"
-            if [ -f "$UPDATE_SIG" ]; then
-                echo -e "${GREEN}✅ Updater signature created${NC}"
-            else
-                echo -e "${RED}❌ Failed to create updater signature${NC}"
-                UPDATER_SIGN=false
-            fi
-        fi
+    echo -e "${GREEN}✅ Created updater archive: $(basename "$UPDATE_TAR_GZ")${NC}"
 
-        # Copy updater artifacts next to DMG for easy access
-        UPDATER_OUTPUT_DIR="src-tauri/target/release/bundle/dmg"
-        cp "$UPDATE_TAR_GZ" "$UPDATER_OUTPUT_DIR/"
-        cp "$UPDATE_SIG" "$UPDATER_OUTPUT_DIR/" 2>/dev/null
+    # Sign with Tauri updater key
+    echo "   Signing updater archive..."
+    npx @tauri-apps/cli signer sign "$UPDATE_TAR_GZ" \
+        --private-key "$TAURI_PRIVATE_KEY" \
+        --password "$TAURI_KEY_PASSWORD" 2>&1
+    UPDATE_SIG="${UPDATE_TAR_GZ}.sig"
 
-        # Generate latest.json for the updater endpoint
-        echo ""
-        echo -e "${YELLOW}📝 Generating latest.json updater manifest...${NC}"
+    if [ -f "$UPDATE_SIG" ]; then
+        echo -e "${GREEN}✅ Updater signature created${NC}"
+    else
+        echo -e "${RED}❌ Failed to create updater signature${NC}"
+        UPDATER_SIGN=false
+    fi
 
-        SIGNATURE=$(cat "$UPDATE_SIG" 2>/dev/null || echo "")
-        PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-        TAR_GZ_NAME=$(basename "$UPDATE_TAR_GZ")
-        ARCH=$(uname -m)
+    # Copy updater artifacts next to DMG for easy access
+    cp "$UPDATE_TAR_GZ" "$DMG_DIR/"
+    cp "$UPDATE_SIG" "$DMG_DIR/" 2>/dev/null
 
-        # Map architecture to Tauri target triple
-        if [ "$ARCH" = "arm64" ]; then
-            PLATFORM="darwin-aarch64"
-        else
-            PLATFORM="darwin-x86_64"
-        fi
+    # Generate latest.json for the updater endpoint
+    echo ""
+    echo -e "${YELLOW}📝 Generating latest.json updater manifest...${NC}"
 
-        LATEST_JSON="$UPDATER_OUTPUT_DIR/latest.json"
-        cat > "$LATEST_JSON" <<EOJSON
+    SIGNATURE=$(cat "$UPDATE_SIG" 2>/dev/null || echo "")
+    PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    TAR_GZ_NAME=$(basename "$UPDATE_TAR_GZ")
+
+    LATEST_JSON="$DMG_DIR/latest.json"
+    cat > "$LATEST_JSON" <<EOJSON
 {
   "version": "${VERSION}",
   "notes": "MailVault v${VERSION}",
   "pub_date": "${PUB_DATE}",
   "platforms": {
-    "${PLATFORM}": {
+    "darwin-aarch64": {
+      "signature": "${SIGNATURE}",
+      "url": "https://github.com/GraphicMeat/mail-vault-app/releases/download/v${VERSION}/${TAR_GZ_NAME}"
+    },
+    "darwin-x86_64": {
       "signature": "${SIGNATURE}",
       "url": "https://github.com/GraphicMeat/mail-vault-app/releases/download/v${VERSION}/${TAR_GZ_NAME}"
     }
@@ -405,15 +437,11 @@ if [ "$UPDATER_SIGN" = true ]; then
 }
 EOJSON
 
-        echo -e "${GREEN}✅ latest.json generated${NC}"
-    else
-        echo -e "${YELLOW}⚠️  No updater .tar.gz found in $UPDATER_BUNDLE_DIR${NC}"
-        echo "   Ensure 'createUpdaterArtifacts' is set to true in tauri.conf.json"
-        UPDATER_SIGN=false
-    fi
+    echo -e "${GREEN}✅ latest.json generated${NC}"
 fi
 
-# Summary
+# ── Summary ────────────────────────────────────────────────────────
+
 echo ""
 echo -e "${GREEN}════════════════════════════════════════════════════════════${NC}"
 echo -e "${GREEN}  Build Complete!${NC}"
@@ -423,8 +451,8 @@ echo "📦 Output:"
 echo "   App:  $APP_PATH"
 echo "   DMG:  $SIGNED_DMG"
 if [ "$UPDATER_SIGN" = true ] && [ -n "$UPDATE_TAR_GZ" ]; then
-    echo "   Update archive:   $UPDATER_OUTPUT_DIR/$(basename "$UPDATE_TAR_GZ")"
-    echo "   Update signature: $UPDATER_OUTPUT_DIR/$(basename "$UPDATE_SIG")"
+    echo "   Update archive:   $DMG_DIR/$(basename "$UPDATE_TAR_GZ")"
+    echo "   Update signature: $DMG_DIR/$(basename "$UPDATE_SIG")"
     echo "   Update manifest:  $LATEST_JSON"
 fi
 echo ""
@@ -439,9 +467,11 @@ if [ "$UPDATER_SIGN" = true ]; then
 fi
 echo ""
 
-# Open output folder
-read -p "Open output folder? (y/n) " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    open "src-tauri/target/release/bundle/dmg"
+# Open output folder (local only)
+if [ "$CI" != "true" ]; then
+    read -p "Open output folder? (y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        open "$DMG_DIR"
+    fi
 fi
