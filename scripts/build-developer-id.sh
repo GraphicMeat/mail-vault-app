@@ -176,6 +176,9 @@ fi
 
 npm run tauri build -- $TAURI_ARGS
 
+# Remove Tauri's unsigned DMG (we create our own signed DMG below)
+rm -f "$TARGET_DIR/bundle/dmg"/*.dmg
+
 # ── Paths ──────────────────────────────────────────────────────────
 
 APP_PATH="$TARGET_DIR/bundle/macos/${APP_NAME}.app"

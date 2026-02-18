@@ -114,9 +114,10 @@ jobs:
           BUNDLE_DIR="src-tauri/target/universal-apple-darwin/release/bundle"
           DMG_DIR="$BUNDLE_DIR/dmg"
 
-          # Find artifacts
-          DMG=$(ls "$DMG_DIR"/*.dmg 2>/dev/null | head -1)
-          TAR_GZ=$(ls "$DMG_DIR"/*.tar.gz 2>/dev/null | grep -v '.sig' | head -1)
+          # Find our signed artifacts (not Tauri's unsigned ones)
+          VERSION_NUM="${VERSION#v}"
+          DMG="$DMG_DIR/MailVault-v${VERSION_NUM}.dmg"
+          TAR_GZ="$DMG_DIR/MailVault.app.tar.gz"
           TAR_GZ_SIG="${TAR_GZ}.sig"
           LATEST_JSON="$DMG_DIR/latest.json"
 
