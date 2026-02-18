@@ -45,7 +45,7 @@ export function Onboarding() {
   return (
     <div className="h-screen bg-mail-bg flex items-center justify-center p-4 pt-8">
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 1, y: 0 }}
         animate={{ opacity: 1, y: 0 }}
         className="max-w-lg w-full"
       >

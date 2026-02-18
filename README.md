@@ -110,9 +110,9 @@ Emails are saved as `.eml` files in Maildir format on your disk.
 
 | Icon | Meaning |
 |------|---------|
-| 💾 (green HDD) | Email is saved locally |
+| 🖥️ (green HDD) | Email is archived locally |
 | ☁️ (blue cloud) | Email exists only on server |
-| 🟡 (yellow dot) | Email is local-only (deleted from server) |
+| 🖥️ (yellow HDD) | Email is local-only (deleted from server) |
 
 ### View Modes
 

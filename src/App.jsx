@@ -297,7 +297,7 @@ function App() {
     return (
       <div className="h-screen bg-mail-bg flex items-center justify-center pt-8">
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 1, y: 0 }}
           animate={{ opacity: 1, y: 0 }}
           className="text-center"
         >

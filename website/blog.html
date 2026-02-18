@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blog - MailVault</title>
+  <meta name="description" content="Behind the scenes of building MailVault. Development updates, technical deep dives, and release notes.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/blog.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/blog.html">
+  <meta property="og:title" content="Blog - MailVault">
+  <meta property="og:description" content="Behind the scenes of building MailVault. Development updates, technical deep dives, and release notes.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Blog - MailVault">
+  <meta name="twitter:description" content="Behind the scenes of building MailVault. Development updates, technical deep dives, and release notes.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc',
+              400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca',
+              800: '#3730a3', 900: '#312e81',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .gradient-text {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .gradient-bg { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); }
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/" class="flex items-center gap-2">
+          <img src="icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+        <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" title="Toggle theme">
+          <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+          <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <h1 class="text-4xl font-bold mb-2">Blog</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-12">Behind the scenes of building MailVault</p>
+
+      <!-- Blog Post: Sandbox Signing -->
+      <article id="sandbox-signing-saga" class="mb-16">
+        <div class="mb-6">
+          <time datetime="2026-02-18" class="text-sm text-primary-500 font-medium">February 18, 2026</time>
+          <h2 class="text-2xl font-bold mt-1 mb-3">The macOS Sandbox Signing Saga (or Why v1.4.0 Through v1.4.5 Exist)</h2>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>5 min read</span>
+          </div>
+        </div>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            If you looked at our <a href="/changelog.html" class="text-primary-500 hover:text-primary-600 underline">changelog</a> today and noticed six patch releases in a single day, you might be wondering what happened. The short answer: macOS code signing and App Sandbox nearly broke us. Here's the full story.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">How MailVault Works Under the Hood</h3>
+
+          <p>
+            MailVault is a <a href="https://v2.tauri.app" class="text-primary-500 hover:text-primary-600 underline">Tauri v2</a> desktop app. The frontend is React running in a native webview, and the backend is a Node.js Express server compiled into a native binary using <a href="https://bun.sh" class="text-primary-500 hover:text-primary-600 underline">Bun</a>. This binary (called a "sidecar") runs alongside the main app and handles all IMAP/SMTP communication.
+          </p>
+
+          <p>
+            For macOS distribution, Apple requires apps to be signed with a Developer ID certificate and notarized. We also enable <strong>App Sandbox</strong> &mdash; Apple's security layer that restricts what the app can access on your system. It's required for the Mac App Store and is good practice for any desktop app.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">The Problem</h3>
+
+          <p>
+            After releasing v1.4.0, we discovered that the sidecar server wasn't starting in release builds. The app launched fine, but the backend was silently crashing with exit code 133 (SIGTRAP). Everything worked perfectly in development &mdash; only the signed, sandboxed release build was affected.
+          </p>
+
+          <p>
+            It took several iterations to peel back the layers:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>v1.4.0</strong> &mdash; Server bound to <code>0.0.0.0</code> but the frontend connected to <code>localhost</code>, causing IPv4/IPv6 mismatch. Fixed by binding explicitly to <code>127.0.0.1</code>.</li>
+            <li><strong>v1.4.1</strong> &mdash; The "Add Account" modal used a raw <code>fetch('/api/test-connection')</code> instead of the API helper. In Tauri release builds, the webview origin is <code>tauri://localhost</code>, not <code>http://localhost</code> &mdash; so relative URLs resolve to the wrong place.</li>
+            <li><strong>v1.4.2</strong> &mdash; Missing <code>com.apple.security.network.server</code> entitlement. The sandbox blocked the sidecar from listening on a port.</li>
+            <li><strong>v1.4.3</strong> &mdash; We had shell-based process cleanup (<code>lsof</code>, <code>kill</code>) that's blocked inside App Sandbox. Replaced with Tauri's <code>CommandChild</code> handle.</li>
+            <li><strong>v1.4.4</strong> &mdash; The real culprit: <strong>Bun-compiled binaries need JIT</strong> (Just-In-Time compilation). The JIT compiler allocates executable memory at runtime. While macOS has entitlements to allow this (<code>com.apple.security.cs.allow-jit</code>), Tauri signs all binaries in the app bundle with the <strong>same entitlements</strong> using <code>--deep</code>. The sidecar ended up with App Sandbox entitlements, which blocked JIT even with the allow-jit flag present.</li>
+            <li><strong>v1.4.5</strong> &mdash; Fixed the signing pipeline. The sidecar is now signed separately with its own entitlements (no App Sandbox, JIT allowed). The main app keeps App Sandbox. Signing order matters: sidecar first, then the main app bundle <em>without</em> <code>--deep</code> to preserve the sidecar's entitlements. Also caught that our CI pipeline was uploading Tauri's auto-generated unsigned DMG instead of our properly signed one.</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">The Fix</h3>
+
+          <p>
+            The solution has two parts:
+          </p>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li><strong>Separate entitlements</strong> &mdash; The sidecar gets <code>entitlements-sidecar.plist</code> (JIT + network, no sandbox). The main app gets <code>entitlements.plist</code> (sandbox + JIT + network).</li>
+            <li><strong>Correct signing order</strong> &mdash; Sign the sidecar first with its own entitlements, then sign the main <code>.app</code> bundle without <code>--deep</code>. Using <code>--deep</code> would recursively re-sign everything inside the bundle, overwriting the sidecar's entitlements.</li>
+          </ol>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">How to Verify the Signing Yourself</h3>
+
+          <p>
+            If you want to verify that MailVault is properly signed and notarized on your machine, open Terminal and run these commands:
+          </p>
+
+          <p><strong>1. Verify the app signature:</strong></p>
+
+          <pre>codesign --verify --verbose /Applications/MailVault.app</pre>
+
+          <p>You should see:</p>
+          <pre>/Applications/MailVault.app: valid on disk
+/Applications/MailVault.app: satisfies its Designated Requirement</pre>
+
+          <p><strong>2. Check the main app's entitlements:</strong></p>
+
+          <pre>codesign -d --entitlements - /Applications/MailVault.app</pre>
+
+          <p>Look for <code>com.apple.security.app-sandbox</code> set to <code>true</code> &mdash; this confirms the app runs in a sandbox.</p>
+
+          <p><strong>3. Check the sidecar's entitlements:</strong></p>
+
+          <pre>codesign -d --entitlements - /Applications/MailVault.app/Contents/MacOS/mailvault-server</pre>
+
+          <p>The sidecar should have <code>com.apple.security.cs.allow-jit</code> but should <strong>not</strong> have <code>com.apple.security.app-sandbox</code>.</p>
+
+          <p><strong>4. Verify notarization:</strong></p>
+
+          <pre>spctl --assess --type execute -v /Applications/MailVault.app</pre>
+
+          <p>You should see:</p>
+          <pre>/Applications/MailVault.app: accepted
+source=Notarized Developer ID</pre>
+
+          <p><strong>5. Check the DMG notarization (before installing):</strong></p>
+
+          <pre>spctl --assess --type open --context context:primary-signature -v ~/Downloads/MailVault-v1.4.5.dmg</pre>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Lessons Learned</h3>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Test release builds early.</strong> Development builds skip code signing and sandboxing entirely. The gap between "works in dev" and "works in release" can be enormous.</li>
+            <li><strong>Sidecars need special treatment.</strong> If you're bundling a Bun/Node/Deno compiled binary inside a Tauri app, it needs its own entitlements. Tauri doesn't support per-binary entitlements natively &mdash; you have to re-sign after the build.</li>
+            <li><strong><code>--deep</code> is dangerous.</strong> It's convenient but it overwrites all nested signatures with the same entitlements. If different binaries need different entitlements, sign them individually.</li>
+            <li><strong>One build script for local and CI.</strong> Having separate signing logic for local builds and CI caused the CI to upload the wrong (unsigned) DMG. Now both use the same script.</li>
+          </ul>
+
+          <p>
+            If you were affected by the broken releases, we apologize for the inconvenience. v1.4.5 is the stable, properly signed release. Your emails were never at risk &mdash; the issue was purely about the app binary not launching its backend server.
+          </p>
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex items-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacy Policy</a>
+          <a href="/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Terms of Service</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. All rights reserved.
+        </p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    // Initialize theme
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+  </script>
+
+</body>
+</html>

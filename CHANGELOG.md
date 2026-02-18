@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.4.6] - 2026-02-18
+
+### Fixed
+- Black screen on first launch on some Macs — Framer Motion animations starting at opacity 0 could stay invisible if animation engine failed in WKWebView
+- Added React error boundary with visible fallback UI for rendering crashes
+- Splash screen now only dismisses after React successfully renders (not before)
+- Added 10-second timeout fallback if app fails to load — shows reload button instead of blank screen
+
+### Added
+- Blog section on website with post about the v1.4.x signing saga
+
+### Changed
+- Updated README icon descriptions to match current UI
+
 ## [1.4.5] - 2026-02-18
 
 ### Fixed

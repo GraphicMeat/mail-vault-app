@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/schema.json",
   "productName": "MailVault",
-  "version": "1.4.5",
+  "version": "1.4.6",
   "identifier": "com.mailvault.app",
   "build": {
     "beforeBuildCommand": "npm run build",

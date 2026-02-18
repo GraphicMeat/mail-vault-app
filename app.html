@@ -24,16 +24,40 @@
       #splash.fade-out { opacity: 0; pointer-events: none; }
       #splash h1 { font-size: 2.25rem; font-weight: 700; color: #e4e4e7; }
       #splash h1 span { color: #6366f1; }
+      #splash .splash-error { display: none; color: #71717a; font-size: 0.8rem; margin-top: 1.5rem; }
+      #splash .splash-error button {
+        margin-top: 0.75rem; padding: 0.4rem 1.2rem; background: #6366f1;
+        color: white; border: none; border-radius: 0.4rem; cursor: pointer; font-size: 0.8rem;
+      }
+      #splash.splash-stuck .splash-error { display: block; }
       @media (prefers-color-scheme: light) {
         body { background: #f8fafc; }
         #splash { background: #f8fafc; }
         #splash h1 { color: #18181b; }
+        #splash .splash-error { color: #64748b; }
       }
     </style>
   </head>
   <body>
-    <div id="splash"><h1><span>Mail</span>Vault</h1></div>
+    <div id="splash">
+      <div>
+        <h1><span>Mail</span>Vault</h1>
+        <div class="splash-error">
+          <p>The app is taking longer than expected to load.</p>
+          <button onclick="window.location.reload()">Reload</button>
+        </div>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      // If splash is still showing after 10s, something went wrong with React
+      setTimeout(function() {
+        var splash = document.getElementById('splash');
+        if (splash && !splash.classList.contains('fade-out')) {
+          splash.classList.add('splash-stuck');
+        }
+      }, 10000);
+    </script>
   </body>
 </html>
