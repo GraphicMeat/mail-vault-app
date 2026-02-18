@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.4.9] - 2026-02-19
+
+### Fixed
+- "SecurityError: the operation is insecure" crash caused by Web Worker — WKWebView blocks `blob:` URL workers under the `tauri://` origin; replaced Web Worker with main-thread queue processor (no functionality lost, all I/O was already on the main thread)
+
 ## [1.4.8] - 2026-02-19
 
 ### Fixed

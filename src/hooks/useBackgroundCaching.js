@@ -5,9 +5,12 @@ import * as db from '../services/db';
 import * as api from '../services/api';
 
 export function useBackgroundCaching() {
-  const workerRef = useRef(null);
   const [isRunning, setIsRunning] = useState(false);
   const [progress, setProgress] = useState({ completed: 0, total: 0 });
+  const queueRef = useRef([]);
+  const stoppedRef = useRef(false);
+  const pausedRef = useRef(false);
+  const processingRef = useRef(false);
 
   const {
     activeAccountId,
@@ -20,81 +23,18 @@ export function useBackgroundCaching() {
 
   const { localCacheDurationMonths, cacheLimitMB } = useSettingsStore();
 
-  // Create worker on mount
-  useEffect(() => {
-    // Create worker from blob URL for better compatibility
-    const workerCode = `
-      let isPaused = false;
-      let isStopped = false;
-      let uidQueue = [];
-
-      const FETCH_DELAY = 500;
-      const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-      self.onmessage = function(event) {
-        const { type, payload } = event.data;
-
-        switch (type) {
-          case 'start':
-            isStopped = false;
-            isPaused = false;
-            uidQueue = [...payload.uids];
-            // Signal ready - main thread will handle actual fetching
-            self.postMessage({ type: 'ready', uids: uidQueue });
-            break;
-
-          case 'pause':
-            isPaused = true;
-            self.postMessage({ type: 'paused' });
-            break;
-
-          case 'resume':
-            isPaused = false;
-            self.postMessage({ type: 'resumed' });
-            break;
-
-          case 'stop':
-            isStopped = true;
-            uidQueue = [];
-            self.postMessage({ type: 'stopped' });
-            break;
-
-          case 'nextUid':
-            if (uidQueue.length > 0 && !isStopped && !isPaused) {
-              const uid = uidQueue.shift();
-              self.postMessage({ type: 'fetchUid', uid, remaining: uidQueue.length });
-            } else if (uidQueue.length === 0) {
-              self.postMessage({ type: 'done' });
-            }
-            break;
-        }
-      };
-    `;
-
-    const blob = new Blob([workerCode], { type: 'application/javascript' });
-    const workerUrl = URL.createObjectURL(blob);
-    workerRef.current = new Worker(workerUrl);
-
-    return () => {
-      if (workerRef.current) {
-        workerRef.current.terminate();
-        workerRef.current = null;
-      }
-      URL.revokeObjectURL(workerUrl);
-    };
-  }, []);
-
   // Handle online/offline status
   useEffect(() => {
     const handleOnline = () => {
-      if (workerRef.current && isRunning) {
-        workerRef.current.postMessage({ type: 'resume' });
+      if (pausedRef.current && isRunning) {
+        pausedRef.current = false;
+        processNext();
       }
     };
 
     const handleOffline = () => {
-      if (workerRef.current && isRunning) {
-        workerRef.current.postMessage({ type: 'pause' });
+      if (isRunning) {
+        pausedRef.current = true;
       }
     };
 
@@ -106,6 +46,55 @@ export function useBackgroundCaching() {
       window.removeEventListener('offline', handleOffline);
     };
   }, [isRunning]);
+
+  // Process next UID in queue
+  const processNext = useCallback(() => {
+    if (stoppedRef.current || pausedRef.current || processingRef.current) return;
+    if (queueRef.current.length === 0) {
+      // Done
+      console.log('[BackgroundCaching] Completed');
+      setIsRunning(false);
+
+      (async () => {
+        const accountId = useMailStore.getState().activeAccountId;
+        const mailbox = useMailStore.getState().activeMailbox;
+        const newSavedIds = await db.getSavedEmailIds(accountId, mailbox);
+        const newArchivedIds = await db.getArchivedEmailIds(accountId, mailbox);
+        const newLocalEmails = await db.getLocalEmails(accountId, mailbox);
+        useMailStore.setState({ savedEmailIds: newSavedIds, archivedEmailIds: newArchivedIds, localEmails: newLocalEmails });
+        useMailStore.getState().updateSortedEmails();
+      })();
+      return;
+    }
+
+    processingRef.current = true;
+    const uid = queueRef.current.shift();
+    const account = useMailStore.getState().accounts.find(a => a.id === useMailStore.getState().activeAccountId);
+    const mailbox = useMailStore.getState().activeMailbox;
+    const accountId = useMailStore.getState().activeAccountId;
+
+    (async () => {
+      try {
+        const fullEmail = await api.fetchEmail(account, uid, mailbox);
+        await db.saveEmail(fullEmail, accountId, mailbox);
+
+        const cacheKey = `${accountId}-${mailbox}-${uid}`;
+        useMailStore.getState().addToCache(cacheKey, fullEmail, useSettingsStore.getState().cacheLimitMB);
+
+        setProgress(prev => ({
+          completed: prev.completed + 1,
+          total: prev.total
+        }));
+
+        processingRef.current = false;
+        setTimeout(() => processNext(), 500);
+      } catch (error) {
+        console.error(`[BackgroundCaching] Failed to fetch email ${uid}:`, error);
+        processingRef.current = false;
+        setTimeout(() => processNext(), 1000);
+      }
+    })();
+  }, []);
 
   // Start background caching
   const startBackgroundCaching = useCallback(async () => {
@@ -120,14 +109,10 @@ export function useBackgroundCaching() {
     }
 
     // Filter emails that aren't already locally saved
-    // If localCacheDurationMonths is 0, cache all emails (no date cutoff)
     const emailsToCache = emails.filter(email => {
       if (savedEmailIds.has(email.uid)) return false;
-
-      // If duration is 0, cache all emails
       if (localCacheDurationMonths === 0) return true;
 
-      // Otherwise, only cache emails within the duration
       const cutoffDate = new Date();
       cutoffDate.setMonth(cutoffDate.getMonth() - localCacheDurationMonths);
       const emailDate = new Date(email.date || email.internalDate);
@@ -154,74 +139,15 @@ export function useBackgroundCaching() {
     }
 
     console.log(`[BackgroundCaching] Starting to cache ${uidsToFetch.length} emails`);
+    stoppedRef.current = false;
+    pausedRef.current = false;
+    processingRef.current = false;
+    queueRef.current = [...uidsToFetch];
     setIsRunning(true);
     setProgress({ completed: 0, total: uidsToFetch.length });
 
-    // Set up worker message handler
-    const handleMessage = async (event) => {
-      const { type, uid, remaining } = event.data;
-
-      switch (type) {
-        case 'fetchUid':
-          try {
-            // Fetch full email from server
-            const fullEmail = await api.fetchEmail(account, uid, activeMailbox);
-
-            // Save to Maildir
-            await db.saveEmail(fullEmail, activeAccountId, activeMailbox);
-
-            // Add to in-memory cache
-            const cacheKey = `${activeAccountId}-${activeMailbox}-${uid}`;
-            addToCache(cacheKey, fullEmail, cacheLimitMB);
-
-            setProgress(prev => ({
-              completed: prev.completed + 1,
-              total: prev.total
-            }));
-
-            // Small delay then request next
-            setTimeout(() => {
-              if (workerRef.current) {
-                workerRef.current.postMessage({ type: 'nextUid' });
-              }
-            }, 500);
-          } catch (error) {
-            console.error(`[BackgroundCaching] Failed to fetch email ${uid}:`, error);
-            // Continue with next
-            setTimeout(() => {
-              if (workerRef.current) {
-                workerRef.current.postMessage({ type: 'nextUid' });
-              }
-            }, 1000);
-          }
-          break;
-
-        case 'done':
-          console.log('[BackgroundCaching] Completed');
-          setIsRunning(false);
-
-          // Update savedEmailIds and archivedEmailIds in store
-          const newSavedIds = await db.getSavedEmailIds(activeAccountId, activeMailbox);
-          const newArchivedIds = await db.getArchivedEmailIds(activeAccountId, activeMailbox);
-          const newLocalEmails = await db.getLocalEmails(activeAccountId, activeMailbox);
-          useMailStore.setState({ savedEmailIds: newSavedIds, archivedEmailIds: newArchivedIds, localEmails: newLocalEmails });
-          useMailStore.getState().updateSortedEmails();
-          break;
-
-        case 'ready':
-          // Worker is ready, request first UID
-          workerRef.current.postMessage({ type: 'nextUid' });
-          break;
-      }
-    };
-
-    workerRef.current.onmessage = handleMessage;
-
-    // Start the worker
-    workerRef.current.postMessage({
-      type: 'start',
-      payload: { uids: uidsToFetch }
-    });
+    // Kick off processing
+    processNext();
   }, [
     activeAccountId,
     activeMailbox,
@@ -229,16 +155,22 @@ export function useBackgroundCaching() {
     savedEmailIds,
     localCacheDurationMonths,
     accounts,
-    addToCache,
-    cacheLimitMB
+    processNext
   ]);
 
   // Stop caching
   const stopBackgroundCaching = useCallback(() => {
-    if (workerRef.current) {
-      workerRef.current.postMessage({ type: 'stop' });
-      setIsRunning(false);
-    }
+    stoppedRef.current = true;
+    queueRef.current = [];
+    setIsRunning(false);
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stoppedRef.current = true;
+      queueRef.current = [];
+    };
   }, []);
 
   return {
