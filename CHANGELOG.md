@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.4.3] - 2026-02-18
+
+### Fixed
+- Sidecar server not starting in sandboxed builds — removed shell commands (lsof, kill) blocked by App Sandbox, replaced with Tauri CommandChild handle for clean process management
+
 ## [1.4.2] - 2026-02-18
 
 ### Fixed

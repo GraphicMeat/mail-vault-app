@@ -26,8 +26,11 @@ use cocoa::foundation::NSString;
 #[cfg(target_os = "macos")]
 use objc::{msg_send, sel, sel_impl};
 
-// Global server process handle
+// Global server process handle (dev mode: std::process::Child)
 struct ServerState(Mutex<Option<Child>>);
+
+// Global sidecar process handle (release mode: Tauri CommandChild)
+struct SidecarState(Mutex<Option<tauri_plugin_shell::process::CommandChild>>);
 
 // Global log directory
 struct LogDir(PathBuf);
@@ -98,36 +101,9 @@ fn cleanup_old_logs(log_dir: &PathBuf) {
     }
 }
 
-/// Kill any orphaned mailvault-server processes (from previous app runs that didn't shut down cleanly)
-fn kill_orphan_servers() {
-    info!("Checking for orphaned mailvault-server processes...");
-    let my_pid = std::process::id();
-
-    // Find processes listening on port 3001 and kill them
-    if let Ok(output) = Command::new("lsof")
-        .args(["-ti", ":3001"])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .output()
-    {
-        let pids_str = String::from_utf8_lossy(&output.stdout);
-        for pid_str in pids_str.split_whitespace() {
-            if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                if pid != my_pid {
-                    info!("Killing orphaned server process on port 3001: PID {}", pid);
-                    let _ = Command::new("kill").arg(pid.to_string()).output();
-                }
-            }
-        }
-    }
-}
-
 #[allow(unused_variables)]
 fn start_backend_server(app_handle: &tauri::AppHandle) -> Option<Child> {
     info!("Starting backend server...");
-
-    // Kill any orphaned server processes before starting a new one
-    kill_orphan_servers();
 
     #[cfg(debug_assertions)]
     {
@@ -175,11 +151,15 @@ fn start_backend_server(app_handle: &tauri::AppHandle) -> Option<Child> {
             Ok(cmd) => {
                 match cmd.spawn() {
                     Ok((mut rx, child)) => {
-                        // Store the sidecar PID so we can kill it on quit
                         let sidecar_pid = child.pid();
                         info!("Sidecar server started with PID: {}", sidecar_pid);
-                        // Store PID in env for cleanup on quit
-                        std::env::set_var("MAILVAULT_SIDECAR_PID", sidecar_pid.to_string());
+
+                        // Store the CommandChild handle for clean shutdown
+                        if let Some(state) = app_handle.try_state::<SidecarState>() {
+                            if let Ok(mut guard) = state.0.lock() {
+                                *guard = Some(child);
+                            }
+                        }
 
                         tauri::async_runtime::spawn(async move {
                             let mut stderr_lines: Vec<String> = Vec::new();
@@ -222,21 +202,6 @@ fn start_backend_server(app_handle: &tauri::AppHandle) -> Option<Child> {
         }
         None
     }
-}
-
-/// Kill the sidecar server process on app quit
-fn kill_sidecar_server() {
-    // Kill by stored PID (sidecar)
-    if let Ok(pid_str) = std::env::var("MAILVAULT_SIDECAR_PID") {
-        if let Ok(pid) = pid_str.parse::<u32>() {
-            info!("Killing sidecar server PID: {}", pid);
-            let _ = Command::new("kill").arg(pid.to_string()).output();
-        }
-    }
-    // Also kill anything on port 3001 as a safety net
-    let _ = Command::new("sh")
-        .args(["-c", "lsof -ti :3001 | xargs kill 2>/dev/null"])
-        .output();
 }
 
 #[tauri::command]
@@ -1943,6 +1908,7 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .manage(ServerState(Mutex::new(None)))
+        .manage(SidecarState(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             get_app_data_dir,
             store_credentials,
@@ -2186,7 +2152,14 @@ fn main() {
                                 }
                             }
                             // Kill sidecar server process
-                            kill_sidecar_server();
+                            if let Some(state) = app.try_state::<SidecarState>() {
+                                if let Ok(mut guard) = state.0.lock() {
+                                    if let Some(child) = guard.take() {
+                                        info!("Killing sidecar via CommandChild handle");
+                                        let _ = child.kill();
+                                    }
+                                }
+                            }
                             std::process::exit(0);
                         }
                         _ => {}
@@ -2302,7 +2275,14 @@ fn main() {
                         }
                     }
                     // Kill sidecar server process
-                    kill_sidecar_server();
+                    if let Some(state) = app_handle.try_state::<SidecarState>() {
+                        if let Ok(mut guard) = state.0.lock() {
+                            if let Some(child) = guard.take() {
+                                info!("Killing sidecar via CommandChild handle");
+                                let _ = child.kill();
+                            }
+                        }
+                    }
                 }
                 _ => {}
             }
