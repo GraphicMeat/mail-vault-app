@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { safeStorage } from './safeStorage';
 
 export const useSettingsStore = create(
   persist(
@@ -245,7 +246,8 @@ export const useSettingsStore = create(
       }
     }),
     {
-      name: 'mailvault-settings'
+      name: 'mailvault-settings',
+      storage: createJSONStorage(() => safeStorage)
     }
   )
 );

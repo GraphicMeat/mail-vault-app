@@ -1,9 +1,10 @@
 # Changelog
 
-## [1.4.6] - 2026-02-18
+## [1.4.7] - 2026-02-18
 
 ### Fixed
-- Black screen on first launch on some Macs — Framer Motion animations starting at opacity 0 could stay invisible if animation engine failed in WKWebView
+- "SecurityError: The operation is insecure" crash on sandboxed Macs — WKWebView blocking localStorage; all persistent stores now use safe storage wrapper with in-memory fallback
+- Black screen on first launch — Framer Motion animations starting at opacity 0 could stay invisible if animation engine failed in WKWebView
 - Added React error boundary with visible fallback UI for rendering crashes
 - Splash screen now only dismisses after React successfully renders (not before)
 - Added 10-second timeout fallback if app fails to load — shows reload button instead of blank screen

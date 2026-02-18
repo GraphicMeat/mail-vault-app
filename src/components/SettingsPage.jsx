@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import { safeStorage } from '../stores/safeStorage';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getOAuth2AuthUrl, exchangeOAuth2Code } from '../services/api';
 import {
@@ -230,8 +231,8 @@ export function SettingsPage({ onClose }) {
       }
 
       const settingsData = {
-        theme: localStorage.getItem('mailvault-theme'),
-        settings: localStorage.getItem('mailvault-settings'),
+        theme: safeStorage.getItem('mailvault-theme'),
+        settings: safeStorage.getItem('mailvault-settings'),
       };
 
       const db = await import('../services/db');
@@ -287,10 +288,10 @@ export function SettingsPage({ onClose }) {
         try {
           const settings = JSON.parse(result.settingsJson);
           if (settings.theme) {
-            localStorage.setItem('mailvault-theme', settings.theme);
+            safeStorage.setItem('mailvault-theme', settings.theme);
           }
           if (settings.settings) {
-            localStorage.setItem('mailvault-settings', settings.settings);
+            safeStorage.setItem('mailvault-settings', settings.settings);
           }
         } catch (e) {
           console.warn('Failed to restore settings:', e);
@@ -1555,7 +1556,7 @@ export function SettingsPage({ onClose }) {
                         } catch (e) {
                           console.error('Failed to clear Maildir data:', e);
                         }
-                        localStorage.clear();
+                        try { localStorage.clear(); } catch { /* sandbox may block */ }
                         window.location.reload();
                       }
                     }}

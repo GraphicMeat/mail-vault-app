@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { safeStorage } from './safeStorage';
 
 export const useThemeStore = create(
   persist(
@@ -23,7 +24,8 @@ export const useThemeStore = create(
       }
     }),
     {
-      name: 'mailvault-theme'
+      name: 'mailvault-theme',
+      storage: createJSONStorage(() => safeStorage)
     }
   )
 );
