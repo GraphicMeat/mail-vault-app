@@ -67,17 +67,19 @@ async function createConnection(account) {
     maxIdleTime: 30000
   });
   
-  // Handle errors without crashing
+  // Handle errors without crashing — clean up both pools
   client.on('error', (err) => {
     console.error(`IMAP error for ${account.email}:`, err.message);
     const key = `${account.email}-${account.imapHost}`;
     connections.delete(key);
+    priorityConnections.delete(key);
   });
-  
+
   client.on('close', () => {
     console.log(`IMAP connection closed for ${account.email}`);
     const key = `${account.email}-${account.imapHost}`;
     connections.delete(key);
+    priorityConnections.delete(key);
   });
   
   await client.connect();
@@ -136,9 +138,14 @@ async function withConnection(account, operation, usePriority = false) {
     // Remove failed connection
     connectionPool.delete(key);
 
-    // Retry once with fresh connection
-    if (error.code === 'ETIMEOUT' || error.code === 'ECONNRESET' || error.message?.includes('Socket')) {
-      console.log(`Retrying ${usePriority ? 'priority ' : ''}connection for ${account.email}...`);
+    // Retry once with fresh connection on recoverable errors
+    const isRecoverable = error.code === 'ETIMEOUT' || error.code === 'ECONNRESET'
+      || error.code === 'ECONNABORTED' || error.code === 'EPIPE' || error.code === 'EAI_AGAIN'
+      || error.message?.includes('Socket') || error.message?.includes('closed')
+      || error.message?.includes('BYE') || error.message?.includes('connection')
+      || error.message?.includes('not connected') || error.message?.includes('SERVERBUG');
+    if (isRecoverable) {
+      console.log(`[withConnection] Retrying ${usePriority ? 'priority ' : ''}connection for ${account.email} (${error.code || error.message})...`);
       try {
         const client = await createConnection(account);
         connectionPool.set(key, client);
@@ -233,6 +240,7 @@ app.post('/api/emails-range', async (req, res) => {
         const imapStart = Math.max(1, total - clampedEnd + 1);
         const imapEnd = total - clampedStart;
 
+        let skipped = 0;
         for await (const message of client.fetch(`${imapStart}:${imapEnd}`, {
           envelope: true,
           flags: true,
@@ -241,26 +249,30 @@ app.post('/api/emails-range', async (req, res) => {
           internalDate: true,
           size: true
         })) {
-          // Calculate the display index for this message
-          const displayIndex = total - message.seq;
-
-          emails.push({
-            uid: message.uid,
-            seq: message.seq,
-            displayIndex,
-            messageId: message.envelope.messageId,
-            subject: message.envelope.subject || '(No Subject)',
-            from: message.envelope.from?.[0] || { name: 'Unknown', address: 'unknown@unknown.com' },
-            to: message.envelope.to || [],
-            cc: message.envelope.cc || [],
-            bcc: message.envelope.bcc || [],
-            date: message.envelope.date,
-            internalDate: message.internalDate,
-            flags: Array.from(message.flags || []),
-            size: message.size,
-            hasAttachments: message.bodyStructure?.childNodes?.length > 1 || false
-          });
+          try {
+            const displayIndex = total - message.seq;
+            emails.push({
+              uid: message.uid,
+              seq: message.seq,
+              displayIndex,
+              messageId: message.envelope?.messageId,
+              subject: message.envelope?.subject || '(No Subject)',
+              from: message.envelope?.from?.[0] || { name: 'Unknown', address: 'unknown@unknown.com' },
+              to: message.envelope?.to || [],
+              cc: message.envelope?.cc || [],
+              bcc: message.envelope?.bcc || [],
+              date: message.envelope?.date,
+              internalDate: message.internalDate,
+              flags: Array.from(message.flags || []),
+              size: message.size,
+              hasAttachments: message.bodyStructure?.childNodes?.length > 1 || false
+            });
+          } catch (msgErr) {
+            skipped++;
+            console.warn(`[/api/emails-range] Skipped message seq=${message?.seq} uid=${message?.uid}: ${msgErr.message}`);
+          }
         }
+        if (skipped > 0) console.warn(`[/api/emails-range] Skipped ${skipped} malformed messages`);
 
         // Sort by displayIndex (ascending = newest first in the range)
         emails.sort((a, b) => a.displayIndex - b.displayIndex);
@@ -296,6 +308,7 @@ app.post('/api/emails', async (req, res) => {
         const start = Math.max(1, total - (page * limit) + 1);
         const end = Math.max(1, total - ((page - 1) * limit));
         
+        let skipped = 0;
         for await (const message of client.fetch(`${start}:${end}`, {
           envelope: true,
           flags: true,
@@ -304,26 +317,33 @@ app.post('/api/emails', async (req, res) => {
           internalDate: true,
           size: true
         })) {
-          emails.push({
-            uid: message.uid,
-            seq: message.seq,
-            messageId: message.envelope.messageId,
-            subject: message.envelope.subject || '(No Subject)',
-            from: message.envelope.from?.[0] || { name: 'Unknown', address: 'unknown@unknown.com' },
-            to: message.envelope.to || [],
-            cc: message.envelope.cc || [],
-            bcc: message.envelope.bcc || [],
-            date: message.envelope.date,
-            internalDate: message.internalDate,
-            flags: Array.from(message.flags || []),
-            size: message.size,
-            hasAttachments: message.bodyStructure?.childNodes?.length > 1 || false
-          });
+          try {
+            emails.push({
+              uid: message.uid,
+              seq: message.seq,
+              messageId: message.envelope?.messageId,
+              subject: message.envelope?.subject || '(No Subject)',
+              from: message.envelope?.from?.[0] || { name: 'Unknown', address: 'unknown@unknown.com' },
+              to: message.envelope?.to || [],
+              cc: message.envelope?.cc || [],
+              bcc: message.envelope?.bcc || [],
+              date: message.envelope?.date,
+              internalDate: message.internalDate,
+              flags: Array.from(message.flags || []),
+              size: message.size,
+              hasAttachments: message.bodyStructure?.childNodes?.length > 1 || false
+            });
+          } catch (msgErr) {
+            skipped++;
+            console.warn(`[/api/emails] Skipped message seq=${message?.seq} uid=${message?.uid}: ${msgErr.message}`);
+          }
         }
-        
+
+        if (skipped > 0) console.warn(`[/api/emails] Skipped ${skipped} malformed messages on page ${page}`);
+
         // Reverse to show newest first
         emails.reverse();
-        
+
         return { emails, total, page, limit, hasMore: start > 1 };
       } finally {
         lock.release();
@@ -972,16 +992,18 @@ function startServer(retryCount = 0) {
 
 startServer();
 
-// Cleanup stale connections periodically
+// Cleanup stale connections periodically (both pools)
 setInterval(() => {
-  for (const [key, client] of connections.entries()) {
-    if (!client.usable) {
-      console.log(`Removing stale connection: ${key}`);
-      connections.delete(key);
-      try {
-        client.logout();
-      } catch (e) {
-        // Ignore
+  for (const [pool, poolName] of [[connections, 'background'], [priorityConnections, 'priority']]) {
+    for (const [key, client] of pool.entries()) {
+      if (!client.usable) {
+        console.log(`Removing stale ${poolName} connection: ${key}`);
+        pool.delete(key);
+        try {
+          client.logout();
+        } catch (e) {
+          // Ignore
+        }
       }
     }
   }

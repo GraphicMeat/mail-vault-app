@@ -901,6 +901,10 @@ export const useMailStore = create((set, get) => ({
   },
 
   // Load more emails (called internally for background loading)
+  // Uses unlimited exponential backoff on failure: 3s, 9s, 18s, 36s, ...
+  _loadMoreRetryDelay: 0,
+  _loadMorePausedOffline: false,
+
   loadMoreEmails: async () => {
     const { activeAccountId, accounts, activeMailbox, emails, currentPage, hasMoreEmails, loadingMore } = get();
     const account = accounts.find(a => a.id === activeAccountId);
@@ -908,8 +912,15 @@ export const useMailStore = create((set, get) => ({
     // Don't load if already loading, no more emails, or no account
     if (!account || loadingMore || !hasMoreEmails) return;
 
-    // Don't load more if password is missing or offline
-    if (!account.password) return;
+    // Don't load more if credentials are missing (support both password and OAuth2)
+    const hasCredentials = account.password || (account.authType === 'oauth2' && account.oauth2AccessToken);
+    if (!hasCredentials) return;
+
+    // Don't load if offline — will resume via online event
+    if (!navigator.onLine) {
+      set({ _loadMorePausedOffline: true });
+      return;
+    }
 
     set({ loadingMore: true });
 
@@ -917,10 +928,19 @@ export const useMailStore = create((set, get) => ({
       const nextPage = currentPage + 1;
       const serverResult = await api.fetchEmails(account, activeMailbox, nextPage);
 
+      // Reset retry delay on success
+      set({ _loadMoreRetryDelay: 0 });
+
       // Use requestIdleCallback to update state when browser is idle
-      // This prevents blocking the UI during heavy loading
       const updateState = () => {
-        const newEmails = [...get().emails, ...serverResult.emails];
+        // Guard: if user switched mailbox/account while idle, discard stale result
+        const current = get();
+        if (current.activeAccountId !== activeAccountId || current.activeMailbox !== activeMailbox) {
+          set({ loadingMore: false });
+          return;
+        }
+
+        const newEmails = [...current.emails, ...serverResult.emails];
         set({
           emails: newEmails,
           currentPage: nextPage,
@@ -929,21 +949,16 @@ export const useMailStore = create((set, get) => ({
           loadingMore: false
         });
 
-        // Update sorted emails for memoization
         get().updateSortedEmails();
 
-        // Update cached headers with all loaded emails
         db.saveEmailHeaders(activeAccountId, activeMailbox, newEmails, serverResult.total)
           .catch(e => console.warn('[loadMoreEmails] Failed to cache headers:', e));
 
-        // Continue loading in background if there are more emails
         if (serverResult.hasMore) {
-          // Longer delay to keep UI responsive
           setTimeout(() => get().loadMoreEmails(), 1000);
         }
       };
 
-      // Use requestIdleCallback if available, otherwise setTimeout
       if (typeof requestIdleCallback !== 'undefined') {
         requestIdleCallback(updateState, { timeout: 2000 });
       } else {
@@ -951,13 +966,15 @@ export const useMailStore = create((set, get) => ({
       }
     } catch (error) {
       console.error('[loadMoreEmails] Failed to load more emails:', error);
-      // Don't set hasMoreEmails to false on error - allow retry
       set({ loadingMore: false });
 
-      // Retry after a delay if there are still more emails to load
+      // Unlimited exponential backoff: 3s, 9s, 18s, 36s, 72s, cap at 120s
       if (get().hasMoreEmails && get().emails.length < get().totalEmails) {
-        console.log('[loadMoreEmails] Will retry in 3 seconds...');
-        setTimeout(() => get().loadMoreEmails(), 3000);
+        const prevDelay = get()._loadMoreRetryDelay || 0;
+        const nextDelay = prevDelay === 0 ? 3000 : Math.min(prevDelay * 2, 120000);
+        set({ _loadMoreRetryDelay: nextDelay });
+        console.log(`[loadMoreEmails] Will retry in ${nextDelay / 1000}s...`);
+        setTimeout(() => get().loadMoreEmails(), nextDelay);
       }
     }
   },
@@ -1801,3 +1818,20 @@ export const useMailStore = create((set, get) => ({
     isSearching: false
   })
 }));
+
+// Online/offline listeners for header loading pipeline
+// When going offline: header loading pauses naturally (API calls will fail, backoff kicks in)
+// When coming back online: resume header loading if it was in progress
+window.addEventListener('online', () => {
+  const state = useMailStore.getState();
+  if (state._loadMorePausedOffline && state.hasMoreEmails && state.emails.length < state.totalEmails) {
+    console.log('[mailStore] Back online — resuming header loading');
+    useMailStore.setState({ _loadMorePausedOffline: false, _loadMoreRetryDelay: 0 });
+    state.loadMoreEmails();
+  }
+});
+
+window.addEventListener('offline', () => {
+  console.log('[mailStore] Went offline — header loading will pause');
+  useMailStore.setState({ _loadMorePausedOffline: true });
+});

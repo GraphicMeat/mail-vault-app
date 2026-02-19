@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.5.0] - 2026-02-19
+
+### Fixed
+- Failproof email loading — emails that fail to load are now retried with unlimited exponential backoff (3s → 9s → 18s → 36s… capped at 120s) instead of being silently skipped
+- OAuth2 accounts (Microsoft 365) silently failed to load email content — background caching and header loading both checked only for password, now correctly accept OAuth2 access tokens
+- All network activity pauses automatically when app goes offline and resumes on reconnect (both header loading and content caching pipelines)
+- Per-message error handling on the server — one malformed email no longer kills the entire page fetch; failed messages are skipped with a warning and the rest load normally
+- IMAP connection retry now covers more transient error types (BYE, closed, SERVERBUG, EPIPE, EAI_AGAIN) in addition to timeouts and resets
+- Priority IMAP connections (used for single email fetch) now properly cleaned up on error/close, preventing stale connection buildup
+- Guard against stale state updates when user switches mailbox while background loading is in progress
+
+### Changed
+- Disabled browser's native "Open Frame in New Window" right-click option on email content iframe
+
 ## [1.4.11] - 2026-02-19
 
 ### Fixed

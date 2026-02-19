@@ -8,6 +8,9 @@ export function useBackgroundCaching() {
   const [isRunning, setIsRunning] = useState(false);
   const [progress, setProgress] = useState({ completed: 0, total: 0 });
   const queueRef = useRef([]);
+  const retryQueueRef = useRef([]); // UIDs that failed, waiting to retry
+  const retryTimerRef = useRef(null);
+  const retryDelayRef = useRef(3000); // starts at 3s, grows exponentially
   const stoppedRef = useRef(false);
   const pausedRef = useRef(false);
   const processingRef = useRef(false);
@@ -47,11 +50,34 @@ export function useBackgroundCaching() {
     };
   }, [isRunning]);
 
+  // Schedule retry of failed UIDs with exponential backoff
+  const scheduleRetry = useCallback(() => {
+    if (stoppedRef.current || retryQueueRef.current.length === 0) return;
+
+    const delay = retryDelayRef.current;
+    console.log(`[BackgroundCaching] Scheduling retry of ${retryQueueRef.current.length} failed UIDs in ${delay / 1000}s`);
+
+    retryTimerRef.current = setTimeout(() => {
+      if (stoppedRef.current) return;
+      // Move retry queue back to main queue
+      queueRef.current = [...retryQueueRef.current, ...queueRef.current];
+      retryQueueRef.current = [];
+      // Grow delay: 3s → 9s → 18s → 36s → 72s → 120s cap
+      retryDelayRef.current = Math.min(delay * 2, 120000);
+      processNext();
+    }, delay);
+  }, []);
+
   // Process next UID in queue
   const processNext = useCallback(() => {
     if (stoppedRef.current || pausedRef.current || processingRef.current) return;
     if (queueRef.current.length === 0) {
-      // Done
+      // Main queue empty — check if there are failed UIDs to retry
+      if (retryQueueRef.current.length > 0) {
+        scheduleRetry();
+        return;
+      }
+      // All done
       console.log('[BackgroundCaching] Completed');
       setIsRunning(false);
 
@@ -86,11 +112,15 @@ export function useBackgroundCaching() {
           total: prev.total
         }));
 
+        // Success — reset retry delay since connection is healthy
+        retryDelayRef.current = 3000;
         processingRef.current = false;
         setTimeout(() => processNext(), 500);
       } catch (error) {
-        console.error(`[BackgroundCaching] Failed to fetch email ${uid}:`, error);
+        console.error(`[BackgroundCaching] Failed to fetch email ${uid}, queued for retry:`, error.message || error);
+        retryQueueRef.current.push(uid);
         processingRef.current = false;
+        // Continue processing remaining main queue items before retrying failed ones
         setTimeout(() => processNext(), 1000);
       }
     })();
@@ -103,8 +133,9 @@ export function useBackgroundCaching() {
     }
 
     const account = accounts.find(a => a.id === activeAccountId);
-    if (!account || !account.password) {
-      console.log('[BackgroundCaching] No account or password, skipping');
+    const hasCredentials = account && (account.password || (account.authType === 'oauth2' && account.oauth2AccessToken));
+    if (!hasCredentials) {
+      console.log('[BackgroundCaching] No account or credentials, skipping');
       return;
     }
 
@@ -143,6 +174,9 @@ export function useBackgroundCaching() {
     pausedRef.current = false;
     processingRef.current = false;
     queueRef.current = [...uidsToFetch];
+    retryQueueRef.current = [];
+    retryDelayRef.current = 3000;
+    if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     setIsRunning(true);
     setProgress({ completed: 0, total: uidsToFetch.length });
 
@@ -162,6 +196,9 @@ export function useBackgroundCaching() {
   const stopBackgroundCaching = useCallback(() => {
     stoppedRef.current = true;
     queueRef.current = [];
+    retryQueueRef.current = [];
+    if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    retryDelayRef.current = 3000;
     setIsRunning(false);
   }, []);
 
@@ -170,6 +207,8 @@ export function useBackgroundCaching() {
     return () => {
       stoppedRef.current = true;
       queueRef.current = [];
+      retryQueueRef.current = [];
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     };
   }, []);
 

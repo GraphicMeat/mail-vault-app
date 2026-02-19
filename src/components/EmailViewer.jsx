@@ -968,6 +968,7 @@ export function EmailViewer() {
                 style={{ minHeight: '300px', display: 'block' }}
                 sandbox="allow-same-origin allow-popups"
                 title="Email content"
+                onContextMenu={e => e.preventDefault()}
               />
             </div>
           ) : (
