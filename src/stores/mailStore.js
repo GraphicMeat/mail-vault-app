@@ -802,9 +802,29 @@ export const useMailStore = create((set, get) => ({
       const newEmails = serverResult.emails.filter(e => !existingUids.has(e.uid));
       console.log('[loadEmails] Found', newEmails.length, 'new emails not in cache');
 
+      // Stale UID cleanup: if the server total shrank, emails were deleted
+      // on another client. Remove cached emails whose UIDs appear in the
+      // fresh page-1 range as "missing" (server returned fewer UIDs than
+      // we had in that range). We can only validate UIDs we received from
+      // the server — the rest will be re-validated when those pages load.
+      const serverUids = new Set(serverResult.emails.map(e => e.uid));
+      let cleanedExisting = existingEmails;
+      if (existingEmails.length > 0 && serverResult.total < existingEmails.length) {
+        // Server has fewer emails than we cached — some were deleted
+        // Remove cached emails in the page-1 window that the server no longer has
+        const page1Size = serverResult.emails.length;
+        const overlapSlice = existingEmails.slice(0, page1Size);
+        const staleUids = overlapSlice.filter(e => !serverUids.has(e.uid)).map(e => e.uid);
+        if (staleUids.length > 0) {
+          console.log(`[loadEmails] Removing ${staleUids.length} stale UIDs no longer on server`);
+          const staleSet = new Set(staleUids);
+          cleanedExisting = existingEmails.filter(e => !staleSet.has(e.uid));
+        }
+      }
+
       // Merge: new emails first, then existing cached emails
       let mergedEmails;
-      if (existingEmails.length > 0 && newEmails.length < serverResult.emails.length) {
+      if (cleanedExisting.length > 0 && newEmails.length < serverResult.emails.length) {
         // We have cached emails - merge new ones at the beginning
         const newEmailsWithIndex = newEmails.map((email, idx) => ({
           ...email,
@@ -814,7 +834,7 @@ export const useMailStore = create((set, get) => ({
         }));
 
         // Shift existing email indices
-        const shiftedExisting = existingEmails.map((email, idx) => ({
+        const shiftedExisting = cleanedExisting.map((email, idx) => ({
           ...email,
           displayIndex: newEmails.length + idx,
           isLocal: savedEmailIds.has(email.uid)
@@ -931,6 +951,16 @@ export const useMailStore = create((set, get) => ({
       // Reset retry delay on success
       set({ _loadMoreRetryDelay: 0 });
 
+      // Detect mailbox mutation: if total changed since we started loading,
+      // sequence numbers have shifted — restart pagination from scratch
+      const previousTotal = get().totalEmails;
+      if (previousTotal > 0 && serverResult.total !== previousTotal) {
+        console.warn(`[loadMoreEmails] Mailbox total changed (${previousTotal} → ${serverResult.total}), restarting pagination`);
+        set({ loadingMore: false });
+        get().loadEmails();
+        return;
+      }
+
       // Use requestIdleCallback to update state when browser is idle
       const updateState = () => {
         // Guard: if user switched mailbox/account while idle, discard stale result
@@ -1013,6 +1043,17 @@ export const useMailStore = create((set, get) => ({
 
     try {
       const result = await api.fetchEmailsRange(account, activeMailbox, startIndex, endIndex);
+
+      // Detect mailbox mutation — total changed, indices are stale
+      const previousTotal = get().totalEmails;
+      if (previousTotal > 0 && result.total !== previousTotal) {
+        console.warn(`[loadEmailRange] Mailbox total changed (${previousTotal} → ${result.total}), restarting`);
+        const loadingRangesAfter = new Set(get().loadingRanges);
+        loadingRangesAfter.delete(rangeKey);
+        set({ loadingRanges: loadingRangesAfter });
+        get().loadEmails();
+        return;
+      }
 
       if (result.emails && result.emails.length > 0) {
         const newEmailsByIndex = new Map(get().emailsByIndex);
