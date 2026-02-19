@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.4.11] - 2026-02-19
+
+### Fixed
+- Sidecar server port conflict after app update — old sidecar process stayed alive on port 3001, blocking new instance; new sidecar now sends a shutdown request (`POST /api/shutdown`) to the old instance before retrying, enabling graceful handoff without shell commands (blocked in sandbox)
+
 ## [1.4.10] - 2026-02-19
 
 ### Fixed

@@ -912,21 +912,59 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', connections: connections.size });
 });
 
+// Shutdown endpoint — allows a new sidecar instance to gracefully stop the old one
+app.post('/api/shutdown', (req, res) => {
+  console.log('[shutdown] Received shutdown request — exiting gracefully');
+  res.json({ success: true, message: 'Shutting down' });
+  setTimeout(() => cleanupAndExit(), 200);
+});
+
 const PORT = process.env.PORT || 3001;
 const MAX_LISTEN_RETRIES = 5;
-const LISTEN_RETRY_DELAY = 1000; // ms
+const LISTEN_RETRY_DELAY = 1500; // ms — give old instance time to shut down
+
+// Ask the old server instance to shut down gracefully
+function requestOldServerShutdown() {
+  return new Promise((resolve) => {
+    console.log(`[startup] Requesting old server on port ${PORT} to shut down...`);
+    const req = http.request({
+      hostname: '127.0.0.1',
+      port: PORT,
+      path: '/api/shutdown',
+      method: 'POST',
+      timeout: 3000
+    }, (res) => {
+      console.log(`[startup] Old server responded with status ${res.statusCode}`);
+      resolve(true);
+    });
+    req.on('error', (err) => {
+      console.log(`[startup] Could not reach old server: ${err.message}`);
+      resolve(false);
+    });
+    req.on('timeout', () => {
+      console.log('[startup] Shutdown request timed out');
+      req.destroy();
+      resolve(false);
+    });
+    req.end();
+  });
+}
 
 function startServer(retryCount = 0) {
   const server = app.listen(PORT, '127.0.0.1', () => {
     console.log(`Mail server running on 127.0.0.1:${PORT}`);
   });
 
-  server.on('error', (err) => {
+  server.on('error', async (err) => {
     if (err.code === 'EADDRINUSE' && retryCount < MAX_LISTEN_RETRIES) {
-      console.error(`Port ${PORT} in use, retrying in ${LISTEN_RETRY_DELAY}ms... (attempt ${retryCount + 1}/${MAX_LISTEN_RETRIES})`);
+      console.error(`[startup] Port ${PORT} in use (attempt ${retryCount + 1}/${MAX_LISTEN_RETRIES})`);
+      // On first retry, ask the old server to shut down
+      if (retryCount === 0) {
+        await requestOldServerShutdown();
+      }
       setTimeout(() => startServer(retryCount + 1), LISTEN_RETRY_DELAY);
     } else {
-      console.error(`Failed to start server: ${err.message}`);
+      console.error(`[startup] Failed to start server: ${err.message}`);
       process.exit(1);
     }
   });
