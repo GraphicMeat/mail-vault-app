@@ -67,7 +67,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
   } = useMailStore();
   
   const { theme, toggleTheme } = useThemeStore();
-  const { getOrderedAccounts, setAccountOrder } = useSettingsStore();
+  const { accountOrder, getOrderedAccounts, setAccountOrder } = useSettingsStore();
 
   const [expandedFolders, setExpandedFolders] = useState(new Set(['INBOX']));
   const [showErrorModal, setShowErrorModal] = useState(false);

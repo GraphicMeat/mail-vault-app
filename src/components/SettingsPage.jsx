@@ -93,6 +93,7 @@ export function SettingsPage({ onClose }) {
     clearFilterHistory,
     localCacheDurationMonths,
     setLocalCacheDurationMonths,
+    accountOrder,
     getOrderedAccounts,
     setAccountOrder
   } = useSettingsStore();

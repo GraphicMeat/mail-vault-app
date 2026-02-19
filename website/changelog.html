@@ -159,6 +159,10 @@
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
               <span>Server graceful shutdown now cleans up both priority and background IMAP connection pools (previously leaked priority connections)</span>
             </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span>Drag-and-drop account reordering in sidebar and settings had no visible effect — components weren't subscribed to the <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">accountOrder</code> state, so reorders were persisted but never reflected in the UI</span>
+            </li>
           </ul>
         </div>
 
