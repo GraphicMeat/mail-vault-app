@@ -31,6 +31,7 @@ case "$BUMP_TYPE" in
 esac
 
 NEW="$MAJOR.$MINOR.$PATCH"
+TODAY=$(date +%Y-%m-%d)
 
 echo "Bumping version: $CURRENT → $NEW"
 
@@ -46,6 +47,20 @@ sed -i '' "s/\"version\": \"$CURRENT\"/\"version\": \"$NEW\"/" "$ROOT/src-tauri/
 # Update Cargo.lock by running cargo check
 (cd "$ROOT/src-tauri" && cargo update -p mailvault 2>/dev/null || true)
 
+# CHANGELOG.md: move [Unreleased] content to new version section
+CHANGELOG="$ROOT/CHANGELOG.md"
+if grep -q '## \[Unreleased\]' "$CHANGELOG"; then
+  sed -i '' "s/## \[Unreleased\]/## [Unreleased]\n\n## [$NEW] - $TODAY/" "$CHANGELOG"
+  echo "  CHANGELOG.md            → [Unreleased] → [$NEW] - $TODAY"
+fi
+
+# Regenerate website changelog
+if [[ -f "$ROOT/scripts/generate-changelog.cjs" ]]; then
+  node "$ROOT/scripts/generate-changelog.cjs"
+  echo "  website/changelog.html  → regenerated"
+fi
+
+echo ""
 echo "Updated files:"
 echo "  package.json            → $NEW"
 echo "  src-tauri/Cargo.toml    → $NEW"

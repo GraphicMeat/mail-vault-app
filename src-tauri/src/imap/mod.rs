@@ -843,30 +843,44 @@ pub async fn test_connection(config: &ImapConfig) -> Result<(), String> {
 
 // ── Helper functions ────────────────────────────────────────────────────────
 
-/// Walk an IMAP BODYSTRUCTURE tree to detect non-inline attachments.
+/// Walk an IMAP BODYSTRUCTURE tree to detect real attachments.
+/// Inline images with a Content-ID are treated as embedded (not attachments)
+/// since they are referenced via cid: in the HTML body.
 fn has_attachments_from_bodystructure(bs: &imap_proto::types::BodyStructure) -> bool {
     use imap_proto::types::BodyStructure;
     match bs {
-        BodyStructure::Basic { common, .. }
-        | BodyStructure::Text { common, .. }
-        | BodyStructure::Message { common, .. } => {
+        BodyStructure::Basic { common, other, .. }
+        | BodyStructure::Text { common, other, .. }
+        | BodyStructure::Message { common, other, .. } => {
+            // Explicit Content-Disposition: attachment → always counts
             if let Some(ref disp) = common.disposition {
-                let ty = disp.ty.to_ascii_lowercase();
-                if ty == "attachment" {
+                if disp.ty.eq_ignore_ascii_case("attachment") {
                     return true;
                 }
             }
-            // Inline non-text parts (images, etc.) also count as attachments
+
             let mime = format!("{}/{}", common.ty.ty, common.ty.subtype).to_ascii_lowercase();
-            if !mime.starts_with("text/") && !mime.starts_with("multipart/") {
-                // Check disposition: if not explicitly "inline", treat as attachment
-                let is_inline = common.disposition.as_ref()
-                    .map(|d| d.ty.eq_ignore_ascii_case("inline"))
-                    .unwrap_or(false);
-                if !is_inline {
-                    return true;
+
+            // Skip text/* and multipart/* — never attachments on their own
+            if mime.starts_with("text/") || mime.starts_with("multipart/") {
+                // Recurse into message/rfc822 body
+                if let BodyStructure::Message { body, .. } = bs {
+                    return has_attachments_from_bodystructure(body);
                 }
-                // Inline non-text with a filename param counts as attachment
+                return false;
+            }
+
+            let is_inline = common.disposition.as_ref()
+                .map(|d| d.ty.eq_ignore_ascii_case("inline"))
+                .unwrap_or(false);
+
+            if is_inline {
+                // Inline part with a Content-ID → embedded image (cid: reference)
+                if other.id.is_some() {
+                    return false;
+                }
+                // Inline image with a filename but no Content-ID → real attachment
+                // (user attached an image inline without embedding it)
                 if let Some(ref disp) = common.disposition {
                     if let Some(ref params) = disp.params {
                         if params.iter().any(|(k, _)| k.eq_ignore_ascii_case("filename")) {
@@ -874,12 +888,12 @@ fn has_attachments_from_bodystructure(bs: &imap_proto::types::BodyStructure) -> 
                         }
                     }
                 }
+                // Inline with no Content-ID and no filename → tracking pixel, skip
+                return false;
             }
-            // Recurse into message/rfc822 body
-            if let BodyStructure::Message { body, .. } = bs {
-                return has_attachments_from_bodystructure(body);
-            }
-            false
+
+            // No disposition at all → non-text part without disposition is an attachment
+            true
         }
         BodyStructure::Multipart { bodies, .. } => {
             bodies.iter().any(has_attachments_from_bodystructure)

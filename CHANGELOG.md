@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+- **Inline images treated as attachments** — embedded images with Content-ID (referenced via `cid:` in HTML) incorrectly showed the paperclip icon in the email list and appeared in the attachment section; BODYSTRUCTURE walker now checks Content-ID to distinguish embedded images from real attachments, and `.eml` parsing applies the same filter (tracking pixels also excluded)
+
 ## [1.5.0] - 2026-02-19
 
 ### Performance

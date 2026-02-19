@@ -1172,6 +1172,48 @@ fn collect_attachment_parts<'a>(
     }
 }
 
+/// Check if any attachment is a "real" attachment (not an inline embedded image
+/// or tracking pixel). Mirrors the JS-side `hasRealAttachments` logic.
+fn is_real_attachment(
+    content_type: &str,
+    content_id: &Option<String>,
+    filename: &Option<String>,
+    size: usize,
+    html: Option<&str>,
+) -> bool {
+    let ct = content_type.to_lowercase();
+    // Non-image types are always real attachments
+    if !ct.starts_with("image/") {
+        return true;
+    }
+    // Inline image with Content-ID referenced in the HTML body → embedded, not real
+    if let Some(ref cid) = content_id {
+        if let Some(html_body) = html {
+            let bare_cid = cid.trim_start_matches('<').trim_end_matches('>');
+            if html_body.contains(&format!("cid:{}", bare_cid)) {
+                return false;
+            }
+        }
+    }
+    // Tiny unnamed image → tracking pixel
+    if filename.is_none() && size < 5000 {
+        return false;
+    }
+    true
+}
+
+fn has_real_attachments(attachments: &[LightAttachment], html: Option<&str>) -> bool {
+    attachments.iter().any(|att| {
+        is_real_attachment(&att.content_type, &att.content_id, &att.filename, att.size, html)
+    })
+}
+
+fn has_real_attachments_full(attachments: &[MaildirAttachment], html: Option<&str>) -> bool {
+    attachments.iter().any(|att| {
+        is_real_attachment(&att.content_type, &att.content_id, &att.filename, att.size, html)
+    })
+}
+
 fn parse_eml_bytes_light(raw: &[u8], uid: u32, flags: Vec<String>) -> Result<LightEmail, String> {
     let parsed = mailparse::parse_mail(raw)
         .map_err(|e| format!("Failed to parse email: {}", e))?;
@@ -1214,7 +1256,7 @@ fn parse_eml_bytes_light(raw: &[u8], uid: u32, flags: Vec<String>) -> Result<Lig
     walk_mime_parts_light(&parsed, &mut text_body, &mut html_body, &mut attachments);
 
     let is_archived = flags.iter().any(|f| f == "archived");
-    let has_attachments = !attachments.is_empty();
+    let has_attachments = has_real_attachments(&attachments, html_body.as_deref());
 
     Ok(LightEmail {
         uid,
@@ -1277,7 +1319,7 @@ fn parse_eml_bytes(raw: &[u8], uid: u32, flags: Vec<String>) -> Result<ParsedEma
     walk_mime_parts(&parsed, &mut text_body, &mut html_body, &mut attachments);
 
     let is_archived = flags.iter().any(|f| f == "archived");
-    let has_attachments = !attachments.is_empty();
+    let has_attachments = has_real_attachments_full(&attachments, html_body.as_deref());
 
     use base64::Engine;
     let raw_source = base64::engine::general_purpose::STANDARD.encode(raw);
@@ -2672,8 +2714,9 @@ iVBORw0KGgo=\r\n\
     fn light_parse_detects_inline_non_text() {
         let raw = multipart_with_inline_image();
         let email = parse_eml_bytes_light(&raw, 3, vec![]).unwrap();
-        // Inline image counts as an attachment in the metadata
-        assert!(email.has_attachments);
+        // Inline image referenced via cid: in HTML should NOT set has_attachments
+        assert!(!email.has_attachments, "Embedded inline image should not count as attachment");
+        // But the attachment metadata should still be present for the viewer
         assert_eq!(email.attachments.len(), 1);
         assert_eq!(email.attachments[0].content_type, "image/png");
         assert!(email.attachments[0].content_id.is_some());
@@ -2785,5 +2828,175 @@ iVBORw0KGgo=\r\n\
         let full = parse_eml_bytes(&raw, 1, vec![]).unwrap();
         let light = parse_eml_bytes_light(&raw, 1, vec![]).unwrap();
         assert_eq!(full.text, light.text);
+    }
+
+    // ── is_real_attachment tests ────────────────────────────────────────
+
+    #[test]
+    fn real_attachment_pdf() {
+        assert!(is_real_attachment("application/pdf", &None, &Some("report.pdf".into()), 10000, None));
+    }
+
+    #[test]
+    fn real_attachment_zip() {
+        assert!(is_real_attachment("application/zip", &None, &Some("archive.zip".into()), 50000, None));
+    }
+
+    #[test]
+    fn inline_image_with_cid_referenced_in_html() {
+        let cid = Some("<logo123>".to_string());
+        let html = Some(r#"<html><body><img src="cid:logo123"></body></html>"#);
+        assert!(!is_real_attachment("image/png", &cid, &Some("logo.png".into()), 15000, html));
+    }
+
+    #[test]
+    fn inline_image_with_cid_not_in_html() {
+        let cid = Some("<logo123>".to_string());
+        let html = Some("<html><body><p>No images</p></body></html>");
+        assert!(is_real_attachment("image/png", &cid, &Some("logo.png".into()), 15000, html));
+    }
+
+    #[test]
+    fn inline_image_with_cid_no_html_body() {
+        let cid = Some("<logo123>".to_string());
+        assert!(is_real_attachment("image/png", &cid, &Some("logo.png".into()), 15000, None));
+    }
+
+    #[test]
+    fn tracking_pixel_tiny_unnamed_image() {
+        assert!(!is_real_attachment("image/gif", &None, &None, 43, None));
+    }
+
+    #[test]
+    fn tracking_pixel_boundary() {
+        // Just under 5000 — still a tracking pixel
+        assert!(!is_real_attachment("image/png", &None, &None, 4999, None));
+        // At 5000 — counts as real
+        assert!(is_real_attachment("image/png", &None, &None, 5000, None));
+    }
+
+    #[test]
+    fn named_inline_image_no_cid() {
+        // Has filename but no Content-ID → user-attached image, counts as real
+        assert!(is_real_attachment("image/jpeg", &None, &Some("photo.jpg".into()), 50000, Some("<p>hello</p>")));
+    }
+
+    #[test]
+    fn non_image_inline_always_real() {
+        // Even with Content-ID, non-image types are always real attachments
+        let cid = Some("<doc1>".to_string());
+        assert!(is_real_attachment("application/pdf", &cid, &Some("doc.pdf".into()), 10000, Some("<p>hello</p>")));
+    }
+
+    // ── has_real_attachments integration tests ─────────────────────────
+
+    #[test]
+    fn has_real_attachments_mixed_inline_and_real() {
+        let attachments = vec![
+            LightAttachment {
+                filename: Some("logo.png".into()),
+                content_type: "image/png".into(),
+                content_disposition: Some("Inline".into()),
+                size: 15000,
+                content_id: Some("<logo1>".into()),
+            },
+            LightAttachment {
+                filename: Some("report.pdf".into()),
+                content_type: "application/pdf".into(),
+                content_disposition: Some("Attachment".into()),
+                size: 102400,
+                content_id: None,
+            },
+        ];
+        let html = Some(r#"<img src="cid:logo1">"#);
+        assert!(has_real_attachments(&attachments, html));
+    }
+
+    #[test]
+    fn has_real_attachments_only_embedded_images() {
+        let attachments = vec![
+            LightAttachment {
+                filename: Some("banner.png".into()),
+                content_type: "image/png".into(),
+                content_disposition: Some("Inline".into()),
+                size: 20000,
+                content_id: Some("<banner>".into()),
+            },
+        ];
+        let html = Some(r#"<img src="cid:banner">"#);
+        assert!(!has_real_attachments(&attachments, html));
+    }
+
+    #[test]
+    fn has_real_attachments_only_tracking_pixel() {
+        let attachments = vec![
+            LightAttachment {
+                filename: None,
+                content_type: "image/gif".into(),
+                content_disposition: Some("Inline".into()),
+                size: 43,
+                content_id: None,
+            },
+        ];
+        assert!(!has_real_attachments(&attachments, Some("<p>hello</p>")));
+    }
+
+    #[test]
+    fn eml_with_inline_image_has_attachments_false() {
+        let raw = b"From: sender@test.com\r\n\
+            To: rcpt@test.com\r\n\
+            Subject: Inline image test\r\n\
+            MIME-Version: 1.0\r\n\
+            Content-Type: multipart/related; boundary=\"boundary1\"\r\n\
+            \r\n\
+            --boundary1\r\n\
+            Content-Type: text/html; charset=\"utf-8\"\r\n\
+            \r\n\
+            <html><body><img src=\"cid:img1\"></body></html>\r\n\
+            --boundary1\r\n\
+            Content-Type: image/png\r\n\
+            Content-Disposition: inline; filename=\"logo.png\"\r\n\
+            Content-ID: <img1>\r\n\
+            Content-Transfer-Encoding: base64\r\n\
+            \r\n\
+            iVBORw0KGgoAAAANSUhEUg==\r\n\
+            --boundary1--\r\n";
+        let email = parse_eml_bytes_light(raw, 1, vec![]).unwrap();
+        assert!(!email.has_attachments, "Inline embedded image should not set has_attachments");
+        assert_eq!(email.attachments.len(), 1, "Inline image should still be in attachments list");
+    }
+
+    #[test]
+    fn eml_with_real_plus_inline_has_attachments_true() {
+        let raw = b"From: sender@test.com\r\n\
+            To: rcpt@test.com\r\n\
+            Subject: Mixed attachments\r\n\
+            MIME-Version: 1.0\r\n\
+            Content-Type: multipart/mixed; boundary=\"outer\"\r\n\
+            \r\n\
+            --outer\r\n\
+            Content-Type: multipart/related; boundary=\"inner\"\r\n\
+            \r\n\
+            --inner\r\n\
+            Content-Type: text/html; charset=\"utf-8\"\r\n\
+            \r\n\
+            <html><body><img src=\"cid:img1\"><p>Hello</p></body></html>\r\n\
+            --inner\r\n\
+            Content-Type: image/png\r\n\
+            Content-Disposition: inline; filename=\"logo.png\"\r\n\
+            Content-ID: <img1>\r\n\
+            Content-Transfer-Encoding: base64\r\n\
+            \r\n\
+            iVBORw0KGgoAAAANSUhEUg==\r\n\
+            --inner--\r\n\
+            --outer\r\n\
+            Content-Type: application/pdf\r\n\
+            Content-Disposition: attachment; filename=\"report.pdf\"\r\n\
+            Content-Transfer-Encoding: base64\r\n\
+            \r\n\
+            JVBERi0xLjQK\r\n\
+            --outer--\r\n";
+        let email = parse_eml_bytes_light(raw, 1, vec![]).unwrap();
+        assert!(email.has_attachments, "Email with real PDF attachment should set has_attachments");
     }
 }
