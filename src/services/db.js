@@ -364,7 +364,7 @@ export async function saveEmails(emails, accountId, mailbox) {
       mailbox,
       uid: email.uid,
       rawSourceBase64: email.rawSource,
-      flags: ['seen'],
+      flags: ['archived', 'seen'],
     });
     results.push({ ...email, localId: `${accountId}-${mailbox}-${email.uid}` });
   }
@@ -403,6 +403,18 @@ export async function getLocalEmail(accountId, mailbox, uid) {
   }
 }
 
+export async function getLocalEmailLight(accountId, mailbox, uid) {
+  await initDB();
+  if (!invoke) return undefined;
+
+  try {
+    const email = await invoke('maildir_read_light', { accountId, mailbox, uid: parseInt(uid, 10) });
+    return email || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function getLocalEmails(accountId, mailbox) {
   await initBasic();
   if (!invoke) return [];
@@ -412,7 +424,7 @@ export async function getLocalEmails(accountId, mailbox) {
     const emails = [];
     for (const summary of summaries) {
       try {
-        const email = await invoke('maildir_read', { accountId, mailbox, uid: summary.uid });
+        const email = await invoke('maildir_read_light', { accountId, mailbox, uid: summary.uid });
         if (email) emails.push({ ...email, localId: `${accountId}-${mailbox}-${summary.uid}`, isArchived: summary.isArchived });
       } catch (e) {
         console.warn(`[db.js] Failed to read email UID ${summary.uid}:`, e);
@@ -506,18 +518,25 @@ export async function exportEmail(localId) {
   if (!parsed || !invoke) return null;
 
   try {
-    const email = await invoke('maildir_read', {
-      accountId: parsed.accountId,
-      mailbox: parsed.mailbox,
-      uid: parseInt(parsed.uid, 10),
-    });
-    if (!email) return null;
+    // Get light email for subject, and raw source separately
+    const [email, rawBase64] = await Promise.all([
+      invoke('maildir_read_light', {
+        accountId: parsed.accountId,
+        mailbox: parsed.mailbox,
+        uid: parseInt(parsed.uid, 10),
+      }),
+      invoke('maildir_read_raw_source', {
+        accountId: parsed.accountId,
+        mailbox: parsed.mailbox,
+        uid: parseInt(parsed.uid, 10),
+      }),
+    ]);
+    if (!email || !rawBase64) return null;
 
-    // rawSource is base64-encoded
     return {
       filename: `${(email.subject || 'email').replace(/[^a-zA-Z0-9]/g, '_')}.eml`,
-      content: atob(email.rawSource),
-      rawBase64: email.rawSource,
+      content: atob(rawBase64),
+      rawBase64,
       mimeType: 'message/rfc822'
     };
   } catch {
@@ -526,14 +545,44 @@ export async function exportEmail(localId) {
 }
 
 // --- Email headers cache ---
-// Uses file-based caching via Tauri commands (unchanged)
+// ── Mailbox cache ─────────────────────────────────────────────────────────
 
-export async function saveEmailHeaders(accountId, mailbox, emails, totalEmails) {
+export async function saveMailboxes(accountId, mailboxes) {
+  if (invoke) {
+    try {
+      const data = JSON.stringify({ mailboxes, lastSynced: Date.now() });
+      await invoke('save_email_cache', { accountId, mailbox: '__mailboxes__', data });
+    } catch (error) {
+      console.warn('[db.js] Failed to save mailbox cache:', error);
+    }
+  }
+}
+
+export async function getCachedMailboxes(accountId) {
+  if (invoke) {
+    try {
+      const data = await invoke('load_email_cache', { accountId, mailbox: '__mailboxes__' });
+      if (data) {
+        const entry = JSON.parse(data);
+        return entry.mailboxes || null;
+      }
+    } catch (error) {
+      console.warn('[db.js] Failed to load mailbox cache:', error);
+    }
+  }
+  return null;
+}
+
+// ── Email header cache ───────────────────────────────────────────────────
+
+export async function saveEmailHeaders(accountId, mailbox, emails, totalEmails, { uidValidity, uidNext } = {}) {
   const cacheEntry = {
     accountId,
     mailbox,
     emails,
     totalEmails,
+    uidValidity: uidValidity ?? null,
+    uidNext: uidNext ?? null,
     lastSynced: Date.now()
   };
 
@@ -560,6 +609,8 @@ export async function getEmailHeaders(accountId, mailbox) {
         return {
           emails: entry.emails,
           totalEmails: entry.totalEmails,
+          uidValidity: entry.uidValidity ?? null,
+          uidNext: entry.uidNext ?? null,
           lastSynced: entry.lastSynced
         };
       }

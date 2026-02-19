@@ -39,7 +39,7 @@ A modern, cross-platform desktop email client built with Tauri and React. Save y
 
 - **Desktop**: Tauri v2 (Rust-based native wrapper)
 - **Frontend**: React 18, Zustand (state management), Framer Motion (animations)
-- **Backend**: Node.js sidecar (Express.js, ImapFlow for IMAP, Nodemailer for SMTP), bundled as native binary
+- **IMAP/SMTP**: Native Rust — `async-imap` for IMAP, `lettre` for SMTP, custom OAuth2 PKCE flow — all running in-process via Tauri `invoke()` commands
 - **Storage**: Maildir format (`.eml` files on disk), OS keychain for credentials (via `keyring` crate), JSON file cache for email headers
 - **Styling**: Tailwind CSS
 - **Build**: Vite
@@ -57,7 +57,7 @@ A modern, cross-platform desktop email client built with Tauri and React. Save y
 1. Clone the project:
 ```bash
 git clone <repo-url>
-cd mail-client
+cd mail-vault-app
 ```
 
 2. Install dependencies:
@@ -133,35 +133,39 @@ Archived emails are already stored as `.eml` files. You can:
 ## Project Structure
 
 ```
-mail-client/
-├── index.html
+mail-vault-app/
+├── app.html                   # Tauri window entry point
 ├── package.json
 ├── vite.config.js
 ├── tailwind.config.js
-├── postcss.config.js
-├── server/
-│   └── index.js              # Express backend for IMAP/SMTP
 ├── src/
-│   ├── main.jsx              # App entry point
-│   ├── App.jsx               # Main app component
+│   ├── main.jsx               # App entry point
+│   ├── App.jsx                # Main app component
 │   ├── components/
-│   │   ├── Sidebar.jsx       # Account & folder navigation
-│   │   ├── EmailList.jsx     # Email list with local indicators
-│   │   ├── EmailViewer.jsx   # Email content viewer
-│   │   ├── AccountModal.jsx  # Add account modal
-│   │   └── Toast.jsx         # Notification toasts
+│   │   ├── Sidebar.jsx        # Account & folder navigation
+│   │   ├── EmailList.jsx      # Email list with local indicators
+│   │   ├── EmailViewer.jsx    # Email content viewer
+│   │   ├── AccountModal.jsx   # Add account modal
+│   │   └── Toast.jsx          # Notification toasts
 │   ├── services/
-│   │   ├── api.js            # API client for backend
-│   │   └── db.js             # Maildir + keychain operations
+│   │   ├── api.js             # Tauri invoke() API client
+│   │   └── db.js              # Maildir + keychain operations
 │   ├── stores/
-│   │   └── mailStore.js      # Zustand state management
+│   │   └── mailStore.js       # Zustand state management
 │   └── styles/
-│       └── index.css         # Tailwind + custom styles
+│       └── index.css          # Tailwind + custom styles
 └── src-tauri/
-    ├── Cargo.toml            # Rust dependencies
-    ├── tauri.conf.json       # Tauri configuration
+    ├── Cargo.toml             # Rust dependencies
+    ├── tauri.conf.json        # Tauri configuration
     └── src/
-        └── main.rs           # Tauri commands (keychain, Maildir, EML parsing)
+        ├── main.rs            # Tauri commands (keychain, Maildir, EML parsing)
+        ├── imap/
+        │   ├── mod.rs         # IMAP operations (connect, fetch, search, flags)
+        │   └── pool.rs        # Two-pool connection manager (background + priority)
+        ├── smtp.rs            # SMTP send via lettre
+        ├── oauth2.rs          # Microsoft OAuth2 PKCE flow
+        ├── commands.rs        # Tauri command wrappers for IMAP/SMTP/OAuth2
+        └── archive.rs         # Bulk email archiving (concurrent, cancellable)
 ```
 
 ## Data Storage
@@ -187,6 +191,8 @@ All data is stored locally on your device — nothing is sent to third-party ser
 - **OAuth2 for Microsoft**: Outlook/Microsoft 365 accounts use secure OAuth2 (XOAUTH2) authentication with PKCE. Your Microsoft password is never stored — only short-lived access tokens and refresh tokens, encrypted in the system keychain.
 
 - **App Passwords**: For other providers, use app-specific passwords instead of your main account password when available.
+
+- **Native IMAP/SMTP**: All email operations run natively in Rust within the Tauri process — no intermediate HTTP server, no sidecar binary, no localhost networking. Your credentials never leave the app process.
 
 - **Local Storage**: Emails saved locally include all content and attachments. Be mindful of what you save on shared computers.
 

@@ -32,6 +32,19 @@ walkdir = "2"
 zip = "2"
 uuid = { version = "1", features = ["v4"] }
 tauri-plugin-http = "2.5.7"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tokio = { version = "1", features = ["sync", "net", "io-util", "time", "rt", "macros"] }
+async-imap = "0.11"
+imap-proto = "0.16"
+async-native-tls = "0.5"
+async-std = { version = "1", features = ["attributes"] }
+futures = "0.3"
+lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "smtp-transport", "builder"] }
+sha2 = "0.10"
+rand = "0.8"
+url = "2"
+thiserror = "2"
+once_cell = "1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 cocoa = "0.26"

@@ -2,7 +2,27 @@
 
 ## [1.5.0] - 2026-02-19
 
+### Performance
+- **Delta-sync on folder/account switch** — switching mailbox or account now checks IMAP UIDVALIDITY + UIDNEXT before fetching; if nothing changed, the cached email list is kept as-is with zero IMAP fetches; when emails were added or deleted, only the diff is fetched via `UID SEARCH ALL` + `UID FETCH` for new UIDs, instead of re-downloading the entire first page
+- **Lazy email parsing** — opening an email now only parses text/HTML body and attachment metadata; attachment binaries and raw source are no longer loaded upfront, reducing parse time from ~60ms to ~8ms for a 5 MB email
+- **On-demand attachment loading** — attachment content is fetched from the .eml file only when the user clicks download, eliminating wasted memory for unviewed attachments
+- **On-demand raw source** — "View Source" now loads the full email source lazily instead of including it with every email open
+- **Optimized email list rendering** — `EmailRow` wrapped in `React.memo` with stable selectors, eliminating thousands of unnecessary re-renders per store mutation at scale (10k+ emails)
+- **Light IMAP fetch** — new `imap_get_email_light` command returns only body text and attachment metadata from the server, auto-persisting the full .eml to Maildir for later on-demand access
+- **Light Maildir reads** — `getLocalEmails()` and email selection now use `maildir_read_light` which skips base64-encoding attachment binaries and raw source
+- **Light background caching** — content caching pipeline now uses `fetchEmailLight` (Rust auto-persists .eml) instead of fetching full email + JS-side save, reducing memory and bandwidth per cached email
+
 ### Fixed
+- **Garbled sender/subject in email list** — non-ASCII names and subjects (e.g. `=?windows-1257?Q?Ona_...?=`) appeared as raw RFC 2047 encoded text in the email list; IMAP envelope values are now decoded through `mailparse` before display
+- **Attachment indicators missing from email list** — IMAP header fetches never detected attachments because `BODYSTRUCTURE` wasn't requested; now included in the FETCH command so `hasAttachments` is set correctly at the header level without needing to open the email
+- **Attachment section not showing in email viewer** — `hasAttachments` updates only wrote to the `emails` array but not to `emailsByIndex` (the Map used by the virtual-scroll list); now both are updated in sync when selecting an email or background-caching completes
+- **IMAP namespace error** — servers requiring mailbox prefix (e.g., `INBOX.Sent` instead of `Sent`) would fail with "nonexistent namespace" when the app fell back to hardcoded mailbox paths; now caches server-returned mailbox paths and falls back to INBOX-only when no cache exists
+- **Black screen crash** — app going to a black screen after extended use due to WKWebView memory exhaustion; stripped heavy fields (rawSource, attachment content) from in-memory cache, reduced default cache limit from 5GB to 512MB, and eliminated wasteful Map copies on every cache read/write
+- Iframe event listeners (click, contextmenu) leaked on every email selection — now properly cleaned up when switching emails
+- Rust panic hook installed — panics are now logged to stderr/system log before process abort, aiding crash diagnosis
+- Update checker blocked a Tokio worker thread with `std::thread::sleep` — replaced with async `tokio::time::sleep`
+- Email archive from cache could fail when rawSource was not available — now falls through to a fresh IMAP fetch
+- Bulk archive ("Archive Selected") now correctly sets the `archived` flag — previously only set `seen`, so bulk-archived emails didn't appear in Local view
 - Failproof email loading — emails that fail to load are now retried with unlimited exponential backoff (3s → 9s → 18s → 36s… capped at 120s) instead of being silently skipped
 - OAuth2 accounts (Microsoft 365) silently failed to load email content — background caching and header loading both checked only for password, now correctly accept OAuth2 access tokens
 - All network activity pauses automatically when app goes offline and resumes on reconnect (both header loading and content caching pipelines)
@@ -17,15 +37,22 @@
 - Drag-and-drop account reordering in sidebar and settings had no visible effect — components weren't subscribed to the `accountOrder` state, so reorders were persisted but never reflected in the UI
 
 ### Added
+- **Native Rust IMAP/SMTP** — replaced Node.js sidecar server with native `async-imap` and `lettre` crates; all email operations now run directly in the Tauri process via `invoke()` commands (no more HTTP to localhost:3001)
+- **IMAP connection pooling** — two-pool design (background + priority) with NOOP health checks and automatic reconnection on stale sessions
+- **Native OAuth2 PKCE flow** — Microsoft OAuth2 moved from Node.js to Rust with PKCE code challenge, local TCP callback server on port 19876, and automatic token refresh
+- **UID EXPUNGE support** — permanent email deletion now uses RFC 4315 UID EXPUNGE to only remove the targeted message, not all deleted messages in the mailbox
 - Background loading pipeline architecture — dedicated `AccountPipeline` class manages per-account header loading and content caching with configurable concurrency
 - Multi-account background sync — after the active account finishes loading, all other accounts' INBOX headers are fetched and cached automatically
 - Parallel content caching — active account downloads 3 email bodies concurrently (up from 1); background accounts use 1 concurrent worker
 - Cross-account cascade — after active account content is fully cached, background accounts also get their email bodies cached sequentially
 - Shared credential helper (`authUtils.js`) — single source of truth for password/OAuth2 credential validation
+- Bulk archive runs on Rust async thread pool — 3 concurrent email fetches via IMAP pool, with progress events and cancellation support; no longer blocks the JS event loop
+- Cancel button on bulk archive progress toast — stops in-flight archive operation
 
 ### Changed
 - Disabled browser's native "Open Frame in New Window" right-click option on email content iframe
 - Replaced monolithic `useBackgroundCaching` hook with clean pipeline architecture: `AccountPipeline` (per-account worker), `EmailPipelineManager` (singleton coordinator), `usePipelineCoordinator` (React bridge)
+- Removed Node.js sidecar server — no more bundled binary, sidecar spawning, health check polling, or HTTP-based API calls; reduces app size and startup time
 
 ## [1.4.11] - 2026-02-19
 

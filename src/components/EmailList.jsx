@@ -33,8 +33,10 @@ function formatEmailDate(dateStr) {
   return format(date, 'MMM d');
 }
 
-function EmailRow({ email, isSelected, onSelect, onToggleSelection, isChecked, style }) {
-  const { saveEmailLocally, removeLocalEmail, deleteEmailFromServer } = useMailStore();
+const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onToggleSelection, isChecked, style }) {
+  const saveEmailLocally = useMailStore(s => s.saveEmailLocally);
+  const removeLocalEmail = useMailStore(s => s.removeLocalEmail);
+  const deleteEmailFromServer = useMailStore(s => s.deleteEmailFromServer);
   const [menuOpen, setMenuOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -184,7 +186,7 @@ function EmailRow({ email, isSelected, onSelect, onToggleSelection, isChecked, s
       </div>
     </div>
   );
-}
+});
 
 export function EmailList({ layoutMode = 'three-column' }) {
   const {

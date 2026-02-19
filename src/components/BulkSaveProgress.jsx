@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { HardDrive, Check, X, AlertCircle } from 'lucide-react';
 
 export function BulkSaveProgress() {
-  const { bulkSaveProgress, dismissBulkProgress } = useMailStore();
+  const { bulkSaveProgress, dismissBulkProgress, cancelArchive } = useMailStore();
   
   if (!bulkSaveProgress) return null;
   
@@ -49,12 +49,20 @@ export function BulkSaveProgress() {
               </span>
             </div>
             
-            {isComplete && (
+            {isComplete ? (
               <button
                 onClick={dismissBulkProgress}
                 className="p-1 hover:bg-mail-border rounded transition-colors"
               >
                 <X size={14} className="text-mail-text-muted" />
+              </button>
+            ) : (
+              <button
+                onClick={cancelArchive}
+                className="px-2 py-1 text-xs text-mail-text-muted hover:text-mail-danger
+                           hover:bg-mail-border rounded transition-colors"
+              >
+                Cancel
               </button>
             )}
           </div>

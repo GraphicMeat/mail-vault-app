@@ -109,12 +109,95 @@
 
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </span>
+            Performance
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Delta-sync on folder/account switch</strong> — switching mailbox or account now checks IMAP UIDVALIDITY + UIDNEXT before fetching; if nothing changed, the cached email list is kept as-is with zero IMAP fetches; when emails were added or deleted, only the diff is fetched via <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">UID SEARCH ALL</code> + <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">UID FETCH</code> for new UIDs, instead of re-downloading the entire first page</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Lazy email parsing</strong> — opening an email now only parses text/HTML body and attachment metadata; attachment binaries and raw source are no longer loaded upfront, reducing parse time from ~60ms to ~8ms for a 5 MB email</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>On-demand attachment loading</strong> — attachment content is fetched from the .eml file only when the user clicks download, eliminating wasted memory for unviewed attachments</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>On-demand raw source</strong> — "View Source" now loads the full email source lazily instead of including it with every email open</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Optimized email list rendering</strong> — <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">EmailRow</code> wrapped in <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">React.memo</code> with stable selectors, eliminating thousands of unnecessary re-renders per store mutation at scale (10k+ emails)</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Light IMAP fetch</strong> — new <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">imap_get_email_light</code> command returns only body text and attachment metadata from the server, auto-persisting the full .eml to Maildir for later on-demand access</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Light Maildir reads</strong> — <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">getLocalEmails()</code> and email selection now use <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">maildir_read_light</code> which skips base64-encoding attachment binaries and raw source</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Light background caching</strong> — content caching pipeline now uses <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">fetchEmailLight</code> (Rust auto-persists .eml) instead of fetching full email + JS-side save, reducing memory and bandwidth per cached email</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
               <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
             </span>
             Fixed
           </h3>
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Garbled sender/subject in email list</strong> — non-ASCII names and subjects (e.g. <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">=?windows-1257?Q?Ona_...?=</code>) appeared as raw RFC 2047 encoded text in the email list; IMAP envelope values are now decoded through <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">mailparse</code> before display</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Attachment indicators missing from email list</strong> — IMAP header fetches never detected attachments because <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">BODYSTRUCTURE</code> wasn't requested; now included in the FETCH command so <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">hasAttachments</code> is set correctly at the header level without needing to open the email</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Attachment section not showing in email viewer</strong> — <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">hasAttachments</code> updates only wrote to the <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">emails</code> array but not to <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">emailsByIndex</code> (the Map used by the virtual-scroll list); now both are updated in sync when selecting an email or background-caching completes</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>IMAP namespace error</strong> — servers requiring mailbox prefix (e.g., <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">INBOX.Sent</code> instead of <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">Sent</code>) would fail with "nonexistent namespace" when the app fell back to hardcoded mailbox paths; now caches server-returned mailbox paths and falls back to INBOX-only when no cache exists</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Black screen crash</strong> — app going to a black screen after extended use due to WKWebView memory exhaustion; stripped heavy fields (rawSource, attachment content) from in-memory cache, reduced default cache limit from 5GB to 512MB, and eliminated wasteful Map copies on every cache read/write</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span>Iframe event listeners (click, contextmenu) leaked on every email selection — now properly cleaned up when switching emails</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span>Rust panic hook installed — panics are now logged to stderr/system log before process abort, aiding crash diagnosis</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span>Update checker blocked a Tokio worker thread with <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">std::thread::sleep</code> — replaced with async <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">tokio::time::sleep</code></span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span>Email archive from cache could fail when rawSource was not available — now falls through to a fresh IMAP fetch</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span>Bulk archive ("Archive Selected") now correctly sets the <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">archived</code> flag — previously only set <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">seen</code>, so bulk-archived emails didn't appear in Local view</span>
+            </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
               <span>Failproof email loading — emails that fail to load are now retried with unlimited exponential backoff (3s → 9s → 18s → 36s… capped at 120s) instead of being silently skipped</span>
@@ -176,6 +259,22 @@
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Native Rust IMAP/SMTP</strong> — replaced Node.js sidecar server with native <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">async-imap</code> and <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">lettre</code> crates; all email operations now run directly in the Tauri process via <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">invoke()</code> commands (no more HTTP to localhost:3001)</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>IMAP connection pooling</strong> — two-pool design (background + priority) with NOOP health checks and automatic reconnection on stale sessions</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Native OAuth2 PKCE flow</strong> — Microsoft OAuth2 moved from Node.js to Rust with PKCE code challenge, local TCP callback server on port 19876, and automatic token refresh</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>UID EXPUNGE support</strong> — permanent email deletion now uses RFC 4315 UID EXPUNGE to only remove the targeted message, not all deleted messages in the mailbox</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
               <span>Background loading pipeline architecture — dedicated <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">AccountPipeline</code> class manages per-account header loading and content caching with configurable concurrency</span>
             </li>
             <li class="flex items-start gap-3">
@@ -193,6 +292,14 @@
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
               <span>Shared credential helper (<code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">authUtils.js</code>) — single source of truth for password/OAuth2 credential validation</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span>Bulk archive runs on Rust async thread pool — 3 concurrent email fetches via IMAP pool, with progress events and cancellation support; no longer blocks the JS event loop</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span>Cancel button on bulk archive progress toast — stops in-flight archive operation</span>
             </li>
           </ul>
         </div>
@@ -212,6 +319,10 @@
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
               <span>Replaced monolithic <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">useBackgroundCaching</code> hook with clean pipeline architecture: <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">AccountPipeline</code> (per-account worker), <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">EmailPipelineManager</code> (singleton coordinator), <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">usePipelineCoordinator</code> (React bridge)</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span>Removed Node.js sidecar server — no more bundled binary, sidecar spawning, health check polling, or HTTP-based API calls; reduces app size and startup time</span>
             </li>
           </ul>
         </div>

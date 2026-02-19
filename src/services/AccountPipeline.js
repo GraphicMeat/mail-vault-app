@@ -121,12 +121,30 @@ export class AccountPipeline {
       if (uid === undefined) break; // queue empty, slot goes idle
 
       try {
-        const fullEmail = await api.fetchEmail(this.account, uid, mailbox);
-        await db.saveEmail(fullEmail, this.accountId, mailbox);
+        // Light fetch: auto-persists .eml to Maildir in Rust, returns metadata only
+        const email = await api.fetchEmailLight(this.account, uid, mailbox);
 
         const cacheKey = `${this.accountId}-${mailbox}-${uid}`;
         const cacheLimitMB = useSettingsStore.getState().cacheLimitMB;
-        useMailStore.getState().addToCache(cacheKey, fullEmail, cacheLimitMB);
+        const store = useMailStore.getState();
+        store.addToCache(cacheKey, email, cacheLimitMB);
+
+        // Update hasAttachments on the email list item (both emails array and emailsByIndex map)
+        if (email?.hasAttachments) {
+          useMailStore.setState(state => {
+            const newEmailsByIndex = new Map(state.emailsByIndex);
+            for (const [idx, e] of newEmailsByIndex) {
+              if (e.uid === uid) {
+                newEmailsByIndex.set(idx, { ...e, hasAttachments: true });
+                break;
+              }
+            }
+            return {
+              emails: state.emails.map(e => e.uid === uid ? { ...e, hasAttachments: true } : e),
+              emailsByIndex: newEmailsByIndex,
+            };
+          });
+        }
 
         this._completed++;
         this._retryDelay = 3000; // reset on success
@@ -187,6 +205,11 @@ export class AccountPipeline {
           localEmails: newLocalEmails
         });
         useMailStore.getState().updateSortedEmails();
+
+        // Persist updated hasAttachments values to headers cache
+        const { emails, totalEmails } = useMailStore.getState();
+        db.saveEmailHeaders(activeAccountId, activeMailbox, emails, totalEmails)
+          .catch(e => console.warn(`[Pipeline:${this.account.email}] Failed to save updated headers:`, e));
       } catch (e) {
         console.warn(`[Pipeline:${this.account.email}] Failed to refresh saved IDs:`, e);
       }

@@ -25,25 +25,10 @@ import {
   FolderOpen,
   AppWindow,
   Check,
-  Code
+  Code,
+  RefreshCw
 } from 'lucide-react';
-
-function getRealAttachments(attachments, html) {
-  if (!attachments) return [];
-  return attachments.filter(att => {
-    const type = (att.contentType || '').toLowerCase();
-    if (!type.startsWith('image/')) return true;
-    // Only hide if the image has a Content-ID that is actually
-    // referenced in the HTML body (i.e. embedded via cid:)
-    if (att.contentId && html) {
-      const cid = att.contentId.replace(/^<|>$/g, '');
-      if (html.includes(`cid:${cid}`)) return false;
-    }
-    // Tracking pixels: tiny unnamed images
-    if (!att.filename && att.size && att.size < 5000) return false;
-    return true;
-  });
-}
+import { getRealAttachments } from '../services/attachmentUtils';
 
 function getCleanBase64(content) {
   let base64Content = content;
@@ -179,13 +164,41 @@ function AttachmentContextMenu({ x, y, downloadedPath, onDownload, onSaveAs, onO
   );
 }
 
-function AttachmentItem({ attachment, account, folder }) {
+function AttachmentItem({ attachment, attachmentIndex, emailUid, account, folder }) {
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState(null);
   const [downloadedPath, setDownloadedPath] = useState(null);
   const [justDownloaded, setJustDownloaded] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
+  const [contentBase64, setContentBase64] = useState(attachment.content || null);
   const isTauri = !!window.__TAURI__;
+
+  const { activeAccountId, activeMailbox } = useMailStore(
+    state => ({ activeAccountId: state.activeAccountId, activeMailbox: state.activeMailbox })
+  );
+
+  // Lazy-load attachment content from disk on demand (with retry for timing)
+  const ensureContent = async () => {
+    if (contentBase64) return contentBase64;
+    if (isTauri) {
+      const { invoke } = window.__TAURI__.core;
+      const args = { accountId: activeAccountId, mailbox: activeMailbox, uid: emailUid, attachmentIndex };
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const b64 = await invoke('maildir_read_attachment', args);
+          setContentBase64(b64);
+          return b64;
+        } catch (err) {
+          if (attempt < 2 && String(err).includes('not found')) {
+            await new Promise(r => setTimeout(r, 500));
+            continue;
+          }
+          throw err;
+        }
+      }
+    }
+    throw new Error('Attachment content not available');
+  };
 
   const handleDownload = async (e) => {
     if (e) {
@@ -193,19 +206,16 @@ function AttachmentItem({ attachment, account, folder }) {
       e.preventDefault();
     }
 
-    if (!attachment.content) {
-      setError('Attachment content not available');
-      setTimeout(() => setError(null), 3000);
-      return;
-    }
-
     setDownloading(true);
     setError(null);
 
     try {
+      const b64 = await ensureContent();
+      if (!b64) throw new Error('Could not load attachment content');
+
       if (isTauri) {
         const { invoke } = window.__TAURI__.core;
-        const base64Content = getCleanBase64(attachment.content);
+        const base64Content = getCleanBase64(b64);
         const savedPath = await invoke('save_attachment', {
           filename: attachment.filename || 'attachment',
           contentBase64: base64Content,
@@ -216,7 +226,7 @@ function AttachmentItem({ attachment, account, folder }) {
         setJustDownloaded(true);
         setTimeout(() => setJustDownloaded(false), 3000);
       } else {
-        browserDownload(attachment);
+        browserDownload({ ...attachment, content: b64 });
       }
     } catch (err) {
       console.error('[Attachment] Failed to download:', err);
@@ -229,9 +239,12 @@ function AttachmentItem({ attachment, account, folder }) {
 
   const handleSaveAs = async () => {
     setContextMenu(null);
-    if (!attachment.content || !isTauri) return;
+    if (!isTauri) return;
 
     try {
+      const b64 = await ensureContent();
+      if (!b64) throw new Error('Could not load attachment content');
+
       const { save } = await import('@tauri-apps/plugin-dialog');
       const { invoke } = window.__TAURI__.core;
       const fname = attachment.filename || 'attachment';
@@ -244,7 +257,7 @@ function AttachmentItem({ attachment, account, folder }) {
 
       setDownloading(true);
       setError(null);
-      const base64Content = getCleanBase64(attachment.content);
+      const base64Content = getCleanBase64(b64);
       const savedPath = await invoke('save_attachment_to', {
         filename: fname,
         contentBase64: base64Content,
@@ -380,30 +393,43 @@ function AttachmentItem({ attachment, account, folder }) {
   );
 }
 
-function DownloadAllButton({ attachments, account, folder }) {
+function DownloadAllButton({ attachments, emailUid, account, folder }) {
   const [downloading, setDownloading] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const isTauri = !!window.__TAURI__;
 
+  const { activeAccountId, activeMailbox } = useMailStore(
+    state => ({ activeAccountId: state.activeAccountId, activeMailbox: state.activeMailbox })
+  );
+
   const handleDownloadAll = async () => {
-    const validAttachments = attachments.filter(a => a.content);
-    if (validAttachments.length === 0) {
-      alert('No attachment content available for download');
-      return;
-    }
+    if (attachments.length === 0) return;
 
     setDownloading(true);
-    setProgress({ current: 0, total: validAttachments.length });
+    setProgress({ current: 0, total: attachments.length });
 
     try {
-      for (let i = 0; i < validAttachments.length; i++) {
-        const attachment = validAttachments[i];
-        setProgress({ current: i + 1, total: validAttachments.length });
+      for (let i = 0; i < attachments.length; i++) {
+        const attachment = attachments[i];
+        setProgress({ current: i + 1, total: attachments.length });
 
         try {
+          // Lazy-load content for each attachment
+          let b64 = attachment.content;
+          if (!b64 && isTauri) {
+            const { invoke } = window.__TAURI__.core;
+            b64 = await invoke('maildir_read_attachment', {
+              accountId: activeAccountId,
+              mailbox: activeMailbox,
+              uid: emailUid,
+              attachmentIndex: attachment._originalIndex,
+            });
+          }
+          if (!b64) continue;
+
           if (isTauri) {
             const { invoke } = window.__TAURI__.core;
-            const base64Content = getCleanBase64(attachment.content);
+            const base64Content = getCleanBase64(b64);
             await invoke('save_attachment', {
               filename: attachment.filename || `attachment_${i + 1}`,
               contentBase64: base64Content,
@@ -411,8 +437,8 @@ function DownloadAllButton({ attachments, account, folder }) {
               folder: folder || null,
             });
           } else {
-            browserDownload(attachment);
-            if (i < validAttachments.length - 1) {
+            browserDownload({ ...attachment, content: b64 });
+            if (i < attachments.length - 1) {
               await new Promise(resolve => setTimeout(resolve, 300));
             }
           }
@@ -449,7 +475,7 @@ function DownloadAllButton({ attachments, account, folder }) {
   );
 }
 
-function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw }) {
+function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, loadingRaw }) {
   return (
     <div
       className="p-4 border-b border-mail-border cursor-pointer"
@@ -497,18 +523,22 @@ function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw }) {
                 {email.replyTo?.length > 0 && (
                   <div>Reply-To: {email.replyTo.map(r => r.address).join(', ')}</div>
                 )}
-                {email.rawSource && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onToggleRaw(); }}
-                    className={`mt-2 flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors
-                               ${showRaw
-                                 ? 'bg-mail-accent text-white'
-                                 : 'bg-mail-surface hover:bg-mail-surface-hover text-mail-text-muted'}`}
-                  >
+                <button
+                  onClick={(e) => { e.stopPropagation(); onToggleRaw(); }}
+                  disabled={loadingRaw}
+                  className={`mt-2 flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors
+                             ${showRaw
+                               ? 'bg-mail-accent text-white'
+                               : 'bg-mail-surface hover:bg-mail-surface-hover text-mail-text-muted'}
+                             disabled:opacity-50`}
+                >
+                  {loadingRaw ? (
+                    <RefreshCw size={12} className="animate-spin" />
+                  ) : (
                     <Code size={12} />
-                    {showRaw ? 'Rendered' : 'View Source'}
-                  </button>
-                )}
+                  )}
+                  {loadingRaw ? 'Loading...' : showRaw ? 'Rendered' : 'View Source'}
+                </button>
               </motion.div>
             )}
           </AnimatePresence>
@@ -547,6 +577,8 @@ export function EmailViewer() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmUnarchive, setConfirmUnarchive] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
+  const [rawSource, setRawSource] = useState(null);
+  const [loadingRaw, setLoadingRaw] = useState(false);
   const iframeRef = useRef(null);
   
   const isCached = selectedEmail && savedEmailIds.has(selectedEmail.uid);
@@ -557,6 +589,7 @@ export function EmailViewer() {
   // Reset view states when switching emails
   useEffect(() => {
     setShowRaw(false);
+    setRawSource(null);
     setConfirmDelete(false);
     setConfirmUnarchive(false);
   }, [selectedEmail?.uid]);
@@ -672,91 +705,107 @@ export function EmailViewer() {
   
   // Auto-resize iframe and apply dark mode overrides
   useEffect(() => {
-    if (iframeRef.current && selectedEmail?.html) {
-      const iframe = iframeRef.current;
+    if (!iframeRef.current || !selectedEmail?.html) return;
 
-      const resizeIframe = () => {
-        try {
-          const doc = iframe.contentDocument || iframe.contentWindow?.document;
-          if (doc && doc.body) {
-            const height = Math.max(
-              doc.body.scrollHeight,
-              doc.body.offsetHeight,
-              doc.documentElement?.scrollHeight || 0,
-              doc.documentElement?.offsetHeight || 0
-            );
-            iframe.style.height = Math.max(height + 32, 300) + 'px';
-          }
-        } catch (e) {
-          console.error('Failed to resize iframe:', e);
+    const iframe = iframeRef.current;
+    let resizeTimers = [];
+
+    const resizeIframe = () => {
+      try {
+        const doc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (doc && doc.body) {
+          const height = Math.max(
+            doc.body.scrollHeight,
+            doc.body.offsetHeight,
+            doc.documentElement?.scrollHeight || 0,
+            doc.documentElement?.offsetHeight || 0
+          );
+          iframe.style.height = Math.max(height + 32, 300) + 'px';
         }
-      };
+      } catch (e) {
+        console.error('Failed to resize iframe:', e);
+      }
+    };
 
-      // Intercept link clicks inside iframe and open in system browser
-      const interceptLinks = () => {
-        try {
-          const doc = iframe.contentDocument || iframe.contentWindow?.document;
-          if (!doc) return;
-          doc.addEventListener('click', (e) => {
-            const link = e.target.closest('a');
-            if (link && link.href && !link.href.startsWith('cid:')) {
-              e.preventDefault();
-              e.stopPropagation();
-              const url = link.href;
-              // Use Tauri shell plugin to open in system browser
-              import('@tauri-apps/plugin-shell').then(({ open }) => {
-                open(url);
-              }).catch(() => {
-                window.open(url, '_blank');
-              });
-            }
-          });
-          // Custom context menu (replaces native "Open Frame in New Window" which doesn't work in Tauri)
-          doc.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            // Remove any existing custom menu
-            const existing = doc.getElementById('mv-ctx-menu');
-            if (existing) existing.remove();
-            // Build menu
-            const menu = doc.createElement('div');
-            menu.id = 'mv-ctx-menu';
-            menu.style.cssText = 'position:fixed;z-index:99999;background:#ffffff;border:1px solid #d1d5db;border-radius:6px;padding:4px 0;min-width:180px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.15);';
-            menu.style.left = e.clientX + 'px';
-            menu.style.top = e.clientY + 'px';
-            const items = [
-              { label: 'Copy', action: () => doc.execCommand('copy') },
-              { label: 'Select All', action: () => doc.execCommand('selectAll') },
-            ];
-            items.forEach(({ label, action }) => {
-              const item = doc.createElement('div');
-              item.textContent = label;
-              item.style.cssText = 'padding:6px 14px;cursor:pointer;color:#333333;';
-              item.onmouseover = () => item.style.background = '#f3f4f6';
-              item.onmouseout = () => item.style.background = 'none';
-              item.onclick = () => { action(); menu.remove(); };
-              menu.appendChild(item);
-            });
-            doc.body.appendChild(menu);
-            // Close on click outside
-            const close = () => { menu.remove(); doc.removeEventListener('click', close); };
-            setTimeout(() => doc.addEventListener('click', close), 0);
-          });
-        } catch (e) {
-          console.error('Failed to intercept iframe links:', e);
+    // Named handlers so we can remove them in cleanup
+    const handleClick = (e) => {
+      const link = e.target.closest('a');
+      if (link && link.href && !link.href.startsWith('cid:')) {
+        e.preventDefault();
+        e.stopPropagation();
+        const url = link.href;
+        import('@tauri-apps/plugin-shell').then(({ open }) => {
+          open(url);
+        }).catch(() => {
+          window.open(url, '_blank');
+        });
+      }
+    };
+
+    const handleContextMenu = (e) => {
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!doc) return;
+      e.preventDefault();
+      const existing = doc.getElementById('mv-ctx-menu');
+      if (existing) existing.remove();
+      const menu = doc.createElement('div');
+      menu.id = 'mv-ctx-menu';
+      menu.style.cssText = 'position:fixed;z-index:99999;background:#ffffff;border:1px solid #d1d5db;border-radius:6px;padding:4px 0;min-width:180px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.15);';
+      menu.style.left = e.clientX + 'px';
+      menu.style.top = e.clientY + 'px';
+      const items = [
+        { label: 'Copy', action: () => doc.execCommand('copy') },
+        { label: 'Select All', action: () => doc.execCommand('selectAll') },
+      ];
+      items.forEach(({ label, action }) => {
+        const item = doc.createElement('div');
+        item.textContent = label;
+        item.style.cssText = 'padding:6px 14px;cursor:pointer;color:#333333;';
+        item.onmouseover = () => item.style.background = '#f3f4f6';
+        item.onmouseout = () => item.style.background = 'none';
+        item.onclick = () => { action(); menu.remove(); };
+        menu.appendChild(item);
+      });
+      doc.body.appendChild(menu);
+      const close = () => { menu.remove(); doc.removeEventListener('click', close); };
+      setTimeout(() => doc.addEventListener('click', close), 0);
+    };
+
+    let currentDoc = null;
+
+    const onLoad = () => {
+      try {
+        const doc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (!doc) return;
+        // Remove listeners from previous document if any
+        if (currentDoc && currentDoc !== doc) {
+          currentDoc.removeEventListener('click', handleClick);
+          currentDoc.removeEventListener('contextmenu', handleContextMenu);
         }
-      };
+        currentDoc = doc;
+        doc.addEventListener('click', handleClick);
+        doc.addEventListener('contextmenu', handleContextMenu);
+      } catch (e) {
+        console.error('Failed to intercept iframe links:', e);
+      }
+      resizeIframe();
+      resizeTimers.push(setTimeout(resizeIframe, 200));
+      resizeTimers.push(setTimeout(resizeIframe, 1000));
+    };
 
-      // Resize after load
-      iframe.onload = () => {
-        interceptLinks();
-        resizeIframe();
-        setTimeout(resizeIframe, 200);
-        setTimeout(resizeIframe, 1000);
-      };
+    iframe.addEventListener('load', onLoad);
+    resizeTimers.push(setTimeout(resizeIframe, 100));
 
-      // Initial resize
-      setTimeout(resizeIframe, 100);
-    }
+    return () => {
+      iframe.removeEventListener('load', onLoad);
+      resizeTimers.forEach(t => clearTimeout(t));
+      if (currentDoc) {
+        try {
+          currentDoc.removeEventListener('click', handleClick);
+          currentDoc.removeEventListener('contextmenu', handleContextMenu);
+        } catch { /* iframe may already be detached */ }
+      }
+    };
   }, [selectedEmail?.html]);
   
   if (!selectedEmail && !loadingEmail) {
@@ -949,15 +998,42 @@ export function EmailViewer() {
         expanded={headerExpanded}
         onToggle={() => setHeaderExpanded(!headerExpanded)}
         showRaw={showRaw}
-        onToggleRaw={() => setShowRaw(r => !r)}
+        loadingRaw={loadingRaw}
+        onToggleRaw={async () => {
+          if (showRaw) {
+            setShowRaw(false);
+            return;
+          }
+          // Lazy-load rawSource on first "View Source" click
+          if (!rawSource) {
+            setLoadingRaw(true);
+            try {
+              const isTauri = !!window.__TAURI__;
+              if (isTauri) {
+                const { invoke } = window.__TAURI__.core;
+                const b64 = await invoke('maildir_read_raw_source', {
+                  accountId: activeAccountId,
+                  mailbox: activeMailbox,
+                  uid: selectedEmail.uid,
+                });
+                setRawSource(b64);
+              }
+            } catch (err) {
+              console.error('[EmailViewer] Failed to load raw source:', err);
+            } finally {
+              setLoadingRaw(false);
+            }
+          }
+          setShowRaw(true);
+        }}
       />
-      
+
       {/* Content */}
       <div className="flex-1 overflow-y-auto min-h-0">
         <div className="p-4">
-          {showRaw && selectedEmail.rawSource ? (
+          {showRaw && rawSource ? (
             <pre className="text-xs font-mono text-mail-text bg-mail-surface rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-all">
-              {atob(selectedEmail.rawSource)}
+              {atob(rawSource)}
             </pre>
           ) : selectedEmail.html ? (
             <div className="rounded-lg overflow-hidden bg-white">
@@ -989,12 +1065,12 @@ export function EmailViewer() {
                   <span>{realAttachments.length} Attachment{realAttachments.length !== 1 ? 's' : ''}</span>
                 </div>
                 {realAttachments.length > 1 && (
-                  <DownloadAllButton attachments={realAttachments} account={activeAccountId} folder={activeMailbox} />
+                  <DownloadAllButton attachments={realAttachments} emailUid={selectedEmail.uid} account={activeAccountId} folder={activeMailbox} />
                 )}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {realAttachments.map((attachment, index) => (
-                  <AttachmentItem key={index} attachment={attachment} account={activeAccountId} folder={activeMailbox} />
+                  <AttachmentItem key={index} attachment={attachment} attachmentIndex={attachment._originalIndex} emailUid={selectedEmail.uid} account={activeAccountId} folder={activeMailbox} />
                 ))}
               </div>
             </div>

@@ -8,14 +8,19 @@ use tauri_plugin_updater::UpdaterExt;
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Child, Stdio};
-use std::sync::Mutex;
+use std::process::Command;
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn, error, Level};
 use tracing_subscriber::fmt::writer::MakeWriterExt;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use walkdir::WalkDir;
+
+mod archive;
+mod commands;
+mod imap;
+mod oauth2;
+mod smtp;
 
 #[cfg(target_os = "macos")]
 use cocoa::appkit::NSApplication;
@@ -25,12 +30,6 @@ use cocoa::base::nil;
 use cocoa::foundation::NSString;
 #[cfg(target_os = "macos")]
 use objc::{msg_send, sel, sel_impl};
-
-// Global server process handle (dev mode: std::process::Child)
-struct ServerState(Mutex<Option<Child>>);
-
-// Global sidecar process handle (release mode: Tauri CommandChild)
-struct SidecarState(Mutex<Option<tauri_plugin_shell::process::CommandChild>>);
 
 // Global log directory
 struct LogDir(PathBuf);
@@ -98,109 +97,6 @@ fn cleanup_old_logs(log_dir: &PathBuf) {
                 }
             }
         }
-    }
-}
-
-#[allow(unused_variables)]
-fn start_backend_server(app_handle: &tauri::AppHandle) -> Option<Child> {
-    info!("Starting backend server...");
-
-    #[cfg(debug_assertions)]
-    {
-        info!("Running in development mode");
-
-        let server_path = std::env::current_dir()
-            .ok()
-            .map(|p| p.join("server").join("index.js"));
-
-        if let Some(path) = server_path {
-            info!("Server path: {:?}", path);
-            if path.exists() {
-                match Command::new("node")
-                    .arg(&path)
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped())
-                    .spawn()
-                {
-                    Ok(child) => {
-                        info!("Server started with PID: {}", child.id());
-                        return Some(child);
-                    }
-                    Err(e) => {
-                        error!("Failed to start server: {}", e);
-                    }
-                }
-            } else {
-                warn!("Server path does not exist: {:?}", path);
-            }
-        }
-
-        warn!("Start the server manually with 'npm run server'");
-        None
-    }
-
-    #[cfg(not(debug_assertions))]
-    {
-        use tauri_plugin_shell::ShellExt;
-        use tauri_plugin_shell::process::CommandEvent;
-
-        info!("Running in release mode, using sidecar");
-
-        let handle_for_events = app_handle.clone();
-        match app_handle.shell().sidecar("mailvault-server") {
-            Ok(cmd) => {
-                match cmd.spawn() {
-                    Ok((mut rx, child)) => {
-                        let sidecar_pid = child.pid();
-                        info!("Sidecar server started with PID: {}", sidecar_pid);
-
-                        // Store the CommandChild handle for clean shutdown
-                        if let Some(state) = app_handle.try_state::<SidecarState>() {
-                            if let Ok(mut guard) = state.0.lock() {
-                                *guard = Some(child);
-                            }
-                        }
-
-                        tauri::async_runtime::spawn(async move {
-                            let mut stderr_lines: Vec<String> = Vec::new();
-                            while let Some(event) = rx.recv().await {
-                                match event {
-                                    CommandEvent::Stdout(line) => info!("[Server] {}", String::from_utf8_lossy(&line)),
-                                    CommandEvent::Stderr(line) => {
-                                        let msg = String::from_utf8_lossy(&line).to_string();
-                                        error!("[Server stderr] {}", msg);
-                                        stderr_lines.push(msg);
-                                    }
-                                    CommandEvent::Error(e) => {
-                                        error!("[Server Error] {}", e);
-                                        stderr_lines.push(e.clone());
-                                    }
-                                    CommandEvent::Terminated(p) => {
-                                        let last_output = if stderr_lines.is_empty() {
-                                            "no output captured".to_string()
-                                        } else {
-                                            stderr_lines.join("\n")
-                                        };
-                                        error!("[Server] Terminated with code {:?}. Last output: {}", p.code, last_output);
-                                        use tauri::Emitter;
-                                        let _ = handle_for_events.emit("server-crashed", format!(
-                                            "Backend server terminated (exit code: {:?}). {}",
-                                            p.code, last_output
-                                        ));
-                                        break;
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        });
-                        return None;
-                    }
-                    Err(e) => error!("Failed to spawn sidecar: {}", e),
-                }
-            }
-            Err(e) => error!("Failed to create sidecar command: {}", e),
-        }
-        None
     }
 }
 
@@ -996,6 +892,18 @@ struct MaildirAttachment {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+struct LightAttachment {
+    filename: Option<String>,
+    #[serde(rename = "contentType")]
+    content_type: String,
+    #[serde(rename = "contentDisposition")]
+    content_disposition: Option<String>,
+    size: usize,
+    #[serde(rename = "contentId")]
+    content_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct ParsedEmail {
     uid: u32,
     #[serde(rename = "messageId")]
@@ -1014,6 +922,29 @@ struct ParsedEmail {
     attachments: Vec<MaildirAttachment>,
     #[serde(rename = "rawSource")]
     raw_source: String,
+    #[serde(rename = "hasAttachments")]
+    has_attachments: bool,
+    #[serde(rename = "isArchived")]
+    is_archived: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct LightEmail {
+    uid: u32,
+    #[serde(rename = "messageId")]
+    message_id: Option<String>,
+    subject: String,
+    from: MaildirAddress,
+    to: Vec<MaildirAddress>,
+    cc: Vec<MaildirAddress>,
+    bcc: Vec<MaildirAddress>,
+    #[serde(rename = "replyTo")]
+    reply_to: Vec<MaildirAddress>,
+    date: Option<String>,
+    flags: Vec<String>,
+    text: Option<String>,
+    html: Option<String>,
+    attachments: Vec<LightAttachment>,
     #[serde(rename = "hasAttachments")]
     has_attachments: bool,
     #[serde(rename = "isArchived")]
@@ -1039,7 +970,7 @@ struct MaildirStorageStats {
     email_count: u32,
 }
 
-fn maildir_cur_path(app_handle: &tauri::AppHandle, account_id: &str, mailbox: &str) -> Result<PathBuf, String> {
+pub fn maildir_cur_path(app_handle: &tauri::AppHandle, account_id: &str, mailbox: &str) -> Result<PathBuf, String> {
     let safe_mailbox = mailbox.chars().map(|c| {
         if c.is_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' }
     }).collect::<String>();
@@ -1070,7 +1001,7 @@ fn parse_flags_from_filename(filename: &str) -> Vec<String> {
     }
 }
 
-fn build_maildir_filename(uid: u32, flags: &[String]) -> String {
+pub fn build_maildir_filename(uid: u32, flags: &[String]) -> String {
     let mut flag_chars: Vec<char> = Vec::new();
     for f in flags {
         match f.to_lowercase().as_str() {
@@ -1089,7 +1020,7 @@ fn build_maildir_filename(uid: u32, flags: &[String]) -> String {
     format!("{}:2,{}", uid, flag_str)
 }
 
-fn find_file_by_uid(dir: &Path, uid: u32) -> Option<PathBuf> {
+pub fn find_file_by_uid(dir: &Path, uid: u32) -> Option<PathBuf> {
     let prefix = format!("{}:", uid);
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
@@ -1178,6 +1109,132 @@ fn walk_mime_parts(
     }
 }
 
+fn walk_mime_parts_light(
+    part: &mailparse::ParsedMail,
+    text_body: &mut Option<String>,
+    html_body: &mut Option<String>,
+    attachments: &mut Vec<LightAttachment>,
+) {
+    let content_type = part.ctype.mimetype.to_lowercase();
+
+    if !part.subparts.is_empty() {
+        for sub in &part.subparts {
+            walk_mime_parts_light(sub, text_body, html_body, attachments);
+        }
+        return;
+    }
+
+    let disposition = part.get_content_disposition();
+    let is_attachment = disposition.disposition == mailparse::DispositionType::Attachment;
+    let is_inline_non_text = disposition.disposition == mailparse::DispositionType::Inline
+        && !content_type.starts_with("text/");
+
+    if is_attachment || is_inline_non_text {
+        let size = part.get_body_raw().map(|b| b.len()).unwrap_or(0);
+        let filename = disposition.params.get("filename")
+            .or_else(|| part.ctype.params.get("name"))
+            .cloned();
+        let content_id = part.headers.iter()
+            .find(|h| h.get_key().eq_ignore_ascii_case("Content-ID"))
+            .map(|h| h.get_value());
+
+        attachments.push(LightAttachment {
+            filename,
+            content_type: content_type.clone(),
+            content_disposition: Some(format!("{:?}", disposition.disposition)),
+            size,
+            content_id,
+        });
+    } else if content_type == "text/plain" && text_body.is_none() {
+        *text_body = part.get_body().ok();
+    } else if content_type == "text/html" && html_body.is_none() {
+        *html_body = part.get_body().ok();
+    }
+}
+
+fn collect_attachment_parts<'a>(
+    part: &'a mailparse::ParsedMail<'a>,
+    out: &mut Vec<&'a mailparse::ParsedMail<'a>>,
+) {
+    if !part.subparts.is_empty() {
+        for sub in &part.subparts {
+            collect_attachment_parts(sub, out);
+        }
+        return;
+    }
+    let disposition = part.get_content_disposition();
+    let ct = part.ctype.mimetype.to_lowercase();
+    let is_attachment = disposition.disposition == mailparse::DispositionType::Attachment;
+    let is_inline_non_text = disposition.disposition == mailparse::DispositionType::Inline
+        && !ct.starts_with("text/");
+    if is_attachment || is_inline_non_text {
+        out.push(part);
+    }
+}
+
+fn parse_eml_bytes_light(raw: &[u8], uid: u32, flags: Vec<String>) -> Result<LightEmail, String> {
+    let parsed = mailparse::parse_mail(raw)
+        .map_err(|e| format!("Failed to parse email: {}", e))?;
+
+    let headers = &parsed.headers;
+    let get_header = |name: &str| -> Option<String> {
+        headers.iter()
+            .find(|h| h.get_key().eq_ignore_ascii_case(name))
+            .map(|h| h.get_value())
+    };
+
+    let subject = get_header("Subject").unwrap_or_else(|| "(No Subject)".to_string());
+    let message_id = get_header("Message-ID");
+    let date = get_header("Date");
+
+    let from_str = get_header("From").unwrap_or_default();
+    let from_addrs = parse_address_str(&from_str);
+    let from = from_addrs.into_iter().next().unwrap_or(MaildirAddress {
+        name: Some("Unknown".to_string()),
+        address: "unknown@unknown.com".to_string(),
+    });
+
+    let to = get_header("To")
+        .map(|v| parse_address_str(&v))
+        .unwrap_or_default();
+    let cc = get_header("Cc")
+        .map(|v| parse_address_str(&v))
+        .unwrap_or_default();
+    let bcc = get_header("Bcc")
+        .map(|v| parse_address_str(&v))
+        .unwrap_or_default();
+    let reply_to = get_header("Reply-To")
+        .map(|v| parse_address_str(&v))
+        .unwrap_or_default();
+
+    let mut text_body: Option<String> = None;
+    let mut html_body: Option<String> = None;
+    let mut attachments: Vec<LightAttachment> = Vec::new();
+
+    walk_mime_parts_light(&parsed, &mut text_body, &mut html_body, &mut attachments);
+
+    let is_archived = flags.iter().any(|f| f == "archived");
+    let has_attachments = !attachments.is_empty();
+
+    Ok(LightEmail {
+        uid,
+        message_id,
+        subject,
+        from,
+        to,
+        cc,
+        bcc,
+        reply_to,
+        date,
+        flags,
+        text: text_body,
+        html: html_body,
+        attachments,
+        has_attachments,
+        is_archived,
+    })
+}
+
 fn parse_eml_bytes(raw: &[u8], uid: u32, flags: Vec<String>) -> Result<ParsedEmail, String> {
     let parsed = mailparse::parse_mail(raw)
         .map_err(|e| format!("Failed to parse email: {}", e))?;
@@ -1245,6 +1302,41 @@ fn parse_eml_bytes(raw: &[u8], uid: u32, flags: Vec<String>) -> Result<ParsedEma
     })
 }
 
+/// Store an .eml file to Maildir — callable from commands.rs
+/// Only writes if the file doesn't already exist for this UID.
+pub fn maildir_store_raw(
+    app_handle: &tauri::AppHandle,
+    account_id: &str,
+    mailbox: &str,
+    uid: u32,
+    raw_source_base64: &str,
+    flags: &[String],
+) -> Result<(), String> {
+    use base64::Engine;
+
+    let cur_dir = maildir_cur_path(app_handle, account_id, mailbox)?;
+    fs::create_dir_all(&cur_dir)
+        .map_err(|e| format!("Failed to create Maildir directory: {}", e))?;
+
+    // Skip if already cached on disk
+    if find_file_by_uid(&cur_dir, uid).is_some() {
+        return Ok(());
+    }
+
+    let filename = build_maildir_filename(uid, flags);
+    let file_path = cur_dir.join(&filename);
+
+    let raw_bytes = base64::engine::general_purpose::STANDARD
+        .decode(raw_source_base64)
+        .map_err(|e| format!("Failed to decode base64: {}", e))?;
+
+    fs::write(&file_path, &raw_bytes)
+        .map_err(|e| format!("Failed to write .eml file: {}", e))?;
+
+    info!("Stored email UID {} to {:?} ({} bytes)", uid, file_path, raw_bytes.len());
+    Ok(())
+}
+
 #[tauri::command]
 fn maildir_store(
     app_handle: tauri::AppHandle,
@@ -1260,7 +1352,7 @@ fn maildir_store(
     fs::create_dir_all(&cur_dir)
         .map_err(|e| format!("Failed to create Maildir directory: {}", e))?;
 
-    // Remove existing file for this UID if any
+    // Remove existing file for this UID if any (maildir_store always overwrites)
     if let Some(existing) = find_file_by_uid(&cur_dir, uid) {
         let _ = fs::remove_file(&existing);
     }
@@ -1276,6 +1368,40 @@ fn maildir_store(
         .map_err(|e| format!("Failed to write .eml file: {}", e))?;
 
     info!("Stored email UID {} to {:?} ({} bytes)", uid, file_path, raw_bytes.len());
+    Ok(())
+}
+
+#[tauri::command]
+async fn archive_emails(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, archive::ArchiveCancelToken>,
+    account_id: String,
+    account_json: String,
+    mailbox: String,
+    uids: Vec<u32>,
+) -> Result<archive::ArchiveProgress, String> {
+    // Reset cancellation flag for this run
+    let cancel = {
+        let mut guard = state.0.lock().unwrap();
+        let token = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        *guard = std::sync::Arc::clone(&token);
+        token
+    };
+
+    archive::run(
+        app_handle,
+        account_id,
+        account_json,
+        mailbox,
+        uids,
+        cancel,
+    ).await
+}
+
+#[tauri::command]
+fn cancel_archive(state: tauri::State<'_, archive::ArchiveCancelToken>) -> Result<(), String> {
+    state.0.lock().unwrap().store(true, std::sync::atomic::Ordering::Relaxed);
+    info!("cancel_archive: cancellation requested");
     Ok(())
 }
 
@@ -1303,6 +1429,83 @@ fn maildir_read(
 
     let email = parse_eml_bytes(&raw, uid, flags)?;
     Ok(Some(email))
+}
+
+#[tauri::command]
+fn maildir_read_light(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    mailbox: String,
+    uid: u32,
+) -> Result<Option<LightEmail>, String> {
+    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
+
+    let file_path = match find_file_by_uid(&cur_dir, uid) {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+
+    let filename = file_path.file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let flags = parse_flags_from_filename(&filename);
+
+    let raw = fs::read(&file_path)
+        .map_err(|e| format!("Failed to read .eml file: {}", e))?;
+
+    let email = parse_eml_bytes_light(&raw, uid, flags)?;
+    Ok(Some(email))
+}
+
+#[tauri::command]
+fn maildir_read_attachment(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    mailbox: String,
+    uid: u32,
+    attachment_index: usize,
+) -> Result<String, String> {
+    use base64::Engine;
+
+    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
+    let file_path = find_file_by_uid(&cur_dir, uid)
+        .ok_or_else(|| format!("Email UID {} not found", uid))?;
+
+    let raw = fs::read(&file_path)
+        .map_err(|e| format!("Failed to read .eml file: {}", e))?;
+
+    let parsed = mailparse::parse_mail(&raw)
+        .map_err(|e| format!("Failed to parse email: {}", e))?;
+
+    let mut attach_parts: Vec<&mailparse::ParsedMail> = Vec::new();
+    collect_attachment_parts(&parsed, &mut attach_parts);
+
+    let part = attach_parts.get(attachment_index)
+        .ok_or_else(|| format!("Attachment index {} out of range (total: {})", attachment_index, attach_parts.len()))?;
+
+    let body = part.get_body_raw()
+        .map_err(|e| format!("Failed to get attachment body: {}", e))?;
+
+    Ok(base64::engine::general_purpose::STANDARD.encode(&body))
+}
+
+#[tauri::command]
+fn maildir_read_raw_source(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    mailbox: String,
+    uid: u32,
+) -> Result<String, String> {
+    use base64::Engine;
+
+    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
+    let file_path = find_file_by_uid(&cur_dir, uid)
+        .ok_or_else(|| format!("Email UID {} not found", uid))?;
+
+    let raw = fs::read(&file_path)
+        .map_err(|e| format!("Failed to read .eml file: {}", e))?;
+
+    Ok(base64::engine::general_purpose::STANDARD.encode(&raw))
 }
 
 #[tauri::command]
@@ -1920,6 +2123,21 @@ async fn import_backup(
 }
 
 fn main() {
+    // Log panics before abort — set_hook fires even with panic = "abort"
+    std::panic::set_hook(Box::new(|info| {
+        let location = info.location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_else(|| "unknown".to_string());
+        let payload = if let Some(s) = info.payload().downcast_ref::<&str>() {
+            s.to_string()
+        } else if let Some(s) = info.payload().downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "non-string panic".to_string()
+        };
+        eprintln!("PANIC at {}: {}", location, payload);
+    }));
+
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             // When a second instance is launched, focus the main window
@@ -1936,8 +2154,9 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_http::init())
-        .manage(ServerState(Mutex::new(None)))
-        .manage(SidecarState(Mutex::new(None)))
+        .manage(archive::ArchiveCancelToken::default())
+        .manage(imap::ImapPool::new())
+        .manage(oauth2::OAuth2Manager::new())
         .invoke_handler(tauri::generate_handler![
             get_app_data_dir,
             read_settings_json,
@@ -1966,6 +2185,9 @@ fn main() {
             open_email_window,
             maildir_store,
             maildir_read,
+            maildir_read_light,
+            maildir_read_attachment,
+            maildir_read_raw_source,
             maildir_exists,
             maildir_list,
             maildir_delete,
@@ -1973,7 +2195,26 @@ fn main() {
             maildir_storage_stats,
             maildir_migrate_json_to_eml,
             export_backup,
-            import_backup
+            import_backup,
+            archive_emails,
+            cancel_archive,
+            commands::imap_test_connection,
+            commands::imap_get_mailboxes,
+            commands::imap_get_emails,
+            commands::imap_get_emails_range,
+            commands::imap_check_mailbox_status,
+            commands::imap_search_all_uids,
+            commands::imap_fetch_headers_by_uids,
+            commands::imap_get_email,
+            commands::imap_get_email_light,
+            commands::imap_set_flags,
+            commands::imap_delete_email,
+            commands::smtp_send_email,
+            commands::imap_search_emails,
+            commands::imap_disconnect,
+            commands::oauth2_auth_url,
+            commands::oauth2_exchange,
+            commands::oauth2_refresh
         ])
         .setup(|app| {
             // Set up logging to app log directory
@@ -2174,23 +2415,6 @@ fn main() {
                         }
                         "quit" => {
                             info!("Application quitting via tray menu");
-                            // Kill dev-mode server child if stored
-                            if let Some(state) = app.try_state::<ServerState>() {
-                                if let Ok(mut guard) = state.0.lock() {
-                                    if let Some(ref mut child) = *guard {
-                                        let _ = child.kill();
-                                    }
-                                }
-                            }
-                            // Kill sidecar server process
-                            if let Some(state) = app.try_state::<SidecarState>() {
-                                if let Ok(mut guard) = state.0.lock() {
-                                    if let Some(child) = guard.take() {
-                                        info!("Killing sidecar via CommandChild handle");
-                                        let _ = child.kill();
-                                    }
-                                }
-                            }
                             std::process::exit(0);
                         }
                         _ => {}
@@ -2198,23 +2422,11 @@ fn main() {
                 })
                 .build(app)?;
 
-            // Start the backend server
-            let server_child = start_backend_server(&app.handle());
-
-            // Store server process handle for cleanup
-            if let Some(child) = server_child {
-                if let Some(state) = app.try_state::<ServerState>() {
-                    if let Ok(mut guard) = state.0.lock() {
-                        *guard = Some(child);
-                    }
-                }
-            }
-
             // Check for updates in background
             let update_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 // Delay update check to let the app initialize first
-                std::thread::sleep(std::time::Duration::from_secs(5));
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
 
                 info!("Checking for updates...");
                 let updater = match update_handle.updater() {
@@ -2296,26 +2508,282 @@ fn main() {
                     }
                 }
                 tauri::RunEvent::Exit => {
-                    info!("Application exiting, cleaning up server...");
-                    // Kill dev-mode server child if stored
-                    if let Some(state) = app_handle.try_state::<ServerState>() {
-                        if let Ok(mut guard) = state.0.lock() {
-                            if let Some(ref mut child) = *guard {
-                                let _ = child.kill();
-                            }
-                        }
-                    }
-                    // Kill sidecar server process
-                    if let Some(state) = app_handle.try_state::<SidecarState>() {
-                        if let Ok(mut guard) = state.0.lock() {
-                            if let Some(child) = guard.take() {
-                                info!("Killing sidecar via CommandChild handle");
-                                let _ = child.kill();
-                            }
-                        }
-                    }
+                    info!("Application exiting");
                 }
                 _ => {}
             }
         });
+}
+
+// ── Unit tests ──────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -- Fixtures --
+
+    const PLAIN_EMAIL: &[u8] = b"From: alice@example.com\r\n\
+Subject: Hello\r\n\
+Date: Wed, 19 Feb 2026 10:00:00 +0000\r\n\
+Content-Type: text/plain\r\n\
+\r\n\
+Hello, World!";
+
+    const HTML_EMAIL: &[u8] = b"From: alice@example.com\r\n\
+Subject: Hello HTML\r\n\
+Content-Type: text/html\r\n\
+\r\n\
+<p>Hello</p>";
+
+    fn multipart_with_attachment() -> Vec<u8> {
+        b"From: bob@example.com\r\n\
+Subject: With attachment\r\n\
+MIME-Version: 1.0\r\n\
+Content-Type: multipart/mixed; boundary=\"BOUNDARY\"\r\n\
+\r\n\
+--BOUNDARY\r\n\
+Content-Type: text/plain\r\n\
+\r\n\
+Body text\r\n\
+--BOUNDARY\r\n\
+Content-Type: application/pdf; name=\"report.pdf\"\r\n\
+Content-Disposition: attachment; filename=\"report.pdf\"\r\n\
+Content-Transfer-Encoding: base64\r\n\
+\r\n\
+JVBERi0xLjQK\r\n\
+--BOUNDARY--\r\n".to_vec()
+    }
+
+    fn multipart_with_inline_image() -> Vec<u8> {
+        b"From: carol@example.com\r\n\
+Subject: Inline image\r\n\
+MIME-Version: 1.0\r\n\
+Content-Type: multipart/related; boundary=\"RELBOUND\"\r\n\
+\r\n\
+--RELBOUND\r\n\
+Content-Type: text/html\r\n\
+\r\n\
+<html><body><img src=\"cid:logo123\"></body></html>\r\n\
+--RELBOUND\r\n\
+Content-Type: image/png\r\n\
+Content-ID: <logo123>\r\n\
+Content-Disposition: inline\r\n\
+Content-Transfer-Encoding: base64\r\n\
+\r\n\
+iVBORw0KGgo=\r\n\
+--RELBOUND--\r\n".to_vec()
+    }
+
+    fn multipart_mixed_and_inline() -> Vec<u8> {
+        b"From: dave@example.com\r\n\
+Subject: Mixed attachments\r\n\
+MIME-Version: 1.0\r\n\
+Content-Type: multipart/mixed; boundary=\"MIX\"\r\n\
+\r\n\
+--MIX\r\n\
+Content-Type: text/plain\r\n\
+\r\n\
+See attached.\r\n\
+--MIX\r\n\
+Content-Type: image/jpeg\r\n\
+Content-Disposition: inline\r\n\
+Content-Transfer-Encoding: base64\r\n\
+\r\n\
+/9j/4AAQ\r\n\
+--MIX\r\n\
+Content-Type: application/zip; name=\"archive.zip\"\r\n\
+Content-Disposition: attachment; filename=\"archive.zip\"\r\n\
+Content-Transfer-Encoding: base64\r\n\
+\r\n\
+UEsFBg==\r\n\
+--MIX--\r\n".to_vec()
+    }
+
+    fn multipart_two_attachments() -> Vec<u8> {
+        b"From: eve@example.com\r\n\
+Subject: Two attachments\r\n\
+MIME-Version: 1.0\r\n\
+Content-Type: multipart/mixed; boundary=\"TWO\"\r\n\
+\r\n\
+--TWO\r\n\
+Content-Type: text/html\r\n\
+\r\n\
+<p>Please review</p>\r\n\
+--TWO\r\n\
+Content-Type: application/pdf; name=\"doc1.pdf\"\r\n\
+Content-Disposition: attachment; filename=\"doc1.pdf\"\r\n\
+Content-Transfer-Encoding: base64\r\n\
+\r\n\
+JVBERi0xLjQK\r\n\
+--TWO\r\n\
+Content-Type: image/png; name=\"screenshot.png\"\r\n\
+Content-Disposition: attachment; filename=\"screenshot.png\"\r\n\
+Content-Transfer-Encoding: base64\r\n\
+\r\n\
+iVBORw0KGgo=\r\n\
+--TWO--\r\n".to_vec()
+    }
+
+    // -----------------------------------------------------------------------
+    // parse_eml_bytes_light — basic fields
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn light_parse_plain_email_fields() {
+        let email = parse_eml_bytes_light(PLAIN_EMAIL, 42, vec![]).unwrap();
+        assert_eq!(email.uid, 42);
+        assert_eq!(email.subject, "Hello");
+        assert_eq!(email.from.address, "alice@example.com");
+        assert_eq!(email.text.as_deref(), Some("Hello, World!"));
+        assert!(email.html.is_none());
+    }
+
+    #[test]
+    fn light_parse_html_email() {
+        let email = parse_eml_bytes_light(HTML_EMAIL, 1, vec![]).unwrap();
+        assert!(email.html.is_some());
+        assert!(email.html.unwrap().contains("<p>Hello</p>"));
+    }
+
+    // -----------------------------------------------------------------------
+    // parse_eml_bytes_light — attachment detection
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn light_parse_no_attachments_plain() {
+        let email = parse_eml_bytes_light(PLAIN_EMAIL, 1, vec![]).unwrap();
+        assert!(!email.has_attachments);
+        assert!(email.attachments.is_empty());
+    }
+
+    #[test]
+    fn light_parse_detects_attachment() {
+        let raw = multipart_with_attachment();
+        let email = parse_eml_bytes_light(&raw, 2, vec![]).unwrap();
+        assert!(email.has_attachments);
+        assert_eq!(email.attachments.len(), 1);
+        assert_eq!(email.attachments[0].filename.as_deref(), Some("report.pdf"));
+        assert_eq!(email.attachments[0].content_type, "application/pdf");
+        assert!(email.attachments[0].size > 0);
+    }
+
+    #[test]
+    fn light_parse_detects_inline_non_text() {
+        let raw = multipart_with_inline_image();
+        let email = parse_eml_bytes_light(&raw, 3, vec![]).unwrap();
+        // Inline image counts as an attachment in the metadata
+        assert!(email.has_attachments);
+        assert_eq!(email.attachments.len(), 1);
+        assert_eq!(email.attachments[0].content_type, "image/png");
+        assert!(email.attachments[0].content_id.is_some());
+    }
+
+    #[test]
+    fn light_parse_mixed_inline_and_attachment() {
+        let raw = multipart_mixed_and_inline();
+        let email = parse_eml_bytes_light(&raw, 4, vec![]).unwrap();
+        assert!(email.has_attachments);
+        assert_eq!(email.attachments.len(), 2); // inline jpeg + attached zip
+        let filenames: Vec<_> = email.attachments.iter().map(|a| a.filename.as_deref()).collect();
+        assert!(filenames.contains(&Some("archive.zip")));
+    }
+
+    #[test]
+    fn light_parse_two_attachments() {
+        let raw = multipart_two_attachments();
+        let email = parse_eml_bytes_light(&raw, 5, vec![]).unwrap();
+        assert!(email.has_attachments);
+        assert_eq!(email.attachments.len(), 2);
+        let names: Vec<_> = email.attachments.iter()
+            .filter_map(|a| a.filename.as_deref())
+            .collect();
+        assert!(names.contains(&"doc1.pdf"));
+        assert!(names.contains(&"screenshot.png"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Light attachment metadata — no binary content
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn light_attachment_has_no_content_field() {
+        // LightAttachment struct has no `content` field — this is a compile-time
+        // guarantee, but we verify the JSON representation also omits it.
+        let raw = multipart_with_attachment();
+        let email = parse_eml_bytes_light(&raw, 6, vec![]).unwrap();
+        let json = serde_json::to_value(&email.attachments[0]).unwrap();
+        assert!(json.get("content").is_none(), "LightAttachment should not have content");
+        assert!(json.get("contentType").is_some(), "LightAttachment should have contentType");
+        assert!(json.get("filename").is_some());
+        assert!(json.get("size").is_some());
+    }
+
+    // -----------------------------------------------------------------------
+    // collect_attachment_parts — on-demand single attachment fetch
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn collect_parts_matches_light_count() {
+        let raw = multipart_two_attachments();
+        let parsed = mailparse::parse_mail(&raw).unwrap();
+        let mut parts = Vec::new();
+        collect_attachment_parts(&parsed, &mut parts);
+        // Should find same count as walk_mime_parts_light
+        let email = parse_eml_bytes_light(&raw, 1, vec![]).unwrap();
+        assert_eq!(parts.len(), email.attachments.len());
+    }
+
+    #[test]
+    fn collect_parts_empty_for_plain() {
+        let parsed = mailparse::parse_mail(PLAIN_EMAIL).unwrap();
+        let mut parts = Vec::new();
+        collect_attachment_parts(&parsed, &mut parts);
+        assert!(parts.is_empty());
+    }
+
+    // -----------------------------------------------------------------------
+    // Flags parsing
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn light_parse_archived_flag() {
+        let email = parse_eml_bytes_light(PLAIN_EMAIL, 1, vec!["archived".to_string()]).unwrap();
+        assert!(email.is_archived);
+    }
+
+    #[test]
+    fn light_parse_not_archived_by_default() {
+        let email = parse_eml_bytes_light(PLAIN_EMAIL, 1, vec![]).unwrap();
+        assert!(!email.is_archived);
+    }
+
+    // -----------------------------------------------------------------------
+    // Full parse vs light parse consistency
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn full_and_light_parse_same_attachment_count() {
+        let raw = multipart_two_attachments();
+        let full = parse_eml_bytes(&raw, 1, vec![]).unwrap();
+        let light = parse_eml_bytes_light(&raw, 1, vec![]).unwrap();
+        assert_eq!(full.attachments.len(), light.attachments.len());
+        assert_eq!(full.has_attachments, light.has_attachments);
+    }
+
+    #[test]
+    fn full_and_light_parse_same_subject() {
+        let raw = multipart_with_attachment();
+        let full = parse_eml_bytes(&raw, 1, vec![]).unwrap();
+        let light = parse_eml_bytes_light(&raw, 1, vec![]).unwrap();
+        assert_eq!(full.subject, light.subject);
+    }
+
+    #[test]
+    fn full_and_light_parse_same_body_text() {
+        let raw = multipart_with_attachment();
+        let full = parse_eml_bytes(&raw, 1, vec![]).unwrap();
+        let light = parse_eml_bytes_light(&raw, 1, vec![]).unwrap();
+        assert_eq!(full.text, light.text);
+    }
 }

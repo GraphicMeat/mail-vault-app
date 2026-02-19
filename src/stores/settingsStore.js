@@ -10,7 +10,7 @@ export const useSettingsStore = create(
       storageConfigured: false,
       
       // Cache settings
-      cacheLimitMB: 5120, // Maximum cache size in MB (0 = unlimited), default 5GB
+      cacheLimitMB: 512, // Maximum cache size in MB (0 = unlimited), default 512MB
 
       // Local email caching duration (in months)
       localCacheDurationMonths: 3, // Default 3 months
@@ -217,7 +217,7 @@ export const useSettingsStore = create(
         set({
           localStoragePath: '',
           storageConfigured: false,
-          cacheLimitMB: 5120,
+          cacheLimitMB: 512,
           localCacheDurationMonths: 3,
           accountOrder: [],
           signatures: {},
@@ -247,7 +247,14 @@ export const useSettingsStore = create(
     }),
     {
       name: 'mailvault-settings',
-      storage: createJSONStorage(() => safeStorage)
+      storage: createJSONStorage(() => safeStorage),
+      // Migrate existing users from the old 5GB default to 512MB
+      onRehydrateStorage: () => (state) => {
+        if (state && state.cacheLimitMB >= 5120) {
+          // Use setState to trigger persistence write
+          setTimeout(() => useSettingsStore.setState({ cacheLimitMB: 512 }), 0);
+        }
+      }
     }
   )
 );
