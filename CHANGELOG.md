@@ -4,6 +4,10 @@
 
 ### Fixed
 - "SecurityError: the operation is insecure" crash caused by Web Worker — WKWebView blocks `blob:` URL workers under the `tauri://` origin; replaced Web Worker with main-thread queue processor (no functionality lost, all I/O was already on the main thread)
+- Infinite spinner when adding an account — sidecar server crashed silently on `EADDRINUSE` (port 3001 occupied by previous instance) and the frontend waited forever; sidecar now retries port binding up to 5 times before exiting cleanly so the crash is detected and reported
+- Frontend API requests now have a 30-second timeout (AbortController) to prevent infinite hangs
+- Health check polling now throws and resets on failure, allowing retry on subsequent API calls instead of caching the failed state forever
+- IMAP test-connection timeout reduced from 30s to 15s for faster settings detection feedback
 
 ## [1.4.8] - 2026-02-19
 

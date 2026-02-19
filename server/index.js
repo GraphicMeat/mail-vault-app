@@ -29,6 +29,7 @@ const priorityConnections = new Map();
 
 // Connection config
 const CONNECTION_TIMEOUT = 30000; // 30 seconds
+const TEST_CONNECTION_TIMEOUT = 15000; // 15 seconds — faster feedback for settings detection
 
 // Helper to build IMAP auth config (password or OAuth2)
 function buildImapAuth(account) {
@@ -634,8 +635,8 @@ app.post('/api/test-connection', async (req, res) => {
       secure: account.imapSecure !== false,
       auth,
       logger: false,
-      connectTimeout: CONNECTION_TIMEOUT,
-      greetingTimeout: CONNECTION_TIMEOUT,
+      connectTimeout: TEST_CONNECTION_TIMEOUT,
+      greetingTimeout: TEST_CONNECTION_TIMEOUT,
       socketOptions: {
         family: 4
       }
@@ -903,9 +904,26 @@ app.get('/api/health', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, '127.0.0.1', () => {
-  console.log(`Mail server running on 127.0.0.1:${PORT}`);
-});
+const MAX_LISTEN_RETRIES = 5;
+const LISTEN_RETRY_DELAY = 1000; // ms
+
+function startServer(retryCount = 0) {
+  const server = app.listen(PORT, '127.0.0.1', () => {
+    console.log(`Mail server running on 127.0.0.1:${PORT}`);
+  });
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE' && retryCount < MAX_LISTEN_RETRIES) {
+      console.error(`Port ${PORT} in use, retrying in ${LISTEN_RETRY_DELAY}ms... (attempt ${retryCount + 1}/${MAX_LISTEN_RETRIES})`);
+      setTimeout(() => startServer(retryCount + 1), LISTEN_RETRY_DELAY);
+    } else {
+      console.error(`Failed to start server: ${err.message}`);
+      process.exit(1);
+    }
+  });
+}
+
+startServer();
 
 // Cleanup stale connections periodically
 setInterval(() => {
@@ -949,4 +967,8 @@ process.on('unhandledRejection', (reason, promise) => {
 
 process.on('uncaughtException', (error) => {
   console.error('Uncaught Exception:', error);
+  // Exit on fatal errors so the Rust host can detect the crash and notify the user
+  if (error.code === 'EADDRINUSE' || error.code === 'EACCES') {
+    process.exit(1);
+  }
 });

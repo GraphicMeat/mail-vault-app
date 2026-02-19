@@ -4,6 +4,9 @@ const API_BASE = window.__TAURI__ ? 'http://localhost:3001/api' : '/api';
 console.log('[api.js] API_BASE:', API_BASE);
 console.log('[api.js] Running in Tauri:', !!window.__TAURI__);
 
+// Default timeout for fetch requests (30 seconds)
+const DEFAULT_FETCH_TIMEOUT = 30000;
+
 // Server readiness state — ensures sidecar is up before first API call
 let serverReady = !window.__TAURI__; // Skip wait in browser dev mode
 let serverReadyPromise = null;
@@ -31,7 +34,12 @@ async function waitForServer() {
       await new Promise(r => setTimeout(r, delay));
     }
 
-    console.error('[api.js] Server did not become ready after', maxAttempts, 'attempts');
+    // Reset so next API call retries the health check
+    serverReadyPromise = null;
+    throw new ApiError(
+      'Backend server did not start. Please restart the app.',
+      0
+    );
   })();
 
   return serverReadyPromise;
@@ -52,22 +60,38 @@ async function request(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
   console.log('[api.js] Making request to:', url);
 
+  // Set up AbortController with timeout
+  const timeout = options.timeout || DEFAULT_FETCH_TIMEOUT;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
   let response;
   try {
+    const { timeout: _timeout, ...fetchOptions } = options;
     response = await fetch(url, {
       headers: {
         'Content-Type': 'application/json',
-        ...options.headers
+        ...fetchOptions.headers
       },
-      ...options
+      ...fetchOptions,
+      signal: controller.signal
     });
   } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      console.error('[api.js] Request timed out for', endpoint);
+      throw new ApiError(
+        `Request timed out (${endpoint}). The server took too long to respond.`,
+        0
+      );
+    }
     console.error('[api.js] Fetch failed for', endpoint, ':', error);
     throw new ApiError(
       `Server unreachable (${endpoint}): ${error.message}. The backend server may not be running.`,
       0
     );
   }
+  clearTimeout(timeoutId);
 
   console.log('[api.js] Response status:', response.status);
 
@@ -96,7 +120,8 @@ async function request(endpoint, options = {}) {
 export async function testConnection(account) {
   return request('/test-connection', {
     method: 'POST',
-    body: JSON.stringify({ account })
+    body: JSON.stringify({ account }),
+    timeout: 20000 // 20s — server IMAP timeout is 15s, leave margin
   });
 }
 
