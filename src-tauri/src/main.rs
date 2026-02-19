@@ -1935,6 +1935,7 @@ fn main() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_http::init())
         .manage(ServerState(Mutex::new(None)))
         .manage(SidecarState(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![

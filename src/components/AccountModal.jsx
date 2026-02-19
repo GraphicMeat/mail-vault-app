@@ -193,6 +193,7 @@ export function AccountModal({ onClose }) {
   };
 
   const handleAutoDetect = async () => {
+    console.log('[AccountModal] handleAutoDetect called');
     if (!formData.email || !formData.password) {
       setError('Please enter email and password first');
       return;
@@ -203,6 +204,7 @@ export function AccountModal({ onClose }) {
 
     // First check if we know this provider
     const detected = detectProvider(formData.email);
+    console.log('[AccountModal] detectProvider result:', detected?.key || 'none');
     if (detected) {
       setFormData(prev => ({
         ...prev,
@@ -235,7 +237,9 @@ export function AccountModal({ onClose }) {
           };
 
           // Actually test the connection
+          console.log('[AccountModal] Testing pattern: %s:%d', pattern.imapHost, guess.imapPort);
           const result = await testConnection(testAccount);
+          console.log('[AccountModal] Pattern result:', result.success ? 'SUCCESS' : 'FAILED');
 
           if (result.success) {
             setFormData(prev => ({
@@ -258,6 +262,7 @@ export function AccountModal({ onClose }) {
             break;
           }
         } catch (e) {
+          console.log('[AccountModal] Pattern %s failed: %s', pattern.imapHost, e.message);
           // Connection failed, try next pattern
           continue;
         }
@@ -341,7 +346,12 @@ export function AccountModal({ onClose }) {
         accountData.authType = 'password';
       }
 
-      console.log('[AccountModal] Calling addAccount...');
+      console.log('[AccountModal] Calling addAccount with:', {
+        email: accountData.email,
+        imapHost: accountData.imapHost,
+        imapPort: accountData.imapPort,
+        authType: accountData.authType || 'password'
+      });
       await addAccount(accountData);
       console.log('[AccountModal] addAccount completed successfully');
       setSuccess(true);

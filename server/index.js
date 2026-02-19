@@ -627,6 +627,7 @@ app.post('/api/search', async (req, res) => {
 app.post('/api/test-connection', async (req, res) => {
   try {
     const { account } = req.body;
+    console.log(`[test-connection] Testing ${account.email} → ${account.imapHost}:${account.imapPort || 993} (timeout: ${TEST_CONNECTION_TIMEOUT}ms)`);
     const auth = buildImapAuth(account);
 
     const client = new ImapFlow({
@@ -642,12 +643,15 @@ app.post('/api/test-connection', async (req, res) => {
       }
     });
 
+    console.log('[test-connection] Connecting...');
     await client.connect();
+    console.log('[test-connection] Connected, logging out...');
     await client.logout();
+    console.log('[test-connection] Success');
 
     res.json({ success: true, message: 'Connection successful' });
   } catch (error) {
-    console.error('Connection test failed:', error.message, error.code || '', error.responseText || '');
+    console.error('[test-connection] FAILED:', error.message, error.code || '', error.responseText || '');
     res.status(400).json({ success: false, error: `Connection test failed: ${getErrorDetail(error)}` });
   }
 });
@@ -899,7 +903,12 @@ app.post('/api/oauth2/refresh', async (req, res) => {
 });
 
 // Health check
+let healthCheckCount = 0;
 app.get('/api/health', (req, res) => {
+  healthCheckCount++;
+  if (healthCheckCount <= 3) {
+    console.log(`[health] Health check #${healthCheckCount} — ok (connections: ${connections.size})`);
+  }
   res.json({ status: 'ok', connections: connections.size });
 });
 

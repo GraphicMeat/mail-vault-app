@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.4.10] - 2026-02-19
+
+### Fixed
+- API calls now routed through Tauri HTTP plugin instead of WKWebView's native fetch — App Sandbox blocks WebView from making HTTP requests to `localhost` sidecar; the plugin routes requests through Rust's networking stack, bypassing the restriction
+- Fixed duplicate `http:default` capability identifier that could cause permission conflicts
+
+### Added
+- Comprehensive diagnostic logging throughout the connection flow: API module startup, HTTP plugin loading, health check polling, request lifecycle, and IMAP test-connection steps — enables pinpointing exactly where failures occur in sandbox environments
+
 ## [1.4.9] - 2026-02-19
 
 ### Fixed

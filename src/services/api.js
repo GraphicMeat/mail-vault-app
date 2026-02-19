@@ -3,9 +3,32 @@ const API_BASE = window.__TAURI__ ? 'http://localhost:3001/api' : '/api';
 
 console.log('[api.js] API_BASE:', API_BASE);
 console.log('[api.js] Running in Tauri:', !!window.__TAURI__);
+console.log('[api.js] Window origin:', window.location?.origin);
+console.log('[api.js] User agent:', navigator.userAgent);
 
 // Default timeout for fetch requests (30 seconds)
 const DEFAULT_FETCH_TIMEOUT = 30000;
+
+// Use Tauri's HTTP plugin fetch in production builds — WKWebView's native fetch
+// is blocked by App Sandbox when making requests from tauri:// to http://localhost.
+// The plugin routes requests through Rust's networking stack, bypassing WebView restrictions.
+let tauriFetch = null;
+let fetchMode = 'native'; // 'native' or 'tauri-plugin'
+
+const tauriFetchReady = window.__TAURI__
+  ? import('@tauri-apps/plugin-http').then(mod => {
+      tauriFetch = mod.fetch;
+      fetchMode = 'tauri-plugin';
+      console.log('[api.js] Tauri HTTP plugin loaded successfully');
+    }).catch(err => {
+      console.error('[api.js] Tauri HTTP plugin FAILED to load:', err);
+      console.error('[api.js] Will fall back to native fetch (may fail in sandbox)');
+    })
+  : Promise.resolve();
+
+function getFetch() {
+  return tauriFetch || fetch;
+}
 
 // Server readiness state — ensures sidecar is up before first API call
 let serverReady = !window.__TAURI__; // Skip wait in browser dev mode
@@ -13,28 +36,42 @@ let serverReadyPromise = null;
 
 async function waitForServer() {
   if (serverReady) return;
-  if (serverReadyPromise) return serverReadyPromise;
+
+  // Ensure Tauri HTTP plugin is loaded before polling
+  console.log('[api.js] waitForServer: waiting for Tauri HTTP plugin...');
+  await tauriFetchReady;
+  console.log('[api.js] waitForServer: using fetch mode:', fetchMode);
+
+  if (serverReadyPromise) {
+    console.log('[api.js] waitForServer: reusing existing health check promise');
+    return serverReadyPromise;
+  }
 
   serverReadyPromise = (async () => {
     const maxAttempts = 30;
     const delay = 500; // ms
-    console.log('[api.js] Waiting for backend server to be ready...');
+    const doFetch = getFetch();
+    console.log('[api.js] Starting health check polling (%d attempts, %dms delay)...', maxAttempts, delay);
 
     for (let i = 0; i < maxAttempts; i++) {
       try {
-        const res = await fetch(`${API_BASE}/health`);
+        console.log('[api.js] Health check attempt %d/%d...', i + 1, maxAttempts);
+        const res = await doFetch(`${API_BASE}/health`);
+        console.log('[api.js] Health check response: status=%d, ok=%s', res.status, res.ok);
         if (res.ok) {
-          console.log(`[api.js] Server ready after ${i + 1} attempt(s)`);
+          const data = await res.json().catch(() => null);
+          console.log('[api.js] Server ready after %d attempt(s), data:', i + 1, data);
           serverReady = true;
           return;
         }
-      } catch {
-        // Server not up yet
+      } catch (err) {
+        console.log('[api.js] Health check attempt %d failed: %s', i + 1, err.message || err);
       }
       await new Promise(r => setTimeout(r, delay));
     }
 
     // Reset so next API call retries the health check
+    console.error('[api.js] Server did not become ready after %d attempts (%ds)', maxAttempts, (maxAttempts * delay) / 1000);
     serverReadyPromise = null;
     throw new ApiError(
       'Backend server did not start. Please restart the app.',
@@ -55,20 +92,23 @@ class ApiError extends Error {
 
 async function request(endpoint, options = {}) {
   // Wait for sidecar server to be ready on first API call
+  console.log('[api.js] request: %s %s', options.method || 'GET', endpoint);
   await waitForServer();
 
   const url = `${API_BASE}${endpoint}`;
-  console.log('[api.js] Making request to:', url);
 
   // Set up AbortController with timeout
   const timeout = options.timeout || DEFAULT_FETCH_TIMEOUT;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
+  const doFetch = getFetch();
+  console.log('[api.js] Fetching %s (timeout: %dms, mode: %s)', url, timeout, fetchMode);
+
   let response;
   try {
     const { timeout: _timeout, ...fetchOptions } = options;
-    response = await fetch(url, {
+    response = await doFetch(url, {
       headers: {
         'Content-Type': 'application/json',
         ...fetchOptions.headers
@@ -79,13 +119,13 @@ async function request(endpoint, options = {}) {
   } catch (error) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {
-      console.error('[api.js] Request timed out for', endpoint);
+      console.error('[api.js] Request TIMED OUT after %dms for %s', timeout, endpoint);
       throw new ApiError(
         `Request timed out (${endpoint}). The server took too long to respond.`,
         0
       );
     }
-    console.error('[api.js] Fetch failed for', endpoint, ':', error);
+    console.error('[api.js] Fetch FAILED for %s: [%s] %s', endpoint, error.name, error.message);
     throw new ApiError(
       `Server unreachable (${endpoint}): ${error.message}. The backend server may not be running.`,
       0
@@ -93,13 +133,13 @@ async function request(endpoint, options = {}) {
   }
   clearTimeout(timeoutId);
 
-  console.log('[api.js] Response status:', response.status);
+  console.log('[api.js] Response: %s %d', endpoint, response.status);
 
   let data;
   try {
     data = await response.json();
   } catch (error) {
-    console.error('[api.js] Failed to parse response for', endpoint, ':', error);
+    console.error('[api.js] Failed to parse JSON for %s: %s', endpoint, error.message);
     throw new ApiError(
       `Invalid response from server (${endpoint}): HTTP ${response.status}`,
       response.status
@@ -107,7 +147,7 @@ async function request(endpoint, options = {}) {
   }
 
   if (!response.ok || !data.success) {
-    console.error('[api.js] Request failed:', data.error);
+    console.error('[api.js] Request failed: %s — %s', endpoint, data.error);
     throw new ApiError(
       data.error || `Request failed (${endpoint}): HTTP ${response.status}`,
       response.status
@@ -118,6 +158,7 @@ async function request(endpoint, options = {}) {
 }
 
 export async function testConnection(account) {
+  console.log('[api.js] testConnection: %s @ %s:%d', account.email, account.imapHost, account.imapPort);
   return request('/test-connection', {
     method: 'POST',
     body: JSON.stringify({ account }),
