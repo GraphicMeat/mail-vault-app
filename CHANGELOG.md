@@ -13,9 +13,18 @@
 - Mailbox mutation detection — if another client adds or deletes emails mid-pagination, sequence numbers shift and MailVault now detects the total change and restarts pagination instead of loading duplicates or gaps
 - Stale UID cleanup on refresh — cached emails deleted on another client are removed from the local list when the server no longer returns them in the overlap window
 - Server returns skipped UIDs to client for retry instead of silently dropping them; client re-requests the affected page/range after 5 seconds
+- Server graceful shutdown now cleans up both priority and background IMAP connection pools (previously leaked priority connections)
+
+### Added
+- Background loading pipeline architecture — dedicated `AccountPipeline` class manages per-account header loading and content caching with configurable concurrency
+- Multi-account background sync — after the active account finishes loading, all other accounts' INBOX headers are fetched and cached automatically
+- Parallel content caching — active account downloads 3 email bodies concurrently (up from 1); background accounts use 1 concurrent worker
+- Cross-account cascade — after active account content is fully cached, background accounts also get their email bodies cached sequentially
+- Shared credential helper (`authUtils.js`) — single source of truth for password/OAuth2 credential validation
 
 ### Changed
 - Disabled browser's native "Open Frame in New Window" right-click option on email content iframe
+- Replaced monolithic `useBackgroundCaching` hook with clean pipeline architecture: `AccountPipeline` (per-account worker), `EmailPipelineManager` (singleton coordinator), `usePipelineCoordinator` (React bridge)
 
 ## [1.4.11] - 2026-02-19
 

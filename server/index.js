@@ -1016,11 +1016,13 @@ function cleanupAndExit() {
     callbackServer.close();
     callbackServer = null;
   }
-  for (const [key, client] of connections.entries()) {
-    try {
-      client.logout();
-    } catch (e) {
-      // Ignore
+  for (const pool of [connections, priorityConnections]) {
+    for (const [key, client] of pool.entries()) {
+      try {
+        client.logout();
+      } catch (e) {
+        // Ignore
+      }
     }
   }
   process.exit(0);

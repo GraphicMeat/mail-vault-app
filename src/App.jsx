@@ -13,7 +13,7 @@ import { BulkSaveProgress } from './components/BulkSaveProgress';
 import { Onboarding } from './components/Onboarding';
 import { ChatViewWrapper } from './components/ChatViewWrapper';
 import { useEmailScheduler } from './hooks/useEmailScheduler';
-import { useBackgroundCaching } from './hooks/useBackgroundCaching';
+import { usePipelineCoordinator } from './hooks/usePipelineCoordinator';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw } from 'lucide-react';
 
@@ -81,20 +81,8 @@ function App() {
   // Initialize email scheduler
   useEmailScheduler();
 
-  // Background caching hook
-  const { startBackgroundCaching } = useBackgroundCaching();
-
-  // Start background caching 5 seconds after emails load (allows UI to stabilize)
-  useEffect(() => {
-    if (initialized && emails.length > 0 && !loading) {
-      const timer = setTimeout(() => {
-        console.log('[App] Starting background caching...');
-        startBackgroundCaching();
-      }, 5000);
-
-      return () => clearTimeout(timer);
-    }
-  }, [initialized, emails.length, loading, startBackgroundCaching]);
+  // Pipeline coordinator — manages background caching for all accounts
+  usePipelineCoordinator();
 
   // Handle resize for email list pane
   const handleListResize = useCallback((position) => {

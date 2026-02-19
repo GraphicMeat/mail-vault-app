@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import * as db from '../services/db';
 import * as api from '../services/api';
 import { useSettingsStore } from './settingsStore';
+import { hasValidCredentials } from '../services/authUtils';
 
 export const useMailStore = create((set, get) => ({
   // Accounts
@@ -1624,9 +1625,9 @@ export const useMailStore = create((set, get) => ({
     let previousEmailCount = get().emails.length;
 
     for (const account of accounts) {
-      // Skip if password is missing
-      if (!account.password) {
-        console.warn(`[mailStore] Skipping account ${account.email} - no password`);
+      // Skip if credentials are missing (support both password and OAuth2)
+      if (!hasValidCredentials(account)) {
+        console.warn(`[mailStore] Skipping account ${account.email} - no credentials`);
         continue;
       }
 
@@ -1638,14 +1639,30 @@ export const useMailStore = create((set, get) => ({
           const currentEmails = get().emails;
           totalUnread += currentEmails.filter(e => !e.flags?.includes('\\Seen')).length;
         } else {
-          // For other accounts, fetch INBOX to count unread
+          // For other accounts, load full headers into cache and count unread
           try {
-            const result = await api.fetchEmails(account, 'INBOX', 1);
-            if (result.emails) {
-              totalUnread += result.emails.filter(e => !e.flags?.includes('\\Seen')).length;
+            const allEmails = [];
+            let page = 1;
+            let hasMore = true;
+            let total = 0;
+
+            while (hasMore) {
+              const result = await api.fetchEmails(account, 'INBOX', page);
+              allEmails.push(...result.emails);
+              total = result.total;
+              hasMore = result.hasMore;
+              page++;
+              if (hasMore) await new Promise(r => setTimeout(r, 1000));
             }
+
+            if (allEmails.length > 0) {
+              await db.saveEmailHeaders(account.id, 'INBOX', allEmails, total);
+              console.log(`[mailStore] Cached ${allEmails.length} headers for ${account.email}`);
+            }
+
+            totalUnread += allEmails.filter(e => !e.flags?.includes('\\Seen')).length;
           } catch (e) {
-            console.warn(`[mailStore] Could not fetch INBOX for ${account.email}:`, e);
+            console.warn(`[mailStore] Could not load headers for ${account.email}:`, e);
           }
         }
       } catch (error) {
