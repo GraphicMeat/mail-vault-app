@@ -954,7 +954,12 @@ export const useMailStore = create((set, get) => ({
         db.saveEmailHeaders(activeAccountId, activeMailbox, newEmails, serverResult.total)
           .catch(e => console.warn('[loadMoreEmails] Failed to cache headers:', e));
 
-        if (serverResult.hasMore) {
+        if (serverResult.skippedUids && serverResult.skippedUids.length > 0) {
+          console.warn(`[loadMoreEmails] ${serverResult.skippedUids.length} messages skipped on page ${nextPage}, will re-request`);
+          // Re-request same page by not advancing currentPage
+          set({ currentPage: nextPage - 1, hasMoreEmails: true });
+          setTimeout(() => get().loadMoreEmails(), 5000);
+        } else if (serverResult.hasMore) {
           setTimeout(() => get().loadMoreEmails(), 1000);
         }
       };
@@ -984,7 +989,8 @@ export const useMailStore = create((set, get) => ({
     const { activeAccountId, accounts, activeMailbox, emailsByIndex, loadedRanges, loadingRanges, savedEmailIds } = get();
     const account = accounts.find(a => a.id === activeAccountId);
 
-    if (!account || !account.password) return;
+    const hasCredentials = account && (account.password || (account.authType === 'oauth2' && account.oauth2AccessToken));
+    if (!hasCredentials) return;
 
     // Check if this range is already loaded
     const isRangeLoaded = (start, end) => {
@@ -1061,12 +1067,34 @@ export const useMailStore = create((set, get) => ({
         // Cache the updated emails
         db.saveEmailHeaders(activeAccountId, activeMailbox, emailsArray, result.total)
           .catch(e => console.warn('[loadEmailRange] Failed to cache headers:', e));
+
+        // If server reported skipped UIDs, schedule a retry for this range
+        if (result.skippedUids && result.skippedUids.length > 0) {
+          console.warn(`[loadEmailRange] ${result.skippedUids.length} messages skipped, scheduling retry for range ${startIndex}-${endIndex}`);
+          setTimeout(() => {
+            // Remove the range from loadedRanges so it can be re-fetched
+            const currentRanges = get().loadedRanges.filter(r => !(r.start === startIndex && r.end === endIndex));
+            set({ loadedRanges: currentRanges });
+            get().loadEmailRange(startIndex, endIndex);
+          }, 5000);
+        }
       }
     } catch (error) {
       console.error('[loadEmailRange] Failed:', error);
       const loadingRangesAfter = new Set(get().loadingRanges);
       loadingRangesAfter.delete(rangeKey);
       set({ loadingRanges: loadingRangesAfter });
+
+      // Retry failed range with exponential backoff
+      const retryKey = `_rangeRetry_${rangeKey}`;
+      const prevDelay = get()[retryKey] || 0;
+      const nextDelay = prevDelay === 0 ? 3000 : Math.min(prevDelay * 2, 120000);
+      set({ [retryKey]: nextDelay });
+      console.log(`[loadEmailRange] Retrying range ${startIndex}-${endIndex} in ${nextDelay / 1000}s`);
+      setTimeout(() => {
+        set({ [retryKey]: undefined });
+        get().loadEmailRange(startIndex, endIndex);
+      }, nextDelay);
     }
   },
 

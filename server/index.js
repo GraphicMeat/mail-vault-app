@@ -240,7 +240,7 @@ app.post('/api/emails-range', async (req, res) => {
         const imapStart = Math.max(1, total - clampedEnd + 1);
         const imapEnd = total - clampedStart;
 
-        let skipped = 0;
+        const skippedUids = [];
         for await (const message of client.fetch(`${imapStart}:${imapEnd}`, {
           envelope: true,
           flags: true,
@@ -268,16 +268,16 @@ app.post('/api/emails-range', async (req, res) => {
               hasAttachments: message.bodyStructure?.childNodes?.length > 1 || false
             });
           } catch (msgErr) {
-            skipped++;
-            console.warn(`[/api/emails-range] Skipped message seq=${message?.seq} uid=${message?.uid}: ${msgErr.message}`);
+            skippedUids.push(message?.uid || null);
+            console.warn(`[/api/emails-range] Failed message seq=${message?.seq} uid=${message?.uid}: ${msgErr.message}`);
           }
         }
-        if (skipped > 0) console.warn(`[/api/emails-range] Skipped ${skipped} malformed messages`);
+        if (skippedUids.length > 0) console.warn(`[/api/emails-range] Failed ${skippedUids.length} messages, UIDs returned for client retry`);
 
         // Sort by displayIndex (ascending = newest first in the range)
         emails.sort((a, b) => a.displayIndex - b.displayIndex);
 
-        return { emails, total, startIndex: clampedStart, endIndex: clampedEnd };
+        return { emails, total, startIndex: clampedStart, endIndex: clampedEnd, skippedUids };
       } finally {
         lock.release();
       }
@@ -308,7 +308,7 @@ app.post('/api/emails', async (req, res) => {
         const start = Math.max(1, total - (page * limit) + 1);
         const end = Math.max(1, total - ((page - 1) * limit));
         
-        let skipped = 0;
+        const skippedUids = [];
         for await (const message of client.fetch(`${start}:${end}`, {
           envelope: true,
           flags: true,
@@ -334,17 +334,17 @@ app.post('/api/emails', async (req, res) => {
               hasAttachments: message.bodyStructure?.childNodes?.length > 1 || false
             });
           } catch (msgErr) {
-            skipped++;
-            console.warn(`[/api/emails] Skipped message seq=${message?.seq} uid=${message?.uid}: ${msgErr.message}`);
+            skippedUids.push(message?.uid || null);
+            console.warn(`[/api/emails] Failed message seq=${message?.seq} uid=${message?.uid}: ${msgErr.message}`);
           }
         }
 
-        if (skipped > 0) console.warn(`[/api/emails] Skipped ${skipped} malformed messages on page ${page}`);
+        if (skippedUids.length > 0) console.warn(`[/api/emails] Failed ${skippedUids.length} messages on page ${page}, UIDs returned for client retry`);
 
         // Reverse to show newest first
         emails.reverse();
 
-        return { emails, total, page, limit, hasMore: start > 1 };
+        return { emails, total, page, limit, hasMore: start > 1, skippedUids };
       } finally {
         lock.release();
       }
