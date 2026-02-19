@@ -143,6 +143,18 @@
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
               <span>Guard against stale state updates when user switches mailbox while background loading is in progress</span>
             </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span>Mailbox mutation detection — if another client adds or deletes emails mid-pagination, sequence numbers shift and MailVault now detects the total change and restarts pagination instead of loading duplicates or gaps</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span>Stale UID cleanup on refresh — cached emails deleted on another client are removed from the local list when the server no longer returns them in the overlap window</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span>Server returns skipped UIDs to client for retry instead of silently dropping them; client re-requests the affected page/range after 5 seconds</span>
+            </li>
           </ul>
         </div>
 

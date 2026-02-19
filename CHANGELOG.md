@@ -10,6 +10,9 @@
 - IMAP connection retry now covers more transient error types (BYE, closed, SERVERBUG, EPIPE, EAI_AGAIN) in addition to timeouts and resets
 - Priority IMAP connections (used for single email fetch) now properly cleaned up on error/close, preventing stale connection buildup
 - Guard against stale state updates when user switches mailbox while background loading is in progress
+- Mailbox mutation detection — if another client adds or deletes emails mid-pagination, sequence numbers shift and MailVault now detects the total change and restarts pagination instead of loading duplicates or gaps
+- Stale UID cleanup on refresh — cached emails deleted on another client are removed from the local list when the server no longer returns them in the overlap window
+- Server returns skipped UIDs to client for retry instead of silently dropping them; client re-requests the affected page/range after 5 seconds
 
 ### Changed
 - Disabled browser's native "Open Frame in New Window" right-click option on email content iframe
