@@ -251,12 +251,9 @@ DMG_DIR="$TARGET_DIR/bundle/dmg"
 mkdir -p "$DMG_DIR"
 
 SIGNED_DMG="$DMG_DIR/${APP_NAME}-v${VERSION}.dmg"
-DMG_TEMP="$DMG_DIR/dmg-temp"
-DMG_RW="$DMG_DIR/${APP_NAME}-rw.dmg"
 
 # Remove old files and ensure clean state
-rm -f "$SIGNED_DMG" "$DMG_RW"
-rm -rf "$DMG_TEMP"
+rm -f "$SIGNED_DMG"
 
 # Also eject any mounted MailVault volumes from previous attempts
 if diskutil list | grep -q "MailVault"; then
@@ -264,75 +261,30 @@ if diskutil list | grep -q "MailVault"; then
     hdiutil detach "/Volumes/${APP_NAME}" -force 2>/dev/null || true
 fi
 
-# Create temp folder with app and Applications symlink
-mkdir -p "$DMG_TEMP"
-cp -R "$APP_PATH" "$DMG_TEMP/"
-ln -s /Applications "$DMG_TEMP/Applications"
+# Use create-dmg for proper .DS_Store generation (gives white labels on dark bg)
+BG_SRC="src-tauri/icons/dmg-background@2x.png"
+CREATE_DMG_ARGS=(
+    --volname "$APP_NAME"
+    --window-pos 100 100
+    --window-size 600 650
+    --icon-size 128
+    --text-size 14
+    --icon "${APP_NAME}.app" 170 400
+    --app-drop-link 430 400
+    --no-internet-enable
+    --format UDZO
+)
 
-# Create a read-write DMG first so we can style it
-echo "   Creating DMG image..."
-DMG_SIZE_MB=$(du -sm "$DMG_TEMP" | awk '{print $1}')
-DMG_SIZE_MB=$((DMG_SIZE_MB + 20))
+if [ -f "$BG_SRC" ]; then
+    CREATE_DMG_ARGS+=(--background "$BG_SRC")
+fi
 
-if ! hdiutil create -volname "$APP_NAME" \
-    -srcfolder "$DMG_TEMP" \
-    -ov -format UDRW \
-    -size "${DMG_SIZE_MB}m" \
-    "$DMG_RW" 2>&1; then
-    echo ""
+create-dmg "${CREATE_DMG_ARGS[@]}" "$SIGNED_DMG" "$APP_PATH"
+
+if [ ! -f "$SIGNED_DMG" ]; then
     echo -e "${RED}❌ DMG creation failed!${NC}"
-    rm -rf "$DMG_TEMP"
     exit 1
 fi
-
-# Clean up temp folder
-rm -rf "$DMG_TEMP"
-
-# Mount the R/W DMG and style it
-echo "   Styling DMG layout..."
-MOUNT_DIR=$(hdiutil attach -readwrite -noverify -noautoopen "$DMG_RW" | grep '/Volumes/' | awk -F'\t' '{print $NF}')
-
-if [ -d "$MOUNT_DIR" ]; then
-    # Extract the actual volume name from the mount path
-    VOL_NAME=$(basename "$MOUNT_DIR")
-    echo "   Mounted at: $MOUNT_DIR (volume: $VOL_NAME)"
-
-    # Wait for Finder to register the volume
-    sleep 2
-
-    # Use AppleScript to set Finder window appearance
-    osascript <<APPLESCRIPT
-tell application "Finder"
-    tell disk "${VOL_NAME}"
-        open
-        set current view of container window to icon view
-        set toolbar visible of container window to false
-        set statusbar visible of container window to false
-        set bounds of container window to {100, 100, 640, 480}
-        set theViewOptions to icon view options of container window
-        set arrangement of theViewOptions to not arranged
-        set icon size of theViewOptions to 128
-        set text size of theViewOptions to 13
-        set background color of theViewOptions to {5140, 5140, 5654}
-        set position of item "${APP_NAME}.app" of container window to {150, 195}
-        set position of item "Applications" of container window to {390, 195}
-        close
-        open
-        update without registering applications
-        delay 1
-        close
-    end tell
-end tell
-APPLESCRIPT
-    sync
-    hdiutil detach "$MOUNT_DIR" -quiet
-else
-    echo -e "${YELLOW}⚠️  Could not mount DMG for styling, continuing with unstyled layout${NC}"
-fi
-
-# Convert to compressed read-only DMG
-hdiutil convert "$DMG_RW" -format UDZO -o "$SIGNED_DMG" -quiet
-rm -f "$DMG_RW"
 
 # Sign the DMG
 codesign --force --timestamp \

@@ -90,6 +90,9 @@ jobs:
           echo "Universal binary:"
           file src-tauri/binaries/mailvault-server-universal-apple-darwin
 
+      - name: Install create-dmg
+        run: brew install create-dmg
+
       - name: Build, sign, notarize, and package
         env:
           CI: 'true'

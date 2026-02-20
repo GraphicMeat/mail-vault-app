@@ -156,9 +156,6 @@
         <div class="flex items-center gap-3">
           <img src="icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
           <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
-          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" class="inline-flex">
-            <img src="https://img.shields.io/github/stars/GraphicMeat/mail-vault-app?style=social" alt="GitHub stars" class="h-5">
-          </a>
         </div>
 
         <div class="hidden md:flex items-center gap-8">
@@ -235,21 +232,29 @@
             MailVault stores your IMAP emails locally — keep them safe forever, even after they're deleted from the server.
           </p>
 
-          <div class="flex flex-col sm:flex-row gap-4 mb-8">
-            <a href="#download" class="gradient-bg text-white px-8 py-4 rounded-xl font-semibold text-lg hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
-              <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+          <div class="flex flex-col gap-3 mb-8 max-w-xs">
+            <a href="#download" class="gradient-bg text-white px-8 py-4 rounded-xl font-semibold text-lg hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 w-full">
+              <svg class="w-5 h-5 shrink-0" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
               </svg>
               Download for Mac
             </a>
 
-            <button id="want-this-btn" class="group px-8 py-4 rounded-xl font-semibold text-lg border-2 border-primary-500 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors inline-flex items-center justify-center gap-2">
-              <svg class="w-5 h-5 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 20 20">
+            <button id="want-this-btn" class="group px-8 py-4 rounded-xl font-semibold text-lg border-2 border-primary-500 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors inline-flex items-center justify-center gap-2 w-full">
+              <svg class="w-5 h-5 shrink-0 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 20 20">
                 <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"/>
               </svg>
               I want this!
               <span id="vote-count" class="ml-1 px-2 py-0.5 bg-primary-100 dark:bg-primary-900/50 rounded-full text-sm">--</span>
             </button>
+
+            <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" class="group px-8 py-4 rounded-xl font-semibold text-lg border-2 border-slate-300 dark:border-slate-600 hover:border-amber-500 dark:hover:border-amber-500 text-slate-700 dark:text-slate-300 hover:text-amber-600 dark:hover:text-amber-400 transition-colors inline-flex items-center justify-center gap-2 w-full">
+              <svg class="w-5 h-5 shrink-0 group-hover:scale-110 transition-transform text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+              </svg>
+              Star on GitHub
+              <span id="github-stars" class="ml-1 px-2 py-0.5 bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400 rounded-full text-sm">--</span>
+            </a>
           </div>
 
           <div class="flex items-center gap-6 text-sm text-slate-500 dark:text-slate-400">
@@ -1418,6 +1423,19 @@
         const dmg = release.assets.find(a => a.name.endsWith('.dmg'));
         if (dmg) {
           document.getElementById('download-dmg').href = dmg.browser_download_url;
+        }
+      })
+      .catch(() => {});
+
+    // ============================================
+    // GitHub star count
+    // ============================================
+    fetch('https://api.github.com/repos/GraphicMeat/mail-vault-app')
+      .then(r => r.json())
+      .then(repo => {
+        const el = document.getElementById('github-stars');
+        if (el && typeof repo.stargazers_count === 'number') {
+          el.textContent = repo.stargazers_count.toLocaleString();
         }
       })
       .catch(() => {});

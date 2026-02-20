@@ -2,8 +2,24 @@ name: CI
 on:
   push:
     branches: [main]
+    paths:
+      - 'src/**'
+      - 'src-tauri/**'
+      - 'tests/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.*'
+      - 'vitest.config.*'
   pull_request:
     branches: [main]
+    paths:
+      - 'src/**'
+      - 'src-tauri/**'
+      - 'tests/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.*'
+      - 'vitest.config.*'
 jobs:
   test:
     runs-on: ubuntu-latest
