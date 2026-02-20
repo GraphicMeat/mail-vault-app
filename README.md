@@ -10,9 +10,10 @@ A modern, cross-platform desktop email client built with Tauri and React. Save y
 
 ### 📧 Full Email Management
 - Connect multiple email accounts (Gmail, Outlook, Yahoo, iCloud, or custom IMAP)
+- **Google OAuth2** — Sign in with Google for Gmail accounts (no app password needed)
 - **Microsoft 365 OAuth2** — Sign in with Microsoft for Outlook/Hotmail/Live accounts (no app password needed)
 - View all mailboxes and folders
-- Read, send, and manage emails
+- Read, send, and manage emails with From account selector
 - Full attachment support
 
 ### 💾 Local Storage (Maildir + EML)
@@ -31,9 +32,10 @@ A modern, cross-platform desktop email client built with Tauri and React. Save y
 
 ### 🎨 Modern UI
 - Light and dark themes with accent colors
+- Collapsible sidebar (full or icon-only mode)
+- Default or compact email list layout
+- Per-account avatar colors (auto-assigned or custom)
 - Smooth animations and transitions
-- Responsive design
-- Clean, intuitive interface
 
 ## Tech Stack
 
@@ -80,10 +82,11 @@ npm run tauri build
 1. Click "Add Your First Account" or the "Add Account" button
 2. Select your email provider (Gmail, Outlook, Yahoo, iCloud, or Custom)
 3. Authenticate:
+   - **Gmail**: Click "Sign in with Google" (recommended) — opens your browser for secure OAuth2 login. No app password needed, works with 2FA/MFA.
    - **Outlook / Microsoft 365**: Click "Sign in with Microsoft" (recommended) — opens your browser for secure OAuth2 login. No app password needed, works with 2FA/MFA.
    - **Other providers**: Enter your email address and password/app password.
 
-**Important for Gmail users:**
+**Gmail fallback (if not using OAuth2):**
 - If you have 2-Factor Authentication enabled, you need to use an [App Password](https://support.google.com/accounts/answer/185833)
 - Go to Google Account → Security → 2-Step Verification → App passwords
 - Generate a new app password for "Mail" and use it instead of your regular password

@@ -1,6 +1,6 @@
 import * as api from './api';
 import * as db from './db';
-import { hasValidCredentials } from './authUtils';
+import { hasValidCredentials, ensureFreshToken } from './authUtils';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 
@@ -61,6 +61,7 @@ export class AccountPipeline {
       let total = 0;
 
       while (hasMore && !this._destroyed && !this._paused) {
+        this.account = await ensureFreshToken(this.account);
         const result = await api.fetchEmails(this.account, mailbox, page);
         allEmails.push(...result.emails);
         total = result.total;
@@ -121,8 +122,12 @@ export class AccountPipeline {
       if (uid === undefined) break; // queue empty, slot goes idle
 
       try {
+        // Ensure OAuth2 token is fresh before each fetch
+        const freshAccount = await ensureFreshToken(this.account);
+        if (freshAccount !== this.account) this.account = freshAccount;
+
         // Light fetch: auto-persists .eml to Maildir in Rust, returns metadata only
-        const email = await api.fetchEmailLight(this.account, uid, mailbox);
+        const email = await api.fetchEmailLight(freshAccount, uid, mailbox);
 
         const cacheKey = `${this.accountId}-${mailbox}-${uid}`;
         const cacheLimitMB = useSettingsStore.getState().cacheLimitMB;

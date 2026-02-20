@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { getOAuth2AuthUrl, exchangeOAuth2Code, testConnection } from '../services/api';
 import { motion } from 'framer-motion';
@@ -13,7 +13,9 @@ const PROVIDER_CONFIGS = {
     imapPort: 993,
     smtpHost: 'smtp.gmail.com',
     smtpPort: 587,
-    note: 'Use an App Password if 2FA is enabled'
+    note: 'Sign in with Google (recommended) or use an App Password',
+    supportsOAuth2: true,
+    oauth2Provider: 'google'
   },
   outlook: {
     name: 'Outlook / Microsoft 365',
@@ -130,6 +132,7 @@ export function AccountModal({ onClose }) {
   const [authType, setAuthType] = useState('password'); // 'password' | 'oauth2'
   const [oauthLoading, setOauthLoading] = useState(false);
   const [oauthConnected, setOauthConnected] = useState(false);
+  const oauthAbortRef = useRef(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -290,12 +293,18 @@ export function AccountModal({ onClose }) {
     setOauthLoading(true);
     setError(null);
 
+    // Create an abort signal so the user can cancel the waiting state
+    let cancelled = false;
+    oauthAbortRef.current = () => { cancelled = true; };
+
     // Capture the email before async operations (user may have typed it)
     const userEnteredEmail = formData.email;
 
+    const currentProvider = providerConfig?.oauth2Provider || 'microsoft';
+
     try {
-      // Step 1: Get the auth URL from the server (pass email as login_hint)
-      const { authUrl, state } = await getOAuth2AuthUrl(userEnteredEmail);
+      // Step 1: Get the auth URL from the server (pass email as login_hint + provider)
+      const { authUrl, state } = await getOAuth2AuthUrl(userEnteredEmail, currentProvider);
 
       // Step 2: Open the auth URL in the default browser
       if (window.__TAURI__) {
@@ -308,12 +317,14 @@ export function AccountModal({ onClose }) {
       // Step 3: Wait for the callback — exchange endpoint blocks until user completes sign-in
       const tokenData = await exchangeOAuth2Code(state);
 
+      if (cancelled) return; // User cancelled while waiting
+
       // Step 4: Update form data with OAuth2 tokens
       // Email must be entered manually by the user (no OpenID scopes = no email from token)
       setFormData(prev => ({
         ...prev,
         authType: 'oauth2',
-        oauth2Provider: 'microsoft',
+        oauth2Provider: currentProvider,
         oauth2AccessToken: tokenData.accessToken,
         oauth2RefreshToken: tokenData.refreshToken,
         oauth2ExpiresAt: tokenData.expiresAt,
@@ -322,11 +333,20 @@ export function AccountModal({ onClose }) {
 
       setOauthConnected(true);
     } catch (err) {
+      if (cancelled) return; // User cancelled — don't show error
       console.error('[AccountModal] OAuth2 sign-in failed:', err);
-      setError(err.message || 'Microsoft sign-in failed. Please try again.');
+      const providerLabel = currentProvider === 'google' ? 'Google' : 'Microsoft';
+      setError(err.message || `${providerLabel} sign-in failed. Please try again.`);
     } finally {
-      setOauthLoading(false);
+      if (!cancelled) setOauthLoading(false);
+      oauthAbortRef.current = null;
     }
+  };
+
+  const handleOAuth2Cancel = () => {
+    if (oauthAbortRef.current) oauthAbortRef.current();
+    setOauthLoading(false);
+    setError(null);
   };
 
   const handleSubmit = async (e) => {
@@ -341,7 +361,7 @@ export function AccountModal({ onClose }) {
       // Set the auth type properly
       if (authType === 'oauth2') {
         accountData.authType = 'oauth2';
-        accountData.oauth2Provider = 'microsoft';
+        accountData.oauth2Provider = providerConfig?.oauth2Provider || 'microsoft';
       } else {
         accountData.authType = 'password';
       }
@@ -486,28 +506,40 @@ export function AccountModal({ onClose }) {
                 <div className="space-y-3">
                   {/* Sign in with Microsoft button */}
                   {authType === 'oauth2' && !oauthConnected && (
-                    <button
-                      type="button"
-                      onClick={handleOAuth2SignIn}
-                      disabled={oauthLoading || !formData.email?.includes('@')}
-                      className={`w-full flex items-center justify-center gap-3 px-4 py-3
-                                text-white rounded-lg transition-all font-medium
-                                ${oauthLoading || !formData.email?.includes('@')
-                                  ? 'bg-purple-400/50 cursor-not-allowed'
-                                  : 'bg-purple-600 hover:bg-purple-700'}`}
-                    >
-                      {oauthLoading ? (
-                        <>
-                          <Loader size={18} className="animate-spin" />
-                          Waiting for Microsoft sign-in...
-                        </>
-                      ) : (
-                        <>
-                          <Shield size={18} />
-                          Sign in with Microsoft
-                        </>
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleOAuth2SignIn}
+                        disabled={oauthLoading || !formData.email?.includes('@')}
+                        className={`w-full flex items-center justify-center gap-3 px-4 py-3
+                                  text-white rounded-lg transition-all font-medium
+                                  ${oauthLoading || !formData.email?.includes('@')
+                                    ? 'bg-purple-400/50 cursor-not-allowed'
+                                    : 'bg-purple-600 hover:bg-purple-700'}`}
+                      >
+                        {oauthLoading ? (
+                          <>
+                            <Loader size={18} className="animate-spin" />
+                            Waiting for {providerConfig?.oauth2Provider === 'google' ? 'Google' : 'Microsoft'} sign-in...
+                          </>
+                        ) : (
+                          <>
+                            <Shield size={18} />
+                            Sign in with {providerConfig?.oauth2Provider === 'google' ? 'Google' : 'Microsoft'}
+                          </>
+                        )}
+                      </button>
+                      {oauthLoading && (
+                        <button
+                          type="button"
+                          onClick={handleOAuth2Cancel}
+                          className="w-full text-sm text-mail-text-muted hover:text-mail-text
+                                     py-1.5 transition-colors"
+                        >
+                          Cancel
+                        </button>
                       )}
-                    </button>
+                    </>
                   )}
 
                   {/* OAuth2 connected state */}
@@ -515,7 +547,7 @@ export function AccountModal({ onClose }) {
                     <div className="flex items-center gap-3 p-3 bg-mail-success/10 border border-mail-success/20 rounded-lg text-sm">
                       <Check size={16} className="text-mail-success flex-shrink-0" />
                       <div>
-                        <span className="text-mail-text font-medium">Microsoft account connected</span>
+                        <span className="text-mail-text font-medium">{providerConfig?.oauth2Provider === 'google' ? 'Google' : 'Microsoft'} account connected</span>
                         {formData.email && (
                           <span className="text-mail-text-muted ml-1">({formData.email})</span>
                         )}
@@ -543,7 +575,7 @@ export function AccountModal({ onClose }) {
                       className="w-full text-sm text-mail-accent hover:text-mail-accent-hover
                                 transition-colors py-1"
                     >
-                      Sign in with Microsoft instead (recommended)
+                      Sign in with {providerConfig?.oauth2Provider === 'google' ? 'Google' : 'Microsoft'} instead (recommended)
                     </button>
                   )}
                 </div>

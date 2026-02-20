@@ -70,6 +70,7 @@ function App() {
     viewStyle,
     listPaneSize,
     setListPaneSize,
+    sidebarCollapsed,
     onboardingComplete
   } = useSettingsStore();
   const [showAccountModal, setShowAccountModal] = useState(false);
@@ -91,8 +92,7 @@ function App() {
 
     if (layoutMode === 'three-column') {
       // In 3-column mode, position is X coordinate
-      // Sidebar is 256px (w-64)
-      const sidebarWidth = 256;
+      const sidebarWidth = sidebarCollapsed ? 56 : 256;
       const newSize = Math.max(300, Math.min(600, position - sidebarWidth));
       setListPaneSize(newSize);
     } else {
@@ -101,7 +101,7 @@ function App() {
       const newSize = Math.max(100, Math.min(containerRect.height - 100, position - containerRect.top));
       setListPaneSize(newSize);
     }
-  }, [layoutMode, setListPaneSize]);
+  }, [layoutMode, setListPaneSize, sidebarCollapsed]);
 
   // Debug: log accounts changes
   useEffect(() => {
@@ -381,7 +381,7 @@ function App() {
 
       <AnimatePresence>
         {showSettings && (
-          <SettingsPage onClose={() => setShowSettings(false)} />
+          <SettingsPage onClose={() => setShowSettings(false)} onAddAccount={() => { setShowSettings(false); setShowAccountModal(true); }} />
         )}
       </AnimatePresence>
 

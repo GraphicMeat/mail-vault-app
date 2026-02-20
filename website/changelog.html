@@ -102,9 +102,130 @@
 
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.6.0</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">February 20, 2026</span>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            </span>
+            Added
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Gmail OAuth2 sign-in</strong> — Gmail accounts now support "Sign in with Google" via OAuth2 PKCE flow, alongside the existing Microsoft OAuth2; uses Thunderbird's public Google client ID with <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">https://mail.google.com/</code> scope for IMAP and SMTP access</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Multi-provider OAuth2 architecture</strong> — OAuth2 backend refactored from Microsoft-only to a provider-agnostic design; adding new OAuth2 providers requires only a new <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">ProviderConfig</code> entry in Rust</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Automatic OAuth2 token refresh</strong> — access tokens are now refreshed proactively 5 minutes before expiry; refresh is deduplicated across concurrent calls, persisted to Keychain, and patched into the live store so all pipelines and UI operations get fresh tokens transparently</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Collapsible sidebar</strong> — click the panel icon in the sidebar header to collapse it to a narrow icon-only strip (~56px); expands back with one click; state persisted across sessions</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Compact email list view</strong> — alternative 2-line layout (sender + date on line 1, subject on line 2) selectable from Settings > General</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Account avatar initials & colors</strong> — account avatars now show the first letter of the display name (or email) on a deterministic color circle instead of a generic person icon; each account gets a unique color, customizable per-account from Settings > Accounts</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>From account selector</strong> — compose modal shows a "From" dropdown when multiple accounts exist, defaulting to the currently active account</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Per-account mailbox memory</strong> — switching accounts restores the last selected folder for that account instead of always resetting to INBOX</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Non-selectable folder handling</strong> — IMAP <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">\Noselect</code> folders (e.g. Gmail's <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">[Google Mail]</code>) now expand children on click instead of triggering a SELECT error</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            </span>
+            Fixed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Inline images treated as attachments</strong> — embedded images with Content-ID (referenced via <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">cid:</code> in HTML) incorrectly showed the paperclip icon in the email list and appeared in the attachment section; BODYSTRUCTURE walker now checks Content-ID to distinguish embedded images from real attachments, and <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">.eml</code> parsing applies the same filter (tracking pixels also excluded)</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Gmail XOAUTH2 auth hanging</strong> — <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">async-imap</code>'s <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">authenticate()</code> deadlocked because the IMAP server greeting was not consumed before starting the SASL handshake; added explicit <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">read_response()</code> to drain the greeting first</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>XOAUTH2 authenticator infinite loop</strong> — when the server rejected XOAUTH2 with a <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">+</code> error challenge, the authenticator resent the full token on every challenge; now sends empty response on subsequent challenges to let the server close cleanly</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Gmail OAuth2 "client_secret is missing"</strong> — Google requires <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">client_secret</code> even for PKCE public clients (unlike Microsoft); added Thunderbird's public Google client secret as default</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>OAuth2 sign-in endless spinner</strong> — entering wrong credentials during OAuth2 sign-in left the UI in a permanent loading state; added Cancel button to abort the OAuth2 flow</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Test connection timeout</strong> — <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">imap_test_connection</code> had no timeout; wrapped in 20-second <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">tokio::time::timeout</code></span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>OAuth2 token refresh race condition</strong> — concurrent callers could bypass the deduplication guard; moved guard registration before any async operation</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Missing token refresh at IMAP entry points</strong> — <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">markEmailReadStatus</code>, <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">performSearch</code>, and <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">setActiveAccount</code> didn't call <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">ensureFreshToken</code>, causing expired-token failures for OAuth2 accounts</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Server-side search broken for OAuth2</strong> — <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">performSearch</code> only checked <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">account.password</code>; now uses <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">hasValidCredentials()</code> which accepts both password and OAuth2 tokens</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Mailbox folders unsorted</strong> — folders appeared in arbitrary server order; now sorted alphabetically with INBOX pinned first</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>"Invalid from address" on send</strong> — special characters in display name broke <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">format!()</code> address parsing; now uses <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">lettre::Mailbox::new()</code> for proper RFC 5322 formatting</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Namespace error on account switch</strong> — old mailbox path (e.g. <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">[Google Mail]/Spam</code>) carried across accounts; fixed with per-account mailbox memory</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Cloud icon doubling on Retina</strong> — CSS <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">opacity-50</code> on Lucide SVG caused double-compositing; replaced with <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">rgba()</code> inline color</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Badge count log spam</strong> — <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">set_badge_count</code> logged on every call; added deduplication and downgraded to debug level</span>
+            </li>
+          </ul>
+        </div>
+
+      </article>
+      <article class="mb-16">
+        <div class="flex items-center gap-3 mb-6">
           <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.5.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">February 19, 2026</span>
-          <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
         </div>
 
         <div class="mb-8">
@@ -158,10 +279,6 @@
             Fixed
           </h3>
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
-            <li class="flex items-start gap-3">
-              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
-              <span><strong>Inline images treated as attachments</strong> — embedded images with Content-ID (referenced via <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">cid:</code> in HTML) incorrectly showed the paperclip icon in the email list and appeared in the attachment section; BODYSTRUCTURE walker now checks Content-ID to distinguish embedded images from real attachments, and <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">.eml</code> parsing applies the same filter (tracking pixels also excluded)</span>
-            </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
               <span><strong>Garbled sender/subject in email list</strong> — non-ASCII names and subjects (e.g. <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">=?windows-1257?Q?Ona_...?=</code>) appeared as raw RFC 2047 encoded text in the email list; IMAP envelope values are now decoded through <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">mailparse</code> before display</span>

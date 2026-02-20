@@ -604,7 +604,7 @@ fn check_running_from_dmg() -> Result<bool, String> {
 
 #[tauri::command]
 fn set_badge_count(_app_handle: tauri::AppHandle, count: i32) -> Result<(), String> {
-    info!("set_badge_count called with count: {}", count);
+    tracing::debug!("set_badge_count called with count: {}", count);
 
     #[cfg(target_os = "macos")]
     {

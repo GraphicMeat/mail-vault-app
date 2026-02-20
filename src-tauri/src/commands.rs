@@ -57,7 +57,14 @@ pub async fn imap_test_connection(account: ImapConfig) -> Result<serde_json::Val
         account.effective_port()
     );
 
-    imap::test_connection(&account).await?;
+    // Wrap entire test in a 20s timeout — auth/TLS steps have no individual timeout
+    tokio::time::timeout(
+        std::time::Duration::from_secs(20),
+        imap::test_connection(&account),
+    )
+    .await
+    .map_err(|_| format!("Connection test timed out for {}", account.email))?
+    ?;
 
     Ok(serde_json::json!({
         "success": true,
@@ -403,8 +410,9 @@ pub async fn imap_disconnect(
 pub async fn oauth2_auth_url(
     oauth: tauri::State<'_, OAuth2Manager>,
     email: Option<String>,
+    provider: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let result = oauth.generate_auth_url(email).await?;
+    let result = oauth.generate_auth_url(email, provider).await?;
     Ok(serde_json::json!({
         "success": true,
         "authUrl": result.auth_url,
@@ -434,8 +442,9 @@ pub async fn oauth2_exchange(
 pub async fn oauth2_refresh(
     oauth: tauri::State<'_, OAuth2Manager>,
     refresh_token: String,
+    provider: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let result = oauth.refresh_token(&refresh_token).await?;
+    let result = oauth.refresh_token(&refresh_token, provider).await?;
     Ok(serde_json::json!({
         "success": true,
         "accessToken": result.access_token,

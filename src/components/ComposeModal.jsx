@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { motion } from 'framer-motion';
-import { X, Send, Paperclip, Loader, Minimize2, Maximize2, FileText, Trash2 } from 'lucide-react';
+import { X, Send, Paperclip, Loader, Minimize2, Maximize2, FileText, Trash2, ChevronDown } from 'lucide-react';
 import * as api from '../services/api';
+import { ensureFreshToken } from '../services/authUtils';
 
 function AttachmentPreview({ attachment, onRemove }) {
   const formatSize = (bytes) => {
@@ -30,8 +31,9 @@ function AttachmentPreview({ attachment, onRemove }) {
 export function ComposeModal({ mode = 'new', replyTo = null, onClose }) {
   const { accounts, activeAccountId } = useMailStore();
   const { getSignature, getDisplayName } = useSettingsStore();
-  const activeAccount = accounts.find(a => a.id === activeAccountId);
-  
+  const [selectedAccountId, setSelectedAccountId] = useState(activeAccountId);
+  const selectedAccount = accounts.find(a => a.id === selectedAccountId) || accounts[0];
+
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const [minimized, setMinimized] = useState(false);
@@ -51,28 +53,28 @@ export function ComposeModal({ mode = 'new', replyTo = null, onClose }) {
   // Initialize form based on mode and replyTo email
   useEffect(() => {
     let initialBody = '';
-    
+
     // Add signature if enabled
-    const signature = getSignature(activeAccountId);
+    const signature = getSignature(selectedAccountId);
     if (signature.enabled && signature.text) {
       initialBody = `\n\n--\n${signature.text}`;
     }
-    
+
     if (!replyTo) {
       setFormData(prev => ({ ...prev, body: initialBody }));
       return;
     }
-    
+
     const fromAddress = replyTo.from?.address || '';
     const fromName = replyTo.from?.name || '';
     const originalSubject = replyTo.subject || '';
     const originalDate = replyTo.date ? new Date(replyTo.date).toLocaleString() : '';
     const originalTo = replyTo.to?.map(t => t.address).join(', ') || '';
-    
+
     // Build quoted content
     const quotedHeader = `\n\n-------- Original Message --------\nFrom: ${fromName} <${fromAddress}>\nDate: ${originalDate}\nSubject: ${originalSubject}\nTo: ${originalTo}\n\n`;
     const quotedBody = replyTo.text || '';
-    
+
     if (mode === 'reply') {
       setFormData({
         to: replyTo.replyTo?.[0]?.address || fromAddress,
@@ -88,11 +90,11 @@ export function ComposeModal({ mode = 'new', replyTo = null, onClose }) {
       const allRecipients = [
         replyTo.replyTo?.[0]?.address || fromAddress,
         ...(replyTo.to?.map(t => t.address) || []),
-      ].filter(addr => addr !== activeAccount?.email);
-      
+      ].filter(addr => addr !== selectedAccount?.email);
+
       const ccRecipients = (replyTo.cc?.map(c => c.address) || [])
-        .filter(addr => addr !== activeAccount?.email);
-      
+        .filter(addr => addr !== selectedAccount?.email);
+
       setFormData({
         to: allRecipients.join(', '),
         cc: ccRecipients.join(', '),
@@ -112,7 +114,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, onClose }) {
         inReplyTo: '',
         references: ''
       });
-      
+
       // Include original attachments for forwarding
       if (replyTo.attachments?.length > 0) {
         setAttachments(replyTo.attachments.map(att => ({
@@ -124,7 +126,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, onClose }) {
         })));
       }
     }
-  }, [mode, replyTo, activeAccount, activeAccountId]);
+  }, [mode, replyTo, selectedAccountId]);
   
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -169,18 +171,21 @@ export function ComposeModal({ mode = 'new', replyTo = null, onClose }) {
       return;
     }
     
-    if (!activeAccount) {
-      setError('No active account');
+    if (!selectedAccount) {
+      setError('No account selected');
       return;
     }
-    
+
     setSending(true);
     setError(null);
-    
+
     try {
+      // Refresh OAuth2 token if needed before sending
+      const freshAccount = await ensureFreshToken(selectedAccount);
+
       // Get display name from settings or account
-      const displayName = getDisplayName(activeAccountId) || activeAccount.name || activeAccount.email;
-      
+      const displayName = getDisplayName(selectedAccountId) || freshAccount.name || freshAccount.email;
+
       // Prepare attachments for nodemailer
       const emailAttachments = attachments.map(att => ({
         filename: att.filename,
@@ -188,9 +193,9 @@ export function ComposeModal({ mode = 'new', replyTo = null, onClose }) {
         encoding: 'base64',
         contentType: att.contentType
       }));
-      
+
       await api.sendEmail(
-        { ...activeAccount, name: displayName },
+        { ...freshAccount, name: displayName },
         {
           to: formData.to,
           cc: formData.cc || undefined,
@@ -294,6 +299,29 @@ export function ComposeModal({ mode = 'new', replyTo = null, onClose }) {
         {/* Form */}
         <form onSubmit={handleSend} className="flex-1 flex flex-col overflow-hidden">
           <div className="px-4 py-2 space-y-2 border-b border-mail-border">
+            {/* From */}
+            {accounts.length > 1 && (
+              <div className="flex items-center gap-2">
+                <label className="w-12 text-sm text-mail-text-muted">From:</label>
+                <div className="relative flex-1">
+                  <select
+                    value={selectedAccountId}
+                    onChange={(e) => setSelectedAccountId(e.target.value)}
+                    className="w-full bg-transparent text-mail-text text-sm py-1 pr-6
+                              outline-none appearance-none cursor-pointer"
+                  >
+                    {accounts.map(acc => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.name ? `${acc.name} <${acc.email}>` : acc.email}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={14} className="absolute right-0 top-1/2 -translate-y-1/2
+                                                     text-mail-text-muted pointer-events-none" />
+                </div>
+              </div>
+            )}
+
             {/* To */}
             <div className="flex items-center gap-2">
               <label className="w-12 text-sm text-mail-text-muted">To:</label>

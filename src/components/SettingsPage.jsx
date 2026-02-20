@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useThemeStore } from '../stores/themeStore';
-import { useSettingsStore } from '../stores/settingsStore';
+import { useSettingsStore, AVATAR_COLORS, getAccountInitial, getAccountColor } from '../stores/settingsStore';
 import { safeStorage } from '../stores/safeStorage';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getOAuth2AuthUrl, exchangeOAuth2Code } from '../services/api';
@@ -20,6 +20,8 @@ import {
   Check,
   Trash2,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   Download,
   Upload,
   Database,
@@ -39,7 +41,8 @@ import {
   List,
   Link,
   Unlink,
-  Copy
+  Copy,
+  Plus
 } from 'lucide-react';
 
 function ToggleSwitch({ active, onClick }) {
@@ -51,7 +54,7 @@ function ToggleSwitch({ active, onClick }) {
   );
 }
 
-export function SettingsPage({ onClose }) {
+export function SettingsPage({ onClose, onAddAccount }) {
   const { accounts, removeAccount } = useMailStore();
   const { theme, toggleTheme } = useThemeStore();
   const {
@@ -80,6 +83,8 @@ export function SettingsPage({ onClose }) {
     setLayoutMode,
     viewStyle,
     setViewStyle,
+    emailListStyle,
+    setEmailListStyle,
     setOnboardingComplete,
     searchHistoryLimit,
     setSearchHistoryLimit,
@@ -95,7 +100,10 @@ export function SettingsPage({ onClose }) {
     setLocalCacheDurationMonths,
     accountOrder,
     getOrderedAccounts,
-    setAccountOrder
+    setAccountOrder,
+    accountColors,
+    setAccountColor,
+    clearAccountColor
   } = useSettingsStore();
   
   // Close on Escape key
@@ -125,10 +133,17 @@ export function SettingsPage({ onClose }) {
   const [localStorageUsage, setLocalStorageUsage] = useState(null);
   const [oauthReconnecting, setOauthReconnecting] = useState(false);
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
-  const [settingsDragOverId, setSettingsDragOverId] = useState(null);
-  const settingsDragItemRef = useRef(null);
-
   const orderedAccounts = getOrderedAccounts(accounts);
+
+  const moveAccount = (accountId, direction) => {
+    const ids = orderedAccounts.map(a => a.id);
+    const idx = ids.indexOf(accountId);
+    const newIdx = idx + direction;
+    if (newIdx < 0 || newIdx >= ids.length) return;
+    ids.splice(idx, 1);
+    ids.splice(newIdx, 0, accountId);
+    setAccountOrder(ids);
+  };
   
   // Check for File System Access API support
   useEffect(() => {
@@ -319,7 +334,9 @@ export function SettingsPage({ onClose }) {
     setOauthReconnecting(true);
 
     try {
-      const { authUrl, state } = await getOAuth2AuthUrl();
+      const account = accounts.find(a => a.id === selectedAccountId);
+      const provider = account?.oauth2Provider || 'microsoft';
+      const { authUrl, state } = await getOAuth2AuthUrl(account?.email, provider);
 
       if (invoke) {
         const { open } = await import('@tauri-apps/plugin-shell');
@@ -331,7 +348,6 @@ export function SettingsPage({ onClose }) {
       const tokenData = await exchangeOAuth2Code(state);
 
       const { saveAccount } = await import('../services/db');
-      const account = accounts.find(a => a.id === selectedAccountId);
       if (account) {
         await saveAccount({
           ...account,
@@ -618,6 +634,67 @@ export function SettingsPage({ onClose }) {
                       <span className="text-xs text-mail-text-muted">
                         Conversation style
                       </span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Email List Style */}
+                <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+                  <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
+                    <List size={18} className="text-mail-accent" />
+                    Email List Style
+                  </h4>
+
+                  <p className="text-sm text-mail-text-muted mb-4">
+                    Choose how emails appear in the list.
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => setEmailListStyle('default')}
+                      className={`p-4 rounded-lg border-2 transition-all flex flex-col items-center gap-3
+                                ${emailListStyle === 'default'
+                                  ? 'border-mail-accent bg-mail-accent/10'
+                                  : 'border-mail-border hover:border-mail-accent/50'}`}
+                    >
+                      <div className="w-full h-12 flex flex-col gap-1.5 justify-center">
+                        <div className="flex items-center gap-1">
+                          <div className="w-2 h-2 bg-mail-border rounded-sm flex-shrink-0" />
+                          <div className="h-2 bg-mail-border rounded flex-1" />
+                          <div className="h-2 bg-mail-border rounded w-8" />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <div className="w-2 h-2 bg-mail-border rounded-sm flex-shrink-0" />
+                          <div className="h-2 bg-mail-border rounded flex-1" />
+                          <div className="h-2 bg-mail-border rounded w-8" />
+                        </div>
+                      </div>
+                      <span className="text-sm font-medium text-mail-text">Default</span>
+                      <span className="text-xs text-mail-text-muted">Single line per email</span>
+                    </button>
+
+                    <button
+                      onClick={() => setEmailListStyle('compact')}
+                      className={`p-4 rounded-lg border-2 transition-all flex flex-col items-center gap-3
+                                ${emailListStyle === 'compact'
+                                  ? 'border-mail-accent bg-mail-accent/10'
+                                  : 'border-mail-border hover:border-mail-accent/50'}`}
+                    >
+                      <div className="w-full h-12 flex flex-col gap-0.5 justify-center">
+                        <div className="flex items-center gap-1">
+                          <div className="h-1.5 bg-mail-text-muted/30 rounded w-16" />
+                          <div className="h-1.5 bg-mail-border rounded w-6 ml-auto" />
+                        </div>
+                        <div className="h-2 bg-mail-border rounded w-full" />
+                        <div className="h-px bg-mail-border/50 w-full mt-0.5" />
+                        <div className="flex items-center gap-1">
+                          <div className="h-1.5 bg-mail-text-muted/30 rounded w-12" />
+                          <div className="h-1.5 bg-mail-border rounded w-6 ml-auto" />
+                        </div>
+                        <div className="h-2 bg-mail-border rounded w-3/4" />
+                      </div>
+                      <span className="text-sm font-medium text-mail-text">Compact</span>
+                      <span className="text-xs text-mail-text-muted">Sender + subject on two lines</span>
                     </button>
                   </div>
                 </div>
@@ -1045,48 +1122,40 @@ export function SettingsPage({ onClose }) {
                       </div>
                     ) : (
                       <div className="space-y-1">
-                        {orderedAccounts.map(account => (
+                        {orderedAccounts.map((account, index) => (
                           <div
                             key={account.id}
-                            draggable
-                            onDragStart={(e) => {
-                              settingsDragItemRef.current = account.id;
-                              e.dataTransfer.effectAllowed = 'move';
-                            }}
-                            onDragOver={(e) => {
-                              e.preventDefault();
-                              e.dataTransfer.dropEffect = 'move';
-                              if (account.id !== settingsDragItemRef.current) {
-                                setSettingsDragOverId(account.id);
-                              }
-                            }}
-                            onDragLeave={() => setSettingsDragOverId(null)}
-                            onDrop={(e) => {
-                              e.preventDefault();
-                              setSettingsDragOverId(null);
-                              const fromId = settingsDragItemRef.current;
-                              if (!fromId || fromId === account.id) return;
-                              const ids = orderedAccounts.map(a => a.id);
-                              const fromIdx = ids.indexOf(fromId);
-                              const toIdx = ids.indexOf(account.id);
-                              ids.splice(fromIdx, 1);
-                              ids.splice(toIdx, 0, fromId);
-                              setAccountOrder(ids);
-                            }}
-                            onDragEnd={() => {
-                              settingsDragItemRef.current = null;
-                              setSettingsDragOverId(null);
-                            }}
                             onClick={() => setSelectedAccountId(account.id)}
-                            className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all
+                            className={`group/acct flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all
                                        ${account.id === selectedAccountId
                                          ? 'bg-mail-accent/10 border border-mail-accent/30'
-                                         : 'hover:bg-mail-surface-hover border border-transparent'}
-                                       ${settingsDragOverId === account.id ? 'border-t-2 border-t-mail-accent' : ''}`}
+                                         : 'hover:bg-mail-surface-hover border border-transparent'}`}
                           >
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center
-                                           ${account.id === selectedAccountId ? 'bg-mail-accent' : 'bg-mail-border'}`}>
-                              <User size={16} className="text-white" />
+                            {orderedAccounts.length > 1 && (
+                              <div className="flex flex-col opacity-0 group-hover/acct:opacity-100 transition-opacity">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); moveAccount(account.id, -1); }}
+                                  disabled={index === 0}
+                                  className={`p-0.5 rounded transition-colors ${index === 0 ? 'opacity-0' : 'hover:bg-mail-border'}`}
+                                  title="Move up"
+                                >
+                                  <ChevronUp size={12} className="text-mail-text-muted" />
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); moveAccount(account.id, 1); }}
+                                  disabled={index === orderedAccounts.length - 1}
+                                  className={`p-0.5 rounded transition-colors ${index === orderedAccounts.length - 1 ? 'opacity-0' : 'hover:bg-mail-border'}`}
+                                  title="Move down"
+                                >
+                                  <ChevronDown size={12} className="text-mail-text-muted" />
+                                </button>
+                              </div>
+                            )}
+                            <div
+                              className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold select-none"
+                              style={{ backgroundColor: getAccountColor(accountColors, account) }}
+                            >
+                              {getAccountInitial(account, getDisplayName(account.id))}
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="text-sm font-medium text-mail-text truncate flex items-center gap-1.5">
@@ -1106,9 +1175,20 @@ export function SettingsPage({ onClose }) {
                         ))}
                       </div>
                     )}
+                    {onAddAccount && (
+                      <button
+                        onClick={onAddAccount}
+                        className="w-full mt-3 flex items-center justify-center gap-2 p-2.5 text-sm text-mail-text-muted
+                                  hover:text-mail-text hover:bg-mail-surface-hover border border-dashed border-mail-border
+                                  rounded-lg transition-all"
+                      >
+                        <Plus size={16} />
+                        Add Account
+                      </button>
+                    )}
                   </div>
                 </div>
-                
+
                 {/* Account Settings - Right Column */}
                 <div className="flex-1 overflow-y-auto p-6">
                   {selectedAccount ? (
@@ -1151,9 +1231,48 @@ export function SettingsPage({ onClose }) {
                                         focus:border-mail-accent transition-all"
                             />
                           </div>
+
+                          {/* Avatar Color */}
+                          <div>
+                            <label className="block text-sm font-medium text-mail-text mb-2">
+                              Avatar Color
+                            </label>
+                            <p className="text-sm text-mail-text-muted mb-2">
+                              Color used for the account avatar in the sidebar
+                            </p>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {AVATAR_COLORS.map(color => {
+                                const currentColor = getAccountColor(accountColors, selectedAccount);
+                                const isSelected = currentColor === color;
+                                return (
+                                  <button
+                                    key={color}
+                                    onClick={() => setAccountColor(selectedAccountId, color)}
+                                    className={`w-7 h-7 rounded-full transition-all ${
+                                      isSelected ? 'ring-2 ring-offset-2 ring-offset-mail-bg' : 'hover:scale-110'
+                                    }`}
+                                    style={{
+                                      backgroundColor: color,
+                                      '--tw-ring-color': color
+                                    }}
+                                    title={color}
+                                  />
+                                );
+                              })}
+                              {accountColors[selectedAccountId] && (
+                                <button
+                                  onClick={() => clearAccountColor(selectedAccountId)}
+                                  className="text-xs text-mail-text-muted hover:text-mail-text transition-colors ml-1"
+                                  title="Reset to default"
+                                >
+                                  Reset
+                                </button>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </div>
-                      
+
                       {/* Signature */}
                       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
                         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
@@ -1209,7 +1328,7 @@ export function SettingsPage({ onClose }) {
                               ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20'
                               : 'bg-mail-accent/10 text-mail-accent border border-mail-accent/20'}`}>
                             {selectedAccount.authType === 'oauth2' ? (
-                              <><Shield size={12} /> Microsoft OAuth2</>
+                              <><Shield size={12} /> {selectedAccount.oauth2Provider === 'google' ? 'Google' : 'Microsoft'} OAuth2</>
                             ) : (
                               <><Key size={12} /> Password</>
                             )}
@@ -1233,11 +1352,11 @@ export function SettingsPage({ onClose }) {
                           <div className="space-y-4">
                             <div className="flex items-center justify-between">
                               <div>
-                                <div className="font-medium text-mail-text">Microsoft Account</div>
+                                <div className="font-medium text-mail-text">{selectedAccount.oauth2Provider === 'google' ? 'Google' : 'Microsoft'} Account</div>
                                 <div className="text-sm text-mail-text-muted">
                                   {selectedAccount.oauth2ExpiresAt && selectedAccount.oauth2ExpiresAt > Date.now()
-                                    ? 'Authenticated via OAuth2. Tokens refresh automatically.'
-                                    : 'Token expired. Click Reconnect to re-authenticate.'}
+                                    ? 'Authenticated via OAuth2. Tokens refresh automatically before expiry.'
+                                    : 'Token expired. Tokens will refresh automatically on the next email operation, or click Reconnect.'}
                                 </div>
                               </div>
                               <button

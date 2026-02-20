@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useMailStore } from '../stores/mailStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import { computeDisplayEmails } from '../services/emailListUtils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
@@ -22,7 +23,8 @@ import {
   Search
 } from 'lucide-react';
 
-const ROW_HEIGHT = 56;
+const ROW_HEIGHT_DEFAULT = 56;
+const ROW_HEIGHT_COMPACT = 52;
 const BUFFER_SIZE = 10;
 
 function formatEmailDate(dateStr) {
@@ -98,7 +100,7 @@ const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onT
             <HardDrive size={14} className="text-mail-local" />
           </div>
         ) : (
-          <Cloud size={14} className="text-mail-server opacity-50" />
+          <Cloud size={14} style={{ color: 'rgba(59, 130, 246, 0.5)' }} />
         )}
       </div>
 
@@ -188,6 +190,130 @@ const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onT
   );
 });
 
+const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSelected, onSelect, onToggleSelection, isChecked, style }) {
+  const saveEmailLocally = useMailStore(s => s.saveEmailLocally);
+  const removeLocalEmail = useMailStore(s => s.removeLocalEmail);
+  const deleteEmailFromServer = useMailStore(s => s.deleteEmailFromServer);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  const handleSave = async (e) => {
+    e.stopPropagation();
+    setSaving(true);
+    try { await saveEmailLocally(email.uid); } finally { setSaving(false); }
+  };
+
+  const handleRemoveLocal = async (e) => {
+    e.stopPropagation();
+    await removeLocalEmail(email.uid);
+    setMenuOpen(false);
+  };
+
+  const handleDeleteServer = (e) => {
+    e.stopPropagation();
+    if (confirmingDelete) {
+      deleteEmailFromServer(email.uid);
+      setMenuOpen(false);
+      setConfirmingDelete(false);
+    } else {
+      setConfirmingDelete(true);
+    }
+  };
+
+  const isUnread = !email.flags?.includes('\\Seen');
+
+  return (
+    <div
+      style={style}
+      className={`group flex items-center gap-2 px-4 border-b border-mail-border
+                 cursor-pointer transition-colors
+                 ${isSelected ? 'bg-mail-accent/10' : 'hover:bg-mail-surface-hover'}
+                 ${isUnread ? 'bg-mail-surface' : ''}`}
+      onClick={() => onSelect(email.uid, email.source)}
+    >
+      <div onClick={(e) => { e.stopPropagation(); onToggleSelection(email.uid); }}>
+        <input type="checkbox" checked={isChecked} onChange={() => {}} className="custom-checkbox" />
+      </div>
+
+      {/* Source icon */}
+      <div className="w-4 flex items-center justify-center flex-shrink-0">
+        {email.source === 'local-only' ? (
+          <HardDrive size={13} className="text-mail-warning" title="Local only" />
+        ) : email.isArchived ? (
+          <HardDrive size={13} className="text-mail-local" title="Archived" />
+        ) : (
+          <Cloud size={13} style={{ color: 'rgba(59, 130, 246, 0.5)' }} />
+        )}
+      </div>
+
+      {/* Two-line content */}
+      <div className="flex-1 min-w-0 py-1.5">
+        {/* Line 1: Sender ... Date */}
+        <div className="flex items-center gap-2">
+          <span className={`truncate text-xs ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
+            {email.from?.name || email.from?.address || 'Unknown'}
+          </span>
+          <span className="text-xs text-mail-text-muted whitespace-nowrap ml-auto">
+            {formatEmailDate(email.date)}
+          </span>
+        </div>
+        {/* Line 2: Subject + attachment */}
+        <div className="flex items-center gap-1.5">
+          <span className={`truncate text-sm leading-snug ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
+            {email.subject}
+          </span>
+          {email.hasAttachments && (
+            <Paperclip size={12} className="text-mail-text-muted flex-shrink-0" />
+          )}
+        </div>
+      </div>
+
+      {/* Hover actions */}
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+        {!email.isArchived && (
+          <button onClick={handleSave} disabled={saving}
+            className="p-1 hover:bg-mail-border rounded transition-colors" title="Archive">
+            {saving ? <RefreshCw size={13} className="animate-spin text-mail-accent" />
+              : <Archive size={13} className="text-mail-text-muted hover:text-mail-local" />}
+          </button>
+        )}
+        <div className="relative">
+          <button onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
+            className="p-1 hover:bg-mail-border rounded transition-colors">
+            <MoreHorizontal size={13} className="text-mail-text-muted" />
+          </button>
+          <AnimatePresence>
+            {menuOpen && (
+              <>
+                <div className="fixed inset-0 z-40"
+                  onClick={(e) => { e.stopPropagation(); setMenuOpen(false); setConfirmingDelete(false); }} />
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+                  className="absolute right-0 top-full mt-1 bg-mail-bg border border-mail-border rounded-lg shadow-lg z-50 py-1 min-w-[160px]"
+                  onClick={(e) => e.stopPropagation()}>
+                  {email.isArchived && (
+                    <button onClick={handleRemoveLocal}
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover flex items-center gap-2 text-mail-text">
+                      <Archive size={14} /> Unarchive
+                    </button>
+                  )}
+                  {email.source !== 'local-only' && (
+                    <button onClick={handleDeleteServer}
+                      className={`w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover flex items-center gap-2 ${confirmingDelete ? 'text-white bg-red-600 hover:bg-red-700' : 'text-mail-danger'}`}>
+                      <Trash2 size={14} /> {confirmingDelete ? 'Confirm delete?' : 'Delete from server'}
+                    </button>
+                  )}
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+    </div>
+  );
+});
+
 export function EmailList({ layoutMode = 'three-column' }) {
   const {
     loading,
@@ -217,6 +343,11 @@ export function EmailList({ layoutMode = 'three-column' }) {
     savedEmailIds,
     archivedEmailIds
   } = useMailStore();
+
+  const emailListStyle = useSettingsStore(s => s.emailListStyle);
+  const isCompact = emailListStyle === 'compact';
+  const ROW_HEIGHT = isCompact ? ROW_HEIGHT_COMPACT : ROW_HEIGHT_DEFAULT;
+  const RowComponent = isCompact ? CompactEmailRow : EmailRow;
 
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const [actionInProgress, setActionInProgress] = useState(false);
@@ -563,7 +694,7 @@ export function EmailList({ layoutMode = 'three-column' }) {
         ) : (
           <div key={`${activeAccountId}-${viewMode}`} style={{ height: totalHeight, position: 'relative' }}>
             {visibleRows.map(({ email, top }) => (
-                <EmailRow
+                <RowComponent
                   key={email.uid}
                   email={email}
                   isSelected={selectedEmailId === email.uid}

@@ -2,8 +2,34 @@
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-02-20
+
+### Added
+- **Gmail OAuth2 sign-in** — Gmail accounts now support "Sign in with Google" via OAuth2 PKCE flow, alongside the existing Microsoft OAuth2; uses Thunderbird's public Google client ID with `https://mail.google.com/` scope for IMAP and SMTP access
+- **Multi-provider OAuth2 architecture** — OAuth2 backend refactored from Microsoft-only to a provider-agnostic design; adding new OAuth2 providers requires only a new `ProviderConfig` entry in Rust
+- **Automatic OAuth2 token refresh** — access tokens are now refreshed proactively 5 minutes before expiry; refresh is deduplicated across concurrent calls, persisted to Keychain, and patched into the live store so all pipelines and UI operations get fresh tokens transparently
+- **Collapsible sidebar** — click the panel icon in the sidebar header to collapse it to a narrow icon-only strip (~56px); expands back with one click; state persisted across sessions
+- **Compact email list view** — alternative 2-line layout (sender + date on line 1, subject on line 2) selectable from Settings > General
+- **Account avatar initials & colors** — account avatars now show the first letter of the display name (or email) on a deterministic color circle instead of a generic person icon; each account gets a unique color, customizable per-account from Settings > Accounts
+- **From account selector** — compose modal shows a "From" dropdown when multiple accounts exist, defaulting to the currently active account
+- **Per-account mailbox memory** — switching accounts restores the last selected folder for that account instead of always resetting to INBOX
+- **Non-selectable folder handling** — IMAP `\Noselect` folders (e.g. Gmail's `[Google Mail]`) now expand children on click instead of triggering a SELECT error
+
 ### Fixed
 - **Inline images treated as attachments** — embedded images with Content-ID (referenced via `cid:` in HTML) incorrectly showed the paperclip icon in the email list and appeared in the attachment section; BODYSTRUCTURE walker now checks Content-ID to distinguish embedded images from real attachments, and `.eml` parsing applies the same filter (tracking pixels also excluded)
+- **Gmail XOAUTH2 auth hanging** — `async-imap`'s `authenticate()` deadlocked because the IMAP server greeting was not consumed before starting the SASL handshake; added explicit `read_response()` to drain the greeting first
+- **XOAUTH2 authenticator infinite loop** — when the server rejected XOAUTH2 with a `+` error challenge, the authenticator resent the full token on every challenge; now sends empty response on subsequent challenges to let the server close cleanly
+- **Gmail OAuth2 "client_secret is missing"** — Google requires `client_secret` even for PKCE public clients (unlike Microsoft); added Thunderbird's public Google client secret as default
+- **OAuth2 sign-in endless spinner** — entering wrong credentials during OAuth2 sign-in left the UI in a permanent loading state; added Cancel button to abort the OAuth2 flow
+- **Test connection timeout** — `imap_test_connection` had no timeout; wrapped in 20-second `tokio::time::timeout`
+- **OAuth2 token refresh race condition** — concurrent callers could bypass the deduplication guard; moved guard registration before any async operation
+- **Missing token refresh at IMAP entry points** — `markEmailReadStatus`, `performSearch`, and `setActiveAccount` didn't call `ensureFreshToken`, causing expired-token failures for OAuth2 accounts
+- **Server-side search broken for OAuth2** — `performSearch` only checked `account.password`; now uses `hasValidCredentials()` which accepts both password and OAuth2 tokens
+- **Mailbox folders unsorted** — folders appeared in arbitrary server order; now sorted alphabetically with INBOX pinned first
+- **"Invalid from address" on send** — special characters in display name broke `format!()` address parsing; now uses `lettre::Mailbox::new()` for proper RFC 5322 formatting
+- **Namespace error on account switch** — old mailbox path (e.g. `[Google Mail]/Spam`) carried across accounts; fixed with per-account mailbox memory
+- **Cloud icon doubling on Retina** — CSS `opacity-50` on Lucide SVG caused double-compositing; replaced with `rgba()` inline color
+- **Badge count log spam** — `set_badge_count` logged on every call; added deduplication and downgraded to debug level
 
 ## [1.5.0] - 2026-02-19
 

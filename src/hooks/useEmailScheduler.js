@@ -19,6 +19,7 @@ export function useEmailScheduler() {
   const intervalRef = useRef(null);
   const hasRefreshedOnLaunch = useRef(false);
   const previousEmailCount = useRef(0);
+  const lastBadgeCount = useRef(-1);
 
   // Send notification
   const sendNotification = async (title, body) => {
@@ -44,9 +45,10 @@ export function useEmailScheduler() {
       return;
     }
 
+    if (count === lastBadgeCount.current) return;
     try {
       await invoke('set_badge_count', { count });
-      console.log('[scheduler] Badge updated to:', count);
+      lastBadgeCount.current = count;
     } catch (error) {
       console.error('[scheduler] Failed to update badge:', error);
     }

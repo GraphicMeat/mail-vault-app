@@ -27,10 +27,14 @@ pub async fn send_email(account: &ImapConfig, email: &OutgoingEmail) -> Result<S
         .ok_or_else(|| "SMTP host not configured".to_string())?;
     let smtp_port = account.smtp_port.unwrap_or(587);
 
-    let from_name = account.name.as_deref().unwrap_or(&account.email);
-    let from_mailbox: Mailbox = format!("{} <{}>", from_name, account.email)
-        .parse()
-        .map_err(|e| format!("Invalid from address: {}", e))?;
+    let from_mailbox: Mailbox = {
+        let addr: lettre::Address = account.email.parse()
+            .map_err(|e| format!("Invalid from email: {}", e))?;
+        match account.name.as_deref() {
+            Some(name) if !name.is_empty() => Mailbox::new(Some(name.to_string()), addr),
+            _ => Mailbox::new(None, addr),
+        }
+    };
 
     let to_mailbox: Mailbox = email
         .to
@@ -140,10 +144,19 @@ pub async fn send_email(account: &ImapConfig, email: &OutgoingEmail) -> Result<S
             .build()
     };
 
+    info!(
+        "[smtp] Sending to {} via {}:{} (tls={}, oauth2={})",
+        email.to,
+        smtp_host,
+        smtp_port,
+        account.smtp_secure.unwrap_or(false),
+        account.is_oauth2()
+    );
+
     let response = transport
         .send(message)
         .await
-        .map_err(|e| format!("SMTP send failed: {}", e))?;
+        .map_err(|e| format!("SMTP send failed ({}:{}): {}", smtp_host, smtp_port, e))?;
 
     let message_id = response
         .message()

@@ -2,6 +2,46 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { safeStorage } from './safeStorage';
 
+// Palette of visually distinct avatar colors
+export const AVATAR_COLORS = [
+  '#6366f1', // indigo (default accent)
+  '#f43f5e', // rose
+  '#10b981', // emerald
+  '#f59e0b', // amber
+  '#3b82f6', // blue
+  '#8b5cf6', // violet
+  '#ec4899', // pink
+  '#14b8a6', // teal
+  '#ef4444', // red
+  '#06b6d4', // cyan
+];
+
+// Deterministic color from email string
+function hashColor(email) {
+  let hash = 0;
+  for (let i = 0; i < email.length; i++) {
+    hash = ((hash << 5) - hash) + email.charCodeAt(i);
+    hash |= 0;
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
+// Get the initial letter(s) for an account avatar
+export function getAccountInitial(account, displayName) {
+  const name = displayName || account.name;
+  if (name) {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return name[0].toUpperCase();
+  }
+  return (account.email || '?')[0].toUpperCase();
+}
+
+// Get avatar color for an account (user override or deterministic)
+export function getAccountColor(accountColors, account) {
+  return accountColors[account.id] || hashColor(account.email || account.id);
+}
+
 export const useSettingsStore = create(
   persist(
     (set, get) => ({
@@ -21,8 +61,12 @@ export const useSettingsStore = create(
       // Account order (array of account IDs for drag-to-reorder)
       accountOrder: [],
 
+      // Last selected mailbox per account { [accountId]: string }
+      lastMailboxPerAccount: {},
+
       // Display settings
       displayNames: {}, // { [accountId]: string }
+      accountColors: {}, // { [accountId]: string (hex color) } — user overrides for avatar color
       
       // Default settings
       defaultSignatureEnabled: true,
@@ -49,6 +93,8 @@ export const useSettingsStore = create(
       // Layout settings
       layoutMode: 'three-column', // 'three-column' | 'two-column'
       viewStyle: 'list', // 'list' | 'chat'
+      emailListStyle: 'default', // 'default' | 'compact'
+      sidebarCollapsed: false, // Whether sidebar is in compact/collapsed mode
       listPaneSize: 350, // Width of email list in 3-column, or height in 2-column
       viewerPaneSize: 50, // Percentage of remaining space for viewer in 3-column
 
@@ -61,6 +107,12 @@ export const useSettingsStore = create(
       filterHistoryPeriodDays: 30, // Period for tracking popular filters (1-365 days)
       topFiltersLimit: 20, // Number of top filters to show (1-50)
       filterUsageHistory: [], // Array of { filter, timestamp } for tracking usage
+
+      // Per-account mailbox memory
+      getLastMailbox: (accountId) => get().lastMailboxPerAccount[accountId] || 'INBOX',
+      setLastMailbox: (accountId, mailbox) => set({
+        lastMailboxPerAccount: { ...get().lastMailboxPerAccount, [accountId]: mailbox }
+      }),
 
       // Account order management
       setAccountOrder: (order) => set({ accountOrder: order }),
@@ -121,6 +173,19 @@ export const useSettingsStore = create(
         return get().displayNames[accountId] || '';
       },
 
+      // Account color management
+      setAccountColor: (accountId, color) => {
+        set(state => ({
+          accountColors: { ...state.accountColors, [accountId]: color }
+        }));
+      },
+      clearAccountColor: (accountId) => {
+        set(state => {
+          const { [accountId]: _, ...rest } = state.accountColors;
+          return { accountColors: rest };
+        });
+      },
+
       // Email sync settings
       setRefreshInterval: (minutes) => set({ refreshInterval: minutes }),
       setRefreshOnLaunch: (enabled) => set({ refreshOnLaunch: enabled }),
@@ -139,6 +204,9 @@ export const useSettingsStore = create(
       // Layout settings
       setLayoutMode: (mode) => set({ layoutMode: mode }),
       setViewStyle: (style) => set({ viewStyle: style }),
+      setEmailListStyle: (style) => set({ emailListStyle: style }),
+      setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
+      toggleSidebarCollapsed: () => set(state => ({ sidebarCollapsed: !state.sidebarCollapsed })),
       setListPaneSize: (size) => set({ listPaneSize: size }),
       setViewerPaneSize: (size) => set({ viewerPaneSize: size }),
 
@@ -220,8 +288,10 @@ export const useSettingsStore = create(
           cacheLimitMB: 512,
           localCacheDurationMonths: 3,
           accountOrder: [],
+          lastMailboxPerAccount: {},
           signatures: {},
           displayNames: {},
+          accountColors: {},
           defaultSignatureEnabled: true,
           autoSaveDrafts: true,
           autoSaveInterval: 30,
@@ -234,6 +304,8 @@ export const useSettingsStore = create(
           markAsReadMode: 'auto',
           layoutMode: 'three-column',
           viewStyle: 'list',
+          emailListStyle: 'default',
+          sidebarCollapsed: false,
           listPaneSize: 350,
           viewerPaneSize: 50,
           onboardingComplete: false,

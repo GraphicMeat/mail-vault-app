@@ -7,30 +7,85 @@ use tokio::net::TcpListener;
 use tokio::sync::{oneshot, Mutex};
 use tracing::{info, error};
 
-// ── Microsoft OAuth2 constants ──────────────────────────────────────────────
+// ── OAuth2 Provider Configuration ──────────────────────────────────────────
 
-const AUTH_ENDPOINT: &str = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
-const TOKEN_ENDPOINT: &str = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
-const THUNDERBIRD_CLIENT_ID: &str = "9e5f94bc-e8a4-4e73-b8be-63364c29d753";
 const REDIRECT_URI: &str = "http://localhost:19876/callback";
 const CALLBACK_PORT: u16 = 19876;
-const SCOPES: &[&str] = &[
-    "offline_access",
-    "https://outlook.office.com/IMAP.AccessAsUser.All",
-    "https://outlook.office.com/SMTP.Send",
-];
 
-fn get_client_id() -> String {
-    std::env::var("MAILVAULT_MS_CLIENT_ID")
-        .ok()
-        .filter(|s| !s.is_empty() && s != "undefined")
-        .unwrap_or_else(|| THUNDERBIRD_CLIENT_ID.to_string())
+// Microsoft constants
+const MS_AUTH_ENDPOINT: &str = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
+const MS_TOKEN_ENDPOINT: &str = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
+const MS_THUNDERBIRD_CLIENT_ID: &str = "9e5f94bc-e8a4-4e73-b8be-63364c29d753";
+
+// Google constants
+const GOOGLE_AUTH_ENDPOINT: &str = "https://accounts.google.com/o/oauth2/v2/auth";
+const GOOGLE_TOKEN_ENDPOINT: &str = "https://oauth2.googleapis.com/token";
+const GOOGLE_THUNDERBIRD_CLIENT_ID: &str = "406964657835-aq8lmia8j95dhl1a2bvharmfk3t1hgqj.apps.googleusercontent.com";
+// Google "installed app" OAuth2 requires client_secret even with PKCE (unlike Microsoft).
+// This is Thunderbird's public secret — embedded in source, not confidential by design.
+const GOOGLE_THUNDERBIRD_CLIENT_SECRET: &str = "kSmqreRr0qwBWJgbf5Y-PjSU";
+
+
+struct ProviderConfig {
+    auth_endpoint: &'static str,
+    token_endpoint: &'static str,
+    client_id: String,
+    client_secret: Option<String>,
+    scopes: String,
+    /// Extra query params for the auth URL (e.g. access_type=offline for Google)
+    extra_auth_params: Vec<(&'static str, String)>,
 }
 
-fn get_client_secret() -> Option<String> {
-    std::env::var("MAILVAULT_MS_CLIENT_SECRET")
-        .ok()
-        .filter(|s| !s.is_empty() && s != "undefined")
+fn get_provider_config(provider: &str) -> Result<ProviderConfig, String> {
+    match provider {
+        "microsoft" => {
+            let client_id = std::env::var("MAILVAULT_MS_CLIENT_ID")
+                .ok()
+                .filter(|s| !s.is_empty() && s != "undefined")
+                .unwrap_or_else(|| MS_THUNDERBIRD_CLIENT_ID.to_string());
+            let client_secret = std::env::var("MAILVAULT_MS_CLIENT_SECRET")
+                .ok()
+                .filter(|s| !s.is_empty() && s != "undefined");
+
+            Ok(ProviderConfig {
+                auth_endpoint: MS_AUTH_ENDPOINT,
+                token_endpoint: MS_TOKEN_ENDPOINT,
+                client_id,
+                client_secret,
+                scopes: [
+                    "offline_access",
+                    "https://outlook.office.com/IMAP.AccessAsUser.All",
+                    "https://outlook.office.com/SMTP.Send",
+                ].join(" "),
+                extra_auth_params: vec![
+                    ("response_mode", "query".to_string()),
+                ],
+            })
+        }
+        "google" => {
+            let client_id = std::env::var("MAILVAULT_GOOGLE_CLIENT_ID")
+                .ok()
+                .filter(|s| !s.is_empty() && s != "undefined")
+                .unwrap_or_else(|| GOOGLE_THUNDERBIRD_CLIENT_ID.to_string());
+            let client_secret = std::env::var("MAILVAULT_GOOGLE_CLIENT_SECRET")
+                .ok()
+                .filter(|s| !s.is_empty() && s != "undefined")
+                .or_else(|| Some(GOOGLE_THUNDERBIRD_CLIENT_SECRET.to_string()));
+
+            Ok(ProviderConfig {
+                auth_endpoint: GOOGLE_AUTH_ENDPOINT,
+                token_endpoint: GOOGLE_TOKEN_ENDPOINT,
+                client_id,
+                client_secret,
+                scopes: "https://mail.google.com/".to_string(),
+                extra_auth_params: vec![
+                    ("access_type", "offline".to_string()),
+                    ("prompt", "consent".to_string()),
+                ],
+            })
+        }
+        _ => Err(format!("Unknown OAuth2 provider: {}", provider)),
+    }
 }
 
 // ── PKCE helpers ────────────────────────────────────────────────────────────
@@ -86,6 +141,7 @@ type SenderMap = Arc<Mutex<HashMap<String, oneshot::Sender<Result<String, String
 
 struct PendingOAuth {
     code_verifier: String,
+    provider: String,
     code_rx: Option<oneshot::Receiver<Result<String, String>>>,
 }
 
@@ -104,8 +160,14 @@ impl OAuth2Manager {
         }
     }
 
-    pub async fn generate_auth_url(&self, login_hint: Option<String>) -> Result<AuthUrlResponse, String> {
-        let client_id = get_client_id();
+    pub async fn generate_auth_url(
+        &self,
+        login_hint: Option<String>,
+        provider: Option<String>,
+    ) -> Result<AuthUrlResponse, String> {
+        let provider_name = provider.as_deref().unwrap_or("microsoft");
+        let config = get_provider_config(provider_name)?;
+
         let code_verifier = generate_code_verifier();
         let code_challenge = generate_code_challenge(&code_verifier);
 
@@ -122,6 +184,7 @@ impl OAuth2Manager {
             state.clone(),
             PendingOAuth {
                 code_verifier,
+                provider: provider_name.to_string(),
                 code_rx: Some(rx),
             },
         );
@@ -141,13 +204,11 @@ impl OAuth2Manager {
             }
         });
 
-        let scopes = SCOPES.join(" ");
         let mut params = vec![
-            ("client_id", client_id.as_str()),
+            ("client_id", config.client_id.as_str()),
             ("response_type", "code"),
             ("redirect_uri", REDIRECT_URI),
-            ("scope", &scopes),
-            ("response_mode", "query"),
+            ("scope", &config.scopes),
             ("state", &state),
             ("code_challenge", &code_challenge),
             ("code_challenge_method", "S256"),
@@ -159,13 +220,22 @@ impl OAuth2Manager {
             params.push(("login_hint", &hint_str));
         }
 
+        // Add provider-specific params (e.g. access_type=offline for Google)
+        let extra_refs: Vec<(&str, &str)> = config.extra_auth_params
+            .iter()
+            .map(|(k, v)| (*k, v.as_str()))
+            .collect();
+        for (k, v) in &extra_refs {
+            params.push((k, v));
+        }
+
         let query = params
             .iter()
             .map(|(k, v)| format!("{}={}", k, url_encode(v)))
             .collect::<Vec<_>>()
             .join("&");
 
-        let auth_url = format!("{}?{}", AUTH_ENDPOINT, query);
+        let auth_url = format!("{}?{}", config.auth_endpoint, query);
 
         Ok(AuthUrlResponse {
             success: true,
@@ -186,6 +256,7 @@ impl OAuth2Manager {
             .ok_or_else(|| "OAuth code already consumed".to_string())?;
 
         let code_verifier = flow.code_verifier.clone();
+        let provider_name = flow.provider.clone();
         drop(pending);
 
         // Wait for the authorization code from callback server
@@ -194,26 +265,25 @@ impl OAuth2Manager {
             .map_err(|_| "OAuth callback channel dropped".to_string())?
             .map_err(|e| format!("OAuth callback error: {}", e))?;
 
-        let client_id = get_client_id();
-        let client_secret = get_client_secret();
+        let config = get_provider_config(&provider_name)?;
 
         let mut params = vec![
-            ("client_id".to_string(), client_id),
+            ("client_id".to_string(), config.client_id),
             ("grant_type".to_string(), "authorization_code".to_string()),
             ("code".to_string(), code),
             ("redirect_uri".to_string(), REDIRECT_URI.to_string()),
             ("code_verifier".to_string(), code_verifier),
         ];
 
-        if let Some(secret) = client_secret {
+        if let Some(secret) = config.client_secret {
             params.push(("client_secret".to_string(), secret));
         }
 
-        info!("[OAuth2] Exchanging code for tokens...");
+        info!("[OAuth2] Exchanging code for tokens ({})...", provider_name);
 
         let client = reqwest::Client::new();
         let resp = client
-            .post(TOKEN_ENDPOINT)
+            .post(config.token_endpoint)
             .form(&params)
             .send()
             .await
@@ -254,25 +324,28 @@ impl OAuth2Manager {
         })
     }
 
-    pub async fn refresh_token(&self, refresh_token: &str) -> Result<TokenResponse, String> {
-        let client_id = get_client_id();
-        let client_secret = get_client_secret();
-        let scopes = SCOPES.join(" ");
+    pub async fn refresh_token(
+        &self,
+        refresh_token: &str,
+        provider: Option<String>,
+    ) -> Result<TokenResponse, String> {
+        let provider_name = provider.as_deref().unwrap_or("microsoft");
+        let config = get_provider_config(provider_name)?;
 
         let mut params = vec![
-            ("client_id".to_string(), client_id),
+            ("client_id".to_string(), config.client_id),
             ("grant_type".to_string(), "refresh_token".to_string()),
             ("refresh_token".to_string(), refresh_token.to_string()),
-            ("scope".to_string(), scopes),
+            ("scope".to_string(), config.scopes),
         ];
 
-        if let Some(secret) = client_secret {
+        if let Some(secret) = config.client_secret {
             params.push(("client_secret".to_string(), secret));
         }
 
         let client = reqwest::Client::new();
         let resp = client
-            .post(TOKEN_ENDPOINT)
+            .post(config.token_endpoint)
             .form(&params)
             .send()
             .await

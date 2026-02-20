@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import * as db from '../services/db';
 import * as api from '../services/api';
 import { useSettingsStore } from './settingsStore';
-import { hasValidCredentials } from '../services/authUtils';
+import { hasValidCredentials, ensureFreshToken } from '../services/authUtils';
 import { hasRealAttachments } from '../services/attachmentUtils';
 
 export const useMailStore = create((set, get) => ({
@@ -328,8 +328,9 @@ export const useMailStore = create((set, get) => ({
   },
   
   setActiveAccount: async (accountId) => {
-    const account = get().accounts.find(a => a.id === accountId);
+    let account = get().accounts.find(a => a.id === accountId);
     if (!account) return;
+    account = await ensureFreshToken(account);
 
     const invoke = window.__TAURI__?.core?.invoke;
     const { activeAccountId: currentAccountId, emails: currentEmails, totalEmails: currentTotalEmails } = get();
@@ -347,11 +348,13 @@ export const useMailStore = create((set, get) => ({
     }
 
     // Different account or no data - need to reset and load
-    console.log('[setActiveAccount] Switching to account:', accountId, 'from:', currentAccountId);
+    const lastMailbox = useSettingsStore.getState().getLastMailbox(accountId);
+    console.log('[setActiveAccount] Switching to account:', accountId, 'mailbox:', lastMailbox);
 
     // Reset all email state immediately to prevent stale data from rendering
     set({
       activeAccountId: accountId,
+      activeMailbox: lastMailbox,
       emails: [],
       localEmails: [],
       totalEmails: 0,
@@ -373,12 +376,12 @@ export const useMailStore = create((set, get) => ({
     });
 
     // Get local emails first (always available)
-    const localEmails = await db.getLocalEmails(accountId, 'INBOX');
-    const savedEmailIds = await db.getSavedEmailIds(accountId, 'INBOX');
-    const archivedEmailIds = await db.getArchivedEmailIds(accountId, 'INBOX');
+    const localEmails = await db.getLocalEmails(accountId, lastMailbox);
+    const savedEmailIds = await db.getSavedEmailIds(accountId, lastMailbox);
+    const archivedEmailIds = await db.getArchivedEmailIds(accountId, lastMailbox);
 
     // Load cached headers to check if we have data for this account
-    const cachedHeaders = await db.getEmailHeaders(accountId, 'INBOX');
+    const cachedHeaders = await db.getEmailHeaders(accountId, lastMailbox);
 
     if (cachedHeaders && cachedHeaders.emails.length > 0) {
       console.log('[setActiveAccount] Found cached data:', cachedHeaders.emails.length, 'emails');
@@ -567,6 +570,9 @@ export const useMailStore = create((set, get) => ({
   setActiveMailbox: async (mailbox) => {
     const { activeAccountId } = get();
 
+    // Remember this mailbox for the account
+    useSettingsStore.getState().setLastMailbox(activeAccountId, mailbox);
+
     // Clear selection but don't reset email data yet - loadEmails will handle cache
     set({
       activeMailbox: mailbox,
@@ -638,8 +644,11 @@ export const useMailStore = create((set, get) => ({
   // Load emails
   loadEmails: async () => {
     const { activeAccountId, accounts, activeMailbox } = get();
-    const account = accounts.find(a => a.id === activeAccountId);
+    let account = accounts.find(a => a.id === activeAccountId);
     if (!account) return;
+
+    // Proactively refresh OAuth2 token if expiring soon
+    account = await ensureFreshToken(account);
 
     const invoke = window.__TAURI__?.core?.invoke;
 
@@ -1007,10 +1016,12 @@ export const useMailStore = create((set, get) => ({
 
   loadMoreEmails: async () => {
     const { activeAccountId, accounts, activeMailbox, emails, currentPage, hasMoreEmails, loadingMore } = get();
-    const account = accounts.find(a => a.id === activeAccountId);
+    let account = accounts.find(a => a.id === activeAccountId);
 
     // Don't load if already loading, no more emails, or no account
     if (!account || loadingMore || !hasMoreEmails) return;
+
+    account = await ensureFreshToken(account);
 
     // Don't load more if credentials are missing (support both password and OAuth2)
     const hasCredentials = account.password || (account.authType === 'oauth2' && account.oauth2AccessToken);
@@ -1097,7 +1108,8 @@ export const useMailStore = create((set, get) => ({
   // Load emails by index range (for virtualized scrolling)
   loadEmailRange: async (startIndex, endIndex) => {
     const { activeAccountId, accounts, activeMailbox, emailsByIndex, loadedRanges, loadingRanges, savedEmailIds } = get();
-    const account = accounts.find(a => a.id === activeAccountId);
+    let account = accounts.find(a => a.id === activeAccountId);
+    account = await ensureFreshToken(account);
 
     const hasCredentials = account && (account.password || (account.authType === 'oauth2' && account.oauth2AccessToken));
     if (!hasCredentials) return;
@@ -1242,7 +1254,8 @@ export const useMailStore = create((set, get) => ({
   // Select email
   selectEmail: async (uid, source = 'server') => {
     const { activeAccountId, accounts, activeMailbox } = get();
-    const account = accounts.find(a => a.id === activeAccountId);
+    let account = accounts.find(a => a.id === activeAccountId);
+    account = await ensureFreshToken(account);
     const cacheKey = `${activeAccountId}-${activeMailbox}-${uid}`;
     const cacheLimitMB = useSettingsStore.getState().cacheLimitMB;
 
@@ -1380,8 +1393,9 @@ export const useMailStore = create((set, get) => ({
   // Archive multiple emails via Rust thread (concurrent fetch + write with progress)
   saveEmailsLocally: async (uids) => {
     const { activeAccountId, accounts, activeMailbox } = get();
-    const account = accounts.find(a => a.id === activeAccountId);
+    let account = accounts.find(a => a.id === activeAccountId);
     if (!account) return;
+    account = await ensureFreshToken(account);
 
     const invoke = window.__TAURI__?.core?.invoke;
     const listen = window.__TAURI__?.event?.listen;
@@ -1494,8 +1508,9 @@ export const useMailStore = create((set, get) => ({
   // Delete email from server
   deleteEmailFromServer: async (uid) => {
     const { activeAccountId, accounts, activeMailbox, selectedEmailId } = get();
-    const account = accounts.find(a => a.id === activeAccountId);
+    let account = accounts.find(a => a.id === activeAccountId);
     if (!account) return;
+    account = await ensureFreshToken(account);
 
     await api.deleteEmail(account, uid, activeMailbox);
 
@@ -1523,12 +1538,13 @@ export const useMailStore = create((set, get) => ({
   // Mark email as read/unread
   markEmailReadStatus: async (uid, read) => {
     const { activeAccountId, accounts, activeMailbox, selectedEmail } = get();
-    const account = accounts.find(a => a.id === activeAccountId);
+    let account = accounts.find(a => a.id === activeAccountId);
     if (!account) return;
-    
+    account = await ensureFreshToken(account);
+
     try {
       await api.updateEmailFlags(
-        account, 
+        account,
         uid, 
         ['\\Seen'], 
         read ? 'add' : 'remove', 
@@ -1596,8 +1612,9 @@ export const useMailStore = create((set, get) => ({
   // Bulk mark as read
   markSelectedAsRead: async () => {
     const { selectedEmailIds, activeAccountId, accounts, activeMailbox } = get();
-    const account = accounts.find(a => a.id === activeAccountId);
+    let account = accounts.find(a => a.id === activeAccountId);
     if (!account || selectedEmailIds.size === 0) return;
+    account = await ensureFreshToken(account);
 
     const uids = Array.from(selectedEmailIds);
     for (const uid of uids) {
@@ -1621,8 +1638,9 @@ export const useMailStore = create((set, get) => ({
   // Bulk mark as unread
   markSelectedAsUnread: async () => {
     const { selectedEmailIds, activeAccountId, accounts, activeMailbox } = get();
-    const account = accounts.find(a => a.id === activeAccountId);
+    let account = accounts.find(a => a.id === activeAccountId);
     if (!account || selectedEmailIds.size === 0) return;
+    account = await ensureFreshToken(account);
 
     const uids = Array.from(selectedEmailIds);
     for (const uid of uids) {
@@ -1646,8 +1664,9 @@ export const useMailStore = create((set, get) => ({
   // Bulk delete from server
   deleteSelectedFromServer: async () => {
     const { selectedEmailIds, activeAccountId, accounts, activeMailbox } = get();
-    const account = accounts.find(a => a.id === activeAccountId);
+    let account = accounts.find(a => a.id === activeAccountId);
     if (!account || selectedEmailIds.size === 0) return;
+    account = await ensureFreshToken(account);
 
     const uids = Array.from(selectedEmailIds);
     for (const uid of uids) {
@@ -1690,12 +1709,13 @@ export const useMailStore = create((set, get) => ({
     let totalUnread = 0;
     let previousEmailCount = get().emails.length;
 
-    for (const account of accounts) {
+    for (let account of accounts) {
       // Skip if credentials are missing (support both password and OAuth2)
       if (!hasValidCredentials(account)) {
         console.warn(`[mailStore] Skipping account ${account.email} - no credentials`);
         continue;
       }
+      account = await ensureFreshToken(account);
 
       try {
         // If this is the active account, refresh the current mailbox
@@ -1814,7 +1834,8 @@ export const useMailStore = create((set, get) => ({
 
     set({ isSearching: true, searchActive: true });
 
-    const account = accounts.find(a => a.id === activeAccountId);
+    let account = accounts.find(a => a.id === activeAccountId);
+    account = await ensureFreshToken(account);
     const queryLower = searchQuery.toLowerCase().trim();
 
     // Helper to filter emails locally
@@ -1893,7 +1914,7 @@ export const useMailStore = create((set, get) => ({
       }
 
       // 3. Search on server via IMAP (if online and not local-only search)
-      if (searchFilters.location !== 'local' && account && account.password) {
+      if (searchFilters.location !== 'local' && account && hasValidCredentials(account)) {
         try {
           const serverFilters = {};
           if (searchFilters.sender) serverFilters.from = searchFilters.sender;

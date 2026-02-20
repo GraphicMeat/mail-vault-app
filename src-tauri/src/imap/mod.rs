@@ -54,6 +54,8 @@ pub struct MailboxInfo {
     pub special_use: Option<String>,
     pub flags: Vec<String>,
     pub delimiter: Option<String>,
+    #[serde(rename = "noselect")]
+    pub noselect: bool,
     pub children: Vec<MailboxInfo>,
 }
 
@@ -177,6 +179,8 @@ pub async fn create_imap_session(config: &ImapConfig) -> Result<ImapSession, Str
     let port = config.effective_port();
     let addr = format!("{}:{}", config.host, port);
 
+    info!("[IMAP] Connecting to {} (oauth2={})", addr, config.is_oauth2());
+
     // Resolve to IPv4 only — avoids IPv6 hangs (especially with Outlook)
     use async_std::net::ToSocketAddrs;
     let addrs: Vec<std::net::SocketAddr> = addr
@@ -190,6 +194,8 @@ pub async fn create_imap_session(config: &ImapConfig) -> Result<ImapSession, Str
         return Err(format!("No IPv4 address found for {}", config.host));
     }
 
+    info!("[IMAP] DNS resolved to {:?}", addrs);
+
     let tcp = async_std::io::timeout(
         std::time::Duration::from_secs(15),
         TcpStream::connect(&addrs[..]),
@@ -197,22 +203,34 @@ pub async fn create_imap_session(config: &ImapConfig) -> Result<ImapSession, Str
     .await
     .map_err(|e| format!("TCP connect to {} failed: {}", addr, e))?;
 
+    info!("[IMAP] TCP connected, starting TLS handshake...");
+
     let tls = TlsConnector::new();
     let tls_stream = tls
         .connect(&config.host, tcp)
         .await
         .map_err(|e| format!("TLS handshake with {} failed: {}", config.host, e))?;
 
-    let client = async_imap::Client::new(tls_stream);
+    info!("[IMAP] TLS established, authenticating...");
+
+    let mut client = async_imap::Client::new(tls_stream);
+
+    // Consume the server greeting (e.g. "* OK Gimap ready") before auth.
+    // Without this, authenticate() reads the greeting instead of the "+"
+    // continuation, causing a deadlock. login() handles it internally but
+    // authenticate()'s handshake loop does not.
+    let _greeting = client.read_response().await
+        .map_err(|e| format!("Failed to read server greeting: {}", e))?;
 
     let session = if config.is_oauth2() {
         let token = config
             .access_token
             .as_deref()
             .ok_or_else(|| "OAuth2 access token missing".to_string())?;
+        info!("[IMAP] Using XOAUTH2 for {} (token length: {})", config.email, token.len());
         let xoauth2 = build_xoauth2(&config.email, token);
         client
-            .authenticate("XOAUTH2", XOAuth2Authenticator(xoauth2.into_bytes()))
+            .authenticate("XOAUTH2", XOAuth2Authenticator::new(xoauth2.into_bytes()))
             .await
             .map_err(|(e, _)| format!("XOAUTH2 auth failed for {}: {}", config.email, e))?
     } else {
@@ -226,7 +244,7 @@ pub async fn create_imap_session(config: &ImapConfig) -> Result<ImapSession, Str
             .map_err(|(e, _)| format!("Login failed for {}: {}", config.email, e))?
     };
 
-    info!("IMAP session established for {}", config.email);
+    info!("[IMAP] Session established for {}", config.email);
     Ok(session)
 }
 
@@ -234,12 +252,30 @@ fn build_xoauth2(email: &str, token: &str) -> String {
     format!("user={}\x01auth=Bearer {}\x01\x01", email, token)
 }
 
-struct XOAuth2Authenticator(Vec<u8>);
+struct XOAuth2Authenticator {
+    response: Vec<u8>,
+    sent: bool,
+}
+
+impl XOAuth2Authenticator {
+    fn new(response: Vec<u8>) -> Self {
+        Self { response, sent: false }
+    }
+}
 
 impl async_imap::Authenticator for XOAuth2Authenticator {
     type Response = Vec<u8>;
     fn process(&mut self, _challenge: &[u8]) -> Self::Response {
-        self.0.clone()
+        if !self.sent {
+            // First call: send the XOAUTH2 token
+            self.sent = true;
+            self.response.clone()
+        } else {
+            // Subsequent calls: server sent an error challenge (e.g. Gmail sends
+            // `+ <base64-json-error>`). Reply with empty response to acknowledge,
+            // so the server can send the final NO/BAD and end the handshake.
+            Vec::new()
+        }
     }
 }
 
@@ -275,6 +311,10 @@ pub async fn list_mailboxes(session: &mut ImapSession) -> Result<Vec<MailboxInfo
             .map(|a| format!("{:?}", a))
             .collect();
         let special_use = detect_special_use(&attrs, &path);
+        let noselect = attrs.iter().any(|a| {
+            let lower = a.to_lowercase();
+            lower.contains("noselect") || lower.contains("nonexistent")
+        });
 
         all.push(MailboxInfo {
             name: short_name,
@@ -282,6 +322,7 @@ pub async fn list_mailboxes(session: &mut ImapSession) -> Result<Vec<MailboxInfo
             special_use,
             flags: attrs,
             delimiter,
+            noselect,
             children: Vec::new(),
         });
     }
