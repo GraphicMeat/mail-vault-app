@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-02-21
+
+### Added
+- **Email threading (Gmail-style)** — emails are now grouped into threads using RFC 2822 `In-Reply-To` and `References` headers, with normalized subject as fallback; the regular email list shows collapsed thread rows with participant names, message count badges, and latest date; the chat view uses the same threading algorithm for its topic grouping; Rust IMAP layer now fetches `In-Reply-To` from ENVELOPE and `References` via `BODY.PEEK[HEADER.FIELDS (References)]`
+- **Thread conversation view** — clicking a thread in the email list now shows all emails in the thread as a stacked conversation in the viewer; emails are sorted chronologically with the latest expanded by default; each email has its own reply/reply-all/forward buttons and attachment section; email bodies load progressively using the same concurrent loader as the chat view
+- **Chat view: sent message merge** — chat conversations now display both received (INBOX) and sent messages together; Sent folder headers are synced via the background pipeline and merged with INBOX emails, with deduplication by Message-ID to avoid duplicates; body loading handles per-mailbox IMAP fetches transparently
+- **Clear cache button** — Settings > General > Local Email Caching now has a "Clear Cache" button that removes all cached .eml files and headers, preserves archived emails, and restarts the sync pipeline
+- **Hide/unhide accounts** — accounts can be hidden from Settings > Accounts; hidden accounts disappear from the sidebar and stop all syncing (background pipelines, scheduled refresh); unhiding immediately resumes sync; if the active account is hidden, the app switches to the next visible account
+
+### Removed
+- **App Password fallback for OAuth2 providers** — Gmail and Microsoft accounts no longer show the "Use App Password instead" toggle; OAuth2 is the only authentication method for these providers as app passwords are less secure
+
+### Fixed
+- **Thread row actions** — threaded email rows in the list view now show archive and more-menu buttons on hover (matching single-email rows); archive button archives all emails in the thread; more menu offers "Delete thread from server" with confirmation
+- **Chat view "Content cannot be displayed"** — chat bubbles showed "Content cannot be displayed" for all messages because the chat view only received header-only emails (no body content); added progressive body loading via `useChatBodyLoader` hook that fetches email bodies concurrently (3 at a time) from cache → Maildir → IMAP, with per-bubble loading spinners and targeted re-renders
+
 ## [1.6.0] - 2026-02-20
 
 ### Added

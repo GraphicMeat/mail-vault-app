@@ -61,6 +61,9 @@ export const useSettingsStore = create(
       // Account order (array of account IDs for drag-to-reorder)
       accountOrder: [],
 
+      // Hidden accounts { [accountId]: true } — hidden accounts don't sync and are invisible in sidebar
+      hiddenAccounts: {},
+
       // Last selected mailbox per account { [accountId]: string }
       lastMailboxPerAccount: {},
 
@@ -137,9 +140,9 @@ export const useSettingsStore = create(
         set({ cacheLimitMB: limit });
       },
 
-      // Set local cache duration (validates: 0 (all), 1, 2, 3, 6, or 12 months)
+      // Set local cache duration (validates: 0 (all), 1, 3, 6, or 12 months)
       setLocalCacheDurationMonths: (months) => {
-        const validValues = [0, 1, 2, 3, 6, 12]; // 0 = cache all emails
+        const validValues = [0, 1, 3, 6, 12]; // 0 = cache all emails
         if (validValues.includes(months)) {
           set({ localCacheDurationMonths: months });
         }
@@ -185,6 +188,18 @@ export const useSettingsStore = create(
           return { accountColors: rest };
         });
       },
+
+      // Hidden account management
+      setAccountHidden: (accountId, hidden) => {
+        set(state => {
+          if (hidden) {
+            return { hiddenAccounts: { ...state.hiddenAccounts, [accountId]: true } };
+          }
+          const { [accountId]: _, ...rest } = state.hiddenAccounts;
+          return { hiddenAccounts: rest };
+        });
+      },
+      isAccountHidden: (accountId) => !!get().hiddenAccounts[accountId],
 
       // Email sync settings
       setRefreshInterval: (minutes) => set({ refreshInterval: minutes }),
@@ -288,6 +303,7 @@ export const useSettingsStore = create(
           cacheLimitMB: 512,
           localCacheDurationMonths: 3,
           accountOrder: [],
+          hiddenAccounts: {},
           lastMailboxPerAccount: {},
           signatures: {},
           displayNames: {},
