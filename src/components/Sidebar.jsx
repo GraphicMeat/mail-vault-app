@@ -67,12 +67,12 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
   } = useMailStore();
 
   const { theme, toggleTheme } = useThemeStore();
-  const { getOrderedAccounts, getDisplayName, accountColors, sidebarCollapsed, toggleSidebarCollapsed } = useSettingsStore();
+  const { getOrderedAccounts, getDisplayName, accountColors, hiddenAccounts, sidebarCollapsed, toggleSidebarCollapsed } = useSettingsStore();
 
   const [expandedFolders, setExpandedFolders] = useState(new Set(['INBOX']));
   const [showErrorModal, setShowErrorModal] = useState(false);
 
-  const orderedAccounts = getOrderedAccounts(accounts);
+  const orderedAccounts = getOrderedAccounts(accounts).filter(a => !hiddenAccounts[a.id]);
   const collapsed = sidebarCollapsed;
 
   // Sort mailboxes: INBOX first, then alphabetically; children sorted alphabetically too

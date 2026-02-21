@@ -4,6 +4,11 @@ import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import * as db from './db';
 
+/** Check if an account is hidden in settings */
+function isHidden(accountId) {
+  return !!useSettingsStore.getState().hiddenAccounts[accountId];
+}
+
 /**
  * Singleton coordinator that manages per-account loading pipelines.
  *
@@ -25,7 +30,7 @@ class EmailPipelineManager {
   async startActiveAccountPipeline(accountId) {
     const { accounts, activeMailbox, emails, savedEmailIds } = useMailStore.getState();
     const account = accounts.find(a => a.id === accountId);
-    if (!account || !hasValidCredentials(account)) return;
+    if (!account || !hasValidCredentials(account) || isHidden(accountId)) return;
 
     this._activeAccountId = accountId;
 
@@ -42,6 +47,9 @@ class EmailPipelineManager {
     });
 
     this.pipelines.set(accountId, pipeline);
+
+    // Load Sent folder headers in parallel (for chat view)
+    this._loadSentHeaders(account, pipeline);
 
     // Filter UIDs that need caching
     const { localCacheDurationMonths } = useSettingsStore.getState();
@@ -75,7 +83,7 @@ class EmailPipelineManager {
 
     const { accounts } = useMailStore.getState();
     const otherAccounts = accounts.filter(
-      a => a.id !== this._activeAccountId && hasValidCredentials(a)
+      a => a.id !== this._activeAccountId && hasValidCredentials(a) && !isHidden(a.id)
     );
 
     for (const account of otherAccounts) {
@@ -95,9 +103,11 @@ class EmailPipelineManager {
 
       this.pipelines.set(account.id, pipeline);
 
-      // Phase 1: load headers
+      // Phase 1: load headers (INBOX + Sent)
       await pipeline.loadHeaders('INBOX');
+      if (pipeline._destroyed) continue;
 
+      await this._loadSentHeaders(account, pipeline);
       if (pipeline._destroyed) continue;
 
       // Phase 2: cache content
@@ -173,6 +183,14 @@ class EmailPipelineManager {
   }
 
   /**
+   * Restart background pipelines (e.g., after unhiding an account).
+   */
+  restartBackgroundPipelines() {
+    this._backgroundRunning = false;
+    this._startBackgroundPipelines();
+  }
+
+  /**
    * Destroy all pipelines.
    */
   destroyAll() {
@@ -204,6 +222,31 @@ class EmailPipelineManager {
   _onProgress(accountId, state) {
     // Progress is available via getProgress() — no store write needed
     // The coordinator hook can poll this if UI needs it
+  }
+
+  /**
+   * Load Sent folder headers for chat view (INBOX + Sent merge).
+   * Caches to disk and populates store for the active account.
+   */
+  async _loadSentHeaders(account, pipeline) {
+    const store = useMailStore.getState();
+    const sentPath = store.getSentMailboxPath();
+    if (!sentPath || pipeline._destroyed) return;
+
+    try {
+      // Always refresh Sent headers from IMAP (Sent folder grows as user sends)
+      if (pipeline._destroyed) return;
+      console.log(`[PipelineManager] Loading Sent headers for ${account.email} (${sentPath})`);
+      await pipeline.loadHeaders(sentPath);
+      if (pipeline._destroyed) return;
+
+      // Populate store if this is the active account
+      if (account.id === this._activeAccountId) {
+        useMailStore.getState().loadSentHeaders(account.id);
+      }
+    } catch (e) {
+      console.warn(`[PipelineManager] Sent headers load failed (${account.email}):`, e.message);
+    }
   }
 
   /**

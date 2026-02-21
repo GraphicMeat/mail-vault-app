@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
-  groupByTopic,
+  buildThreads,
   getAvatarColor,
   getInitials,
   formatRelativeTime
@@ -13,12 +13,12 @@ export function ChatTopicsList({ correspondent, onBack, onSelectTopic }) {
   const avatarColor = getAvatarColor(correspondent.email);
   const initials = getInitials(correspondent.name, correspondent.email);
 
-  // Group emails by topic (subject)
+  // Group emails into threads using RFC header chains + subject fallback
   const topics = useMemo(() => {
-    const topicGroups = groupByTopic(correspondent.emails);
+    const threads = buildThreads(correspondent.emails);
 
     // Convert to array and sort by most recent message
-    return Array.from(topicGroups.values())
+    return Array.from(threads.values())
       .sort((a, b) => {
         const dateA = a.dateRange.end || new Date(0);
         const dateB = b.dateRange.end || new Date(0);
@@ -29,31 +29,31 @@ export function ChatTopicsList({ correspondent, onBack, onSelectTopic }) {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-mail-border bg-mail-surface">
+      <div data-tauri-drag-region className="flex items-center gap-2.5 px-4 py-[13px] border-b border-mail-border bg-mail-surface">
         <button
           onClick={onBack}
-          className="p-1.5 hover:bg-mail-border rounded-lg transition-colors"
+          className="p-1 hover:bg-mail-border rounded-lg transition-colors"
         >
-          <ChevronLeft size={20} className="text-mail-text-muted" />
+          <ChevronLeft size={18} className="text-mail-text-muted" />
         </button>
 
         <div
-          className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0"
+          className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0"
           style={{ backgroundColor: avatarColor }}
         >
           {initials}
         </div>
 
         <div className="flex-1 min-w-0">
-          <h2 className="font-semibold text-mail-text truncate">
+          <h2 className="text-sm font-semibold text-mail-text truncate leading-tight">
             {correspondent.name}
           </h2>
-          <p className="text-xs text-mail-text-muted truncate">
+          <p className="text-[11px] text-mail-text-muted truncate leading-tight">
             {correspondent.email}
           </p>
         </div>
 
-        <div className="text-right text-xs text-mail-text-muted">
+        <div className="text-right text-[11px] text-mail-text-muted">
           <p>{correspondent.emails.length} messages</p>
           <p>{topics.length} topics</p>
         </div>
@@ -63,7 +63,7 @@ export function ChatTopicsList({ correspondent, onBack, onSelectTopic }) {
       <div className="flex-1 overflow-y-auto">
         {topics.map((topic, index) => (
           <TopicRow
-            key={topic.subject}
+            key={topic.threadId}
             topic={topic}
             onClick={() => onSelectTopic(topic)}
             index={index}

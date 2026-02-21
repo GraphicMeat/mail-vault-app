@@ -42,7 +42,9 @@ import {
   Link,
   Unlink,
   Copy,
-  Plus
+  Plus,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 function ToggleSwitch({ active, onClick }) {
@@ -103,7 +105,10 @@ export function SettingsPage({ onClose, onAddAccount }) {
     setAccountOrder,
     accountColors,
     setAccountColor,
-    clearAccountColor
+    clearAccountColor,
+    hiddenAccounts,
+    setAccountHidden,
+    isAccountHidden
   } = useSettingsStore();
   
   // Close on Escape key
@@ -131,6 +136,9 @@ export function SettingsPage({ onClose, onAddAccount }) {
   const [editingPassword, setEditingPassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [localStorageUsage, setLocalStorageUsage] = useState(null);
+  const [clearingCache, setClearingCache] = useState(false);
+  const [clearCacheConfirm, setClearCacheConfirm] = useState(false);
+  const [clearCacheResult, setClearCacheResult] = useState(null);
   const [oauthReconnecting, setOauthReconnecting] = useState(false);
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
   const orderedAccounts = getOrderedAccounts(accounts);
@@ -699,86 +707,6 @@ export function SettingsPage({ onClose, onAddAccount }) {
                   </div>
                 </div>
 
-                {/* Local Email Caching */}
-                <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
-                  <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-                    <HardDrive size={18} className="text-mail-accent" />
-                    Local Email Caching
-                  </h4>
-
-                  <p className="text-sm text-mail-text-muted mb-4">
-                    Automatically cache full email content for emails within this time period.
-                    Cached emails are available offline and load instantly.
-                  </p>
-
-                  <div className="space-y-4">
-                    <div>
-                      <div className="flex items-center justify-between mb-3">
-                        <label className="text-sm font-medium text-mail-text">
-                          Cache Duration
-                        </label>
-                        <span className="text-sm font-medium text-mail-accent">
-                          {localCacheDurationMonths === 0 ? 'All emails' :
-                           localCacheDurationMonths === 1 ? '1 month' :
-                           localCacheDurationMonths === 12 ? '1 year' :
-                           `${localCacheDurationMonths} months`}
-                        </span>
-                      </div>
-
-                      {/* Slider - 6 steps: 1, 2, 3, 6, 12 months, All */}
-                      <div className="relative">
-                        <input
-                          type="range"
-                          min="0"
-                          max="5"
-                          value={
-                            localCacheDurationMonths === 1 ? 0 :
-                            localCacheDurationMonths === 2 ? 1 :
-                            localCacheDurationMonths === 3 ? 2 :
-                            localCacheDurationMonths === 6 ? 3 :
-                            localCacheDurationMonths === 12 ? 4 : 5
-                          }
-                          onChange={(e) => {
-                            const steps = [1, 2, 3, 6, 12, 0]; // 0 = All
-                            setLocalCacheDurationMonths(steps[parseInt(e.target.value)]);
-                          }}
-                          className="w-full"
-                        />
-
-                        {/* Tick marks */}
-                        <div className="flex justify-between mt-1 px-1">
-                          <span className="text-[10px] text-mail-text-muted">1 mo</span>
-                          <span className="text-[10px] text-mail-text-muted">3 mo</span>
-                          <span className="text-[10px] text-mail-text-muted">6 mo</span>
-                          <span className="text-[10px] text-mail-text-muted">1 year</span>
-                          <span className="text-[10px] text-mail-text-muted">All</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Local storage usage */}
-                    <div className="flex items-center justify-between p-3 bg-mail-bg rounded-lg">
-                      <div>
-                        <div className="text-sm text-mail-text">Local storage usage</div>
-                        <div className="text-xs text-mail-text-muted">
-                          {localStorageUsage ? (
-                            <>
-                              {localStorageUsage.totalMB >= 1024
-                                ? `${(localStorageUsage.totalMB / 1024).toFixed(2)} GB`
-                                : localStorageUsage.totalMB >= 1
-                                ? `${localStorageUsage.totalMB.toFixed(2)} MB`
-                                : `${(localStorageUsage.totalMB * 1024).toFixed(0)} KB`}
-                              {' '}({localStorageUsage.emailCount.toLocaleString()} emails saved)
-                            </>
-                          ) : (
-                            'Calculating...'
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
                 {/* Email Sync */}
                 <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
                   <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
@@ -1152,7 +1080,7 @@ export function SettingsPage({ onClose, onAddAccount }) {
                               </div>
                             )}
                             <div
-                              className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold select-none"
+                              className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold select-none${hiddenAccounts[account.id] ? ' opacity-40' : ''}`}
                               style={{ backgroundColor: getAccountColor(accountColors, account) }}
                             >
                               {getAccountInitial(account, getDisplayName(account.id))}
@@ -1162,6 +1090,9 @@ export function SettingsPage({ onClose, onAddAccount }) {
                                 {getDisplayName(account.id) || account.name || account.email?.split('@')[0] || 'Unknown'}
                                 {account.authType === 'oauth2' && (
                                   <Shield size={12} className="text-blue-500 flex-shrink-0" />
+                                )}
+                                {hiddenAccounts[account.id] && (
+                                  <EyeOff size={12} className="text-mail-text-muted flex-shrink-0" />
                                 )}
                               </div>
                               <div className="text-xs text-mail-text-muted truncate">
@@ -1270,6 +1201,79 @@ export function SettingsPage({ onClose, onAddAccount }) {
                               )}
                             </div>
                           </div>
+                        </div>
+                      </div>
+
+                      {/* Hide Account */}
+                      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            {isAccountHidden(selectedAccountId) ? (
+                              <EyeOff size={18} className="text-mail-text-muted" />
+                            ) : (
+                              <Eye size={18} className="text-mail-accent" />
+                            )}
+                            <div>
+                              <div className="font-medium text-mail-text">
+                                {isAccountHidden(selectedAccountId) ? 'Account Hidden' : 'Account Visible'}
+                              </div>
+                              <div className="text-sm text-mail-text-muted">
+                                Hidden accounts are removed from the sidebar and stop syncing
+                              </div>
+                            </div>
+                          </div>
+                          <ToggleSwitch
+                            active={!isAccountHidden(selectedAccountId)}
+                            onClick={() => {
+                              const currentlyHidden = isAccountHidden(selectedAccountId);
+                              setAccountHidden(selectedAccountId, !currentlyHidden);
+
+                              if (!currentlyHidden) {
+                                // Hiding: destroy pipeline and switch active account if needed
+                                import('../services/EmailPipelineManager').then(({ pipelineManager }) => {
+                                  const pipeline = pipelineManager.pipelines.get(selectedAccountId);
+                                  if (pipeline) {
+                                    pipeline.destroy();
+                                    pipelineManager.pipelines.delete(selectedAccountId);
+                                  }
+                                });
+
+                                const { activeAccountId, setActiveAccount } = useMailStore.getState();
+                                if (selectedAccountId === activeAccountId) {
+                                  // Read fresh hidden state from store (not stale closure)
+                                  const { hiddenAccounts: currentHidden } = useSettingsStore.getState();
+                                  const nextVisible = accounts.find(
+                                    a => a.id !== selectedAccountId && !currentHidden[a.id]
+                                  );
+                                  if (nextVisible) {
+                                    setActiveAccount(nextVisible.id);
+                                  } else {
+                                    // No visible accounts left — clear active state
+                                    useMailStore.setState({
+                                      activeAccountId: null,
+                                      mailboxes: [],
+                                      emails: [],
+                                      localEmails: [],
+                                      savedEmailIds: new Set(),
+                                      archivedEmailIds: new Set(),
+                                      selectedEmailId: null,
+                                      selectedEmail: null,
+                                      selectedEmailSource: null
+                                    });
+                                  }
+                                }
+                              } else {
+                                // Unhiding: trigger immediate sync
+                                import('../services/EmailPipelineManager').then(({ pipelineManager }) => {
+                                  const { activeAccountId } = useMailStore.getState();
+                                  if (!activeAccountId) {
+                                    useMailStore.getState().setActiveAccount(selectedAccountId);
+                                  }
+                                  pipelineManager.restartBackgroundPipelines();
+                                });
+                              }
+                            }}
+                          />
                         </div>
                       </div>
 
@@ -1559,6 +1563,168 @@ export function SettingsPage({ onClose, onAddAccount }) {
                   </p>
                 </div>
                 
+                {/* Local Email Caching */}
+                <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+                  <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
+                    <HardDrive size={18} className="text-mail-accent" />
+                    Local Email Caching
+                  </h4>
+
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <label className="text-sm font-medium text-mail-text">
+                          Cache Duration
+                        </label>
+                        <span className="text-sm font-medium text-mail-accent">
+                          {localCacheDurationMonths === 0 ? 'All emails' :
+                           localCacheDurationMonths === 1 ? '1 month' :
+                           localCacheDurationMonths === 12 ? '1 year' :
+                           `${localCacheDurationMonths} months`}
+                        </span>
+                      </div>
+
+                      {/* Slider - 5 steps: 1, 3, 6, 12 months, All */}
+                      <div className="relative">
+                        <input
+                          type="range"
+                          min="0"
+                          max="4"
+                          value={
+                            localCacheDurationMonths === 1 ? 0 :
+                            localCacheDurationMonths === 3 ? 1 :
+                            localCacheDurationMonths === 6 ? 2 :
+                            localCacheDurationMonths === 12 ? 3 : 4
+                          }
+                          onChange={(e) => {
+                            const steps = [1, 3, 6, 12, 0]; // 0 = All
+                            setLocalCacheDurationMonths(steps[parseInt(e.target.value)]);
+                          }}
+                          className="w-full"
+                        />
+
+                        {/* Tick marks */}
+                        <div className="flex justify-between mt-1 px-1">
+                          <span className="text-[10px] text-mail-text-muted">1 mo</span>
+                          <span className="text-[10px] text-mail-text-muted">3 mo</span>
+                          <span className="text-[10px] text-mail-text-muted">6 mo</span>
+                          <span className="text-[10px] text-mail-text-muted">1 year</span>
+                          <span className="text-[10px] text-mail-text-muted">All</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Local storage usage */}
+                    <div className="flex items-center justify-between p-3 bg-mail-bg rounded-lg">
+                      <div>
+                        <div className="text-sm text-mail-text">Local storage usage</div>
+                        <div className="text-xs text-mail-text-muted">
+                          {localStorageUsage ? (
+                            <>
+                              {localStorageUsage.totalMB >= 1024
+                                ? `${(localStorageUsage.totalMB / 1024).toFixed(2)} GB`
+                                : localStorageUsage.totalMB >= 1
+                                ? `${localStorageUsage.totalMB.toFixed(2)} MB`
+                                : `${(localStorageUsage.totalMB * 1024).toFixed(0)} KB`}
+                              {' '}({localStorageUsage.emailCount.toLocaleString()} emails saved)
+                            </>
+                          ) : (
+                            'Calculating...'
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Clear cache */}
+                    <div className="flex items-center justify-between p-3 bg-mail-bg rounded-lg">
+                      <div>
+                        <div className="text-sm text-mail-text">Clear cached emails</div>
+                        <div className="text-xs text-mail-text-muted">
+                          Removes all cached .eml files and re-syncs. Archived emails are preserved.
+                        </div>
+                      </div>
+                      {!clearCacheConfirm ? (
+                        <button
+                          onClick={() => { setClearCacheConfirm(true); setClearCacheResult(null); }}
+                          disabled={clearingCache}
+                          className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
+                        >
+                          <Trash2 size={14} />
+                          Clear Cache
+                        </button>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setClearCacheConfirm(false)}
+                            disabled={clearingCache}
+                            className="px-3 py-1.5 text-sm font-medium rounded-lg border border-mail-border text-mail-text-muted hover:bg-mail-surface transition-colors disabled:opacity-50"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (clearingCache) return;
+                              setClearingCache(true);
+                              setClearCacheResult(null);
+                              try {
+                                const invoke = window.__TAURI__?.core?.invoke;
+                                if (!invoke) return;
+
+                                // Stop all pipelines
+                                const { pipelineManager } = await import('../services/EmailPipelineManager');
+                                pipelineManager.destroyAll();
+
+                                // Clear .eml files (preserving archived)
+                                const result = await invoke('maildir_clear_cache');
+
+                                // Clear headers cache files
+                                await invoke('clear_email_cache', { accountId: null });
+
+                                // Clear in-memory cache
+                                useMailStore.getState().clearEmailCache();
+
+                                setClearCacheResult(result);
+
+                                // Refresh storage usage
+                                const { getStorageUsage } = await import('../services/db');
+                                const usage = await getStorageUsage();
+                                setLocalStorageUsage(usage);
+
+                                // Restart pipelines — coordinator will pick up on next cycle
+                                const activeAccountId = useMailStore.getState().activeAccountId;
+                                if (activeAccountId) {
+                                  pipelineManager.switchAccount(activeAccountId);
+                                }
+                              } catch (error) {
+                                console.error('Failed to clear cache:', error);
+                              } finally {
+                                setClearingCache(false);
+                                setClearCacheConfirm(false);
+                              }
+                            }}
+                            disabled={clearingCache}
+                            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+                          >
+                            {clearingCache ? (
+                              <Loader size={14} className="animate-spin" />
+                            ) : (
+                              <Trash2 size={14} />
+                            )}
+                            {clearingCache ? 'Clearing...' : 'Confirm'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {clearCacheResult && (
+                      <div className="text-xs text-green-600 dark:text-green-400 px-1">
+                        Cleared {clearCacheResult.deletedCount.toLocaleString()} cached emails
+                        {clearCacheResult.skippedArchived > 0 && `, ${clearCacheResult.skippedArchived.toLocaleString()} archived emails preserved`}.
+                        Re-sync started.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 {/* Backup & Restore */}
                 <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
                   <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">

@@ -67,6 +67,10 @@ pub struct EmailHeader {
     pub display_index: Option<u32>,
     #[serde(rename = "messageId")]
     pub message_id: Option<String>,
+    #[serde(rename = "inReplyTo", skip_serializing_if = "Option::is_none")]
+    pub in_reply_to: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub references: Option<Vec<String>>,
     pub subject: String,
     pub from: EmailAddress,
     pub to: Vec<EmailAddress>,
@@ -433,7 +437,7 @@ pub async fn fetch_emails_page(
 
     let range = format!("{}:{}", start, end);
     let fetch_stream = session
-        .fetch(&range, "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE)")
+        .fetch(&range, "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (References)])")
         .await
         .map_err(|e| format!("FETCH failed: {}", e))?;
 
@@ -488,7 +492,7 @@ pub async fn fetch_emails_range(
 
     let range = format!("{}:{}", imap_start, imap_end);
     let fetch_stream = session
-        .fetch(&range, "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE)")
+        .fetch(&range, "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (References)])")
         .await
         .map_err(|e| format!("FETCH range failed: {}", e))?;
 
@@ -567,7 +571,7 @@ pub async fn fetch_headers_by_uids(
         .join(",");
 
     let fetch_stream = session
-        .uid_fetch(&uid_set, "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE)")
+        .uid_fetch(&uid_set, "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (References)])")
         .await
         .map_err(|e| format!("UID FETCH {} failed: {}", uid_set, e))?;
 
@@ -841,7 +845,7 @@ pub async fn search_emails(
         .join(",");
 
     let fetch_stream = session
-        .uid_fetch(&uid_range, "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE)")
+        .uid_fetch(&uid_range, "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (References)])")
         .await
         .map_err(|e| format!("FETCH search results failed: {}", e))?;
 
@@ -960,6 +964,19 @@ fn parse_header_from_fetch(fetch: &Fetch) -> Result<EmailHeader, String> {
         .as_ref()
         .map(|s| String::from_utf8_lossy(s).to_string());
 
+    let in_reply_to = envelope
+        .in_reply_to
+        .as_ref()
+        .map(|s| String::from_utf8_lossy(s).to_string());
+
+    // Parse References from BODY.PEEK[HEADER.FIELDS (References)]
+    let references = fetch.header()
+        .and_then(|data| {
+            let raw = String::from_utf8_lossy(data);
+            let parsed = parse_references_header(&raw);
+            if parsed.is_empty() { None } else { Some(parsed) }
+        });
+
     let date = envelope
         .date
         .as_ref()
@@ -1003,6 +1020,8 @@ fn parse_header_from_fetch(fetch: &Fetch) -> Result<EmailHeader, String> {
         seq,
         display_index: None,
         message_id,
+        in_reply_to,
+        references,
         subject,
         from,
         to,
@@ -1015,6 +1034,36 @@ fn parse_header_from_fetch(fetch: &Fetch) -> Result<EmailHeader, String> {
         has_attachments,
         source: None,
     })
+}
+
+/// Parse the References header value into a list of message-id strings.
+/// References is a space/newline-separated list of `<message-id@domain>` values.
+fn parse_references_header(raw: &str) -> Vec<String> {
+    let mut refs = Vec::new();
+    // Find the header value after "References:"
+    let value = if let Some(idx) = raw.to_lowercase().find("references:") {
+        &raw[idx + "references:".len()..]
+    } else {
+        return refs;
+    };
+    // Extract all <...> message-id tokens
+    let mut start = None;
+    for (i, ch) in value.char_indices() {
+        match ch {
+            '<' => start = Some(i),
+            '>' => {
+                if let Some(s) = start {
+                    let msg_id = value[s..=i].trim().to_string();
+                    if !msg_id.is_empty() {
+                        refs.push(msg_id);
+                    }
+                }
+                start = None;
+            }
+            _ => {}
+        }
+    }
+    refs
 }
 
 /// Decode RFC 2047 encoded-words (e.g. `=?windows-1257?Q?Ona_...?=`) in raw

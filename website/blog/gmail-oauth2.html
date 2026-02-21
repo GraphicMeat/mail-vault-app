@@ -3,17 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Blog - MailVault</title>
-  <meta name="description" content="Behind the scenes of building MailVault. Development updates, technical deep dives, and release notes.">
+  <title>Adding Gmail OAuth2: One Flow, Two Providers - MailVault Blog</title>
+  <meta name="description" content="How we added Gmail OAuth2 to MailVault by making the existing Microsoft OAuth2 flow provider-agnostic.">
   <meta name="robots" content="index, follow">
-  <link rel="canonical" href="https://mailvaultapp.com/blog.html">
+  <link rel="canonical" href="https://mailvaultapp.com/blog/gmail-oauth2.html">
   <meta name="theme-color" content="#6366f1">
 
   <!-- Open Graph -->
-  <meta property="og:type" content="website">
-  <meta property="og:url" content="https://mailvaultapp.com/blog.html">
-  <meta property="og:title" content="Blog - MailVault">
-  <meta property="og:description" content="Behind the scenes of building MailVault. Development updates, technical deep dives, and release notes.">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/blog/gmail-oauth2.html">
+  <meta property="og:title" content="Adding Gmail OAuth2: One Flow, Two Providers - MailVault Blog">
+  <meta property="og:description" content="How we added Gmail OAuth2 to MailVault by making the existing Microsoft OAuth2 flow provider-agnostic.">
   <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -21,14 +21,14 @@
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Blog - MailVault">
-  <meta name="twitter:description" content="Behind the scenes of building MailVault. Development updates, technical deep dives, and release notes.">
+  <meta name="twitter:title" content="Adding Gmail OAuth2: One Flow, Two Providers - MailVault Blog">
+  <meta name="twitter:description" content="How we added Gmail OAuth2 to MailVault by making the existing Microsoft OAuth2 flow provider-agnostic.">
   <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
   <meta name="twitter:site" content="@GraphicMeat">
 
-  <link rel="icon" type="image/x-icon" href="favicon.ico">
-  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -70,6 +70,30 @@
       background: rgba(0, 0, 0, 0.2);
       border: 1px solid rgba(255, 255, 255, 0.05);
     }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
   </style>
 </head>
 
@@ -80,7 +104,7 @@
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16">
         <a href="/" class="flex items-center gap-3">
-          <img src="icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
+          <img src="/icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
           <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
         </a>
 
@@ -101,7 +125,6 @@
           <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex gradient-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
             Download
           </a>
-          <!-- Mobile menu button -->
           <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
@@ -111,7 +134,6 @@
         </div>
       </div>
 
-      <!-- Mobile menu -->
       <div id="mobile-menu" class="hidden md:hidden pb-4">
         <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
           <a href="/" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Home</a>
@@ -130,32 +152,72 @@
   <main class="pt-24 pb-20">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
-      <h1 class="text-4xl font-bold mb-2">Blog</h1>
-      <p class="text-slate-500 dark:text-slate-400 mb-12">Behind the scenes of building MailVault</p>
+      <a href="/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Back to Blog
+      </a>
 
-      <div class="space-y-6">
-
-        <!-- Gmail OAuth2 -->
-        <a href="/blog/gmail-oauth2.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+      <article>
+        <header class="mb-8">
           <time datetime="2026-02-20" class="text-sm text-primary-500 font-medium">February 20, 2026</time>
-          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">Adding Gmail OAuth2: One Flow, Two Providers</h2>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">How we made MailVault's existing Microsoft OAuth2 PKCE flow provider-agnostic and added Google sign-in — no app passwords, no IMAP settings to find.</p>
-          <div class="flex items-center gap-2 mt-3 text-xs text-slate-400 dark:text-slate-500">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Adding Gmail OAuth2: One Flow, Two Providers</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
             <span>4 min read</span>
           </div>
-        </a>
+        </header>
 
-        <!-- Sandbox Signing Saga -->
-        <a href="/blog/sandbox-signing-saga.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <time datetime="2026-02-18" class="text-sm text-primary-500 font-medium">February 18, 2026</time>
-          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">The macOS Sandbox Signing Saga (or Why v1.4.0 Through v1.4.5 Exist)</h2>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Six patch releases in a single day. macOS code signing, App Sandbox, and Bun-compiled sidecars don't mix well — here's the full story of how we fixed it.</p>
-          <div class="flex items-center gap-2 mt-3 text-xs text-slate-400 dark:text-slate-500">
-            <span>5 min read</span>
-          </div>
-        </a>
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
 
-      </div>
+          <p>
+            When we shipped Microsoft OAuth2 in v1.2.0, the goal was clear: let users sign in with their existing Microsoft account instead of generating an app password. It worked well for Outlook, Hotmail, and M365 accounts. The natural next step was Gmail &mdash; the most popular email provider in the world.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Why OAuth2 Matters</h3>
+
+          <p>
+            Google has been tightening access to IMAP for years. If you have 2FA enabled (and you should), you need an <a href="https://support.google.com/accounts/answer/185833" class="text-primary-500 hover:text-primary-600 underline">App Password</a> to use third-party email clients. App passwords work, but they're obscure, easy to forget, and feel like a workaround. OAuth2 lets users click "Sign in with Google," authenticate in their browser, and come back to the app &mdash; no passwords copied, no settings pages searched.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">The Implementation</h3>
+
+          <p>
+            MailVault already had a working OAuth2 PKCE flow for Microsoft, written in Rust. The architecture has three parts: a local TCP callback server on <code>localhost:19876</code> that receives the redirect after browser login, a token exchange function that swaps the authorization code for access/refresh tokens, and XOAUTH2 SASL authentication for IMAP and SMTP.
+          </p>
+
+          <p>
+            Adding Google meant making all of this provider-agnostic. Instead of hardcoding Microsoft's endpoints, we refactored the Rust OAuth2 module to accept provider configuration at runtime &mdash; authorization URL, token URL, scopes, and client ID all come from the frontend when initiating the flow.
+          </p>
+
+          <p>
+            For the client ID, we followed the same approach as Microsoft: use a well-known public client ID. Thunderbird, the open-source email client by Mozilla, registers public OAuth2 clients with both Google and Microsoft. MailVault uses Thunderbird's Google client ID (<code>406964657835-aq8lmia8j95dhl1a2bvharmfk3t1hgqj.apps.googleusercontent.com</code>) with the <code>https://mail.google.com/</code> scope, which grants full IMAP and SMTP access.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">What Changed in the Code</h3>
+
+          <p>
+            The Rust side needed a new <code>oauth2_start</code> command that accepts provider-specific parameters (auth URL, token URL, scopes, client ID) instead of assuming Microsoft. The callback server and PKCE logic stayed the same &mdash; OAuth2 is OAuth2, regardless of provider.
+          </p>
+
+          <p>
+            On the frontend, the <code>AccountModal</code> component now shows a "Sign in with Google" button for Gmail accounts (alongside the existing "Use App Password instead" fallback). The button triggers the same OAuth2 flow, just with Google's endpoints and scopes instead of Microsoft's. After authentication, the access token is used with XOAUTH2 SASL for both IMAP (<code>imap.gmail.com</code>) and SMTP (<code>smtp.gmail.com</code>).
+          </p>
+
+          <p>
+            Token refresh works identically to Microsoft: when an access token expires (typically after one hour), MailVault automatically refreshes it using the stored refresh token. The user never has to re-authenticate unless they revoke access from their Google account settings.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">The Result</h3>
+
+          <p>
+            Gmail users can now click one button, sign in through Google's standard login page, and start using MailVault immediately. No app passwords, no IMAP settings to find, no "less secure apps" toggles. It works with 2FA, Google Workspace, and personal Gmail accounts.
+          </p>
+
+          <p>
+            The same OAuth2 infrastructure is now ready for any future provider that supports standard OAuth2 &mdash; the Rust module is fully provider-agnostic.
+          </p>
+
+        </div>
+      </article>
 
     </div>
   </main>
@@ -165,7 +227,7 @@
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex flex-col md:flex-row items-center justify-between gap-4">
         <div class="flex items-center gap-2">
-          <img src="icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
+          <img src="/icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
           <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
         </div>
 
@@ -196,7 +258,6 @@
       moonIcon.classList.toggle('hidden', isDark);
     }
 
-    // Initialize theme
     if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
       document.documentElement.classList.add('dark');
     }
@@ -213,13 +274,11 @@
     const mobileMenu = document.getElementById('mobile-menu');
     const menuIconOpen = document.getElementById('menu-icon-open');
     const menuIconClose = document.getElementById('menu-icon-close');
-
     mobileMenuBtn.addEventListener('click', () => {
       mobileMenu.classList.toggle('hidden');
       menuIconOpen.classList.toggle('hidden');
       menuIconClose.classList.toggle('hidden');
     });
-
     document.querySelectorAll('#mobile-menu a').forEach(link => {
       link.addEventListener('click', () => {
         mobileMenu.classList.add('hidden');

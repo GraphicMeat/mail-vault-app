@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { ComposeModal } from './ComposeModal';
+import { useChatBodyLoader, emailKey } from '../hooks/useChatBodyLoader';
 import {
   Reply,
   ReplyAll,
@@ -553,10 +554,373 @@ function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, loadingR
   );
 }
 
+// ── Thread Email Item (one email in a thread conversation view) ──────────────
+
+function ThreadEmailItemContent({ email, loadedEmail, isLoading }) {
+  const iframeRef = useRef(null);
+
+  const iframeContent = loadedEmail?.html ? `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <base target="_blank">
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          * { box-sizing: border-box; }
+          html, body {
+            margin: 0;
+            padding: 16px;
+            background: #ffffff;
+            color: #333333;
+          }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            font-size: 14px;
+            line-height: 1.6;
+          }
+          img { max-width: 100%; height: auto; }
+          table { max-width: 100% !important; }
+        </style>
+      </head>
+      <body>${(() => {
+        if (!loadedEmail.html) return '';
+        const bodyMatch = loadedEmail.html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+        return bodyMatch ? bodyMatch[1] : loadedEmail.html;
+      })()}</body>
+    </html>
+  ` : '';
+
+  // Auto-resize iframe and intercept links
+  useEffect(() => {
+    if (!iframeRef.current || !loadedEmail?.html) return;
+
+    const iframe = iframeRef.current;
+    let resizeTimers = [];
+
+    const resizeIframe = () => {
+      try {
+        const doc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (doc && doc.body) {
+          const height = Math.max(
+            doc.body.scrollHeight,
+            doc.body.offsetHeight,
+            doc.documentElement?.scrollHeight || 0,
+            doc.documentElement?.offsetHeight || 0
+          );
+          iframe.style.height = Math.max(height + 32, 100) + 'px';
+        }
+      } catch (e) {
+        console.error('Failed to resize thread iframe:', e);
+      }
+    };
+
+    const handleClick = (e) => {
+      const link = e.target.closest('a');
+      if (link && link.href && !link.href.startsWith('cid:')) {
+        e.preventDefault();
+        e.stopPropagation();
+        import('@tauri-apps/plugin-shell').then(({ open }) => {
+          open(link.href);
+        }).catch(() => {
+          window.open(link.href, '_blank');
+        });
+      }
+    };
+
+    const onLoad = () => {
+      try {
+        const doc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (doc) doc.addEventListener('click', handleClick);
+      } catch (e) {}
+      resizeIframe();
+      resizeTimers.push(setTimeout(resizeIframe, 200));
+      resizeTimers.push(setTimeout(resizeIframe, 1000));
+    };
+
+    iframe.addEventListener('load', onLoad);
+    resizeTimers.push(setTimeout(resizeIframe, 100));
+
+    return () => {
+      iframe.removeEventListener('load', onLoad);
+      resizeTimers.forEach(t => clearTimeout(t));
+    };
+  }, [loadedEmail?.html]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <div className="w-5 h-5 border-2 border-mail-accent border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!loadedEmail) {
+    return (
+      <div className="py-4 text-sm text-mail-text-muted">
+        Could not load email content
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {loadedEmail.html ? (
+        <div className="rounded-lg overflow-hidden bg-white mt-2">
+          <iframe
+            ref={iframeRef}
+            srcDoc={iframeContent}
+            className="w-full border-0"
+            style={{ minHeight: '100px', display: 'block' }}
+            sandbox="allow-same-origin allow-popups"
+            title={`Email from ${email.from?.name || email.from?.address}`}
+          />
+        </div>
+      ) : (
+        <div className="email-content whitespace-pre-wrap text-mail-text mt-2 text-sm">
+          {loadedEmail.text || 'No content'}
+        </div>
+      )}
+    </>
+  );
+}
+
+function ThreadEmailItem({ email, bodiesMapRef, registerListener, isLast, activeAccountId, activeMailbox }) {
+  const [expanded, setExpanded] = useState(isLast);
+  const [, forceUpdate] = useState(0);
+  const [composeMode, setComposeMode] = useState(null);
+  const key = emailKey(email);
+
+  // Register for body load notifications
+  useEffect(() => {
+    return registerListener(key, () => forceUpdate(n => n + 1));
+  }, [key, registerListener]);
+
+  const bodyEntry = bodiesMapRef.current.get(key);
+  const loadedEmail = bodyEntry?.status === 'loaded' ? bodyEntry.email : null;
+  const isLoading = bodyEntry?.status === 'loading';
+
+  const realAttachments = loadedEmail ? getRealAttachments(loadedEmail.attachments, loadedEmail.html) : [];
+
+  return (
+    <div className={`border-b border-mail-border ${expanded ? '' : 'hover:bg-mail-surface-hover'}`}>
+      {/* Header — always visible */}
+      <div
+        className="flex items-start gap-3 px-4 py-3 cursor-pointer"
+        onClick={() => setExpanded(!expanded)}
+      >
+        {/* Avatar */}
+        <div className="w-8 h-8 bg-mail-accent rounded-full flex items-center justify-center flex-shrink-0">
+          <span className="text-white font-semibold text-xs">
+            {(email.from?.name || email.from?.address || '?')[0].toUpperCase()}
+          </span>
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-sm text-mail-text truncate">
+              {email.from?.name || email.from?.address || 'Unknown'}
+            </span>
+            {email.from?.name && (
+              <span className="text-xs text-mail-text-muted truncate">
+                &lt;{email.from.address}&gt;
+              </span>
+            )}
+          </div>
+          {!expanded && (
+            <p className="text-xs text-mail-text-muted truncate mt-0.5">
+              {loadedEmail?.text?.substring(0, 120) || email.subject || ''}
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className="text-xs text-mail-text-muted whitespace-nowrap">
+            {format(new Date(email.date), 'MMM d, h:mm a')}
+          </span>
+          {expanded ? <ChevronUp size={14} className="text-mail-text-muted" /> : <ChevronDown size={14} className="text-mail-text-muted" />}
+        </div>
+      </div>
+
+      {/* Expanded content */}
+      {expanded && (
+        <div className="px-4 pb-4">
+          {/* To/CC line */}
+          <div className="text-xs text-mail-text-muted mb-2 pl-11">
+            To: {email.to?.map(t => t.name || t.address).join(', ') || 'Unknown'}
+            {email.cc?.length > 0 && (
+              <span className="ml-2">CC: {email.cc.map(c => c.name || c.address).join(', ')}</span>
+            )}
+          </div>
+
+          {/* Body */}
+          <div className="pl-11">
+            <ThreadEmailItemContent email={email} loadedEmail={loadedEmail} isLoading={isLoading} />
+          </div>
+
+          {/* Attachments */}
+          {realAttachments.length > 0 && (
+            <div className="mt-3 pl-11">
+              <div className="flex items-center gap-2 text-xs text-mail-text-muted mb-2">
+                <Paperclip size={12} />
+                <span>{realAttachments.length} Attachment{realAttachments.length !== 1 ? 's' : ''}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {realAttachments.map((attachment, index) => (
+                  <AttachmentItem
+                    key={index}
+                    attachment={attachment}
+                    attachmentIndex={attachment._originalIndex}
+                    emailUid={email.uid}
+                    account={activeAccountId}
+                    folder={activeMailbox}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Reply actions */}
+          <div className="flex items-center gap-2 mt-3 pl-11">
+            <button
+              onClick={(e) => { e.stopPropagation(); setComposeMode('reply'); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-mail-text-muted
+                        bg-mail-surface hover:bg-mail-surface-hover rounded-lg border border-mail-border transition-colors"
+            >
+              <Reply size={14} />
+              Reply
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setComposeMode('replyAll'); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-mail-text-muted
+                        bg-mail-surface hover:bg-mail-surface-hover rounded-lg border border-mail-border transition-colors"
+            >
+              <ReplyAll size={14} />
+              Reply All
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setComposeMode('forward'); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-mail-text-muted
+                        bg-mail-surface hover:bg-mail-surface-hover rounded-lg border border-mail-border transition-colors"
+            >
+              <Forward size={14} />
+              Forward
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Compose Modal for this email */}
+      <AnimatePresence>
+        {composeMode && (
+          <ComposeModal
+            mode={composeMode}
+            replyTo={loadedEmail || email}
+            onClose={() => setComposeMode(null)}
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ── Thread View (shows all emails in a thread) ──────────────────────────────
+
+function ThreadView({ thread }) {
+  const { activeAccountId, activeMailbox, savedEmailIds, archivedEmailIds, saveEmailsLocally } = useMailStore();
+  const [saving, setSaving] = useState(false);
+  const scrollContainerRef = useRef(null);
+  const lastEmailRef = useRef(null);
+
+  // Sort emails chronologically (oldest first for conversation flow)
+  const sortedEmails = useMemo(() =>
+    [...thread.emails].sort((a, b) => new Date(a.date) - new Date(b.date)),
+    [thread.emails]
+  );
+
+  const { bodiesMapRef, registerListener } = useChatBodyLoader(sortedEmails);
+
+  // Scroll to the newest (last) email on mount — scoped to the scroll container
+  const threadId = thread.threadId;
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (lastEmailRef.current && scrollContainerRef.current) {
+        const container = scrollContainerRef.current;
+        const el = lastEmailRef.current;
+        container.scrollTop = el.offsetTop;
+      }
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [threadId]);
+
+  const allArchived = thread.emails.every(e => archivedEmailIds.has(e.uid));
+
+  const handleArchiveThread = async () => {
+    setSaving(true);
+    try {
+      const uids = thread.emails.filter(em => !archivedEmailIds.has(em.uid)).map(em => em.uid);
+      if (uids.length > 0) await saveEmailsLocally(uids);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex-1 flex flex-col bg-mail-bg overflow-hidden min-h-0 h-full">
+      {/* Thread header */}
+      <div data-tauri-drag-region className="flex items-center justify-between px-4 py-3 border-b border-mail-border">
+        <div className="flex flex-col justify-center flex-1 min-w-0 min-h-[34px]">
+          <h1 className="text-sm font-semibold text-mail-text truncate">
+            {thread.subject}
+          </h1>
+          <span className="text-xs text-mail-text-muted">
+            {thread.messageCount} message{thread.messageCount !== 1 ? 's' : ''} in thread
+          </span>
+        </div>
+
+        {!allArchived && (
+          <button
+            onClick={handleArchiveThread}
+            disabled={saving}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-mail-local/10
+                      text-mail-local hover:bg-mail-local/20 rounded-lg text-sm
+                      font-medium transition-colors disabled:opacity-50 ml-3"
+          >
+            <Archive size={14} />
+            {saving ? 'Archiving...' : 'Archive All'}
+          </button>
+        )}
+      </div>
+
+      {/* Thread emails */}
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto min-h-0">
+        {sortedEmails.map((email, idx) => {
+          const isLast = idx === sortedEmails.length - 1;
+          return (
+            <div key={emailKey(email)} ref={isLast ? lastEmailRef : undefined}>
+              <ThreadEmailItem
+                email={email}
+                bodiesMapRef={bodiesMapRef}
+                registerListener={registerListener}
+                isLast={isLast}
+                activeAccountId={activeAccountId}
+                activeMailbox={activeMailbox}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Single Email Viewer ─────────────────────────────────────────────────────
+
 export function EmailViewer() {
   const {
     selectedEmail,
     selectedEmailSource,
+    selectedThread,
     loadingEmail,
     savedEmailIds,
     archivedEmailIds,
@@ -808,6 +1172,11 @@ export function EmailViewer() {
     };
   }, [selectedEmail?.html]);
   
+  // Thread view — show all emails in the thread
+  if (selectedThread) {
+    return <ThreadView thread={selectedThread} />;
+  }
+
   if (!selectedEmail && !loadingEmail) {
     return (
       <div className="flex-1 flex items-center justify-center bg-mail-bg h-full min-h-0">

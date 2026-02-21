@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useMailStore } from '../stores/mailStore';
+import { groupByCorrespondent, buildThreads } from '../utils/emailParser';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChatSenderList } from './ChatSenderList';
 import { ChatTopicsList } from './ChatTopicsList';
@@ -7,9 +8,10 @@ import { ChatBubbleView } from './ChatBubbleView';
 import { ComposeModal } from './ComposeModal';
 
 export function ChatViewWrapper({ layoutMode }) {
-  const { accounts, activeAccountId } = useMailStore();
+  const { accounts, activeAccountId, getChatEmails, emails, localEmails, sentEmails, viewMode } = useMailStore();
 
-  // Per-account navigation state: { accountId: { correspondent, topic } }
+  // Per-account navigation state: only store identifiers, not full objects
+  // { accountId: { correspondentEmail: string, threadId: string } }
   const [accountNavState, setAccountNavState] = useState({});
 
   // Compose modal state
@@ -23,10 +25,22 @@ export function ChatViewWrapper({ layoutMode }) {
     return activeAccount?.email || '';
   }, [accounts, activeAccountId]);
 
-  // Get current account's navigation state
+  // Get current account's navigation state (identifiers only)
   const currentNavState = accountNavState[activeAccountId] || {};
-  const selectedCorrespondent = currentNavState.correspondent || null;
-  const selectedTopic = currentNavState.topic || null;
+  const selectedCorrespondentEmail = currentNavState.correspondentEmail || null;
+  const selectedThreadId = currentNavState.threadId || null;
+
+  // Derive live correspondent and topic data from current store state
+  const combinedEmails = getChatEmails();
+
+  const correspondentMap = useMemo(() => {
+    return groupByCorrespondent(combinedEmails, userEmail);
+  }, [combinedEmails, userEmail]);
+
+  // Re-derive the full correspondent object from live data
+  const selectedCorrespondent = selectedCorrespondentEmail
+    ? correspondentMap.get(selectedCorrespondentEmail) || null
+    : null;
 
   // Helper to update navigation state for current account
   const updateNavState = (updates) => {
@@ -39,21 +53,21 @@ export function ChatViewWrapper({ layoutMode }) {
     }));
   };
 
-  // Handlers
+  // Handlers — store only identifiers
   const handleSelectSender = (correspondent) => {
-    updateNavState({ correspondent, topic: null });
+    updateNavState({ correspondentEmail: correspondent.email, threadId: null });
   };
 
   const handleSelectTopic = (topic) => {
-    updateNavState({ topic });
+    updateNavState({ threadId: topic.threadId });
   };
 
   const handleBackFromTopics = () => {
-    updateNavState({ correspondent: null, topic: null });
+    updateNavState({ correspondentEmail: null, threadId: null });
   };
 
   const handleBackFromChat = () => {
-    updateNavState({ topic: null });
+    updateNavState({ threadId: null });
   };
 
   const handleReply = (email, mode = 'reply') => {
@@ -69,7 +83,11 @@ export function ChatViewWrapper({ layoutMode }) {
   };
 
   // Determine current view
-  const currentView = selectedTopic ? 'chat' : selectedCorrespondent ? 'topics' : 'senders';
+  const currentView = selectedThreadId && selectedCorrespondent
+    ? 'chat'
+    : selectedCorrespondent
+      ? 'topics'
+      : 'senders';
 
   return (
     <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden bg-mail-bg">
@@ -104,7 +122,7 @@ export function ChatViewWrapper({ layoutMode }) {
           </motion.div>
         )}
 
-        {currentView === 'chat' && selectedCorrespondent && selectedTopic && (
+        {currentView === 'chat' && selectedCorrespondent && selectedThreadId && (
           <motion.div
             key="chat"
             initial={{ x: 20, opacity: 0 }}
@@ -115,7 +133,7 @@ export function ChatViewWrapper({ layoutMode }) {
           >
             <ChatBubbleView
               correspondent={selectedCorrespondent}
-              topic={selectedTopic}
+              threadId={selectedThreadId}
               userEmail={userEmail}
               onBack={handleBackFromChat}
               onReply={handleReply}

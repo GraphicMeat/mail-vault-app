@@ -25,6 +25,7 @@
   <meta name="twitter:title" content="MailVault — Free Local Email Backup for Mac | Store Emails Offline">
   <meta name="twitter:description" content="Back up your IMAP emails locally on macOS. MailVault stores emails offline in a local archive — keep them forever, even after server deletion. Free and open source.">
   <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
 
   <!-- Favicon -->
   <link rel="icon" type="image/x-icon" href="favicon.ico">
@@ -105,6 +106,9 @@
     "description": "Back up your IMAP emails locally on macOS. MailVault stores emails offline in a local archive — keep them forever, even after server deletion. Free and open source.",
     "operatingSystem": "macOS",
     "applicationCategory": "BusinessApplication",
+    "applicationSubCategory": "EmailApplication",
+    "softwareVersion": "1.6.0",
+    "datePublished": "2026-02-20",
     "offers": {
       "@type": "Offer",
       "price": "0",
@@ -112,14 +116,21 @@
     },
     "downloadUrl": "https://github.com/GraphicMeat/mail-vault-app/releases/latest",
     "featureList": [
-      "Local email storage",
-      "Privacy-first design",
-      "IMAP support",
-      "Gmail OAuth2",
-      "Microsoft 365 OAuth2",
-      "Offline access",
-      "Full-text search",
-      "Email backup"
+      "Local email storage in Maildir format",
+      "Privacy-first design — no cloud, no tracking",
+      "IMAP support for any email provider",
+      "Gmail OAuth2 sign-in",
+      "Microsoft 365 OAuth2 sign-in",
+      "Offline email access",
+      "Full-text search with filters",
+      "ZIP backup export and import",
+      "Email threading (Gmail-style conversations)",
+      "Chat conversation view",
+      "Bulk email archiving",
+      "Multi-account support",
+      "Dark and light themes",
+      "Native macOS app (Tauri, not Electron)",
+      "Auto-updater"
     ],
     "screenshot": "https://mailvaultapp.com/og-image.png",
     "author": {
@@ -584,7 +595,7 @@
           <h3 class="text-xl font-semibold mb-3">Email Management</h3>
           <ul class="space-y-2 text-slate-600 dark:text-slate-400">
             <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Compose, reply, reply all, and forward</li>
-            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Gmail &amp; Microsoft 365 OAuth2 sign-in (no app password needed)</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Gmail &amp; Microsoft 365 OAuth2 sign-in</li>
             <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Advanced search (sender, date, attachments, folder)</li>
             <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Bulk operations (select all, batch archive/delete)</li>
           </ul>
