@@ -5,11 +5,13 @@ import {
   getAvatarColor,
   getInitials,
   getCleanMessageBody,
+  buildThreads,
   formatMessageTime,
   formatDateSeparator,
   isDifferentDay,
   isFromUser
 } from '../utils/emailParser';
+import { useChatBodyLoader, emailKey } from '../hooks/useChatBodyLoader';
 import {
   ChevronLeft,
   Paperclip,
@@ -25,18 +27,79 @@ import {
 } from 'lucide-react';
 
 
-export function ChatBubbleView({ correspondent, topic, userEmail, onBack, onReply }) {
+export function ChatBubbleView({ correspondent, threadId, userEmail, onBack, onReply }) {
   const scrollRef = useRef(null);
+  const stickToBottomRef = useRef(true);
   const [showOriginal, setShowOriginal] = useState(null); // email uid or null
   const [contextMenu, setContextMenu] = useState(null); // { x, y, email } or null
   const [fullViewEmail, setFullViewEmail] = useState(null); // email to show in full view modal
 
-  // Scroll to bottom on mount
+  // Derive thread from live correspondent data using RFC header-based threading
+  const topic = useMemo(() => {
+    const threads = buildThreads(correspondent.emails);
+    return threads.get(threadId) || { subject: threadId, emails: [] };
+  }, [correspondent.emails, threadId]);
+
+  const { bodiesMapRef, registerListener } = useChatBodyLoader(topic.emails);
+
+  // Scroll to bottom only on initial mount (threadId change = new thread opened)
+  const initialScrollDoneRef = useRef(false);
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    initialScrollDoneRef.current = false;
+    stickToBottomRef.current = true;
+    requestAnimationFrame(() => {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        initialScrollDoneRef.current = true;
+      }
+    });
+  }, [threadId]);
+
+  // Keep scroll pinned to bottom as content loads (messages expanding),
+  // until the user manually scrolls up via wheel/touch
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    // Detect only real user-initiated scrolls (wheel/touch), not browser
+    // scroll events fired due to content resizing
+    const checkUserScroll = () => {
+      requestAnimationFrame(() => {
+        const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+        stickToBottomRef.current = distFromBottom < 40;
+      });
+    };
+
+    const observer = new ResizeObserver(() => {
+      if (stickToBottomRef.current) {
+        el.scrollTop = el.scrollHeight;
+      }
+    });
+
+    el.addEventListener('wheel', checkUserScroll, { passive: true });
+    el.addEventListener('touchmove', checkUserScroll, { passive: true });
+    observer.observe(el);
+    for (const child of el.children) {
+      observer.observe(child);
     }
-  }, [topic.emails]);
+
+    // Watch for new children (bubbles added to DOM)
+    const mo = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        for (const node of m.addedNodes) {
+          if (node.nodeType === 1) observer.observe(node);
+        }
+      }
+    });
+    mo.observe(el, { childList: true });
+
+    return () => {
+      el.removeEventListener('wheel', checkUserScroll);
+      el.removeEventListener('touchmove', checkUserScroll);
+      observer.disconnect();
+      mo.disconnect();
+    };
+  }, [threadId]);
 
   // Close context menu on click outside
   useEffect(() => {
@@ -72,19 +135,19 @@ export function ChatBubbleView({ correspondent, topic, userEmail, onBack, onRepl
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-mail-border bg-mail-surface">
+      <div data-tauri-drag-region className="flex items-center gap-2.5 px-4 py-[14px] border-b border-mail-border bg-mail-surface">
         <button
           onClick={onBack}
-          className="p-1.5 hover:bg-mail-border rounded-lg transition-colors"
+          className="p-1 hover:bg-mail-border rounded-lg transition-colors"
         >
-          <ChevronLeft size={20} className="text-mail-text-muted" />
+          <ChevronLeft size={18} className="text-mail-text-muted" />
         </button>
 
         <div className="flex-1 min-w-0">
-          <h2 className="font-semibold text-mail-text truncate">
+          <h2 className="text-sm font-semibold text-mail-text truncate leading-tight">
             {topic.subject}
           </h2>
-          <p className="text-xs text-mail-text-muted truncate">
+          <p className="text-[11px] text-mail-text-muted truncate leading-tight">
             {correspondent.name} &middot; {topic.emails.length} message{topic.emails.length !== 1 ? 's' : ''}
           </p>
         </div>
@@ -97,8 +160,9 @@ export function ChatBubbleView({ correspondent, topic, userEmail, onBack, onRepl
           const showDateSeparator = !prevEmail || isDifferentDay(prevEmail.date, email.date);
           const fromUser = isFromUser(email, userEmail);
 
+          const eKey = emailKey(email);
           return (
-            <React.Fragment key={email.uid}>
+            <React.Fragment key={eKey}>
               {/* Date Separator */}
               {showDateSeparator && (
                 <div className="flex items-center justify-center py-4">
@@ -111,16 +175,22 @@ export function ChatBubbleView({ correspondent, topic, userEmail, onBack, onRepl
               {/* Message Bubble */}
               <MessageBubble
                 email={email}
+                eKey={eKey}
                 fromUser={fromUser}
                 avatarColor={avatarColor}
                 initials={initials}
-                isOriginalVisible={showOriginal === email.uid}
+                isOriginalVisible={showOriginal === eKey}
                 onToggleOriginal={() => setShowOriginal(
-                  showOriginal === email.uid ? null : email.uid
+                  showOriginal === eKey ? null : eKey
                 )}
                 onContextMenu={(e) => handleContextMenu(e, email)}
                 onReply={() => handleReplyToEmail(email)}
-                onOpenFullView={() => setFullViewEmail(email)}
+                onOpenFullView={() => {
+                  const bodyEntry = bodiesMapRef.current?.get(eKey);
+                  setFullViewEmail(bodyEntry?.email ? { ...email, ...bodyEntry.email } : email);
+                }}
+                bodiesMapRef={bodiesMapRef}
+                registerListener={registerListener}
               />
             </React.Fragment>
           );
@@ -219,12 +289,25 @@ function ContextMenu({ x, y, onReply, onReplyAll, onForward, onClose }) {
   );
 }
 
-function MessageBubble({ email, fromUser, avatarColor, initials, isOriginalVisible, onToggleOriginal, onContextMenu, onReply, onOpenFullView }) {
+function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOriginalVisible, onToggleOriginal, onContextMenu, onReply, onOpenFullView, bodiesMapRef, registerListener }) {
   const iframeRef = useRef(null);
-  const cleanBody = useMemo(() => getCleanMessageBody(email), [email]);
-  const hasAttachments = email.attachments?.length > 0 || email.hasAttachments;
-  const hasHtml = !!email.html;
-  const wasStripped = !hasHtml && cleanBody.length < (email.text?.length || 0) * 0.8;
+
+  // Subscribe to body load updates for this specific email
+  const [, forceUpdate] = useState(0);
+  useEffect(() => {
+    if (!registerListener) return;
+    return registerListener(eKey, () => forceUpdate(n => n + 1));
+  }, [eKey, registerListener]);
+
+  // Merge fetched body into header-only email
+  const bodyEntry = bodiesMapRef?.current?.get(eKey);
+  const mergedEmail = bodyEntry?.email ? { ...email, ...bodyEntry.email } : email;
+  const isBodyLoading = bodyEntry?.status === 'loading';
+
+  const cleanBody = useMemo(() => getCleanMessageBody(mergedEmail), [mergedEmail]);
+  const hasAttachments = mergedEmail.attachments?.length > 0 || mergedEmail.hasAttachments;
+  const hasHtml = !!mergedEmail.html;
+  const wasStripped = !hasHtml && cleanBody.length < (mergedEmail.text?.length || 0) * 0.8;
 
   // Check if we have displayable content
   const hasDisplayableContent = hasHtml || (cleanBody && cleanBody.trim().length > 0);
@@ -242,9 +325,15 @@ function MessageBubble({ email, fromUser, avatarColor, initials, isOriginalVisib
     onOpenFullView?.();
   };
 
-  // Build HTML content for iframe with dark mode support
+  // Build HTML content for iframe with theme-aware colors
   const iframeContent = useMemo(() => {
-    if (!email.html) return '';
+    if (!mergedEmail.html) return '';
+
+    // Use appropriate text color based on bubble type
+    const textColor = fromUser ? '#ffffff' : 'var(--mail-text, #e4e4e7)';
+    const linkColor = fromUser ? '#c7d2fe' : '#6366f1';
+    const quoteColor = fromUser ? 'rgba(255,255,255,0.6)' : '#6b7280';
+    const quoteBorder = fromUser ? 'rgba(255,255,255,0.3)' : '#d1d5db';
 
     return `
       <!DOCTYPE html>
@@ -264,14 +353,14 @@ function MessageBubble({ email, fromUser, avatarColor, initials, isOriginalVisib
               word-wrap: break-word;
               overflow-wrap: break-word;
               background-color: transparent !important;
-              color: #333333;
+              color: ${textColor};
             }
             img {
               max-width: 100%;
               height: auto;
             }
             a {
-              color: #2563eb;
+              color: ${linkColor};
             }
             table {
               max-width: 100%;
@@ -284,10 +373,10 @@ function MessageBubble({ email, fromUser, avatarColor, initials, isOriginalVisib
               overflow-x: auto;
             }
             blockquote {
-              border-left: 3px solid #d1d5db;
+              border-left: 3px solid ${quoteBorder};
               margin: 8px 0;
               padding-left: 12px;
-              color: #6b7280;
+              color: ${quoteColor};
             }
             /* Hide signatures in chat view */
             .gmail_signature, .yahoo_signature,
@@ -300,14 +389,14 @@ function MessageBubble({ email, fromUser, avatarColor, initials, isOriginalVisib
             }
           </style>
         </head>
-        <body>${email.html}</body>
+        <body>${mergedEmail.html}</body>
       </html>
     `;
-  }, [email.html]);
+  }, [mergedEmail.html, fromUser]);
 
   // Auto-resize iframe
   useEffect(() => {
-    if (iframeRef.current && email.html) {
+    if (iframeRef.current && mergedEmail.html) {
       const iframe = iframeRef.current;
 
       const resizeIframe = () => {
@@ -351,7 +440,7 @@ function MessageBubble({ email, fromUser, avatarColor, initials, isOriginalVisib
 
       setTimeout(resizeIframe, 100);
     }
-  }, [email.html]);
+  }, [mergedEmail.html]);
 
   return (
     <motion.div
@@ -376,8 +465,8 @@ function MessageBubble({ email, fromUser, avatarColor, initials, isOriginalVisib
           onDoubleClick={handleDoubleClick}
           className={`rounded-2xl overflow-hidden cursor-pointer ${
             fromUser
-              ? 'bg-mail-accent text-white rounded-br-md'
-              : 'bg-mail-surface border border-mail-border text-mail-text rounded-bl-md'
+              ? 'chat-bubble-sent rounded-br-md'
+              : 'chat-bubble-received rounded-bl-md'
           }`}
           title="Double-click to open in new window"
         >
@@ -387,7 +476,7 @@ function MessageBubble({ email, fromUser, avatarColor, initials, isOriginalVisib
               <div className="text-xs opacity-70 font-medium pb-1 border-b border-current/20">
                 Original message:
               </div>
-              {email.html ? (
+              {mergedEmail.html ? (
                 <iframe
                   ref={iframeRef}
                   srcDoc={iframeContent}
@@ -398,7 +487,7 @@ function MessageBubble({ email, fromUser, avatarColor, initials, isOriginalVisib
                 />
               ) : (
                 <div className="whitespace-pre-wrap break-words text-sm">
-                  {email.text || email.textBody || '(No text content)'}
+                  {mergedEmail.text || mergedEmail.textBody || '(No text content)'}
                 </div>
               )}
             </div>
@@ -416,6 +505,13 @@ function MessageBubble({ email, fromUser, avatarColor, initials, isOriginalVisib
           ) : hasDisplayableContent ? (
             <div className="px-4 py-2.5 whitespace-pre-wrap break-words text-sm">
               {cleanBody}
+            </div>
+          ) : isBodyLoading ? (
+            <div className="px-4 py-3 flex items-center gap-2">
+              <Loader size={14} className={`animate-spin flex-shrink-0 ${fromUser ? 'text-white/70' : 'text-mail-text-muted'}`} />
+              <span className={`text-sm ${fromUser ? 'text-white/70' : 'text-mail-text-muted'}`}>
+                Loading...
+              </span>
             </div>
           ) : (
             <div className="px-4 py-3 flex flex-col items-center gap-2">

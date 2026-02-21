@@ -134,6 +134,35 @@ body {
   color: var(--mail-text-muted);
 }
 
+/* Chat bubble styles */
+:root,
+[data-theme="dark"] {
+  --chat-sent-bg: #4f46e5;
+  --chat-sent-text: #ffffff;
+  --chat-received-bg: #1e1e2e;
+  --chat-received-text: #e4e4e7;
+  --chat-received-border: #2a2a3a;
+}
+
+[data-theme="light"] {
+  --chat-sent-bg: #4338ca;
+  --chat-sent-text: #ffffff;
+  --chat-received-bg: #ffffff;
+  --chat-received-text: #1e293b;
+  --chat-received-border: #e2e8f0;
+}
+
+.chat-bubble-sent {
+  background-color: var(--chat-sent-bg);
+  color: var(--chat-sent-text);
+}
+
+.chat-bubble-received {
+  background-color: var(--chat-received-bg);
+  color: var(--chat-received-text);
+  border: 1px solid var(--chat-received-border);
+}
+
 /* Custom checkbox */
 .custom-checkbox {
   appearance: none;

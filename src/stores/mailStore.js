@@ -5,6 +5,7 @@ import * as api from '../services/api';
 import { useSettingsStore } from './settingsStore';
 import { hasValidCredentials, ensureFreshToken } from '../services/authUtils';
 import { hasRealAttachments } from '../services/attachmentUtils';
+import { buildThreads } from '../utils/emailParser';
 
 export const useMailStore = create((set, get) => ({
   // Accounts
@@ -23,6 +24,7 @@ export const useMailStore = create((set, get) => ({
   selectedEmailId: null,
   selectedEmail: null,
   selectedEmailSource: null, // 'server' | 'local' | 'local-only'
+  selectedThread: null, // thread object from buildThreads, or null for single email
 
   // Sparse email storage for virtualized scrolling
   // Maps display index -> email header
@@ -42,6 +44,9 @@ export const useMailStore = create((set, get) => ({
 
   // Pre-sorted emails for performance (memoization)
   sortedEmails: [],
+
+  // Sent folder headers for chat view (merged with INBOX for conversations)
+  sentEmails: [],
   
   // Connection status: 'connected' | 'disconnected' | 'error'
   connectionStatus: 'disconnected',
@@ -232,7 +237,9 @@ export const useMailStore = create((set, get) => ({
         for (const account of accounts) {
           await db.ensureAccountInFile(account);
         }
-        await get().setActiveAccount(accounts[0].id);
+        const { hiddenAccounts } = useSettingsStore.getState();
+        const firstVisible = accounts.find(a => !hiddenAccounts[a.id]) || accounts[0];
+        await get().setActiveAccount(firstVisible.id);
       }
     } catch (error) {
       console.error('Failed to initialize:', error);
@@ -309,8 +316,10 @@ export const useMailStore = create((set, get) => ({
     set({ accounts: newAccounts });
     
     if (get().activeAccountId === accountId) {
-      if (newAccounts.length > 0) {
-        await get().setActiveAccount(newAccounts[0].id);
+      const { hiddenAccounts } = useSettingsStore.getState();
+      const nextVisible = newAccounts.find(a => !hiddenAccounts[a.id]);
+      if (nextVisible) {
+        await get().setActiveAccount(nextVisible.id);
       } else {
         set({
           activeAccountId: null,
@@ -321,7 +330,8 @@ export const useMailStore = create((set, get) => ({
           archivedEmailIds: new Set(),
           selectedEmailId: null,
           selectedEmail: null,
-          selectedEmailSource: null
+          selectedEmailSource: null,
+          selectedThread: null
         });
       }
     }
@@ -357,6 +367,7 @@ export const useMailStore = create((set, get) => ({
       activeMailbox: lastMailbox,
       emails: [],
       localEmails: [],
+      sentEmails: [],
       totalEmails: 0,
       emailsByIndex: new Map(),
       loadedRanges: [],
@@ -366,6 +377,7 @@ export const useMailStore = create((set, get) => ({
       selectedEmailId: null,
       selectedEmail: null,
       selectedEmailSource: null,
+      selectedThread: null,
       selectedEmailIds: new Set(),
       savedEmailIds: new Set(),
       archivedEmailIds: new Set(),
@@ -451,6 +463,7 @@ export const useMailStore = create((set, get) => ({
         connectionErrorType: 'passwordMissing',
         loading: false
       });
+      get().loadSentHeaders(accountId);
       return;
     }
 
@@ -471,6 +484,7 @@ export const useMailStore = create((set, get) => ({
             connectionErrorType: 'offline',
             loading: false
           });
+          get().loadSentHeaders(accountId);
           return;
         }
       } catch (e) {
@@ -535,6 +549,9 @@ export const useMailStore = create((set, get) => ({
 
       // Load emails (this will update connection status)
       await get().loadEmails();
+
+      // Load cached Sent headers for chat view (non-blocking)
+      get().loadSentHeaders(accountId);
     } catch (error) {
       console.error('Failed to connect to server:', error);
 
@@ -579,6 +596,7 @@ export const useMailStore = create((set, get) => ({
       selectedEmailId: null,
       selectedEmail: null,
       selectedEmailSource: null,
+      selectedThread: null,
       selectedEmailIds: new Set()
     });
 
@@ -1250,7 +1268,98 @@ export const useMailStore = create((set, get) => ({
   getCombinedEmails: () => {
     return get().sortedEmails;
   },
+
+  // Get the Sent mailbox path from the mailboxes tree (e.g. "Sent", "INBOX.Sent", "[Gmail]/Sent Mail")
+  getSentMailboxPath: () => {
+    const { mailboxes } = get();
+    const findSent = (boxes) => {
+      for (const box of boxes) {
+        if (box.specialUse === '\\Sent') return box.path;
+        if (box.children?.length > 0) {
+          const found = findSent(box.children);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    return findSent(mailboxes);
+  },
+
+  // Load Sent folder headers into sentEmails state.
+  // Quick-loads from disk cache, then refreshes from IMAP when connected.
+  loadSentHeaders: async (accountId) => {
+    const sentPath = get().getSentMailboxPath();
+    if (!sentPath) { set({ sentEmails: [] }); return; }
+
+    // Quick-load from disk cache first (instant UI)
+    const cached = await db.getEmailHeaders(accountId, sentPath);
+    if (cached?.emails?.length > 0) {
+      set({ sentEmails: cached.emails });
+    }
+
+    // Then refresh from IMAP (Sent folder can grow as user sends)
+    const { accounts, connectionStatus } = get();
+    const account = accounts.find(a => a.id === accountId);
+    if (!account || connectionStatus !== 'connected') return;
+
+    try {
+      const result = await api.fetchEmails(account, sentPath, 1, 200);
+      if (result?.emails?.length > 0) {
+        await db.saveEmailHeaders(accountId, sentPath, result.emails, result.total);
+        set({ sentEmails: result.emails });
+      }
+    } catch (e) {
+      console.warn('[loadSentHeaders] IMAP fetch failed:', e.message);
+      // Keep whatever was in cache
+    }
+  },
+
+  // Get merged INBOX + Sent emails for chat view
+  getChatEmails: () => {
+    const { sortedEmails, sentEmails } = get();
+    if (sentEmails.length === 0) return sortedEmails;
+
+    // Deduplicate by messageId (some servers copy sent to INBOX)
+    const seen = new Set();
+    const merged = [];
+
+    for (const email of sortedEmails) {
+      if (email.messageId) seen.add(email.messageId);
+      merged.push(email);
+    }
+
+    for (const email of sentEmails) {
+      if (email.messageId && seen.has(email.messageId)) continue;
+      if (email.messageId) seen.add(email.messageId);
+      merged.push({ ...email, _fromSentFolder: true });
+    }
+
+    merged.sort((a, b) => {
+      const dateA = new Date(a.date || a.internalDate || 0);
+      const dateB = new Date(b.date || b.internalDate || 0);
+      return dateB - dateA;
+    });
+
+    return merged;
+  },
   
+  // Build threads from merged INBOX + Sent emails using RFC header chains
+  getThreads: () => {
+    const emails = get().getChatEmails();
+    return buildThreads(emails);
+  },
+
+  // Select a thread (shows all emails in the thread in the viewer)
+  selectThread: (thread) => {
+    set({
+      selectedThread: thread,
+      selectedEmailId: thread.lastEmail.uid,
+      selectedEmail: null,
+      selectedEmailSource: null,
+      loadingEmail: false,
+    });
+  },
+
   // Select email
   selectEmail: async (uid, source = 'server') => {
     const { activeAccountId, accounts, activeMailbox } = get();
@@ -1259,7 +1368,7 @@ export const useMailStore = create((set, get) => ({
     const cacheKey = `${activeAccountId}-${activeMailbox}-${uid}`;
     const cacheLimitMB = useSettingsStore.getState().cacheLimitMB;
 
-    set({ selectedEmailId: uid, loadingEmail: true, selectedEmail: null, selectedEmailSource: source });
+    set({ selectedThread: null, selectedEmailId: uid, loadingEmail: true, selectedEmail: null, selectedEmailSource: source });
 
     try {
       let email;
@@ -1498,7 +1607,7 @@ export const useMailStore = create((set, get) => ({
 
     // Clear selection if we deleted the selected email
     if (selectedEmailId === uid) {
-      set({ savedEmailIds, archivedEmailIds, localEmails, selectedEmailId: null, selectedEmail: null, selectedEmailSource: null });
+      set({ savedEmailIds, archivedEmailIds, localEmails, selectedEmailId: null, selectedEmail: null, selectedEmailSource: null, selectedThread: null });
     } else {
       set({ savedEmailIds, archivedEmailIds, localEmails });
     }
@@ -1525,6 +1634,7 @@ export const useMailStore = create((set, get) => ({
       updates.selectedEmailId = null;
       updates.selectedEmail = null;
       updates.selectedEmailSource = null;
+      updates.selectedThread = null;
     }
     set(updates);
 
@@ -1710,6 +1820,11 @@ export const useMailStore = create((set, get) => ({
     let previousEmailCount = get().emails.length;
 
     for (let account of accounts) {
+      // Skip hidden accounts
+      if (useSettingsStore.getState().isAccountHidden(account.id)) {
+        console.log(`[mailStore] Skipping hidden account ${account.email}`);
+        continue;
+      }
       // Skip if credentials are missing (support both password and OAuth2)
       if (!hasValidCredentials(account)) {
         console.warn(`[mailStore] Skipping account ${account.email} - no credentials`);

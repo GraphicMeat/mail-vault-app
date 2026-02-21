@@ -13,7 +13,7 @@ const PROVIDER_CONFIGS = {
     imapPort: 993,
     smtpHost: 'smtp.gmail.com',
     smtpPort: 587,
-    note: 'Sign in with Google (recommended) or use an App Password',
+    note: 'Sign in with your Google account',
     supportsOAuth2: true,
     oauth2Provider: 'google'
   },
@@ -24,7 +24,7 @@ const PROVIDER_CONFIGS = {
     imapPort: 993,
     smtpHost: 'smtp.office365.com',
     smtpPort: 587,
-    note: 'Sign in with Microsoft (recommended) or use an App Password',
+    note: 'Sign in with your Microsoft account',
     supportsOAuth2: true,
     oauth2Provider: 'microsoft'
   },
@@ -555,29 +555,6 @@ export function AccountModal({ onClose }) {
                     </div>
                   )}
 
-                  {/* Toggle to password auth */}
-                  {authType === 'oauth2' && !oauthLoading && !oauthConnected && (
-                    <button
-                      type="button"
-                      onClick={() => setAuthType('password')}
-                      className="w-full text-sm text-mail-text-muted hover:text-mail-text
-                                transition-colors py-1"
-                    >
-                      Use App Password instead
-                    </button>
-                  )}
-
-                  {/* Toggle back to OAuth2 */}
-                  {authType === 'password' && showOAuth2Option && (
-                    <button
-                      type="button"
-                      onClick={() => setAuthType('oauth2')}
-                      className="w-full text-sm text-mail-accent hover:text-mail-accent-hover
-                                transition-colors py-1"
-                    >
-                      Sign in with {providerConfig?.oauth2Provider === 'google' ? 'Google' : 'Microsoft'} instead (recommended)
-                    </button>
-                  )}
                 </div>
               )}
 
@@ -627,7 +604,7 @@ export function AccountModal({ onClose }) {
               {authType === 'password' && (
                 <div>
                   <label className="block text-sm text-mail-text-muted mb-1.5">
-                    Password / App Password *
+                    Password *
                   </label>
                   <div className="relative">
                     <Lock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-mail-text-muted" />

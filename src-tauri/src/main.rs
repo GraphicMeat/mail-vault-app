@@ -970,6 +970,14 @@ struct MaildirStorageStats {
     email_count: u32,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct MaildirClearCacheResult {
+    #[serde(rename = "deletedCount")]
+    deleted_count: u32,
+    #[serde(rename = "skippedArchived")]
+    skipped_archived: u32,
+}
+
 pub fn maildir_cur_path(app_handle: &tauri::AppHandle, account_id: &str, mailbox: &str) -> Result<PathBuf, String> {
     let safe_mailbox = mailbox.chars().map(|c| {
         if c.is_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' }
@@ -1692,6 +1700,45 @@ fn maildir_storage_stats(
 }
 
 #[tauri::command]
+fn maildir_clear_cache(
+    app_handle: tauri::AppHandle,
+) -> Result<MaildirClearCacheResult, String> {
+    let base = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not get app data directory: {}", e))?
+        .join("Maildir");
+
+    if !base.exists() {
+        return Ok(MaildirClearCacheResult { deleted_count: 0, skipped_archived: 0 });
+    }
+
+    let mut deleted_count: u32 = 0;
+    let mut skipped_archived: u32 = 0;
+
+    for entry in WalkDir::new(&base).into_iter().flatten() {
+        if entry.file_type().is_file() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.contains(":2,") {
+                let flags = parse_flags_from_filename(&name);
+                if flags.iter().any(|f| f == "archived") {
+                    skipped_archived += 1;
+                } else {
+                    if let Err(e) = fs::remove_file(entry.path()) {
+                        warn!("Failed to delete cached email {:?}: {}", entry.path(), e);
+                    } else {
+                        deleted_count += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    info!("Cleared email cache: deleted {} files, skipped {} archived", deleted_count, skipped_archived);
+    Ok(MaildirClearCacheResult { deleted_count, skipped_archived })
+}
+
+#[tauri::command]
 fn maildir_migrate_json_to_eml(
     app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
@@ -2235,6 +2282,7 @@ fn main() {
             maildir_delete,
             maildir_set_flags,
             maildir_storage_stats,
+            maildir_clear_cache,
             maildir_migrate_json_to_eml,
             export_backup,
             import_backup,

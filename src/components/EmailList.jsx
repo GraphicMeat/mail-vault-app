@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { computeDisplayEmails } from '../services/emailListUtils';
+import { buildThreads } from '../utils/emailParser';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
 import { SearchBar } from './SearchBar';
@@ -20,7 +21,8 @@ import {
   ChevronDown,
   Mail,
   MailOpen,
-  Search
+  Search,
+  MessageSquare
 } from 'lucide-react';
 
 const ROW_HEIGHT_DEFAULT = 56;
@@ -314,6 +316,304 @@ const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSelected,
   );
 });
 
+// Thread row for default layout — shows collapsed thread with participant names and count
+const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectThread, onToggleSelection, selectedEmailIds, style }) {
+  const saveEmailsLocally = useMailStore(s => s.saveEmailsLocally);
+  const deleteEmailFromServer = useMailStore(s => s.deleteEmailFromServer);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [confirmingDeleteThread, setConfirmingDeleteThread] = useState(false);
+
+  const latestEmail = thread.lastEmail;
+  const hasUnread = thread.unreadCount > 0;
+  const allArchived = thread.emails.every(e => e.isArchived);
+
+  // Build participant display: show sender names (not the user)
+  const participantNames = useMemo(() => {
+    const seen = new Set();
+    const names = [];
+    for (const email of thread.emails) {
+      const name = email.from?.name || email.from?.address || 'Unknown';
+      const addr = email.from?.address?.toLowerCase() || '';
+      if (!seen.has(addr)) {
+        seen.add(addr);
+        names.push(name);
+      }
+    }
+    return names.length <= 2 ? names.join(', ') : `${names[0]}, ${names[1]} +${names.length - 2}`;
+  }, [thread.emails]);
+
+  const anyChecked = thread.emails.some(e => selectedEmailIds.has(e.uid));
+
+  const handleArchiveThread = async (e) => {
+    e.stopPropagation();
+    setSaving(true);
+    try {
+      const uids = thread.emails.filter(em => !em.isArchived).map(em => em.uid);
+      if (uids.length > 0) await saveEmailsLocally(uids);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteThread = async (e) => {
+    e.stopPropagation();
+    if (!confirmingDeleteThread) {
+      setConfirmingDeleteThread(true);
+      return;
+    }
+    // Delete all server emails in the thread
+    for (const email of thread.emails) {
+      if (email.source !== 'local-only') {
+        await deleteEmailFromServer(email.uid);
+      }
+    }
+    setMenuOpen(false);
+    setConfirmingDeleteThread(false);
+  };
+
+  return (
+    <div
+      style={style}
+      className={`group flex items-center gap-3 px-4 border-b border-mail-border
+                 cursor-pointer transition-colors
+                 ${isSelected ? 'bg-mail-accent/10' : 'hover:bg-mail-surface-hover'}
+                 ${hasUnread ? 'bg-mail-surface' : ''}`}
+      onClick={() => onSelectThread(thread)}
+    >
+      <div onClick={(e) => { e.stopPropagation(); thread.emails.forEach(em => onToggleSelection(em.uid)); }}>
+        <input type="checkbox" checked={anyChecked} onChange={() => {}} className="custom-checkbox" />
+      </div>
+
+      <div className="w-5 flex items-center justify-center">
+        {latestEmail.source === 'local-only' ? (
+          <HardDrive size={14} className="text-mail-warning" title="Local only" />
+        ) : latestEmail.isArchived ? (
+          <HardDrive size={14} className="text-mail-local" title="Archived" />
+        ) : (
+          <Cloud size={14} style={{ color: 'rgba(59, 130, 246, 0.5)' }} />
+        )}
+      </div>
+
+      <div className={`w-48 truncate ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
+        {participantNames}
+      </div>
+
+      <div className="flex-1 min-w-0 flex items-center gap-2">
+        <span className={`truncate ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
+          {thread.subject}
+        </span>
+        {thread.messageCount > 1 && (
+          <span className="flex-shrink-0 min-w-[20px] h-5 px-1.5 bg-mail-text-muted/15 rounded-full
+                        text-mail-text-muted text-xs font-medium flex items-center justify-center">
+            {thread.messageCount}
+          </span>
+        )}
+        {latestEmail.hasAttachments && (
+          <Paperclip size={14} className="text-mail-text-muted flex-shrink-0" />
+        )}
+      </div>
+
+      <div className="text-sm text-mail-text-muted whitespace-nowrap">
+        {formatEmailDate(latestEmail.date)}
+      </div>
+
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {!allArchived && (
+          <button
+            onClick={handleArchiveThread}
+            disabled={saving}
+            className="p-1.5 hover:bg-mail-border rounded transition-colors"
+            title="Archive thread"
+          >
+            {saving ? (
+              <RefreshCw size={14} className="animate-spin text-mail-accent" />
+            ) : (
+              <Archive size={14} className="text-mail-text-muted hover:text-mail-local" />
+            )}
+          </button>
+        )}
+
+        <div className="relative">
+          <button
+            onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); setConfirmingDeleteThread(false); }}
+            className="p-1.5 hover:bg-mail-border rounded transition-colors"
+          >
+            <MoreHorizontal size={14} className="text-mail-text-muted" />
+          </button>
+
+          <AnimatePresence>
+            {menuOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={(e) => { e.stopPropagation(); setMenuOpen(false); setConfirmingDeleteThread(false); }}
+                />
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="absolute right-0 top-full mt-1 bg-mail-bg border border-mail-border
+                            rounded-lg shadow-lg z-50 py-1 min-w-[200px]"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    onClick={handleDeleteThread}
+                    className={`w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover
+                              flex items-center gap-2 ${confirmingDeleteThread ? 'text-white bg-red-600 hover:bg-red-700' : 'text-mail-danger'}`}
+                  >
+                    <Trash2 size={14} />
+                    {confirmingDeleteThread ? `Delete ${thread.messageCount} emails?` : 'Delete thread from server'}
+                  </button>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+// Compact thread row for compact layout
+const CompactThreadRow = React.memo(function CompactThreadRow({ thread, isSelected, onSelectThread, onToggleSelection, selectedEmailIds, style }) {
+  const saveEmailsLocally = useMailStore(s => s.saveEmailsLocally);
+  const deleteEmailFromServer = useMailStore(s => s.deleteEmailFromServer);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [confirmingDeleteThread, setConfirmingDeleteThread] = useState(false);
+
+  const latestEmail = thread.lastEmail;
+  const hasUnread = thread.unreadCount > 0;
+  const allArchived = thread.emails.every(e => e.isArchived);
+
+  const participantNames = useMemo(() => {
+    const seen = new Set();
+    const names = [];
+    for (const email of thread.emails) {
+      const name = email.from?.name || email.from?.address || 'Unknown';
+      const addr = email.from?.address?.toLowerCase() || '';
+      if (!seen.has(addr)) {
+        seen.add(addr);
+        names.push(name);
+      }
+    }
+    return names.length <= 2 ? names.join(', ') : `${names[0]}, ${names[1]} +${names.length - 2}`;
+  }, [thread.emails]);
+
+  const anyChecked = thread.emails.some(e => selectedEmailIds.has(e.uid));
+
+  const handleArchiveThread = async (e) => {
+    e.stopPropagation();
+    setSaving(true);
+    try {
+      const uids = thread.emails.filter(em => !em.isArchived).map(em => em.uid);
+      if (uids.length > 0) await saveEmailsLocally(uids);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteThread = async (e) => {
+    e.stopPropagation();
+    if (!confirmingDeleteThread) {
+      setConfirmingDeleteThread(true);
+      return;
+    }
+    for (const email of thread.emails) {
+      if (email.source !== 'local-only') {
+        await deleteEmailFromServer(email.uid);
+      }
+    }
+    setMenuOpen(false);
+    setConfirmingDeleteThread(false);
+  };
+
+  return (
+    <div
+      style={style}
+      className={`group flex items-center gap-2 px-4 border-b border-mail-border
+                 cursor-pointer transition-colors
+                 ${isSelected ? 'bg-mail-accent/10' : 'hover:bg-mail-surface-hover'}
+                 ${hasUnread ? 'bg-mail-surface' : ''}`}
+      onClick={() => onSelectThread(thread)}
+    >
+      <div onClick={(e) => { e.stopPropagation(); thread.emails.forEach(em => onToggleSelection(em.uid)); }}>
+        <input type="checkbox" checked={anyChecked} onChange={() => {}} className="custom-checkbox" />
+      </div>
+
+      <div className="w-4 flex items-center justify-center flex-shrink-0">
+        {latestEmail.source === 'local-only' ? (
+          <HardDrive size={13} className="text-mail-warning" title="Local only" />
+        ) : latestEmail.isArchived ? (
+          <HardDrive size={13} className="text-mail-local" title="Archived" />
+        ) : (
+          <Cloud size={13} style={{ color: 'rgba(59, 130, 246, 0.5)' }} />
+        )}
+      </div>
+
+      <div className="flex-1 min-w-0 py-1.5">
+        <div className="flex items-center gap-2">
+          <span className={`truncate text-xs ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
+            {participantNames}
+          </span>
+          {thread.messageCount > 1 && (
+            <span className="flex-shrink-0 min-w-[16px] h-4 px-1 bg-mail-text-muted/15 rounded-full
+                          text-mail-text-muted text-[10px] font-medium flex items-center justify-center">
+              {thread.messageCount}
+            </span>
+          )}
+          <span className="text-xs text-mail-text-muted whitespace-nowrap ml-auto">
+            {formatEmailDate(latestEmail.date)}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className={`truncate text-sm leading-snug ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
+            {thread.subject}
+          </span>
+          {latestEmail.hasAttachments && (
+            <Paperclip size={12} className="text-mail-text-muted flex-shrink-0" />
+          )}
+        </div>
+      </div>
+
+      {/* Hover actions */}
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+        {!allArchived && (
+          <button onClick={handleArchiveThread} disabled={saving}
+            className="p-1 hover:bg-mail-border rounded transition-colors" title="Archive thread">
+            {saving ? <RefreshCw size={13} className="animate-spin text-mail-accent" />
+              : <Archive size={13} className="text-mail-text-muted hover:text-mail-local" />}
+          </button>
+        )}
+        <div className="relative">
+          <button onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); setConfirmingDeleteThread(false); }}
+            className="p-1 hover:bg-mail-border rounded transition-colors">
+            <MoreHorizontal size={13} className="text-mail-text-muted" />
+          </button>
+          <AnimatePresence>
+            {menuOpen && (
+              <>
+                <div className="fixed inset-0 z-40"
+                  onClick={(e) => { e.stopPropagation(); setMenuOpen(false); setConfirmingDeleteThread(false); }} />
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+                  className="absolute right-0 top-full mt-1 bg-mail-bg border border-mail-border rounded-lg shadow-lg z-50 py-1 min-w-[200px]"
+                  onClick={(e) => e.stopPropagation()}>
+                  <button onClick={handleDeleteThread}
+                    className={`w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover flex items-center gap-2 ${confirmingDeleteThread ? 'text-white bg-red-600 hover:bg-red-700' : 'text-mail-danger'}`}>
+                    <Trash2 size={14} /> {confirmingDeleteThread ? `Delete ${thread.messageCount} emails?` : 'Delete thread from server'}
+                  </button>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+    </div>
+  );
+});
+
 export function EmailList({ layoutMode = 'three-column' }) {
   const {
     loading,
@@ -325,10 +625,12 @@ export function EmailList({ layoutMode = 'three-column' }) {
     selectedEmailIds,
     emails,
     localEmails,
+    sentEmails,
     loadEmails,
     loadMoreEmails,
     hasMoreEmails,
     selectEmail,
+    selectThread,
     toggleEmailSelection,
     selectAllEmails,
     clearSelection,
@@ -341,7 +643,8 @@ export function EmailList({ layoutMode = 'three-column' }) {
     clearSearch,
     totalEmails,
     savedEmailIds,
-    archivedEmailIds
+    archivedEmailIds,
+    getChatEmails
   } = useMailStore();
 
   const emailListStyle = useSettingsStore(s => s.emailListStyle);
@@ -362,20 +665,49 @@ export function EmailList({ layoutMode = 'three-column' }) {
     [searchActive, searchResults, emails, localEmails, archivedEmailIds, viewMode]
   );
 
+  // Build threaded display: merge Sent folder emails into threads so both sides of
+  // conversations appear together (like Gmail). Threads are anchored on displayEmails —
+  // only threads containing at least one INBOX email are shown.
+  const threadedDisplay = useMemo(() => {
+    if (searchActive) {
+      // Don't thread search results — show flat
+      return displayEmails.map(email => ({ type: 'email', email }));
+    }
+
+    // Merge INBOX + Sent for complete threading (same as chat view)
+    const mergedEmails = getChatEmails();
+    const threads = buildThreads(mergedEmails);
+
+    // Only show threads that contain at least one email from the current display set
+    const displayUids = new Set(displayEmails.map(e => e.uid));
+    const filtered = Array.from(threads.values())
+      .filter(thread => thread.emails.some(e => displayUids.has(e.uid)));
+
+    // Sort threads by latest date descending
+    const sorted = filtered.sort((a, b) => b.lastDate - a.lastDate);
+
+    return sorted.map(thread => {
+      if (thread.messageCount === 1) {
+        return { type: 'email', email: thread.emails[0] };
+      }
+      return { type: 'thread', thread };
+    });
+  }, [displayEmails, searchActive, sentEmails, getChatEmails]);
+
   // Create a map for quick lookup by index
-  const emailsByIndex = useMemo(() => {
+  const itemsByIndex = useMemo(() => {
     const map = new Map();
-    displayEmails.forEach((email, index) => {
-      map.set(index, email);
+    threadedDisplay.forEach((item, index) => {
+      map.set(index, item);
     });
     return map;
-  }, [displayEmails]);
+  }, [threadedDisplay]);
 
   const hasSelection = selectedEmailIds.size > 0;
   const allSelected = displayEmails.length > 0 && selectedEmailIds.size === displayEmails.length;
 
   // Virtual scroll calculations - always use loaded count; list grows as more emails load
-  const rowCount = displayEmails.length;
+  const rowCount = threadedDisplay.length;
   const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - BUFFER_SIZE);
   const visibleCount = Math.ceil(containerHeight / ROW_HEIGHT) + 2 * BUFFER_SIZE;
   const endIndex = Math.min(rowCount, startIndex + visibleCount);
@@ -410,13 +742,13 @@ export function EmailList({ layoutMode = 'three-column' }) {
     const visibleStart = Math.floor(scrollTop / ROW_HEIGHT);
     const visibleEnd = visibleStart + Math.ceil(containerHeight / ROW_HEIGHT);
 
-    if (visibleEnd >= displayEmails.length - 20) {
+    if (visibleEnd >= threadedDisplay.length - 20) {
       const timer = setTimeout(() => {
         loadMoreEmails();
       }, 100);
       return () => clearTimeout(timer);
     }
-  }, [scrollTop, containerHeight, displayEmails.length, hasMoreEmails, loadingMore, searchActive, viewMode, loadMoreEmails]);
+  }, [scrollTop, containerHeight, threadedDisplay.length, hasMoreEmails, loadingMore, searchActive, viewMode, loadMoreEmails]);
 
   // Handle scroll - load more when approaching end of loaded emails
   const handleScroll = useCallback((e) => {
@@ -425,11 +757,11 @@ export function EmailList({ layoutMode = 'three-column' }) {
 
     if (!searchActive && hasMoreEmails && !loadingMore && viewMode !== 'local') {
       const visibleEnd = Math.floor(scrollTop / ROW_HEIGHT) + Math.ceil(containerHeight / ROW_HEIGHT);
-      if (visibleEnd >= displayEmails.length - 20) {
+      if (visibleEnd >= threadedDisplay.length - 20) {
         loadMoreEmails();
       }
     }
-  }, [searchActive, hasMoreEmails, loadingMore, loadMoreEmails, containerHeight, displayEmails.length, viewMode]);
+  }, [searchActive, hasMoreEmails, loadingMore, loadMoreEmails, containerHeight, threadedDisplay.length, viewMode]);
 
   const handleAction = async (action) => {
     setActionInProgress(true);
@@ -445,13 +777,13 @@ export function EmailList({ layoutMode = 'three-column' }) {
   const visibleRows = useMemo(() => {
     const rows = [];
     for (let i = startIndex; i < endIndex; i++) {
-      const email = emailsByIndex.get(i);
-      if (email) {
-        rows.push({ index: i, email, top: i * ROW_HEIGHT });
+      const item = itemsByIndex.get(i);
+      if (item) {
+        rows.push({ index: i, item, top: i * ROW_HEIGHT });
       }
     }
     return rows;
-  }, [startIndex, endIndex, emailsByIndex]);
+  }, [startIndex, endIndex, itemsByIndex]);
 
   // Total height based on total email count for stable scrollbar
   const totalHeight = rowCount * ROW_HEIGHT;
@@ -496,7 +828,7 @@ export function EmailList({ layoutMode = 'three-column' }) {
                 {activeMailbox}
               </h2>
               <span className="text-sm text-mail-text-muted flex items-center gap-1">
-                ({displayEmails.length.toLocaleString()}{viewMode !== 'local' && totalEmails > displayEmails.length ? ` of ${totalEmails.toLocaleString()}` : ''} emails)
+                ({threadedDisplay.length.toLocaleString()}{viewMode !== 'local' && totalEmails > displayEmails.length ? ` of ${totalEmails.toLocaleString()}` : ''}{!searchActive && threadedDisplay.length < displayEmails.length ? ' threads' : ' emails'})
                 {loadingMore && (
                   <RefreshCw size={12} className="animate-spin text-mail-accent" />
                 )}
@@ -693,25 +1025,44 @@ export function EmailList({ layoutMode = 'three-column' }) {
           </div>
         ) : (
           <div key={`${activeAccountId}-${viewMode}`} style={{ height: totalHeight, position: 'relative' }}>
-            {visibleRows.map(({ email, top }) => (
+            {visibleRows.map(({ item, top }) => {
+              const rowStyle = {
+                position: 'absolute',
+                top,
+                left: 0,
+                right: 0,
+                height: ROW_HEIGHT,
+                display: 'flex',
+                alignItems: 'center'
+              };
+
+              if (item.type === 'thread') {
+                const ThreadRowComponent = isCompact ? CompactThreadRow : ThreadRow;
+                return (
+                  <ThreadRowComponent
+                    key={`thread-${item.thread.threadId}`}
+                    thread={item.thread}
+                    isSelected={item.thread.emails.some(e => selectedEmailId === e.uid)}
+                    onSelectThread={selectThread}
+                    onToggleSelection={toggleEmailSelection}
+                    selectedEmailIds={selectedEmailIds}
+                    style={rowStyle}
+                  />
+                );
+              }
+
+              return (
                 <RowComponent
-                  key={email.uid}
-                  email={email}
-                  isSelected={selectedEmailId === email.uid}
-                  isChecked={selectedEmailIds.has(email.uid)}
+                  key={item.email.uid}
+                  email={item.email}
+                  isSelected={selectedEmailId === item.email.uid}
+                  isChecked={selectedEmailIds.has(item.email.uid)}
                   onSelect={selectEmail}
                   onToggleSelection={toggleEmailSelection}
-                  style={{
-                    position: 'absolute',
-                    top,
-                    left: 0,
-                    right: 0,
-                    height: ROW_HEIGHT,
-                    display: 'flex',
-                    alignItems: 'center'
-                  }}
+                  style={rowStyle}
                 />
-            ))}
+              );
+            })}
 
           </div>
         )}

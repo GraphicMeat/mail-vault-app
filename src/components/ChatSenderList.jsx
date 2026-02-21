@@ -12,11 +12,12 @@ import { MessageSquare, Search } from 'lucide-react';
 export function ChatSenderList({ onSelectSender }) {
   // Subscribe to all state values that affect email display to ensure re-renders
   const {
-    getCombinedEmails,
+    getChatEmails,
     accounts,
     activeAccountId,
     emails,        // Subscribe to trigger re-render when server emails change
     localEmails,   // Subscribe to trigger re-render when local emails change
+    sentEmails,    // Subscribe to trigger re-render when sent emails load
     viewMode       // Subscribe to trigger re-render when view mode changes
   } = useMailStore();
   const [searchQuery, setSearchQuery] = React.useState('');
@@ -27,8 +28,8 @@ export function ChatSenderList({ onSelectSender }) {
     return activeAccount?.email || '';
   }, [accounts, activeAccountId]);
 
-  // Get emails directly - subscribing to emails/localEmails/viewMode above ensures this updates
-  const combinedEmails = getCombinedEmails();
+  // Get emails directly - subscribing to emails/localEmails/sentEmails/viewMode above ensures this updates
+  const combinedEmails = getChatEmails();
 
   // Group emails by correspondent
   const correspondents = useMemo(() => {
@@ -69,16 +70,16 @@ export function ChatSenderList({ onSelectSender }) {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Search Bar */}
-      <div className="p-3 border-b border-mail-border">
-        <div className="relative">
+      {/* Search Bar — matches sidebar header height (px-4 py-3) */}
+      <div data-tauri-drag-region className="px-4 py-3 border-b border-mail-border flex items-center">
+        <div className="relative w-full">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-mail-text-muted" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search conversations..."
-            className="w-full pl-9 pr-4 py-2 bg-mail-bg border border-mail-border rounded-lg
+            className="w-full pl-9 pr-4 py-1.5 bg-mail-bg border border-mail-border rounded-lg
                       text-mail-text placeholder-mail-text-muted text-sm
                       focus:border-mail-accent focus:outline-none"
           />

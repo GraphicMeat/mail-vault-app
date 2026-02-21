@@ -102,10 +102,14 @@ export function getPreview(email, maxLength = 50) {
  */
 export function normalizeSubject(subject) {
   if (!subject) return '(No subject)';
-  return subject
-    .replace(/^(re:|fwd:|fw:|re\[\d+\]:)\s*/gi, '')
-    .replace(/^(re:|fwd:|fw:|re\[\d+\]:)\s*/gi, '') // Run twice for nested
-    .trim() || '(No subject)';
+  const prefix = /^(re:|fwd:|fw:|re\[\d+\]:)\s*/i;
+  let result = subject.trim();
+  let prev;
+  do {
+    prev = result;
+    result = result.replace(prefix, '').trim();
+  } while (result !== prev);
+  return result || '(No subject)';
 }
 
 /**
@@ -149,6 +153,165 @@ export function groupByTopic(emails) {
   }
 
   return topics;
+}
+
+/**
+ * Build email threads using RFC 2822 header chains (References, In-Reply-To)
+ * with normalized subject as fallback.
+ *
+ * Algorithm (simplified JWZ):
+ * 1. Index all emails by Message-ID
+ * 2. Link emails via References/In-Reply-To chains to find thread roots
+ * 3. Fall back to normalized subject for emails without threading headers
+ * 4. Return a Map of threadId → thread object
+ *
+ * @param {Array} emails - email objects with messageId, inReplyTo, references fields
+ * @returns {Map<string, { threadId, subject, emails[], lastDate, participants, unreadCount }>}
+ */
+export function buildThreads(emails) {
+  if (!emails || emails.length === 0) return new Map();
+
+  // Step 1: Index by messageId
+  const byMessageId = new Map(); // messageId → email
+  for (const email of emails) {
+    if (email.messageId) {
+      byMessageId.set(email.messageId, email);
+    }
+  }
+
+  // Step 2: Find the thread root for each email by walking the reference chain
+  const emailToThreadId = new Map(); // email → threadId (root messageId)
+
+  const findRoot = (email, visited = new Set()) => {
+    if (email.messageId && visited.has(email.messageId)) return email.messageId;
+    if (email.messageId) visited.add(email.messageId);
+
+    // Walk the references chain (oldest ancestor first)
+    const refs = email.references || [];
+    if (refs.length > 0) {
+      // The first reference is the oldest ancestor = thread root
+      return refs[0];
+    }
+    // Fall back to inReplyTo
+    if (email.inReplyTo) {
+      // Check if that parent has its own root
+      const parent = byMessageId.get(email.inReplyTo);
+      if (parent) {
+        return findRoot(parent, visited);
+      }
+      // Parent not in our set — use inReplyTo as the thread root
+      return email.inReplyTo;
+    }
+    // No threading headers — this email is its own root
+    return email.messageId || `uid-${email.uid}`;
+  };
+
+  // Step 3: Assign thread IDs
+  for (const email of emails) {
+    const threadId = findRoot(email);
+    emailToThreadId.set(email, threadId);
+  }
+
+  // Step 4: Group emails by thread ID
+  const threadGroups = new Map(); // threadId → email[]
+  for (const email of emails) {
+    const threadId = emailToThreadId.get(email);
+    if (!threadGroups.has(threadId)) {
+      threadGroups.set(threadId, []);
+    }
+    threadGroups.get(threadId).push(email);
+  }
+
+  // Step 5: Subject-based fallback — merge single-email "threads" with matching subjects
+  const subjectToThreadId = new Map(); // normalizedSubject → threadId (of first multi-email thread or first occurrence)
+  const threadIdToSubject = new Map(); // threadId → normalizedSubject
+
+  for (const [threadId, threadEmails] of threadGroups) {
+    const subject = normalizeSubject(threadEmails[0].subject);
+    threadIdToSubject.set(threadId, subject);
+
+    if (!subjectToThreadId.has(subject)) {
+      subjectToThreadId.set(subject, threadId);
+    }
+  }
+
+  // Merge threads with same normalized subject if they have no RFC threading headers
+  // Two-pass: first add all non-orphan threads, then merge orphans into canonical threads
+  const mergedGroups = new Map();
+  const orphans = []; // [threadId, threadEmails][] — single-email threads without RFC headers
+
+  for (const [threadId, threadEmails] of threadGroups) {
+    const email = threadEmails[0];
+    const hasRfcHeaders = email.inReplyTo || (email.references && email.references.length > 0);
+
+    if (threadEmails.length === 1 && !hasRfcHeaders) {
+      orphans.push([threadId, threadEmails]);
+    } else {
+      mergedGroups.set(threadId, [...threadEmails]);
+    }
+  }
+
+  // Second pass: merge orphans into canonical threads by subject
+  for (const [threadId, threadEmails] of orphans) {
+    const subject = threadIdToSubject.get(threadId);
+    const canonicalThreadId = subjectToThreadId.get(subject);
+
+    if (canonicalThreadId !== threadId && mergedGroups.has(canonicalThreadId)) {
+      mergedGroups.get(canonicalThreadId).push(...threadEmails);
+    } else {
+      mergedGroups.set(threadId, [...threadEmails]);
+    }
+  }
+
+  // Step 6: Build thread objects
+  const threads = new Map();
+
+  for (const [threadId, threadEmails] of mergedGroups) {
+    // Sort by date ascending (oldest first)
+    threadEmails.sort((a, b) => {
+      const dateA = new Date(a.date || a.internalDate || 0);
+      const dateB = new Date(b.date || b.internalDate || 0);
+      return dateA - dateB;
+    });
+
+    const lastEmail = threadEmails[threadEmails.length - 1];
+    const firstEmail = threadEmails[0];
+    const lastDate = new Date(lastEmail.date || lastEmail.internalDate || 0);
+
+    // Collect unique participants
+    const participantSet = new Set();
+    for (const e of threadEmails) {
+      if (e.from?.address) participantSet.add(e.from.address.toLowerCase());
+      if (e.to) {
+        for (const to of e.to) {
+          if (to.address) participantSet.add(to.address.toLowerCase());
+        }
+      }
+    }
+
+    // Count unread
+    const unreadCount = threadEmails.filter(e => !e.flags?.includes('\\Seen')).length;
+
+    const subject = normalizeSubject(firstEmail.subject);
+
+    threads.set(threadId, {
+      threadId,
+      subject,
+      originalSubject: firstEmail.subject || '(No subject)',
+      emails: threadEmails,
+      lastDate,
+      lastEmail,
+      participants: Array.from(participantSet),
+      unreadCount,
+      messageCount: threadEmails.length,
+      dateRange: {
+        start: new Date(firstEmail.date || firstEmail.internalDate || 0),
+        end: lastDate
+      }
+    });
+  }
+
+  return threads;
 }
 
 /**
