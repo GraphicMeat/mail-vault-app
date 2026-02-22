@@ -34,7 +34,7 @@ uuid = { version = "1", features = ["v4"] }
 tauri-plugin-http = "2.5.7"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 tokio = { version = "1", features = ["sync", "net", "io-util", "time", "rt", "macros"] }
-async-imap = "0.11"
+async-imap = { version = "0.11", features = ["compress"] }
 imap-proto = "0.16"
 async-native-tls = "0.5"
 async-std = { version = "1", features = ["attributes"] }

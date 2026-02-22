@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+- **Chat view: attachment support** — chat bubbles and the full-view modal now show functional attachment cards (click to download/open, right-click for Open/Open With/Save As/Show in Folder); uses compact styling to fit the chat bubble aesthetic; correctly resolves mailbox for both inbox and sent folder emails
+- **IMAP performance optimizations** — 9 optimizations to IMAP header loading: UID range compression (reduces command size from O(n) to O(ranges)), chunked UID FETCH (200-batch limits prevent command-length errors), lean fetch spec (drops BODYSTRUCTURE/RFC822.SIZE from header loads), newest-first UID fetching (users see newest emails first during delta-sync), COMPRESS=DEFLATE negotiation (70-80% bandwidth reduction when server supports it), capability caching in connection pool, skip-redundant-SELECT tracking, CONDSTORE delta sync (zero IMAP calls when mailbox unchanged, flag-only sync when only flags changed), and ESEARCH for compact UID enumeration
+- **Email list scrolling performance** — fingerprint-based memoization skips redundant O(n log n) sorts in `updateSortedEmails()` and `getChatEmails()`; individual Zustand selectors prevent cascade re-renders from background pipeline updates; hand-rolled virtual scroll with static CSS positioning for smooth 17k+ email scrolling
+- **Concurrency & pipeline performance optimizations** — 10 optimizations: Set-based uncached UID filtering (eliminates 17k sequential IPC calls), parallel disk reads via Promise.all in loadEmails/setActiveMailbox/pipeline finish, batch `maildir_read_light_batch` Rust command (single IPC for all local emails), IMAP connection pool expanded from 1→3 sessions per account (supports concurrent workers), parallel background account header loading (up to 3 accounts at once), memoized thread building, batch account backfill (single file read/write), reduced pipeline/pagination/loadMore delays (5s→1s, 1s→200ms, 2s→500ms)
+
+### Fixed
+- **Large mailbox not loading (17k+ emails)** — fixed multiple issues: `_sortedEmailsFingerprint` not reset on account switch caused `sortedEmails` to stay empty via false fingerprint match; quick-load parsed full 15-20MB headers.json (now loads partial 200 headers); `displayEmails` redundantly re-sorted 17k emails (now uses pre-sorted `sortedEmails` directly); `threadedDisplay` depended on stable `getChatEmails` function ref that never triggered recomputation (added `sortedEmails` as dependency)
+- **Large mailbox stall at partial cache** — CONDSTORE and non-CONDSTORE early-return paths in delta-sync now check whether the local cache is partial and schedule `loadMoreEmails()` when needed; previously, mailboxes with 17k+ emails would stall at ~200 cached headers because the "no changes" fast path returned without continuing background pagination
+- **Endless spinner on app launch** — `getChatEmails()` was calling Zustand `set()` during React render (inside a `useMemo`), and `threadedDisplay` useMemo never reacted to `sortedEmails` changes because the function reference was stable; moved chat email cache to module-level variables
+
 ## [1.7.0] - 2026-02-21
 
 ### Added

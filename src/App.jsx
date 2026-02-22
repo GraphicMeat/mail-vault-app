@@ -62,6 +62,13 @@ function ResizeDivider({ orientation, onResize, onResizeEnd }) {
   );
 }
 
+// Debug: log to Rust side via invoke
+const debugLog = (...args) => {
+  const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+  console.log(msg);
+  window.__TAURI__?.core?.invoke?.('log_from_frontend', { message: msg }).catch(() => {});
+};
+
 function App() {
   const { init, accounts, error, clearError, connectionErrorType, emails, loading } = useMailStore();
   const { initTheme } = useThemeStore();
@@ -132,110 +139,108 @@ function App() {
 
   // Listen for server crash events from the Rust backend
   useEffect(() => {
-    const listen = window.__TAURI__?.event?.listen;
-    if (!listen) return;
     let unlisten;
-    listen('server-crashed', (event) => {
-      console.error('[App] Server crashed:', event.payload);
-      useMailStore.setState({
-        connectionStatus: 'error',
-        connectionError: event.payload,
-        connectionErrorType: 'serverError'
+    let active = true;
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      listen('server-crashed', (event) => {
+        console.error('[App] Server crashed:', event.payload);
+        useMailStore.setState({
+          connectionStatus: 'error',
+          connectionError: event.payload,
+          connectionErrorType: 'serverError'
+        });
+      }).then(fn => {
+        if (!active) fn(); // unmounted before listener ready — detach immediately
+        else unlisten = fn;
       });
-    }).then(fn => { unlisten = fn; });
-    return () => { if (unlisten) unlisten(); };
+    }).catch(() => {}); // not in Tauri environment
+    return () => { active = false; if (unlisten) unlisten(); };
   }, []);
 
   // Listen for open-settings event from native menu
   useEffect(() => {
-    const listen = window.__TAURI__?.event?.listen;
-    if (!listen) return;
     let unlisten;
-    listen('open-settings', () => {
-      setShowSettings(true);
-    }).then(fn => { unlisten = fn; });
-    return () => { if (unlisten) unlisten(); };
+    let active = true;
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      listen('open-settings', () => {
+        setShowSettings(true);
+      }).then(fn => {
+        if (!active) fn();
+        else unlisten = fn;
+      });
+    }).catch(() => {});
+    return () => { active = false; if (unlisten) unlisten(); };
   }, []);
 
   // Track if quick load is done
   const [quickLoadDone, setQuickLoadDone] = useState(false);
 
-  // Quick load accounts and local emails from DB immediately (no keychain access)
-  // This allows showing the home UI with local emails right away
+  // Quick load: get accounts from disk ASAP so the main UI renders immediately.
+  // Email headers/local data are loaded in a second phase to avoid blocking.
   useEffect(() => {
     const quickLoadAccounts = async () => {
       try {
         const db = await import('./services/db');
         await db.initBasic();
-        // Use getAccountsWithoutPasswords to avoid triggering keychain prompt
         const accounts = await db.getAccountsWithoutPasswords();
         if (accounts.length > 0) {
-          console.log('[App] Quick loaded', accounts.length, 'accounts from DB');
-          const firstAccount = accounts[0];
+          const { hiddenAccounts } = useSettingsStore.getState();
+          const firstVisible = accounts.find(a => !hiddenAccounts[a.id]) || accounts[0];
+          debugLog('[QuickLoad] Phase 1: setting', accounts.length, 'accounts, firstVisible:', firstVisible.email);
 
-          // Load local emails for the first account
-          const localEmails = await db.getLocalEmails(firstAccount.id, 'INBOX');
-          const savedEmailIds = await db.getSavedEmailIds(firstAccount.id, 'INBOX');
-
-          // Load cached email headers for instant display
-          const cachedHeaders = await db.getEmailHeaders(firstAccount.id, 'INBOX');
-
-          // Default mailboxes for display before server fetch
-          const defaultMailboxes = [
-            { name: 'INBOX', path: 'INBOX', specialUse: null, children: [] },
-            { name: 'Sent', path: 'Sent', specialUse: '\\Sent', children: [] },
-            { name: 'Drafts', path: 'Drafts', specialUse: '\\Drafts', children: [] },
-            { name: 'Trash', path: 'Trash', specialUse: '\\Trash', children: [] }
-          ];
-
-          console.log('[App] Quick loaded', localEmails.length, 'local emails');
-          if (cachedHeaders) {
-            console.log('[App] Quick loaded', cachedHeaders.emails.length, 'cached headers, total:', cachedHeaders.totalEmails);
-          }
-
-          // Build sparse index from cached headers
-          const emailsByIndex = new Map();
-          const loadedRanges = [];
-          let emails = localEmails;
-          let totalEmails = 0;
-
-          if (cachedHeaders && cachedHeaders.emails.length > 0) {
-            cachedHeaders.emails.forEach((email, idx) => {
-              const index = email.displayIndex !== undefined ? email.displayIndex : idx;
-              emailsByIndex.set(index, {
-                ...email,
-                isLocal: savedEmailIds.has(email.uid),
-                source: email.source || 'server'
-              });
-            });
-            loadedRanges.push({ start: 0, end: cachedHeaders.emails.length });
-            emails = cachedHeaders.emails;
-            totalEmails = cachedHeaders.totalEmails;
-          }
-
+          // Set accounts FIRST so the main UI renders immediately
           useMailStore.setState({
             accounts,
-            activeAccountId: firstAccount.id,
+            activeAccountId: firstVisible.id,
             activeMailbox: 'INBOX',
-            mailboxes: defaultMailboxes,
-            localEmails,
-            savedEmailIds,
-            emails,
-            emailsByIndex,
-            loadedRanges,
-            totalEmails,
-            // Important: set loading to false so cached data shows immediately
-            loading: cachedHeaders && cachedHeaders.emails.length > 0 ? false : true,
-            // Calculate hasMore based on what's loaded
-            hasMoreEmails: cachedHeaders ? cachedHeaders.emails.length < cachedHeaders.totalEmails : true,
-            currentPage: cachedHeaders ? Math.ceil(cachedHeaders.emails.length / 50) || 1 : 1
+            mailboxes: [
+              { name: 'INBOX', path: 'INBOX', specialUse: null, children: [] },
+              { name: 'Sent', path: 'Sent', specialUse: '\\Sent', children: [] },
+              { name: 'Drafts', path: 'Drafts', specialUse: '\\Drafts', children: [] },
+              { name: 'Trash', path: 'Trash', specialUse: '\\Trash', children: [] }
+            ],
+            loading: true,
           });
 
-          // Update sorted emails
-          useMailStore.getState().updateSortedEmails();
+          // Phase 2: Load partial cached headers (fast) — only first 200 to avoid blocking
+          // on large mailboxes (17k+ emails = 15-20MB JSON). Full cache loads during init.
+          try {
+            const cachedHeaders = await db.getEmailHeadersPartial(firstVisible.id, 'INBOX', 200);
+
+            debugLog('[QuickLoad] Phase 2: cachedHeaders=' +
+              (cachedHeaders ? cachedHeaders.emails.length + ' of ' + cachedHeaders.totalCached + ' emails' : 'null'));
+
+            if (cachedHeaders && cachedHeaders.emails.length > 0) {
+              const emailsByIndex = new Map();
+              cachedHeaders.emails.forEach((email, idx) => {
+                const index = email.displayIndex !== undefined ? email.displayIndex : idx;
+                emailsByIndex.set(index, {
+                  ...email,
+                  source: email.source || 'server'
+                });
+              });
+
+              useMailStore.setState({
+                emails: cachedHeaders.emails,
+                emailsByIndex,
+                loadedRanges: [{ start: 0, end: cachedHeaders.emails.length }],
+                totalEmails: cachedHeaders.totalEmails,
+                loading: false,
+                loadingMore: true, // Full cache + server sync will follow
+                hasMoreEmails: cachedHeaders.emails.length < cachedHeaders.totalEmails,
+                currentPage: Math.ceil(cachedHeaders.emails.length / 50) || 1
+              });
+              useMailStore.getState().updateSortedEmails();
+              const { sortedEmails } = useMailStore.getState();
+              debugLog('[QuickLoad] Phase 2 done: emails=' + cachedHeaders.emails.length +
+                ', sortedEmails=' + sortedEmails.length + ', totalEmails=' + cachedHeaders.totalEmails);
+            }
+          } catch (e) {
+            console.warn('[App] Quick load headers failed (non-fatal):', e);
+          }
         }
       } catch (e) {
-        console.error('[App] Quick load accounts failed:', e);
+        console.error('[App] Quick load failed:', e);
       } finally {
         setQuickLoadDone(true);
       }
@@ -247,14 +252,26 @@ function App() {
   // Only start after onboarding is complete, quick load is done, and UI has had time to render
   useEffect(() => {
     if (!initialized && quickLoadDone && onboardingComplete) {
-      // Long delay to ensure UI is fully rendered before keychain prompt
+      // Short delay to ensure UI has rendered before potential keychain prompt
       const timer = setTimeout(() => {
-        console.log('[App] Full initialization starting (after 2s delay)...');
+        console.log('[App] Full initialization starting (after 500ms delay)...');
+
+        // Failsafe: if init hangs (e.g. keychain dialog behind window), unblock after 5s
+        const failsafe = setTimeout(() => {
+          console.warn('[App] Init failsafe triggered — unblocking UI after 5s');
+          setInitialized(true);
+        }, 5000);
+
         init().then(() => {
           console.log('[App] Full init completed');
+          clearTimeout(failsafe);
+          setInitialized(true);
+        }).catch((err) => {
+          console.error('[App] Full init failed:', err);
+          clearTimeout(failsafe);
           setInitialized(true);
         });
-      }, 2000); // 2 second delay - gives UI plenty of time to render
+      }, 500); // 500ms delay - enough for UI to render
 
       return () => clearTimeout(timer);
     }

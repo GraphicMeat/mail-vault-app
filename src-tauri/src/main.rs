@@ -101,6 +101,11 @@ fn cleanup_old_logs(log_dir: &PathBuf) {
 }
 
 #[tauri::command]
+fn log_from_frontend(message: String) {
+    info!("[FRONTEND] {}", message);
+}
+
+#[tauri::command]
 fn get_app_data_dir(app_handle: tauri::AppHandle) -> Result<String, String> {
     info!("get_app_data_dir called");
     app_handle
@@ -489,61 +494,218 @@ fn send_notification(app_handle: tauri::AppHandle, title: String, body: String) 
     Ok(())
 }
 
-// Email cache file operations
+// Email cache — per-email JSON sidecars
+// Directory structure: email_cache/<accountId>_<mailbox>/_meta.json + <uid>.json per email
+// Old monolithic format (single .json file) is auto-migrated on first save.
+
+fn cache_base_name(account_id: &str, mailbox: &str) -> String {
+    format!("{}_{}",
+        account_id.replace(|c: char| !c.is_alphanumeric(), "_"),
+        mailbox.replace(|c: char| !c.is_alphanumeric(), "_")
+    )
+}
+
 #[tauri::command]
 fn save_email_cache(app_handle: tauri::AppHandle, account_id: String, mailbox: String, data: String) -> Result<(), String> {
-    let cache_dir = app_handle
+    let base_dir = app_handle
         .path()
         .app_data_dir()
         .map_err(|e| format!("Could not get app data directory: {}", e))?
         .join("email_cache");
 
-    // Create cache directory if it doesn't exist
-    fs::create_dir_all(&cache_dir)
-        .map_err(|e| format!("Failed to create cache directory: {}", e))?;
+    let base_name = cache_base_name(&account_id, &mailbox);
+    let sidecar_dir = base_dir.join(&base_name);
 
-    // Create a safe filename from account_id and mailbox
-    let safe_name = format!("{}_{}.json",
-        account_id.replace(|c: char| !c.is_alphanumeric(), "_"),
-        mailbox.replace(|c: char| !c.is_alphanumeric(), "_")
-    );
-    let cache_file = cache_dir.join(&safe_name);
+    fs::create_dir_all(&sidecar_dir)
+        .map_err(|e| format!("Failed to create sidecar directory: {}", e))?;
 
-    info!("Saving email cache to {:?} ({} bytes)", cache_file, data.len());
+    let parsed: serde_json::Value = serde_json::from_str(&data)
+        .map_err(|e| format!("Failed to parse cache JSON: {}", e))?;
 
-    fs::write(&cache_file, &data)
-        .map_err(|e| format!("Failed to write cache file: {}", e))?;
+    // Write _meta.json
+    let meta = serde_json::json!({
+        "totalEmails": parsed.get("totalEmails"),
+        "uidValidity": parsed.get("uidValidity"),
+        "uidNext": parsed.get("uidNext"),
+        "lastSynced": parsed.get("lastSynced")
+    });
+    fs::write(sidecar_dir.join("_meta.json"), serde_json::to_string(&meta).unwrap())
+        .map_err(|e| format!("Failed to write _meta.json: {}", e))?;
 
-    info!("Email cache saved successfully");
+    // Write individual email files (skip existing for performance)
+    let mut valid_uids = std::collections::HashSet::new();
+    if let Some(emails) = parsed.get("emails").and_then(|e| e.as_array()) {
+        let mut written = 0usize;
+        for email in emails {
+            if let Some(uid) = email.get("uid").and_then(|u| u.as_u64()) {
+                let uid_str = uid.to_string();
+                valid_uids.insert(uid_str.clone());
+                let file_path = sidecar_dir.join(format!("{}.json", uid_str));
+                if !file_path.exists() {
+                    fs::write(&file_path, serde_json::to_string(email).unwrap())
+                        .map_err(|e| format!("Failed to write email {}: {}", uid, e))?;
+                    written += 1;
+                }
+            }
+        }
+        info!("Email cache saved: {} new files, {} total UIDs in {}", written, valid_uids.len(), base_name);
+    }
+
+    // Clean up stale UID files (UIDs no longer in the list)
+    if let Ok(entries) = fs::read_dir(&sidecar_dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name == "_meta.json" { continue; }
+            if let Some(uid) = name.strip_suffix(".json") {
+                if !valid_uids.contains(uid) {
+                    let _ = fs::remove_file(entry.path());
+                }
+            }
+        }
+    }
+
+    // Delete old monolithic file if it exists
+    let old_monolithic = base_dir.join(format!("{}.json", base_name));
+    if old_monolithic.exists() {
+        let _ = fs::remove_file(&old_monolithic);
+        info!("Removed old monolithic cache file: {:?}", old_monolithic);
+    }
+
     Ok(())
 }
 
 #[tauri::command]
 fn load_email_cache(app_handle: tauri::AppHandle, account_id: String, mailbox: String) -> Result<Option<String>, String> {
-    let cache_dir = app_handle
+    let base_dir = app_handle
         .path()
         .app_data_dir()
         .map_err(|e| format!("Could not get app data directory: {}", e))?
         .join("email_cache");
 
-    let safe_name = format!("{}_{}.json",
-        account_id.replace(|c: char| !c.is_alphanumeric(), "_"),
-        mailbox.replace(|c: char| !c.is_alphanumeric(), "_")
-    );
-    let cache_file = cache_dir.join(&safe_name);
+    let base_name = cache_base_name(&account_id, &mailbox);
+    let sidecar_dir = base_dir.join(&base_name);
+    let meta_file = sidecar_dir.join("_meta.json");
 
-    if !cache_file.exists() {
-        info!("No cache file found at {:?}", cache_file);
-        return Ok(None);
+    // Try sidecar format first
+    if meta_file.exists() {
+        return load_from_sidecars(&sidecar_dir, &meta_file, None);
     }
 
-    info!("Loading email cache from {:?}", cache_file);
+    // Fall back to old monolithic format
+    let old_file = base_dir.join(format!("{}.json", base_name));
+    if old_file.exists() {
+        info!("Loading from old monolithic cache: {:?}", old_file);
+        let data = fs::read_to_string(&old_file)
+            .map_err(|e| format!("Failed to read cache file: {}", e))?;
+        return Ok(Some(data));
+    }
 
-    let data = fs::read_to_string(&cache_file)
-        .map_err(|e| format!("Failed to read cache file: {}", e))?;
+    Ok(None)
+}
 
-    info!("Email cache loaded successfully ({} bytes)", data.len());
-    Ok(Some(data))
+/// Load only the N most recent emails from sidecar cache (fast initial display)
+#[tauri::command]
+fn load_email_cache_partial(app_handle: tauri::AppHandle, account_id: String, mailbox: String, limit: usize) -> Result<Option<String>, String> {
+    let base_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not get app data directory: {}", e))?
+        .join("email_cache");
+
+    let base_name = cache_base_name(&account_id, &mailbox);
+    let sidecar_dir = base_dir.join(&base_name);
+    let meta_file = sidecar_dir.join("_meta.json");
+
+    // Try sidecar format first
+    if meta_file.exists() {
+        return load_from_sidecars(&sidecar_dir, &meta_file, Some(limit));
+    }
+
+    // Fall back to old monolithic format (parse and truncate in memory)
+    let old_file = base_dir.join(format!("{}.json", base_name));
+    if old_file.exists() {
+        info!("Partial load falling back to monolithic: {:?}", old_file);
+        let data = fs::read_to_string(&old_file)
+            .map_err(|e| format!("Failed to read cache file: {}", e))?;
+        let mut parsed: serde_json::Value = serde_json::from_str(&data)
+            .map_err(|e| format!("Failed to parse cache JSON: {}", e))?;
+
+        let total_cached = parsed.get("emails")
+            .and_then(|e| e.as_array())
+            .map(|a| a.len())
+            .unwrap_or(0);
+
+        if let Some(emails) = parsed.get_mut("emails").and_then(|e| e.as_array_mut()) {
+            if emails.len() > limit {
+                emails.truncate(limit);
+            }
+        }
+        parsed.as_object_mut().map(|o| o.insert("totalCached".to_string(), serde_json::json!(total_cached)));
+
+        let result = serde_json::to_string(&parsed)
+            .map_err(|e| format!("Failed to serialize: {}", e))?;
+        return Ok(Some(result));
+    }
+
+    Ok(None)
+}
+
+/// Read emails from sidecar directory. If limit is Some(n), only read the N most recent (highest UIDs).
+fn load_from_sidecars(sidecar_dir: &Path, meta_file: &Path, limit: Option<usize>) -> Result<Option<String>, String> {
+    // Read metadata
+    let meta_data = fs::read_to_string(meta_file)
+        .map_err(|e| format!("Failed to read _meta.json: {}", e))?;
+    let meta: serde_json::Value = serde_json::from_str(&meta_data)
+        .map_err(|e| format!("Failed to parse _meta.json: {}", e))?;
+
+    // List all UID files, parse UIDs as numbers for sorting
+    let mut uids: Vec<u64> = Vec::new();
+    if let Ok(entries) = fs::read_dir(sidecar_dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name == "_meta.json" { continue; }
+            if let Some(uid_str) = name.strip_suffix(".json") {
+                if let Ok(uid) = uid_str.parse::<u64>() {
+                    uids.push(uid);
+                }
+            }
+        }
+    }
+
+    let total_cached = uids.len();
+
+    // Sort descending (newest first) and apply limit
+    uids.sort_unstable_by(|a, b| b.cmp(a));
+    if let Some(limit) = limit {
+        uids.truncate(limit);
+    }
+
+    // Read selected email files
+    let mut emails: Vec<serde_json::Value> = Vec::with_capacity(uids.len());
+    for uid in &uids {
+        let file_path = sidecar_dir.join(format!("{}.json", uid));
+        if let Ok(data) = fs::read_to_string(&file_path) {
+            if let Ok(email) = serde_json::from_str(&data) {
+                emails.push(email);
+            }
+        }
+    }
+
+    info!("Sidecar cache loaded: {} of {} emails (limit: {:?})", emails.len(), total_cached, limit);
+
+    // Build response in the same format as the old monolithic cache
+    let result = serde_json::json!({
+        "emails": emails,
+        "totalEmails": meta.get("totalEmails"),
+        "totalCached": total_cached,
+        "uidValidity": meta.get("uidValidity"),
+        "uidNext": meta.get("uidNext"),
+        "lastSynced": meta.get("lastSynced")
+    });
+
+    serde_json::to_string(&result)
+        .map(|s| Some(s))
+        .map_err(|e| format!("Failed to serialize sidecar cache: {}", e))
 }
 
 #[tauri::command]
@@ -559,14 +721,19 @@ fn clear_email_cache(app_handle: tauri::AppHandle, account_id: Option<String>) -
     }
 
     if let Some(account_id) = account_id {
-        // Clear cache for specific account
+        // Clear cache for specific account (both sidecar dirs and old monolithic files)
         let prefix = account_id.replace(|c: char| !c.is_alphanumeric(), "_");
         if let Ok(entries) = fs::read_dir(&cache_dir) {
             for entry in entries.flatten() {
                 let name = entry.file_name().to_string_lossy().to_string();
                 if name.starts_with(&prefix) {
-                    let _ = fs::remove_file(entry.path());
-                    info!("Removed cache file: {:?}", entry.path());
+                    let path = entry.path();
+                    if path.is_dir() {
+                        let _ = fs::remove_dir_all(&path);
+                    } else {
+                        let _ = fs::remove_file(&path);
+                    }
+                    info!("Removed cache entry: {:?}", path);
                 }
             }
         }
@@ -1508,6 +1675,38 @@ fn maildir_read_light(
 }
 
 #[tauri::command]
+fn maildir_read_light_batch(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    mailbox: String,
+    uids: Vec<u32>,
+) -> Result<Vec<Option<LightEmail>>, String> {
+    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
+    let mut results = Vec::with_capacity(uids.len());
+
+    for uid in uids {
+        match find_file_by_uid(&cur_dir, uid) {
+            Some(file_path) => {
+                let filename = file_path.file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                let flags = parse_flags_from_filename(&filename);
+                match fs::read(&file_path) {
+                    Ok(raw) => match parse_eml_bytes_light(&raw, uid, flags) {
+                        Ok(email) => results.push(Some(email)),
+                        Err(_) => results.push(None),
+                    },
+                    Err(_) => results.push(None),
+                }
+            }
+            None => results.push(None),
+        }
+    }
+
+    Ok(results)
+}
+
+#[tauri::command]
 fn maildir_read_attachment(
     app_handle: tauri::AppHandle,
     account_id: String,
@@ -2247,6 +2446,7 @@ fn main() {
         .manage(imap::ImapPool::new())
         .manage(oauth2::OAuth2Manager::new())
         .invoke_handler(tauri::generate_handler![
+            log_from_frontend,
             get_app_data_dir,
             read_settings_json,
             write_settings_json,
@@ -2265,6 +2465,7 @@ fn main() {
             check_running_from_dmg,
             save_email_cache,
             load_email_cache,
+            load_email_cache_partial,
             clear_email_cache,
             save_attachment,
             save_attachment_to,
@@ -2275,6 +2476,7 @@ fn main() {
             maildir_store,
             maildir_read,
             maildir_read_light,
+            maildir_read_light_batch,
             maildir_read_attachment,
             maildir_read_raw_source,
             maildir_exists,
@@ -2293,6 +2495,7 @@ fn main() {
             commands::imap_get_emails,
             commands::imap_get_emails_range,
             commands::imap_check_mailbox_status,
+            commands::imap_fetch_changed_flags,
             commands::imap_search_all_uids,
             commands::imap_fetch_headers_by_uids,
             commands::imap_get_email,

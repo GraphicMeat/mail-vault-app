@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Virtual scroll row positioning */
+.virtual-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+}
+
 /* Theme CSS Variables */
 :root,
 [data-theme="dark"] {

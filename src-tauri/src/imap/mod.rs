@@ -1,13 +1,13 @@
 pub mod pool;
 
-use async_imap::types::{Fetch, Flag, Mailbox, Name, NameAttribute};
+use async_imap::types::{Fetch, Flag, Mailbox, Name};
 use async_native_tls::TlsConnector;
 use async_std::net::TcpStream;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
-pub use pool::{ImapPool, ImapSession};
+pub use pool::{ImapPool, ImapSession, ImapTransport};
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
@@ -179,7 +179,7 @@ pub struct LightFullEmail {
 
 // ── Connection creation ─────────────────────────────────────────────────────
 
-pub async fn create_imap_session(config: &ImapConfig) -> Result<ImapSession, String> {
+pub async fn create_imap_session(config: &ImapConfig, pool: &ImapPool) -> Result<ImapSession, String> {
     let port = config.effective_port();
     let addr = format!("{}:{}", config.host, port);
 
@@ -217,7 +217,9 @@ pub async fn create_imap_session(config: &ImapConfig) -> Result<ImapSession, Str
 
     info!("[IMAP] TLS established, authenticating...");
 
-    let mut client = async_imap::Client::new(tls_stream);
+    // Box the TLS stream for type-erased session (allows COMPRESS=DEFLATE upgrade later)
+    let boxed_stream: Box<dyn ImapTransport> = Box::new(tls_stream);
+    let mut client = async_imap::Client::new(boxed_stream);
 
     // Consume the server greeting (e.g. "* OK Gimap ready") before auth.
     // Without this, authenticate() reads the greeting instead of the "+"
@@ -226,7 +228,7 @@ pub async fn create_imap_session(config: &ImapConfig) -> Result<ImapSession, Str
     let _greeting = client.read_response().await
         .map_err(|e| format!("Failed to read server greeting: {}", e))?;
 
-    let session = if config.is_oauth2() {
+    let mut session = if config.is_oauth2() {
         let token = config
             .access_token
             .as_deref()
@@ -247,6 +249,61 @@ pub async fn create_imap_session(config: &ImapConfig) -> Result<ImapSession, Str
             .await
             .map_err(|(e, _)| format!("Login failed for {}: {}", config.email, e))?
     };
+
+    // ── Cache capabilities ──────────────────────────────────────────────
+    let caps = session.capabilities().await
+        .map_err(|e| format!("CAPABILITY failed: {}", e))?;
+    let cap_list: Vec<String> = caps.iter().map(|c| match c {
+        async_imap::types::Capability::Imap4rev1 => "IMAP4rev1".to_string(),
+        async_imap::types::Capability::Auth(s) => format!("AUTH={}", s),
+        async_imap::types::Capability::Atom(s) => s.clone(),
+    }).collect();
+    info!("[IMAP] Capabilities for {}: {:?}", config.email, &cap_list[..cap_list.len().min(15)]);
+    pool.set_capabilities(config, cap_list).await;
+
+    // ── Negotiate COMPRESS=DEFLATE ──────────────────────────────────────
+    let has_compress = caps.has_str("COMPRESS=DEFLATE");
+    if has_compress {
+        // compress() consumes the session, so on failure we create a new one
+        let result = session.compress(|deflate_stream| {
+            Box::new(deflate_stream) as Box<dyn ImapTransport>
+        }).await;
+        match result {
+            Ok(compressed_session) => {
+                info!("[IMAP] COMPRESS=DEFLATE enabled for {}", config.email);
+                info!("[IMAP] Session established for {}", config.email);
+                return Ok(compressed_session);
+            }
+            Err(e) => {
+                warn!("[IMAP] COMPRESS=DEFLATE failed for {}: {}, reconnecting without compression", config.email, e);
+                // Session was consumed by compress() — create a new uncompressed session
+                let boxed: Box<dyn ImapTransport> = Box::new(
+                    TlsConnector::new()
+                        .connect(&config.host, async_std::io::timeout(
+                            std::time::Duration::from_secs(15),
+                            TcpStream::connect(&addrs[..]),
+                        ).await.map_err(|e| format!("Reconnect TCP failed: {}", e))?)
+                        .await
+                        .map_err(|e| format!("Reconnect TLS failed: {}", e))?
+                );
+                let mut client = async_imap::Client::new(boxed);
+                let _greeting = client.read_response().await
+                    .map_err(|e| format!("Reconnect greeting failed: {}", e))?;
+                let session = if config.is_oauth2() {
+                    let token = config.access_token.as_deref().unwrap();
+                    let xoauth2 = build_xoauth2(&config.email, token);
+                    client.authenticate("XOAUTH2", XOAuth2Authenticator::new(xoauth2.into_bytes()))
+                        .await.map_err(|(e, _)| format!("Reconnect XOAUTH2 failed: {}", e))?
+                } else {
+                    let password = config.password.as_deref().unwrap();
+                    client.login(&config.email, password)
+                        .await.map_err(|(e, _)| format!("Reconnect login failed: {}", e))?
+                };
+                info!("[IMAP] Session established for {} (no compression)", config.email);
+                return Ok(session);
+            }
+        }
+    }
 
     info!("[IMAP] Session established for {}", config.email);
     Ok(session)
@@ -281,6 +338,51 @@ impl async_imap::Authenticator for XOAuth2Authenticator {
             Vec::new()
         }
     }
+}
+
+// ── Fetch spec constants ────────────────────────────────────────────────────
+// Lean spec: no BODYSTRUCTURE/RFC822.SIZE — used for header loading (pages, ranges, delta-sync)
+const HEADER_FETCH_SPEC: &str = "(UID FLAGS ENVELOPE INTERNALDATE BODY.PEEK[HEADER.FIELDS (References)])";
+// Full spec: includes BODYSTRUCTURE + RFC822.SIZE — used for search results (smaller sets, full info)
+const HEADER_FETCH_SPEC_FULL: &str = "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (References)])";
+
+// ── UID helpers ─────────────────────────────────────────────────────────────
+
+/// Compress a sorted list of UIDs into IMAP range notation.
+/// e.g. [1,2,3,5,6,10] → "1:3,5:6,10"
+pub fn compress_uid_ranges(uids: &[u32]) -> String {
+    if uids.is_empty() {
+        return String::new();
+    }
+    let mut sorted = uids.to_vec();
+    sorted.sort_unstable();
+    sorted.dedup();
+
+    let mut ranges = Vec::new();
+    let mut start = sorted[0];
+    let mut end = sorted[0];
+
+    for &uid in &sorted[1..] {
+        if uid == end + 1 {
+            end = uid;
+        } else {
+            if start == end {
+                ranges.push(start.to_string());
+            } else {
+                ranges.push(format!("{}:{}", start, end));
+            }
+            start = uid;
+            end = uid;
+        }
+    }
+    // Push the last range
+    if start == end {
+        ranges.push(start.to_string());
+    } else {
+        ranges.push(format!("{}:{}", start, end));
+    }
+
+    ranges.join(",")
 }
 
 // ── IMAP Operations ─────────────────────────────────────────────────────────
@@ -413,6 +515,26 @@ pub async fn select_mailbox(session: &mut ImapSession, mailbox: &str) -> Result<
         .map_err(|e| format!("SELECT {} failed: {}", mailbox, e))
 }
 
+/// Select a mailbox, skipping the SELECT command if already on the right mailbox.
+/// Returns cached Mailbox status when skipped. Use `select_mailbox()` for fresh status.
+pub async fn select_mailbox_cached(
+    session: &mut ImapSession,
+    mailbox: &str,
+    pool: &ImapPool,
+    config: &ImapConfig,
+) -> Result<Mailbox, String> {
+    if let Some(ref last) = pool.get_last_selected(config).await {
+        if last == mailbox {
+            info!("[IMAP] SELECT skipped (already on {})", mailbox);
+            // Return a minimal Mailbox — callers that need real status use select_mailbox()
+            return Ok(Mailbox::default());
+        }
+    }
+    let mbox = select_mailbox(session, mailbox).await?;
+    pool.set_last_selected(config, mailbox).await;
+    Ok(mbox)
+}
+
 /// Fetch email headers by page (newest first)
 pub async fn fetch_emails_page(
     session: &mut ImapSession,
@@ -437,7 +559,7 @@ pub async fn fetch_emails_page(
 
     let range = format!("{}:{}", start, end);
     let fetch_stream = session
-        .fetch(&range, "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (References)])")
+        .fetch(&range, HEADER_FETCH_SPEC)
         .await
         .map_err(|e| format!("FETCH failed: {}", e))?;
 
@@ -492,7 +614,7 @@ pub async fn fetch_emails_range(
 
     let range = format!("{}:{}", imap_start, imap_end);
     let fetch_stream = session
-        .fetch(&range, "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (References)])")
+        .fetch(&range, HEADER_FETCH_SPEC)
         .await
         .map_err(|e| format!("FETCH range failed: {}", e))?;
 
@@ -523,23 +645,76 @@ pub async fn fetch_emails_range(
     Ok((emails, total, skipped_uids))
 }
 
-/// Check mailbox status — returns exists, uid_validity, uid_next
+/// Check mailbox status — returns (exists, uid_validity, uid_next, highest_mod_seq).
+/// Uses CONDSTORE-aware SELECT if the server supports it.
 /// Used for delta-sync: detect changes without fetching any messages.
 pub async fn check_mailbox_status(
     session: &mut ImapSession,
     mailbox: &str,
-) -> Result<(u32, Option<u32>, Option<u32>), String> {
-    let mbox = select_mailbox(session, mailbox).await?;
-    Ok((mbox.exists, mbox.uid_validity, mbox.uid_next))
+    has_condstore: bool,
+) -> Result<(u32, Option<u32>, Option<u32>, Option<u64>), String> {
+    if has_condstore {
+        // Use CONDSTORE SELECT to get HIGHESTMODSEQ
+        let mbox = session.select_condstore(mailbox).await
+            .map_err(|e| format!("SELECT CONDSTORE {} failed: {}", mailbox, e))?;
+        Ok((mbox.exists, mbox.uid_validity, mbox.uid_next, mbox.highest_modseq))
+    } else {
+        let mbox = select_mailbox(session, mailbox).await?;
+        Ok((mbox.exists, mbox.uid_validity, mbox.uid_next, None))
+    }
+}
+
+/// Fetch UIDs with changed flags since a given MODSEQ (CONDSTORE).
+/// Returns Vec of (uid, flags) for emails whose flags changed.
+pub async fn fetch_changed_flags(
+    session: &mut ImapSession,
+    mailbox: &str,
+    since_modseq: u64,
+) -> Result<Vec<(u32, Vec<String>)>, String> {
+    let _mbox = select_mailbox(session, mailbox).await?;
+
+    let fetch_stream = session
+        .uid_fetch("1:*", &format!("(UID FLAGS) (CHANGEDSINCE {})", since_modseq))
+        .await
+        .map_err(|e| format!("FETCH CHANGEDSINCE failed: {}", e))?;
+
+    let fetches: Vec<Fetch> = fetch_stream
+        .collect::<Vec<_>>()
+        .await
+        .into_iter()
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let mut results = Vec::new();
+    for fetch in &fetches {
+        if let Some(uid) = fetch.uid {
+            let flags = extract_flags(fetch);
+            results.push((uid, flags));
+        }
+    }
+
+    info!("[IMAP] CHANGEDSINCE {}: {} UIDs with changed flags", since_modseq, results.len());
+    Ok(results)
 }
 
 /// UID SEARCH ALL — returns every UID in the mailbox (ascending order).
 /// Used for delta-sync: diff against cached UID set to find additions/deletions.
+/// Uses ESEARCH when supported for compact UID range responses.
 pub async fn search_all_uids(
     session: &mut ImapSession,
     mailbox: &str,
+    has_esearch: bool,
 ) -> Result<Vec<u32>, String> {
     let _mbox = select_mailbox(session, mailbox).await?;
+
+    if has_esearch {
+        match search_all_uids_esearch(session).await {
+            Ok(uids) => return Ok(uids),
+            Err(e) => {
+                warn!("[IMAP] ESEARCH failed, falling back to UID SEARCH ALL: {}", e);
+            }
+        }
+    }
 
     let uids = session
         .uid_search("ALL")
@@ -548,6 +723,91 @@ pub async fn search_all_uids(
 
     let mut result: Vec<u32> = uids.into_iter().collect();
     result.sort();
+    Ok(result)
+}
+
+/// ESEARCH-based UID enumeration: sends `UID SEARCH RETURN (ALL) ALL` and parses
+/// the compact `* ESEARCH ... UID ALL 1:500,502:1000` response.
+async fn search_all_uids_esearch(session: &mut ImapSession) -> Result<Vec<u32>, String> {
+    let tag = session.run_command("UID SEARCH RETURN (ALL) ALL").await
+        .map_err(|e| format!("ESEARCH command failed: {}", e))?;
+
+    let mut uid_ranges = String::new();
+    let mut found = false;
+
+    // Read responses until we get the tagged OK
+    loop {
+        let resp_data = session.read_response().await
+            .map_err(|e| format!("ESEARCH read response failed: {}", e))?;
+
+        let resp_data = match resp_data {
+            Some(d) => d,
+            None => break,
+        };
+
+        // Check if this is the tagged completion
+        if resp_data.request_id() == Some(&tag) {
+            // Verify OK status
+            match resp_data.parsed() {
+                imap_proto::Response::Done { status, .. } => {
+                    if *status != imap_proto::Status::Ok {
+                        return Err("ESEARCH command returned non-OK status".to_string());
+                    }
+                }
+                _ => {}
+            }
+            break;
+        }
+
+        // Look for ESEARCH response in raw bytes
+        // Format: * ESEARCH (TAG "tagN") UID ALL <ranges>
+        let raw_bytes = resp_data.borrow_owner();
+        let raw_str = String::from_utf8_lossy(raw_bytes);
+        let upper = raw_str.to_uppercase();
+
+        if upper.contains("ESEARCH") {
+            // Extract the UID ALL part
+            if let Some(all_pos) = upper.find("ALL ") {
+                let after_all = &raw_str[all_pos + 4..];
+                // Trim trailing whitespace and CRLF
+                uid_ranges = after_all.trim().to_string();
+                found = true;
+            }
+        }
+    }
+
+    if !found || uid_ranges.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Expand UID ranges: "1:3,5:6,10" → [1,2,3,5,6,10]
+    expand_uid_ranges(&uid_ranges)
+}
+
+/// Expand IMAP UID range notation into a Vec of UIDs.
+/// e.g. "1:3,5:6,10" → [1,2,3,5,6,10]
+fn expand_uid_ranges(ranges: &str) -> Result<Vec<u32>, String> {
+    let mut result = Vec::new();
+    for part in ranges.split(',') {
+        let part = part.trim();
+        if part.is_empty() { continue; }
+
+        if let Some((start_str, end_str)) = part.split_once(':') {
+            let start: u32 = start_str.trim().parse()
+                .map_err(|_| format!("Invalid UID range start: {}", start_str))?;
+            let end: u32 = end_str.trim().parse()
+                .map_err(|_| format!("Invalid UID range end: {}", end_str))?;
+            for uid in start..=end {
+                result.push(uid);
+            }
+        } else {
+            let uid: u32 = part.parse()
+                .map_err(|_| format!("Invalid UID: {}", part))?;
+            result.push(uid);
+        }
+    }
+    result.sort();
+    info!("[IMAP] ESEARCH expanded {} UIDs (ranges: {})", result.len(), &ranges[..ranges.len().min(60)]);
     Ok(result)
 }
 
@@ -564,30 +824,34 @@ pub async fn fetch_headers_by_uids(
         return Ok((Vec::new(), total));
     }
 
-    let uid_set = uids
-        .iter()
-        .map(|u| u.to_string())
-        .collect::<Vec<_>>()
-        .join(",");
+    // Sort descending so newest emails arrive first
+    let mut sorted_uids = uids.to_vec();
+    sorted_uids.sort_unstable_by(|a, b| b.cmp(a));
 
-    let fetch_stream = session
-        .uid_fetch(&uid_set, "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (References)])")
-        .await
-        .map_err(|e| format!("UID FETCH {} failed: {}", uid_set, e))?;
-
-    let fetches: Vec<Fetch> = fetch_stream
-        .collect::<Vec<_>>()
-        .await
-        .into_iter()
-        .filter_map(|r| r.ok())
-        .collect();
-
+    // Chunk into batches of 200 to avoid IMAP command-length limits
     let mut emails = Vec::new();
-    for fetch in &fetches {
-        match parse_header_from_fetch(fetch) {
-            Ok(header) => emails.push(header),
-            Err(e) => {
-                warn!("Failed to parse UID-fetched message uid={:?}: {}", fetch.uid, e);
+    for chunk in sorted_uids.chunks(200) {
+        let uid_set = compress_uid_ranges(chunk);
+        info!("[IMAP] Fetching header chunk: {} UIDs (range: {})", chunk.len(), &uid_set[..uid_set.len().min(80)]);
+
+        let fetch_stream = session
+            .uid_fetch(&uid_set, HEADER_FETCH_SPEC)
+            .await
+            .map_err(|e| format!("UID FETCH {} failed: {}", uid_set, e))?;
+
+        let fetches: Vec<Fetch> = fetch_stream
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .filter_map(|r| r.ok())
+            .collect();
+
+        for fetch in &fetches {
+            match parse_header_from_fetch(fetch) {
+                Ok(header) => emails.push(header),
+                Err(e) => {
+                    warn!("Failed to parse UID-fetched message uid={:?}: {}", fetch.uid, e);
+                }
             }
         }
     }
@@ -838,14 +1102,10 @@ pub async fn search_emails(
         uids
     };
 
-    let uid_range = limited
-        .iter()
-        .map(|u| u.to_string())
-        .collect::<Vec<_>>()
-        .join(",");
+    let uid_range = compress_uid_ranges(&limited);
 
     let fetch_stream = session
-        .uid_fetch(&uid_range, "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (References)])")
+        .uid_fetch(&uid_range, HEADER_FETCH_SPEC_FULL)
         .await
         .map_err(|e| format!("FETCH search results failed: {}", e))?;
 
@@ -873,9 +1133,59 @@ pub async fn search_emails(
     Ok((emails, total_matches))
 }
 
+/// Create a plain IMAP session without pool (for test_connection only).
+async fn create_imap_session_plain(config: &ImapConfig) -> Result<async_imap::Session<async_native_tls::TlsStream<async_std::net::TcpStream>>, String> {
+    let port = config.effective_port();
+    let addr = format!("{}:{}", config.host, port);
+
+    use async_std::net::ToSocketAddrs;
+    let addrs: Vec<std::net::SocketAddr> = addr
+        .to_socket_addrs()
+        .await
+        .map_err(|e| format!("DNS resolve failed for {}: {}", addr, e))?
+        .filter(|a| a.is_ipv4())
+        .collect();
+
+    if addrs.is_empty() {
+        return Err(format!("No IPv4 address found for {}", config.host));
+    }
+
+    let tcp = async_std::io::timeout(
+        std::time::Duration::from_secs(15),
+        TcpStream::connect(&addrs[..]),
+    )
+    .await
+    .map_err(|e| format!("TCP connect to {} failed: {}", addr, e))?;
+
+    let tls = TlsConnector::new();
+    let tls_stream = tls
+        .connect(&config.host, tcp)
+        .await
+        .map_err(|e| format!("TLS handshake with {} failed: {}", config.host, e))?;
+
+    let mut client = async_imap::Client::new(tls_stream);
+    let _greeting = client.read_response().await
+        .map_err(|e| format!("Failed to read server greeting: {}", e))?;
+
+    let session = if config.is_oauth2() {
+        let token = config.access_token.as_deref()
+            .ok_or_else(|| "OAuth2 access token missing".to_string())?;
+        let xoauth2 = build_xoauth2(&config.email, token);
+        client.authenticate("XOAUTH2", XOAuth2Authenticator::new(xoauth2.into_bytes()))
+            .await.map_err(|(e, _)| format!("XOAUTH2 auth failed: {}", e))?
+    } else {
+        let password = config.password.as_deref()
+            .ok_or_else(|| "Password missing".to_string())?;
+        client.login(&config.email, password)
+            .await.map_err(|(e, _)| format!("Login failed: {}", e))?
+    };
+
+    Ok(session)
+}
+
 /// Test IMAP connection
 pub async fn test_connection(config: &ImapConfig) -> Result<(), String> {
-    let mut session = create_imap_session(config).await
+    let mut session = create_imap_session_plain(config).await
         .map_err(|e| format!("Connection test failed: {}", e))?;
 
     session
@@ -1356,4 +1666,119 @@ pub async fn fetch_email_by_uid_light(
         attachments,
         raw_source_bytes: body.to_vec(),
     }))
+}
+
+// ── Unit tests ──────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── compress_uid_ranges ─────────────────────────────────────────────
+
+    #[test]
+    fn compress_empty() {
+        assert_eq!(compress_uid_ranges(&[]), "");
+    }
+
+    #[test]
+    fn compress_single() {
+        assert_eq!(compress_uid_ranges(&[42]), "42");
+    }
+
+    #[test]
+    fn compress_consecutive() {
+        assert_eq!(compress_uid_ranges(&[1, 2, 3, 4, 5]), "1:5");
+    }
+
+    #[test]
+    fn compress_mixed() {
+        assert_eq!(compress_uid_ranges(&[1, 2, 3, 5, 6, 10]), "1:3,5:6,10");
+    }
+
+    #[test]
+    fn compress_all_gaps() {
+        assert_eq!(compress_uid_ranges(&[1, 3, 5, 7]), "1,3,5,7");
+    }
+
+    #[test]
+    fn compress_unsorted_input() {
+        assert_eq!(compress_uid_ranges(&[10, 1, 5, 6, 2, 3]), "1:3,5:6,10");
+    }
+
+    #[test]
+    fn compress_duplicates() {
+        assert_eq!(compress_uid_ranges(&[1, 1, 2, 2, 3]), "1:3");
+    }
+
+    #[test]
+    fn compress_large_range() {
+        let uids: Vec<u32> = (1..=1000).collect();
+        assert_eq!(compress_uid_ranges(&uids), "1:1000");
+    }
+
+    #[test]
+    fn compress_two_ranges() {
+        assert_eq!(compress_uid_ranges(&[100, 101, 200, 201, 202]), "100:101,200:202");
+    }
+
+    // ── expand_uid_ranges ───────────────────────────────────────────────
+
+    #[test]
+    fn expand_single_range() {
+        assert_eq!(expand_uid_ranges("1:5").unwrap(), vec![1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn expand_single_uid() {
+        assert_eq!(expand_uid_ranges("42").unwrap(), vec![42]);
+    }
+
+    #[test]
+    fn expand_mixed() {
+        assert_eq!(expand_uid_ranges("1:3,5:6,10").unwrap(), vec![1, 2, 3, 5, 6, 10]);
+    }
+
+    #[test]
+    fn expand_empty_parts() {
+        // Trailing comma or empty parts should be skipped
+        assert_eq!(expand_uid_ranges("1:3,,5").unwrap(), vec![1, 2, 3, 5]);
+    }
+
+    #[test]
+    fn expand_invalid_uid() {
+        assert!(expand_uid_ranges("abc").is_err());
+    }
+
+    #[test]
+    fn expand_invalid_range() {
+        assert!(expand_uid_ranges("1:abc").is_err());
+    }
+
+    // ── roundtrip: compress → expand ────────────────────────────────────
+
+    #[test]
+    fn roundtrip_compress_expand() {
+        let original = vec![1, 2, 3, 5, 6, 10, 100, 101, 102, 200];
+        let compressed = compress_uid_ranges(&original);
+        let expanded = expand_uid_ranges(&compressed).unwrap();
+        assert_eq!(expanded, original);
+    }
+
+    #[test]
+    fn roundtrip_single_element() {
+        let original = vec![999];
+        let compressed = compress_uid_ranges(&original);
+        let expanded = expand_uid_ranges(&compressed).unwrap();
+        assert_eq!(expanded, original);
+    }
+
+    #[test]
+    fn roundtrip_large_set() {
+        let original: Vec<u32> = (500..=700).chain(800..=900).chain(std::iter::once(1000)).collect();
+        let compressed = compress_uid_ranges(&original);
+        assert_eq!(compressed, "500:700,800:900,1000");
+        let expanded = expand_uid_ranges(&compressed).unwrap();
+        assert_eq!(expanded, original);
+    }
 }

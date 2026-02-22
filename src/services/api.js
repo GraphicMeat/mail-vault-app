@@ -134,12 +134,25 @@ export async function fetchEmailsRange(account, mailbox = 'INBOX', startIndex = 
 
 export async function checkMailboxStatus(account, mailbox = 'INBOX') {
   if (IS_TAURI) {
+    // Returns { exists, uidValidity, uidNext, highestModseq }
     return tauriInvoke('imap_check_mailbox_status', { account, mailbox });
   }
   return httpRequest('/mailbox-status', {
     method: 'POST',
     body: JSON.stringify({ account, mailbox }),
   });
+}
+
+export async function fetchChangedFlags(account, mailbox = 'INBOX', sinceModseq) {
+  if (IS_TAURI) {
+    const data = await tauriInvoke('imap_fetch_changed_flags', { account, mailbox, sinceModseq });
+    return data.changes; // [{ uid, flags }]
+  }
+  const data = await httpRequest('/fetch-changed-flags', {
+    method: 'POST',
+    body: JSON.stringify({ account, mailbox, sinceModseq }),
+  });
+  return data.changes;
 }
 
 export async function searchAllUids(account, mailbox = 'INBOX') {

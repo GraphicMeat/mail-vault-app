@@ -59,6 +59,11 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
     connectionStatus,
     connectionError,
     connectionErrorType,
+    emails,
+    totalEmails,
+    loading,
+    loadingMore,
+    hasMoreEmails,
     setActiveAccount,
     setActiveMailbox,
     setViewMode,
@@ -291,6 +296,20 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
           >
             <Settings size={16} className="text-mail-text-muted" />
           </button>
+          {totalEmails > 0 && (
+            <div
+              className="p-2"
+              title={loading || loadingMore || hasMoreEmails
+                ? `${emails.length.toLocaleString()} / ${totalEmails.toLocaleString()} emails`
+                : `${totalEmails.toLocaleString()} emails`}
+            >
+              {(loading || loadingMore || hasMoreEmails) ? (
+                <RefreshCw size={14} className="animate-spin text-mail-accent" />
+              ) : (
+                <HardDrive size={14} className="text-mail-text-muted" />
+              )}
+            </div>
+          )}
         </div>
 
         {errorModal}
@@ -594,6 +613,19 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
           <Settings size={16} />
           Settings
         </button>
+        {totalEmails > 0 && (
+          <div className="flex items-center gap-1.5 px-2 mt-1 text-xs text-mail-text-muted">
+            <HardDrive size={12} />
+            {loading || loadingMore || hasMoreEmails ? (
+              <span>{emails.length.toLocaleString()} / {totalEmails.toLocaleString()} emails</span>
+            ) : (
+              <span>{totalEmails.toLocaleString()} emails</span>
+            )}
+            {(loading || loadingMore || hasMoreEmails) && (
+              <RefreshCw size={10} className="animate-spin text-mail-accent" />
+            )}
+          </div>
+        )}
         <div className="text-xs text-mail-text-muted text-center mt-2">
           MailVault v{version}
         </div>

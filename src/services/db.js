@@ -224,6 +224,19 @@ export async function ensureAccountInFile(account) {
   console.log('[db.js] Backfilled account to accounts.json:', account.email);
 }
 
+// Batch version: reads accounts.json once, merges all missing accounts, writes once.
+export async function ensureAccountsInFile(accounts) {
+  const existing = await readAccountsFile();
+  const existingIds = new Set(existing.map(a => a.id));
+  const newAccounts = accounts
+    .filter(a => !existingIds.has(a.id))
+    .map(({ password, oauth2AccessToken, oauth2RefreshToken, ...acctData }) => acctData);
+  if (newAccounts.length > 0) {
+    await writeAccountsFile([...existing, ...newAccounts]);
+    console.log('[db.js] Backfilled', newAccounts.length, 'accounts to accounts.json');
+  }
+}
+
 export async function getAccounts() {
   await initDB();
 
@@ -421,13 +434,22 @@ export async function getLocalEmails(accountId, mailbox) {
 
   try {
     const summaries = await invoke('maildir_list', { accountId, mailbox, requireFlag: null });
+    if (summaries.length === 0) return [];
+
+    // Build archive flag lookup
+    const archivedUids = new Set(summaries.filter(s => s.isArchived).map(s => s.uid));
+    const uids = summaries.map(s => s.uid);
+
+    // Batch read all emails in a single IPC call
+    const results = await invoke('maildir_read_light_batch', { accountId, mailbox, uids });
     const emails = [];
-    for (const summary of summaries) {
-      try {
-        const email = await invoke('maildir_read_light', { accountId, mailbox, uid: summary.uid });
-        if (email) emails.push({ ...email, localId: `${accountId}-${mailbox}-${summary.uid}`, isArchived: summary.isArchived });
-      } catch (e) {
-        console.warn(`[db.js] Failed to read email UID ${summary.uid}:`, e);
+    for (let i = 0; i < results.length; i++) {
+      if (results[i]) {
+        emails.push({
+          ...results[i],
+          localId: `${accountId}-${mailbox}-${uids[i]}`,
+          isArchived: archivedUids.has(uids[i])
+        });
       }
     }
     return emails;
@@ -575,7 +597,7 @@ export async function getCachedMailboxes(accountId) {
 
 // ── Email header cache ───────────────────────────────────────────────────
 
-export async function saveEmailHeaders(accountId, mailbox, emails, totalEmails, { uidValidity, uidNext } = {}) {
+export async function saveEmailHeaders(accountId, mailbox, emails, totalEmails, { uidValidity, uidNext, highestModseq } = {}) {
   const cacheEntry = {
     accountId,
     mailbox,
@@ -583,6 +605,7 @@ export async function saveEmailHeaders(accountId, mailbox, emails, totalEmails, 
     totalEmails,
     uidValidity: uidValidity ?? null,
     uidNext: uidNext ?? null,
+    highestModseq: highestModseq ?? null,
     lastSynced: Date.now()
   };
 
@@ -599,6 +622,31 @@ export async function saveEmailHeaders(accountId, mailbox, emails, totalEmails, 
   return cacheEntry;
 }
 
+export async function getEmailHeadersPartial(accountId, mailbox, limit = 200) {
+  if (invoke) {
+    try {
+      const data = await invoke('load_email_cache_partial', { accountId, mailbox, limit });
+      if (data) {
+        const entry = JSON.parse(data);
+        console.log('[db.js] Partial email headers loaded:', entry.emails?.length, 'of', entry.totalCached, 'emails');
+        return {
+          emails: entry.emails,
+          totalEmails: entry.totalEmails,
+          totalCached: entry.totalCached,
+          uidValidity: entry.uidValidity ?? null,
+          uidNext: entry.uidNext ?? null,
+          highestModseq: entry.highestModseq ?? null,
+          lastSynced: entry.lastSynced
+        };
+      }
+    } catch (error) {
+      console.warn('[db.js] Failed to load partial cache:', error);
+    }
+  }
+
+  return null;
+}
+
 export async function getEmailHeaders(accountId, mailbox) {
   if (invoke) {
     try {
@@ -611,6 +659,7 @@ export async function getEmailHeaders(accountId, mailbox) {
           totalEmails: entry.totalEmails,
           uidValidity: entry.uidValidity ?? null,
           uidNext: entry.uidNext ?? null,
+          highestModseq: entry.highestModseq ?? null,
           lastSynced: entry.lastSynced
         };
       }

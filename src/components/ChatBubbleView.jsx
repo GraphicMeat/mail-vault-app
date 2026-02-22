@@ -25,6 +25,8 @@ import {
   ExternalLink,
   Loader
 } from 'lucide-react';
+import { AttachmentItem } from './EmailViewer';
+import { getRealAttachments } from '../services/attachmentUtils';
 
 
 export function ChatBubbleView({ correspondent, threadId, userEmail, onBack, onReply }) {
@@ -292,6 +294,10 @@ function ContextMenu({ x, y, onReply, onReplyAll, onForward, onClose }) {
 function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOriginalVisible, onToggleOriginal, onContextMenu, onReply, onOpenFullView, bodiesMapRef, registerListener }) {
   const iframeRef = useRef(null);
 
+  const { activeAccountId, activeMailbox, getSentMailboxPath } = useMailStore(
+    state => ({ activeAccountId: state.activeAccountId, activeMailbox: state.activeMailbox, getSentMailboxPath: state.getSentMailboxPath })
+  );
+
   // Subscribe to body load updates for this specific email
   const [, forceUpdate] = useState(0);
   useEffect(() => {
@@ -306,6 +312,11 @@ function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOrigina
 
   const cleanBody = useMemo(() => getCleanMessageBody(mergedEmail), [mergedEmail]);
   const hasAttachments = mergedEmail.attachments?.length > 0 || mergedEmail.hasAttachments;
+  const realAttachments = useMemo(
+    () => mergedEmail.attachments ? getRealAttachments(mergedEmail.attachments, mergedEmail.html) : [],
+    [mergedEmail.attachments, mergedEmail.html]
+  );
+  const emailMailbox = email._fromSentFolder ? getSentMailboxPath() : activeMailbox;
   const hasHtml = !!mergedEmail.html;
   const wasStripped = !hasHtml && cleanBody.length < (mergedEmail.text?.length || 0) * 0.8;
 
@@ -533,20 +544,31 @@ function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOrigina
           )}
 
           {/* Attachments */}
-          {hasAttachments && (
-            <div className={`flex flex-wrap items-center gap-2 px-4 py-2 border-t ${
+          {hasAttachments && realAttachments.length > 0 && (
+            <div className={`flex flex-col gap-1.5 px-3 py-2 border-t ${
+              fromUser ? 'border-white/20' : 'border-mail-border'
+            }`}>
+              {realAttachments.map((att) => (
+                <AttachmentItem
+                  key={att._originalIndex}
+                  attachment={att}
+                  attachmentIndex={att._originalIndex}
+                  emailUid={email.uid}
+                  account={activeAccountId}
+                  folder={emailMailbox}
+                  accountId={activeAccountId}
+                  mailbox={emailMailbox}
+                  compact
+                />
+              ))}
+            </div>
+          )}
+          {hasAttachments && realAttachments.length === 0 && !mergedEmail.attachments && (
+            <div className={`flex items-center gap-2 px-4 py-2 border-t ${
               fromUser ? 'border-white/20' : 'border-mail-border'
             }`}>
               <Paperclip size={14} className="opacity-70" />
-              {email.attachments?.map((att, i) => (
-                <span key={i} className="text-xs opacity-80 bg-black/10 px-2 py-0.5 rounded">
-                  {att.filename || `Attachment ${i + 1}`}
-                </span>
-              )) || (
-                <span className="text-xs opacity-70">
-                  {email.attachments?.length || 1} attachment{(email.attachments?.length || 1) !== 1 ? 's' : ''}
-                </span>
-              )}
+              <span className="text-xs opacity-70">Attachments</span>
             </div>
           )}
         </div>
@@ -686,7 +708,7 @@ export function OriginalEmailModal({ email, onClose }) {
 
 // Full-screen modal for viewing complete email with HTML rendering
 function FullViewEmailModal({ email: initialEmail, onClose }) {
-  const { selectEmail, selectedEmail, loadingEmail } = useMailStore();
+  const { selectEmail, selectedEmail, loadingEmail, activeAccountId, activeMailbox, getSentMailboxPath } = useMailStore();
   const iframeRef = useRef(null);
   const [fetchedEmail, setFetchedEmail] = useState(null);
 
@@ -895,22 +917,28 @@ function FullViewEmailModal({ email: initialEmail, onClose }) {
         </div>
 
         {/* Attachments */}
-        {email.attachments?.length > 0 && (
-          <div className="px-4 py-3 border-t border-mail-border bg-mail-bg">
-            <div className="flex items-center gap-2 flex-wrap">
-              <Paperclip size={14} className="text-mail-text-muted" />
-              <span className="text-sm text-mail-text-muted">Attachments:</span>
-              {email.attachments.map((att, i) => (
-                <span
-                  key={i}
-                  className="text-xs bg-mail-surface border border-mail-border px-2 py-1 rounded text-mail-text"
-                >
-                  {att.filename || `Attachment ${i + 1}`}
-                </span>
-              ))}
+        {(() => {
+          const modalAttachments = getRealAttachments(email.attachments, email.html);
+          const modalMailbox = initialEmail._fromSentFolder ? getSentMailboxPath() : activeMailbox;
+          return modalAttachments.length > 0 ? (
+            <div className="px-4 py-3 border-t border-mail-border bg-mail-bg">
+              <div className="grid grid-cols-2 gap-2">
+                {modalAttachments.map((att) => (
+                  <AttachmentItem
+                    key={att._originalIndex}
+                    attachment={att}
+                    attachmentIndex={att._originalIndex}
+                    emailUid={email.uid}
+                    account={activeAccountId}
+                    folder={modalMailbox}
+                    accountId={activeAccountId}
+                    mailbox={modalMailbox}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          ) : null;
+        })()}
       </motion.div>
     </motion.div>
   );
