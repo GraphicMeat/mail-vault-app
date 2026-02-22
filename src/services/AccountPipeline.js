@@ -67,7 +67,7 @@ export class AccountPipeline {
         total = result.total;
         hasMore = result.hasMore;
         page++;
-        if (hasMore) await new Promise(r => setTimeout(r, 1000));
+        if (hasMore) await new Promise(r => setTimeout(r, 200));
       }
 
       if (allEmails.length > 0 && !this._destroyed) {
@@ -134,21 +134,15 @@ export class AccountPipeline {
         const store = useMailStore.getState();
         store.addToCache(cacheKey, email, cacheLimitMB);
 
-        // Update hasAttachments on the email list item (both emails array and emailsByIndex map)
+        // Update hasAttachments on the email list item — mutate in place to avoid
+        // creating a new emails array (which would trigger expensive re-renders)
         if (email?.hasAttachments) {
-          useMailStore.setState(state => {
-            const newEmailsByIndex = new Map(state.emailsByIndex);
-            for (const [idx, e] of newEmailsByIndex) {
-              if (e.uid === uid) {
-                newEmailsByIndex.set(idx, { ...e, hasAttachments: true });
-                break;
-              }
-            }
-            return {
-              emails: state.emails.map(e => e.uid === uid ? { ...e, hasAttachments: true } : e),
-              emailsByIndex: newEmailsByIndex,
-            };
-          });
+          const state = useMailStore.getState();
+          const target = state.emails.find(e => e.uid === uid);
+          if (target) target.hasAttachments = true;
+          for (const [, e] of state.emailsByIndex) {
+            if (e.uid === uid) { e.hasAttachments = true; break; }
+          }
         }
 
         this._completed++;
@@ -176,13 +170,14 @@ export class AccountPipeline {
   }
 
   _scheduleRetry(mailbox) {
-    if (this._destroyed || this._retryQueue.length === 0) return;
+    if (this._destroyed || this._retryQueue.length === 0 || this._retryTimer) return;
 
     const delay = this._retryDelay;
     console.log(`[Pipeline:${this.account.email}] Retrying ${this._retryQueue.length} failed UIDs in ${delay / 1000}s`);
 
     this._retryTimer = setTimeout(() => {
-      if (this._destroyed) return;
+      this._retryTimer = null;
+      if (this._destroyed || this._activeSlots > 0) return;
       this._queue = [...this._retryQueue, ...this._queue];
       this._retryQueue = [];
       this._retryDelay = Math.min(delay * 2, 120000);
@@ -201,9 +196,11 @@ export class AccountPipeline {
     const { activeAccountId, activeMailbox } = useMailStore.getState();
     if (this.accountId === activeAccountId) {
       try {
-        const newSavedIds = await db.getSavedEmailIds(activeAccountId, activeMailbox);
-        const newArchivedIds = await db.getArchivedEmailIds(activeAccountId, activeMailbox);
-        const newLocalEmails = await db.getLocalEmails(activeAccountId, activeMailbox);
+        const [newSavedIds, newArchivedIds, newLocalEmails] = await Promise.all([
+          db.getSavedEmailIds(activeAccountId, activeMailbox),
+          db.getArchivedEmailIds(activeAccountId, activeMailbox),
+          db.getLocalEmails(activeAccountId, activeMailbox),
+        ]);
         useMailStore.setState({
           savedEmailIds: newSavedIds,
           archivedEmailIds: newArchivedIds,

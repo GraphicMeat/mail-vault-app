@@ -53,7 +53,7 @@ class EmailPipelineManager {
 
     // Filter UIDs that need caching
     const { localCacheDurationMonths } = useSettingsStore.getState();
-    const uidsToFetch = await this._getUncachedUids(accountId, activeMailbox, emails, savedEmailIds, localCacheDurationMonths);
+    const uidsToFetch = this._getUncachedUids(emails, savedEmailIds, localCacheDurationMonths);
 
     if (uidsToFetch.length > 0) {
       await pipeline.startContentCaching(uidsToFetch, activeMailbox);
@@ -75,7 +75,9 @@ class EmailPipelineManager {
   }
 
   /**
-   * Load headers + cache content for all non-active accounts, sequentially.
+   * Load headers + cache content for all non-active accounts.
+   * Phase 1: Headers loaded in parallel (up to 3 accounts at a time).
+   * Phase 2: Content cached sequentially at concurrency=1.
    */
   async _startBackgroundPipelines() {
     if (this._backgroundRunning) return;
@@ -86,36 +88,50 @@ class EmailPipelineManager {
       a => a.id !== this._activeAccountId && hasValidCredentials(a) && !isHidden(a.id)
     );
 
+    // Phase 1: Load headers for all background accounts in parallel (max 3 at a time)
+    const CHUNK_SIZE = 3;
+    for (let i = 0; i < otherAccounts.length; i += CHUNK_SIZE) {
+      if (this._destroyed) break;
+      const chunk = otherAccounts.slice(i, i + CHUNK_SIZE);
+
+      await Promise.all(chunk.map(async (account) => {
+        if (this._isDestroyed(account.id)) return;
+
+        // Destroy any existing pipeline for this account
+        if (this.pipelines.has(account.id)) {
+          this.pipelines.get(account.id).destroy();
+        }
+
+        const pipeline = new AccountPipeline(account, {
+          concurrency: 1,
+          onProgress: (state) => this._onProgress(account.id, state),
+          onComplete: () => console.log(`[PipelineManager] Background account ${account.email} complete`),
+          onError: (err) => console.warn(`[PipelineManager] Background pipeline error (${account.email}):`, err.message)
+        });
+
+        this.pipelines.set(account.id, pipeline);
+
+        // Load headers (INBOX + Sent)
+        await pipeline.loadHeaders('INBOX');
+        if (!pipeline._destroyed) {
+          await this._loadSentHeaders(account, pipeline);
+        }
+      }));
+    }
+
+    // Phase 2: Content caching sequentially at concurrency=1
     for (const account of otherAccounts) {
+      if (this._destroyed) break;
       if (this._isDestroyed(account.id)) continue;
 
-      // Destroy any existing pipeline for this account
-      if (this.pipelines.has(account.id)) {
-        this.pipelines.get(account.id).destroy();
-      }
+      const pipeline = this.pipelines.get(account.id);
+      if (!pipeline || pipeline._destroyed) continue;
 
-      const pipeline = new AccountPipeline(account, {
-        concurrency: 1, // low priority — single worker
-        onProgress: (state) => this._onProgress(account.id, state),
-        onComplete: () => console.log(`[PipelineManager] Background account ${account.email} complete`),
-        onError: (err) => console.warn(`[PipelineManager] Background pipeline error (${account.email}):`, err.message)
-      });
-
-      this.pipelines.set(account.id, pipeline);
-
-      // Phase 1: load headers (INBOX + Sent)
-      await pipeline.loadHeaders('INBOX');
-      if (pipeline._destroyed) continue;
-
-      await this._loadSentHeaders(account, pipeline);
-      if (pipeline._destroyed) continue;
-
-      // Phase 2: cache content
       const { localCacheDurationMonths } = useSettingsStore.getState();
       const cachedHeaders = await db.getEmailHeaders(account.id, 'INBOX');
       if (cachedHeaders?.emails) {
         const savedIds = await db.getSavedEmailIds(account.id, 'INBOX');
-        const uids = await this._getUncachedUids(account.id, 'INBOX', cachedHeaders.emails, savedIds, localCacheDurationMonths);
+        const uids = this._getUncachedUids(cachedHeaders.emails, savedIds, localCacheDurationMonths);
         if (uids.length > 0) {
           const done = pipeline.waitForComplete();
           pipeline.startContentCaching(uids, 'INBOX');
@@ -251,26 +267,21 @@ class EmailPipelineManager {
 
   /**
    * Filter emails to only UIDs not yet cached in Maildir.
+   * Uses the pre-loaded savedEmailIds Set for O(1) lookups instead of per-UID IPC calls.
    */
-  async _getUncachedUids(accountId, mailbox, emails, savedEmailIds, localCacheDurationMonths) {
+  _getUncachedUids(emails, savedEmailIds, localCacheDurationMonths) {
     const cutoffDate = localCacheDurationMonths > 0
       ? new Date(new Date().setMonth(new Date().getMonth() - localCacheDurationMonths))
       : null;
 
-    const candidates = emails.filter(email => {
-      if (savedEmailIds.has(email.uid)) return false;
-      if (!cutoffDate) return true;
-      const emailDate = new Date(email.date || email.internalDate);
-      return emailDate >= cutoffDate;
-    });
-
-    // Check which are actually on disk (batch check)
-    const uids = [];
-    for (const email of candidates) {
-      const exists = await db.isEmailSaved(accountId, mailbox, email.uid);
-      if (!exists) uids.push(email.uid);
-    }
-    return uids;
+    return emails
+      .filter(email => {
+        if (savedEmailIds.has(email.uid)) return false;
+        if (!cutoffDate) return true;
+        const emailDate = new Date(email.date || email.internalDate);
+        return emailDate >= cutoffDate;
+      })
+      .map(email => email.uid);
   }
 }
 

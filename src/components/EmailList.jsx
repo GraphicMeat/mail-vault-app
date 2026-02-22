@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import { computeDisplayEmails } from '../services/emailListUtils';
 import { buildThreads } from '../utils/emailParser';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
@@ -77,7 +76,7 @@ const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onT
   return (
     <div
       style={style}
-      className={`group flex items-center gap-3 px-4 border-b border-mail-border
+      className={`virtual-row group flex items-center gap-3 px-4 border-b border-mail-border
                  cursor-pointer transition-colors
                  ${isSelected ? 'bg-mail-accent/10' : 'hover:bg-mail-surface-hover'}
                  ${isUnread ? 'bg-mail-surface' : ''}`}
@@ -228,7 +227,7 @@ const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSelected,
   return (
     <div
       style={style}
-      className={`group flex items-center gap-2 px-4 border-b border-mail-border
+      className={`virtual-row group flex items-center gap-2 px-4 border-b border-mail-border
                  cursor-pointer transition-colors
                  ${isSelected ? 'bg-mail-accent/10' : 'hover:bg-mail-surface-hover'}
                  ${isUnread ? 'bg-mail-surface' : ''}`}
@@ -375,7 +374,7 @@ const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectTh
   return (
     <div
       style={style}
-      className={`group flex items-center gap-3 px-4 border-b border-mail-border
+      className={`virtual-row group flex items-center gap-3 px-4 border-b border-mail-border
                  cursor-pointer transition-colors
                  ${isSelected ? 'bg-mail-accent/10' : 'hover:bg-mail-surface-hover'}
                  ${hasUnread ? 'bg-mail-surface' : ''}`}
@@ -532,7 +531,7 @@ const CompactThreadRow = React.memo(function CompactThreadRow({ thread, isSelect
   return (
     <div
       style={style}
-      className={`group flex items-center gap-2 px-4 border-b border-mail-border
+      className={`virtual-row group flex items-center gap-2 px-4 border-b border-mail-border
                  cursor-pointer transition-colors
                  ${isSelected ? 'bg-mail-accent/10' : 'hover:bg-mail-surface-hover'}
                  ${hasUnread ? 'bg-mail-surface' : ''}`}
@@ -615,37 +614,33 @@ const CompactThreadRow = React.memo(function CompactThreadRow({ thread, isSelect
 });
 
 export function EmailList({ layoutMode = 'three-column' }) {
-  const {
-    loading,
-    loadingMore,
-    activeMailbox,
-    activeAccountId,
-    viewMode,
-    selectedEmailId,
-    selectedEmailIds,
-    emails,
-    localEmails,
-    sentEmails,
-    loadEmails,
-    loadMoreEmails,
-    hasMoreEmails,
-    selectEmail,
-    selectThread,
-    toggleEmailSelection,
-    selectAllEmails,
-    clearSelection,
-    saveSelectedLocally,
-    markSelectedAsRead,
-    markSelectedAsUnread,
-    deleteSelectedFromServer,
-    searchActive,
-    searchResults,
-    clearSearch,
-    totalEmails,
-    savedEmailIds,
-    archivedEmailIds,
-    getChatEmails
-  } = useMailStore();
+  // Individual selectors — component only re-renders when these specific fields change
+  const loading = useMailStore(s => s.loading);
+  const loadingMore = useMailStore(s => s.loadingMore);
+  const activeMailbox = useMailStore(s => s.activeMailbox);
+  const activeAccountId = useMailStore(s => s.activeAccountId);
+  const viewMode = useMailStore(s => s.viewMode);
+  const selectedEmailId = useMailStore(s => s.selectedEmailId);
+  const selectedEmailIds = useMailStore(s => s.selectedEmailIds);
+  const sortedEmails = useMailStore(s => s.sortedEmails);
+  const sentEmails = useMailStore(s => s.sentEmails);
+  const hasMoreEmails = useMailStore(s => s.hasMoreEmails);
+  const searchActive = useMailStore(s => s.searchActive);
+  const searchResults = useMailStore(s => s.searchResults);
+  // Actions (stable references — never cause re-renders)
+  const loadEmails = useMailStore(s => s.loadEmails);
+  const loadMoreEmails = useMailStore(s => s.loadMoreEmails);
+  const selectEmail = useMailStore(s => s.selectEmail);
+  const selectThread = useMailStore(s => s.selectThread);
+  const toggleEmailSelection = useMailStore(s => s.toggleEmailSelection);
+  const selectAllEmails = useMailStore(s => s.selectAllEmails);
+  const clearSelection = useMailStore(s => s.clearSelection);
+  const saveSelectedLocally = useMailStore(s => s.saveSelectedLocally);
+  const markSelectedAsRead = useMailStore(s => s.markSelectedAsRead);
+  const markSelectedAsUnread = useMailStore(s => s.markSelectedAsUnread);
+  const deleteSelectedFromServer = useMailStore(s => s.deleteSelectedFromServer);
+  const clearSearch = useMailStore(s => s.clearSearch);
+  const getChatEmails = useMailStore(s => s.getChatEmails);
 
   const emailListStyle = useSettingsStore(s => s.emailListStyle);
   const isCompact = emailListStyle === 'compact';
@@ -659,24 +654,33 @@ export function EmailList({ layoutMode = 'three-column' }) {
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(600);
 
-  // Use search results when searching, otherwise filter based on viewMode
+  // sortedEmails is already combined (server + local-only), flagged (isLocal, isArchived, source),
+  // and sorted by updateSortedEmails(). Use directly to avoid redundant 17k-object spread + sort.
   const displayEmails = useMemo(
-    () => computeDisplayEmails({ searchActive, searchResults, emails, localEmails, archivedEmailIds, viewMode }),
-    [searchActive, searchResults, emails, localEmails, archivedEmailIds, viewMode]
+    () => searchActive ? searchResults : sortedEmails,
+    [searchActive, searchResults, sortedEmails]
   );
 
-  // Build threaded display: merge Sent folder emails into threads so both sides of
-  // conversations appear together (like Gmail). Threads are anchored on displayEmails —
-  // only threads containing at least one INBOX email are shown.
+  // Cache threads — only recompute buildThreads when the email set actually changes
+  const threadCache = useRef({ fingerprint: '', threads: new Map() });
+
+  // Build threaded display: merge Sent folder emails into threads
   const threadedDisplay = useMemo(() => {
     if (searchActive) {
-      // Don't thread search results — show flat
       return displayEmails.map(email => ({ type: 'email', email }));
     }
 
-    // Merge INBOX + Sent for complete threading (same as chat view)
+    // Stable fingerprint: only rebuild threads when the email set materially changes
     const mergedEmails = getChatEmails();
-    const threads = buildThreads(mergedEmails);
+    const fp = `${mergedEmails.length}-${mergedEmails[0]?.uid || 0}-${mergedEmails[mergedEmails.length - 1]?.uid || 0}`;
+
+    let threads;
+    if (threadCache.current.fingerprint === fp) {
+      threads = threadCache.current.threads;
+    } else {
+      threads = buildThreads(mergedEmails);
+      threadCache.current = { fingerprint: fp, threads };
+    }
 
     // Only show threads that contain at least one email from the current display set
     const displayUids = new Set(displayEmails.map(e => e.uid));
@@ -694,19 +698,10 @@ export function EmailList({ layoutMode = 'three-column' }) {
     });
   }, [displayEmails, searchActive, sentEmails, getChatEmails]);
 
-  // Create a map for quick lookup by index
-  const itemsByIndex = useMemo(() => {
-    const map = new Map();
-    threadedDisplay.forEach((item, index) => {
-      map.set(index, item);
-    });
-    return map;
-  }, [threadedDisplay]);
-
   const hasSelection = selectedEmailIds.size > 0;
   const allSelected = displayEmails.length > 0 && selectedEmailIds.size === displayEmails.length;
 
-  // Virtual scroll calculations - always use loaded count; list grows as more emails load
+  // Hand-rolled virtual scroll — proven to feel smoother than @tanstack/react-virtual
   const rowCount = threadedDisplay.length;
   const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - BUFFER_SIZE);
   const visibleCount = Math.ceil(containerHeight / ROW_HEIGHT) + 2 * BUFFER_SIZE;
@@ -739,9 +734,7 @@ export function EmailList({ layoutMode = 'three-column' }) {
   useEffect(() => {
     if (searchActive || loadingMore || !hasMoreEmails || viewMode === 'local') return;
 
-    const visibleStart = Math.floor(scrollTop / ROW_HEIGHT);
-    const visibleEnd = visibleStart + Math.ceil(containerHeight / ROW_HEIGHT);
-
+    const visibleEnd = Math.floor(scrollTop / ROW_HEIGHT) + Math.ceil(containerHeight / ROW_HEIGHT);
     if (visibleEnd >= threadedDisplay.length - 20) {
       const timer = setTimeout(() => {
         loadMoreEmails();
@@ -750,18 +743,24 @@ export function EmailList({ layoutMode = 'three-column' }) {
     }
   }, [scrollTop, containerHeight, threadedDisplay.length, hasMoreEmails, loadingMore, searchActive, viewMode, loadMoreEmails]);
 
-  // Handle scroll - load more when approaching end of loaded emails
+  // Handle scroll
   const handleScroll = useCallback((e) => {
-    const { scrollTop } = e.target;
-    setScrollTop(scrollTop);
+    setScrollTop(e.target.scrollTop);
+  }, []);
 
-    if (!searchActive && hasMoreEmails && !loadingMore && viewMode !== 'local') {
-      const visibleEnd = Math.floor(scrollTop / ROW_HEIGHT) + Math.ceil(containerHeight / ROW_HEIGHT);
-      if (visibleEnd >= threadedDisplay.length - 20) {
-        loadMoreEmails();
+  // Generate visible rows
+  const visibleRows = useMemo(() => {
+    const rows = [];
+    for (let i = startIndex; i < endIndex; i++) {
+      const item = threadedDisplay[i];
+      if (item) {
+        rows.push({ index: i, item, top: i * ROW_HEIGHT });
       }
     }
-  }, [searchActive, hasMoreEmails, loadingMore, loadMoreEmails, containerHeight, threadedDisplay.length, viewMode]);
+    return rows;
+  }, [startIndex, endIndex, threadedDisplay, ROW_HEIGHT]);
+
+  const totalHeight = rowCount * ROW_HEIGHT;
 
   const handleAction = async (action) => {
     setActionInProgress(true);
@@ -772,21 +771,6 @@ export function EmailList({ layoutMode = 'three-column' }) {
       setActionInProgress(false);
     }
   };
-
-  // Generate visible rows
-  const visibleRows = useMemo(() => {
-    const rows = [];
-    for (let i = startIndex; i < endIndex; i++) {
-      const item = itemsByIndex.get(i);
-      if (item) {
-        rows.push({ index: i, item, top: i * ROW_HEIGHT });
-      }
-    }
-    return rows;
-  }, [startIndex, endIndex, itemsByIndex]);
-
-  // Total height based on total email count for stable scrollbar
-  const totalHeight = rowCount * ROW_HEIGHT;
 
   return (
     <div className={`flex flex-col h-full min-h-0 overflow-hidden ${layoutMode === 'three-column' ? 'border-r border-mail-border' : 'border-b border-mail-border'}`}>
@@ -827,12 +811,6 @@ export function EmailList({ layoutMode = 'three-column' }) {
               <h2 className="text-lg font-semibold text-mail-text">
                 {activeMailbox}
               </h2>
-              <span className="text-sm text-mail-text-muted flex items-center gap-1">
-                ({threadedDisplay.length.toLocaleString()}{viewMode !== 'local' && totalEmails > displayEmails.length ? ` of ${totalEmails.toLocaleString()}` : ''}{!searchActive && threadedDisplay.length < displayEmails.length ? ' threads' : ' emails'})
-                {loadingMore && (
-                  <RefreshCw size={12} className="animate-spin text-mail-accent" />
-                )}
-              </span>
             </>
           )}
         </div>
@@ -979,8 +957,8 @@ export function EmailList({ layoutMode = 'three-column' }) {
       {/* Email List */}
       <div
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto min-h-0"
         onScroll={handleScroll}
+        className="flex-1 overflow-y-auto min-h-0"
       >
         {loading && rowCount === 0 ? (
           <div className="flex items-center justify-center h-full">
@@ -1025,16 +1003,10 @@ export function EmailList({ layoutMode = 'three-column' }) {
           </div>
         ) : (
           <div key={`${activeAccountId}-${viewMode}`} style={{ height: totalHeight, position: 'relative' }}>
-            {visibleRows.map(({ item, top }) => {
-              const rowStyle = {
-                position: 'absolute',
-                top,
-                left: 0,
-                right: 0,
-                height: ROW_HEIGHT,
-                display: 'flex',
-                alignItems: 'center'
-              };
+            {visibleRows.map(({ index, item, top }) => {
+              if (!item) return null;
+
+              const rowStyle = { top, height: ROW_HEIGHT };
 
               if (item.type === 'thread') {
                 const ThreadRowComponent = isCompact ? CompactThreadRow : ThreadRow;
@@ -1063,7 +1035,6 @@ export function EmailList({ layoutMode = 'three-column' }) {
                 />
               );
             })}
-
           </div>
         )}
       </div>

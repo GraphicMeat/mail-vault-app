@@ -57,11 +57,10 @@ export function computeDisplayEmails({
     }
   }
 
-  combinedEmails.sort((a, b) => {
-    const dateA = new Date(a.date || a.internalDate || 0);
-    const dateB = new Date(b.date || b.internalDate || 0);
-    return dateB - dateA;
-  });
+  for (const e of combinedEmails) {
+    if (e._ts === undefined) e._ts = new Date(e.date || e.internalDate || 0).getTime();
+  }
+  combinedEmails.sort((a, b) => b._ts - a._ts);
 
   return combinedEmails;
 }

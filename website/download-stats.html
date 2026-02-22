@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Download Stats - MailVault</title>
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#6366f1">
+
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc',
+              400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca',
+              800: '#3730a3', 900: '#312e81',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .gradient-text {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .gradient-bg { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); }
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .bar-fill {
+      transition: width 0.6s ease-out;
+    }
+  </style>
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Minimal Nav -->
+  <nav class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/" class="flex items-center gap-3">
+          <img src="icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+        <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+          <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/>
+          </svg>
+          <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Content -->
+  <main class="pt-24 pb-20">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <!-- Header -->
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+        <div>
+          <h1 class="text-3xl sm:text-4xl font-bold"><span class="gradient-text">Download Stats</span></h1>
+          <p id="last-fetched" class="text-sm text-slate-500 dark:text-slate-400 mt-1"></p>
+        </div>
+        <button id="refresh-btn" onclick="fetchStats()" class="self-start sm:self-auto px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 hover:border-primary-500 hover:text-primary-500 transition-colors text-sm font-medium flex items-center gap-2">
+          <svg id="refresh-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          Refresh
+        </button>
+      </div>
+
+      <!-- Loading State -->
+      <div id="loading" class="flex flex-col items-center justify-center py-20">
+        <svg class="animate-spin w-8 h-8 text-primary-500 mb-4" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <p class="text-slate-500 dark:text-slate-400">Fetching release data from GitHub...</p>
+      </div>
+
+      <!-- Error State -->
+      <div id="error" class="hidden">
+        <div class="rounded-xl border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-6 text-center">
+          <p class="text-red-600 dark:text-red-400 font-medium mb-2">Failed to fetch release data</p>
+          <p id="error-message" class="text-sm text-red-500 dark:text-red-400/80"></p>
+          <button onclick="fetchStats()" class="mt-4 px-4 py-2 rounded-lg gradient-bg text-white text-sm font-medium hover:opacity-90 transition-opacity">Try Again</button>
+        </div>
+      </div>
+
+      <!-- Stats Content (hidden until loaded) -->
+      <div id="stats-content" class="hidden space-y-8">
+
+        <!-- Summary Cards -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5">
+            <p class="text-sm text-slate-500 dark:text-slate-400 mb-1">Total Downloads</p>
+            <p id="stat-total" class="text-2xl sm:text-3xl font-bold gradient-text">0</p>
+          </div>
+          <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5">
+            <p class="text-sm text-slate-500 dark:text-slate-400 mb-1">DMG Installs</p>
+            <p id="stat-dmg" class="text-2xl sm:text-3xl font-bold gradient-text">0</p>
+          </div>
+          <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5">
+            <p class="text-sm text-slate-500 dark:text-slate-400 mb-1">Releases</p>
+            <p id="stat-releases" class="text-2xl sm:text-3xl font-bold gradient-text">0</p>
+          </div>
+          <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5">
+            <p class="text-sm text-slate-500 dark:text-slate-400 mb-1">Latest Version</p>
+            <p id="stat-latest" class="text-2xl sm:text-3xl font-bold gradient-text">—</p>
+          </div>
+        </div>
+
+        <!-- Bar Chart -->
+        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6">
+          <h2 class="text-lg font-semibold mb-4">Downloads per Release</h2>
+          <div id="chart" class="space-y-3"></div>
+        </div>
+
+        <!-- Per-Release Table -->
+        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-700">
+            <h2 class="text-lg font-semibold">Release Details</h2>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="bg-slate-50 dark:bg-slate-800/50 text-left text-slate-500 dark:text-slate-400">
+                  <th class="px-6 py-3 font-medium">Version</th>
+                  <th class="px-6 py-3 font-medium">Date</th>
+                  <th class="px-6 py-3 font-medium text-right">DMG</th>
+                  <th class="px-6 py-3 font-medium text-right">Updater</th>
+                  <th class="px-6 py-3 font-medium text-right">Other</th>
+                  <th class="px-6 py-3 font-medium text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody id="releases-table"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <a href="/" class="flex items-center gap-2">
+          <img src="icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. All rights reserved.
+        </p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Theme Toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const html = document.documentElement;
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      html.classList.add('dark');
+    }
+    themeToggle.addEventListener('click', () => {
+      html.classList.toggle('dark');
+      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
+    });
+
+    // Fetch and render stats
+    async function fetchStats() {
+      const loading = document.getElementById('loading');
+      const error = document.getElementById('error');
+      const content = document.getElementById('stats-content');
+      const refreshIcon = document.getElementById('refresh-icon');
+
+      loading.classList.remove('hidden');
+      error.classList.add('hidden');
+      content.classList.add('hidden');
+      refreshIcon.classList.add('animate-spin');
+
+      try {
+        const res = await fetch('https://api.github.com/repos/GraphicMeat/mail-vault-app/releases', {
+          headers: { 'Accept': 'application/vnd.github.v3+json' }
+        });
+        if (!res.ok) throw new Error(`GitHub API returned ${res.status}: ${res.statusText}`);
+        const releases = await res.json();
+
+        renderStats(releases);
+
+        loading.classList.add('hidden');
+        content.classList.remove('hidden');
+        document.getElementById('last-fetched').textContent = `Last fetched: ${new Date().toLocaleString()}`;
+      } catch (err) {
+        loading.classList.add('hidden');
+        error.classList.remove('hidden');
+        document.getElementById('error-message').textContent = err.message;
+      } finally {
+        refreshIcon.classList.remove('animate-spin');
+      }
+    }
+
+    function renderStats(releases) {
+      let totalDownloads = 0;
+      let totalDmg = 0;
+
+      const releaseData = releases.map(release => {
+        let dmg = 0, updater = 0, other = 0;
+        for (const asset of release.assets) {
+          const name = asset.name.toLowerCase();
+          if (name.endsWith('.dmg')) {
+            dmg += asset.download_count;
+          } else if (name === 'latest.json' || name.endsWith('.tar.gz') || name.endsWith('.sig')) {
+            updater += asset.download_count;
+          } else {
+            other += asset.download_count;
+          }
+        }
+        const total = dmg + updater + other;
+        totalDownloads += total;
+        totalDmg += dmg;
+        return {
+          tag: release.tag_name,
+          name: release.name || release.tag_name,
+          date: release.published_at,
+          prerelease: release.prerelease,
+          draft: release.draft,
+          dmg,
+          updater,
+          other,
+          total
+        };
+      });
+
+      // Summary cards
+      document.getElementById('stat-total').textContent = totalDownloads.toLocaleString();
+      document.getElementById('stat-dmg').textContent = totalDmg.toLocaleString();
+      document.getElementById('stat-releases').textContent = releases.length.toLocaleString();
+      document.getElementById('stat-latest').textContent = releaseData.length > 0 ? releaseData[0].tag : '—';
+
+      // Bar chart
+      const maxTotal = Math.max(...releaseData.map(r => r.total), 1);
+      const chart = document.getElementById('chart');
+      chart.innerHTML = '';
+
+      // Show releases in chronological order (oldest first) for the chart
+      const chronological = [...releaseData].reverse();
+      for (const r of chronological) {
+        const pct = Math.max((r.total / maxTotal) * 100, r.total > 0 ? 2 : 0);
+        const row = document.createElement('div');
+        row.className = 'flex items-center gap-3';
+        row.innerHTML = `
+          <span class="text-xs font-mono text-slate-500 dark:text-slate-400 w-16 text-right shrink-0">${r.tag}</span>
+          <div class="flex-1 h-7 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+            <div class="bar-fill h-full rounded-full gradient-bg flex items-center justify-end pr-2" style="width: ${pct}%">
+              ${r.total > 0 ? `<span class="text-xs text-white font-medium whitespace-nowrap">${r.total.toLocaleString()}</span>` : ''}
+            </div>
+          </div>
+        `;
+        chart.appendChild(row);
+        // Trigger reflow then animate
+        requestAnimationFrame(() => {
+          const bar = row.querySelector('.bar-fill');
+          if (bar) bar.style.width = pct + '%';
+        });
+      }
+
+      if (releaseData.length === 0) {
+        chart.innerHTML = '<p class="text-slate-500 dark:text-slate-400 text-sm text-center py-4">No releases found</p>';
+      }
+
+      // Table
+      const tbody = document.getElementById('releases-table');
+      tbody.innerHTML = '';
+      for (const r of releaseData) {
+        const date = r.date ? new Date(r.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
+        const tr = document.createElement('tr');
+        tr.className = 'border-t border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors';
+        tr.innerHTML = `
+          <td class="px-6 py-3 font-medium whitespace-nowrap">
+            ${r.tag}
+            ${r.prerelease ? '<span class="ml-1.5 text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded">pre</span>' : ''}
+            ${r.draft ? '<span class="ml-1.5 text-xs bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 px-1.5 py-0.5 rounded">draft</span>' : ''}
+          </td>
+          <td class="px-6 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">${date}</td>
+          <td class="px-6 py-3 text-right tabular-nums">${r.dmg.toLocaleString()}</td>
+          <td class="px-6 py-3 text-right tabular-nums text-slate-500 dark:text-slate-400">${r.updater.toLocaleString()}</td>
+          <td class="px-6 py-3 text-right tabular-nums text-slate-500 dark:text-slate-400">${r.other.toLocaleString()}</td>
+          <td class="px-6 py-3 text-right tabular-nums font-semibold">${r.total.toLocaleString()}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+
+      if (releaseData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-slate-500 dark:text-slate-400">No releases found</td></tr>';
+      }
+    }
+
+    // Fetch on page load
+    fetchStats();
+  </script>
+</body>
+</html>

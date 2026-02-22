@@ -26,7 +26,7 @@ export function usePipelineCoordinator() {
       console.log(`[PipelineCoordinator] Starting pipeline for account ${activeAccountId}`);
       startedForRef.current = activeAccountId;
       pipelineManager.startActiveAccountPipeline(activeAccountId);
-    }, 5000); // 5s delay — matches the original useBackgroundCaching delay
+    }, 1000); // 1s delay — enough for UI to stabilize after account switch
 
     return () => clearTimeout(timer);
   }, [activeAccountId, emails.length, loading]);

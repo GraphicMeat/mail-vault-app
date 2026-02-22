@@ -163,17 +163,19 @@ pub async fn imap_check_mailbox_status(
     mailbox: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let mailbox = mailbox.unwrap_or_else(|| "INBOX".to_string());
+    let has_condstore = pool.has_capability(&account, "CONDSTORE").await;
 
-    let (exists, uid_validity, uid_next) =
+    let (exists, uid_validity, uid_next, highest_modseq) =
         with_background(&pool, &account, |mut session| async move {
-            let result = imap::check_mailbox_status(&mut session, &mailbox).await?;
+            let result = imap::check_mailbox_status(&mut session, &mailbox, has_condstore).await?;
             Ok((result, session))
         }).await?;
 
     Ok(serde_json::json!({
         "exists": exists,
         "uidValidity": uid_validity,
-        "uidNext": uid_next
+        "uidNext": uid_next,
+        "highestModseq": highest_modseq
     }))
 }
 
@@ -186,9 +188,10 @@ pub async fn imap_search_all_uids(
     mailbox: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let mailbox = mailbox.unwrap_or_else(|| "INBOX".to_string());
+    let has_esearch = pool.has_capability(&account, "ESEARCH").await;
 
     let uids = with_background(&pool, &account, |mut session| async move {
-        let result = imap::search_all_uids(&mut session, &mailbox).await?;
+        let result = imap::search_all_uids(&mut session, &mailbox, has_esearch).await?;
         Ok((result, session))
     }).await?;
 
@@ -216,6 +219,33 @@ pub async fn imap_fetch_headers_by_uids(
     Ok(serde_json::json!({
         "emails": emails,
         "total": total
+    }))
+}
+
+// ── Fetch changed flags (CONDSTORE) ─────────────────────────────────────
+
+#[tauri::command]
+pub async fn imap_fetch_changed_flags(
+    pool: tauri::State<'_, ImapPool>,
+    account: ImapConfig,
+    mailbox: Option<String>,
+    since_modseq: u64,
+) -> Result<serde_json::Value, String> {
+    let mailbox = mailbox.unwrap_or_else(|| "INBOX".to_string());
+
+    let changed = with_background(&pool, &account, |mut session| async move {
+        let result = imap::fetch_changed_flags(&mut session, &mailbox, since_modseq).await?;
+        Ok((result, session))
+    }).await?;
+
+    // Convert to JSON-friendly format
+    let changes: Vec<serde_json::Value> = changed
+        .into_iter()
+        .map(|(uid, flags)| serde_json::json!({ "uid": uid, "flags": flags }))
+        .collect();
+
+    Ok(serde_json::json!({
+        "changes": changes
     }))
 }
 

@@ -7,6 +7,14 @@ import { hasValidCredentials, ensureFreshToken } from '../services/authUtils';
 import { hasRealAttachments } from '../services/attachmentUtils';
 import { buildThreads } from '../utils/emailParser';
 
+// Module-level cache for getChatEmails() — avoids calling set() during render
+let _chatEmailsCache = [];
+let _chatEmailsFingerprint = '';
+
+// Module-level cache for getThreads() — avoids rebuilding threads on every call
+let _threadsCache = [];
+let _threadsFingerprint = '';
+
 export const useMailStore = create((set, get) => ({
   // Accounts
   accounts: [],
@@ -44,6 +52,7 @@ export const useMailStore = create((set, get) => ({
 
   // Pre-sorted emails for performance (memoization)
   sortedEmails: [],
+  _sortedEmailsFingerprint: '',
 
   // Sent folder headers for chat view (merged with INBOX for conversations)
   sentEmails: [],
@@ -154,12 +163,25 @@ export const useMailStore = create((set, get) => ({
       size: emailSize
     });
 
-    set({ cacheCurrentSizeMB: currentSize + emailSize });
+    // Update size tracking without triggering a store notification on every cached email.
+    // Only emit set() when the size changes by ≥1MB to avoid 15+ re-renders/sec from pipeline.
+    const newSize = currentSize + emailSize;
+    const prevSize = get().cacheCurrentSizeMB;
+    if (Math.abs(newSize - prevSize) >= 1) {
+      set({ cacheCurrentSizeMB: newSize });
+    } else {
+      // Track internally without notifying subscribers
+      get().cacheCurrentSizeMB = newSize;
+    }
   },
   
   // Update sorted emails (memoization for performance)
   updateSortedEmails: () => {
-    const { emails, localEmails, viewMode, savedEmailIds, archivedEmailIds } = get();
+    const { emails, localEmails, viewMode, savedEmailIds, archivedEmailIds, _sortedEmailsFingerprint } = get();
+
+    // Fingerprint check: skip if the input set hasn't materially changed
+    const fp = `${viewMode}-${emails.length}-${emails[0]?.uid || 0}-${emails[emails.length - 1]?.uid || 0}-${localEmails.length}-${archivedEmailIds.size}-${savedEmailIds.size}`;
+    if (fp === _sortedEmailsFingerprint) return;
 
     let result = [];
 
@@ -167,6 +189,7 @@ export const useMailStore = create((set, get) => ({
       result = emails.map(e => ({
         ...e,
         isLocal: savedEmailIds.has(e.uid),
+        isArchived: archivedEmailIds.has(e.uid),
         source: 'server'
       }));
     } else if (viewMode === 'local') {
@@ -176,23 +199,26 @@ export const useMailStore = create((set, get) => ({
         .map(e => ({
           ...e,
           isLocal: true,
+          isArchived: true,
           source: 'local'
         }));
     } else {
-      // Combine: server emails + local-only emails
+      // Combine: server emails + archived local-only emails
       const serverUids = new Set(emails.map(e => e.uid));
       const combinedEmails = emails.map(e => ({
         ...e,
         isLocal: savedEmailIds.has(e.uid),
+        isArchived: archivedEmailIds.has(e.uid),
         source: 'server'
       }));
 
-      // Add local-only emails (deleted from server but saved locally)
+      // Add local-only emails (deleted from server but explicitly archived)
       for (const localEmail of localEmails) {
-        if (!serverUids.has(localEmail.uid)) {
+        if (!serverUids.has(localEmail.uid) && archivedEmailIds.has(localEmail.uid)) {
           combinedEmails.push({
             ...localEmail,
             isLocal: true,
+            isArchived: true,
             source: 'local-only'
           });
         }
@@ -201,14 +227,15 @@ export const useMailStore = create((set, get) => ({
       result = combinedEmails;
     }
 
-    // Sort by date descending (newest first) - done once on update
-    result.sort((a, b) => {
-      const dateA = new Date(a.date || a.internalDate || 0);
-      const dateB = new Date(b.date || b.internalDate || 0);
-      return dateB - dateA;
-    });
+    // Sort by date descending (newest first) - pre-parse dates for performance
+    for (const e of result) {
+      e._ts = new Date(e.date || e.internalDate || 0).getTime();
+    }
+    result.sort((a, b) => b._ts - a._ts);
 
-    set({ sortedEmails: result });
+    _chatEmailsFingerprint = ''; // Invalidate module-level chat cache
+    _threadsFingerprint = ''; // Invalidate module-level threads cache
+    set({ sortedEmails: result, _sortedEmailsFingerprint: fp });
   },
 
   // Get email from cache (updates timestamp for LRU)
@@ -228,22 +255,53 @@ export const useMailStore = create((set, get) => ({
   // Initialize
   init: async () => {
     try {
+      console.log('[init] Starting db.initDB...');
       await db.initDB();
+      console.log('[init] db.initDB done, getting accounts...');
       const accounts = await db.getAccounts();
+      console.log('[init] Got', accounts.length, 'accounts');
       set({ accounts });
 
       // Backfill accounts.json so future quick-loads find accounts without keychain
       if (accounts.length > 0) {
-        for (const account of accounts) {
-          await db.ensureAccountInFile(account);
-        }
+        await db.ensureAccountsInFile(accounts);
         const { hiddenAccounts } = useSettingsStore.getState();
-        const firstVisible = accounts.find(a => !hiddenAccounts[a.id]) || accounts[0];
-        await get().setActiveAccount(firstVisible.id);
+        const { activeAccountId: currentActiveId } = get();
+
+        // Prefer the account that quick-load already activated (if it's valid and visible)
+        const currentIsValid = currentActiveId && accounts.some(a => a.id === currentActiveId) && !hiddenAccounts[currentActiveId];
+        const firstVisible = currentIsValid
+          ? accounts.find(a => a.id === currentActiveId)
+          : (accounts.find(a => !hiddenAccounts[a.id]) || accounts[0]);
+
+        if (currentActiveId === firstVisible.id) {
+          // Quick-load already set this account — just refresh without resetting state
+          console.log('[init] Account already active from quick-load, refreshing...');
+          // Load cached mailboxes first (quick-load only sets placeholders)
+          const cachedMailboxes = await db.getCachedMailboxes(firstVisible.id);
+          if (cachedMailboxes) {
+            set({ mailboxes: cachedMailboxes });
+          }
+          // Fetch real mailboxes from server + load emails
+          try {
+            const freshAccount = await ensureFreshToken(firstVisible);
+            const mailboxes = await api.fetchMailboxes(freshAccount);
+            set({ mailboxes, connectionStatus: 'connected', connectionError: null, connectionErrorType: null });
+            db.saveMailboxes(firstVisible.id, mailboxes);
+          } catch (e) {
+            console.warn('[init] Mailbox fetch failed (non-fatal, using cached):', e.message);
+          }
+          await get().loadEmails();
+          get().loadSentHeaders(firstVisible.id);
+        } else {
+          console.log('[init] Setting active account:', firstVisible.id);
+          await get().setActiveAccount(firstVisible.id);
+        }
+        console.log('[init] Account setup done');
       }
     } catch (error) {
       console.error('Failed to initialize:', error);
-      set({ error: error.message });
+      set({ error: error.message, loading: false });
     }
   },
   
@@ -362,12 +420,16 @@ export const useMailStore = create((set, get) => ({
     console.log('[setActiveAccount] Switching to account:', accountId, 'mailbox:', lastMailbox);
 
     // Reset all email state immediately to prevent stale data from rendering
+    _chatEmailsFingerprint = ''; // Invalidate module-level chat cache
+    _threadsFingerprint = ''; // Invalidate module-level threads cache
     set({
       activeAccountId: accountId,
       activeMailbox: lastMailbox,
       emails: [],
       localEmails: [],
       sentEmails: [],
+      sortedEmails: [],
+      _sortedEmailsFingerprint: '', // Must reset alongside sortedEmails
       totalEmails: 0,
       emailsByIndex: new Map(),
       loadedRanges: [],
@@ -387,61 +449,53 @@ export const useMailStore = create((set, get) => ({
       error: null
     });
 
-    // Get local emails first (always available)
-    const localEmails = await db.getLocalEmails(accountId, lastMailbox);
-    const savedEmailIds = await db.getSavedEmailIds(accountId, lastMailbox);
-    const archivedEmailIds = await db.getArchivedEmailIds(accountId, lastMailbox);
+    // Helper: check if this setActiveAccount call is still current
+    const isStale = () => get().activeAccountId !== accountId;
 
-    // Load cached headers to check if we have data for this account
-    const cachedHeaders = await db.getEmailHeaders(accountId, lastMailbox);
+    // Fast partial load: only first 200 headers from cache (~200KB instead of 16MB for large accounts).
+    // Full cache loads later during loadEmails() network sync.
+    const cachedHeaders = await db.getEmailHeadersPartial(accountId, lastMailbox, 200);
+    if (isStale()) { console.log('[setActiveAccount] Stale after cache load, aborting'); return; }
 
     if (cachedHeaders && cachedHeaders.emails.length > 0) {
-      console.log('[setActiveAccount] Found cached data:', cachedHeaders.emails.length, 'emails');
-      // Build sparse index from cached emails
+      console.log('[setActiveAccount] Found cached data:', cachedHeaders.emails.length, 'of', cachedHeaders.totalCached, 'emails (partial load)');
       const emailsByIndex = new Map();
       cachedHeaders.emails.forEach((email, idx) => {
         const index = email.displayIndex !== undefined ? email.displayIndex : idx;
         emailsByIndex.set(index, {
           ...email,
-          isLocal: savedEmailIds.has(email.uid),
           source: email.source || 'server'
         });
       });
 
-      const loadedRanges = [{ start: 0, end: cachedHeaders.emails.length }];
-
-      // Set cached data - don't show loading spinner, but indicate background refresh
       set({
         emails: cachedHeaders.emails,
         emailsByIndex,
-        loadedRanges,
+        loadedRanges: [{ start: 0, end: cachedHeaders.emails.length }],
         loadingRanges: new Set(),
         totalEmails: cachedHeaders.totalEmails,
-        localEmails,
-        savedEmailIds, archivedEmailIds,
         loading: false,
-        loadingMore: true, // Indicate background refresh is happening
+        loadingMore: true,
         currentPage: Math.ceil(cachedHeaders.emails.length / 50) || 1,
         hasMoreEmails: cachedHeaders.emails.length < cachedHeaders.totalEmails
       });
       get().updateSortedEmails();
       console.log('[setActiveAccount] Showing cached data, will refresh from server...');
     } else {
-      // No cache - reset to empty with loading state
-      set({
-        loading: true,
-        emails: localEmails,
-        localEmails,
-        savedEmailIds, archivedEmailIds,
-        emailsByIndex: new Map(),
-        loadedRanges: [],
-        loadingRanges: new Set(),
-        currentPage: 1,
-        hasMoreEmails: true,
-        totalEmails: 0
-      });
-      get().updateSortedEmails();
+      set({ loading: true });
     }
+
+    // Fire-and-forget: load local emails in background (slow, reads .eml files)
+    // Updates isLocal flags and local-only emails when ready, without blocking network ops
+    Promise.all([
+      db.getLocalEmails(accountId, lastMailbox),
+      db.getSavedEmailIds(accountId, lastMailbox),
+      db.getArchivedEmailIds(accountId, lastMailbox)
+    ]).then(([localEmails, savedEmailIds, archivedEmailIds]) => {
+      if (isStale()) return;
+      set({ localEmails, savedEmailIds, archivedEmailIds });
+      get().updateSortedEmails();
+    }).catch(e => console.warn('[setActiveAccount] Local email load failed:', e));
 
     // Use cached mailboxes from last successful connection, or INBOX-only as safe fallback.
     // Never use hardcoded paths like "Sent" — some servers require "INBOX.Sent" prefix.
@@ -450,14 +504,15 @@ export const useMailStore = create((set, get) => ({
       { name: 'INBOX', path: 'INBOX', specialUse: null, children: [] }
     ];
 
+    if (isStale()) { console.log('[setActiveAccount] Stale after mailbox cache, aborting'); return; }
+
     // Check if credentials are missing - local emails are still viewable
     const hasCredentials = account.password || (account.authType === 'oauth2' && account.oauth2AccessToken);
     if (!hasCredentials) {
       console.error('Credentials missing for account:', account.email);
+      if (isStale()) return;
       set({
         mailboxes: defaultMailboxes,
-        localEmails,
-        savedEmailIds, archivedEmailIds,
         connectionStatus: 'error',
         connectionError: 'Keychain access required to fetch emails from server. Local emails are available.',
         connectionErrorType: 'passwordMissing',
@@ -472,13 +527,12 @@ export const useMailStore = create((set, get) => ({
       try {
         console.log('[setActiveAccount] Checking network connectivity...');
         const isOnline = await invoke('check_network_connectivity');
+        if (isStale()) return;
         console.log('[setActiveAccount] Network connectivity result:', isOnline);
         if (isOnline === false) {
           console.error('[setActiveAccount] No network connectivity detected!');
           set({
             mailboxes: defaultMailboxes,
-            localEmails,
-            savedEmailIds, archivedEmailIds,
             connectionStatus: 'error',
             connectionError: 'No internet connection. Showing locally saved emails.',
             connectionErrorType: 'offline',
@@ -489,11 +543,10 @@ export const useMailStore = create((set, get) => ({
         }
       } catch (e) {
         console.warn('[setActiveAccount] Could not check network connectivity:', e);
+        if (isStale()) return;
         // If connectivity check fails, assume offline
         set({
           mailboxes: defaultMailboxes,
-          localEmails,
-          savedEmailIds, archivedEmailIds,
           connectionStatus: 'error',
           connectionError: 'Could not check internet connection. Showing locally saved emails.',
           connectionErrorType: 'offline',
@@ -507,8 +560,6 @@ export const useMailStore = create((set, get) => ({
         console.error('[setActiveAccount] Browser reports offline');
         set({
           mailboxes: defaultMailboxes,
-          localEmails,
-          savedEmailIds, archivedEmailIds,
           connectionStatus: 'error',
           connectionError: 'No internet connection. Showing locally saved emails.',
           connectionErrorType: 'offline',
@@ -519,6 +570,7 @@ export const useMailStore = create((set, get) => ({
     }
 
     try {
+      if (isStale()) return;
       // Fetch mailboxes with retry (sidecar may still be starting)
       let mailboxes;
       let lastError;
@@ -537,6 +589,7 @@ export const useMailStore = create((set, get) => ({
           throw e;
         }
       }
+      if (isStale()) return;
       set({
         mailboxes,
         connectionStatus: 'connected',
@@ -548,10 +601,11 @@ export const useMailStore = create((set, get) => ({
       db.saveMailboxes(accountId, mailboxes);
 
       // Load emails (this will update connection status)
+      if (isStale()) return;
       await get().loadEmails();
 
       // Load cached Sent headers for chat view (non-blocking)
-      get().loadSentHeaders(accountId);
+      if (!isStale()) get().loadSentHeaders(accountId);
     } catch (error) {
       console.error('Failed to connect to server:', error);
 
@@ -570,16 +624,16 @@ export const useMailStore = create((set, get) => ({
         errorMessage = error.message;
       }
 
-      set({
-        mailboxes: defaultMailboxes,
-        localEmails,
-        savedEmailIds, archivedEmailIds,
-        connectionStatus: 'error',
-        connectionError: errorMessage,
-        connectionErrorType: errorType
-      });
+      if (!isStale()) {
+        set({
+          mailboxes: defaultMailboxes,
+          connectionStatus: 'error',
+          connectionError: errorMessage,
+          connectionErrorType: errorType
+        });
+      }
     } finally {
-      set({ loading: false });
+      if (!isStale()) set({ loading: false });
     }
   },
 
@@ -600,11 +654,13 @@ export const useMailStore = create((set, get) => ({
       selectedEmailIds: new Set()
     });
 
-    // Check if we have cached data for this mailbox
-    const cachedHeaders = await db.getEmailHeaders(activeAccountId, mailbox);
-    const savedEmailIds = await db.getSavedEmailIds(activeAccountId, mailbox);
-    const archivedEmailIds = await db.getArchivedEmailIds(activeAccountId, mailbox);
-    const localEmails = await db.getLocalEmails(activeAccountId, mailbox);
+    // Load cached data for this mailbox in parallel (all independent disk reads)
+    const [cachedHeaders, savedEmailIds, archivedEmailIds, localEmails] = await Promise.all([
+      db.getEmailHeaders(activeAccountId, mailbox),
+      db.getSavedEmailIds(activeAccountId, mailbox),
+      db.getArchivedEmailIds(activeAccountId, mailbox),
+      db.getLocalEmails(activeAccountId, mailbox),
+    ]);
 
     if (cachedHeaders && cachedHeaders.emails.length > 0) {
       console.log('[setActiveMailbox] Found cached data:', cachedHeaders.emails.length, 'emails for', mailbox);
@@ -653,10 +709,25 @@ export const useMailStore = create((set, get) => ({
     await get().loadEmails();
   },
   
-  // View mode
+  // View mode — refresh local state from disk when switching to local view
+  // so that in-progress bulk saves are reflected immediately
   setViewMode: (mode) => {
     set({ viewMode: mode });
     get().updateSortedEmails();
+    // Refresh local state in background for up-to-date archive data
+    if (mode === 'local' || mode === 'all') {
+      const { activeAccountId, activeMailbox } = get();
+      if (activeAccountId && activeMailbox) {
+        Promise.all([
+          db.getSavedEmailIds(activeAccountId, activeMailbox),
+          db.getArchivedEmailIds(activeAccountId, activeMailbox),
+          db.getLocalEmails(activeAccountId, activeMailbox),
+        ]).then(([savedEmailIds, archivedEmailIds, localEmails]) => {
+          set({ savedEmailIds, archivedEmailIds, localEmails });
+          get().updateSortedEmails();
+        });
+      }
+    }
   },
   
   // Load emails
@@ -665,18 +736,23 @@ export const useMailStore = create((set, get) => ({
     let account = accounts.find(a => a.id === activeAccountId);
     if (!account) return;
 
+    // Helper: check if this loadEmails call is still current
+    const isStale = () => get().activeAccountId !== activeAccountId;
+
     // Proactively refresh OAuth2 token if expiring soon
     account = await ensureFreshToken(account);
+    if (isStale()) return;
 
     const invoke = window.__TAURI__?.core?.invoke;
 
-    // Get local emails first (always available)
-    const localEmails = await db.getLocalEmails(activeAccountId, activeMailbox);
-    const savedEmailIds = await db.getSavedEmailIds(activeAccountId, activeMailbox);
-    const archivedEmailIds = await db.getArchivedEmailIds(activeAccountId, activeMailbox);
-
-    // Load cached headers from file cache for instant display BEFORE resetting state
-    const cachedHeaders = await db.getEmailHeaders(activeAccountId, activeMailbox);
+    // Load local state + cached headers in parallel (all independent disk reads)
+    const [localEmails, savedEmailIds, archivedEmailIds, cachedHeaders] = await Promise.all([
+      db.getLocalEmails(activeAccountId, activeMailbox),
+      db.getSavedEmailIds(activeAccountId, activeMailbox),
+      db.getArchivedEmailIds(activeAccountId, activeMailbox),
+      db.getEmailHeaders(activeAccountId, activeMailbox),
+    ]);
+    if (isStale()) return;
 
     if (cachedHeaders && cachedHeaders.emails.length > 0) {
       console.log('[loadEmails] Loaded', cachedHeaders.emails.length, 'cached headers from Maildir (total:', cachedHeaders.totalEmails, ')');
@@ -742,7 +818,7 @@ export const useMailStore = create((set, get) => ({
     const hasCredentials = account.password || (account.authType === 'oauth2' && account.oauth2AccessToken);
     if (!hasCredentials) {
       console.error('[loadEmails] Credentials missing for account:', account.email);
-      set({
+      if (!isStale()) set({
         // Keep previous/cached emails when credentials are missing
         emails: previousEmails,
         localEmails,
@@ -762,10 +838,11 @@ export const useMailStore = create((set, get) => ({
       try {
         console.log('[loadEmails] Checking network connectivity...');
         const isOnline = await invoke('check_network_connectivity');
+        if (isStale()) return;
         console.log('[loadEmails] Network connectivity result:', isOnline);
         if (isOnline === false) {
           console.error('[loadEmails] No network connectivity detected!');
-          set({
+          if (!isStale()) set({
             // Keep previous emails when offline
             emails: previousEmails,
             localEmails,
@@ -780,6 +857,7 @@ export const useMailStore = create((set, get) => ({
         }
       } catch (e) {
         console.warn('[loadEmails] Could not check network connectivity:', e);
+        if (isStale()) return;
         // If connectivity check itself fails, assume we're offline
         console.error('[loadEmails] Connectivity check failed, assuming offline');
         set({
@@ -819,25 +897,28 @@ export const useMailStore = create((set, get) => ({
       const existingEmails = get().emails;
       const cachedUidValidity = cachedHeaders?.uidValidity;
       const cachedUidNext = cachedHeaders?.uidNext;
+      const cachedHighestModseq = cachedHeaders?.highestModseq;
       const hasCachedSync = cachedUidValidity != null && cachedUidNext != null && existingEmails.length > 0;
 
       let mergedEmails;
       let serverTotal;
       let newUidValidity;
       let newUidNext;
+      let newHighestModseq;
 
       if (hasCachedSync) {
         // We have uidValidity/uidNext from last sync — try delta-sync
-        console.log('[loadEmails] Delta-sync: checking mailbox status (cached uidValidity=%d, uidNext=%d, emails=%d)',
-          cachedUidValidity, cachedUidNext, existingEmails.length);
+        console.log('[loadEmails] Delta-sync: checking mailbox status (cached uidValidity=%d, uidNext=%d, modseq=%s, emails=%d)',
+          cachedUidValidity, cachedUidNext, cachedHighestModseq ?? 'none', existingEmails.length);
 
         const status = await api.checkMailboxStatus(account, activeMailbox);
         newUidValidity = status.uidValidity;
         newUidNext = status.uidNext;
+        newHighestModseq = status.highestModseq ?? null;
         serverTotal = status.exists;
 
-        console.log('[loadEmails] Server status: exists=%d, uidValidity=%d, uidNext=%d',
-          serverTotal, newUidValidity, newUidNext);
+        console.log('[loadEmails] Server status: exists=%d, uidValidity=%d, uidNext=%d, modseq=%s',
+          serverTotal, newUidValidity, newUidNext, newHighestModseq ?? 'none');
 
         if (newUidValidity !== cachedUidValidity) {
           // UIDVALIDITY changed — cache is invalid, full reload required
@@ -850,8 +931,77 @@ export const useMailStore = create((set, get) => ({
             isLocal: savedEmailIds.has(email.uid),
             source: 'server'
           }));
-        } else if (newUidNext === cachedUidNext && serverTotal === existingEmails.length) {
-          // Nothing changed — skip all IMAP fetching
+        } else if (
+          // CONDSTORE fast path: if highestModseq matches and uidNext matches, NOTHING changed
+          newHighestModseq != null && cachedHighestModseq != null &&
+          newHighestModseq === cachedHighestModseq &&
+          newUidNext === cachedUidNext
+        ) {
+          console.log('[loadEmails] CONDSTORE: modseq unchanged (%s), zero IMAP calls needed', newHighestModseq);
+          set({
+            connectionStatus: 'connected',
+            connectionError: null,
+            connectionErrorType: null,
+            loadingMore: false
+          });
+          get().updateSortedEmails();
+          set({ loading: false, loadingMore: false });
+          // If cache is partial, continue loading remaining emails
+          if (existingEmails.length < serverTotal) {
+            console.log('[loadEmails] CONDSTORE: cache partial (%d/%d), scheduling loadMoreEmails', existingEmails.length, serverTotal);
+            set({ hasMoreEmails: true, totalEmails: serverTotal });
+            setTimeout(() => get().loadMoreEmails(), 2000);
+          }
+          return;
+        } else if (
+          // CONDSTORE flag-only sync: uidNext same but modseq changed → only flags changed
+          newHighestModseq != null && cachedHighestModseq != null &&
+          newHighestModseq !== cachedHighestModseq &&
+          newUidNext === cachedUidNext &&
+          serverTotal === existingEmails.length
+        ) {
+          console.log('[loadEmails] CONDSTORE: flag-only sync (modseq %s → %s)', cachedHighestModseq, newHighestModseq);
+          try {
+            const changes = await api.fetchChangedFlags(account, activeMailbox, cachedHighestModseq);
+            if (isStale()) return;
+
+            if (changes.length > 0) {
+              const changeMap = new Map(changes.map(c => [c.uid, c.flags]));
+              mergedEmails = existingEmails.map((email, idx) => {
+                const newFlags = changeMap.get(email.uid);
+                return {
+                  ...email,
+                  displayIndex: idx,
+                  flags: newFlags || email.flags
+                };
+              });
+              serverTotal = status.exists;
+              console.log('[loadEmails] CONDSTORE: updated flags for %d emails', changes.length);
+            } else {
+              // No actual changes found — keep cache
+              set({
+                connectionStatus: 'connected',
+                connectionError: null,
+                connectionErrorType: null,
+                loadingMore: false
+              });
+              get().updateSortedEmails();
+              set({ loading: false, loadingMore: false });
+              // If cache is partial, continue loading remaining emails
+              if (existingEmails.length < serverTotal) {
+                console.log('[loadEmails] CONDSTORE flag-sync: cache partial (%d/%d), scheduling loadMoreEmails', existingEmails.length, serverTotal);
+                set({ hasMoreEmails: true, totalEmails: serverTotal });
+                setTimeout(() => get().loadMoreEmails(), 2000);
+              }
+              return;
+            }
+          } catch (e) {
+            console.warn('[loadEmails] CONDSTORE flag sync failed, falling back to UID search:', e);
+            // Fall through to UID search below
+            mergedEmails = null;
+          }
+        } else if (newUidNext === cachedUidNext && serverTotal <= existingEmails.length) {
+          // Nothing changed (non-CONDSTORE path) — skip all IMAP fetching
           console.log('[loadEmails] Delta-sync: no changes detected, keeping cache as-is');
           set({
             connectionStatus: 'connected',
@@ -862,8 +1012,10 @@ export const useMailStore = create((set, get) => ({
           get().updateSortedEmails();
           set({ loading: false, loadingMore: false });
           return;
-        } else {
-          // Something changed — use UID SEARCH ALL to find exact diff
+        }
+
+        // UID search delta-sync: something changed that wasn't handled above
+        if (mergedEmails == null && newUidValidity === cachedUidValidity) {
           console.log('[loadEmails] Delta-sync: changes detected, searching UIDs...');
           const serverUids = await api.searchAllUids(account, activeMailbox);
           const serverUidSet = new Set(serverUids);
@@ -883,9 +1035,10 @@ export const useMailStore = create((set, get) => ({
             updatedEmails = updatedEmails.filter(e => !deletedSet.has(e.uid));
           }
 
-          // Fetch headers for new UIDs only
+          // Fetch headers for new UIDs only (sorted descending for newest-first)
           if (newUids.length > 0) {
-            const { emails: newHeaders } = await api.fetchHeadersByUids(account, activeMailbox, newUids);
+            const sortedNewUids = [...newUids].sort((a, b) => b - a);
+            const { emails: newHeaders } = await api.fetchHeadersByUids(account, activeMailbox, sortedNewUids);
             const newEmailsWithMeta = newHeaders.map(email => ({
               ...email,
               isLocal: savedEmailIds.has(email.uid),
@@ -909,12 +1062,14 @@ export const useMailStore = create((set, get) => ({
         serverTotal = serverResult.total;
         newUidValidity = null;
         newUidNext = null;
+        newHighestModseq = null;
 
-        // Get fresh status for uidValidity/uidNext to cache for next time
+        // Get fresh status for uidValidity/uidNext/highestModseq to cache for next time
         try {
           const status = await api.checkMailboxStatus(account, activeMailbox);
           newUidValidity = status.uidValidity;
           newUidNext = status.uidNext;
+          newHighestModseq = status.highestModseq ?? null;
         } catch (e) {
           console.warn('[loadEmails] Could not get mailbox status for caching:', e);
         }
@@ -968,6 +1123,12 @@ export const useMailStore = create((set, get) => ({
       const currentPage = Math.ceil(mergedEmails.length / 50) || 1;
       const hasMoreEmails = mergedEmails.length < serverTotal;
 
+      // Guard: account may have changed during async IMAP operations
+      if (isStale()) {
+        console.log('[loadEmails] Account changed during fetch, discarding results for', activeAccountId);
+        return;
+      }
+
       set({
         emails: mergedEmails,
         emailsByIndex,
@@ -985,10 +1146,11 @@ export const useMailStore = create((set, get) => ({
 
       get().updateSortedEmails();
 
-      // Save merged headers with uidValidity/uidNext for next delta-sync
+      // Save merged headers with uidValidity/uidNext/highestModseq for next delta-sync
       db.saveEmailHeaders(activeAccountId, activeMailbox, mergedEmails, serverTotal, {
         uidValidity: newUidValidity,
-        uidNext: newUidNext
+        uidNext: newUidNext,
+        highestModseq: newHighestModseq ?? null
       }).catch(e => console.warn('[loadEmails] Failed to cache headers:', e));
 
       // Continue loading more if we don't have all emails yet
@@ -1014,16 +1176,18 @@ export const useMailStore = create((set, get) => ({
       }
 
       // Keep previous/cached emails on error - don't wipe out the cache!
-      set({
-        emails: previousEmails.length > 0 ? previousEmails : localEmails,
-        localEmails,
-        savedEmailIds, archivedEmailIds,
-        connectionStatus: 'error',
-        connectionError: errorMessage,
-        connectionErrorType: errorType
-      });
+      if (!isStale()) {
+        set({
+          emails: previousEmails.length > 0 ? previousEmails : localEmails,
+          localEmails,
+          savedEmailIds, archivedEmailIds,
+          connectionStatus: 'error',
+          connectionError: errorMessage,
+          connectionErrorType: errorType
+        });
+      }
     } finally {
-      set({ loading: false, loadingMore: false });
+      if (!isStale()) set({ loading: false, loadingMore: false });
     }
   },
 
@@ -1293,6 +1457,8 @@ export const useMailStore = create((set, get) => ({
 
     // Quick-load from disk cache first (instant UI)
     const cached = await db.getEmailHeaders(accountId, sentPath);
+    // Guard: account may have changed during async cache read
+    if (get().activeAccountId !== accountId) return;
     if (cached?.emails?.length > 0) {
       set({ sentEmails: cached.emails });
     }
@@ -1304,8 +1470,12 @@ export const useMailStore = create((set, get) => ({
 
     try {
       const result = await api.fetchEmails(account, sentPath, 1, 200);
+      // Guard: account may have changed during async IMAP fetch
+      if (get().activeAccountId !== accountId) return;
       if (result?.emails?.length > 0) {
         await db.saveEmailHeaders(accountId, sentPath, result.emails, result.total);
+        // Guard: check again after async save
+        if (get().activeAccountId !== accountId) return;
         set({ sentEmails: result.emails });
       }
     } catch (e) {
@@ -1314,10 +1484,19 @@ export const useMailStore = create((set, get) => ({
     }
   },
 
-  // Get merged INBOX + Sent emails for chat view
+  // Get merged INBOX + Sent emails for chat view (memoized via module-level cache)
   getChatEmails: () => {
     const { sortedEmails, sentEmails } = get();
-    if (sentEmails.length === 0) return sortedEmails;
+
+    // Fingerprint check: skip merge+sort if inputs haven't changed
+    const fp = `${sortedEmails.length}-${sortedEmails[0]?.uid || 0}-${sortedEmails[sortedEmails.length - 1]?.uid || 0}-${sentEmails.length}-${sentEmails[0]?.uid || 0}`;
+    if (fp === _chatEmailsFingerprint && _chatEmailsCache.length > 0) return _chatEmailsCache;
+
+    if (sentEmails.length === 0) {
+      _chatEmailsCache = sortedEmails;
+      _chatEmailsFingerprint = fp;
+      return sortedEmails;
+    }
 
     // Deduplicate by messageId (some servers copy sent to INBOX)
     const seen = new Set();
@@ -1334,19 +1513,27 @@ export const useMailStore = create((set, get) => ({
       merged.push({ ...email, _fromSentFolder: true });
     }
 
-    merged.sort((a, b) => {
-      const dateA = new Date(a.date || a.internalDate || 0);
-      const dateB = new Date(b.date || b.internalDate || 0);
-      return dateB - dateA;
-    });
+    for (const e of merged) {
+      if (e._ts === undefined) e._ts = new Date(e.date || e.internalDate || 0).getTime();
+    }
+    merged.sort((a, b) => b._ts - a._ts);
 
+    _chatEmailsCache = merged;
+    _chatEmailsFingerprint = fp;
     return merged;
   },
   
-  // Build threads from merged INBOX + Sent emails using RFC header chains
+  // Build threads from merged INBOX + Sent emails using RFC header chains (memoized)
   getThreads: () => {
-    const emails = get().getChatEmails();
-    return buildThreads(emails);
+    const chatEmails = get().getChatEmails();
+    const fp = `${chatEmails.length}-${chatEmails[0]?.uid || 0}-${chatEmails[chatEmails.length - 1]?.uid || 0}`;
+    if (fp === _threadsFingerprint && _threadsCache.length > 0) {
+      return _threadsCache;
+    }
+    const threads = buildThreads(chatEmails);
+    _threadsCache = threads;
+    _threadsFingerprint = fp;
+    return threads;
   },
 
   // Select a thread (shows all emails in the thread in the viewer)
@@ -1507,16 +1694,23 @@ export const useMailStore = create((set, get) => ({
     account = await ensureFreshToken(account);
 
     const invoke = window.__TAURI__?.core?.invoke;
-    const listen = window.__TAURI__?.event?.listen;
 
     // Tauri available — use Rust async archive (runs on Tokio thread pool)
-    if (invoke && listen) {
+    if (invoke) {
+      console.log('[saveEmailsLocally] Starting Tauri archive for', uids.length, 'UIDs');
       set({ bulkSaveProgress: { total: uids.length, completed: 0, errors: 0, active: true } });
 
-      const unlisten = await listen('archive-progress', (event) => {
-        const p = event.payload;
-        set({ bulkSaveProgress: { total: p.total, completed: p.completed, errors: p.errors, active: p.active } });
-      });
+      // Use module import for reliable event listening (global can be unavailable)
+      let unlisten;
+      try {
+        const { listen } = await import('@tauri-apps/api/event');
+        unlisten = await listen('archive-progress', (event) => {
+          const p = event.payload;
+          set({ bulkSaveProgress: { total: p.total, completed: p.completed, errors: p.errors, active: p.active } });
+        });
+      } catch (e) {
+        console.warn('[saveEmailsLocally] Failed to register event listener:', e);
+      }
 
       try {
         await invoke('archive_emails', {
@@ -1532,8 +1726,10 @@ export const useMailStore = create((set, get) => ({
         const localEmails = await db.getLocalEmails(activeAccountId, activeMailbox);
         set({ savedEmailIds, archivedEmailIds, localEmails });
         get().updateSortedEmails();
+      } catch (err) {
+        console.error('[saveEmailsLocally] archive_emails failed:', err);
       } finally {
-        unlisten();
+        if (unlisten) unlisten();
         setTimeout(() => set({ bulkSaveProgress: null }), 3000);
       }
       return;

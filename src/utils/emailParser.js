@@ -266,17 +266,24 @@ export function buildThreads(emails) {
   // Step 6: Build thread objects
   const threads = new Map();
 
+  // Pre-parse dates once for all emails to avoid repeated new Date() in sort comparators
+  const dateCache = new Map();
+  const getDate = (email) => {
+    let d = dateCache.get(email);
+    if (d === undefined) {
+      d = new Date(email.date || email.internalDate || 0).getTime();
+      dateCache.set(email, d);
+    }
+    return d;
+  };
+
   for (const [threadId, threadEmails] of mergedGroups) {
     // Sort by date ascending (oldest first)
-    threadEmails.sort((a, b) => {
-      const dateA = new Date(a.date || a.internalDate || 0);
-      const dateB = new Date(b.date || b.internalDate || 0);
-      return dateA - dateB;
-    });
+    threadEmails.sort((a, b) => getDate(a) - getDate(b));
 
     const lastEmail = threadEmails[threadEmails.length - 1];
     const firstEmail = threadEmails[0];
-    const lastDate = new Date(lastEmail.date || lastEmail.internalDate || 0);
+    const lastDate = new Date(getDate(lastEmail));
 
     // Collect unique participants
     const participantSet = new Set();
@@ -305,10 +312,152 @@ export function buildThreads(emails) {
       unreadCount,
       messageCount: threadEmails.length,
       dateRange: {
-        start: new Date(firstEmail.date || firstEmail.internalDate || 0),
+        start: new Date(getDate(firstEmail)),
         end: lastDate
       }
     });
+  }
+
+  return threads;
+}
+
+/**
+ * Find the thread root for a single email given a messageId index.
+ * Extracted from buildThreads() for reuse in incremental updates.
+ */
+function findThreadRoot(email, byMessageId, visited = new Set()) {
+  if (email.messageId && visited.has(email.messageId)) return email.messageId;
+  if (email.messageId) visited.add(email.messageId);
+
+  const refs = email.references || [];
+  if (refs.length > 0) return refs[0];
+
+  if (email.inReplyTo) {
+    const parent = byMessageId.get(email.inReplyTo);
+    if (parent) return findThreadRoot(parent, byMessageId, visited);
+    return email.inReplyTo;
+  }
+
+  return email.messageId || `uid-${email.uid}`;
+}
+
+/**
+ * Incrementally update an existing thread map with added/removed emails.
+ * Only touches affected threads instead of rebuilding the entire map.
+ *
+ * @param {Map} existingThreads - previous buildThreads() result
+ * @param {Array} newEmails - emails to add
+ * @param {Set} removedUids - UIDs to remove
+ * @param {Array} allEmails - full current email list (for messageId index)
+ * @returns {Map} updated threads map (shallow copy with mutations)
+ */
+export function updateThreads(existingThreads, newEmails, removedUids, allEmails) {
+  if (newEmails.length === 0 && removedUids.size === 0) return existingThreads;
+
+  // Build messageId index from all emails for thread root lookups
+  const byMessageId = new Map();
+  for (const email of allEmails) {
+    if (email.messageId) byMessageId.set(email.messageId, email);
+  }
+
+  // Shallow copy the threads map so React detects the change
+  const threads = new Map(existingThreads);
+
+  // Helper: pre-parse date for sorting
+  const getTs = (email) => {
+    if (email._threadTs !== undefined) return email._threadTs;
+    email._threadTs = new Date(email.date || email.internalDate || 0).getTime();
+    return email._threadTs;
+  };
+
+  // Helper: rebuild thread metadata after mutation
+  const rebuildThreadMeta = (threadId, threadEmails) => {
+    if (threadEmails.length === 0) {
+      threads.delete(threadId);
+      return;
+    }
+    threadEmails.sort((a, b) => getTs(a) - getTs(b));
+    const firstEmail = threadEmails[0];
+    const lastEmail = threadEmails[threadEmails.length - 1];
+    const lastDate = new Date(getTs(lastEmail));
+
+    const participantSet = new Set();
+    for (const e of threadEmails) {
+      if (e.from?.address) participantSet.add(e.from.address.toLowerCase());
+      if (e.to) for (const to of e.to) if (to.address) participantSet.add(to.address.toLowerCase());
+    }
+
+    const unreadCount = threadEmails.filter(e => !e.flags?.includes('\\Seen')).length;
+
+    threads.set(threadId, {
+      threadId,
+      subject: normalizeSubject(firstEmail.subject),
+      originalSubject: firstEmail.subject || '(No subject)',
+      emails: threadEmails,
+      lastDate,
+      lastEmail,
+      participants: Array.from(participantSet),
+      unreadCount,
+      messageCount: threadEmails.length,
+      dateRange: { start: new Date(getTs(firstEmail)), end: lastDate }
+    });
+  };
+
+  // Remove emails by UID
+  if (removedUids.size > 0) {
+    for (const [threadId, thread] of existingThreads) {
+      const filtered = thread.emails.filter(e => !removedUids.has(e.uid));
+      if (filtered.length !== thread.emails.length) {
+        rebuildThreadMeta(threadId, filtered);
+      }
+    }
+  }
+
+  // Add new emails
+  if (newEmails.length > 0) {
+    // Build subject-to-threadId index for orphan merging
+    const subjectToThreadId = new Map();
+    for (const [threadId, thread] of threads) {
+      const subj = normalizeSubject(thread.emails[0]?.subject);
+      if (!subjectToThreadId.has(subj) || thread.emails.length > 1) {
+        subjectToThreadId.set(subj, threadId);
+      }
+    }
+
+    for (const email of newEmails) {
+      const threadId = findThreadRoot(email, byMessageId);
+      const hasRfcHeaders = email.inReplyTo || (email.references && email.references.length > 0);
+
+      // Try to find existing thread
+      let targetThreadId = threadId;
+      if (!threads.has(targetThreadId)) {
+        // Orphan: try subject-based merge if no RFC headers
+        if (!hasRfcHeaders) {
+          const subj = normalizeSubject(email.subject);
+          const canonical = subjectToThreadId.get(subj);
+          if (canonical && threads.has(canonical)) {
+            targetThreadId = canonical;
+          }
+        }
+      }
+
+      if (threads.has(targetThreadId)) {
+        const existing = threads.get(targetThreadId);
+        // Avoid duplicates
+        if (!existing.emails.some(e => e.uid === email.uid)) {
+          const updatedEmails = [...existing.emails, email];
+          rebuildThreadMeta(targetThreadId, updatedEmails);
+        }
+      } else {
+        // New thread
+        rebuildThreadMeta(threadId, [email]);
+        // Register subject for future orphan merging
+        const subj = normalizeSubject(email.subject);
+        if (!subjectToThreadId.has(subj)) {
+          subjectToThreadId.set(subj, threadId);
+        }
+      }
+    }
   }
 
   return threads;

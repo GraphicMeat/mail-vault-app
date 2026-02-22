@@ -165,7 +165,7 @@ function AttachmentContextMenu({ x, y, downloadedPath, onDownload, onSaveAs, onO
   );
 }
 
-function AttachmentItem({ attachment, attachmentIndex, emailUid, account, folder }) {
+export function AttachmentItem({ attachment, attachmentIndex, emailUid, account, folder, accountId: accountIdProp, mailbox: mailboxProp, compact }) {
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState(null);
   const [downloadedPath, setDownloadedPath] = useState(null);
@@ -178,12 +178,15 @@ function AttachmentItem({ attachment, attachmentIndex, emailUid, account, folder
     state => ({ activeAccountId: state.activeAccountId, activeMailbox: state.activeMailbox })
   );
 
+  const resolvedAccountId = accountIdProp || activeAccountId;
+  const resolvedMailbox = mailboxProp || activeMailbox;
+
   // Lazy-load attachment content from disk on demand (with retry for timing)
   const ensureContent = async () => {
     if (contentBase64) return contentBase64;
     if (isTauri) {
       const { invoke } = window.__TAURI__.core;
-      const args = { accountId: activeAccountId, mailbox: activeMailbox, uid: emailUid, attachmentIndex };
+      const args = { accountId: resolvedAccountId, mailbox: resolvedMailbox, uid: emailUid, attachmentIndex };
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
           const b64 = await invoke('maildir_read_attachment', args);
@@ -220,8 +223,8 @@ function AttachmentItem({ attachment, attachmentIndex, emailUid, account, folder
         const savedPath = await invoke('save_attachment', {
           filename: attachment.filename || 'attachment',
           contentBase64: base64Content,
-          account: account || null,
-          folder: folder || null,
+          account: resolvedAccountId || null,
+          folder: resolvedMailbox || null,
         });
         setDownloadedPath(savedPath);
         setJustDownloaded(true);
@@ -326,28 +329,31 @@ function AttachmentItem({ attachment, attachmentIndex, emailUid, account, folder
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const iconSize = compact ? 14 : 20;
+  const badgeIconSize = compact ? 12 : 16;
+
   return (
     <>
       <div
-        className={`flex items-center gap-3 p-3 bg-mail-bg rounded-lg border transition-all group cursor-pointer
+        className={`flex items-center gap-${compact ? '2' : '3'} ${compact ? 'px-2.5 py-1.5' : 'p-3'} bg-mail-bg rounded-lg border transition-all group cursor-pointer
                    ${error ? 'border-mail-danger' : justDownloaded ? 'border-green-500/50' : 'border-mail-border hover:border-mail-accent/50'}`}
         onClick={downloadedPath && isTauri ? handleOpen : handleDownload}
         onContextMenu={handleContextMenu}
         role="button"
         tabIndex={0}
       >
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${justDownloaded ? 'bg-green-500/10' : 'bg-mail-accent/10'}`}>
+        <div className={`${compact ? 'w-7 h-7' : 'w-10 h-10'} rounded-lg flex items-center justify-center ${justDownloaded ? 'bg-green-500/10' : 'bg-mail-accent/10'}`}>
           {justDownloaded ? (
-            <Check size={20} className="text-green-500" />
+            <Check size={iconSize} className="text-green-500" />
           ) : (
-            <FileText size={20} className="text-mail-accent" />
+            <FileText size={iconSize} className="text-mail-accent" />
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium text-mail-text truncate">
+          <div className={`${compact ? 'text-xs' : 'text-sm'} font-medium text-mail-text truncate`}>
             {attachment.filename || 'Unnamed attachment'}
           </div>
-          <div className="text-xs text-mail-text-muted">
+          <div className={`${compact ? 'text-[10px]' : 'text-xs'} text-mail-text-muted`}>
             {error ? (
               <span className="text-mail-danger">{error}</span>
             ) : justDownloaded ? (
@@ -360,17 +366,17 @@ function AttachmentItem({ attachment, attachmentIndex, emailUid, account, folder
           </div>
         </div>
         {downloading ? (
-          <div className="w-4 h-4 border-2 border-mail-accent border-t-transparent rounded-full animate-spin" />
+          <div className={`${compact ? 'w-3 h-3' : 'w-4 h-4'} border-2 border-mail-accent border-t-transparent rounded-full animate-spin`} />
         ) : justDownloaded ? (
-          <Check size={16} className="text-green-500" />
+          <Check size={badgeIconSize} className="text-green-500" />
         ) : downloadedPath ? (
           <ExternalLink
-            size={16}
+            size={badgeIconSize}
             className="text-mail-text-muted group-hover:text-mail-accent transition-colors"
           />
         ) : (
           <Download
-            size={16}
+            size={badgeIconSize}
             className="text-mail-text-muted group-hover:text-mail-accent transition-colors"
           />
         )}
