@@ -26,19 +26,17 @@ const LOCATION_OPTIONS = [
 ];
 
 export function SearchBar() {
-  const {
-    searchQuery,
-    searchFilters,
-    searchActive,
-    isSearching,
-    searchResults,
-    setSearchQuery,
-    setSearchFilters,
-    performSearch,
-    clearSearch,
-    mailboxes,
-    activeMailbox
-  } = useMailStore();
+  const searchQuery = useMailStore(s => s.searchQuery);
+  const searchFilters = useMailStore(s => s.searchFilters);
+  const searchActive = useMailStore(s => s.searchActive);
+  const isSearching = useMailStore(s => s.isSearching);
+  const searchResults = useMailStore(s => s.searchResults);
+  const setSearchQuery = useMailStore(s => s.setSearchQuery);
+  const setSearchFilters = useMailStore(s => s.setSearchFilters);
+  const performSearch = useMailStore(s => s.performSearch);
+  const clearSearch = useMailStore(s => s.clearSearch);
+  const mailboxes = useMailStore(s => s.mailboxes);
+  const activeMailbox = useMailStore(s => s.activeMailbox);
 
   const {
     searchHistory,

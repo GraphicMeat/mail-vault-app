@@ -506,7 +506,8 @@ fn cache_base_name(account_id: &str, mailbox: &str) -> String {
 }
 
 #[tauri::command]
-fn save_email_cache(app_handle: tauri::AppHandle, account_id: String, mailbox: String, data: String) -> Result<(), String> {
+async fn save_email_cache(app_handle: tauri::AppHandle, account_id: String, mailbox: String, data: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
     let base_dir = app_handle
         .path()
         .app_data_dir()
@@ -527,6 +528,7 @@ fn save_email_cache(app_handle: tauri::AppHandle, account_id: String, mailbox: S
         "totalEmails": parsed.get("totalEmails"),
         "uidValidity": parsed.get("uidValidity"),
         "uidNext": parsed.get("uidNext"),
+        "highestModseq": parsed.get("highestModseq"),
         "lastSynced": parsed.get("lastSynced")
     });
     fs::write(sidecar_dir.join("_meta.json"), serde_json::to_string(&meta).unwrap())
@@ -572,6 +574,7 @@ fn save_email_cache(app_handle: tauri::AppHandle, account_id: String, mailbox: S
     }
 
     Ok(())
+    }).await.map_err(|e| format!("Task join error: {}", e))?
 }
 
 #[tauri::command]
@@ -605,49 +608,51 @@ fn load_email_cache(app_handle: tauri::AppHandle, account_id: String, mailbox: S
 
 /// Load only the N most recent emails from sidecar cache (fast initial display)
 #[tauri::command]
-fn load_email_cache_partial(app_handle: tauri::AppHandle, account_id: String, mailbox: String, limit: usize) -> Result<Option<String>, String> {
-    let base_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not get app data directory: {}", e))?
-        .join("email_cache");
+async fn load_email_cache_partial(app_handle: tauri::AppHandle, account_id: String, mailbox: String, limit: usize) -> Result<Option<String>, String> {
+    tokio::task::spawn_blocking(move || {
+        let base_dir = app_handle
+            .path()
+            .app_data_dir()
+            .map_err(|e| format!("Could not get app data directory: {}", e))?
+            .join("email_cache");
 
-    let base_name = cache_base_name(&account_id, &mailbox);
-    let sidecar_dir = base_dir.join(&base_name);
-    let meta_file = sidecar_dir.join("_meta.json");
+        let base_name = cache_base_name(&account_id, &mailbox);
+        let sidecar_dir = base_dir.join(&base_name);
+        let meta_file = sidecar_dir.join("_meta.json");
 
-    // Try sidecar format first
-    if meta_file.exists() {
-        return load_from_sidecars(&sidecar_dir, &meta_file, Some(limit));
-    }
-
-    // Fall back to old monolithic format (parse and truncate in memory)
-    let old_file = base_dir.join(format!("{}.json", base_name));
-    if old_file.exists() {
-        info!("Partial load falling back to monolithic: {:?}", old_file);
-        let data = fs::read_to_string(&old_file)
-            .map_err(|e| format!("Failed to read cache file: {}", e))?;
-        let mut parsed: serde_json::Value = serde_json::from_str(&data)
-            .map_err(|e| format!("Failed to parse cache JSON: {}", e))?;
-
-        let total_cached = parsed.get("emails")
-            .and_then(|e| e.as_array())
-            .map(|a| a.len())
-            .unwrap_or(0);
-
-        if let Some(emails) = parsed.get_mut("emails").and_then(|e| e.as_array_mut()) {
-            if emails.len() > limit {
-                emails.truncate(limit);
-            }
+        // Try sidecar format first
+        if meta_file.exists() {
+            return load_from_sidecars(&sidecar_dir, &meta_file, Some(limit));
         }
-        parsed.as_object_mut().map(|o| o.insert("totalCached".to_string(), serde_json::json!(total_cached)));
 
-        let result = serde_json::to_string(&parsed)
-            .map_err(|e| format!("Failed to serialize: {}", e))?;
-        return Ok(Some(result));
-    }
+        // Fall back to old monolithic format (parse and truncate in memory)
+        let old_file = base_dir.join(format!("{}.json", base_name));
+        if old_file.exists() {
+            info!("Partial load falling back to monolithic: {:?}", old_file);
+            let data = fs::read_to_string(&old_file)
+                .map_err(|e| format!("Failed to read cache file: {}", e))?;
+            let mut parsed: serde_json::Value = serde_json::from_str(&data)
+                .map_err(|e| format!("Failed to parse cache JSON: {}", e))?;
 
-    Ok(None)
+            let total_cached = parsed.get("emails")
+                .and_then(|e| e.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0);
+
+            if let Some(emails) = parsed.get_mut("emails").and_then(|e| e.as_array_mut()) {
+                if emails.len() > limit {
+                    emails.truncate(limit);
+                }
+            }
+            parsed.as_object_mut().map(|o| o.insert("totalCached".to_string(), serde_json::json!(total_cached)));
+
+            let result = serde_json::to_string(&parsed)
+                .map_err(|e| format!("Failed to serialize: {}", e))?;
+            return Ok(Some(result));
+        }
+
+        Ok(None)
+    }).await.map_err(|e| format!("Task join error: {}", e))?
 }
 
 /// Read emails from sidecar directory. If limit is Some(n), only read the N most recent (highest UIDs).
@@ -706,6 +711,65 @@ fn load_from_sidecars(sidecar_dir: &Path, meta_file: &Path, limit: Option<usize>
     serde_json::to_string(&result)
         .map(|s| Some(s))
         .map_err(|e| format!("Failed to serialize sidecar cache: {}", e))
+}
+
+/// Load only cache metadata (no emails) — fast, for delta-sync parameters
+#[tauri::command]
+fn load_email_cache_meta(app_handle: tauri::AppHandle, account_id: String, mailbox: String) -> Result<Option<String>, String> {
+    let base_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not get app data directory: {}", e))?
+        .join("email_cache");
+
+    let base_name = cache_base_name(&account_id, &mailbox);
+    let sidecar_dir = base_dir.join(&base_name);
+    let meta_file = sidecar_dir.join("_meta.json");
+
+    // Try sidecar format
+    if meta_file.exists() {
+        let meta_data = fs::read_to_string(&meta_file)
+            .map_err(|e| format!("Failed to read _meta.json: {}", e))?;
+        let mut meta: serde_json::Value = serde_json::from_str(&meta_data)
+            .map_err(|e| format!("Failed to parse _meta.json: {}", e))?;
+
+        // Count UID files for totalCached
+        let total_cached = fs::read_dir(&sidecar_dir)
+            .map(|entries| entries.flatten().filter(|e| {
+                let name = e.file_name().to_string_lossy().to_string();
+                name != "_meta.json" && name.ends_with(".json")
+            }).count())
+            .unwrap_or(0);
+
+        meta.as_object_mut().map(|o| o.insert("totalCached".to_string(), serde_json::json!(total_cached)));
+
+        return serde_json::to_string(&meta)
+            .map(|s| Some(s))
+            .map_err(|e| format!("Failed to serialize: {}", e));
+    }
+
+    // Fall back to old monolithic format — parse only metadata
+    let old_file = base_dir.join(format!("{}.json", base_name));
+    if old_file.exists() {
+        let data = fs::read_to_string(&old_file)
+            .map_err(|e| format!("Failed to read cache file: {}", e))?;
+        let parsed: serde_json::Value = serde_json::from_str(&data)
+            .map_err(|e| format!("Failed to parse cache JSON: {}", e))?;
+        let total_cached = parsed.get("emails").and_then(|e| e.as_array()).map(|a| a.len()).unwrap_or(0);
+        let meta = serde_json::json!({
+            "totalEmails": parsed.get("totalEmails"),
+            "uidValidity": parsed.get("uidValidity"),
+            "uidNext": parsed.get("uidNext"),
+            "highestModseq": parsed.get("highestModseq"),
+            "lastSynced": parsed.get("lastSynced"),
+            "totalCached": total_cached
+        });
+        return serde_json::to_string(&meta)
+            .map(|s| Some(s))
+            .map_err(|e| format!("Failed to serialize: {}", e));
+    }
+
+    Ok(None)
 }
 
 #[tauri::command]
@@ -1675,35 +1739,37 @@ fn maildir_read_light(
 }
 
 #[tauri::command]
-fn maildir_read_light_batch(
+async fn maildir_read_light_batch(
     app_handle: tauri::AppHandle,
     account_id: String,
     mailbox: String,
     uids: Vec<u32>,
 ) -> Result<Vec<Option<LightEmail>>, String> {
-    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
-    let mut results = Vec::with_capacity(uids.len());
+    tokio::task::spawn_blocking(move || {
+        let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
+        let mut results = Vec::with_capacity(uids.len());
 
-    for uid in uids {
-        match find_file_by_uid(&cur_dir, uid) {
-            Some(file_path) => {
-                let filename = file_path.file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_default();
-                let flags = parse_flags_from_filename(&filename);
-                match fs::read(&file_path) {
-                    Ok(raw) => match parse_eml_bytes_light(&raw, uid, flags) {
-                        Ok(email) => results.push(Some(email)),
+        for uid in &uids {
+            match find_file_by_uid(&cur_dir, *uid) {
+                Some(file_path) => {
+                    let filename = file_path.file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    let flags = parse_flags_from_filename(&filename);
+                    match fs::read(&file_path) {
+                        Ok(raw) => match parse_eml_bytes_light(&raw, *uid, flags) {
+                            Ok(email) => results.push(Some(email)),
+                            Err(_) => results.push(None),
+                        },
                         Err(_) => results.push(None),
-                    },
-                    Err(_) => results.push(None),
+                    }
                 }
+                None => results.push(None),
             }
-            None => results.push(None),
         }
-    }
 
-    Ok(results)
+        Ok(results)
+    }).await.map_err(|e| format!("Task join error: {}", e))?
 }
 
 #[tauri::command]
@@ -1769,50 +1835,52 @@ fn maildir_exists(
 }
 
 #[tauri::command]
-fn maildir_list(
+async fn maildir_list(
     app_handle: tauri::AppHandle,
     account_id: String,
     mailbox: String,
     require_flag: Option<String>,
 ) -> Result<Vec<MaildirEmailSummary>, String> {
-    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
+    tokio::task::spawn_blocking(move || {
+        let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
 
-    if !cur_dir.exists() {
-        return Ok(Vec::new());
-    }
-
-    let entries = fs::read_dir(&cur_dir)
-        .map_err(|e| format!("Failed to read Maildir: {}", e))?;
-
-    let mut results = Vec::new();
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-
-        let uid: u32 = match name.split(':').next().and_then(|s| s.parse().ok()) {
-            Some(u) => u,
-            None => continue,
-        };
-
-        let flags = parse_flags_from_filename(&name);
-        let is_archived = flags.iter().any(|f| f == "archived");
-
-        if let Some(ref required) = require_flag {
-            if !flags.iter().any(|f| f == required) {
-                continue;
-            }
+        if !cur_dir.exists() {
+            return Ok(Vec::new());
         }
 
-        let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+        let entries = fs::read_dir(&cur_dir)
+            .map_err(|e| format!("Failed to read Maildir: {}", e))?;
 
-        results.push(MaildirEmailSummary {
-            uid,
-            flags,
-            is_archived,
-            size,
-        });
-    }
+        let mut results = Vec::new();
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
 
-    Ok(results)
+            let uid: u32 = match name.split(':').next().and_then(|s| s.parse().ok()) {
+                Some(u) => u,
+                None => continue,
+            };
+
+            let flags = parse_flags_from_filename(&name);
+            let is_archived = flags.iter().any(|f| f == "archived");
+
+            if let Some(ref required) = &require_flag {
+                if !flags.iter().any(|f| f == required) {
+                    continue;
+                }
+            }
+
+            let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+
+            results.push(MaildirEmailSummary {
+                uid,
+                flags,
+                is_archived,
+                size,
+            });
+        }
+
+        Ok(results)
+    }).await.map_err(|e| format!("Task join error: {}", e))?
 }
 
 #[tauri::command]
@@ -2466,6 +2534,7 @@ fn main() {
             save_email_cache,
             load_email_cache,
             load_email_cache_partial,
+            load_email_cache_meta,
             clear_email_cache,
             save_attachment,
             save_attachment_to,

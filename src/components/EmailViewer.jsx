@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useMailStore } from '../stores/mailStore';
+import { useShallow } from 'zustand/react/shallow';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { ComposeModal } from './ComposeModal';
@@ -832,7 +833,9 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isLast, active
 // ── Thread View (shows all emails in a thread) ──────────────────────────────
 
 function ThreadView({ thread }) {
-  const { activeAccountId, activeMailbox, savedEmailIds, archivedEmailIds, saveEmailsLocally } = useMailStore();
+  const { activeAccountId, activeMailbox, savedEmailIds, archivedEmailIds, saveEmailsLocally } = useMailStore(
+    useShallow(s => ({ activeAccountId: s.activeAccountId, activeMailbox: s.activeMailbox, savedEmailIds: s.savedEmailIds, archivedEmailIds: s.archivedEmailIds, saveEmailsLocally: s.saveEmailsLocally }))
+  );
   const [saving, setSaving] = useState(false);
   const scrollContainerRef = useRef(null);
   const lastEmailRef = useRef(null);

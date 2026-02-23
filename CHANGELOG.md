@@ -42,6 +42,10 @@
 - **IMAP pool sessions always re-SELECT** — `with_background`/`with_priority` helpers now pass the selected mailbox back to the pool for session reuse tracking
 - **App.jsx and usePipelineCoordinator re-renders** — converted whole-store subscriptions to individual Zustand selectors
 - **Stale rAF scroll position** — fixed `handleScroll` to read `scrollTop` inside the rAF callback, not in the stale event closure
+- **UI freeze on large mailboxes (17k+ emails)** — monolithic `getEmailHeaders()` reading all 17k sidecar JSON files replaced with `getEmailHeadersPartial(200)` for instant display; added `load_email_cache_meta` Rust command for metadata-only reads; heavy Rust commands (`save_email_cache`, `load_email_cache_partial`, `maildir_list`, `maildir_read_light_batch`) moved to `tokio::spawn_blocking` to prevent main-thread blocking
+- **Endless spinner on account switching** — `getLocalEmails()` reading all .eml files removed from `setActiveAccount`, `setActiveMailbox`, and `loadEmails` hot paths; archived emails now load via fire-and-forget `getArchivedEmails()` (reads only archived .eml subset); added `_loadEmailsGeneration` counter to cancel stale concurrent `loadEmails` calls on rapid account switching
+- **Background pipeline re-reading 17k files** — `EmailPipelineManager` now uses in-memory `pipeline._lastLoadedEmails` from Phase 1 header loading instead of calling `db.getEmailHeaders()` for Phase 2 content caching
+- **Whole-store Zustand subscriptions** — added `useShallow` selectors to ChatBubbleView, ChatSenderList, ChatViewWrapper, EmailViewer; converted bare `useMailStore()` to individual selectors in useEmailScheduler and SearchBar
 
 ## [1.7.0] - 2026-02-21
 

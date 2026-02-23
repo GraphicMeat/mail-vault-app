@@ -24,6 +24,9 @@ let _flagChangeCounter = 0;
 // Module-level loadMore dedup timer
 let _loadMoreTimer = null;
 
+// Module-level loadEmails generation counter — prevents stale concurrent calls
+let _loadEmailsGeneration = 0;
+
 // Module-level range retry state — avoids polluting Zustand store with dynamic keys
 const _rangeRetryDelays = new Map();
 
@@ -302,10 +305,8 @@ export const useMailStore = create((set, get) => ({
           await get().loadEmails();
           get().loadSentHeaders(firstVisible.id);
         } else {
-          console.log('[init] Setting active account:', firstVisible.id);
           await get().setActiveAccount(firstVisible.id);
         }
-        console.log('[init] Account setup done');
       }
     } catch (error) {
       console.error('Failed to initialize:', error);
@@ -493,17 +494,21 @@ export const useMailStore = create((set, get) => ({
       set({ loading: true });
     }
 
-    // Fire-and-forget: load local emails in background (slow, reads .eml files)
-    // Updates isLocal flags and local-only emails when ready, without blocking network ops
+    // Fire-and-forget: load saved/archived IDs, then archived email headers from disk.
+    // maildir_read_light_batch is now async (tokio thread pool) so it won't freeze the UI.
     Promise.all([
-      db.getLocalEmails(accountId, lastMailbox),
       db.getSavedEmailIds(accountId, lastMailbox),
       db.getArchivedEmailIds(accountId, lastMailbox)
-    ]).then(([localEmails, savedEmailIds, archivedEmailIds]) => {
+    ]).then(async ([savedEmailIds, archivedEmailIds]) => {
       if (isStale()) return;
-      set({ localEmails, savedEmailIds, archivedEmailIds });
+      set({ savedEmailIds, archivedEmailIds });
+      if (archivedEmailIds.size > 0) {
+        const archivedEmails = await db.getArchivedEmails(accountId, lastMailbox, archivedEmailIds);
+        if (isStale()) return;
+        set({ localEmails: archivedEmails });
+      }
       get().updateSortedEmails();
-    }).catch(e => console.warn('[setActiveAccount] Local email load failed:', e));
+    }).catch(e => console.warn('[setActiveAccount] ID load failed:', e));
 
     // Use cached mailboxes from last successful connection, or INBOX-only as safe fallback.
     // Never use hardcoded paths like "Sent" — some servers require "INBOX.Sent" prefix.
@@ -662,16 +667,24 @@ export const useMailStore = create((set, get) => ({
       selectedEmailIds: new Set()
     });
 
-    // Load cached data for this mailbox in parallel (all independent disk reads)
-    const [cachedHeaders, savedEmailIds, archivedEmailIds, localEmails] = await Promise.all([
-      db.getEmailHeaders(activeAccountId, mailbox),
+    // Load partial cached data (200 most recent) + saved/archived IDs + archived headers.
+    const [cachedHeaders, savedEmailIds, archivedEmailIds] = await Promise.all([
+      db.getEmailHeadersPartial(activeAccountId, mailbox, 200),
       db.getSavedEmailIds(activeAccountId, mailbox),
       db.getArchivedEmailIds(activeAccountId, mailbox),
-      db.getLocalEmails(activeAccountId, mailbox),
     ]);
+    let localEmails = [];
+    // Fire-and-forget: load archived emails from disk (async Rust, won't freeze UI)
+    if (archivedEmailIds.size > 0) {
+      db.getArchivedEmails(activeAccountId, mailbox, archivedEmailIds).then(archivedEmails => {
+        if (get().activeAccountId !== activeAccountId || get().activeMailbox !== mailbox) return;
+        set({ localEmails: archivedEmails });
+        get().updateSortedEmails();
+      }).catch(() => {});
+    }
 
     if (cachedHeaders && cachedHeaders.emails.length > 0) {
-      console.log('[setActiveMailbox] Found cached data:', cachedHeaders.emails.length, 'emails for', mailbox);
+      console.log('[setActiveMailbox] Found cached data:', cachedHeaders.emails.length, 'of', cachedHeaders.totalCached, 'emails for', mailbox);
 
       // Build sparse index from cached emails
       const emailsByIndex = new Map();
@@ -744,8 +757,11 @@ export const useMailStore = create((set, get) => ({
     let account = accounts.find(a => a.id === activeAccountId);
     if (!account) return;
 
+    // Bump generation — any previous in-flight loadEmails call becomes stale
+    const generation = ++_loadEmailsGeneration;
+
     // Helper: check if this loadEmails call is still current
-    const isStale = () => get().activeAccountId !== activeAccountId;
+    const isStale = () => get().activeAccountId !== activeAccountId || _loadEmailsGeneration !== generation;
 
     // Proactively refresh OAuth2 token if expiring soon
     account = await ensureFreshToken(account);
@@ -753,53 +769,73 @@ export const useMailStore = create((set, get) => ({
 
     const invoke = window.__TAURI__?.core?.invoke;
 
-    // Load local state + cached headers in parallel (all independent disk reads)
-    const [localEmails, savedEmailIds, archivedEmailIds, cachedHeaders] = await Promise.all([
-      db.getLocalEmails(activeAccountId, activeMailbox),
+    // Load saved/archived IDs + cache metadata + archived email headers.
+    // Only reads archived .eml files (small subset), NOT all .eml files.
+    const [savedEmailIds, archivedEmailIds, cachedHeaders] = await Promise.all([
       db.getSavedEmailIds(activeAccountId, activeMailbox),
       db.getArchivedEmailIds(activeAccountId, activeMailbox),
-      db.getEmailHeaders(activeAccountId, activeMailbox),
+      db.getEmailHeadersMeta(activeAccountId, activeMailbox),
     ]);
     if (isStale()) return;
+    // Load archived email headers from disk in background (async Rust, won't freeze UI).
+    // This populates localEmails so archived emails appear in the list before their IMAP page loads.
+    let localEmails = get().localEmails || [];
+    if (archivedEmailIds.size > 0 && localEmails.length === 0) {
+      // Fire-and-forget: don't await — let IMAP sync proceed in parallel
+      db.getArchivedEmails(activeAccountId, activeMailbox, archivedEmailIds).then(archivedEmails => {
+        if (isStale()) return;
+        set({ localEmails: archivedEmails });
+        get().updateSortedEmails();
+      }).catch(() => {});
+    }
 
-    if (cachedHeaders && cachedHeaders.emails.length > 0) {
-      console.log('[loadEmails] Loaded', cachedHeaders.emails.length, 'cached headers from Maildir (total:', cachedHeaders.totalEmails, ')');
+    // Use existing emails from store (populated by QuickLoad or previous setActiveMailbox)
+    const existingStoreEmails = get().emails;
+    const hasExistingEmails = existingStoreEmails.length > 0;
 
-      // Build sparse index from cached emails
-      const emailsByIndex = new Map();
-      cachedHeaders.emails.forEach((email, idx) => {
-        // Use displayIndex if available, otherwise use array index
-        const index = email.displayIndex !== undefined ? email.displayIndex : idx;
-        emailsByIndex.set(index, {
-          ...email,
-          isLocal: savedEmailIds.has(email.uid),
-          source: email.source || 'server'
-        });
-      });
-
-      // Calculate loaded ranges from cached data
-      const loadedRanges = cachedHeaders.emails.length > 0
-        ? [{ start: 0, end: cachedHeaders.emails.length }]
-        : [];
-
-      // Set cached data immediately - don't reset to empty!
-      // Use loadingMore to indicate background refresh while showing cached data
+    if (hasExistingEmails) {
+      // QuickLoad or setActiveMailbox already populated emails — just update local state
       set({
-        emails: cachedHeaders.emails,
-        emailsByIndex,
-        loadedRanges,
-        loadingRanges: new Set(),
-        totalEmails: cachedHeaders.totalEmails,
         localEmails,
         savedEmailIds, archivedEmailIds,
-        loading: false, // Show cached data immediately
-        loadingMore: true, // Indicate background refresh is happening
+        loading: false,
+        loadingMore: true,
         error: null,
-        currentPage: Math.ceil(cachedHeaders.emails.length / 50) || 1,
-        hasMoreEmails: cachedHeaders.emails.length < cachedHeaders.totalEmails
+        totalEmails: cachedHeaders?.totalEmails ?? existingStoreEmails.length,
+        hasMoreEmails: existingStoreEmails.length < (cachedHeaders?.totalEmails ?? existingStoreEmails.length)
       });
       get().updateSortedEmails();
-      console.log('[loadEmails] Showing cached data, will refresh from server in background...');
+    } else if (cachedHeaders && cachedHeaders.totalCached > 0) {
+      // No emails in store but cache exists — load partial (200 most recent) for fast display
+      console.log('[loadEmails] Store empty, loading 200 from cache (total cached: %d)', cachedHeaders.totalCached);
+      const partialHeaders = await db.getEmailHeadersPartial(activeAccountId, activeMailbox, 200);
+      if (isStale()) return;
+
+      if (partialHeaders && partialHeaders.emails.length > 0) {
+        const emailsByIndex = new Map();
+        partialHeaders.emails.forEach((email, idx) => {
+          emailsByIndex.set(idx, {
+            ...email,
+            isLocal: savedEmailIds.has(email.uid),
+            source: email.source || 'server'
+          });
+        });
+        set({
+          emails: partialHeaders.emails,
+          emailsByIndex,
+          loadedRanges: [{ start: 0, end: partialHeaders.emails.length }],
+          loadingRanges: new Set(),
+          totalEmails: cachedHeaders.totalEmails,
+          localEmails,
+          savedEmailIds, archivedEmailIds,
+          loading: false,
+          loadingMore: true,
+          error: null,
+          currentPage: Math.ceil(partialHeaders.emails.length / 50) || 1,
+          hasMoreEmails: partialHeaders.emails.length < cachedHeaders.totalEmails
+        });
+        get().updateSortedEmails();
+      }
     } else {
       // No cache - reset state to empty
       console.log('[loadEmails] No cached headers, starting fresh');
@@ -844,7 +880,6 @@ export const useMailStore = create((set, get) => ({
 
     if (invoke) {
       try {
-        console.log('[loadEmails] Checking network connectivity...');
         const isOnline = await invoke('check_network_connectivity');
         if (isStale()) return;
         console.log('[loadEmails] Network connectivity result:', isOnline);
@@ -916,17 +951,11 @@ export const useMailStore = create((set, get) => ({
 
       if (hasCachedSync) {
         // We have uidValidity/uidNext from last sync — try delta-sync
-        console.log('[loadEmails] Delta-sync: checking mailbox status (cached uidValidity=%d, uidNext=%d, modseq=%s, emails=%d)',
-          cachedUidValidity, cachedUidNext, cachedHighestModseq ?? 'none', existingEmails.length);
-
         const status = await api.checkMailboxStatus(account, activeMailbox);
         newUidValidity = status.uidValidity;
         newUidNext = status.uidNext;
         newHighestModseq = status.highestModseq ?? null;
         serverTotal = status.exists;
-
-        console.log('[loadEmails] Server status: exists=%d, uidValidity=%d, uidNext=%d, modseq=%s',
-          serverTotal, newUidValidity, newUidNext, newHighestModseq ?? 'none');
 
         if (newUidValidity !== cachedUidValidity) {
           // UIDVALIDITY changed — cache is invalid, full reload required
@@ -945,7 +974,6 @@ export const useMailStore = create((set, get) => ({
           newHighestModseq === cachedHighestModseq &&
           newUidNext === cachedUidNext
         ) {
-          console.log('[loadEmails] CONDSTORE: modseq unchanged (%s), zero IMAP calls needed', newHighestModseq);
           set({
             connectionStatus: 'connected',
             connectionError: null,
@@ -954,12 +982,12 @@ export const useMailStore = create((set, get) => ({
           });
           get().updateSortedEmails();
           set({ loading: false, loadingMore: false });
-          // If cache is partial, continue loading remaining emails
+          // If store is partial, load remaining from disk cache then IMAP
           if (existingEmails.length < serverTotal) {
-            console.log('[loadEmails] CONDSTORE: cache partial (%d/%d), scheduling loadMoreEmails', existingEmails.length, serverTotal);
+            console.log('[loadEmails] CONDSTORE: store partial (%d/%d), loading remaining from cache...', existingEmails.length, serverTotal);
             set({ hasMoreEmails: true, totalEmails: serverTotal });
             if (_loadMoreTimer) clearTimeout(_loadMoreTimer);
-            _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 2000);
+            _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 500);
           }
           return;
         } else if (
@@ -996,12 +1024,12 @@ export const useMailStore = create((set, get) => ({
               });
               get().updateSortedEmails();
               set({ loading: false, loadingMore: false });
-              // If cache is partial, continue loading remaining emails
+              // If store is partial, load remaining from disk cache then IMAP
               if (existingEmails.length < serverTotal) {
-                console.log('[loadEmails] CONDSTORE flag-sync: cache partial (%d/%d), scheduling loadMoreEmails', existingEmails.length, serverTotal);
+                console.log('[loadEmails] CONDSTORE flag-sync: store partial (%d/%d), scheduling loadMoreEmails', existingEmails.length, serverTotal);
                 set({ hasMoreEmails: true, totalEmails: serverTotal });
                 if (_loadMoreTimer) clearTimeout(_loadMoreTimer);
-            _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 2000);
+                _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 500);
               }
               return;
             }
@@ -1010,33 +1038,41 @@ export const useMailStore = create((set, get) => ({
             // Fall through to UID search below
             mergedEmails = null;
           }
-        } else if (newUidNext === cachedUidNext && serverTotal <= existingEmails.length) {
+        } else if (newUidNext === cachedUidNext && serverTotal <= (cachedHeaders?.totalCached ?? existingEmails.length)) {
           // Nothing changed (non-CONDSTORE path) — skip all IMAP fetching
-          console.log('[loadEmails] Delta-sync: no changes detected, keeping cache as-is');
+          // Compare against totalCached (not store length) since store may only have partial data from QuickLoad
           set({
             connectionStatus: 'connected',
             connectionError: null,
             connectionErrorType: null,
-            loadingMore: false
+            loadingMore: false,
+            totalEmails: serverTotal
           });
           get().updateSortedEmails();
           set({ loading: false, loadingMore: false });
+          // If store only has partial data (QuickLoad), schedule loadMoreEmails to paginate from IMAP
+          if (existingEmails.length < serverTotal) {
+            console.log('[loadEmails] Delta-sync: store partial (%d/%d), scheduling loadMoreEmails', existingEmails.length, serverTotal);
+            set({ hasMoreEmails: true });
+            if (_loadMoreTimer) clearTimeout(_loadMoreTimer);
+            _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 500);
+          }
           return;
         }
 
         // UID search delta-sync: something changed that wasn't handled above
         if (mergedEmails == null && newUidValidity === cachedUidValidity) {
-          console.log('[loadEmails] Delta-sync: changes detected, searching UIDs...');
           const serverUids = await api.searchAllUids(account, activeMailbox);
           const serverUidSet = new Set(serverUids);
-          const cachedUidSet = new Set(existingEmails.map(e => e.uid));
+          const storeUidSet = new Set(existingEmails.map(e => e.uid));
 
-          // Find new UIDs (on server but not in cache)
-          const newUids = serverUids.filter(uid => !cachedUidSet.has(uid));
-          // Find deleted UIDs (in cache but not on server)
+          // Find truly new UIDs — only those above cachedUidNext (not just missing from partial store).
+          // Without this, a store with 200 emails from QuickLoad would think 16k+ UIDs are "new".
+          const newUids = cachedUidNext
+            ? serverUids.filter(uid => uid >= cachedUidNext)
+            : serverUids.filter(uid => !storeUidSet.has(uid));
+          // Find deleted UIDs (only check against what's in the store)
           const deletedUids = existingEmails.filter(e => !serverUidSet.has(e.uid)).map(e => e.uid);
-
-          console.log('[loadEmails] Delta-sync: %d new, %d deleted', newUids.length, deletedUids.length);
 
           // Start with existing emails, remove deleted ones
           let updatedEmails = existingEmails;
@@ -1067,7 +1103,6 @@ export const useMailStore = create((set, get) => ({
         }
       } else {
         // No cached sync metadata — fall back to page-1 fetch
-        console.log('[loadEmails] No delta-sync data, fetching page 1...');
         const serverResult = await api.fetchEmails(account, activeMailbox, 1);
         serverTotal = serverResult.total;
         newUidValidity = null;
@@ -1465,8 +1500,8 @@ export const useMailStore = create((set, get) => ({
     const sentPath = get().getSentMailboxPath();
     if (!sentPath) { set({ sentEmails: [] }); return; }
 
-    // Quick-load from disk cache first (instant UI)
-    const cached = await db.getEmailHeaders(accountId, sentPath);
+    // Quick-load from disk cache first (instant UI) — partial load for speed
+    const cached = await db.getEmailHeadersPartial(accountId, sentPath, 200);
     // Guard: account may have changed during async cache read
     if (get().activeAccountId !== accountId) return;
     if (cached?.emails?.length > 0) {

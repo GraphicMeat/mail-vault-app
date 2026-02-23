@@ -30,6 +30,7 @@ export class AccountPipeline {
     this._phase = 'idle'; // 'idle' | 'headers' | 'content' | 'done'
     this._destroyed = false;
     this._paused = false;
+    this._lastLoadedEmails = null; // Cache loaded headers in memory for content caching phase
   }
 
   get state() {
@@ -72,6 +73,7 @@ export class AccountPipeline {
 
       if (allEmails.length > 0 && !this._destroyed) {
         await db.saveEmailHeaders(this.accountId, mailbox, allEmails, total);
+        this._lastLoadedEmails = allEmails; // Keep in memory for content caching phase
         console.log(`[Pipeline:${this.account.email}] Cached ${allEmails.length}/${total} headers`);
       }
     } catch (e) {
@@ -165,8 +167,8 @@ export class AccountPipeline {
         this._retryQueue.push(uid);
       }
 
-      // Small breathing room between fetches
-      await new Promise(r => setTimeout(r, 200));
+      // Small breathing room between fetches (yield to event loop)
+      await new Promise(r => setTimeout(r, 50));
     }
 
     this._activeSlots--;
@@ -208,16 +210,23 @@ export class AccountPipeline {
     const { activeAccountId, activeMailbox } = useMailStore.getState();
     if (this.accountId === activeAccountId) {
       try {
-        const [newSavedIds, newArchivedIds, newLocalEmails] = await Promise.all([
+        const [newSavedIds, newArchivedIds] = await Promise.all([
           db.getSavedEmailIds(activeAccountId, activeMailbox),
           db.getArchivedEmailIds(activeAccountId, activeMailbox),
-          db.getLocalEmails(activeAccountId, activeMailbox),
         ]);
         useMailStore.setState({
           savedEmailIds: newSavedIds,
           archivedEmailIds: newArchivedIds,
-          localEmails: newLocalEmails
         });
+        // Refresh archived emails from disk (async Rust, won't freeze UI)
+        if (newArchivedIds.size > 0) {
+          db.getArchivedEmails(activeAccountId, activeMailbox, newArchivedIds).then(archivedEmails => {
+            const current = useMailStore.getState();
+            if (current.activeAccountId !== activeAccountId) return;
+            useMailStore.setState({ localEmails: archivedEmails });
+            useMailStore.getState().updateSortedEmails();
+          }).catch(() => {});
+        }
         useMailStore.getState().updateSortedEmails();
 
         // Persist updated hasAttachments values to headers cache

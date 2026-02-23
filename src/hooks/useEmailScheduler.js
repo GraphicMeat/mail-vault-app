@@ -6,7 +6,10 @@ import { useSettingsStore } from '../stores/settingsStore';
 const invoke = window.__TAURI__?.core?.invoke;
 
 export function useEmailScheduler() {
-  const { refreshAllAccounts, accounts, emails, totalUnreadCount } = useMailStore();
+  const refreshAllAccounts = useMailStore(s => s.refreshAllAccounts);
+  const accounts = useMailStore(s => s.accounts);
+  const emails = useMailStore(s => s.emails);
+  const totalUnreadCount = useMailStore(s => s.totalUnreadCount);
   const {
     refreshInterval,
     refreshOnLaunch,
