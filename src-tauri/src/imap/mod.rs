@@ -515,26 +515,6 @@ pub async fn select_mailbox(session: &mut ImapSession, mailbox: &str) -> Result<
         .map_err(|e| format!("SELECT {} failed: {}", mailbox, e))
 }
 
-/// Select a mailbox, skipping the SELECT command if already on the right mailbox.
-/// Returns cached Mailbox status when skipped. Use `select_mailbox()` for fresh status.
-pub async fn select_mailbox_cached(
-    session: &mut ImapSession,
-    mailbox: &str,
-    pool: &ImapPool,
-    config: &ImapConfig,
-) -> Result<Mailbox, String> {
-    if let Some(ref last) = pool.get_last_selected(config).await {
-        if last == mailbox {
-            info!("[IMAP] SELECT skipped (already on {})", mailbox);
-            // Return a minimal Mailbox — callers that need real status use select_mailbox()
-            return Ok(Mailbox::default());
-        }
-    }
-    let mbox = select_mailbox(session, mailbox).await?;
-    pool.set_last_selected(config, mailbox).await;
-    Ok(mbox)
-}
-
 /// Fetch email headers by page (newest first)
 pub async fn fetch_emails_page(
     session: &mut ImapSession,

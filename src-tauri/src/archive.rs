@@ -142,7 +142,7 @@ async fn fetch_and_store(
     use std::fs;
 
     // Get a priority session for the fetch
-    let mut session = pool.get_priority(account).await?;
+    let (mut session, _last_sel) = pool.get_priority(account).await?;
 
     let email = imap::fetch_email_by_uid(&mut session, mailbox, uid)
         .await
@@ -151,7 +151,7 @@ async fn fetch_and_store(
             format!("IMAP fetch failed: {}", e)
         })?;
 
-    pool.return_priority(account, session).await;
+    pool.return_priority(account, session, Some(mailbox.to_string())).await;
 
     let email = email.ok_or_else(|| format!("Email UID {} not found", uid))?;
 

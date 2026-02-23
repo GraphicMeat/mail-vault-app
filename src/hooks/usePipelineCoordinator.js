@@ -11,9 +11,21 @@ import { pipelineManager } from '../services/EmailPipelineManager';
  *   - Cleans up on unmount
  */
 export function usePipelineCoordinator() {
-  const { activeAccountId, emails, loading, accounts } = useMailStore();
+  const activeAccountId = useMailStore(s => s.activeAccountId);
+  const emails = useMailStore(s => s.emails);
+  const loading = useMailStore(s => s.loading);
+  const accounts = useMailStore(s => s.accounts);
   const startedForRef = useRef(null); // tracks which account we started the pipeline for
   const prevAccountIdRef = useRef(null);
+  const prevEmailCountRef = useRef(0);
+
+  // Reset pipeline tracking when emails drop to 0 (e.g., cache clear)
+  useEffect(() => {
+    if (prevEmailCountRef.current > 0 && emails.length === 0) {
+      startedForRef.current = null;
+    }
+    prevEmailCountRef.current = emails.length;
+  }, [emails.length]);
 
   // Start active account pipeline after emails load
   useEffect(() => {

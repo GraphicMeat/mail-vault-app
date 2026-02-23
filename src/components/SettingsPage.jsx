@@ -1690,10 +1690,10 @@ export function SettingsPage({ onClose, onAddAccount }) {
                                 const usage = await getStorageUsage();
                                 setLocalStorageUsage(usage);
 
-                                // Restart pipelines — coordinator will pick up on next cycle
+                                // Restart pipelines — reset destroyed flag and let coordinator re-trigger
                                 const activeAccountId = useMailStore.getState().activeAccountId;
                                 if (activeAccountId) {
-                                  pipelineManager.switchAccount(activeAccountId);
+                                  pipelineManager.onAccountSwitch(activeAccountId);
                                 }
                               } catch (error) {
                                 console.error('Failed to clear cache:', error);

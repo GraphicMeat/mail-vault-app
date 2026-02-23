@@ -99,9 +99,14 @@ export function getPreview(email, maxLength = 50) {
 /**
  * Normalize subject for thread grouping
  * Strips Re:, Fwd:, FW:, RE: prefixes
+ * Results are memoized to avoid redundant regex work across multiple code paths.
  */
+const _normalizeSubjectCache = new Map();
 export function normalizeSubject(subject) {
   if (!subject) return '(No subject)';
+  const cached = _normalizeSubjectCache.get(subject);
+  if (cached !== undefined) return cached;
+
   const prefix = /^(re:|fwd:|fw:|re\[\d+\]:)\s*/i;
   let result = subject.trim();
   let prev;
@@ -109,7 +114,12 @@ export function normalizeSubject(subject) {
     prev = result;
     result = result.replace(prefix, '').trim();
   } while (result !== prev);
-  return result || '(No subject)';
+  const normalized = result || '(No subject)';
+
+  // Cap cache size to avoid unbounded growth
+  if (_normalizeSubjectCache.size > 50000) _normalizeSubjectCache.clear();
+  _normalizeSubjectCache.set(subject, normalized);
+  return normalized;
 }
 
 /**
@@ -182,28 +192,36 @@ export function buildThreads(emails) {
   // Step 2: Find the thread root for each email by walking the reference chain
   const emailToThreadId = new Map(); // email → threadId (root messageId)
 
-  const findRoot = (email, visited = new Set()) => {
-    if (email.messageId && visited.has(email.messageId)) return email.messageId;
-    if (email.messageId) visited.add(email.messageId);
+  const rootCache = new Map(); // messageId → threadRoot (memoization to avoid O(N²) chain walks)
 
+  const findRoot = (email, visited = new Set()) => {
+    const id = email.messageId || (email.uid ? `uid-${email.uid}` : null);
+    if (id && rootCache.has(id)) return rootCache.get(id);
+    if (id && visited.has(id)) return id;
+    if (id) visited.add(id);
+
+    let root;
     // Walk the references chain (oldest ancestor first)
     const refs = email.references || [];
     if (refs.length > 0) {
       // The first reference is the oldest ancestor = thread root
-      return refs[0];
-    }
-    // Fall back to inReplyTo
-    if (email.inReplyTo) {
+      root = refs[0];
+    } else if (email.inReplyTo) {
       // Check if that parent has its own root
       const parent = byMessageId.get(email.inReplyTo);
       if (parent) {
-        return findRoot(parent, visited);
+        root = findRoot(parent, visited);
+      } else {
+        // Parent not in our set — use inReplyTo as the thread root
+        root = email.inReplyTo;
       }
-      // Parent not in our set — use inReplyTo as the thread root
-      return email.inReplyTo;
+    } else {
+      // No threading headers — this email is its own root
+      root = email.messageId || `uid-${email.uid}`;
     }
-    // No threading headers — this email is its own root
-    return email.messageId || `uid-${email.uid}`;
+
+    if (id) rootCache.set(id, root);
+    return root;
   };
 
   // Step 3: Assign thread IDs
@@ -252,6 +270,7 @@ export function buildThreads(emails) {
   }
 
   // Second pass: merge orphans into canonical threads by subject
+  // Also check other orphans already promoted to mergedGroups
   for (const [threadId, threadEmails] of orphans) {
     const subject = threadIdToSubject.get(threadId);
     const canonicalThreadId = subjectToThreadId.get(subject);
@@ -259,7 +278,9 @@ export function buildThreads(emails) {
     if (canonicalThreadId !== threadId && mergedGroups.has(canonicalThreadId)) {
       mergedGroups.get(canonicalThreadId).push(...threadEmails);
     } else {
+      // First orphan with this subject becomes the canonical target for future orphans
       mergedGroups.set(threadId, [...threadEmails]);
+      subjectToThreadId.set(subject, threadId);
     }
   }
 

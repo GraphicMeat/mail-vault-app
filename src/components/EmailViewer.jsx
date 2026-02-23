@@ -174,9 +174,8 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, account,
   const [contentBase64, setContentBase64] = useState(attachment.content || null);
   const isTauri = !!window.__TAURI__;
 
-  const { activeAccountId, activeMailbox } = useMailStore(
-    state => ({ activeAccountId: state.activeAccountId, activeMailbox: state.activeMailbox })
-  );
+  const activeAccountId = useMailStore(s => s.activeAccountId);
+  const activeMailbox = useMailStore(s => s.activeMailbox);
 
   const resolvedAccountId = accountIdProp || activeAccountId;
   const resolvedMailbox = mailboxProp || activeMailbox;
@@ -405,9 +404,8 @@ function DownloadAllButton({ attachments, emailUid, account, folder }) {
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const isTauri = !!window.__TAURI__;
 
-  const { activeAccountId, activeMailbox } = useMailStore(
-    state => ({ activeAccountId: state.activeAccountId, activeMailbox: state.activeMailbox })
-  );
+  const activeAccountId = useMailStore(s => s.activeAccountId);
+  const activeMailbox = useMailStore(s => s.activeMailbox);
 
   const handleDownloadAll = async () => {
     if (attachments.length === 0) return;
@@ -509,7 +507,7 @@ function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, loadingR
           </div>
 
           <div className="text-sm text-mail-text-muted">
-            To: {email.to?.map(t => t.name || t.address).join(', ') || 'Unknown'}
+            To: {(Array.isArray(email.to) ? email.to : []).map(t => t.name || t.address).join(', ') || 'Unknown'}
             {email.cc?.length > 0 && (
               <span className="ml-2">
                 CC: {email.cc.map(c => c.name || c.address).join(', ')}
@@ -565,7 +563,11 @@ function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, loadingR
 function ThreadEmailItemContent({ email, loadedEmail, isLoading }) {
   const iframeRef = useRef(null);
 
-  const iframeContent = loadedEmail?.html ? `
+  const iframeContent = useMemo(() => {
+    if (!loadedEmail?.html) return '';
+    const bodyMatch = loadedEmail.html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    const bodyHtml = bodyMatch ? bodyMatch[1] : loadedEmail.html;
+    return `
     <!DOCTYPE html>
     <html>
       <head>
@@ -589,13 +591,10 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading }) {
           table { max-width: 100% !important; }
         </style>
       </head>
-      <body>${(() => {
-        if (!loadedEmail.html) return '';
-        const bodyMatch = loadedEmail.html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-        return bodyMatch ? bodyMatch[1] : loadedEmail.html;
-      })()}</body>
+      <body>${bodyHtml}</body>
     </html>
-  ` : '';
+  `;
+  }, [loadedEmail?.html]);
 
   // Auto-resize iframe and intercept links
   useEffect(() => {
@@ -753,7 +752,7 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isLast, active
         <div className="px-4 pb-4">
           {/* To/CC line */}
           <div className="text-xs text-mail-text-muted mb-2 pl-11">
-            To: {email.to?.map(t => t.name || t.address).join(', ') || 'Unknown'}
+            To: {(Array.isArray(email.to) ? email.to : []).map(t => t.name || t.address).join(', ') || 'Unknown'}
             {email.cc?.length > 0 && (
               <span className="ml-2">CC: {email.cc.map(c => c.name || c.address).join(', ')}</span>
             )}
@@ -923,21 +922,19 @@ function ThreadView({ thread }) {
 // ── Single Email Viewer ─────────────────────────────────────────────────────
 
 export function EmailViewer() {
-  const {
-    selectedEmail,
-    selectedEmailSource,
-    selectedThread,
-    loadingEmail,
-    savedEmailIds,
-    archivedEmailIds,
-    saveEmailLocally,
-    removeLocalEmail,
-    exportEmail,
-    markEmailReadStatus,
-    deleteEmailFromServer,
-    activeAccountId,
-    activeMailbox
-  } = useMailStore();
+  const selectedEmail = useMailStore(s => s.selectedEmail);
+  const selectedEmailSource = useMailStore(s => s.selectedEmailSource);
+  const selectedThread = useMailStore(s => s.selectedThread);
+  const loadingEmail = useMailStore(s => s.loadingEmail);
+  const savedEmailIds = useMailStore(s => s.savedEmailIds);
+  const archivedEmailIds = useMailStore(s => s.archivedEmailIds);
+  const saveEmailLocally = useMailStore(s => s.saveEmailLocally);
+  const removeLocalEmail = useMailStore(s => s.removeLocalEmail);
+  const exportEmail = useMailStore(s => s.exportEmail);
+  const markEmailReadStatus = useMailStore(s => s.markEmailReadStatus);
+  const deleteEmailFromServer = useMailStore(s => s.deleteEmailFromServer);
+  const activeAccountId = useMailStore(s => s.activeAccountId);
+  const activeMailbox = useMailStore(s => s.activeMailbox);
 
   const [headerExpanded, setHeaderExpanded] = useState(false);
   const [saving, setSaving] = useState(false);

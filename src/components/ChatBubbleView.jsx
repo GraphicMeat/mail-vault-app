@@ -294,9 +294,9 @@ function ContextMenu({ x, y, onReply, onReplyAll, onForward, onClose }) {
 function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOriginalVisible, onToggleOriginal, onContextMenu, onReply, onOpenFullView, bodiesMapRef, registerListener }) {
   const iframeRef = useRef(null);
 
-  const { activeAccountId, activeMailbox, getSentMailboxPath } = useMailStore(
-    state => ({ activeAccountId: state.activeAccountId, activeMailbox: state.activeMailbox, getSentMailboxPath: state.getSentMailboxPath })
-  );
+  const activeAccountId = useMailStore(s => s.activeAccountId);
+  const activeMailbox = useMailStore(s => s.activeMailbox);
+  const getSentMailboxPath = useMailStore(s => s.getSentMailboxPath);
 
   // Subscribe to body load updates for this specific email
   const [, forceUpdate] = useState(0);

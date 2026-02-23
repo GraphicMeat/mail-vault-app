@@ -70,7 +70,11 @@ const debugLog = (...args) => {
 };
 
 function App() {
-  const { init, accounts, error, clearError, connectionErrorType, emails, loading } = useMailStore();
+  const init = useMailStore(s => s.init);
+  const accounts = useMailStore(s => s.accounts);
+  const error = useMailStore(s => s.error);
+  const clearError = useMailStore(s => s.clearError);
+  const loading = useMailStore(s => s.loading);
   const { initTheme } = useThemeStore();
   const {
     layoutMode,

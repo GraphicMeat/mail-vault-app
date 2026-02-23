@@ -21,6 +21,7 @@ class EmailPipelineManager {
     this.pipelines = new Map(); // accountId → AccountPipeline
     this._activeAccountId = null;
     this._backgroundRunning = false;
+    this._destroyed = false;
   }
 
   /**
@@ -33,6 +34,7 @@ class EmailPipelineManager {
     if (!account || !hasValidCredentials(account) || isHidden(accountId)) return;
 
     this._activeAccountId = accountId;
+    this._destroyed = false; // Reset so background pipelines can run after destroyAll()
 
     // Destroy previous pipeline for this account if any
     if (this.pipelines.has(accountId)) {
@@ -133,9 +135,10 @@ class EmailPipelineManager {
         const savedIds = await db.getSavedEmailIds(account.id, 'INBOX');
         const uids = this._getUncachedUids(cachedHeaders.emails, savedIds, localCacheDurationMonths);
         if (uids.length > 0) {
-          const done = pipeline.waitForComplete();
+          // Start caching first, THEN await completion — avoids race where
+          // synchronous onComplete fires before waitForComplete sets up its promise
           pipeline.startContentCaching(uids, 'INBOX');
-          await done;
+          await pipeline.waitForComplete();
         }
       }
     }
@@ -210,6 +213,7 @@ class EmailPipelineManager {
    * Destroy all pipelines.
    */
   destroyAll() {
+    this._destroyed = true;
     for (const pipeline of this.pipelines.values()) {
       pipeline.destroy();
     }
