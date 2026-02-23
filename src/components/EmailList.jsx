@@ -316,13 +316,14 @@ const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSelected,
 });
 
 // Thread row for default layout — shows collapsed thread with participant names and count
-const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectThread, onToggleSelection, selectedEmailIds, style }) {
+const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectThread, onToggleSelection, anyChecked, style }) {
   const saveEmailsLocally = useMailStore(s => s.saveEmailsLocally);
   const deleteEmailFromServer = useMailStore(s => s.deleteEmailFromServer);
   const [menuOpen, setMenuOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmingDeleteThread, setConfirmingDeleteThread] = useState(false);
 
+  if (!thread?.lastEmail) return null;
   const latestEmail = thread.lastEmail;
   const hasUnread = thread.unreadCount > 0;
   const allArchived = thread.emails.every(e => e.isArchived);
@@ -342,8 +343,6 @@ const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectTh
     return names.length <= 2 ? names.join(', ') : `${names[0]}, ${names[1]} +${names.length - 2}`;
   }, [thread.emails]);
 
-  const anyChecked = thread.emails.some(e => selectedEmailIds.has(e.uid));
-
   const handleArchiveThread = async (e) => {
     e.stopPropagation();
     setSaving(true);
@@ -361,12 +360,13 @@ const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectTh
       setConfirmingDeleteThread(true);
       return;
     }
-    // Delete all server emails in the thread
-    for (const email of thread.emails) {
-      if (email.source !== 'local-only') {
-        await deleteEmailFromServer(email.uid);
-      }
+    // Delete all server emails in the thread, skip per-delete refresh
+    const serverEmails = thread.emails.filter(em => em.source !== 'local-only');
+    for (const email of serverEmails) {
+      await deleteEmailFromServer(email.uid, { skipRefresh: true });
     }
+    // Single refresh after all deletions
+    if (serverEmails.length > 0) useMailStore.getState().loadEmails();
     setMenuOpen(false);
     setConfirmingDeleteThread(false);
   };
@@ -475,13 +475,14 @@ const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectTh
 });
 
 // Compact thread row for compact layout
-const CompactThreadRow = React.memo(function CompactThreadRow({ thread, isSelected, onSelectThread, onToggleSelection, selectedEmailIds, style }) {
+const CompactThreadRow = React.memo(function CompactThreadRow({ thread, isSelected, onSelectThread, onToggleSelection, anyChecked, style }) {
   const saveEmailsLocally = useMailStore(s => s.saveEmailsLocally);
   const deleteEmailFromServer = useMailStore(s => s.deleteEmailFromServer);
   const [menuOpen, setMenuOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmingDeleteThread, setConfirmingDeleteThread] = useState(false);
 
+  if (!thread?.lastEmail) return null;
   const latestEmail = thread.lastEmail;
   const hasUnread = thread.unreadCount > 0;
   const allArchived = thread.emails.every(e => e.isArchived);
@@ -500,8 +501,6 @@ const CompactThreadRow = React.memo(function CompactThreadRow({ thread, isSelect
     return names.length <= 2 ? names.join(', ') : `${names[0]}, ${names[1]} +${names.length - 2}`;
   }, [thread.emails]);
 
-  const anyChecked = thread.emails.some(e => selectedEmailIds.has(e.uid));
-
   const handleArchiveThread = async (e) => {
     e.stopPropagation();
     setSaving(true);
@@ -519,11 +518,11 @@ const CompactThreadRow = React.memo(function CompactThreadRow({ thread, isSelect
       setConfirmingDeleteThread(true);
       return;
     }
-    for (const email of thread.emails) {
-      if (email.source !== 'local-only') {
-        await deleteEmailFromServer(email.uid);
-      }
+    const serverEmails = thread.emails.filter(em => em.source !== 'local-only');
+    for (const email of serverEmails) {
+      await deleteEmailFromServer(email.uid, { skipRefresh: true });
     }
+    if (serverEmails.length > 0) useMailStore.getState().loadEmails();
     setMenuOpen(false);
     setConfirmingDeleteThread(false);
   };
@@ -627,6 +626,7 @@ export function EmailList({ layoutMode = 'three-column' }) {
   const hasMoreEmails = useMailStore(s => s.hasMoreEmails);
   const searchActive = useMailStore(s => s.searchActive);
   const searchResults = useMailStore(s => s.searchResults);
+  const flagSeq = useMailStore(s => s._flagSeq);
   // Actions (stable references — never cause re-renders)
   const loadEmails = useMailStore(s => s.loadEmails);
   const loadMoreEmails = useMailStore(s => s.loadMoreEmails);
@@ -670,9 +670,9 @@ export function EmailList({ layoutMode = 'three-column' }) {
       return displayEmails.map(email => ({ type: 'email', email }));
     }
 
-    // Stable fingerprint: only rebuild threads when the email set materially changes
+    // Stable fingerprint: rebuild threads when the email set or flags change
     const mergedEmails = getChatEmails();
-    const fp = `${mergedEmails.length}-${mergedEmails[0]?.uid || 0}-${mergedEmails[mergedEmails.length - 1]?.uid || 0}`;
+    const fp = `${mergedEmails.length}-${mergedEmails[0]?.uid || 0}-${mergedEmails[mergedEmails.length - 1]?.uid || 0}-${flagSeq}`;
 
     let threads;
     if (threadCache.current.fingerprint === fp) {
@@ -696,7 +696,7 @@ export function EmailList({ layoutMode = 'three-column' }) {
       }
       return { type: 'thread', thread };
     });
-  }, [displayEmails, searchActive, sentEmails, getChatEmails]);
+  }, [displayEmails, searchActive, sentEmails, getChatEmails, flagSeq]);
 
   const hasSelection = selectedEmailIds.size > 0;
   const allSelected = displayEmails.length > 0 && selectedEmailIds.size === displayEmails.length;
@@ -743,9 +743,15 @@ export function EmailList({ layoutMode = 'three-column' }) {
     }
   }, [scrollTop, containerHeight, threadedDisplay.length, hasMoreEmails, loadingMore, searchActive, viewMode, loadMoreEmails]);
 
-  // Handle scroll
+  // Handle scroll — throttled via rAF to avoid 60fps re-renders
+  const rafRef = useRef(null);
   const handleScroll = useCallback((e) => {
-    setScrollTop(e.target.scrollTop);
+    if (rafRef.current) return;
+    const target = e.currentTarget;
+    rafRef.current = requestAnimationFrame(() => {
+      setScrollTop(target.scrollTop);
+      rafRef.current = null;
+    });
   }, []);
 
   // Generate visible rows
@@ -1010,6 +1016,7 @@ export function EmailList({ layoutMode = 'three-column' }) {
 
               if (item.type === 'thread') {
                 const ThreadRowComponent = isCompact ? CompactThreadRow : ThreadRow;
+                const anyChecked = item.thread.emails.some(e => selectedEmailIds.has(e.uid));
                 return (
                   <ThreadRowComponent
                     key={`thread-${item.thread.threadId}`}
@@ -1017,7 +1024,7 @@ export function EmailList({ layoutMode = 'three-column' }) {
                     isSelected={item.thread.emails.some(e => selectedEmailId === e.uid)}
                     onSelectThread={selectThread}
                     onToggleSelection={toggleEmailSelection}
-                    selectedEmailIds={selectedEmailIds}
+                    anyChecked={anyChecked}
                     style={rowStyle}
                   />
                 );

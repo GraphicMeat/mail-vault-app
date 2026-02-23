@@ -67,7 +67,7 @@ export class AccountPipeline {
         total = result.total;
         hasMore = result.hasMore;
         page++;
-        if (hasMore) await new Promise(r => setTimeout(r, 200));
+        if (hasMore) await new Promise(r => setTimeout(r, 50));
       }
 
       if (allEmails.length > 0 && !this._destroyed) {
@@ -117,17 +117,21 @@ export class AccountPipeline {
   async _workerLoop(slotIndex, mailbox) {
     this._activeSlots++;
 
+    // Ensure OAuth2 token is fresh once before the loop starts
+    try {
+      const freshAccount = await ensureFreshToken(this.account);
+      if (freshAccount !== this.account) this.account = freshAccount;
+    } catch (e) {
+      console.warn(`[Pipeline:${this.account.email}] Token refresh failed before worker loop:`, e.message);
+    }
+
     while (!this._destroyed && !this._paused) {
       const uid = this._queue.shift();
       if (uid === undefined) break; // queue empty, slot goes idle
 
       try {
-        // Ensure OAuth2 token is fresh before each fetch
-        const freshAccount = await ensureFreshToken(this.account);
-        if (freshAccount !== this.account) this.account = freshAccount;
-
         // Light fetch: auto-persists .eml to Maildir in Rust, returns metadata only
-        const email = await api.fetchEmailLight(freshAccount, uid, mailbox);
+        const email = await api.fetchEmailLight(this.account, uid, mailbox);
 
         const cacheKey = `${this.accountId}-${mailbox}-${uid}`;
         const cacheLimitMB = useSettingsStore.getState().cacheLimitMB;
@@ -150,6 +154,14 @@ export class AccountPipeline {
         this.onProgress(this.state);
       } catch (error) {
         console.error(`[Pipeline:${this.account.email}] Failed UID ${uid}:`, error.message || error);
+        // Re-refresh token on auth errors before retrying
+        const msg = String(error.message || error).toLowerCase();
+        if (msg.includes('auth') || msg.includes('token') || msg.includes('expired')) {
+          try {
+            const freshAccount = await ensureFreshToken(this.account);
+            if (freshAccount !== this.account) this.account = freshAccount;
+          } catch (_) {}
+        }
         this._retryQueue.push(uid);
       }
 
@@ -223,15 +235,26 @@ export class AccountPipeline {
 
   /**
    * Returns a promise that resolves when the current content caching run completes.
+   * Also resolves if the pipeline is destroyed before completion.
+   * Idempotent: returns the same promise if called multiple times.
    */
   waitForComplete() {
-    return new Promise(resolve => {
+    // Already finished, idle, or destroyed — resolve immediately
+    if (this._phase === 'idle' || this._phase === 'done' || this._destroyed) return Promise.resolve();
+    // Reuse existing wait promise if one exists
+    if (this._waitPromise) return this._waitPromise;
+
+    this._waitPromise = new Promise(resolve => {
+      this._waitResolve = resolve;
       const origComplete = this.onComplete;
       this.onComplete = () => {
+        this._waitResolve = null;
+        this._waitPromise = null;
         origComplete();
         resolve();
       };
     });
+    return this._waitPromise;
   }
 
   pause() {
@@ -262,5 +285,11 @@ export class AccountPipeline {
       this._retryTimer = null;
     }
     this._phase = 'idle';
+    // Resolve any pending waitForComplete() promise so callers don't hang forever
+    if (this._waitResolve) {
+      this._waitResolve();
+      this._waitResolve = null;
+      this._waitPromise = null;
+    }
   }
 }

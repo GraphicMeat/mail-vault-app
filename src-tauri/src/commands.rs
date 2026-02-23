@@ -6,8 +6,8 @@ use crate::oauth2::OAuth2Manager;
 use crate::smtp;
 
 // Helper: run an IMAP operation with a session from the pool.
-// On success, the session is returned to the pool. On error, the session is
-// logged out to avoid leaking TCP connections.
+// On success, the session is returned to the pool with its last-selected mailbox.
+// On error, the session is dropped (pool will create a new connection next time).
 async fn with_background<F, Fut, T>(
     pool: &ImapPool,
     account: &ImapConfig,
@@ -15,15 +15,15 @@ async fn with_background<F, Fut, T>(
 ) -> Result<T, String>
 where
     F: FnOnce(ImapSession) -> Fut,
-    Fut: std::future::Future<Output = Result<(T, ImapSession), String>>,
+    Fut: std::future::Future<Output = Result<(T, ImapSession, Option<String>), String>>,
 {
-    let session = pool.get_background(account).await?;
+    let (session, _last_sel) = pool.get_background(account).await?;
     match f(session).await {
-        Ok((result, session)) => {
-            pool.return_background(account, session).await;
+        Ok((result, session, selected_mailbox)) => {
+            pool.return_background(account, session, selected_mailbox).await;
             Ok(result)
         }
-        Err(e) => Err(e), // session dropped — pool created a new TCP conn, so nothing to return
+        Err(e) => Err(e),
     }
 }
 
@@ -34,12 +34,12 @@ async fn with_priority<F, Fut, T>(
 ) -> Result<T, String>
 where
     F: FnOnce(ImapSession) -> Fut,
-    Fut: std::future::Future<Output = Result<(T, ImapSession), String>>,
+    Fut: std::future::Future<Output = Result<(T, ImapSession, Option<String>), String>>,
 {
-    let session = pool.get_priority(account).await?;
+    let (session, _last_sel) = pool.get_priority(account).await?;
     match f(session).await {
-        Ok((result, session)) => {
-            pool.return_priority(account, session).await;
+        Ok((result, session, selected_mailbox)) => {
+            pool.return_priority(account, session, selected_mailbox).await;
             Ok(result)
         }
         Err(e) => Err(e),
@@ -82,7 +82,7 @@ pub async fn imap_get_mailboxes(
     let mailboxes = with_background(&pool, &account, |mut session| async move {
         let result = imap::list_mailboxes(&mut session).await
             .map_err(|e| format!("Failed to fetch mailboxes: {}", e))?;
-        Ok((result, session))
+        Ok((result, session, None))
     }).await?;
 
     Ok(serde_json::json!({
@@ -109,7 +109,7 @@ pub async fn imap_get_emails(
         with_background(&pool, &account, |mut session| async move {
             let result = imap::fetch_emails_page(&mut session, &mailbox, page, limit).await
                 .map_err(|e| format!("Failed to fetch emails: {}", e))?;
-            Ok((result, session))
+            Ok((result, session, Some(mailbox)))
         }).await?;
 
     Ok(serde_json::json!({
@@ -141,7 +141,7 @@ pub async fn imap_get_emails_range(
         with_background(&pool, &account, |mut session| async move {
             let result = imap::fetch_emails_range(&mut session, &mailbox, start, end).await
                 .map_err(|e| format!("Failed to fetch emails range: {}", e))?;
-            Ok((result, session))
+            Ok((result, session, Some(mailbox)))
         }).await?;
 
     Ok(serde_json::json!({
@@ -168,7 +168,7 @@ pub async fn imap_check_mailbox_status(
     let (exists, uid_validity, uid_next, highest_modseq) =
         with_background(&pool, &account, |mut session| async move {
             let result = imap::check_mailbox_status(&mut session, &mailbox, has_condstore).await?;
-            Ok((result, session))
+            Ok((result, session, Some(mailbox)))
         }).await?;
 
     Ok(serde_json::json!({
@@ -192,7 +192,7 @@ pub async fn imap_search_all_uids(
 
     let uids = with_background(&pool, &account, |mut session| async move {
         let result = imap::search_all_uids(&mut session, &mailbox, has_esearch).await?;
-        Ok((result, session))
+        Ok((result, session, Some(mailbox)))
     }).await?;
 
     Ok(serde_json::json!({
@@ -213,7 +213,7 @@ pub async fn imap_fetch_headers_by_uids(
 
     let (emails, total) = with_background(&pool, &account, |mut session| async move {
         let result = imap::fetch_headers_by_uids(&mut session, &mailbox, &uids).await?;
-        Ok((result, session))
+        Ok((result, session, Some(mailbox)))
     }).await?;
 
     Ok(serde_json::json!({
@@ -235,7 +235,7 @@ pub async fn imap_fetch_changed_flags(
 
     let changed = with_background(&pool, &account, |mut session| async move {
         let result = imap::fetch_changed_flags(&mut session, &mailbox, since_modseq).await?;
-        Ok((result, session))
+        Ok((result, session, Some(mailbox)))
     }).await?;
 
     // Convert to JSON-friendly format
@@ -263,7 +263,7 @@ pub async fn imap_get_email(
     let email = with_priority(&pool, &account, |mut session| async move {
         let result = imap::fetch_email_by_uid(&mut session, &mailbox, uid).await
             .map_err(|e| format!("Failed to fetch email: {}", e))?;
-        Ok((result, session))
+        Ok((result, session, Some(mailbox)))
     }).await?;
 
     match email {
@@ -291,7 +291,7 @@ pub async fn imap_get_email_light(
     let email = with_priority(&pool, &account, |mut session| async move {
         let result = imap::fetch_email_by_uid_light(&mut session, &mailbox, uid).await
             .map_err(|e| format!("Failed to fetch email: {}", e))?;
-        Ok((result, session))
+        Ok((result, session, Some(mailbox)))
     }).await?;
 
     match email {
@@ -334,7 +334,7 @@ pub async fn imap_set_flags(
     with_priority(&pool, &account, |mut session| async move {
         imap::set_flags(&mut session, &mailbox, uid, &flags, &action).await
             .map_err(|e| format!("Failed to update flags: {}", e))?;
-        Ok(((), session))
+        Ok(((), session, Some(mailbox)))
     }).await?;
 
     Ok(serde_json::json!({ "success": true }))
@@ -356,7 +356,7 @@ pub async fn imap_delete_email(
     with_priority(&pool, &account, |mut session| async move {
         imap::delete_email(&mut session, &mailbox, uid, permanent).await
             .map_err(|e| format!("Failed to delete email: {}", e))?;
-        Ok(((), session))
+        Ok(((), session, Some(mailbox)))
     }).await?;
 
     Ok(serde_json::json!({ "success": true }))
@@ -413,7 +413,7 @@ pub async fn imap_search_emails(
             filters.since.as_deref(),
             filters.before.as_deref(),
         ).await.map_err(|e| format!("Failed to search emails: {}", e))?;
-        Ok((result, session))
+        Ok((result, session, Some(mailbox)))
     }).await?;
 
     Ok(serde_json::json!({

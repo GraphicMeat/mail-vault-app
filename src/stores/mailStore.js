@@ -12,8 +12,20 @@ let _chatEmailsCache = [];
 let _chatEmailsFingerprint = '';
 
 // Module-level cache for getThreads() — avoids rebuilding threads on every call
-let _threadsCache = [];
+let _threadsCache = new Map();
 let _threadsFingerprint = '';
+
+// Module-level cache size tracking — avoids mutating Zustand state outside set()
+let _cacheCurrentSizeMB = 0;
+
+// Module-level flag change counter — used in updateSortedEmails fingerprint
+let _flagChangeCounter = 0;
+
+// Module-level loadMore dedup timer
+let _loadMoreTimer = null;
+
+// Module-level range retry state — avoids polluting Zustand store with dynamic keys
+const _rangeRetryDelays = new Map();
 
 export const useMailStore = create((set, get) => ({
   // Accounts
@@ -53,6 +65,8 @@ export const useMailStore = create((set, get) => ({
   // Pre-sorted emails for performance (memoization)
   sortedEmails: [],
   _sortedEmailsFingerprint: '',
+  // Incremented on flag changes (read/unread) — allows thread caches to invalidate
+  _flagSeq: 0,
 
   // Sent folder headers for chat view (merged with INBOX for conversations)
   sentEmails: [],
@@ -99,6 +113,7 @@ export const useMailStore = create((set, get) => ({
 
   // Clear email cache (call when switching accounts/mailboxes)
   clearEmailCache: () => {
+    _cacheCurrentSizeMB = 0;
     set({ emailCache: new Map(), cacheCurrentSizeMB: 0 });
   },
   
@@ -133,30 +148,21 @@ export const useMailStore = create((set, get) => ({
     // Enforce limit (treat 0 as unlimited but still cap at a safe ceiling for WKWebView)
     const effectiveLimit = cacheLimitMB > 0 ? cacheLimitMB : 4096;
 
-    // Evict oldest entries if we'd exceed the limit
-    let currentSize = cacheCurrentSizeMB;
+    // Evict oldest entries if we'd exceed the limit.
+    // O(1) per eviction: Map preserves insertion order, so first key = oldest.
+    // Delete-before-set ensures re-cached keys move to the end (LRU order).
+    let currentSize = _cacheCurrentSizeMB;
 
     while (currentSize + emailSize > effectiveLimit && emailCache.size > 0) {
-      let oldestKey = null;
-      let oldestTime = Infinity;
-
-      for (const [key, entry] of emailCache) {
-        if (entry.timestamp < oldestTime) {
-          oldestTime = entry.timestamp;
-          oldestKey = key;
-        }
-      }
-
-      if (oldestKey) {
-        const evicted = emailCache.get(oldestKey);
-        currentSize -= evicted.size;
-        emailCache.delete(oldestKey);
-      } else {
-        break;
-      }
+      const oldestKey = emailCache.keys().next().value;
+      if (oldestKey === undefined) break;
+      const evicted = emailCache.get(oldestKey);
+      currentSize -= evicted.size;
+      emailCache.delete(oldestKey);
     }
 
-    // Mutate the existing Map in place — no component subscribes to emailCache directly
+    // Delete first if key exists so re-insert moves it to end of insertion order (LRU)
+    if (emailCache.has(cacheKey)) emailCache.delete(cacheKey);
     emailCache.set(cacheKey, {
       email: lightEmail,
       timestamp: Date.now(),
@@ -166,12 +172,9 @@ export const useMailStore = create((set, get) => ({
     // Update size tracking without triggering a store notification on every cached email.
     // Only emit set() when the size changes by ≥1MB to avoid 15+ re-renders/sec from pipeline.
     const newSize = currentSize + emailSize;
-    const prevSize = get().cacheCurrentSizeMB;
-    if (Math.abs(newSize - prevSize) >= 1) {
+    _cacheCurrentSizeMB = newSize;
+    if (Math.abs(newSize - get().cacheCurrentSizeMB) >= 1) {
       set({ cacheCurrentSizeMB: newSize });
-    } else {
-      // Track internally without notifying subscribers
-      get().cacheCurrentSizeMB = newSize;
     }
   },
   
@@ -180,7 +183,7 @@ export const useMailStore = create((set, get) => ({
     const { emails, localEmails, viewMode, savedEmailIds, archivedEmailIds, _sortedEmailsFingerprint } = get();
 
     // Fingerprint check: skip if the input set hasn't materially changed
-    const fp = `${viewMode}-${emails.length}-${emails[0]?.uid || 0}-${emails[emails.length - 1]?.uid || 0}-${localEmails.length}-${archivedEmailIds.size}-${savedEmailIds.size}`;
+    const fp = `${viewMode}-${emails.length}-${emails[0]?.uid || 0}-${emails[emails.length - 1]?.uid || 0}-${localEmails.length}-${archivedEmailIds.size}-${savedEmailIds.size}-${_flagChangeCounter}`;
     if (fp === _sortedEmailsFingerprint) return;
 
     let result = [];
@@ -273,6 +276,11 @@ export const useMailStore = create((set, get) => ({
         const firstVisible = currentIsValid
           ? accounts.find(a => a.id === currentActiveId)
           : (accounts.find(a => !hiddenAccounts[a.id]) || accounts[0]);
+
+        if (!firstVisible) {
+          set({ loading: false });
+          return;
+        }
 
         if (currentActiveId === firstVisible.id) {
           // Quick-load already set this account — just refresh without resetting state
@@ -950,15 +958,16 @@ export const useMailStore = create((set, get) => ({
           if (existingEmails.length < serverTotal) {
             console.log('[loadEmails] CONDSTORE: cache partial (%d/%d), scheduling loadMoreEmails', existingEmails.length, serverTotal);
             set({ hasMoreEmails: true, totalEmails: serverTotal });
-            setTimeout(() => get().loadMoreEmails(), 2000);
+            if (_loadMoreTimer) clearTimeout(_loadMoreTimer);
+            _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 2000);
           }
           return;
         } else if (
           // CONDSTORE flag-only sync: uidNext same but modseq changed → only flags changed
+          // No serverTotal check needed — uidNext unchanged guarantees no new messages
           newHighestModseq != null && cachedHighestModseq != null &&
           newHighestModseq !== cachedHighestModseq &&
-          newUidNext === cachedUidNext &&
-          serverTotal === existingEmails.length
+          newUidNext === cachedUidNext
         ) {
           console.log('[loadEmails] CONDSTORE: flag-only sync (modseq %s → %s)', cachedHighestModseq, newHighestModseq);
           try {
@@ -991,7 +1000,8 @@ export const useMailStore = create((set, get) => ({
               if (existingEmails.length < serverTotal) {
                 console.log('[loadEmails] CONDSTORE flag-sync: cache partial (%d/%d), scheduling loadMoreEmails', existingEmails.length, serverTotal);
                 set({ hasMoreEmails: true, totalEmails: serverTotal });
-                setTimeout(() => get().loadMoreEmails(), 2000);
+                if (_loadMoreTimer) clearTimeout(_loadMoreTimer);
+            _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 2000);
               }
               return;
             }
@@ -1155,7 +1165,8 @@ export const useMailStore = create((set, get) => ({
 
       // Continue loading more if we don't have all emails yet
       if (hasMoreEmails) {
-        setTimeout(() => get().loadMoreEmails(), 2000);
+        if (_loadMoreTimer) clearTimeout(_loadMoreTimer);
+        _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 2000);
       }
     } catch (error) {
       console.error('[loadEmails] Failed to load emails:', error);
@@ -1261,9 +1272,11 @@ export const useMailStore = create((set, get) => ({
           console.warn(`[loadMoreEmails] ${serverResult.skippedUids.length} messages skipped on page ${nextPage}, will re-request`);
           // Re-request same page by not advancing currentPage
           set({ currentPage: nextPage - 1, hasMoreEmails: true });
-          setTimeout(() => get().loadMoreEmails(), 5000);
+          if (_loadMoreTimer) clearTimeout(_loadMoreTimer);
+          _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 5000);
         } else if (serverResult.hasMore) {
-          setTimeout(() => get().loadMoreEmails(), 1000);
+          if (_loadMoreTimer) clearTimeout(_loadMoreTimer);
+          _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 1000);
         }
       };
 
@@ -1282,7 +1295,8 @@ export const useMailStore = create((set, get) => ({
         const nextDelay = prevDelay === 0 ? 3000 : Math.min(prevDelay * 2, 120000);
         set({ _loadMoreRetryDelay: nextDelay });
         console.log(`[loadMoreEmails] Will retry in ${nextDelay / 1000}s...`);
-        setTimeout(() => get().loadMoreEmails(), nextDelay);
+        if (_loadMoreTimer) clearTimeout(_loadMoreTimer);
+        _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, nextDelay);
       }
     }
   },
@@ -1358,13 +1372,10 @@ export const useMailStore = create((set, get) => ({
           }
         }
 
-        // Update emails array from sparse map for compatibility
-        const emailsArray = [];
-        for (let i = 0; i < get().totalEmails; i++) {
-          if (newEmailsByIndex.has(i)) {
-            emailsArray.push(newEmailsByIndex.get(i));
-          }
-        }
+        // Update emails array from sparse map for compatibility — O(loaded) not O(total)
+        const emailsArray = Array.from(newEmailsByIndex.entries())
+          .sort(([a], [b]) => a - b)
+          .map(([, v]) => v);
 
         const loadingRangesAfter = new Set(get().loadingRanges);
         loadingRangesAfter.delete(rangeKey);
@@ -1400,14 +1411,13 @@ export const useMailStore = create((set, get) => ({
       loadingRangesAfter.delete(rangeKey);
       set({ loadingRanges: loadingRangesAfter });
 
-      // Retry failed range with exponential backoff
-      const retryKey = `_rangeRetry_${rangeKey}`;
-      const prevDelay = get()[retryKey] || 0;
+      // Retry failed range with exponential backoff (module-level Map, not Zustand)
+      const prevDelay = _rangeRetryDelays.get(rangeKey) || 0;
       const nextDelay = prevDelay === 0 ? 3000 : Math.min(prevDelay * 2, 120000);
-      set({ [retryKey]: nextDelay });
+      _rangeRetryDelays.set(rangeKey, nextDelay);
       console.log(`[loadEmailRange] Retrying range ${startIndex}-${endIndex} in ${nextDelay / 1000}s`);
       setTimeout(() => {
-        set({ [retryKey]: undefined });
+        _rangeRetryDelays.delete(rangeKey);
         get().loadEmailRange(startIndex, endIndex);
       }, nextDelay);
     }
@@ -1486,10 +1496,10 @@ export const useMailStore = create((set, get) => ({
 
   // Get merged INBOX + Sent emails for chat view (memoized via module-level cache)
   getChatEmails: () => {
-    const { sortedEmails, sentEmails } = get();
+    const { sortedEmails, sentEmails, archivedEmailIds } = get();
 
     // Fingerprint check: skip merge+sort if inputs haven't changed
-    const fp = `${sortedEmails.length}-${sortedEmails[0]?.uid || 0}-${sortedEmails[sortedEmails.length - 1]?.uid || 0}-${sentEmails.length}-${sentEmails[0]?.uid || 0}`;
+    const fp = `${sortedEmails.length}-${sortedEmails[0]?.uid || 0}-${sortedEmails[sortedEmails.length - 1]?.uid || 0}-${sentEmails.length}-${sentEmails[0]?.uid || 0}-${_flagChangeCounter}-${archivedEmailIds.size}`;
     if (fp === _chatEmailsFingerprint && _chatEmailsCache.length > 0) return _chatEmailsCache;
 
     if (sentEmails.length === 0) {
@@ -1526,8 +1536,8 @@ export const useMailStore = create((set, get) => ({
   // Build threads from merged INBOX + Sent emails using RFC header chains (memoized)
   getThreads: () => {
     const chatEmails = get().getChatEmails();
-    const fp = `${chatEmails.length}-${chatEmails[0]?.uid || 0}-${chatEmails[chatEmails.length - 1]?.uid || 0}`;
-    if (fp === _threadsFingerprint && _threadsCache.length > 0) {
+    const fp = `${chatEmails.length}-${chatEmails[0]?.uid || 0}-${chatEmails[chatEmails.length - 1]?.uid || 0}-${_flagChangeCounter}`;
+    if (fp === _threadsFingerprint && _threadsCache.size > 0) {
       return _threadsCache;
     }
     const threads = buildThreads(chatEmails);
@@ -1811,7 +1821,7 @@ export const useMailStore = create((set, get) => ({
   },
   
   // Delete email from server
-  deleteEmailFromServer: async (uid) => {
+  deleteEmailFromServer: async (uid, { skipRefresh = false } = {}) => {
     const { activeAccountId, accounts, activeMailbox, selectedEmailId } = get();
     let account = accounts.find(a => a.id === activeAccountId);
     if (!account) return;
@@ -1837,8 +1847,8 @@ export const useMailStore = create((set, get) => ({
     // Update cached headers on disk so loadEmails doesn't restore the deleted email
     await db.saveEmailHeaders(activeAccountId, activeMailbox, filteredEmails, newTotal);
 
-    // Background refresh to sync with server
-    get().loadEmails();
+    // Background refresh to sync with server (skip during batch operations)
+    if (!skipRefresh) get().loadEmails();
   },
   
   // Mark email as read/unread
@@ -1851,25 +1861,28 @@ export const useMailStore = create((set, get) => ({
     try {
       await api.updateEmailFlags(
         account,
-        uid, 
-        ['\\Seen'], 
-        read ? 'add' : 'remove', 
+        uid,
+        ['\\Seen'],
+        read ? 'add' : 'remove',
         activeMailbox
       );
-      
+
+      // Bump flag change counter so updateSortedEmails and thread caches detect the change
+      _flagChangeCounter++;
+
       // Update local state
       set(state => {
         // Update in emails list
         const emails = state.emails.map(e => {
           if (e.uid === uid) {
-            const newFlags = read 
+            const newFlags = read
               ? [...(e.flags || []), '\\Seen'].filter((f, i, a) => a.indexOf(f) === i)
               : (e.flags || []).filter(f => f !== '\\Seen');
             return { ...e, flags: newFlags };
           }
           return e;
         });
-        
+
         // Update selected email if it's the same
         let updatedSelectedEmail = state.selectedEmail;
         if (state.selectedEmail?.uid === uid) {
@@ -1878,8 +1891,8 @@ export const useMailStore = create((set, get) => ({
             : (state.selectedEmail.flags || []).filter(f => f !== '\\Seen');
           updatedSelectedEmail = { ...state.selectedEmail, flags: newFlags };
         }
-        
-        return { emails, selectedEmail: updatedSelectedEmail };
+
+        return { emails, selectedEmail: updatedSelectedEmail, _flagSeq: state._flagSeq + 1 };
       });
     } catch (error) {
       set({ error: `Failed to update read status: ${error.message}` });

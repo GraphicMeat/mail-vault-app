@@ -9,9 +9,39 @@
 - **Concurrency & pipeline performance optimizations** — 10 optimizations: Set-based uncached UID filtering (eliminates 17k sequential IPC calls), parallel disk reads via Promise.all in loadEmails/setActiveMailbox/pipeline finish, batch `maildir_read_light_batch` Rust command (single IPC for all local emails), IMAP connection pool expanded from 1→3 sessions per account (supports concurrent workers), parallel background account header loading (up to 3 accounts at once), memoized thread building, batch account backfill (single file read/write), reduced pipeline/pagination/loadMore delays (5s→1s, 1s→200ms, 2s→500ms)
 
 ### Fixed
+- **Thread cache never working (crash fix)** — `getThreads()` checked `_threadsCache.length` but `buildThreads()` returns a `Map` (which uses `.size`); cache was always bypassed, causing expensive thread rebuilds on every render with 17k emails
+- **Thread/compact row crash on null lastEmail** — added null guard to `ThreadRow` and `CompactThreadRow` to prevent crash when a thread has no emails during race conditions
+- **findRoot stack overflow** — cycle detection in email threading now also tracks by UID, preventing infinite recursion on emails without Message-ID but with inReplyTo loops
+- **Direct Zustand state mutation** — `addToCache` no longer mutates `get().cacheCurrentSizeMB` outside `set()`; uses module-level variable for sub-threshold tracking
+- **Sorted emails fingerprint missed flag changes** — `updateSortedEmails` fingerprint now includes a flag-change counter so read/unread toggles are detected
+- **loadEmailRange O(17k) loop** — replaced `for (i=0; i<totalEmails)` loop with `Array.from(entries).sort().map()` — now O(loaded) instead of O(total)
+- **Sidebar/EmailViewer re-rendering on every store change** — replaced whole-store `useMailStore()` subscriptions with individual selectors in Sidebar and EmailViewer
+- **Object selectors without shallow comparison** — split object literal selectors into individual selectors in ChatBubbleView MessageBubble, AttachmentItem, and DownloadAllButton to prevent unnecessary re-renders
+- **selectedEmailIds Set cascading re-renders** — thread rows now receive precomputed `anyChecked` boolean prop instead of the full Set reference
+- **ThreadEmailItemContent iframe rebuilt every render** — wrapped `iframeContent` string in `useMemo` keyed on `loadedEmail?.html`
+- **60fps scroll handler re-renders** — throttled `handleScroll` via `requestAnimationFrame` to batch scroll state updates
+- **IMAP NOOP on every pool get** — added time-based skip: sessions used within 60s skip the NOOP health check; added per-session `last_selected` tracking instead of per-account-key
+- **Pipeline header loading 200ms artificial delay** — reduced to 50ms (just enough to yield to event loop), saving ~30s on 200-page mailboxes
+- **waitForComplete/startContentCaching race** — reordered to call `startContentCaching()` before `waitForComplete()` to prevent synchronous completion firing before promise setup
+- **Duplicate loadMoreEmails scheduling** — added module-level timer deduplication to prevent multiple concurrent pagination timers
+- **Subject-fallback orphan merge** — orphans with matching subjects now merge with each other (not just with multi-email threads)
+- **normalizeSubject called redundantly** — added module-level memoization cache for normalized subjects
+- **ensureFreshToken called per-email in pipeline** — moved to before the worker loop with re-call only on auth errors
 - **Large mailbox not loading (17k+ emails)** — fixed multiple issues: `_sortedEmailsFingerprint` not reset on account switch caused `sortedEmails` to stay empty via false fingerprint match; quick-load parsed full 15-20MB headers.json (now loads partial 200 headers); `displayEmails` redundantly re-sorted 17k emails (now uses pre-sorted `sortedEmails` directly); `threadedDisplay` depended on stable `getChatEmails` function ref that never triggered recomputation (added `sortedEmails` as dependency)
 - **Large mailbox stall at partial cache** — CONDSTORE and non-CONDSTORE early-return paths in delta-sync now check whether the local cache is partial and schedule `loadMoreEmails()` when needed; previously, mailboxes with 17k+ emails would stall at ~200 cached headers because the "no changes" fast path returned without continuing background pagination
 - **Endless spinner on app launch** — `getChatEmails()` was calling Zustand `set()` during React render (inside a `useMemo`), and `threadedDisplay` useMemo never reacted to `sortedEmails` changes because the function reference was stable; moved chat email cache to module-level variables
+- **Pipeline manager `_destroyed` flag never initialized or reset** — `destroyAll()` now sets the flag, constructor initializes it, and `startActiveAccountPipeline()` resets it so background pipelines can run after a destroy/restart cycle
+- **CONDSTORE flag-only sync false negative** — removed `serverTotal === existingEmails.length` condition that failed with partial caches; `uidNext` unchanged already guarantees no new messages
+- **Thread cache stale after flag changes** — added `_flagSeq` store state and `_flagChangeCounter` to `getChatEmails`/`getThreads`/EmailList thread fingerprints so read/unread and archive changes propagate to thread views
+- **`waitForComplete()` hang on pipeline destroy** — stored resolve callback for `destroy()` to call; made `waitForComplete()` idempotent with shared promise
+- **All accounts hidden crash** — added null guard for `firstVisible` in `init()` when all accounts are hidden
+- **findRoot O(N²) chain walking** — added memoization cache so each email's thread root is computed once, not re-walked from scratch
+- **Thread delete triggers N loadEmails calls** — added `skipRefresh` option to `deleteEmailFromServer`; thread delete handlers now batch deletions and call `loadEmails()` once
+- **Dynamic Zustand store key leak** — replaced `_rangeRetry_*` dynamic store keys with module-level `Map` for range retry state
+- **Archive state stale in chat view** — `getChatEmails` fingerprint now includes `archivedEmailIds.size`
+- **IMAP pool sessions always re-SELECT** — `with_background`/`with_priority` helpers now pass the selected mailbox back to the pool for session reuse tracking
+- **App.jsx and usePipelineCoordinator re-renders** — converted whole-store subscriptions to individual Zustand selectors
+- **Stale rAF scroll position** — fixed `handleScroll` to read `scrollTop` inside the rAF callback, not in the stale event closure
 
 ## [1.7.0] - 2026-02-21
 

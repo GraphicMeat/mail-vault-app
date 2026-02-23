@@ -50,26 +50,24 @@ function getMailboxIcon(mailbox) {
 }
 
 export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
-  const {
-    accounts,
-    activeAccountId,
-    mailboxes,
-    activeMailbox,
-    viewMode,
-    connectionStatus,
-    connectionError,
-    connectionErrorType,
-    emails,
-    totalEmails,
-    loading,
-    loadingMore,
-    hasMoreEmails,
-    setActiveAccount,
-    setActiveMailbox,
-    setViewMode,
-    loadEmails,
-    retryKeychainAccess
-  } = useMailStore();
+  const accounts = useMailStore(s => s.accounts);
+  const activeAccountId = useMailStore(s => s.activeAccountId);
+  const mailboxes = useMailStore(s => s.mailboxes);
+  const activeMailbox = useMailStore(s => s.activeMailbox);
+  const viewMode = useMailStore(s => s.viewMode);
+  const connectionStatus = useMailStore(s => s.connectionStatus);
+  const connectionError = useMailStore(s => s.connectionError);
+  const connectionErrorType = useMailStore(s => s.connectionErrorType);
+  const emails = useMailStore(s => s.emails);
+  const totalEmails = useMailStore(s => s.totalEmails);
+  const loading = useMailStore(s => s.loading);
+  const loadingMore = useMailStore(s => s.loadingMore);
+  const hasMoreEmails = useMailStore(s => s.hasMoreEmails);
+  const setActiveAccount = useMailStore(s => s.setActiveAccount);
+  const setActiveMailbox = useMailStore(s => s.setActiveMailbox);
+  const setViewMode = useMailStore(s => s.setViewMode);
+  const loadEmails = useMailStore(s => s.loadEmails);
+  const retryKeychainAccess = useMailStore(s => s.retryKeychainAccess);
 
   const { theme, toggleTheme } = useThemeStore();
   const { getOrderedAccounts, getDisplayName, accountColors, hiddenAccounts, sidebarCollapsed, toggleSidebarCollapsed } = useSettingsStore();
@@ -77,7 +75,10 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
   const [expandedFolders, setExpandedFolders] = useState(new Set(['INBOX']));
   const [showErrorModal, setShowErrorModal] = useState(false);
 
-  const orderedAccounts = getOrderedAccounts(accounts).filter(a => !hiddenAccounts[a.id]);
+  const orderedAccounts = useMemo(
+    () => getOrderedAccounts(accounts).filter(a => !hiddenAccounts[a.id]),
+    [accounts, hiddenAccounts, getOrderedAccounts]
+  );
   const collapsed = sidebarCollapsed;
 
   // Sort mailboxes: INBOX first, then alphabetically; children sorted alphabetically too

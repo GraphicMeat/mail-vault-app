@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tokio::time::Instant;
 use tracing::{info, warn};
 
 use super::{ImapConfig, create_imap_session};
@@ -19,8 +20,18 @@ impl<T: async_std::io::Read + async_std::io::Write + Unpin + fmt::Debug + Send> 
 
 pub type ImapSession = async_imap::Session<Box<dyn ImapTransport>>;
 
+/// Wrapper that tracks per-session metadata (last used time, selected mailbox).
+pub struct PooledSession {
+    pub session: ImapSession,
+    pub last_used: Instant,
+    pub last_selected: Option<String>,
+}
+
 /// Maximum number of pooled sessions per account per pool type.
 const MAX_POOL_SIZE: usize = 3;
+
+/// Sessions used within this window skip the NOOP health check.
+const NOOP_SKIP_SECS: u64 = 60;
 
 /// Connection key: "email@host"
 fn conn_key(config: &ImapConfig) -> String {
@@ -45,15 +56,13 @@ async fn logout_sessions(sessions: Vec<ImapSession>) {
 /// IMPORTANT: All session logout() calls MUST happen outside the mutex lock
 /// to prevent deadlocks when the IMAP server is slow/unreachable.
 ///
-/// Also caches per-connection server capabilities and last-selected mailbox.
+/// Also caches per-connection server capabilities and per-session last-selected mailbox.
 #[derive(Clone)]
 pub struct ImapPool {
-    background: Arc<Mutex<HashMap<String, Vec<ImapSession>>>>,
-    priority: Arc<Mutex<HashMap<String, Vec<ImapSession>>>>,
+    background: Arc<Mutex<HashMap<String, Vec<PooledSession>>>>,
+    priority: Arc<Mutex<HashMap<String, Vec<PooledSession>>>>,
     /// Cached server capabilities per connection key (e.g. CONDSTORE, ESEARCH)
     capabilities: Arc<Mutex<HashMap<String, Vec<String>>>>,
-    /// Last-selected mailbox per connection key — used to skip redundant SELECT
-    last_selected: Arc<Mutex<HashMap<String, String>>>,
 }
 
 impl ImapPool {
@@ -62,28 +71,30 @@ impl ImapPool {
             background: Arc::new(Mutex::new(HashMap::new())),
             priority: Arc::new(Mutex::new(HashMap::new())),
             capabilities: Arc::new(Mutex::new(HashMap::new())),
-            last_selected: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
-    /// Get or create a background connection
-    pub async fn get_background(&self, config: &ImapConfig) -> Result<ImapSession, String> {
+    /// Get or create a background connection.
+    /// Returns (session, last_selected_mailbox) so callers can skip redundant SELECT.
+    pub async fn get_background(&self, config: &ImapConfig) -> Result<(ImapSession, Option<String>), String> {
         self.get_from_pool(&self.background, config).await
     }
 
-    /// Get or create a priority connection
-    pub async fn get_priority(&self, config: &ImapConfig) -> Result<ImapSession, String> {
+    /// Get or create a priority connection.
+    /// Returns (session, last_selected_mailbox) so callers can skip redundant SELECT.
+    pub async fn get_priority(&self, config: &ImapConfig) -> Result<(ImapSession, Option<String>), String> {
         self.get_from_pool(&self.priority, config).await
     }
 
-    /// Return a session to the background pool for reuse
-    pub async fn return_background(&self, config: &ImapConfig, session: ImapSession) {
-        self.return_to_pool(&self.background, config, session).await;
+    /// Return a session to the background pool for reuse.
+    /// `last_selected` records which mailbox was last SELECTed on this session.
+    pub async fn return_background(&self, config: &ImapConfig, session: ImapSession, last_selected: Option<String>) {
+        self.return_to_pool(&self.background, config, session, last_selected).await;
     }
 
-    /// Return a session to the priority pool for reuse
-    pub async fn return_priority(&self, config: &ImapConfig, session: ImapSession) {
-        self.return_to_pool(&self.priority, config, session).await;
+    /// Return a session to the priority pool for reuse.
+    pub async fn return_priority(&self, config: &ImapConfig, session: ImapSession, last_selected: Option<String>) {
+        self.return_to_pool(&self.priority, config, session, last_selected).await;
     }
 
     /// Check if the server supports a specific capability (case-insensitive).
@@ -102,36 +113,17 @@ impl ImapPool {
         self.capabilities.lock().await.insert(key, caps);
     }
 
-    /// Get the last-selected mailbox for a connection key.
-    pub async fn get_last_selected(&self, config: &ImapConfig) -> Option<String> {
-        let key = conn_key(config);
-        self.last_selected.lock().await.get(&key).cloned()
-    }
-
-    /// Record which mailbox was last SELECTed for a connection key.
-    pub async fn set_last_selected(&self, config: &ImapConfig, mailbox: &str) {
-        let key = conn_key(config);
-        self.last_selected.lock().await.insert(key, mailbox.to_string());
-    }
-
-    /// Clear last-selected tracking for a connection key (on stale session).
-    pub async fn clear_last_selected(&self, config: &ImapConfig) {
-        let key = conn_key(config);
-        self.last_selected.lock().await.remove(&key);
-    }
-
     /// Disconnect a specific account from both pools
     pub async fn disconnect(&self, config: &ImapConfig) {
         let key = conn_key(config);
         // Collect sessions to logout OUTSIDE the lock
         let mut to_logout = Vec::new();
         for pool in [&self.background, &self.priority] {
-            if let Some(sessions) = pool.lock().await.remove(&key) {
-                to_logout.extend(sessions);
+            if let Some(pooled_sessions) = pool.lock().await.remove(&key) {
+                to_logout.extend(pooled_sessions.into_iter().map(|ps| ps.session));
             }
         }
         self.capabilities.lock().await.remove(&key);
-        self.last_selected.lock().await.remove(&key);
 
         // Logout outside any lock — network I/O can be slow
         logout_sessions(to_logout).await;
@@ -139,18 +131,18 @@ impl ImapPool {
     }
 
     /// Disconnect all connections (for app shutdown)
+    #[allow(dead_code)]
     pub async fn disconnect_all(&self) {
         // Drain all sessions from both pools under the lock, then logout outside
         let mut to_logout = Vec::new();
         for pool in [&self.background, &self.priority] {
             let mut guard = pool.lock().await;
-            for (key, sessions) in guard.drain() {
-                info!("Closing {} IMAP connection(s): {}", sessions.len(), key);
-                to_logout.extend(sessions);
+            for (key, pooled_sessions) in guard.drain() {
+                info!("Closing {} IMAP connection(s): {}", pooled_sessions.len(), key);
+                to_logout.extend(pooled_sessions.into_iter().map(|ps| ps.session));
             }
         }
         self.capabilities.lock().await.clear();
-        self.last_selected.lock().await.clear();
 
         // Logout outside any lock
         logout_sessions(to_logout).await;
@@ -158,24 +150,30 @@ impl ImapPool {
 
     async fn get_from_pool(
         &self,
-        pool: &Arc<Mutex<HashMap<String, Vec<ImapSession>>>>,
+        pool: &Arc<Mutex<HashMap<String, Vec<PooledSession>>>>,
         config: &ImapConfig,
-    ) -> Result<ImapSession, String> {
+    ) -> Result<(ImapSession, Option<String>), String> {
         let key = conn_key(config);
 
         // Try to reuse existing connection from the Vec
-        if let Some(mut session) = {
+        if let Some(pooled) = {
             let mut map = pool.lock().await;
             map.get_mut(&key).and_then(|v| v.pop())
         } {
+            let mut session = pooled.session;
+            let last_sel = pooled.last_selected;
+
+            // Skip NOOP if session was used recently (within NOOP_SKIP_SECS)
+            if pooled.last_used.elapsed().as_secs() < NOOP_SKIP_SECS {
+                return Ok((session, last_sel));
+            }
+
             // Verify the session is still alive with a NOOP (outside lock)
             match session.noop().await {
-                Ok(_) => return Ok(session),
+                Ok(_) => return Ok((session, last_sel)),
                 Err(e) => {
                     warn!("Pooled IMAP session stale for {}: {}, creating new", config.email, e);
                     let _ = session.logout().await;
-                    // Clear cached state for stale connection
-                    self.last_selected.lock().await.remove(&key);
                 }
             }
         }
@@ -186,14 +184,15 @@ impl ImapPool {
             warn!("IMAP connection failed for {}: {}", config.email, e);
             e
         })?;
-        Ok(session)
+        Ok((session, None))
     }
 
     async fn return_to_pool(
         &self,
-        pool: &Arc<Mutex<HashMap<String, Vec<ImapSession>>>>,
+        pool: &Arc<Mutex<HashMap<String, Vec<PooledSession>>>>,
         config: &ImapConfig,
         session: ImapSession,
+        last_selected: Option<String>,
     ) {
         let key = conn_key(config);
 
@@ -202,7 +201,11 @@ impl ImapPool {
             let mut map = pool.lock().await;
             let vec = map.entry(key).or_default();
             if vec.len() < MAX_POOL_SIZE {
-                vec.push(session);
+                vec.push(PooledSession {
+                    session,
+                    last_used: Instant::now(),
+                    last_selected,
+                });
                 None
             } else {
                 Some(session)
