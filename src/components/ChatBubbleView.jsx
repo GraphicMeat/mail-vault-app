@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useEffect, useState } from 'react';
 import { useMailStore } from '../stores/mailStore';
+import { useShallow } from 'zustand/react/shallow';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   getAvatarColor,
@@ -708,7 +709,9 @@ export function OriginalEmailModal({ email, onClose }) {
 
 // Full-screen modal for viewing complete email with HTML rendering
 function FullViewEmailModal({ email: initialEmail, onClose }) {
-  const { selectEmail, selectedEmail, loadingEmail, activeAccountId, activeMailbox, getSentMailboxPath } = useMailStore();
+  const { selectEmail, selectedEmail, loadingEmail, activeAccountId, activeMailbox, getSentMailboxPath } = useMailStore(
+    useShallow(s => ({ selectEmail: s.selectEmail, selectedEmail: s.selectedEmail, loadingEmail: s.loadingEmail, activeAccountId: s.activeAccountId, activeMailbox: s.activeMailbox, getSentMailboxPath: s.getSentMailboxPath }))
+  );
   const iframeRef = useRef(null);
   const [fetchedEmail, setFetchedEmail] = useState(null);
 

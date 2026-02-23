@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useMailStore } from '../stores/mailStore';
+import { useShallow } from 'zustand/react/shallow';
 import { groupByCorrespondent, buildThreads } from '../utils/emailParser';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChatSenderList } from './ChatSenderList';
@@ -8,7 +9,9 @@ import { ChatBubbleView } from './ChatBubbleView';
 import { ComposeModal } from './ComposeModal';
 
 export function ChatViewWrapper({ layoutMode }) {
-  const { accounts, activeAccountId, getChatEmails, emails, localEmails, sentEmails, viewMode } = useMailStore();
+  const { accounts, activeAccountId, getChatEmails, emails, localEmails, sentEmails, viewMode } = useMailStore(
+    useShallow(s => ({ accounts: s.accounts, activeAccountId: s.activeAccountId, getChatEmails: s.getChatEmails, emails: s.emails, localEmails: s.localEmails, sentEmails: s.sentEmails, viewMode: s.viewMode }))
+  );
 
   // Per-account navigation state: only store identifiers, not full objects
   // { accountId: { correspondentEmail: string, threadId: string } }

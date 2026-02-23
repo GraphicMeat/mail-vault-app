@@ -458,6 +458,33 @@ export async function getLocalEmails(accountId, mailbox) {
   }
 }
 
+/**
+ * Load only archived emails from Maildir (fast — reads only archived .eml files, not all).
+ * Uses archivedEmailIds (already loaded via fast maildir_list) to read only the subset.
+ */
+export async function getArchivedEmails(accountId, mailbox, archivedUidSet) {
+  await initBasic();
+  if (!invoke || !archivedUidSet || archivedUidSet.size === 0) return [];
+
+  try {
+    const uids = Array.from(archivedUidSet);
+    const results = await invoke('maildir_read_light_batch', { accountId, mailbox, uids });
+    const emails = [];
+    for (let i = 0; i < results.length; i++) {
+      if (results[i]) {
+        emails.push({
+          ...results[i],
+          localId: `${accountId}-${mailbox}-${uids[i]}`,
+          isArchived: true
+        });
+      }
+    }
+    return emails;
+  } catch {
+    return [];
+  }
+}
+
 export async function getAllLocalEmails(accountId) {
   await initDB();
   if (!invoke) return [];
@@ -644,6 +671,28 @@ export async function getEmailHeadersPartial(accountId, mailbox, limit = 200) {
     }
   }
 
+  return null;
+}
+
+export async function getEmailHeadersMeta(accountId, mailbox) {
+  if (invoke) {
+    try {
+      const data = await invoke('load_email_cache_meta', { accountId, mailbox });
+      if (data) {
+        const entry = JSON.parse(data);
+        return {
+          totalEmails: entry.totalEmails,
+          totalCached: entry.totalCached ?? 0,
+          uidValidity: entry.uidValidity ?? null,
+          uidNext: entry.uidNext ?? null,
+          highestModseq: entry.highestModseq ?? null,
+          lastSynced: entry.lastSynced
+        };
+      }
+    } catch (error) {
+      console.warn('[db.js] Failed to load cache meta:', error);
+    }
+  }
   return null;
 }
 

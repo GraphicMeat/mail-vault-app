@@ -661,25 +661,55 @@ export function EmailList({ layoutMode = 'three-column' }) {
     [searchActive, searchResults, sortedEmails]
   );
 
-  // Cache threads — only recompute buildThreads when the email set actually changes
+  // Deferred threading — buildThreads(17k+) is too slow for synchronous render.
+  // Show flat list instantly, then compute threads in background and re-render.
   const threadCache = useRef({ fingerprint: '', threads: new Map() });
+  const [deferredThreads, setDeferredThreads] = useState(null); // null = not computed yet
 
-  // Build threaded display: merge Sent folder emails into threads
+  // Fingerprint for thread computation
+  const mergedEmails = useMemo(
+    () => searchActive ? null : getChatEmails(),
+    [searchActive, getChatEmails, sortedEmails, sentEmails]
+  );
+  const threadFingerprint = useMemo(
+    () => mergedEmails ? `${mergedEmails.length}-${mergedEmails[0]?.uid || 0}-${mergedEmails[mergedEmails.length - 1]?.uid || 0}-${flagSeq}` : '',
+    [mergedEmails, flagSeq]
+  );
+
+  // Compute threads in a deferred callback to avoid blocking render
+  useEffect(() => {
+    if (!mergedEmails || searchActive) {
+      setDeferredThreads(null);
+      return;
+    }
+
+    // Use cached threads if fingerprint matches
+    if (threadCache.current.fingerprint === threadFingerprint) {
+      setDeferredThreads(threadCache.current.threads);
+      return;
+    }
+
+    // Schedule thread computation after paint — keeps UI responsive
+    // Note: requestIdleCallback is NOT available in WebKit/Safari (Tauri macOS webview)
+    const timer = setTimeout(() => {
+      const threads = buildThreads(mergedEmails);
+      threadCache.current = { fingerprint: threadFingerprint, threads };
+      setDeferredThreads(threads);
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [mergedEmails, threadFingerprint, searchActive]);
+
+  // Build display list: use threads if available, flat list as fallback
   const threadedDisplay = useMemo(() => {
     if (searchActive) {
       return displayEmails.map(email => ({ type: 'email', email }));
     }
 
-    // Stable fingerprint: rebuild threads when the email set or flags change
-    const mergedEmails = getChatEmails();
-    const fp = `${mergedEmails.length}-${mergedEmails[0]?.uid || 0}-${mergedEmails[mergedEmails.length - 1]?.uid || 0}-${flagSeq}`;
-
-    let threads;
-    if (threadCache.current.fingerprint === fp) {
-      threads = threadCache.current.threads;
-    } else {
-      threads = buildThreads(mergedEmails);
-      threadCache.current = { fingerprint: fp, threads };
+    // If threads haven't been computed yet, show flat list immediately
+    const threads = deferredThreads;
+    if (!threads || threads.size === 0) {
+      return displayEmails.map(email => ({ type: 'email', email }));
     }
 
     // Only show threads that contain at least one email from the current display set
@@ -696,7 +726,7 @@ export function EmailList({ layoutMode = 'three-column' }) {
       }
       return { type: 'thread', thread };
     });
-  }, [displayEmails, searchActive, sentEmails, getChatEmails, flagSeq]);
+  }, [displayEmails, searchActive, deferredThreads]);
 
   const hasSelection = selectedEmailIds.size > 0;
   const allSelected = displayEmails.length > 0 && selectedEmailIds.size === displayEmails.length;

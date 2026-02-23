@@ -130,10 +130,11 @@ class EmailPipelineManager {
       if (!pipeline || pipeline._destroyed) continue;
 
       const { localCacheDurationMonths } = useSettingsStore.getState();
-      const cachedHeaders = await db.getEmailHeaders(account.id, 'INBOX');
-      if (cachedHeaders?.emails) {
+      // Use in-memory headers from Phase 1 (avoids re-reading 17k files from disk)
+      const emails = pipeline._lastLoadedEmails;
+      if (emails && emails.length > 0) {
         const savedIds = await db.getSavedEmailIds(account.id, 'INBOX');
-        const uids = this._getUncachedUids(cachedHeaders.emails, savedIds, localCacheDurationMonths);
+        const uids = this._getUncachedUids(emails, savedIds, localCacheDurationMonths);
         if (uids.length > 0) {
           // Start caching first, THEN await completion — avoids race where
           // synchronous onComplete fires before waitForComplete sets up its promise

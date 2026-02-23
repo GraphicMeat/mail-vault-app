@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { useMailStore } from '../stores/mailStore';
+import { useShallow } from 'zustand/react/shallow';
 import { motion } from 'framer-motion';
 import {
   groupByCorrespondent,
@@ -19,7 +20,9 @@ export function ChatSenderList({ onSelectSender }) {
     localEmails,   // Subscribe to trigger re-render when local emails change
     sentEmails,    // Subscribe to trigger re-render when sent emails load
     viewMode       // Subscribe to trigger re-render when view mode changes
-  } = useMailStore();
+  } = useMailStore(
+    useShallow(s => ({ getChatEmails: s.getChatEmails, accounts: s.accounts, activeAccountId: s.activeAccountId, emails: s.emails, localEmails: s.localEmails, sentEmails: s.sentEmails, viewMode: s.viewMode }))
+  );
   const [searchQuery, setSearchQuery] = React.useState('');
 
   // Get current user's email
