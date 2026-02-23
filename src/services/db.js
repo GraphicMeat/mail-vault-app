@@ -462,26 +462,128 @@ export async function getLocalEmails(accountId, mailbox) {
  * Load only archived emails from Maildir (fast — reads only archived .eml files, not all).
  * Uses archivedEmailIds (already loaded via fast maildir_list) to read only the subset.
  */
-export async function getArchivedEmails(accountId, mailbox, archivedUidSet) {
+/**
+ * Load archived email headers for instant display.
+ *
+ * Strategy (fast path first):
+ * 1. Try sidecar cache (email_cache/{uid}.json) — already populated by IMAP sync.
+ *    Reads only the specific UID files we need. Instant for most archived emails.
+ * 2. For UIDs not in sidecar: try archived_headers.json (populated after first full load)
+ * 3. Last resort: batch-load from .eml files (slow — MIME parsing)
+ * 4. Save results to archived_headers.json for next time
+ */
+export async function getArchivedEmails(accountId, mailbox, archivedUidSet, onBatch) {
   await initBasic();
   if (!invoke || !archivedUidSet || archivedUidSet.size === 0) return [];
 
+  const uids = Array.from(archivedUidSet).sort((a, b) => b - a); // newest first
+  console.log('[db] getArchivedEmails: %d UIDs', uids.length);
+
+  // 1. Fast path: read from sidecar cache (email_cache/{uid}.json)
+  // These are already written by IMAP sync — no .eml parsing needed
+  let sidecarEmails = [];
   try {
-    const uids = Array.from(archivedUidSet);
-    const results = await invoke('maildir_read_light_batch', { accountId, mailbox, uids });
-    const emails = [];
-    for (let i = 0; i < results.length; i++) {
-      if (results[i]) {
-        emails.push({
-          ...results[i],
-          localId: `${accountId}-${mailbox}-${uids[i]}`,
-          isArchived: true
-        });
+    sidecarEmails = await invoke('load_email_cache_by_uids', {
+      accountId, mailbox, uids
+    });
+  } catch (e) {
+    console.warn('[db] getArchivedEmails: sidecar load failed:', e);
+  }
+
+  if (sidecarEmails.length > 0) {
+    const emails = sidecarEmails.map(e => ({
+      ...e,
+      localId: `${accountId}-${mailbox}-${e.uid}`,
+      isArchived: true
+    }));
+    console.log('[db] getArchivedEmails: sidecar hit %d/%d UIDs', emails.length, uids.length);
+    if (onBatch) onBatch(emails);
+
+    // If sidecar covered all UIDs, we're done
+    if (emails.length >= uids.length * 0.9) {
+      return emails;
+    }
+
+    // Some UIDs missing from sidecar — find which ones
+    const foundUids = new Set(emails.map(e => e.uid));
+    const missingUids = uids.filter(uid => !foundUids.has(uid));
+    if (missingUids.length === 0) return emails;
+
+    // Load missing from .eml files
+    console.log('[db] getArchivedEmails: %d UIDs missing from sidecar, loading from .eml', missingUids.length);
+    const BATCH_SIZE = 200;
+    try {
+      for (let i = 0; i < missingUids.length; i += BATCH_SIZE) {
+        const batchUids = missingUids.slice(i, i + BATCH_SIZE);
+        const results = await invoke('maildir_read_light_batch', { accountId, mailbox, uids: batchUids });
+        for (let j = 0; j < results.length; j++) {
+          if (results[j]) {
+            emails.push({
+              ...results[j],
+              localId: `${accountId}-${mailbox}-${batchUids[j]}`,
+              isArchived: true
+            });
+          }
+        }
+        if (onBatch) onBatch([...emails]);
       }
+    } catch (e) {
+      console.warn('[db] getArchivedEmails: .eml fallback failed:', e);
     }
     return emails;
+  }
+
+  // 2. No sidecar data — try archived_headers.json cache
+  try {
+    const cached = await invoke('maildir_read_archived_cached', {
+      accountId, mailbox, expectedCount: uids.length
+    });
+    if (cached && cached.length > 0) {
+      const emails = cached.map(e => ({
+        ...e,
+        localId: `${accountId}-${mailbox}-${e.uid}`,
+        isArchived: true
+      }));
+      console.log('[db] getArchivedEmails: archived cache hit, %d emails', emails.length);
+      if (onBatch) onBatch(emails);
+      return emails;
+    }
   } catch {
-    return [];
+    // Fall through
+  }
+
+  // 3. Last resort: batch load from .eml files (slow — MIME parsing)
+  console.log('[db] getArchivedEmails: full .eml fallback for %d UIDs', uids.length);
+  const BATCH_SIZE = 200;
+  const allEmails = [];
+  try {
+    for (let i = 0; i < uids.length; i += BATCH_SIZE) {
+      const batchUids = uids.slice(i, i + BATCH_SIZE);
+      const results = await invoke('maildir_read_light_batch', { accountId, mailbox, uids: batchUids });
+      for (let j = 0; j < results.length; j++) {
+        if (results[j]) {
+          allEmails.push({
+            ...results[j],
+            localId: `${accountId}-${mailbox}-${batchUids[j]}`,
+            isArchived: true
+          });
+        }
+      }
+      console.log('[db] getArchivedEmails: batch %d/%d, loaded: %d', Math.floor(i / BATCH_SIZE) + 1, Math.ceil(uids.length / BATCH_SIZE), allEmails.length);
+      if (onBatch) onBatch([...allEmails]);
+    }
+
+    // Save to archived_headers.json for next load
+    if (allEmails.length > 0) {
+      const forCache = allEmails.map(({ localId, isArchived, ...rest }) => rest);
+      invoke('maildir_save_archived_cache', { accountId, mailbox, emails: forCache }).catch(() => {});
+    }
+
+    console.log('[db] getArchivedEmails: complete, loaded %d emails', allEmails.length);
+    return allEmails;
+  } catch (e) {
+    console.error('[db] getArchivedEmails: .eml loading FAILED:', e);
+    return allEmails.length > 0 ? allEmails : [];
   }
 }
 
@@ -556,7 +658,8 @@ export async function getArchivedEmailIds(accountId, mailbox) {
   try {
     const summaries = await invoke('maildir_list', { accountId, mailbox, requireFlag: 'archived' });
     return new Set(summaries.map(s => s.uid));
-  } catch {
+  } catch (e) {
+    console.warn('[db] getArchivedEmailIds failed:', e);
     return new Set();
   }
 }
