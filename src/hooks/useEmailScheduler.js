@@ -131,32 +131,35 @@ export function useEmailScheduler() {
     };
   }, [refreshInterval, accounts.length]);
 
-  // Update badge when settings change or emails change
+  // Update badge when settings change or unread count changes.
+  // Debounced to avoid oscillation during IMAP pagination (emails array changes every page).
+  const badgeTimerRef = useRef(null);
   useEffect(() => {
     if (!invoke) return;
 
-    if (badgeEnabled) {
+    if (!badgeEnabled) {
+      updateBadge(0);
+      return;
+    }
+
+    // Debounce: wait 2s after last change before updating badge.
+    // During IMAP sync, emails.length changes every ~1s per page — we want the final stable value.
+    if (badgeTimerRef.current) clearTimeout(badgeTimerRef.current);
+    badgeTimerRef.current = setTimeout(() => {
       if (badgeMode === 'unread') {
-        // Use totalUnreadCount from store (includes all accounts)
-        const unreadCount = totalUnreadCount ||
-          useMailStore.getState().emails.filter(e => !e.flags?.includes('\\Seen')).length;
-        updateBadge(unreadCount);
+        // Prefer totalUnreadCount (set by refreshAllAccounts, covers all accounts).
+        // Fall back to counting current emails only when totalUnreadCount hasn't been set yet.
+        const count = totalUnreadCount > 0
+          ? totalUnreadCount
+          : useMailStore.getState().emails.filter(e => !e.flags?.includes('\\Seen')).length;
+        updateBadge(count);
       } else {
         updateBadge(useMailStore.getState().emails.length);
       }
-    } else {
-      updateBadge(0);
-    }
-  }, [badgeEnabled, badgeMode, emails.length, totalUnreadCount]);
+    }, 2000);
 
-  // Also update badge when emails are marked as read
-  useEffect(() => {
-    if (!invoke || !badgeEnabled || badgeMode !== 'unread') return;
-
-    const currentEmails = useMailStore.getState().emails;
-    const unreadCount = currentEmails.filter(e => !e.flags?.includes('\\Seen')).length;
-    updateBadge(unreadCount);
-  }, [emails]);
+    return () => { if (badgeTimerRef.current) clearTimeout(badgeTimerRef.current); };
+  }, [badgeEnabled, badgeMode, totalUnreadCount]);
 
   return { doRefresh };
 }

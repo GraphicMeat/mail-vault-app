@@ -209,7 +209,8 @@ export const useMailStore = create((set, get) => ({
           source: 'local'
         }));
     } else {
-      // Combine: server emails + archived local-only emails
+      // Combine: server emails + archived emails not yet loaded from server.
+      // Archived emails from disk fill the gaps until their IMAP page loads.
       const serverUids = new Set(emails.map(e => e.uid));
       const combinedEmails = emails.map(e => ({
         ...e,
@@ -218,16 +219,22 @@ export const useMailStore = create((set, get) => ({
         source: 'server'
       }));
 
-      // Add local-only emails (deleted from server but explicitly archived)
+      // Add archived local emails whose UIDs aren't in the loaded server set yet.
+      // These appear instantly from disk and get replaced by server versions as pages load.
+      let addedLocal = 0;
       for (const localEmail of localEmails) {
-        if (!serverUids.has(localEmail.uid) && archivedEmailIds.has(localEmail.uid)) {
+        if (!serverUids.has(localEmail.uid)) {
           combinedEmails.push({
             ...localEmail,
             isLocal: true,
-            isArchived: true,
-            source: 'local-only'
+            isArchived: archivedEmailIds.has(localEmail.uid),
+            source: 'local'
           });
+          addedLocal++;
         }
+      }
+      if (addedLocal > 0) {
+        console.log('[updateSortedEmails] server=%d, local=%d, addedLocal=%d', emails.length, localEmails.length, addedLocal);
       }
 
       result = combinedEmails;
@@ -417,9 +424,7 @@ export const useMailStore = create((set, get) => ({
     const hasExistingData = currentEmails.length > 0 || currentTotalEmails > 0;
 
     if (isSameAccount && hasExistingData) {
-      // Same account with data - don't reset, just refresh in background
-      console.log('[setActiveAccount] Same account with existing data, preserving state');
-      // Just call loadEmails which will handle cache and server fetch
+      console.log('[setActiveAccount] Same account with existing data, calling loadEmails');
       await get().loadEmails();
       return;
     }
@@ -501,13 +506,17 @@ export const useMailStore = create((set, get) => ({
       db.getArchivedEmailIds(accountId, lastMailbox)
     ]).then(async ([savedEmailIds, archivedEmailIds]) => {
       if (isStale()) return;
+      console.log('[setActiveAccount] FF: %d saved, %d archived IDs', savedEmailIds.size, archivedEmailIds.size);
       set({ savedEmailIds, archivedEmailIds });
       if (archivedEmailIds.size > 0) {
-        const archivedEmails = await db.getArchivedEmails(accountId, lastMailbox, archivedEmailIds);
-        if (isStale()) return;
-        set({ localEmails: archivedEmails });
+        // Progressive batch loading: each batch of 200 updates the UI immediately
+        await db.getArchivedEmails(accountId, lastMailbox, archivedEmailIds, (batchEmails) => {
+          if (isStale()) return;
+          set({ localEmails: batchEmails });
+          get().updateSortedEmails();
+        });
       }
-      get().updateSortedEmails();
+      if (!isStale()) get().updateSortedEmails();
     }).catch(e => console.warn('[setActiveAccount] ID load failed:', e));
 
     // Use cached mailboxes from last successful connection, or INBOX-only as safe fallback.
@@ -673,12 +682,12 @@ export const useMailStore = create((set, get) => ({
       db.getSavedEmailIds(activeAccountId, mailbox),
       db.getArchivedEmailIds(activeAccountId, mailbox),
     ]);
-    let localEmails = [];
-    // Fire-and-forget: load archived emails from disk (async Rust, won't freeze UI)
+    // Fire-and-forget: load archived emails from disk in batches of 200 for progressive display.
+    // localEmails is managed ONLY by this chain — never overwritten by set() below.
     if (archivedEmailIds.size > 0) {
-      db.getArchivedEmails(activeAccountId, mailbox, archivedEmailIds).then(archivedEmails => {
+      db.getArchivedEmails(activeAccountId, mailbox, archivedEmailIds, (batchEmails) => {
         if (get().activeAccountId !== activeAccountId || get().activeMailbox !== mailbox) return;
-        set({ localEmails: archivedEmails });
+        set({ localEmails: batchEmails });
         get().updateSortedEmails();
       }).catch(() => {});
     }
@@ -702,7 +711,6 @@ export const useMailStore = create((set, get) => ({
         loadedRanges: [{ start: 0, end: cachedHeaders.emails.length }],
         loadingRanges: new Set(),
         totalEmails: cachedHeaders.totalEmails,
-        localEmails,
         savedEmailIds, archivedEmailIds,
         currentPage: Math.ceil(cachedHeaders.emails.length / 50) || 1,
         hasMoreEmails: cachedHeaders.emails.length < cachedHeaders.totalEmails,
@@ -713,12 +721,11 @@ export const useMailStore = create((set, get) => ({
     } else {
       // No cache - reset to empty
       set({
-        emails: localEmails,
+        emails: [],
         emailsByIndex: new Map(),
         loadedRanges: [],
         loadingRanges: new Set(),
         totalEmails: 0,
-        localEmails,
         savedEmailIds, archivedEmailIds,
         currentPage: 1,
         hasMoreEmails: true,
@@ -769,24 +776,27 @@ export const useMailStore = create((set, get) => ({
 
     const invoke = window.__TAURI__?.core?.invoke;
 
-    // Load saved/archived IDs + cache metadata + archived email headers.
-    // Only reads archived .eml files (small subset), NOT all .eml files.
+    // Load saved/archived IDs + cache metadata.
     const [savedEmailIds, archivedEmailIds, cachedHeaders] = await Promise.all([
       db.getSavedEmailIds(activeAccountId, activeMailbox),
       db.getArchivedEmailIds(activeAccountId, activeMailbox),
       db.getEmailHeadersMeta(activeAccountId, activeMailbox),
     ]);
     if (isStale()) return;
-    // Load archived email headers from disk in background (async Rust, won't freeze UI).
-    // This populates localEmails so archived emails appear in the list before their IMAP page loads.
-    let localEmails = get().localEmails || [];
-    if (archivedEmailIds.size > 0 && localEmails.length === 0) {
-      // Fire-and-forget: don't await — let IMAP sync proceed in parallel
-      db.getArchivedEmails(activeAccountId, activeMailbox, archivedEmailIds).then(archivedEmails => {
-        if (isStale()) return;
-        set({ localEmails: archivedEmails });
+    set({ savedEmailIds, archivedEmailIds });
+
+    // Fire-and-forget: load archived email headers from disk in background.
+    // IMPORTANT: localEmails is managed ONLY by this fire-and-forget chain — never overwritten
+    // by IMAP sync set() calls. This ensures archived emails persist once loaded.
+    if (archivedEmailIds.size > 0 && (get().localEmails || []).length === 0) {
+      // Use account-only staleness check (not generation) — archived emails should
+      // persist regardless of which loadEmails iteration triggered them.
+      const archivedAccount = activeAccountId;
+      db.getArchivedEmails(activeAccountId, activeMailbox, archivedEmailIds, (batchEmails) => {
+        if (get().activeAccountId !== archivedAccount) return;
+        set({ localEmails: batchEmails });
         get().updateSortedEmails();
-      }).catch(() => {});
+      }).catch(e => console.warn('[loadEmails] getArchivedEmails failed:', e));
     }
 
     // Use existing emails from store (populated by QuickLoad or previous setActiveMailbox)
@@ -795,9 +805,8 @@ export const useMailStore = create((set, get) => ({
 
     if (hasExistingEmails) {
       // QuickLoad or setActiveMailbox already populated emails — just update local state
+      // NOTE: Do NOT set localEmails here — the fire-and-forget chain manages it independently
       set({
-        localEmails,
-        savedEmailIds, archivedEmailIds,
         loading: false,
         loadingMore: true,
         error: null,
@@ -826,8 +835,6 @@ export const useMailStore = create((set, get) => ({
           loadedRanges: [{ start: 0, end: partialHeaders.emails.length }],
           loadingRanges: new Set(),
           totalEmails: cachedHeaders.totalEmails,
-          localEmails,
-          savedEmailIds, archivedEmailIds,
           loading: false,
           loadingMore: true,
           error: null,
@@ -837,8 +844,9 @@ export const useMailStore = create((set, get) => ({
         get().updateSortedEmails();
       }
     } else {
-      // No cache - reset state to empty
+      // No cache - reset state to empty, use any already-loaded local emails
       console.log('[loadEmails] No cached headers, starting fresh');
+      const currentLocalEmails = get().localEmails || [];
       set({
         loading: true,
         error: null,
@@ -848,9 +856,7 @@ export const useMailStore = create((set, get) => ({
         emailsByIndex: new Map(),
         loadedRanges: [],
         loadingRanges: new Set(),
-        localEmails,
-        savedEmailIds, archivedEmailIds,
-        emails: localEmails // Show local emails while loading
+        emails: currentLocalEmails // Show local emails while loading
       });
       get().updateSortedEmails();
     }
@@ -863,10 +869,7 @@ export const useMailStore = create((set, get) => ({
     if (!hasCredentials) {
       console.error('[loadEmails] Credentials missing for account:', account.email);
       if (!isStale()) set({
-        // Keep previous/cached emails when credentials are missing
         emails: previousEmails,
-        localEmails,
-        savedEmailIds, archivedEmailIds,
         connectionStatus: 'error',
         connectionError: 'Keychain access required to fetch new emails. Local and cached emails are available.',
         connectionErrorType: 'passwordMissing',
@@ -886,10 +889,7 @@ export const useMailStore = create((set, get) => ({
         if (isOnline === false) {
           console.error('[loadEmails] No network connectivity detected!');
           if (!isStale()) set({
-            // Keep previous emails when offline
             emails: previousEmails,
-            localEmails,
-            savedEmailIds, archivedEmailIds,
             connectionStatus: 'error',
             connectionError: 'No internet connection. Showing cached and locally saved emails.',
             connectionErrorType: 'offline',
@@ -901,13 +901,9 @@ export const useMailStore = create((set, get) => ({
       } catch (e) {
         console.warn('[loadEmails] Could not check network connectivity:', e);
         if (isStale()) return;
-        // If connectivity check itself fails, assume we're offline
         console.error('[loadEmails] Connectivity check failed, assuming offline');
         set({
-          // Keep previous emails when offline
           emails: previousEmails,
-          localEmails,
-          savedEmailIds, archivedEmailIds,
           connectionStatus: 'error',
           connectionError: 'Could not check internet connection. Showing cached and locally saved emails.',
           connectionErrorType: 'offline',
@@ -917,14 +913,10 @@ export const useMailStore = create((set, get) => ({
         return;
       }
     } else {
-      // Check browser online status as fallback
       if (!navigator.onLine) {
         console.error('[loadEmails] Browser reports offline');
         set({
-          // Keep previous emails when offline
           emails: previousEmails,
-          localEmails,
-          savedEmailIds, archivedEmailIds,
           connectionStatus: 'error',
           connectionError: 'No internet connection. Showing cached and locally saved emails.',
           connectionErrorType: 'offline',
@@ -1178,8 +1170,6 @@ export const useMailStore = create((set, get) => ({
         emails: mergedEmails,
         emailsByIndex,
         loadedRanges: [{ start: 0, end: mergedEmails.length }],
-        localEmails,
-        savedEmailIds, archivedEmailIds,
         connectionStatus: 'connected',
         connectionError: null,
         connectionErrorType: null,
@@ -1223,10 +1213,9 @@ export const useMailStore = create((set, get) => ({
 
       // Keep previous/cached emails on error - don't wipe out the cache!
       if (!isStale()) {
+        const currentLocalEmails = get().localEmails || [];
         set({
-          emails: previousEmails.length > 0 ? previousEmails : localEmails,
-          localEmails,
-          savedEmailIds, archivedEmailIds,
+          emails: previousEmails.length > 0 ? previousEmails : currentLocalEmails,
           connectionStatus: 'error',
           connectionError: errorMessage,
           connectionErrorType: errorType

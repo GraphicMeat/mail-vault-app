@@ -26,6 +26,9 @@ CLAUDE.md
 *.swp
 *.swo
 
+# Plans
+docs/plans/
+
 # Environment files
 .env
 .env.local

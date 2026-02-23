@@ -220,10 +220,10 @@ export class AccountPipeline {
         });
         // Refresh archived emails from disk (async Rust, won't freeze UI)
         if (newArchivedIds.size > 0) {
-          db.getArchivedEmails(activeAccountId, activeMailbox, newArchivedIds).then(archivedEmails => {
+          db.getArchivedEmails(activeAccountId, activeMailbox, newArchivedIds, (batchEmails) => {
             const current = useMailStore.getState();
             if (current.activeAccountId !== activeAccountId) return;
-            useMailStore.setState({ localEmails: archivedEmails });
+            useMailStore.setState({ localEmails: batchEmails });
             useMailStore.getState().updateSortedEmails();
           }).catch(() => {});
         }

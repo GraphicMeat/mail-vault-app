@@ -3,6 +3,13 @@
 ## [Unreleased]
 
 ### Added
+- **Instant archived email display** — archived emails stored on disk now appear in the email list within ~400ms (previously 4+ seconds). Uses sidecar JSON cache from IMAP sync instead of slow .eml MIME parsing; 3-tier loading strategy: sidecar cache → archived headers cache → .eml fallback with progressive batch display
+
+### Fixed
+- **Badge count oscillating during IMAP sync** — dock badge no longer flickers between values as email pages load; debounced with 2s delay and removed `emails.length`/`emails` reference from effect dependencies
+- **Archived emails race condition** — `localEmails` no longer overwritten by IMAP sync `set()` calls; fire-and-forget chain is now the sole owner of `localEmails` state; staleness check uses account-only (not generation counter) so archived emails survive pagination restarts
+
+### Added
 - **Chat view: attachment support** — chat bubbles and the full-view modal now show functional attachment cards (click to download/open, right-click for Open/Open With/Save As/Show in Folder); uses compact styling to fit the chat bubble aesthetic; correctly resolves mailbox for both inbox and sent folder emails
 - **IMAP performance optimizations** — 9 optimizations to IMAP header loading: UID range compression (reduces command size from O(n) to O(ranges)), chunked UID FETCH (200-batch limits prevent command-length errors), lean fetch spec (drops BODYSTRUCTURE/RFC822.SIZE from header loads), newest-first UID fetching (users see newest emails first during delta-sync), COMPRESS=DEFLATE negotiation (70-80% bandwidth reduction when server supports it), capability caching in connection pool, skip-redundant-SELECT tracking, CONDSTORE delta sync (zero IMAP calls when mailbox unchanged, flag-only sync when only flags changed), and ESEARCH for compact UID enumeration
 - **Email list scrolling performance** — fingerprint-based memoization skips redundant O(n log n) sorts in `updateSortedEmails()` and `getChatEmails()`; individual Zustand selectors prevent cascade re-renders from background pipeline updates; hand-rolled virtual scroll with static CSS positioning for smooth 17k+ email scrolling
