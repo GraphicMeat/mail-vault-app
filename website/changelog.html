@@ -102,9 +102,236 @@
 
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.8.0</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">February 25, 2026</span>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            </span>
+            Added
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Instant archived email display</strong> — archived emails stored on disk now appear in the email list within ~400ms (previously 4+ seconds). Uses sidecar JSON cache from IMAP sync instead of slow .eml MIME parsing; 3-tier loading strategy: sidecar cache → archived headers cache → .eml fallback with progressive batch display</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            </span>
+            Fixed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Badge count oscillating during IMAP sync</strong> — dock badge no longer flickers between values as email pages load; debounced with 2s delay and removed <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">emails.length</code>/<code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">emails</code> reference from effect dependencies</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Archived emails race condition</strong> — <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">localEmails</code> no longer overwritten by IMAP sync <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">set()</code> calls; fire-and-forget chain is now the sole owner of <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">localEmails</code> state; staleness check uses account-only (not generation counter) so archived emails survive pagination restarts</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            </span>
+            Added
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Chat view: attachment support</strong> — chat bubbles and the full-view modal now show functional attachment cards (click to download/open, right-click for Open/Open With/Save As/Show in Folder); uses compact styling to fit the chat bubble aesthetic; correctly resolves mailbox for both inbox and sent folder emails</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>IMAP performance optimizations</strong> — 9 optimizations to IMAP header loading: UID range compression (reduces command size from O(n) to O(ranges)), chunked UID FETCH (200-batch limits prevent command-length errors), lean fetch spec (drops BODYSTRUCTURE/RFC822.SIZE from header loads), newest-first UID fetching (users see newest emails first during delta-sync), COMPRESS=DEFLATE negotiation (70-80% bandwidth reduction when server supports it), capability caching in connection pool, skip-redundant-SELECT tracking, CONDSTORE delta sync (zero IMAP calls when mailbox unchanged, flag-only sync when only flags changed), and ESEARCH for compact UID enumeration</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Email list scrolling performance</strong> — fingerprint-based memoization skips redundant O(n log n) sorts in <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">updateSortedEmails()</code> and <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">getChatEmails()</code>; individual Zustand selectors prevent cascade re-renders from background pipeline updates; hand-rolled virtual scroll with static CSS positioning for smooth 17k+ email scrolling</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Concurrency & pipeline performance optimizations</strong> — 10 optimizations: Set-based uncached UID filtering (eliminates 17k sequential IPC calls), parallel disk reads via Promise.all in loadEmails/setActiveMailbox/pipeline finish, batch <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">maildir_read_light_batch</code> Rust command (single IPC for all local emails), IMAP connection pool expanded from 1→3 sessions per account (supports concurrent workers), parallel background account header loading (up to 3 accounts at once), memoized thread building, batch account backfill (single file read/write), reduced pipeline/pagination/loadMore delays (5s→1s, 1s→200ms, 2s→500ms)</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            </span>
+            Fixed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Thread cache never working (crash fix)</strong> — <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">getThreads()</code> checked <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">_threadsCache.length</code> but <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">buildThreads()</code> returns a <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">Map</code> (which uses <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">.size</code>); cache was always bypassed, causing expensive thread rebuilds on every render with 17k emails</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Thread/compact row crash on null lastEmail</strong> — added null guard to <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">ThreadRow</code> and <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">CompactThreadRow</code> to prevent crash when a thread has no emails during race conditions</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>findRoot stack overflow</strong> — cycle detection in email threading now also tracks by UID, preventing infinite recursion on emails without Message-ID but with inReplyTo loops</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Direct Zustand state mutation</strong> — <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">addToCache</code> no longer mutates <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">get().cacheCurrentSizeMB</code> outside <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">set()</code>; uses module-level variable for sub-threshold tracking</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Sorted emails fingerprint missed flag changes</strong> — <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">updateSortedEmails</code> fingerprint now includes a flag-change counter so read/unread toggles are detected</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>loadEmailRange O(17k) loop</strong> — replaced <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">for (i=0; i<totalEmails)</code> loop with <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">Array.from(entries).sort().map()</code> — now O(loaded) instead of O(total)</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Sidebar/EmailViewer re-rendering on every store change</strong> — replaced whole-store <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">useMailStore()</code> subscriptions with individual selectors in Sidebar and EmailViewer</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Object selectors without shallow comparison</strong> — split object literal selectors into individual selectors in ChatBubbleView MessageBubble, AttachmentItem, and DownloadAllButton to prevent unnecessary re-renders</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>selectedEmailIds Set cascading re-renders</strong> — thread rows now receive precomputed <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">anyChecked</code> boolean prop instead of the full Set reference</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>ThreadEmailItemContent iframe rebuilt every render</strong> — wrapped <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">iframeContent</code> string in <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">useMemo</code> keyed on <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">loadedEmail?.html</code></span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>60fps scroll handler re-renders</strong> — throttled <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">handleScroll</code> via <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">requestAnimationFrame</code> to batch scroll state updates</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>IMAP NOOP on every pool get</strong> — added time-based skip: sessions used within 60s skip the NOOP health check; added per-session <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">last_selected</code> tracking instead of per-account-key</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Pipeline header loading 200ms artificial delay</strong> — reduced to 50ms (just enough to yield to event loop), saving ~30s on 200-page mailboxes</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>waitForComplete/startContentCaching race</strong> — reordered to call <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">startContentCaching()</code> before <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">waitForComplete()</code> to prevent synchronous completion firing before promise setup</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Duplicate loadMoreEmails scheduling</strong> — added module-level timer deduplication to prevent multiple concurrent pagination timers</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Subject-fallback orphan merge</strong> — orphans with matching subjects now merge with each other (not just with multi-email threads)</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>normalizeSubject called redundantly</strong> — added module-level memoization cache for normalized subjects</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>ensureFreshToken called per-email in pipeline</strong> — moved to before the worker loop with re-call only on auth errors</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Large mailbox not loading (17k+ emails)</strong> — fixed multiple issues: <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">_sortedEmailsFingerprint</code> not reset on account switch caused <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">sortedEmails</code> to stay empty via false fingerprint match; quick-load parsed full 15-20MB headers.json (now loads partial 200 headers); <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">displayEmails</code> redundantly re-sorted 17k emails (now uses pre-sorted <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">sortedEmails</code> directly); <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">threadedDisplay</code> depended on stable <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">getChatEmails</code> function ref that never triggered recomputation (added <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">sortedEmails</code> as dependency)</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Large mailbox stall at partial cache</strong> — CONDSTORE and non-CONDSTORE early-return paths in delta-sync now check whether the local cache is partial and schedule <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">loadMoreEmails()</code> when needed; previously, mailboxes with 17k+ emails would stall at ~200 cached headers because the "no changes" fast path returned without continuing background pagination</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Endless spinner on app launch</strong> — <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">getChatEmails()</code> was calling Zustand <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">set()</code> during React render (inside a <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">useMemo</code>), and <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">threadedDisplay</code> useMemo never reacted to <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">sortedEmails</code> changes because the function reference was stable; moved chat email cache to module-level variables</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Pipeline manager <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">_destroyed</code> flag never initialized or reset</strong> — <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">destroyAll()</code> now sets the flag, constructor initializes it, and <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">startActiveAccountPipeline()</code> resets it so background pipelines can run after a destroy/restart cycle</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>CONDSTORE flag-only sync false negative</strong> — removed <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">serverTotal === existingEmails.length</code> condition that failed with partial caches; <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">uidNext</code> unchanged already guarantees no new messages</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Thread cache stale after flag changes</strong> — added <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">_flagSeq</code> store state and <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">_flagChangeCounter</code> to <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">getChatEmails</code>/<code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">getThreads</code>/EmailList thread fingerprints so read/unread and archive changes propagate to thread views</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong><code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">waitForComplete()</code> hang on pipeline destroy</strong> — stored resolve callback for <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">destroy()</code> to call; made <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">waitForComplete()</code> idempotent with shared promise</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>All accounts hidden crash</strong> — added null guard for <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">firstVisible</code> in <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">init()</code> when all accounts are hidden</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>findRoot O(N²) chain walking</strong> — added memoization cache so each email's thread root is computed once, not re-walked from scratch</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Thread delete triggers N loadEmails calls</strong> — added <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">skipRefresh</code> option to <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">deleteEmailFromServer</code>; thread delete handlers now batch deletions and call <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">loadEmails()</code> once</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Dynamic Zustand store key leak</strong> — replaced <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">_rangeRetry_*</code> dynamic store keys with module-level <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">Map</code> for range retry state</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Archive state stale in chat view</strong> — <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">getChatEmails</code> fingerprint now includes <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">archivedEmailIds.size</code></span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>IMAP pool sessions always re-SELECT</strong> — <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">with_background</code>/<code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">with_priority</code> helpers now pass the selected mailbox back to the pool for session reuse tracking</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>App.jsx and usePipelineCoordinator re-renders</strong> — converted whole-store subscriptions to individual Zustand selectors</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Stale rAF scroll position</strong> — fixed <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">handleScroll</code> to read <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">scrollTop</code> inside the rAF callback, not in the stale event closure</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>UI freeze on large mailboxes (17k+ emails)</strong> — monolithic <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">getEmailHeaders()</code> reading all 17k sidecar JSON files replaced with <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">getEmailHeadersPartial(200)</code> for instant display; added <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">load_email_cache_meta</code> Rust command for metadata-only reads; heavy Rust commands (<code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">save_email_cache</code>, <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">load_email_cache_partial</code>, <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">maildir_list</code>, <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">maildir_read_light_batch</code>) moved to <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">tokio::spawn_blocking</code> to prevent main-thread blocking</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Endless spinner on account switching</strong> — <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">getLocalEmails()</code> reading all .eml files removed from <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">setActiveAccount</code>, <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">setActiveMailbox</code>, and <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">loadEmails</code> hot paths; archived emails now load via fire-and-forget <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">getArchivedEmails()</code> (reads only archived .eml subset); added <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">_loadEmailsGeneration</code> counter to cancel stale concurrent <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">loadEmails</code> calls on rapid account switching</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Background pipeline re-reading 17k files</strong> — <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">EmailPipelineManager</code> now uses in-memory <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">pipeline._lastLoadedEmails</code> from Phase 1 header loading instead of calling <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">db.getEmailHeaders()</code> for Phase 2 content caching</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Whole-store Zustand subscriptions</strong> — added <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">useShallow</code> selectors to ChatBubbleView, ChatSenderList, ChatViewWrapper, EmailViewer; converted bare <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">useMailStore()</code> to individual selectors in useEmailScheduler and SearchBar</span>
+            </li>
+          </ul>
+        </div>
+
+      </article>
+      <article class="mb-16">
+        <div class="flex items-center gap-3 mb-6">
           <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.7.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">February 21, 2026</span>
-          <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
         </div>
 
         <div class="mb-8">

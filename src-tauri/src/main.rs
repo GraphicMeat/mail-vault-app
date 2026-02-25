@@ -1727,6 +1727,115 @@ fn cancel_archive(state: tauri::State<'_, archive::ArchiveCancelToken>) -> Resul
     Ok(())
 }
 
+// ── Bulk delete emails (concurrent) ─────────────────────────────────────────
+
+#[tauri::command]
+async fn bulk_delete_emails(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, archive::ArchiveCancelToken>,
+    account_id: String,
+    account_json: String,
+    mailbox: String,
+    uids: Vec<u32>,
+) -> Result<archive::ArchiveProgress, String> {
+    let cancel = {
+        let mut guard = state.0.lock().unwrap();
+        let token = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        *guard = std::sync::Arc::clone(&token);
+        token
+    };
+
+    archive::bulk_delete(
+        app_handle, account_id, account_json, mailbox, uids, cancel,
+    ).await
+}
+
+// ── Verify archived emails on disk ──────────────────────────────────────────
+
+#[tauri::command]
+async fn verify_archived_emails(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    mailbox: String,
+    uids: Vec<u32>,
+) -> Result<serde_json::Value, String> {
+    tokio::task::spawn_blocking(move || {
+        let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
+
+        let mut verified: Vec<u32> = Vec::new();
+        let mut missing: Vec<u32> = Vec::new();
+
+        for uid in &uids {
+            if find_file_by_uid(&cur_dir, *uid).is_some() {
+                verified.push(*uid);
+            } else {
+                missing.push(*uid);
+            }
+        }
+
+        info!(
+            "verify_archived_emails: {}/{} verified, {} missing",
+            verified.len(), uids.len(), missing.len()
+        );
+
+        Ok(serde_json::json!({
+            "verified": verified,
+            "missing": missing,
+        }))
+    }).await.map_err(|e| format!("Task join error: {}", e))?
+}
+
+// ── Pending operation persistence ───────────────────────────────────────────
+
+#[tauri::command]
+async fn read_pending_operation(
+    app_handle: tauri::AppHandle,
+) -> Result<Option<serde_json::Value>, String> {
+    let path = app_handle.path().app_data_dir()
+        .map_err(|e| format!("app_data_dir: {}", e))?
+        .join("pending_operations.json");
+    if !path.exists() {
+        return Ok(None);
+    }
+    let data = tokio::fs::read_to_string(&path)
+        .await
+        .map_err(|e| format!("read pending_operations.json: {}", e))?;
+    let val: serde_json::Value = serde_json::from_str(&data)
+        .map_err(|e| format!("parse pending_operations.json: {}", e))?;
+    Ok(Some(val))
+}
+
+#[tauri::command]
+async fn save_pending_operation(
+    app_handle: tauri::AppHandle,
+    operation: serde_json::Value,
+) -> Result<(), String> {
+    let path = app_handle.path().app_data_dir()
+        .map_err(|e| format!("app_data_dir: {}", e))?
+        .join("pending_operations.json");
+    let json = serde_json::to_string_pretty(&operation)
+        .map_err(|e| format!("serialize: {}", e))?;
+    tokio::fs::write(&path, json)
+        .await
+        .map_err(|e| format!("write pending_operations.json: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn clear_pending_operation(
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    let path = app_handle.path().app_data_dir()
+        .map_err(|e| format!("app_data_dir: {}", e))?
+        .join("pending_operations.json");
+    if path.exists() {
+        tokio::fs::remove_file(&path)
+            .await
+            .map_err(|e| format!("remove pending_operations.json: {}", e))?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn maildir_read(
     app_handle: tauri::AppHandle,
@@ -2684,6 +2793,11 @@ fn main() {
             import_backup,
             archive_emails,
             cancel_archive,
+            bulk_delete_emails,
+            verify_archived_emails,
+            read_pending_operation,
+            save_pending_operation,
+            clear_pending_operation,
             commands::imap_test_connection,
             commands::imap_get_mailboxes,
             commands::imap_get_emails,

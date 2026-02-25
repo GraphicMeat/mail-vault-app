@@ -17,12 +17,12 @@ import {
   Archive,
   X,
   Layers,
-  ChevronDown,
-  Mail,
-  MailOpen,
   Search,
   MessageSquare
 } from 'lucide-react';
+import { BulkOperationsModal } from './BulkOperationsModal';
+import { BulkOperationProgress } from './BulkOperationProgress';
+import { bulkOperationManager } from '../services/BulkOperationManager';
 
 const ROW_HEIGHT_DEFAULT = 56;
 const ROW_HEIGHT_COMPACT = 52;
@@ -116,10 +116,9 @@ const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onT
         {email.hasAttachments && (
           <Paperclip size={14} className="text-mail-text-muted flex-shrink-0" />
         )}
-      </div>
-
-      <div className="text-sm text-mail-text-muted whitespace-nowrap">
-        {formatEmailDate(email.date)}
+        <span className="ml-auto text-xs text-mail-text-muted whitespace-nowrap flex-shrink-0">
+          {formatEmailDate(email.date)}
+        </span>
       </div>
 
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -411,10 +410,9 @@ const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectTh
         {latestEmail.hasAttachments && (
           <Paperclip size={14} className="text-mail-text-muted flex-shrink-0" />
         )}
-      </div>
-
-      <div className="text-sm text-mail-text-muted whitespace-nowrap">
-        {formatEmailDate(latestEmail.date)}
+        <span className="ml-auto text-xs text-mail-text-muted whitespace-nowrap flex-shrink-0">
+          {formatEmailDate(latestEmail.date)}
+        </span>
       </div>
 
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -635,10 +633,6 @@ export function EmailList({ layoutMode = 'three-column' }) {
   const toggleEmailSelection = useMailStore(s => s.toggleEmailSelection);
   const selectAllEmails = useMailStore(s => s.selectAllEmails);
   const clearSelection = useMailStore(s => s.clearSelection);
-  const saveSelectedLocally = useMailStore(s => s.saveSelectedLocally);
-  const markSelectedAsRead = useMailStore(s => s.markSelectedAsRead);
-  const markSelectedAsUnread = useMailStore(s => s.markSelectedAsUnread);
-  const deleteSelectedFromServer = useMailStore(s => s.deleteSelectedFromServer);
   const clearSearch = useMailStore(s => s.clearSearch);
   const getChatEmails = useMailStore(s => s.getChatEmails);
 
@@ -647,12 +641,18 @@ export function EmailList({ layoutMode = 'three-column' }) {
   const ROW_HEIGHT = isCompact ? ROW_HEIGHT_COMPACT : ROW_HEIGHT_DEFAULT;
   const RowComponent = isCompact ? CompactEmailRow : EmailRow;
 
-  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
-  const [actionInProgress, setActionInProgress] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  const [bulkOpProgress, setBulkOpProgress] = useState(null);
   const scrollContainerRef = useRef(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(600);
+
+  // Pull-to-refresh
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const pullStartY = useRef(null);
+  const isPulling = useRef(false);
 
   // sortedEmails is already combined (server + local-only), flagged (isLocal, isArchived, source),
   // and sorted by updateSortedEmails(). Use directly to avoid redundant 17k-object spread + sort.
@@ -672,8 +672,8 @@ export function EmailList({ layoutMode = 'three-column' }) {
     [searchActive, getChatEmails, sortedEmails, sentEmails]
   );
   const threadFingerprint = useMemo(
-    () => mergedEmails ? `${mergedEmails.length}-${mergedEmails[0]?.uid || 0}-${mergedEmails[mergedEmails.length - 1]?.uid || 0}-${flagSeq}` : '',
-    [mergedEmails, flagSeq]
+    () => mergedEmails ? `${viewMode}-${mergedEmails.length}-${mergedEmails[0]?.uid || 0}-${mergedEmails[mergedEmails.length - 1]?.uid || 0}-${flagSeq}` : '',
+    [mergedEmails, flagSeq, viewMode]
   );
 
   // Compute threads in a deferred callback to avoid blocking render
@@ -698,7 +698,7 @@ export function EmailList({ layoutMode = 'three-column' }) {
     }, 0);
 
     return () => clearTimeout(timer);
-  }, [mergedEmails, threadFingerprint, searchActive]);
+  }, [mergedEmails, threadFingerprint, searchActive, viewMode]);
 
   // Build display list: use threads if available, flat list as fallback
   const threadedDisplay = useMemo(() => {
@@ -784,6 +784,44 @@ export function EmailList({ layoutMode = 'three-column' }) {
     });
   }, []);
 
+  // Pull-to-refresh handlers
+  const PULL_THRESHOLD = 80;
+
+  const handleTouchStart = useCallback((e) => {
+    if (scrollContainerRef.current?.scrollTop === 0 && !isRefreshing) {
+      pullStartY.current = e.touches[0].clientY;
+      isPulling.current = true;
+    }
+  }, [isRefreshing]);
+
+  const handleTouchMove = useCallback((e) => {
+    if (!isPulling.current || pullStartY.current === null) return;
+    const y = e.touches[0].clientY;
+    const distance = Math.max(0, (y - pullStartY.current) * 0.5);
+    if (distance > 0 && scrollContainerRef.current?.scrollTop === 0) {
+      setPullDistance(Math.min(distance, PULL_THRESHOLD * 1.5));
+    }
+  }, []);
+
+  const handleTouchEnd = useCallback(async () => {
+    if (!isPulling.current) return;
+    isPulling.current = false;
+    pullStartY.current = null;
+
+    if (pullDistance >= PULL_THRESHOLD) {
+      setIsRefreshing(true);
+      setPullDistance(PULL_THRESHOLD * 0.6);
+      try {
+        await useMailStore.getState().loadEmails();
+      } finally {
+        setIsRefreshing(false);
+        setPullDistance(0);
+      }
+    } else {
+      setPullDistance(0);
+    }
+  }, [pullDistance]);
+
   // Generate visible rows
   const visibleRows = useMemo(() => {
     const rows = [];
@@ -798,14 +836,34 @@ export function EmailList({ layoutMode = 'three-column' }) {
 
   const totalHeight = rowCount * ROW_HEIGHT;
 
-  const handleAction = async (action) => {
-    setActionInProgress(true);
-    setActionsMenuOpen(false);
+  const handleBulkConfirm = async ({ action, uids }) => {
+    const { activeAccountId, accounts, activeMailbox } = useMailStore.getState();
+    let account = accounts.find(a => a.id === activeAccountId);
+    if (!account) return;
+
+    clearSelection();
+
     try {
-      await action();
-    } finally {
-      setActionInProgress(false);
+      await bulkOperationManager.start({
+        type: action,
+        accountId: activeAccountId,
+        account,
+        mailbox: activeMailbox,
+        uids,
+        onProgress: (op) => setBulkOpProgress({ ...op }),
+      });
+
+      if (bulkOperationManager.operation?.status === 'complete') {
+        await useMailStore.getState().loadEmails();
+      }
+    } catch (err) {
+      console.error('[EmailList] Bulk operation failed:', err);
     }
+  };
+
+  const handleBulkCancel = async () => {
+    await bulkOperationManager.cancel();
+    setBulkOpProgress(null);
   };
 
   return (
@@ -814,7 +872,7 @@ export function EmailList({ layoutMode = 'three-column' }) {
       <div data-tauri-drag-region className="flex items-center justify-between px-4 py-3 border-b border-mail-border bg-mail-surface flex-shrink-0 min-h-[48px]">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => allSelected ? clearSelection() : selectAllEmails()}
+            onClick={() => allSelected ? clearSelection() : setBulkModalOpen(true)}
             className="p-1 hover:bg-mail-border rounded transition-colors"
           >
             {allSelected ? (
@@ -852,102 +910,6 @@ export function EmailList({ layoutMode = 'three-column' }) {
         </div>
 
         <div className="flex items-center gap-2">
-          {hasSelection && (
-            <motion.div
-              initial={{ opacity: 0, x: 10 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="flex items-center gap-2"
-            >
-              <span className="text-sm text-mail-text-muted">
-                {selectedEmailIds.size} selected
-              </span>
-
-              <div className="relative">
-                <button
-                  onClick={() => setActionsMenuOpen(!actionsMenuOpen)}
-                  disabled={actionInProgress}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-mail-surface
-                            text-mail-text border border-mail-border rounded-lg text-sm font-medium
-                            hover:bg-mail-surface-hover transition-colors disabled:opacity-50"
-                >
-                  {actionInProgress ? (
-                    <RefreshCw size={14} className="animate-spin" />
-                  ) : (
-                    <MoreHorizontal size={14} />
-                  )}
-                  Actions
-                  <ChevronDown size={12} />
-                </button>
-
-                <AnimatePresence>
-                  {actionsMenuOpen && (
-                    <>
-                      <div
-                        className="fixed inset-0 z-40"
-                        onClick={() => setActionsMenuOpen(false)}
-                      />
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.95, y: -5 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95, y: -5 }}
-                        className="absolute right-0 top-full mt-1 bg-mail-bg border border-mail-border
-                                  rounded-lg shadow-lg z-50 py-1 min-w-[180px]"
-                      >
-                        <button
-                          onClick={() => handleAction(markSelectedAsRead)}
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover
-                                    flex items-center gap-2 text-mail-text"
-                        >
-                          <MailOpen size={14} />
-                          Mark as read
-                        </button>
-                        <button
-                          onClick={() => handleAction(markSelectedAsUnread)}
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover
-                                    flex items-center gap-2 text-mail-text"
-                        >
-                          <Mail size={14} />
-                          Mark as unread
-                        </button>
-                        <div className="h-px bg-mail-border my-1" />
-                        <button
-                          onClick={() => {
-                            if (confirm(`Delete ${selectedEmailIds.size} email(s) from server?`)) {
-                              handleAction(deleteSelectedFromServer);
-                            } else {
-                              setActionsMenuOpen(false);
-                            }
-                          }}
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover
-                                    flex items-center gap-2 text-mail-danger"
-                        >
-                          <Trash2 size={14} />
-                          Delete from server
-                        </button>
-                      </motion.div>
-                    </>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              <button
-                onClick={saveSelectedLocally}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-mail-local/10
-                          text-mail-local rounded-lg text-sm font-medium
-                          hover:bg-mail-local/20 transition-colors"
-              >
-                <Archive size={14} />
-                Archive All
-              </button>
-              <button
-                onClick={clearSelection}
-                className="p-1.5 hover:bg-mail-border rounded transition-colors"
-              >
-                <X size={14} className="text-mail-text-muted" />
-              </button>
-            </motion.div>
-          )}
-
           <button
             onClick={() => setShowSearch(!showSearch)}
             className={`p-2 rounded-lg transition-colors ${
@@ -958,18 +920,6 @@ export function EmailList({ layoutMode = 'three-column' }) {
             title="Search emails"
           >
             <Search size={18} />
-          </button>
-
-          <button
-            onClick={() => loadEmails()}
-            disabled={loading}
-            className="p-2 hover:bg-mail-border rounded-lg transition-colors"
-            title="Refresh"
-          >
-            <RefreshCw
-              size={18}
-              className={`text-mail-text-muted ${loading ? 'animate-spin' : ''}`}
-            />
           </button>
         </div>
       </div>
@@ -994,8 +944,27 @@ export function EmailList({ layoutMode = 'three-column' }) {
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
         className="flex-1 overflow-y-auto min-h-0"
       >
+        {/* Pull-to-refresh indicator */}
+        {(pullDistance > 0 || isRefreshing) && (
+          <div
+            className="flex items-center justify-center transition-all"
+            style={{ height: pullDistance }}
+          >
+            <RefreshCw
+              size={18}
+              className={`text-mail-accent transition-transform ${isRefreshing ? 'animate-spin' : ''}`}
+              style={{
+                transform: `rotate(${Math.min(pullDistance / PULL_THRESHOLD, 1) * 360}deg)`,
+                opacity: Math.min(pullDistance / PULL_THRESHOLD, 1),
+              }}
+            />
+          </div>
+        )}
         {loading && rowCount === 0 ? (
           <div className="flex items-center justify-center h-full">
             <RefreshCw size={24} className="animate-spin text-mail-accent" />
@@ -1092,6 +1061,16 @@ export function EmailList({ layoutMode = 'three-column' }) {
           <span>Local only (deleted from server)</span>
         </div>
       </div>
+
+      <BulkOperationsModal
+        isOpen={bulkModalOpen}
+        onClose={() => setBulkModalOpen(false)}
+        onConfirm={handleBulkConfirm}
+      />
+      <BulkOperationProgress
+        operation={bulkOpProgress}
+        onCancel={handleBulkCancel}
+      />
     </div>
   );
 }

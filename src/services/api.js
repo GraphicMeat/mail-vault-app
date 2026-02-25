@@ -288,3 +288,42 @@ export async function refreshOAuth2Token(refreshToken, provider) {
     body: JSON.stringify({ refreshToken }),
   });
 }
+
+// ── Bulk operations API ─────────────────────────────────────────────────────
+
+export async function readPendingOperation() {
+  if (IS_TAURI) {
+    return tauriInvoke('read_pending_operation', {});
+  }
+  return null;
+}
+
+export async function savePendingOperation(operation) {
+  if (IS_TAURI) {
+    return tauriInvoke('save_pending_operation', { operation });
+  }
+}
+
+export async function clearPendingOperation() {
+  if (IS_TAURI) {
+    return tauriInvoke('clear_pending_operation', {});
+  }
+}
+
+export async function bulkDeleteEmails(account, accountId, mailbox, uids) {
+  if (IS_TAURI) {
+    return tauriInvoke('bulk_delete_emails', {
+      accountId,
+      accountJson: JSON.stringify(account),
+      mailbox,
+      uids,
+    });
+  }
+}
+
+export async function verifyArchivedEmails(accountId, mailbox, uids) {
+  if (IS_TAURI) {
+    return tauriInvoke('verify_archived_emails', { accountId, mailbox, uids });
+  }
+  return { verified: uids, missing: [] };
+}

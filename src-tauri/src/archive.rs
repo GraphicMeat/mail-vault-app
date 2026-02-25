@@ -51,7 +51,7 @@ pub async fn run(
         total, completed: 0, errors: 0, active: true, last_error: None,
     });
 
-    let sem = Arc::new(Semaphore::new(3));
+    let sem = Arc::new(Semaphore::new(5));
     let completed = Arc::new(AtomicUsize::new(0));
     let errors = Arc::new(AtomicUsize::new(0));
     let mut set: JoinSet<()> = JoinSet::new();
@@ -173,4 +173,112 @@ async fn fetch_and_store(
 
     info!("archive_emails: stored UID {} ({} bytes)", uid, raw_bytes.len());
     Ok(())
+}
+
+// ── Bulk delete runner ──────────────────────────────────────────────────────
+
+pub async fn bulk_delete(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    account_json: String,
+    mailbox: String,
+    uids: Vec<u32>,
+    cancel: Arc<AtomicBool>,
+) -> Result<ArchiveProgress, String> {
+    let total = uids.len();
+    info!("bulk_delete: starting {} UIDs for account {}", total, account_id);
+
+    let account: ImapConfig = serde_json::from_str(&account_json)
+        .map_err(|e| format!("Bad account JSON: {}", e))?;
+
+    let _ = app_handle.emit("bulk-operation-progress", serde_json::json!({
+        "phase": "delete",
+        "total": total,
+        "completed": 0,
+        "errors": 0,
+        "active": true,
+    }));
+
+    let pool = app_handle.state::<ImapPool>();
+    let sem = Arc::new(Semaphore::new(5));
+    let completed = Arc::new(AtomicUsize::new(0));
+    let errors = Arc::new(AtomicUsize::new(0));
+    let mut set: JoinSet<()> = JoinSet::new();
+
+    for uid in uids {
+        if cancel.load(Ordering::Relaxed) {
+            warn!("bulk_delete: cancelled before spawning UID {}", uid);
+            break;
+        }
+
+        let sem = Arc::clone(&sem);
+        let app = app_handle.clone();
+        let account = account.clone();
+        let mailbox = mailbox.clone();
+        let completed = Arc::clone(&completed);
+        let errors = Arc::clone(&errors);
+        let cancel = Arc::clone(&cancel);
+        let pool = pool.inner().clone();
+
+        set.spawn(async move {
+            let _permit = sem.acquire().await.unwrap();
+
+            if cancel.load(Ordering::Relaxed) {
+                return;
+            }
+
+            let result = delete_single_email(&pool, &account, &mailbox, uid).await;
+
+            if result.is_ok() {
+                completed.fetch_add(1, Ordering::Relaxed);
+            } else {
+                errors.fetch_add(1, Ordering::Relaxed);
+                warn!("bulk_delete: UID {} failed: {:?}", uid, result.err());
+            }
+
+            let c = completed.load(Ordering::Relaxed);
+            let e = errors.load(Ordering::Relaxed);
+            let is_cancelled = cancel.load(Ordering::Relaxed);
+            let _ = app.emit("bulk-operation-progress", serde_json::json!({
+                "phase": "delete",
+                "total": total,
+                "completed": c,
+                "errors": e,
+                "active": !is_cancelled && (c + e) < total,
+            }));
+        });
+    }
+
+    while set.join_next().await.is_some() {}
+
+    let final_completed = completed.load(Ordering::Relaxed);
+    let final_errors = errors.load(Ordering::Relaxed);
+
+    info!("bulk_delete: done — {}/{} deleted, {} errors", final_completed, total, final_errors);
+
+    Ok(ArchiveProgress {
+        total,
+        completed: final_completed,
+        errors: final_errors,
+        active: false,
+        last_error: None,
+    })
+}
+
+async fn delete_single_email(
+    pool: &ImapPool,
+    account: &ImapConfig,
+    mailbox: &str,
+    uid: u32,
+) -> Result<(), String> {
+    let (mut session, _last_sel) = pool.get_priority(account).await?;
+
+    let result = imap::delete_email(&mut session, mailbox, uid, true).await;
+
+    if result.is_ok() {
+        pool.return_priority(account, session, Some(mailbox.to_string())).await;
+    }
+    // On error, don't return session — it may be broken
+
+    result
 }
