@@ -727,7 +727,7 @@ export async function getCachedMailboxes(accountId) {
 
 // ── Email header cache ───────────────────────────────────────────────────
 
-export async function saveEmailHeaders(accountId, mailbox, emails, totalEmails, { uidValidity, uidNext, highestModseq } = {}) {
+export async function saveEmailHeaders(accountId, mailbox, emails, totalEmails, { uidValidity, uidNext, highestModseq, serverUids } = {}) {
   const cacheEntry = {
     accountId,
     mailbox,
@@ -736,6 +736,7 @@ export async function saveEmailHeaders(accountId, mailbox, emails, totalEmails, 
     uidValidity: uidValidity ?? null,
     uidNext: uidNext ?? null,
     highestModseq: highestModseq ?? null,
+    serverUids: serverUids ? Array.from(serverUids) : undefined,
     lastSynced: Date.now()
   };
 
@@ -766,6 +767,7 @@ export async function getEmailHeadersPartial(accountId, mailbox, limit = 200) {
           uidValidity: entry.uidValidity ?? null,
           uidNext: entry.uidNext ?? null,
           highestModseq: entry.highestModseq ?? null,
+          serverUids: entry.serverUids ? new Set(entry.serverUids) : null,
           lastSynced: entry.lastSynced
         };
       }

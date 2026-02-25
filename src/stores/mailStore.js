@@ -30,6 +30,57 @@ let _loadEmailsGeneration = 0;
 // Module-level range retry state — avoids polluting Zustand store with dynamic keys
 const _rangeRetryDelays = new Map();
 
+// ── Mailbox LRU cache (max 3 entries) ─────────────────────────────────
+const _mailboxCache = new Map();
+const MAILBOX_CACHE_MAX = 3;
+
+function _saveToMailboxCache(accountId, mailbox, state) {
+  const key = `${accountId}:${mailbox}`;
+  _mailboxCache.set(key, {
+    emails: state.emails,
+    sortedEmails: state.sortedEmails,
+    localEmails: state.localEmails,
+    emailsByIndex: state.emailsByIndex,
+    totalEmails: state.totalEmails,
+    savedEmailIds: state.savedEmailIds,
+    archivedEmailIds: state.archivedEmailIds,
+    loadedRanges: state.loadedRanges,
+    currentPage: state.currentPage,
+    hasMoreEmails: state.hasMoreEmails,
+    timestamp: Date.now(),
+  });
+
+  // LRU eviction
+  if (_mailboxCache.size > MAILBOX_CACHE_MAX) {
+    let oldestKey = null;
+    let oldestTime = Infinity;
+    for (const [k, v] of _mailboxCache) {
+      if (v.timestamp < oldestTime) {
+        oldestTime = v.timestamp;
+        oldestKey = k;
+      }
+    }
+    if (oldestKey) _mailboxCache.delete(oldestKey);
+  }
+}
+
+function _getFromMailboxCache(accountId, mailbox) {
+  const key = `${accountId}:${mailbox}`;
+  const cached = _mailboxCache.get(key);
+  if (cached) {
+    cached.timestamp = Date.now(); // Touch for LRU
+  }
+  return cached || null;
+}
+
+function _invalidateMailboxCache(accountId) {
+  for (const key of _mailboxCache.keys()) {
+    if (key.startsWith(`${accountId}:`)) {
+      _mailboxCache.delete(key);
+    }
+  }
+}
+
 export const useMailStore = create((set, get) => ({
   // Accounts
   accounts: [],
@@ -44,6 +95,7 @@ export const useMailStore = create((set, get) => ({
   localEmails: [],
   savedEmailIds: new Set(),
   archivedEmailIds: new Set(),
+  serverUidSet: new Set(), // Full set of UIDs known to exist on the IMAP server
   selectedEmailId: null,
   selectedEmail: null,
   selectedEmailSource: null, // 'server' | 'local' | 'local-only'
@@ -183,35 +235,38 @@ export const useMailStore = create((set, get) => ({
   
   // Update sorted emails (memoization for performance)
   updateSortedEmails: () => {
-    const { emails, localEmails, viewMode, savedEmailIds, archivedEmailIds, _sortedEmailsFingerprint } = get();
+    const { emails, localEmails, viewMode, savedEmailIds, archivedEmailIds, serverUidSet, _sortedEmailsFingerprint } = get();
 
     // Fingerprint check: skip if the input set hasn't materially changed
-    const fp = `${viewMode}-${emails.length}-${emails[0]?.uid || 0}-${emails[emails.length - 1]?.uid || 0}-${localEmails.length}-${archivedEmailIds.size}-${savedEmailIds.size}-${_flagChangeCounter}`;
+    const fp = `${viewMode}-${emails.length}-${emails[0]?.uid || 0}-${emails[emails.length - 1]?.uid || 0}-${localEmails.length}-${archivedEmailIds.size}-${savedEmailIds.size}-${serverUidSet.size}-${_flagChangeCounter}`;
     if (fp === _sortedEmailsFingerprint) return;
 
     let result = [];
 
     if (viewMode === 'server') {
+      // Server mode: show only IMAP emails, all as 'server' source.
+      // Don't mark isArchived — in server context everything is a server email.
       result = emails.map(e => ({
         ...e,
-        isLocal: savedEmailIds.has(e.uid),
-        isArchived: archivedEmailIds.has(e.uid),
+        isLocal: false,
+        isArchived: false,
         source: 'server'
       }));
     } else if (viewMode === 'local') {
-      // Show only explicitly archived emails (with 'A' flag)
+      // Local mode: show only archived emails from disk.
+      // Use serverUidSet (full IMAP UID set) to distinguish local vs local-only.
       result = localEmails
         .filter(e => archivedEmailIds.has(e.uid))
         .map(e => ({
           ...e,
           isLocal: true,
           isArchived: true,
-          source: 'local'
+          source: serverUidSet.has(e.uid) ? 'local' : 'local-only'
         }));
     } else {
-      // Combine: server emails + archived emails not yet loaded from server.
-      // Archived emails from disk fill the gaps until their IMAP page loads.
-      const serverUids = new Set(emails.map(e => e.uid));
+      // viewMode === 'all': server emails + archived local-only emails.
+      // Use serverUidSet to accurately classify even when emails array is partial.
+      const loadedUids = new Set(emails.map(e => e.uid));
       const combinedEmails = emails.map(e => ({
         ...e,
         isLocal: savedEmailIds.has(e.uid),
@@ -219,22 +274,17 @@ export const useMailStore = create((set, get) => ({
         source: 'server'
       }));
 
-      // Add archived local emails whose UIDs aren't in the loaded server set yet.
-      // These appear instantly from disk and get replaced by server versions as pages load.
-      let addedLocal = 0;
+      // Add archived local emails not yet loaded as headers.
+      // Use serverUidSet to distinguish: on server but not loaded yet ('local') vs truly local-only.
       for (const localEmail of localEmails) {
-        if (!serverUids.has(localEmail.uid)) {
+        if (!loadedUids.has(localEmail.uid) && archivedEmailIds.has(localEmail.uid)) {
           combinedEmails.push({
             ...localEmail,
             isLocal: true,
-            isArchived: archivedEmailIds.has(localEmail.uid),
-            source: 'local'
+            isArchived: true,
+            source: serverUidSet.has(localEmail.uid) ? 'local' : 'local-only'
           });
-          addedLocal++;
         }
-      }
-      if (addedLocal > 0) {
-        console.log('[updateSortedEmails] server=%d, local=%d, addedLocal=%d', emails.length, localEmails.length, addedLocal);
       }
 
       result = combinedEmails;
@@ -457,6 +507,7 @@ export const useMailStore = create((set, get) => ({
       selectedEmailIds: new Set(),
       savedEmailIds: new Set(),
       archivedEmailIds: new Set(),
+      serverUidSet: new Set(),
       connectionStatus: 'disconnected',
       connectionError: null,
       connectionErrorType: null,
@@ -491,7 +542,8 @@ export const useMailStore = create((set, get) => ({
         loading: false,
         loadingMore: true,
         currentPage: Math.ceil(cachedHeaders.emails.length / 50) || 1,
-        hasMoreEmails: cachedHeaders.emails.length < cachedHeaders.totalEmails
+        hasMoreEmails: cachedHeaders.emails.length < cachedHeaders.totalEmails,
+        ...(cachedHeaders.serverUids ? { serverUidSet: cachedHeaders.serverUids } : {})
       });
       get().updateSortedEmails();
       console.log('[setActiveAccount] Showing cached data, will refresh from server...');
@@ -662,9 +714,15 @@ export const useMailStore = create((set, get) => ({
   // Mailbox management
   setActiveMailbox: async (mailbox) => {
     const { activeAccountId } = get();
+    const previousMailbox = get().activeMailbox;
 
     // Remember this mailbox for the account
     useSettingsStore.getState().setLastMailbox(activeAccountId, mailbox);
+
+    // Save previous mailbox state to LRU cache before switching
+    if (previousMailbox && previousMailbox !== mailbox) {
+      _saveToMailboxCache(activeAccountId, previousMailbox, get());
+    }
 
     // Clear selection but don't reset email data yet - loadEmails will handle cache
     set({
@@ -675,6 +733,31 @@ export const useMailStore = create((set, get) => ({
       selectedThread: null,
       selectedEmailIds: new Set()
     });
+
+    // Check LRU cache for target mailbox — instant restore
+    const cached = _getFromMailboxCache(activeAccountId, mailbox);
+    if (cached) {
+      console.log('[setActiveMailbox] LRU cache hit for', mailbox, '— restoring', cached.emails.length, 'emails');
+      set({
+        emails: cached.emails,
+        sortedEmails: cached.sortedEmails,
+        localEmails: cached.localEmails,
+        emailsByIndex: cached.emailsByIndex,
+        totalEmails: cached.totalEmails,
+        savedEmailIds: cached.savedEmailIds,
+        archivedEmailIds: cached.archivedEmailIds,
+        loadedRanges: cached.loadedRanges,
+        currentPage: cached.currentPage,
+        hasMoreEmails: cached.hasMoreEmails,
+        loading: false,
+        loadingMore: false,
+      });
+      get().updateSortedEmails();
+
+      // Background CONDSTORE delta-sync — non-blocking
+      get().loadEmails().catch(() => {});
+      return;
+    }
 
     // Load partial cached data (200 most recent) + saved/archived IDs + archived headers.
     const [cachedHeaders, savedEmailIds, archivedEmailIds] = await Promise.all([
@@ -742,8 +825,13 @@ export const useMailStore = create((set, get) => ({
   setViewMode: (mode) => {
     set({ viewMode: mode });
     get().updateSortedEmails();
-    // Refresh local state in background for up-to-date archive data
-    if (mode === 'local' || mode === 'all') {
+    if (mode === 'server') {
+      // If emails array is empty (account just switched, IMAP not yet synced), trigger load
+      if (get().emails.length === 0) {
+        get().loadEmails();
+      }
+    } else if (mode === 'local' || mode === 'all') {
+      // Refresh local state in background for up-to-date archive data
       const { activeAccountId, activeMailbox } = get();
       if (activeAccountId && activeMailbox) {
         Promise.all([
@@ -844,9 +932,9 @@ export const useMailStore = create((set, get) => ({
         get().updateSortedEmails();
       }
     } else {
-      // No cache - reset state to empty, use any already-loaded local emails
+      // No cache - reset state to empty. Local emails are shown via updateSortedEmails
+      // in 'all' mode (the default) — they don't belong in the `emails` array.
       console.log('[loadEmails] No cached headers, starting fresh');
-      const currentLocalEmails = get().localEmails || [];
       set({
         loading: true,
         error: null,
@@ -856,7 +944,7 @@ export const useMailStore = create((set, get) => ({
         emailsByIndex: new Map(),
         loadedRanges: [],
         loadingRanges: new Set(),
-        emails: currentLocalEmails // Show local emails while loading
+        emails: []
       });
       get().updateSortedEmails();
     }
@@ -1056,6 +1144,7 @@ export const useMailStore = create((set, get) => ({
         if (mergedEmails == null && newUidValidity === cachedUidValidity) {
           const serverUids = await api.searchAllUids(account, activeMailbox);
           const serverUidSet = new Set(serverUids);
+          set({ serverUidSet }); // Persist full server UID set for view mode classification
           const storeUidSet = new Set(existingEmails.map(e => e.uid));
 
           // Find truly new UIDs — only those above cachedUidNext (not just missing from partial store).
@@ -1166,6 +1255,12 @@ export const useMailStore = create((set, get) => ({
         return;
       }
 
+      // Merge loaded UIDs into serverUidSet (partial page adds to existing set from delta-sync)
+      const existingServerUidSet = get().serverUidSet;
+      const mergedServerUidSet = existingServerUidSet.size > 0
+        ? new Set([...existingServerUidSet, ...mergedEmails.map(e => e.uid)])
+        : new Set(mergedEmails.map(e => e.uid));
+
       set({
         emails: mergedEmails,
         emailsByIndex,
@@ -1176,7 +1271,8 @@ export const useMailStore = create((set, get) => ({
         currentPage,
         hasMoreEmails,
         totalEmails: serverTotal,
-        loadingMore: false
+        loadingMore: false,
+        serverUidSet: mergedServerUidSet
       });
 
       get().updateSortedEmails();
@@ -1185,7 +1281,8 @@ export const useMailStore = create((set, get) => ({
       db.saveEmailHeaders(activeAccountId, activeMailbox, mergedEmails, serverTotal, {
         uidValidity: newUidValidity,
         uidNext: newUidNext,
-        highestModseq: newHighestModseq ?? null
+        highestModseq: newHighestModseq ?? null,
+        serverUids: get().serverUidSet
       }).catch(e => console.warn('[loadEmails] Failed to cache headers:', e));
 
       // Continue loading more if we don't have all emails yet
@@ -1211,15 +1308,16 @@ export const useMailStore = create((set, get) => ({
         errorMessage = error.message;
       }
 
-      // Keep previous/cached emails on error - don't wipe out the cache!
+      // Keep previous/cached server emails on error - don't wipe out the cache!
+      // Local emails are merged via updateSortedEmails in 'all' mode — don't mix into `emails`.
       if (!isStale()) {
-        const currentLocalEmails = get().localEmails || [];
         set({
-          emails: previousEmails.length > 0 ? previousEmails : currentLocalEmails,
+          emails: previousEmails,
           connectionStatus: 'error',
           connectionError: errorMessage,
           connectionErrorType: errorType
         });
+        get().updateSortedEmails();
       }
     } finally {
       if (!isStale()) set({ loading: false, loadingMore: false });
@@ -1279,12 +1377,16 @@ export const useMailStore = create((set, get) => ({
         }
 
         const newEmails = [...current.emails, ...serverResult.emails];
+        // Expand serverUidSet with newly loaded UIDs
+        const updatedServerUidSet = new Set(current.serverUidSet);
+        for (const e of serverResult.emails) updatedServerUidSet.add(e.uid);
         set({
           emails: newEmails,
           currentPage: nextPage,
           hasMoreEmails: serverResult.hasMore,
           totalEmails: serverResult.total,
-          loadingMore: false
+          loadingMore: false,
+          serverUidSet: updatedServerUidSet
         });
 
         get().updateSortedEmails();
@@ -1403,13 +1505,17 @@ export const useMailStore = create((set, get) => ({
 
         const loadingRangesAfter = new Set(get().loadingRanges);
         loadingRangesAfter.delete(rangeKey);
+        // Expand serverUidSet with newly loaded range UIDs
+        const rangeServerUidSet = new Set(get().serverUidSet);
+        for (const e of result.emails) rangeServerUidSet.add(e.uid);
 
         set({
           emailsByIndex: newEmailsByIndex,
           loadedRanges: mergedRanges,
           loadingRanges: loadingRangesAfter,
           emails: emailsArray,
-          totalEmails: result.total
+          totalEmails: result.total,
+          serverUidSet: rangeServerUidSet
         });
 
         get().updateSortedEmails();
@@ -1520,10 +1626,10 @@ export const useMailStore = create((set, get) => ({
 
   // Get merged INBOX + Sent emails for chat view (memoized via module-level cache)
   getChatEmails: () => {
-    const { sortedEmails, sentEmails, archivedEmailIds } = get();
+    const { sortedEmails, sentEmails, archivedEmailIds, viewMode } = get();
 
     // Fingerprint check: skip merge+sort if inputs haven't changed
-    const fp = `${sortedEmails.length}-${sortedEmails[0]?.uid || 0}-${sortedEmails[sortedEmails.length - 1]?.uid || 0}-${sentEmails.length}-${sentEmails[0]?.uid || 0}-${_flagChangeCounter}-${archivedEmailIds.size}`;
+    const fp = `${viewMode}-${sortedEmails.length}-${sortedEmails[0]?.uid || 0}-${sortedEmails[sortedEmails.length - 1]?.uid || 0}-${sentEmails.length}-${sentEmails[0]?.uid || 0}-${_flagChangeCounter}-${archivedEmailIds.size}`;
     if (fp === _chatEmailsFingerprint && _chatEmailsCache.length > 0) return _chatEmailsCache;
 
     if (sentEmails.length === 0) {
@@ -1560,7 +1666,8 @@ export const useMailStore = create((set, get) => ({
   // Build threads from merged INBOX + Sent emails using RFC header chains (memoized)
   getThreads: () => {
     const chatEmails = get().getChatEmails();
-    const fp = `${chatEmails.length}-${chatEmails[0]?.uid || 0}-${chatEmails[chatEmails.length - 1]?.uid || 0}-${_flagChangeCounter}`;
+    const { viewMode } = get();
+    const fp = `${viewMode}-${chatEmails.length}-${chatEmails[0]?.uid || 0}-${chatEmails[chatEmails.length - 1]?.uid || 0}-${_flagChangeCounter}`;
     if (fp === _threadsFingerprint && _threadsCache.size > 0) {
       return _threadsCache;
     }
@@ -1944,30 +2051,40 @@ export const useMailStore = create((set, get) => ({
   clearSelection: () => {
     set({ selectedEmailIds: new Set() });
   },
+
+  // Get selection summary — thread-aware counts
+  getSelectionSummary: () => {
+    const { selectedEmailIds, sortedEmails } = get();
+    if (selectedEmailIds.size === 0) return { threads: 0, emails: 0 };
+
+    const threads = buildThreads(sortedEmails);
+    let threadCount = 0;
+
+    for (const [, thread] of threads) {
+      const hasSelected = thread.emails.some(e => selectedEmailIds.has(e.uid));
+      if (hasSelected) threadCount++;
+    }
+
+    return { threads: threadCount, emails: selectedEmailIds.size };
+  },
   
-  // Bulk save
+  // Bulk save — clears selection immediately, archive runs in background
   saveSelectedLocally: async () => {
     const { selectedEmailIds } = get();
-    await get().saveEmailsLocally(Array.from(selectedEmailIds));
+    if (selectedEmailIds.size === 0) return;
+    const uids = Array.from(selectedEmailIds);
     set({ selectedEmailIds: new Set() });
+    await get().saveEmailsLocally(uids);
   },
 
-  // Bulk mark as read
+  // Bulk mark as read — clears selection immediately, optimistic UI update
   markSelectedAsRead: async () => {
     const { selectedEmailIds, activeAccountId, accounts, activeMailbox } = get();
     let account = accounts.find(a => a.id === activeAccountId);
     if (!account || selectedEmailIds.size === 0) return;
-    account = await ensureFreshToken(account);
 
     const uids = Array.from(selectedEmailIds);
-    for (const uid of uids) {
-      try {
-        await api.updateEmailFlags(account, uid, ['\\Seen'], 'add', activeMailbox);
-      } catch (e) {
-        console.error(`Failed to mark email ${uid} as read:`, e);
-      }
-    }
-
+    // Optimistic: update UI immediately + clear selection
     set(state => ({
       emails: state.emails.map(e =>
         selectedEmailIds.has(e.uid)
@@ -1976,24 +2093,25 @@ export const useMailStore = create((set, get) => ({
       ),
       selectedEmailIds: new Set()
     }));
+
+    account = await ensureFreshToken(account);
+    for (const uid of uids) {
+      try {
+        await api.updateEmailFlags(account, uid, ['\\Seen'], 'add', activeMailbox);
+      } catch (e) {
+        console.error(`Failed to mark email ${uid} as read:`, e);
+      }
+    }
   },
 
-  // Bulk mark as unread
+  // Bulk mark as unread — clears selection immediately, optimistic UI update
   markSelectedAsUnread: async () => {
     const { selectedEmailIds, activeAccountId, accounts, activeMailbox } = get();
     let account = accounts.find(a => a.id === activeAccountId);
     if (!account || selectedEmailIds.size === 0) return;
-    account = await ensureFreshToken(account);
 
     const uids = Array.from(selectedEmailIds);
-    for (const uid of uids) {
-      try {
-        await api.updateEmailFlags(account, uid, ['\\Seen'], 'remove', activeMailbox);
-      } catch (e) {
-        console.error(`Failed to mark email ${uid} as unread:`, e);
-      }
-    }
-
+    // Optimistic: update UI immediately + clear selection
     set(state => ({
       emails: state.emails.map(e =>
         selectedEmailIds.has(e.uid)
@@ -2002,16 +2120,27 @@ export const useMailStore = create((set, get) => ({
       ),
       selectedEmailIds: new Set()
     }));
+
+    account = await ensureFreshToken(account);
+    for (const uid of uids) {
+      try {
+        await api.updateEmailFlags(account, uid, ['\\Seen'], 'remove', activeMailbox);
+      } catch (e) {
+        console.error(`Failed to mark email ${uid} as unread:`, e);
+      }
+    }
   },
 
-  // Bulk delete from server
+  // Bulk delete from server — clears selection immediately
   deleteSelectedFromServer: async () => {
     const { selectedEmailIds, activeAccountId, accounts, activeMailbox } = get();
     let account = accounts.find(a => a.id === activeAccountId);
     if (!account || selectedEmailIds.size === 0) return;
-    account = await ensureFreshToken(account);
 
     const uids = Array.from(selectedEmailIds);
+    set({ selectedEmailIds: new Set() });
+
+    account = await ensureFreshToken(account);
     for (const uid of uids) {
       try {
         await api.deleteEmail(account, uid, activeMailbox);
@@ -2020,7 +2149,6 @@ export const useMailStore = create((set, get) => ({
       }
     }
 
-    set({ selectedEmailIds: new Set() });
     await get().loadEmails();
   },
 
@@ -2046,6 +2174,11 @@ export const useMailStore = create((set, get) => ({
   refreshAllAccounts: async () => {
     const { accounts, activeAccountId } = get();
     if (accounts.length === 0) return { newEmails: 0, totalUnread: 0 };
+
+    // Invalidate LRU cache — full refresh
+    for (const account of accounts) {
+      _invalidateMailboxCache(account.id);
+    }
 
     console.log('[mailStore] Refreshing all accounts...');
 

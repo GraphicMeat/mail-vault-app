@@ -119,12 +119,14 @@
         <!-- Summary Cards -->
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5">
-            <p class="text-sm text-slate-500 dark:text-slate-400 mb-1">Total Downloads</p>
-            <p id="stat-total" class="text-2xl sm:text-3xl font-bold gradient-text">0</p>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mb-1">DMG Downloads</p>
+            <p id="stat-dmg" class="text-2xl sm:text-3xl font-bold gradient-text">0</p>
+            <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">Actual installs</p>
           </div>
           <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5">
-            <p class="text-sm text-slate-500 dark:text-slate-400 mb-1">DMG Installs</p>
-            <p id="stat-dmg" class="text-2xl sm:text-3xl font-bold gradient-text">0</p>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mb-1">Update Checks</p>
+            <p id="stat-updater" class="text-2xl sm:text-3xl font-bold text-slate-400 dark:text-slate-500">0</p>
+            <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">Auto-update pings</p>
           </div>
           <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5">
             <p class="text-sm text-slate-500 dark:text-slate-400 mb-1">Releases</p>
@@ -132,13 +134,25 @@
           </div>
           <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5">
             <p class="text-sm text-slate-500 dark:text-slate-400 mb-1">Latest Version</p>
-            <p id="stat-latest" class="text-2xl sm:text-3xl font-bold gradient-text">—</p>
+            <p id="stat-latest" class="text-2xl sm:text-3xl font-bold gradient-text">&mdash;</p>
           </div>
         </div>
 
         <!-- Bar Chart -->
         <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6">
-          <h2 class="text-lg font-semibold mb-4">Downloads per Release</h2>
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold">Downloads per Release</h2>
+            <div class="flex items-center gap-4 text-xs">
+              <div class="flex items-center gap-1.5">
+                <div class="w-3 h-3 rounded-sm gradient-bg"></div>
+                <span class="text-slate-500 dark:text-slate-400">DMG installs</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <div class="w-3 h-3 rounded-sm bg-slate-300 dark:bg-slate-600"></div>
+                <span class="text-slate-500 dark:text-slate-400">Update checks</span>
+              </div>
+            </div>
+          </div>
           <div id="chart" class="space-y-3"></div>
         </div>
 
@@ -154,12 +168,13 @@
                   <th class="px-6 py-3 font-medium">Version</th>
                   <th class="px-6 py-3 font-medium">Date</th>
                   <th class="px-6 py-3 font-medium text-right">DMG</th>
-                  <th class="px-6 py-3 font-medium text-right">Updater</th>
+                  <th class="px-6 py-3 font-medium text-right">Update Checks</th>
                   <th class="px-6 py-3 font-medium text-right">Other</th>
                   <th class="px-6 py-3 font-medium text-right">Total</th>
                 </tr>
               </thead>
               <tbody id="releases-table"></tbody>
+              <tfoot id="releases-footer" class="border-t-2 border-slate-200 dark:border-slate-600 font-semibold"></tfoot>
             </table>
           </div>
         </div>
@@ -229,8 +244,9 @@
     }
 
     function renderStats(releases) {
-      let totalDownloads = 0;
       let totalDmg = 0;
+      let totalUpdater = 0;
+      let totalOther = 0;
 
       const releaseData = releases.map(release => {
         let dmg = 0, updater = 0, other = 0;
@@ -245,8 +261,9 @@
           }
         }
         const total = dmg + updater + other;
-        totalDownloads += total;
         totalDmg += dmg;
+        totalUpdater += updater;
+        totalOther += other;
         return {
           tag: release.tag_name,
           name: release.name || release.tag_name,
@@ -261,35 +278,41 @@
       });
 
       // Summary cards
-      document.getElementById('stat-total').textContent = totalDownloads.toLocaleString();
       document.getElementById('stat-dmg').textContent = totalDmg.toLocaleString();
+      document.getElementById('stat-updater').textContent = totalUpdater.toLocaleString();
       document.getElementById('stat-releases').textContent = releases.length.toLocaleString();
-      document.getElementById('stat-latest').textContent = releaseData.length > 0 ? releaseData[0].tag : '—';
+      document.getElementById('stat-latest').textContent = releaseData.length > 0 ? releaseData[0].tag : '\u2014';
 
-      // Bar chart
+      // Bar chart — stacked DMG + updater
       const maxTotal = Math.max(...releaseData.map(r => r.total), 1);
       const chart = document.getElementById('chart');
       chart.innerHTML = '';
 
-      // Show releases in chronological order (oldest first) for the chart
+      // Show releases in chronological order (oldest first)
       const chronological = [...releaseData].reverse();
       for (const r of chronological) {
-        const pct = Math.max((r.total / maxTotal) * 100, r.total > 0 ? 2 : 0);
+        const dmgPct = (r.dmg / maxTotal) * 100;
+        const updaterPct = ((r.updater + r.other) / maxTotal) * 100;
         const row = document.createElement('div');
         row.className = 'flex items-center gap-3';
         row.innerHTML = `
           <span class="text-xs font-mono text-slate-500 dark:text-slate-400 w-16 text-right shrink-0">${r.tag}</span>
-          <div class="flex-1 h-7 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-            <div class="bar-fill h-full rounded-full gradient-bg flex items-center justify-end pr-2" style="width: ${pct}%">
-              ${r.total > 0 ? `<span class="text-xs text-white font-medium whitespace-nowrap">${r.total.toLocaleString()}</span>` : ''}
+          <div class="flex-1 h-7 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden flex">
+            <div class="bar-fill h-full gradient-bg flex items-center justify-end" style="width: 0%" data-width="${dmgPct}">
+              ${r.dmg > 0 ? `<span class="text-[10px] text-white font-medium whitespace-nowrap px-1.5">${r.dmg}</span>` : ''}
+            </div>
+            <div class="bar-fill h-full bg-slate-300 dark:bg-slate-500/50 flex items-center justify-end" style="width: 0%" data-width="${updaterPct}">
+              ${(r.updater + r.other) > 0 ? `<span class="text-[10px] text-slate-600 dark:text-slate-300 font-medium whitespace-nowrap px-1.5">${r.updater + r.other}</span>` : ''}
             </div>
           </div>
+          <span class="text-xs font-medium text-slate-500 dark:text-slate-400 w-8 text-right shrink-0">${r.total}</span>
         `;
         chart.appendChild(row);
-        // Trigger reflow then animate
+        // Animate bars
         requestAnimationFrame(() => {
-          const bar = row.querySelector('.bar-fill');
-          if (bar) bar.style.width = pct + '%';
+          row.querySelectorAll('.bar-fill').forEach(bar => {
+            bar.style.width = bar.dataset.width + '%';
+          });
         });
       }
 
@@ -301,7 +324,7 @@
       const tbody = document.getElementById('releases-table');
       tbody.innerHTML = '';
       for (const r of releaseData) {
-        const date = r.date ? new Date(r.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
+        const date = r.date ? new Date(r.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '\u2014';
         const tr = document.createElement('tr');
         tr.className = 'border-t border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors';
         tr.innerHTML = `
@@ -311,16 +334,29 @@
             ${r.draft ? '<span class="ml-1.5 text-xs bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 px-1.5 py-0.5 rounded">draft</span>' : ''}
           </td>
           <td class="px-6 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">${date}</td>
-          <td class="px-6 py-3 text-right tabular-nums">${r.dmg.toLocaleString()}</td>
-          <td class="px-6 py-3 text-right tabular-nums text-slate-500 dark:text-slate-400">${r.updater.toLocaleString()}</td>
-          <td class="px-6 py-3 text-right tabular-nums text-slate-500 dark:text-slate-400">${r.other.toLocaleString()}</td>
-          <td class="px-6 py-3 text-right tabular-nums font-semibold">${r.total.toLocaleString()}</td>
+          <td class="px-6 py-3 text-right tabular-nums font-semibold">${r.dmg.toLocaleString()}</td>
+          <td class="px-6 py-3 text-right tabular-nums text-slate-400 dark:text-slate-500">${r.updater.toLocaleString()}</td>
+          <td class="px-6 py-3 text-right tabular-nums text-slate-400 dark:text-slate-500">${r.other.toLocaleString()}</td>
+          <td class="px-6 py-3 text-right tabular-nums">${r.total.toLocaleString()}</td>
         `;
         tbody.appendChild(tr);
       }
 
+      // Footer totals row
+      const tfoot = document.getElementById('releases-footer');
+      tfoot.innerHTML = `
+        <tr>
+          <td class="px-6 py-3" colspan="2">Total</td>
+          <td class="px-6 py-3 text-right tabular-nums">${totalDmg.toLocaleString()}</td>
+          <td class="px-6 py-3 text-right tabular-nums text-slate-400 dark:text-slate-500">${totalUpdater.toLocaleString()}</td>
+          <td class="px-6 py-3 text-right tabular-nums text-slate-400 dark:text-slate-500">${totalOther.toLocaleString()}</td>
+          <td class="px-6 py-3 text-right tabular-nums">${(totalDmg + totalUpdater + totalOther).toLocaleString()}</td>
+        </tr>
+      `;
+
       if (releaseData.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-slate-500 dark:text-slate-400">No releases found</td></tr>';
+        tfoot.innerHTML = '';
       }
     }
 

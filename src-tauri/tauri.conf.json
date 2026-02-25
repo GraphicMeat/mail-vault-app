@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/schema.json",
   "productName": "MailVault",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "identifier": "com.mailvault.app",
   "build": {
     "beforeBuildCommand": "npm run build",
@@ -18,7 +18,7 @@
         "height": 800,
         "width": 1200,
         "minHeight": 600,
-        "minWidth": 900,
+        "minWidth": 600,
         "resizable": true,
         "title": "MailVault",
         "center": true,
