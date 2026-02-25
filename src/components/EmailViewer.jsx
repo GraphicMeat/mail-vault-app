@@ -582,14 +582,19 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading }) {
             padding: 16px;
             background: #ffffff;
             color: #333333;
+            overflow-x: hidden;
+            max-width: 100%;
           }
           body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             font-size: 14px;
             line-height: 1.6;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
           }
           img { max-width: 100%; height: auto; }
-          table { max-width: 100% !important; }
+          table { max-width: 100% !important; width: auto !important; }
+          pre, code { white-space: pre-wrap; max-width: 100%; overflow-wrap: break-word; }
         </style>
       </head>
       <body>${bodyHtml}</body>
@@ -672,18 +677,18 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading }) {
   return (
     <>
       {loadedEmail.html ? (
-        <div className="rounded-lg overflow-hidden bg-white mt-2">
+        <div className="rounded-lg overflow-hidden bg-white mt-2 max-w-full">
           <iframe
             ref={iframeRef}
             srcDoc={iframeContent}
             className="w-full border-0"
-            style={{ minHeight: '100px', display: 'block' }}
+            style={{ minHeight: '100px', display: 'block', maxWidth: '100%' }}
             sandbox="allow-same-origin allow-popups"
             title={`Email from ${email.from?.name || email.from?.address}`}
           />
         </div>
       ) : (
-        <div className="email-content whitespace-pre-wrap text-mail-text mt-2 text-sm">
+        <div className="email-content whitespace-pre-wrap text-mail-text mt-2 text-sm break-words overflow-hidden">
           {loadedEmail.text || 'No content'}
         </div>
       )}
@@ -691,7 +696,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading }) {
   );
 }
 
-function ThreadEmailItem({ email, bodiesMapRef, registerListener, isLast, activeAccountId, activeMailbox }) {
+function ThreadEmailItem({ email, bodiesMapRef, registerListener, isLast, activeAccountId, activeMailbox, archivedEmailIds }) {
   const [expanded, setExpanded] = useState(isLast);
   const [, forceUpdate] = useState(0);
   const [composeMode, setComposeMode] = useState(null);
@@ -709,50 +714,53 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isLast, active
   const realAttachments = loadedEmail ? getRealAttachments(loadedEmail.attachments, loadedEmail.html) : [];
 
   return (
-    <div className={`border-b border-mail-border ${expanded ? '' : 'hover:bg-mail-surface-hover'}`}>
+    <div className={`border-b border-mail-border overflow-hidden ${expanded ? '' : 'hover:bg-mail-surface-hover'}`} style={{ contain: 'inline-size' }}>
       {/* Header — always visible */}
       <div
-        className="flex items-start gap-3 px-4 py-3 cursor-pointer"
+        className="flex items-start gap-2 px-3 py-2.5 cursor-pointer"
         onClick={() => setExpanded(!expanded)}
       >
         {/* Avatar */}
-        <div className="w-8 h-8 bg-mail-accent rounded-full flex items-center justify-center flex-shrink-0">
-          <span className="text-white font-semibold text-xs">
+        <div className="w-7 h-7 bg-mail-accent rounded-full flex items-center justify-center flex-shrink-0">
+          <span className="text-white font-semibold text-[11px]">
             {(email.from?.name || email.from?.address || '?')[0].toUpperCase()}
           </span>
         </div>
 
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-sm text-mail-text truncate">
-              {email.from?.name || email.from?.address || 'Unknown'}
-            </span>
-            {email.from?.name && (
-              <span className="text-xs text-mail-text-muted truncate">
-                &lt;{email.from.address}&gt;
+        <div className="flex-1 min-w-0 overflow-hidden">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              {email.source === 'local-only' ? (
+                <HardDrive size={12} className="text-mail-warning flex-shrink-0" title="Local only" />
+              ) : archivedEmailIds?.has(email.uid) ? (
+                <HardDrive size={12} className="text-mail-local flex-shrink-0" title="Archived" />
+              ) : (
+                <Cloud size={12} className="flex-shrink-0" style={{ color: 'rgba(59, 130, 246, 0.5)' }} title="Server" />
+              )}
+              <span className="font-semibold text-sm text-mail-text truncate">
+                {email.from?.name || email.from?.address || 'Unknown'}
               </span>
-            )}
+            </div>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <span className="text-[11px] text-mail-text-muted">
+                {format(new Date(email.date), 'MMM d, h:mm a')}
+              </span>
+              {expanded ? <ChevronUp size={14} className="text-mail-text-muted" /> : <ChevronDown size={14} className="text-mail-text-muted" />}
+            </div>
           </div>
           {!expanded && (
             <p className="text-xs text-mail-text-muted truncate mt-0.5">
-              {loadedEmail?.text?.substring(0, 120) || email.subject || ''}
+              {loadedEmail?.text?.substring(0, 200) || email.subject || ''}
             </p>
           )}
-        </div>
-
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="text-xs text-mail-text-muted whitespace-nowrap">
-            {format(new Date(email.date), 'MMM d, h:mm a')}
-          </span>
-          {expanded ? <ChevronUp size={14} className="text-mail-text-muted" /> : <ChevronDown size={14} className="text-mail-text-muted" />}
         </div>
       </div>
 
       {/* Expanded content */}
       {expanded && (
-        <div className="px-4 pb-4">
+        <div className="px-3 pb-3 overflow-hidden" style={{ contain: 'inline-size' }}>
           {/* To/CC line */}
-          <div className="text-xs text-mail-text-muted mb-2 pl-11">
+          <div className="text-xs text-mail-text-muted mb-2 pl-9">
             To: {(Array.isArray(email.to) ? email.to : []).map(t => t.name || t.address).join(', ') || 'Unknown'}
             {email.cc?.length > 0 && (
               <span className="ml-2">CC: {email.cc.map(c => c.name || c.address).join(', ')}</span>
@@ -760,13 +768,13 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isLast, active
           </div>
 
           {/* Body */}
-          <div className="pl-11">
+          <div className="pl-9 overflow-hidden" style={{ contain: 'inline-size' }}>
             <ThreadEmailItemContent email={email} loadedEmail={loadedEmail} isLoading={isLoading} />
           </div>
 
           {/* Attachments */}
           {realAttachments.length > 0 && (
-            <div className="mt-3 pl-11">
+            <div className="mt-3 pl-9">
               <div className="flex items-center gap-2 text-xs text-mail-text-muted mb-2">
                 <Paperclip size={12} />
                 <span>{realAttachments.length} Attachment{realAttachments.length !== 1 ? 's' : ''}</span>
@@ -787,7 +795,7 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isLast, active
           )}
 
           {/* Reply actions */}
-          <div className="flex items-center gap-2 mt-3 pl-11">
+          <div className="flex items-center gap-2 mt-3 pl-9">
             <button
               onClick={(e) => { e.stopPropagation(); setComposeMode('reply'); }}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-mail-text-muted
@@ -874,9 +882,9 @@ function ThreadView({ thread }) {
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-mail-bg overflow-hidden min-h-0 h-full">
+    <div className="flex-1 flex flex-col bg-mail-bg overflow-hidden min-h-0 min-w-0 h-full">
       {/* Thread header */}
-      <div data-tauri-drag-region className="flex items-center justify-between px-4 py-3 border-b border-mail-border">
+      <div data-tauri-drag-region className="flex items-center justify-between px-3 py-2.5 border-b border-mail-border">
         <div className="flex flex-col justify-center flex-1 min-w-0 min-h-[34px]">
           <h1 className="text-sm font-semibold text-mail-text truncate">
             {thread.subject}
@@ -890,9 +898,11 @@ function ThreadView({ thread }) {
           <button
             onClick={handleArchiveThread}
             disabled={saving}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-mail-local/10
-                      text-mail-local hover:bg-mail-local/20 rounded-lg text-sm
-                      font-medium transition-colors disabled:opacity-50 ml-3"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm
+                      font-medium transition-colors disabled:opacity-50 ml-2 text-mail-local"
+            style={{ backgroundColor: 'color-mix(in srgb, var(--mail-local) 10%, transparent)' }}
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--mail-local) 20%, transparent)'}
+            onMouseLeave={e => e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--mail-local) 10%, transparent)'}
           >
             <Archive size={14} />
             {saving ? 'Archiving...' : 'Archive All'}
@@ -900,12 +910,12 @@ function ThreadView({ thread }) {
         )}
       </div>
 
-      {/* Thread emails */}
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto min-h-0">
+      {/* Thread emails — w-0 min-w-full prevents children from expanding container beyond viewport */}
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 w-full" style={{ contain: 'inline-size' }}>
         {sortedEmails.map((email, idx) => {
           const isLast = idx === sortedEmails.length - 1;
           return (
-            <div key={emailKey(email)} ref={isLast ? lastEmailRef : undefined}>
+            <div key={emailKey(email)} ref={isLast ? lastEmailRef : undefined} className="w-full overflow-hidden" style={{ contain: 'inline-size' }}>
               <ThreadEmailItem
                 email={email}
                 bodiesMapRef={bodiesMapRef}
@@ -913,6 +923,7 @@ function ThreadView({ thread }) {
                 isLast={isLast}
                 activeAccountId={activeAccountId}
                 activeMailbox={activeMailbox}
+                archivedEmailIds={archivedEmailIds}
               />
             </div>
           );
@@ -1207,9 +1218,9 @@ export function EmailViewer() {
   }
   
   return (
-    <div className="flex-1 flex flex-col bg-mail-bg overflow-hidden min-h-0 h-full relative">
+    <div className="flex-1 flex flex-col bg-mail-bg overflow-hidden min-h-0 min-w-0 h-full relative">
       {/* Toolbar */}
-      <div data-tauri-drag-region className="flex items-center justify-between px-4 py-3 border-b border-mail-border">
+      <div data-tauri-drag-region className="flex items-center justify-between px-3 py-2 border-b border-mail-border">
         <div className="flex items-center gap-2">
           <button 
             onClick={() => setComposeMode('reply')}
@@ -1281,90 +1292,81 @@ export function EmailViewer() {
           )}
         </div>
         
-        <div className="flex items-center gap-2">
-          {/* Storage indicator */}
-          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm
-                          ${isLocalOnly
-                            ? 'bg-mail-warning/10 text-mail-warning'
-                            : isArchived
-                              ? 'bg-mail-local/10 text-mail-local'
-                              : 'bg-mail-server/10 text-mail-server'}`}>
-            {isLocalOnly ? (
-              <>
-                <HardDrive size={14} />
-                <span>Local only</span>
-              </>
-            ) : isArchived ? (
-              <>
-                <HardDrive size={14} />
-                <span>Archived</span>
-              </>
-            ) : (
-              <>
-                <Cloud size={14} />
-                <span>Server</span>
-              </>
-            )}
-          </div>
-
+        <div className="flex items-center gap-1">
           {isLocalOnly ? (
             <>
               <button
                 onClick={handleRemoveLocal}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-mail-danger/10
-                          text-mail-danger hover:bg-mail-danger/20 rounded-lg text-sm transition-colors"
+                className="p-2 hover:bg-mail-surface rounded-lg transition-colors"
+                title="Delete local copy"
               >
-                <Trash2 size={14} />
-                Delete
+                <Trash2 size={18} className="text-mail-danger" />
               </button>
               <button
                 onClick={handleExport}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-mail-surface
-                          hover:bg-mail-surface-hover rounded-lg text-sm transition-colors"
+                className="p-2 hover:bg-mail-surface rounded-lg transition-colors"
+                title="Export .eml"
               >
-                <Download size={14} />
-                Export
+                <Download size={18} className="text-mail-text-muted" />
               </button>
             </>
           ) : isArchived ? (
             <>
               <button
                 onClick={handleRemoveLocal}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-mail-text-muted
-                          hover:bg-mail-surface-hover rounded-lg text-sm transition-colors"
+                className="p-2 hover:bg-mail-surface rounded-lg transition-colors"
+                title="Unarchive"
               >
-                <Archive size={14} />
-                Unarchive
+                <Archive size={18} className="text-mail-text-muted" />
               </button>
               <button
                 onClick={handleExport}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-mail-surface
-                          hover:bg-mail-surface-hover rounded-lg text-sm transition-colors"
+                className="p-2 hover:bg-mail-surface rounded-lg transition-colors"
+                title="Export .eml"
               >
-                <Download size={14} />
-                Export
+                <Download size={18} className="text-mail-text-muted" />
               </button>
             </>
           ) : (
             <button
               onClick={handleSave}
               disabled={saving}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-mail-local/10
-                        text-mail-local hover:bg-mail-local/20 rounded-lg text-sm
-                        font-medium transition-colors disabled:opacity-50"
+              className="p-2 hover:bg-mail-surface rounded-lg transition-colors disabled:opacity-50"
+              title={saving ? 'Archiving...' : 'Archive'}
             >
-              <Archive size={14} />
-              {saving ? 'Archiving...' : 'Archive'}
+              <Archive size={18} className="text-mail-local" />
             </button>
           )}
         </div>
       </div>
       
       {/* Subject */}
-      <div className="px-4 py-4 border-b border-mail-border">
-        <h1 className="text-xl font-semibold text-mail-text">
+      <div className="px-3 py-2.5 border-b border-mail-border flex items-start gap-2">
+        <h1 className="text-lg font-semibold text-mail-text flex-1 min-w-0">
           {selectedEmail.subject}
         </h1>
+        <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium flex-shrink-0 mt-0.5
+                        ${isLocalOnly
+                          ? 'text-mail-warning'
+                          : isArchived
+                            ? 'text-mail-local'
+                            : 'text-mail-text-muted'}`}
+             style={{
+               backgroundColor: isLocalOnly
+                 ? 'color-mix(in srgb, var(--mail-warning) 10%, transparent)'
+                 : isArchived
+                   ? 'color-mix(in srgb, var(--mail-local) 10%, transparent)'
+                   : 'color-mix(in srgb, var(--mail-accent) 8%, transparent)'
+             }}
+        >
+          {isLocalOnly ? (
+            <><HardDrive size={12} /><span>Local only</span></>
+          ) : isArchived ? (
+            <><HardDrive size={12} /><span>Archived</span></>
+          ) : (
+            <><Cloud size={12} /><span>Server</span></>
+          )}
+        </div>
       </div>
       
       {/* Header */}

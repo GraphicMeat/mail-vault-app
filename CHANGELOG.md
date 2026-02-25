@@ -2,20 +2,28 @@
 
 ## [Unreleased]
 
-### Added
-- **Instant archived email display** — archived emails stored on disk now appear in the email list within ~400ms (previously 4+ seconds). Uses sidecar JSON cache from IMAP sync instead of slow .eml MIME parsing; 3-tier loading strategy: sidecar cache → archived headers cache → .eml fallback with progressive batch display
-
-### Fixed
-- **Badge count oscillating during IMAP sync** — dock badge no longer flickers between values as email pages load; debounced with 2s delay and removed `emails.length`/`emails` reference from effect dependencies
-- **Archived emails race condition** — `localEmails` no longer overwritten by IMAP sync `set()` calls; fire-and-forget chain is now the sole owner of `localEmails` state; staleness check uses account-only (not generation counter) so archived emails survive pagination restarts
+## [1.8.0] - 2026-02-25
 
 ### Added
+- **Bulk operations** — archive-and-delete and bulk delete with concurrent IMAP operations (5 workers), progress tracking, cancel support, and crash-safe pending operation recovery on next launch
+- **Selection action bar** — floating action bar for bulk email selection with archive, delete, mark read/unread actions
+- **Sidebar refresh button** — manual refresh button in sidebar footer (both expanded and collapsed states) with animated spinner during sync
+- **Pull-to-refresh** — pull down on email list to trigger a manual refresh
+- **Mailbox LRU cache** — switching between mailboxes (INBOX, Sent, Drafts) is now instant; last 3 mailbox states cached in memory with automatic LRU eviction
+- **Instant archived email display** — archived emails stored on disk now appear in the email list within ~400ms (previously 4+ seconds); 3-tier loading strategy: sidecar cache, archived headers cache, .eml fallback with progressive batch display
 - **Chat view: attachment support** — chat bubbles and the full-view modal now show functional attachment cards (click to download/open, right-click for Open/Open With/Save As/Show in Folder); uses compact styling to fit the chat bubble aesthetic; correctly resolves mailbox for both inbox and sent folder emails
 - **IMAP performance optimizations** — 9 optimizations to IMAP header loading: UID range compression (reduces command size from O(n) to O(ranges)), chunked UID FETCH (200-batch limits prevent command-length errors), lean fetch spec (drops BODYSTRUCTURE/RFC822.SIZE from header loads), newest-first UID fetching (users see newest emails first during delta-sync), COMPRESS=DEFLATE negotiation (70-80% bandwidth reduction when server supports it), capability caching in connection pool, skip-redundant-SELECT tracking, CONDSTORE delta sync (zero IMAP calls when mailbox unchanged, flag-only sync when only flags changed), and ESEARCH for compact UID enumeration
 - **Email list scrolling performance** — fingerprint-based memoization skips redundant O(n log n) sorts in `updateSortedEmails()` and `getChatEmails()`; individual Zustand selectors prevent cascade re-renders from background pipeline updates; hand-rolled virtual scroll with static CSS positioning for smooth 17k+ email scrolling
 - **Concurrency & pipeline performance optimizations** — 10 optimizations: Set-based uncached UID filtering (eliminates 17k sequential IPC calls), parallel disk reads via Promise.all in loadEmails/setActiveMailbox/pipeline finish, batch `maildir_read_light_batch` Rust command (single IPC for all local emails), IMAP connection pool expanded from 1→3 sessions per account (supports concurrent workers), parallel background account header loading (up to 3 accounts at once), memoized thread building, batch account backfill (single file read/write), reduced pipeline/pagination/loadMore delays (5s→1s, 1s→200ms, 2s→500ms)
 
 ### Fixed
+- **View mode filtering (all/server/local)** — server view no longer empty on account switch; local view correctly distinguishes archived (green) vs local-only (orange) emails; all view shows correct source icons
+- **Thread view date pushed off screen** — CSS `contain: inline-size` at multiple container levels prevents expanded email iframe content from stretching collapsed message headers; date stays visible at all window widths
+- **Thread list date shifting on hover** — moved date inside subject flex container so hover action buttons don't displace it
+- **Thread view missing archive icons** — each message in thread conversation view now shows source icon (cloud/green HardDrive/orange HardDrive)
+- **Thread view iframe overflow** — email HTML content (wide tables, images) no longer expands beyond container
+- **Badge count oscillating during IMAP sync** — dock badge no longer flickers between values as email pages load; debounced with 2s delay
+- **Archived emails race condition** — `localEmails` no longer overwritten by IMAP sync; fire-and-forget chain is now the sole owner of `localEmails` state
 - **Thread cache never working (crash fix)** — `getThreads()` checked `_threadsCache.length` but `buildThreads()` returns a `Map` (which uses `.size`); cache was always bypassed, causing expensive thread rebuilds on every render with 17k emails
 - **Thread/compact row crash on null lastEmail** — added null guard to `ThreadRow` and `CompactThreadRow` to prevent crash when a thread has no emails during race conditions
 - **findRoot stack overflow** — cycle detection in email threading now also tracks by UID, preventing infinite recursion on emails without Message-ID but with inReplyTo loops

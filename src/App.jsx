@@ -10,12 +10,15 @@ import { ComposeModal } from './components/ComposeModal';
 import { SettingsPage } from './components/SettingsPage';
 import { Toast } from './components/Toast';
 import { BulkSaveProgress } from './components/BulkSaveProgress';
+import { SelectionActionBar } from './components/SelectionActionBar';
 import { Onboarding } from './components/Onboarding';
 import { ChatViewWrapper } from './components/ChatViewWrapper';
 import { useEmailScheduler } from './hooks/useEmailScheduler';
 import { usePipelineCoordinator } from './hooks/usePipelineCoordinator';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw } from 'lucide-react';
+import * as bulkApi from './services/api';
+import { bulkOperationManager } from './services/BulkOperationManager';
 
 // Resizable divider component
 function ResizeDivider({ orientation, onResize, onResizeEnd }) {
@@ -88,6 +91,7 @@ function App() {
   const [showCompose, setShowCompose] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  const [pendingOperation, setPendingOperation] = useState(null);
   const mainContainerRef = useRef(null);
 
   // Initialize email scheduler
@@ -104,7 +108,7 @@ function App() {
     if (layoutMode === 'three-column') {
       // In 3-column mode, position is X coordinate
       const sidebarWidth = sidebarCollapsed ? 56 : 256;
-      const newSize = Math.max(300, Math.min(600, position - sidebarWidth));
+      const newSize = Math.max(240, Math.min(600, position - sidebarWidth));
       setListPaneSize(newSize);
     } else {
       // In 2-column mode, position is Y coordinate
@@ -242,6 +246,19 @@ function App() {
           } catch (e) {
             console.warn('[App] Quick load headers failed (non-fatal):', e);
           }
+
+          // Phase 3: Check for pending bulk operations
+          try {
+            const pending = await bulkApi.readPendingOperation();
+            if (pending && pending.status !== 'complete') {
+              const remainingCount = (pending.totalUids || []).length - (pending.completedUids || []).length;
+              if (remainingCount > 0) {
+                setPendingOperation(pending);
+              }
+            }
+          } catch (e) {
+            console.warn('[QuickLoad] Failed to check pending operations:', e);
+          }
         }
       } catch (e) {
         console.error('[App] Quick load failed:', e);
@@ -360,7 +377,7 @@ function App() {
             {/* Email List */}
             <div
               style={layoutMode === 'three-column'
-                ? { width: listPaneSize, minWidth: 300, maxWidth: 600 }
+                ? { width: listPaneSize, minWidth: 240, maxWidth: 600 }
                 : { height: listPaneSize, minHeight: 100 }
               }
               className="flex-shrink-0 min-h-0 flex flex-col"
@@ -376,7 +393,7 @@ function App() {
 
             {/* Email Viewer */}
             <div
-              className="flex-1 min-h-0 flex flex-col"
+              className="flex-1 min-h-0 min-w-0 flex flex-col"
               style={layoutMode === 'two-column' ? { minHeight: 100 } : undefined}
             >
               <EmailViewer />
@@ -423,7 +440,43 @@ function App() {
         )}
       </AnimatePresence>
 
+      <SelectionActionBar />
       <BulkSaveProgress />
+
+      {/* Pending bulk operation resume banner */}
+      {pendingOperation && (
+        <div className="fixed top-4 right-4 z-50 bg-mail-surface border border-mail-border rounded-xl shadow-2xl p-4 max-w-sm">
+          <p className="text-sm text-mail-text mb-3">
+            You have an unfinished operation: {pendingOperation.type.replace(/_/g, ' ')} {
+              ((pendingOperation.totalUids || []).length - (pendingOperation.completedUids || []).length).toLocaleString()
+            } remaining emails in {pendingOperation.mailbox}.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={async () => {
+                setPendingOperation(null);
+                const accounts = useMailStore.getState().accounts;
+                const account = accounts.find(a => a.id === pendingOperation.accountId);
+                if (!account) return;
+                await bulkOperationManager.resume(pendingOperation, account, () => {});
+              }}
+              className="px-3 py-1.5 text-sm font-medium bg-mail-accent text-white rounded-lg
+                        hover:bg-mail-accent/90 transition-colors"
+            >
+              Resume
+            </button>
+            <button
+              onClick={async () => {
+                setPendingOperation(null);
+                await bulkApi.clearPendingOperation();
+              }}
+              className="px-3 py-1.5 text-sm text-mail-text-muted hover:bg-mail-border rounded-lg transition-colors"
+            >
+              Discard
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

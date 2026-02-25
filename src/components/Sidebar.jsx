@@ -291,6 +291,13 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
             )}
           </button>
           <button
+            onClick={() => useMailStore.getState().loadEmails()}
+            className="p-2 hover:bg-mail-surface-hover rounded-lg transition-colors"
+            title="Refresh emails"
+          >
+            <RefreshCw size={16} className={`text-mail-text-muted ${loading || loadingMore ? 'animate-spin' : ''}`} />
+          </button>
+          <button
             onClick={onOpenSettings}
             className="p-2 hover:bg-mail-surface-hover rounded-lg transition-colors"
             title="Settings"
@@ -338,6 +345,13 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
             ) : (
               <Moon size={18} className="text-mail-text-muted" />
             )}
+          </button>
+          <button
+            onClick={() => useMailStore.getState().loadEmails()}
+            className="p-2 hover:bg-mail-surface-hover rounded-lg transition-colors"
+            title="Refresh emails"
+          >
+            <RefreshCw size={18} className={`text-mail-text-muted ${loading || loadingMore ? 'animate-spin' : ''}`} />
           </button>
           <button
             onClick={toggleSidebarCollapsed}
