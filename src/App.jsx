@@ -213,10 +213,21 @@ function App() {
           // Phase 2: Load partial cached headers (fast) — only first 200 to avoid blocking
           // on large mailboxes (17k+ emails = 15-20MB JSON). Full cache loads during init.
           try {
-            const cachedHeaders = await db.getEmailHeadersPartial(firstVisible.id, 'INBOX', 200);
+            // Load server headers, archived IDs, and saved IDs in parallel
+            const [cachedHeaders, archivedEmailIds, savedEmailIds] = await Promise.all([
+              db.getEmailHeadersPartial(firstVisible.id, 'INBOX', 200),
+              db.getArchivedEmailIds(firstVisible.id, 'INBOX'),
+              db.getSavedEmailIds(firstVisible.id, 'INBOX'),
+            ]);
+
+            // Load local emails from archived set (uses fast sidecar cache path)
+            const localEmails = archivedEmailIds.size > 0
+              ? await db.getArchivedEmails(firstVisible.id, 'INBOX', archivedEmailIds)
+              : [];
 
             debugLog('[QuickLoad] Phase 2: cachedHeaders=' +
-              (cachedHeaders ? cachedHeaders.emails.length + ' of ' + cachedHeaders.totalCached + ' emails' : 'null'));
+              (cachedHeaders ? cachedHeaders.emails.length + ' of ' + cachedHeaders.totalCached + ' emails' : 'null') +
+              ', archivedIds=' + archivedEmailIds.size + ', localEmails=' + localEmails.length);
 
             if (cachedHeaders && cachedHeaders.emails.length > 0) {
               const emailsByIndex = new Map();
@@ -236,12 +247,27 @@ function App() {
                 loading: false,
                 loadingMore: true, // Full cache + server sync will follow
                 hasMoreEmails: cachedHeaders.emails.length < cachedHeaders.totalEmails,
-                currentPage: Math.ceil(cachedHeaders.emails.length / 50) || 1
+                currentPage: Math.ceil(cachedHeaders.emails.length / 50) || 1,
+                archivedEmailIds,
+                savedEmailIds,
+                localEmails,
+                ...(cachedHeaders.serverUids ? { serverUidSet: cachedHeaders.serverUids } : {}),
               });
               useMailStore.getState().updateSortedEmails();
               const { sortedEmails } = useMailStore.getState();
               debugLog('[QuickLoad] Phase 2 done: emails=' + cachedHeaders.emails.length +
                 ', sortedEmails=' + sortedEmails.length + ', totalEmails=' + cachedHeaders.totalEmails);
+            } else if (localEmails.length > 0) {
+              // No cached server headers but we have local emails — show them immediately
+              useMailStore.setState({
+                loading: false,
+                loadingMore: true,
+                archivedEmailIds,
+                savedEmailIds,
+                localEmails,
+              });
+              useMailStore.getState().updateSortedEmails();
+              debugLog('[QuickLoad] Phase 2 done: no server cache, localEmails=' + localEmails.length);
             }
           } catch (e) {
             console.warn('[App] Quick load headers failed (non-fatal):', e);
