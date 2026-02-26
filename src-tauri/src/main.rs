@@ -149,42 +149,48 @@ const CREDENTIALS_KEY: &str = "credentials";
 
 // Store all credentials as a single JSON object in keychain
 // This triggers the keychain modal only once instead of per-account
+// Async: runs on background thread so macOS keychain dialog can appear without blocking main thread
 #[tauri::command]
-fn store_credentials(credentials: std::collections::HashMap<String, String>) -> Result<(), String> {
+async fn store_credentials(credentials: std::collections::HashMap<String, String>) -> Result<(), String> {
     info!("=== STORE CREDENTIALS START ===");
     info!("Storing credentials for {} account(s)", credentials.len());
 
-    let json = serde_json::to_string(&credentials)
-        .map_err(|e| format!("Failed to serialize credentials: {}", e))?;
+    tokio::task::spawn_blocking(move || {
+        let json = serde_json::to_string(&credentials)
+            .map_err(|e| format!("Failed to serialize credentials: {}", e))?;
 
-    let entry = Entry::new(KEYRING_SERVICE, CREDENTIALS_KEY)
-        .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
+        let entry = Entry::new(KEYRING_SERVICE, CREDENTIALS_KEY)
+            .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
 
-    entry.set_password(&json)
-        .map_err(|e| format!("Failed to store credentials: {}", e))?;
+        entry.set_password(&json)
+            .map_err(|e| format!("Failed to store credentials: {}", e))?;
 
-    info!("Credentials stored successfully for {} account(s)", credentials.len());
-    info!("=== STORE CREDENTIALS END ===");
-    Ok(())
+        info!("Credentials stored successfully");
+        info!("=== STORE CREDENTIALS END ===");
+        Ok(())
+    }).await.map_err(|e| format!("Keychain task panicked: {}", e))?
 }
 
 // Get all credentials as a single JSON object from keychain
+// Async: runs on background thread so macOS keychain dialog can appear without blocking main thread
 #[tauri::command]
-fn get_credentials() -> Result<std::collections::HashMap<String, String>, String> {
+async fn get_credentials() -> Result<std::collections::HashMap<String, String>, String> {
     info!("=== GET CREDENTIALS START ===");
 
-    let entry = Entry::new(KEYRING_SERVICE, CREDENTIALS_KEY)
-        .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
+    tokio::task::spawn_blocking(move || {
+        let entry = Entry::new(KEYRING_SERVICE, CREDENTIALS_KEY)
+            .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
 
-    let json = entry.get_password()
-        .map_err(|e| format!("Failed to retrieve credentials: {}", e))?;
+        let json = entry.get_password()
+            .map_err(|e| format!("Failed to retrieve credentials: {}", e))?;
 
-    let credentials: std::collections::HashMap<String, String> = serde_json::from_str(&json)
-        .map_err(|e| format!("Failed to parse credentials: {}", e))?;
+        let credentials: std::collections::HashMap<String, String> = serde_json::from_str(&json)
+            .map_err(|e| format!("Failed to parse credentials: {}", e))?;
 
-    info!("Retrieved credentials for {} account(s)", credentials.len());
-    info!("=== GET CREDENTIALS END ===");
-    Ok(credentials)
+        info!("Retrieved credentials for {} account(s)", credentials.len());
+        info!("=== GET CREDENTIALS END ===");
+        Ok(credentials)
+    }).await.map_err(|e| format!("Keychain task panicked: {}", e))?
 }
 
 // Legacy function - store single password (kept for migration)

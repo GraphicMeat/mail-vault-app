@@ -530,7 +530,7 @@ export function SearchBar() {
               >
                 <Search size={12} />
               </motion.div>
-              Searching local cache, saved emails, and server...
+              Searching local cache, archived emails, and server...
             </span>
           ) : (
             <>

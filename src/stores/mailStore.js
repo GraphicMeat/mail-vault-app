@@ -377,46 +377,6 @@ export const useMailStore = create((set, get) => ({
       console.log('[init] Got', accounts.length, 'accounts');
       set({ accounts });
 
-      // Check if keychain is available — if not, show local emails only
-      const keychainAvailable = db.isKeychainReady();
-      if (!keychainAvailable) {
-        console.warn('[init] Keychain locked — showing local emails only, deferring IMAP sync');
-        set({ loading: false, loadingMore: false });
-        // Register callback for when keychain unlocks
-        db.onKeychainReady(async () => {
-          console.log('[init] Keychain unlocked — starting full sync');
-          try {
-            // Re-fetch accounts with real credentials
-            const freshAccounts = await db.getAccounts();
-            set({ accounts: freshAccounts });
-            await db.ensureAccountsInFile(freshAccounts);
-            const { hiddenAccounts } = useSettingsStore.getState();
-            const { activeAccountId: currentActiveId } = get();
-            const firstVisible = freshAccounts.find(a => a.id === currentActiveId && !hiddenAccounts[a.id])
-              || freshAccounts.find(a => !hiddenAccounts[a.id]) || freshAccounts[0];
-            if (!firstVisible) return;
-            if (currentActiveId === firstVisible.id) {
-              // Already showing this account's local data — just start IMAP sync
-              try {
-                const freshAccount = await ensureFreshToken(firstVisible);
-                const mailboxes = await api.fetchMailboxes(freshAccount);
-                set({ mailboxes, connectionStatus: 'connected', connectionError: null, connectionErrorType: null });
-                db.saveMailboxes(firstVisible.id, mailboxes);
-              } catch (e) {
-                console.warn('[init:keychainReady] Mailbox fetch failed:', e.message);
-              }
-              await get().loadEmails();
-              get().loadSentHeaders(firstVisible.id);
-            } else {
-              await get().setActiveAccount(firstVisible.id);
-            }
-          } catch (e) {
-            console.error('[init:keychainReady] Deferred sync failed:', e);
-          }
-        });
-        return;
-      }
-
       // Backfill accounts.json so future quick-loads find accounts without keychain
       if (accounts.length > 0) {
         await db.ensureAccountsInFile(accounts);
@@ -457,12 +417,25 @@ export const useMailStore = create((set, get) => ({
           await get().setActiveAccount(firstVisible.id);
         }
       }
+
+      // Auto-retry if credentials are missing (keychain may have been slow or prompted behind window)
+      const { connectionErrorType: initErrorType } = get();
+      if (initErrorType === 'passwordMissing') {
+        console.log('[init] Credentials missing after init, scheduling auto-retry in 5s...');
+        setTimeout(async () => {
+          const { connectionErrorType: currentErrorType } = get();
+          if (currentErrorType === 'passwordMissing') {
+            console.log('[init] Auto-retrying keychain access...');
+            await get().retryKeychainAccess();
+          }
+        }, 5000);
+      }
     } catch (error) {
       console.error('Failed to initialize:', error);
       set({ error: error.message, loading: false });
     }
   },
-  
+
   // Account management
   addAccount: async (accountData) => {
     console.log('[mailStore] addAccount called with:', { ...accountData, password: '***' });
@@ -727,7 +700,7 @@ export const useMailStore = create((set, get) => ({
       set({
         mailboxes: defaultMailboxes,
         connectionStatus: 'error',
-        connectionError: 'Keychain access required to fetch emails from server. Local emails are available.',
+        connectionError: 'Password not found. Please re-enter your password in Settings.',
         connectionErrorType: 'passwordMissing',
         loading: false
       });
@@ -747,7 +720,7 @@ export const useMailStore = create((set, get) => ({
           set({
             mailboxes: defaultMailboxes,
             connectionStatus: 'error',
-            connectionError: 'No internet connection. Showing locally saved emails.',
+            connectionError: 'No internet connection. Showing locally archived emails.',
             connectionErrorType: 'offline',
             loading: false
           });
@@ -761,7 +734,7 @@ export const useMailStore = create((set, get) => ({
         set({
           mailboxes: defaultMailboxes,
           connectionStatus: 'error',
-          connectionError: 'Could not check internet connection. Showing locally saved emails.',
+          connectionError: 'Could not check internet connection. Showing locally archived emails.',
           connectionErrorType: 'offline',
           loading: false
         });
@@ -774,7 +747,7 @@ export const useMailStore = create((set, get) => ({
         set({
           mailboxes: defaultMailboxes,
           connectionStatus: 'error',
-          connectionError: 'No internet connection. Showing locally saved emails.',
+          connectionError: 'No internet connection. Showing locally archived emails.',
           connectionErrorType: 'offline',
           loading: false
         });
@@ -1111,7 +1084,7 @@ export const useMailStore = create((set, get) => ({
       if (!isStale()) set({
         emails: previousEmails,
         connectionStatus: 'error',
-        connectionError: 'Keychain access required to fetch new emails. Local and cached emails are available.',
+        connectionError: 'Password not found. Please re-enter your password in Settings.',
         connectionErrorType: 'passwordMissing',
         loading: false,
         loadingMore: false
@@ -1131,7 +1104,7 @@ export const useMailStore = create((set, get) => ({
           if (!isStale()) set({
             emails: previousEmails,
             connectionStatus: 'error',
-            connectionError: 'No internet connection. Showing cached and locally saved emails.',
+            connectionError: 'No internet connection. Showing cached and locally archived emails.',
             connectionErrorType: 'offline',
             loading: false,
             loadingMore: false
@@ -1145,7 +1118,7 @@ export const useMailStore = create((set, get) => ({
         set({
           emails: previousEmails,
           connectionStatus: 'error',
-          connectionError: 'Could not check internet connection. Showing cached and locally saved emails.',
+          connectionError: 'Could not check internet connection. Showing cached and locally archived emails.',
           connectionErrorType: 'offline',
           loading: false,
           loadingMore: false
@@ -1158,7 +1131,7 @@ export const useMailStore = create((set, get) => ({
         set({
           emails: previousEmails,
           connectionStatus: 'error',
-          connectionError: 'No internet connection. Showing cached and locally saved emails.',
+          connectionError: 'No internet connection. Showing cached and locally archived emails.',
           connectionErrorType: 'offline',
           loading: false,
           loadingMore: false
@@ -2017,7 +1990,7 @@ export const useMailStore = create((set, get) => ({
       set({ savedEmailIds, archivedEmailIds, localEmails });
       get().updateSortedEmails();
     } catch (error) {
-      set({ error: `Failed to save email: ${error.message}` });
+      set({ error: `Failed to archive email: ${error.message}` });
       throw error;
     }
   },
@@ -2449,45 +2422,56 @@ export const useMailStore = create((set, get) => ({
 
   // Retry keychain access - attempts to fetch password from keychain again
   retryKeychainAccess: async () => {
-    const { activeAccountId, accounts } = get();
-    const account = accounts.find(a => a.id === activeAccountId);
-    if (!account) return false;
+    const { activeAccountId } = get();
 
-    const invoke = window.__TAURI__?.core?.invoke;
-    if (!invoke) return false;
-
-    console.log('[mailStore] Retrying keychain access for account:', account.email);
+    console.log('[mailStore] Retrying keychain access...');
 
     try {
-      // Try to get password from keychain
-      const password = await invoke('get_password', { accountId: account.id });
+      // Clear the locked credentials cache so loadKeychain() re-reads from OS keychain
+      db.clearCredentialsCache();
 
-      if (password) {
-        console.log('[mailStore] Password retrieved from keychain');
+      // Re-fetch all accounts with fresh credentials
+      const freshAccounts = await db.getAccounts();
 
-        // Update account with password
-        const updatedAccount = { ...account, password };
-        set(state => ({
-          accounts: state.accounts.map(a =>
-            a.id === account.id ? updatedAccount : a
-          )
-        }));
-
-        // Reload emails with the password
-        await get().loadEmails();
-        return true;
-      } else {
-        console.warn('[mailStore] No password returned from keychain');
+      if (freshAccounts.length === 0) {
+        console.warn('[mailStore] No accounts found after keychain retry');
         set({
-          connectionError: 'Password not found in Keychain. Please add your password in Settings.',
+          connectionError: 'No accounts found. Please add your account in Settings.',
           connectionErrorType: 'passwordMissing'
         });
         return false;
       }
-    } catch (error) {
-      console.error('[mailStore] Failed to get password from keychain:', error);
+
+      // Check if the active account now has credentials
+      const activeAccount = freshAccounts.find(a => a.id === activeAccountId);
+      const hasCredentials = activeAccount && (activeAccount.password || (activeAccount.authType === 'oauth2' && activeAccount.oauth2AccessToken));
+
+      if (!hasCredentials) {
+        console.warn('[mailStore] Active account still has no credentials after keychain retry');
+        set({
+          accounts: freshAccounts,
+          connectionError: 'Password not found. Please re-enter your password in Settings.',
+          connectionErrorType: 'passwordMissing'
+        });
+        return false;
+      }
+
+      // Update store with credentialed accounts and clear error
+      console.log('[mailStore] Keychain retry successful, reloading...');
       set({
-        connectionError: 'Could not access Keychain. Please check system permissions or add password in Settings.',
+        accounts: freshAccounts,
+        connectionStatus: 'connecting',
+        connectionError: null,
+        connectionErrorType: null
+      });
+
+      // Reload emails with the fresh credentials
+      await get().loadEmails();
+      return true;
+    } catch (error) {
+      console.error('[mailStore] Keychain retry failed:', error);
+      set({
+        connectionError: 'Could not access Keychain. Please re-enter your password in Settings.',
         connectionErrorType: 'passwordMissing'
       });
       return false;
@@ -2572,7 +2556,7 @@ export const useMailStore = create((set, get) => ({
         console.log(`[Search] Found ${inMemoryResults.length} in-memory matches`);
       }
 
-      // 2. Search locally saved emails from Maildir
+      // 2. Search locally archived emails from Maildir
       if (searchFilters.location !== 'server') {
         try {
           const localResults = await db.searchLocalEmails(activeAccountId, searchQuery, {

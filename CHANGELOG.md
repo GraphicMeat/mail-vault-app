@@ -2,8 +2,11 @@
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-02-26
+
 ### Fixed
 - **Date alignment in email list** — date no longer shifts position when archiving emails (fixed-width hover action area)
+- **Keychain access** — keychain dialog now appears without freezing UI (async Rust); retry button uses correct credentials format with cache reset; auto-retries after 5s if keychain was slow; clear "Password missing" error with direct Settings link when credentials are lost
 
 ### Added
 - **Year display for old emails** — previous-year emails now show the year (e.g., "Feb 25, 2024")

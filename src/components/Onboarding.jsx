@@ -31,7 +31,7 @@ const features = [
   {
     icon: HardDrive,
     title: 'Local Email Storage',
-    description: 'Save emails for offline access'
+    description: 'Archive emails for offline access'
   }
 ];
 

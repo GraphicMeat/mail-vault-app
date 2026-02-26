@@ -102,24 +102,9 @@
 
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.8.0</span>
-          <span class="text-slate-500 dark:text-slate-400 text-sm">February 25, 2026</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.9.0</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">February 26, 2026</span>
           <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
-        </div>
-
-        <div class="mb-8">
-          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
-            <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-            </span>
-            Added
-          </h3>
-          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
-            <li class="flex items-start gap-3">
-              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
-              <span><strong>Instant archived email display</strong> — archived emails stored on disk now appear in the email list within ~400ms (previously 4+ seconds). Uses sidecar JSON cache from IMAP sync instead of slow .eml MIME parsing; 3-tier loading strategy: sidecar cache → archived headers cache → .eml fallback with progressive batch display</span>
-            </li>
-          </ul>
         </div>
 
         <div class="mb-8">
@@ -132,11 +117,7 @@
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
-              <span><strong>Badge count oscillating during IMAP sync</strong> — dock badge no longer flickers between values as email pages load; debounced with 2s delay and removed <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">emails.length</code>/<code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">emails</code> reference from effect dependencies</span>
-            </li>
-            <li class="flex items-start gap-3">
-              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
-              <span><strong>Archived emails race condition</strong> — <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">localEmails</code> no longer overwritten by IMAP sync <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">set()</code> calls; fire-and-forget chain is now the sole owner of <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">localEmails</code> state; staleness check uses account-only (not generation counter) so archived emails survive pagination restarts</span>
+              <span><strong>Date alignment in email list</strong> — date no longer shifts position when archiving emails (fixed-width hover action area)</span>
             </li>
           </ul>
         </div>
@@ -149,6 +130,91 @@
             Added
           </h3>
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Year display for old emails</strong> — previous-year emails now show the year (e.g., "Feb 25, 2024")</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Locale-aware date formatting</strong> — uses system region by default; configurable in Settings > Appearance with presets (US, European, ISO, short) and custom date-fns pattern support</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Instant account switching</strong> — LRU cache (max 5 accounts) saves/restores full email state on account switch; eliminates empty-list flash and avoids re-reading 15-20MB headers.json from disk</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Parallel background header loading</strong> — background accounts now load INBOX + Sent headers immediately alongside active account content caching (previously blocked until active finished); mailbox lists pre-fetched for instant folder switching on account change</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Email body pre-fetch</strong> — next 3 email bodies pre-fetched in background after selecting an email for instant navigation</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>CONDSTORE fast-path</strong> — skip redundant disk reads for savedEmailIds/archivedEmailIds when account cache is fresh (< 5 minutes)</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </span>
+            Improved
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>IMAP fetch batch size</strong> — increased from 50 to 200 emails per page, reducing round-trips from 340 to 85 for a 17k mailbox</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Reduced artificial delays</strong> — pipeline start 1000→200ms, pagination inter-page 1000→200ms, initial loadMore 2000→500ms, CONDSTORE timers 500→200ms, header pagination yield 50→0ms, content fetch yield 50→10ms, worker stagger 500→100ms</span>
+            </li>
+          </ul>
+        </div>
+
+      </article>
+      <article class="mb-16">
+        <div class="flex items-center gap-3 mb-6">
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.8.0</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">February 25, 2026</span>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            </span>
+            Added
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Bulk operations</strong> — archive-and-delete and bulk delete with concurrent IMAP operations (5 workers), progress tracking, cancel support, and crash-safe pending operation recovery on next launch</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Selection action bar</strong> — floating action bar for bulk email selection with archive, delete, mark read/unread actions</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Sidebar refresh button</strong> — manual refresh button in sidebar footer (both expanded and collapsed states) with animated spinner during sync</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Pull-to-refresh</strong> — pull down on email list to trigger a manual refresh</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Mailbox LRU cache</strong> — switching between mailboxes (INBOX, Sent, Drafts) is now instant; last 3 mailbox states cached in memory with automatic LRU eviction</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Instant archived email display</strong> — archived emails stored on disk now appear in the email list within ~400ms (previously 4+ seconds); 3-tier loading strategy: sidecar cache, archived headers cache, .eml fallback with progressive batch display</span>
+            </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
               <span><strong>Chat view: attachment support</strong> — chat bubbles and the full-view modal now show functional attachment cards (click to download/open, right-click for Open/Open With/Save As/Show in Folder); uses compact styling to fit the chat bubble aesthetic; correctly resolves mailbox for both inbox and sent folder emails</span>
@@ -176,6 +242,34 @@
             Fixed
           </h3>
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>View mode filtering (all/server/local)</strong> — server view no longer empty on account switch; local view correctly distinguishes archived (green) vs local-only (orange) emails; all view shows correct source icons</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Thread view date pushed off screen</strong> — CSS <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">contain: inline-size</code> at multiple container levels prevents expanded email iframe content from stretching collapsed message headers; date stays visible at all window widths</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Thread list date shifting on hover</strong> — moved date inside subject flex container so hover action buttons don't displace it</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Thread view missing archive icons</strong> — each message in thread conversation view now shows source icon (cloud/green HardDrive/orange HardDrive)</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Thread view iframe overflow</strong> — email HTML content (wide tables, images) no longer expands beyond container</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Badge count oscillating during IMAP sync</strong> — dock badge no longer flickers between values as email pages load; debounced with 2s delay</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Archived emails race condition</strong> — <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">localEmails</code> no longer overwritten by IMAP sync; fire-and-forget chain is now the sole owner of <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">localEmails</code> state</span>
+            </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
               <span><strong>Thread cache never working (crash fix)</strong> — <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">getThreads()</code> checked <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">_threadsCache.length</code> but <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">buildThreads()</code> returns a <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">Map</code> (which uses <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">.size</code>); cache was always bypassed, causing expensive thread rebuilds on every render with 17k emails</span>
