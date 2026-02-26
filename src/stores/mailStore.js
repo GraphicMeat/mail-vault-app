@@ -81,6 +81,55 @@ function _invalidateMailboxCache(accountId) {
   }
 }
 
+// ── Account LRU cache (max 5 entries) — instant account switching ────
+const _accountCache = new Map();
+const ACCOUNT_CACHE_MAX = 5;
+
+function _saveToAccountCache(accountId, state) {
+  _accountCache.set(accountId, {
+    emails: state.emails,
+    sortedEmails: state.sortedEmails,
+    localEmails: state.localEmails,
+    emailsByIndex: state.emailsByIndex,
+    totalEmails: state.totalEmails,
+    savedEmailIds: state.savedEmailIds,
+    archivedEmailIds: state.archivedEmailIds,
+    loadedRanges: state.loadedRanges,
+    currentPage: state.currentPage,
+    hasMoreEmails: state.hasMoreEmails,
+    sentEmails: state.sentEmails,
+    mailboxes: state.mailboxes,
+    serverUidSet: state.serverUidSet,
+    connectionStatus: state.connectionStatus,
+    activeMailbox: state.activeMailbox,
+    lastSyncTimestamp: Date.now(),
+    timestamp: Date.now(),
+  });
+
+  // LRU eviction
+  if (_accountCache.size > ACCOUNT_CACHE_MAX) {
+    let oldestKey = null;
+    let oldestTime = Infinity;
+    for (const [k, v] of _accountCache) {
+      if (v.timestamp < oldestTime) {
+        oldestTime = v.timestamp;
+        oldestKey = k;
+      }
+    }
+    if (oldestKey) _accountCache.delete(oldestKey);
+  }
+}
+
+function _getFromAccountCache(accountId) {
+  const cached = _accountCache.get(accountId);
+  if (cached) cached.timestamp = Date.now();
+  return cached || null;
+}
+
+function _invalidateAccountCache(accountId) {
+  _accountCache.delete(accountId);
+}
+
 export const useMailStore = create((set, get) => ({
   // Accounts
   accounts: [],
@@ -169,6 +218,9 @@ export const useMailStore = create((set, get) => ({
   // Clear email cache (call when switching accounts/mailboxes)
   clearEmailCache: () => {
     _cacheCurrentSizeMB = 0;
+    // Invalidate account cache for current account
+    const { activeAccountId } = get();
+    if (activeAccountId) _invalidateAccountCache(activeAccountId);
     set({ emailCache: new Map(), cacheCurrentSizeMB: 0 });
   },
   
@@ -325,6 +377,46 @@ export const useMailStore = create((set, get) => ({
       console.log('[init] Got', accounts.length, 'accounts');
       set({ accounts });
 
+      // Check if keychain is available — if not, show local emails only
+      const keychainAvailable = db.isKeychainReady();
+      if (!keychainAvailable) {
+        console.warn('[init] Keychain locked — showing local emails only, deferring IMAP sync');
+        set({ loading: false, loadingMore: false });
+        // Register callback for when keychain unlocks
+        db.onKeychainReady(async () => {
+          console.log('[init] Keychain unlocked — starting full sync');
+          try {
+            // Re-fetch accounts with real credentials
+            const freshAccounts = await db.getAccounts();
+            set({ accounts: freshAccounts });
+            await db.ensureAccountsInFile(freshAccounts);
+            const { hiddenAccounts } = useSettingsStore.getState();
+            const { activeAccountId: currentActiveId } = get();
+            const firstVisible = freshAccounts.find(a => a.id === currentActiveId && !hiddenAccounts[a.id])
+              || freshAccounts.find(a => !hiddenAccounts[a.id]) || freshAccounts[0];
+            if (!firstVisible) return;
+            if (currentActiveId === firstVisible.id) {
+              // Already showing this account's local data — just start IMAP sync
+              try {
+                const freshAccount = await ensureFreshToken(firstVisible);
+                const mailboxes = await api.fetchMailboxes(freshAccount);
+                set({ mailboxes, connectionStatus: 'connected', connectionError: null, connectionErrorType: null });
+                db.saveMailboxes(firstVisible.id, mailboxes);
+              } catch (e) {
+                console.warn('[init:keychainReady] Mailbox fetch failed:', e.message);
+              }
+              await get().loadEmails();
+              get().loadSentHeaders(firstVisible.id);
+            } else {
+              await get().setActiveAccount(firstVisible.id);
+            }
+          } catch (e) {
+            console.error('[init:keychainReady] Deferred sync failed:', e);
+          }
+        });
+        return;
+      }
+
       // Backfill accounts.json so future quick-loads find accounts without keychain
       if (accounts.length > 0) {
         await db.ensureAccountsInFile(accounts);
@@ -434,9 +526,11 @@ export const useMailStore = create((set, get) => ({
     }
     
     await db.deleteAccount(accountId);
-    
+    _invalidateAccountCache(accountId);
+    _invalidateMailboxCache(accountId);
+
     const newAccounts = get().accounts.filter(a => a.id !== accountId);
-    
+
     set({ accounts: newAccounts });
     
     if (get().activeAccountId === accountId) {
@@ -476,6 +570,51 @@ export const useMailStore = create((set, get) => ({
     if (isSameAccount && hasExistingData) {
       console.log('[setActiveAccount] Same account with existing data, calling loadEmails');
       await get().loadEmails();
+      return;
+    }
+
+    // Save current account state to cache before switching
+    if (currentAccountId && currentAccountId !== accountId && (currentEmails.length > 0 || currentTotalEmails > 0)) {
+      _saveToAccountCache(currentAccountId, get());
+    }
+
+    // Check account cache for instant restore
+    const cachedAccount = _getFromAccountCache(accountId);
+    if (cachedAccount) {
+      console.log('[setActiveAccount] Account cache HIT for', accountId, '— restoring', cachedAccount.emails.length, 'emails instantly');
+      _chatEmailsFingerprint = '';
+      _threadsFingerprint = '';
+      set({
+        activeAccountId: accountId,
+        activeMailbox: cachedAccount.activeMailbox,
+        emails: cachedAccount.emails,
+        sortedEmails: cachedAccount.sortedEmails,
+        localEmails: cachedAccount.localEmails,
+        emailsByIndex: cachedAccount.emailsByIndex,
+        totalEmails: cachedAccount.totalEmails,
+        savedEmailIds: cachedAccount.savedEmailIds,
+        archivedEmailIds: cachedAccount.archivedEmailIds,
+        loadedRanges: cachedAccount.loadedRanges,
+        currentPage: cachedAccount.currentPage,
+        hasMoreEmails: cachedAccount.hasMoreEmails,
+        sentEmails: cachedAccount.sentEmails,
+        mailboxes: cachedAccount.mailboxes,
+        serverUidSet: cachedAccount.serverUidSet,
+        connectionStatus: cachedAccount.connectionStatus,
+        selectedEmailId: null,
+        selectedEmail: null,
+        selectedEmailSource: null,
+        selectedThread: null,
+        selectedEmailIds: new Set(),
+        loading: false,
+        loadingMore: false,
+        error: null,
+      });
+      get().updateSortedEmails();
+
+      // Fire-and-forget: silent CONDSTORE refresh in background
+      get().loadEmails().catch(() => {});
+      get().loadSentHeaders(accountId);
       return;
     }
 
@@ -541,7 +680,7 @@ export const useMailStore = create((set, get) => ({
         totalEmails: cachedHeaders.totalEmails,
         loading: false,
         loadingMore: true,
-        currentPage: Math.ceil(cachedHeaders.emails.length / 50) || 1,
+        currentPage: Math.ceil(cachedHeaders.emails.length / 200) || 1,
         hasMoreEmails: cachedHeaders.emails.length < cachedHeaders.totalEmails,
         ...(cachedHeaders.serverUids ? { serverUidSet: cachedHeaders.serverUids } : {})
       });
@@ -795,7 +934,7 @@ export const useMailStore = create((set, get) => ({
         loadingRanges: new Set(),
         totalEmails: cachedHeaders.totalEmails,
         savedEmailIds, archivedEmailIds,
-        currentPage: Math.ceil(cachedHeaders.emails.length / 50) || 1,
+        currentPage: Math.ceil(cachedHeaders.emails.length / 200) || 1,
         hasMoreEmails: cachedHeaders.emails.length < cachedHeaders.totalEmails,
         loading: false,
         loadingMore: true
@@ -864,12 +1003,25 @@ export const useMailStore = create((set, get) => ({
 
     const invoke = window.__TAURI__?.core?.invoke;
 
-    // Load saved/archived IDs + cache metadata.
-    const [savedEmailIds, archivedEmailIds, cachedHeaders] = await Promise.all([
-      db.getSavedEmailIds(activeAccountId, activeMailbox),
-      db.getArchivedEmailIds(activeAccountId, activeMailbox),
-      db.getEmailHeadersMeta(activeAccountId, activeMailbox),
-    ]);
+    // CONDSTORE fast-path: if account cache is recent and has savedEmailIds, skip disk reads
+    const recentCache = _getFromAccountCache(activeAccountId);
+    const cacheIsFresh = recentCache && recentCache.lastSyncTimestamp && (Date.now() - recentCache.lastSyncTimestamp < 5 * 60 * 1000);
+    const storeHasIds = get().savedEmailIds.size > 0;
+
+    let savedEmailIds, archivedEmailIds, cachedHeaders;
+    if (cacheIsFresh && storeHasIds) {
+      // Use existing store values (restored from account cache) — skip disk I/O
+      savedEmailIds = get().savedEmailIds;
+      archivedEmailIds = get().archivedEmailIds;
+      cachedHeaders = await db.getEmailHeadersMeta(activeAccountId, activeMailbox);
+    } else {
+      // Full disk read
+      [savedEmailIds, archivedEmailIds, cachedHeaders] = await Promise.all([
+        db.getSavedEmailIds(activeAccountId, activeMailbox),
+        db.getArchivedEmailIds(activeAccountId, activeMailbox),
+        db.getEmailHeadersMeta(activeAccountId, activeMailbox),
+      ]);
+    }
     if (isStale()) return;
     set({ savedEmailIds, archivedEmailIds });
 
@@ -926,7 +1078,7 @@ export const useMailStore = create((set, get) => ({
           loading: false,
           loadingMore: true,
           error: null,
-          currentPage: Math.ceil(partialHeaders.emails.length / 50) || 1,
+          currentPage: Math.ceil(partialHeaders.emails.length / 200) || 1,
           hasMoreEmails: partialHeaders.emails.length < cachedHeaders.totalEmails
         });
         get().updateSortedEmails();
@@ -1067,7 +1219,7 @@ export const useMailStore = create((set, get) => ({
             console.log('[loadEmails] CONDSTORE: store partial (%d/%d), loading remaining from cache...', existingEmails.length, serverTotal);
             set({ hasMoreEmails: true, totalEmails: serverTotal });
             if (_loadMoreTimer) clearTimeout(_loadMoreTimer);
-            _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 500);
+            _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 200);
           }
           return;
         } else if (
@@ -1109,7 +1261,7 @@ export const useMailStore = create((set, get) => ({
                 console.log('[loadEmails] CONDSTORE flag-sync: store partial (%d/%d), scheduling loadMoreEmails', existingEmails.length, serverTotal);
                 set({ hasMoreEmails: true, totalEmails: serverTotal });
                 if (_loadMoreTimer) clearTimeout(_loadMoreTimer);
-                _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 500);
+                _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 200);
               }
               return;
             }
@@ -1135,7 +1287,7 @@ export const useMailStore = create((set, get) => ({
             console.log('[loadEmails] Delta-sync: store partial (%d/%d), scheduling loadMoreEmails', existingEmails.length, serverTotal);
             set({ hasMoreEmails: true });
             if (_loadMoreTimer) clearTimeout(_loadMoreTimer);
-            _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 500);
+            _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 200);
           }
           return;
         }
@@ -1246,7 +1398,7 @@ export const useMailStore = create((set, get) => ({
         emailsByIndex.set(idx, email);
       });
 
-      const currentPage = Math.ceil(mergedEmails.length / 50) || 1;
+      const currentPage = Math.ceil(mergedEmails.length / 200) || 1;
       const hasMoreEmails = mergedEmails.length < serverTotal;
 
       // Guard: account may have changed during async IMAP operations
@@ -1277,6 +1429,9 @@ export const useMailStore = create((set, get) => ({
 
       get().updateSortedEmails();
 
+      // Save to account cache for instant restore on switch-back
+      _saveToAccountCache(activeAccountId, get());
+
       // Save merged headers with uidValidity/uidNext/highestModseq for next delta-sync
       db.saveEmailHeaders(activeAccountId, activeMailbox, mergedEmails, serverTotal, {
         uidValidity: newUidValidity,
@@ -1288,7 +1443,7 @@ export const useMailStore = create((set, get) => ({
       // Continue loading more if we don't have all emails yet
       if (hasMoreEmails) {
         if (_loadMoreTimer) clearTimeout(_loadMoreTimer);
-        _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 2000);
+        _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 200);
       }
     } catch (error) {
       console.error('[loadEmails] Failed to load emails:', error);
@@ -1391,6 +1546,9 @@ export const useMailStore = create((set, get) => ({
 
         get().updateSortedEmails();
 
+        // Update account cache with latest state
+        _saveToAccountCache(activeAccountId, get());
+
         db.saveEmailHeaders(activeAccountId, activeMailbox, newEmails, serverResult.total)
           .catch(e => console.warn('[loadMoreEmails] Failed to cache headers:', e));
 
@@ -1402,7 +1560,7 @@ export const useMailStore = create((set, get) => ({
           _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 5000);
         } else if (serverResult.hasMore) {
           if (_loadMoreTimer) clearTimeout(_loadMoreTimer);
-          _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 1000);
+          _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 200);
         }
       };
 
@@ -1688,6 +1846,41 @@ export const useMailStore = create((set, get) => ({
     });
   },
 
+  // Pre-fetch adjacent email bodies for instant navigation
+  _prefetchAdjacentEmails: async (currentUid) => {
+    const { sortedEmails, activeAccountId, activeMailbox, emailCache } = get();
+    const cacheLimitMB = useSettingsStore.getState().cacheLimitMB;
+    const currentIndex = sortedEmails.findIndex(e => e.uid === currentUid);
+    if (currentIndex < 0) return;
+
+    // Pre-fetch next 3 emails
+    for (let i = 1; i <= 3; i++) {
+      const nextEmail = sortedEmails[currentIndex + i];
+      if (!nextEmail) break;
+
+      const cacheKey = `${activeAccountId}-${activeMailbox}-${nextEmail.uid}`;
+      if (emailCache.has(cacheKey)) continue; // Already cached
+
+      try {
+        // Try Maildir first (fast, local disk)
+        const localEmail = await db.getLocalEmailLight(activeAccountId, activeMailbox, nextEmail.uid);
+        if (localEmail && localEmail.html !== undefined) {
+          get().addToCache(cacheKey, localEmail, cacheLimitMB);
+          continue;
+        }
+
+        // Fallback to IMAP (auto-persists .eml)
+        const account = get().accounts.find(a => a.id === activeAccountId);
+        if (!account) break;
+        const email = await api.fetchEmailLight(account, nextEmail.uid, activeMailbox);
+        get().addToCache(cacheKey, email, cacheLimitMB);
+      } catch (e) {
+        // Stop prefetch on network errors — don't waste bandwidth
+        break;
+      }
+    }
+  },
+
   // Select email
   selectEmail: async (uid, source = 'server') => {
     const { activeAccountId, accounts, activeMailbox } = get();
@@ -1778,9 +1971,11 @@ export const useMailStore = create((set, get) => ({
       }
     } finally {
       set({ loadingEmail: false });
+      // Pre-fetch next 3 email bodies in background for instant navigation
+      get()._prefetchAdjacentEmails(uid);
     }
   },
-  
+
   // Archive email locally (save .eml with 'A' flag)
   saveEmailLocally: async (uid) => {
     const { activeAccountId, accounts, activeMailbox, selectedEmail } = get();
@@ -2175,9 +2370,10 @@ export const useMailStore = create((set, get) => ({
     const { accounts, activeAccountId } = get();
     if (accounts.length === 0) return { newEmails: 0, totalUnread: 0 };
 
-    // Invalidate LRU cache — full refresh
+    // Invalidate LRU caches — full refresh
     for (const account of accounts) {
       _invalidateMailboxCache(account.id);
+      _invalidateAccountCache(account.id);
     }
 
     console.log('[mailStore] Refreshing all accounts...');

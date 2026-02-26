@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Date alignment in email list** — date no longer shifts position when archiving emails (fixed-width hover action area)
+
+### Added
+- **Year display for old emails** — previous-year emails now show the year (e.g., "Feb 25, 2024")
+- **Locale-aware date formatting** — uses system region by default; configurable in Settings > Appearance with presets (US, European, ISO, short) and custom date-fns pattern support
+- **Instant account switching** — LRU cache (max 5 accounts) saves/restores full email state on account switch; eliminates empty-list flash and avoids re-reading 15-20MB headers.json from disk
+- **Parallel background header loading** — background accounts now load INBOX + Sent headers immediately alongside active account content caching (previously blocked until active finished); mailbox lists pre-fetched for instant folder switching on account change
+- **Email body pre-fetch** — next 3 email bodies pre-fetched in background after selecting an email for instant navigation
+- **CONDSTORE fast-path** — skip redundant disk reads for savedEmailIds/archivedEmailIds when account cache is fresh (< 5 minutes)
+
+### Improved
+- **IMAP fetch batch size** — increased from 50 to 200 emails per page, reducing round-trips from 340 to 85 for a 17k mailbox
+- **Reduced artificial delays** — pipeline start 1000→200ms, pagination inter-page 1000→200ms, initial loadMore 2000→500ms, CONDSTORE timers 500→200ms, header pagination yield 50→0ms, content fetch yield 50→10ms, worker stagger 500→100ms
+
 ## [1.8.0] - 2026-02-25
 
 ### Added
