@@ -983,8 +983,8 @@ export function EmailList({ layoutMode = 'three-column' }) {
             ) : viewMode === 'local' ? (
               <>
                 <HardDrive size={48} className="mb-4 opacity-50" />
-                <p>No locally saved emails</p>
-                <p className="text-sm mt-2">Save emails from "Server" view to access them offline</p>
+                <p>No locally archived emails</p>
+                <p className="text-sm mt-2">Archive emails from "Server" view to access them offline</p>
               </>
             ) : viewMode === 'server' ? (
               <>

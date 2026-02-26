@@ -23,88 +23,23 @@ let initialized = false;
 // Format: { accountId: JSON.stringify({id, email, imapServer, smtpServer, password, createdAt}) }
 let keychainCache = null;
 let keychainLoaded = false;
-let _keychainReady = false;
-let _keychainReadyCallbacks = [];
-let _keychainLoadingPromise = null;
-
-// Register a callback for when keychain becomes available after a timeout.
-// If keychain is already ready, callback fires immediately.
-export function onKeychainReady(callback) {
-  if (_keychainReady) {
-    callback(keychainCache || {});
-  } else {
-    _keychainReadyCallbacks.push(callback);
-  }
-}
-
-export function isKeychainReady() {
-  return _keychainReady;
-}
-
-function _fireKeychainReadyCallbacks() {
-  const cbs = _keychainReadyCallbacks;
-  _keychainReadyCallbacks = [];
-  for (const cb of cbs) {
-    try { cb(keychainCache || {}); } catch (e) { console.warn('[db.js] keychainReady callback error:', e); }
-  }
-}
-
-const KEYCHAIN_TIMEOUT_MS = 3000;
 
 async function loadKeychain() {
   if (keychainLoaded) return keychainCache || {};
-  if (!invoke) { keychainLoaded = true; _keychainReady = true; return {}; }
+  if (!invoke) { keychainLoaded = true; return {}; }
 
-  // Deduplicate concurrent calls
-  if (_keychainLoadingPromise) return _keychainLoadingPromise;
-
-  _keychainLoadingPromise = _loadKeychainWithTimeout();
-  const result = await _keychainLoadingPromise;
-  _keychainLoadingPromise = null;
-  return result;
-}
-
-async function _loadKeychainWithTimeout() {
-  console.log('[db.js] Loading accounts from keychain...');
-
-  const keychainPromise = invoke('get_credentials').then(data => {
-    return { data, timedOut: false };
-  }).catch(error => {
-    console.log('[db.js] No keychain data found or error:', error);
-    return { data: {}, timedOut: false };
-  });
-
-  const timeoutPromise = new Promise(resolve => {
-    setTimeout(() => resolve({ data: null, timedOut: true }), KEYCHAIN_TIMEOUT_MS);
-  });
-
-  const result = await Promise.race([keychainPromise, timeoutPromise]);
-
-  if (!result.timedOut) {
-    // Keychain responded in time
-    keychainCache = result.data;
+  try {
+    console.log('[db.js] Loading accounts from keychain...');
+    keychainCache = await invoke('get_credentials');
     keychainLoaded = true;
-    _keychainReady = true;
     console.log('[db.js] Keychain loaded for', Object.keys(keychainCache).length, 'account(s)');
-    _fireKeychainReadyCallbacks();
+    return keychainCache;
+  } catch (error) {
+    console.log('[db.js] No keychain data found or error:', error);
+    keychainCache = {};
+    keychainLoaded = true;
     return keychainCache;
   }
-
-  // Timed out — keychain is likely locked (macOS prompt pending)
-  console.warn('[db.js] Keychain access timed out after ' + KEYCHAIN_TIMEOUT_MS + 'ms — proceeding without credentials (local-only mode)');
-  keychainCache = {};
-  keychainLoaded = true;
-  // _keychainReady stays false — IMAP callers should check this
-
-  // Continue waiting for keychain in background
-  keychainPromise.then(({ data }) => {
-    console.log('[db.js] Keychain unlocked (background), merging', Object.keys(data).length, 'account(s)');
-    keychainCache = data;
-    _keychainReady = true;
-    _fireKeychainReadyCallbacks();
-  });
-
-  return keychainCache;
 }
 
 async function saveKeychain(data) {
@@ -122,6 +57,60 @@ async function saveKeychain(data) {
 export function clearCredentialsCache() {
   keychainCache = null;
   keychainLoaded = false;
+  _keychainResolved = false;
+  _keychainLoadPromise = null;
+}
+
+// Fire-and-forget keychain loading with callback notification
+let _keychainReadyCallbacks = [];
+let _keychainResolved = false;
+let _keychainLoadPromise = null;
+
+/**
+ * Start loading keychain in background. Does NOT block.
+ * Register onKeychainReady() to be notified when credentials are available.
+ */
+export function startKeychainLoad() {
+  if (_keychainLoadPromise || keychainLoaded) {
+    // Already loading or loaded — notify immediately if resolved
+    if (keychainLoaded) {
+      _keychainResolved = true;
+      const cbs = _keychainReadyCallbacks;
+      _keychainReadyCallbacks = [];
+      cbs.forEach(cb => cb(null, keychainCache));
+    }
+    return;
+  }
+
+  _keychainLoadPromise = loadKeychain()
+    .then((data) => {
+      _keychainResolved = true;
+      const cbs = _keychainReadyCallbacks;
+      _keychainReadyCallbacks = [];
+      cbs.forEach(cb => cb(null, data));
+    })
+    .catch((err) => {
+      _keychainResolved = true;
+      const cbs = _keychainReadyCallbacks;
+      _keychainReadyCallbacks = [];
+      cbs.forEach(cb => cb(err, null));
+    });
+}
+
+/**
+ * Register a callback for when keychain credentials become available.
+ * If already resolved, fires immediately.
+ */
+export function onKeychainReady(callback) {
+  if (_keychainResolved || keychainLoaded) {
+    callback(null, keychainCache);
+    return;
+  }
+  _keychainReadyCallbacks.push(callback);
+}
+
+export function isKeychainLoaded() {
+  return keychainLoaded;
 }
 
 // --- File helpers (accounts.json only) ---

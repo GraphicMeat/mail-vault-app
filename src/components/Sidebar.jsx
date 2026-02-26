@@ -435,16 +435,44 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                 ? 'bg-mail-warning/10 border-mail-warning/20'
                 : 'bg-mail-danger/10 border-mail-danger/20'
             }`}>
+              {connectionErrorType === 'passwordMissing' ? (
+                <div className="text-xs text-mail-warning">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Key size={14} />
+                      <span>Password missing</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setShowErrorModal(true)}
+                        className="p-1 hover:bg-mail-warning/20 rounded transition-colors"
+                        title="View error details"
+                      >
+                        <Info size={12} />
+                      </button>
+                      <button
+                        onClick={retryKeychainAccess}
+                        className="p-1 hover:bg-mail-warning/20 rounded transition-colors"
+                        title="Retry"
+                      >
+                        <RefreshCw size={12} />
+                      </button>
+                    </div>
+                  </div>
+                  <button
+                    onClick={onOpenSettings}
+                    className="mt-1.5 w-full px-2 py-1 text-xs font-medium bg-mail-warning/20
+                               hover:bg-mail-warning/30 rounded transition-colors text-center"
+                  >
+                    Re-enter Password in Settings
+                  </button>
+                </div>
+              ) : (
               <div className={`flex items-center justify-between text-xs ${
                 connectionErrorType === 'passwordMissing' ? 'text-mail-warning' : 'text-mail-danger'
               }`}>
                 <div className="flex items-center gap-2">
-                  {connectionErrorType === 'passwordMissing' ? (
-                    <>
-                      <Key size={14} />
-                      <span>Keychain access</span>
-                    </>
-                  ) : connectionErrorType === 'offline' ? (
+                  {connectionErrorType === 'offline' ? (
                     <>
                       <WifiOff size={14} />
                       <span>No internet</span>
@@ -464,24 +492,11 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => setShowErrorModal(true)}
-                    className={`p-1 rounded transition-colors ${
-                      connectionErrorType === 'passwordMissing'
-                        ? 'hover:bg-mail-warning/20'
-                        : 'hover:bg-mail-danger/20'
-                    }`}
+                    className="p-1 hover:bg-mail-danger/20 rounded transition-colors"
                     title="View error details"
                   >
                     <Info size={12} />
                   </button>
-                  {connectionErrorType === 'passwordMissing' ? (
-                    <button
-                      onClick={retryKeychainAccess}
-                      className="p-1 hover:bg-mail-warning/20 rounded transition-colors"
-                      title="Retry keychain access"
-                    >
-                      <RefreshCw size={12} />
-                    </button>
-                  ) : (
                     <button
                       onClick={() => loadEmails()}
                       className="p-1 hover:bg-mail-danger/20 rounded transition-colors"
@@ -489,9 +504,9 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                     >
                       <RefreshCw size={12} />
                     </button>
-                  )}
                 </div>
               </div>
+              )}
             </div>
           )}
 

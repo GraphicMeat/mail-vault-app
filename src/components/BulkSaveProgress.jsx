@@ -62,9 +62,9 @@ function BulkSaveProgressInner({ progress, onDismiss, onCancel }) {
             <span className="font-medium text-mail-text text-sm">
               {isComplete
                 ? errors === 0
-                  ? 'Saved Successfully'
-                  : `Saved with ${errors} error(s)`
-                : 'Saving Emails...'}
+                  ? 'Archived Successfully'
+                  : `Archived with ${errors} error(s)`
+                : 'Archiving Emails...'}
             </span>
           </div>
 

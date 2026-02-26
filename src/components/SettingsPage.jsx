@@ -1514,7 +1514,7 @@ export function SettingsPage({ onClose, onAddAccount }) {
                         </h4>
                         
                         <p className="text-sm text-mail-text-muted mb-4">
-                          This will remove the account from MailVault. All locally saved emails, 
+                          This will remove the account from MailVault. All locally archived emails, 
                           attachments, and settings for this account will be permanently deleted 
                           and cannot be recovered.
                         </p>
@@ -1540,7 +1540,7 @@ export function SettingsPage({ onClose, onAddAccount }) {
                                   Are you sure you want to remove {selectedAccount.email}?
                                 </p>
                                 <p className="text-sm text-mail-text-muted mb-4">
-                                  This will permanently delete all locally saved emails, attachments, and settings for this account. This action cannot be undone.
+                                  This will permanently delete all locally archived emails, attachments, and settings for this account. This action cannot be undone.
                                 </p>
                                 <div className="flex items-center gap-2">
                                   <button
@@ -1870,11 +1870,11 @@ export function SettingsPage({ onClose, onAddAccount }) {
                   </h4>
                   
                   <p className="text-sm text-mail-text-muted mb-4">
-                    Clear all locally stored emails and settings. This action cannot be undone.
+                    Clear all locally archived emails and settings. This action cannot be undone.
                   </p>
                   <button
                     onClick={async () => {
-                      if (confirm('Are you sure? This will delete all locally stored emails and settings. This action cannot be undone.')) {
+                      if (confirm('Are you sure? This will delete all locally archived emails and settings. This action cannot be undone.')) {
                         try {
                           const db = await import('../services/db');
                           // Delete each account's Maildir and data
