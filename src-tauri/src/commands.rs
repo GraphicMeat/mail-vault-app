@@ -103,7 +103,7 @@ pub async fn imap_get_emails(
 ) -> Result<serde_json::Value, String> {
     let mailbox = mailbox.unwrap_or_else(|| "INBOX".to_string());
     let page = page.unwrap_or(1);
-    let limit = limit.unwrap_or(50);
+    let limit = limit.unwrap_or(200);
 
     let (emails, total, has_more, skipped_uids) =
         with_background(&pool, &account, |mut session| async move {

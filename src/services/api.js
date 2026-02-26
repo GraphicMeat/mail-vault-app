@@ -110,7 +110,7 @@ export async function fetchMailboxes(account) {
   return data.mailboxes;
 }
 
-export async function fetchEmails(account, mailbox = 'INBOX', page = 1, limit = 50) {
+export async function fetchEmails(account, mailbox = 'INBOX', page = 1, limit = 200) {
   if (IS_TAURI) {
     return tauriInvoke('imap_get_emails', { account, mailbox, page, limit });
   }

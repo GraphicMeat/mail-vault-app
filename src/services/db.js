@@ -23,23 +23,88 @@ let initialized = false;
 // Format: { accountId: JSON.stringify({id, email, imapServer, smtpServer, password, createdAt}) }
 let keychainCache = null;
 let keychainLoaded = false;
+let _keychainReady = false;
+let _keychainReadyCallbacks = [];
+let _keychainLoadingPromise = null;
+
+// Register a callback for when keychain becomes available after a timeout.
+// If keychain is already ready, callback fires immediately.
+export function onKeychainReady(callback) {
+  if (_keychainReady) {
+    callback(keychainCache || {});
+  } else {
+    _keychainReadyCallbacks.push(callback);
+  }
+}
+
+export function isKeychainReady() {
+  return _keychainReady;
+}
+
+function _fireKeychainReadyCallbacks() {
+  const cbs = _keychainReadyCallbacks;
+  _keychainReadyCallbacks = [];
+  for (const cb of cbs) {
+    try { cb(keychainCache || {}); } catch (e) { console.warn('[db.js] keychainReady callback error:', e); }
+  }
+}
+
+const KEYCHAIN_TIMEOUT_MS = 3000;
 
 async function loadKeychain() {
   if (keychainLoaded) return keychainCache || {};
-  if (!invoke) { keychainLoaded = true; return {}; }
+  if (!invoke) { keychainLoaded = true; _keychainReady = true; return {}; }
 
-  try {
-    console.log('[db.js] Loading accounts from keychain...');
-    keychainCache = await invoke('get_credentials');
-    keychainLoaded = true;
-    console.log('[db.js] Keychain loaded for', Object.keys(keychainCache).length, 'account(s)');
-    return keychainCache;
-  } catch (error) {
+  // Deduplicate concurrent calls
+  if (_keychainLoadingPromise) return _keychainLoadingPromise;
+
+  _keychainLoadingPromise = _loadKeychainWithTimeout();
+  const result = await _keychainLoadingPromise;
+  _keychainLoadingPromise = null;
+  return result;
+}
+
+async function _loadKeychainWithTimeout() {
+  console.log('[db.js] Loading accounts from keychain...');
+
+  const keychainPromise = invoke('get_credentials').then(data => {
+    return { data, timedOut: false };
+  }).catch(error => {
     console.log('[db.js] No keychain data found or error:', error);
-    keychainCache = {};
+    return { data: {}, timedOut: false };
+  });
+
+  const timeoutPromise = new Promise(resolve => {
+    setTimeout(() => resolve({ data: null, timedOut: true }), KEYCHAIN_TIMEOUT_MS);
+  });
+
+  const result = await Promise.race([keychainPromise, timeoutPromise]);
+
+  if (!result.timedOut) {
+    // Keychain responded in time
+    keychainCache = result.data;
     keychainLoaded = true;
+    _keychainReady = true;
+    console.log('[db.js] Keychain loaded for', Object.keys(keychainCache).length, 'account(s)');
+    _fireKeychainReadyCallbacks();
     return keychainCache;
   }
+
+  // Timed out — keychain is likely locked (macOS prompt pending)
+  console.warn('[db.js] Keychain access timed out after ' + KEYCHAIN_TIMEOUT_MS + 'ms — proceeding without credentials (local-only mode)');
+  keychainCache = {};
+  keychainLoaded = true;
+  // _keychainReady stays false — IMAP callers should check this
+
+  // Continue waiting for keychain in background
+  keychainPromise.then(({ data }) => {
+    console.log('[db.js] Keychain unlocked (background), merging', Object.keys(data).length, 'account(s)');
+    keychainCache = data;
+    _keychainReady = true;
+    _fireKeychainReadyCallbacks();
+  });
+
+  return keychainCache;
 }
 
 async function saveKeychain(data) {

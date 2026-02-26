@@ -14,13 +14,15 @@ function isHidden(accountId) {
  *
  * Cascade order:
  *   1. Active account runs content caching at full concurrency (3)
- *   2. After active finishes → background accounts load headers then cache content (concurrency 1)
+ *   2. Background accounts load headers immediately in parallel (concurrency 1 per account)
+ *   3. After active finishes → background accounts cache content (sequential, concurrency 1)
  */
 class EmailPipelineManager {
   constructor() {
     this.pipelines = new Map(); // accountId → AccountPipeline
     this._activeAccountId = null;
-    this._backgroundRunning = false;
+    this._backgroundHeadersRunning = false;
+    this._backgroundContentRunning = false;
     this._destroyed = false;
   }
 
@@ -53,6 +55,9 @@ class EmailPipelineManager {
     // Load Sent folder headers in parallel (for chat view)
     this._loadSentHeaders(account, pipeline);
 
+    // Start background headers immediately (don't wait for active to finish)
+    this._startBackgroundHeadersOnly();
+
     // Filter UIDs that need caching
     const { localCacheDurationMonths } = useSettingsStore.getState();
     const uidsToFetch = this._getUncachedUids(emails, savedEmailIds, localCacheDurationMonths);
@@ -60,44 +65,43 @@ class EmailPipelineManager {
     if (uidsToFetch.length > 0) {
       await pipeline.startContentCaching(uidsToFetch, activeMailbox);
     } else {
-      console.log(`[PipelineManager] Active account fully cached, starting background pipelines`);
-      this._startBackgroundPipelines();
+      console.log(`[PipelineManager] Active account fully cached, starting background content pipelines`);
+      this._startBackgroundContentPipelines();
     }
   }
 
   /**
    * Called when the active account's content pipeline finishes.
-   * Triggers background loading for all other accounts.
+   * Triggers background content caching for all other accounts.
    */
   _onActiveComplete(accountId) {
     // Only cascade if this is still the active account
     if (accountId !== this._activeAccountId) return;
-    console.log(`[PipelineManager] Active account ${accountId} complete, starting background pipelines`);
-    this._startBackgroundPipelines();
+    console.log(`[PipelineManager] Active account ${accountId} complete, starting background content pipelines`);
+    this._startBackgroundContentPipelines();
   }
 
   /**
-   * Load headers + cache content for all non-active accounts.
-   * Phase 1: Headers loaded in parallel (up to 3 accounts at a time).
-   * Phase 2: Content cached sequentially at concurrency=1.
+   * Load headers for all non-active accounts immediately.
+   * Runs in parallel alongside active account content caching.
+   * Also pre-fetches and caches mailbox lists for instant account switching.
    */
-  async _startBackgroundPipelines() {
-    if (this._backgroundRunning) return;
-    this._backgroundRunning = true;
+  async _startBackgroundHeadersOnly() {
+    if (this._backgroundHeadersRunning) return;
+    this._backgroundHeadersRunning = true;
 
     const { accounts } = useMailStore.getState();
     const otherAccounts = accounts.filter(
       a => a.id !== this._activeAccountId && hasValidCredentials(a) && !isHidden(a.id)
     );
 
-    // Phase 1: Load headers for all background accounts in parallel (max 3 at a time)
     const CHUNK_SIZE = 3;
     for (let i = 0; i < otherAccounts.length; i += CHUNK_SIZE) {
       if (this._destroyed) break;
       const chunk = otherAccounts.slice(i, i + CHUNK_SIZE);
 
       await Promise.all(chunk.map(async (account) => {
-        if (this._isDestroyed(account.id)) return;
+        if (this._destroyed) return;
 
         // Destroy any existing pipeline for this account
         if (this.pipelines.has(account.id)) {
@@ -107,7 +111,7 @@ class EmailPipelineManager {
         const pipeline = new AccountPipeline(account, {
           concurrency: 1,
           onProgress: (state) => this._onProgress(account.id, state),
-          onComplete: () => console.log(`[PipelineManager] Background account ${account.email} complete`),
+          onComplete: () => console.log(`[PipelineManager] Background account ${account.email} headers complete`),
           onError: (err) => console.warn(`[PipelineManager] Background pipeline error (${account.email}):`, err.message)
         });
 
@@ -118,19 +122,46 @@ class EmailPipelineManager {
         if (!pipeline._destroyed) {
           await this._loadSentHeaders(account, pipeline);
         }
+
+        // Pre-fetch mailbox list for instant account switching
+        if (!pipeline._destroyed) {
+          try {
+            const freshAccount = await import('./authUtils').then(m => m.ensureFreshToken(account));
+            const { fetchMailboxes } = await import('./api');
+            const mailboxes = await fetchMailboxes(freshAccount);
+            await db.saveMailboxes(account.id, mailboxes);
+          } catch (e) {
+            // Non-fatal: cached mailboxes from last connection will be used
+          }
+        }
       }));
     }
 
-    // Phase 2: Content caching sequentially at concurrency=1
+    this._backgroundHeadersRunning = false;
+  }
+
+  /**
+   * Cache content for all non-active accounts.
+   * Runs after active account content caching completes.
+   * Sequential at concurrency=1 to avoid overwhelming IMAP.
+   */
+  async _startBackgroundContentPipelines() {
+    if (this._backgroundContentRunning) return;
+    this._backgroundContentRunning = true;
+
+    const { accounts } = useMailStore.getState();
+    const otherAccounts = accounts.filter(
+      a => a.id !== this._activeAccountId && hasValidCredentials(a) && !isHidden(a.id)
+    );
+
     for (const account of otherAccounts) {
       if (this._destroyed) break;
-      if (this._isDestroyed(account.id)) continue;
 
       const pipeline = this.pipelines.get(account.id);
       if (!pipeline || pipeline._destroyed) continue;
 
       const { localCacheDurationMonths } = useSettingsStore.getState();
-      // Use in-memory headers from Phase 1 (avoids re-reading 17k files from disk)
+      // Use in-memory headers from header loading phase (avoids re-reading from disk)
       const emails = pipeline._lastLoadedEmails;
       if (emails && emails.length > 0) {
         const savedIds = await db.getSavedEmailIds(account.id, 'INBOX');
@@ -144,7 +175,7 @@ class EmailPipelineManager {
       }
     }
 
-    this._backgroundRunning = false;
+    this._backgroundContentRunning = false;
   }
 
   /**
@@ -152,7 +183,7 @@ class EmailPipelineManager {
    */
   onAccountSwitch(newActiveAccountId) {
     this._activeAccountId = newActiveAccountId;
-    this._backgroundRunning = false; // allow background cascade to restart for new account context
+    this._backgroundContentRunning = false; // allow background cascade to restart for new account context
 
     // Pause all non-active pipelines
     for (const [id, pipeline] of this.pipelines) {
@@ -206,8 +237,9 @@ class EmailPipelineManager {
    * Restart background pipelines (e.g., after unhiding an account).
    */
   restartBackgroundPipelines() {
-    this._backgroundRunning = false;
-    this._startBackgroundPipelines();
+    this._backgroundHeadersRunning = false;
+    this._backgroundContentRunning = false;
+    this._startBackgroundHeadersOnly();
   }
 
   /**
@@ -219,7 +251,8 @@ class EmailPipelineManager {
       pipeline.destroy();
     }
     this.pipelines.clear();
-    this._backgroundRunning = false;
+    this._backgroundHeadersRunning = false;
+    this._backgroundContentRunning = false;
   }
 
   /**

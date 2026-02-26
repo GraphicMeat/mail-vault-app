@@ -68,7 +68,7 @@ export class AccountPipeline {
         total = result.total;
         hasMore = result.hasMore;
         page++;
-        if (hasMore) await new Promise(r => setTimeout(r, 50));
+        if (hasMore) await new Promise(r => setTimeout(r, 0));
       }
 
       if (allEmails.length > 0 && !this._destroyed) {
@@ -112,7 +112,7 @@ export class AccountPipeline {
 
     // Launch concurrent worker slots with 500ms stagger
     for (let i = 0; i < this.concurrency; i++) {
-      setTimeout(() => this._workerLoop(i, mailbox), i * 500);
+      setTimeout(() => this._workerLoop(i, mailbox), i * 100);
     }
   }
 
@@ -168,7 +168,7 @@ export class AccountPipeline {
       }
 
       // Small breathing room between fetches (yield to event loop)
-      await new Promise(r => setTimeout(r, 50));
+      await new Promise(r => setTimeout(r, 10));
     }
 
     this._activeSlots--;
@@ -197,7 +197,7 @@ export class AccountPipeline {
       this._retryDelay = Math.min(delay * 2, 120000);
 
       for (let i = 0; i < this.concurrency; i++) {
-        setTimeout(() => this._workerLoop(i, mailbox), i * 500);
+        setTimeout(() => this._workerLoop(i, mailbox), i * 100);
       }
     }, delay);
   }
@@ -278,7 +278,7 @@ export class AccountPipeline {
     if (this._phase === 'content' && this._queue.length > 0) {
       const slotsToLaunch = Math.min(this.concurrency - this._activeSlots, this._queue.length);
       for (let i = 0; i < slotsToLaunch; i++) {
-        setTimeout(() => this._workerLoop(i, mailbox), i * 500);
+        setTimeout(() => this._workerLoop(i, mailbox), i * 100);
       }
     }
   }

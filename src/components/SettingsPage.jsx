@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useSettingsStore, AVATAR_COLORS, getAccountInitial, getAccountColor } from '../stores/settingsStore';
+import { formatEmailDate } from '../utils/dateFormat';
 import { safeStorage } from '../stores/safeStorage';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getOAuth2AuthUrl, exchangeOAuth2Code } from '../services/api';
@@ -108,7 +109,11 @@ export function SettingsPage({ onClose, onAddAccount }) {
     clearAccountColor,
     hiddenAccounts,
     setAccountHidden,
-    isAccountHidden
+    isAccountHidden,
+    dateFormat,
+    customDateFormat,
+    setDateFormat,
+    setCustomDateFormat
   } = useSettingsStore();
   
   // Close on Escape key
@@ -522,11 +527,49 @@ export function SettingsPage({ onClose, onAddAccount }) {
                       </div>
                       <div className="flex items-center gap-3">
                         <Sun size={18} className={theme === 'light' ? 'text-mail-accent' : 'text-mail-text-muted'} />
-                        <ToggleSwitch 
-                          active={theme === 'dark'} 
+                        <ToggleSwitch
+                          active={theme === 'dark'}
                           onClick={toggleTheme}
                         />
                         <Moon size={18} className={theme === 'dark' ? 'text-mail-accent' : 'text-mail-text-muted'} />
+                      </div>
+                    </div>
+
+                    {/* Date Format */}
+                    <div className="pt-4 border-t border-mail-border">
+                      <div className="font-medium text-mail-text mb-1">Date Format</div>
+                      <div className="text-sm text-mail-text-muted mb-3">
+                        Controls how dates appear in the email list
+                      </div>
+                      <select
+                        value={dateFormat}
+                        onChange={(e) => setDateFormat(e.target.value)}
+                        className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg text-mail-text focus:border-mail-accent transition-all cursor-pointer"
+                      >
+                        <option value="auto">System Default ({navigator.language})</option>
+                        <option value="MM/dd/yyyy">MM/DD/YYYY (US)</option>
+                        <option value="dd/MM/yyyy">DD/MM/YYYY (Europe)</option>
+                        <option value="yyyy-MM-dd">YYYY-MM-DD (ISO)</option>
+                        <option value="dd MMM yyyy">DD MMM YYYY (e.g., 25 Feb 2024)</option>
+                        <option value="custom">Custom...</option>
+                      </select>
+                      {dateFormat === 'custom' && (
+                        <div className="mt-3">
+                          <input
+                            type="text"
+                            value={customDateFormat}
+                            onChange={(e) => setCustomDateFormat(e.target.value)}
+                            placeholder="e.g., dd.MM.yyyy"
+                            className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg text-mail-text focus:border-mail-accent transition-all"
+                          />
+                          <p className="text-xs text-mail-text-muted mt-1">
+                            Uses date-fns tokens: yyyy=year, MM=month, dd=day, HH=hour, mm=minute
+                          </p>
+                        </div>
+                      )}
+                      <div className="mt-2 flex items-center gap-4 text-xs text-mail-text-muted">
+                        <span>Today: <span className="text-mail-text">{formatEmailDate(new Date().toISOString())}</span></span>
+                        <span>Older: <span className="text-mail-text">{formatEmailDate('2023-06-15T10:00:00Z')}</span></span>
                       </div>
                     </div>
                   </div>

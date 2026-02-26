@@ -3,7 +3,7 @@ import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { buildThreads } from '../utils/emailParser';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
+import { formatEmailDate } from '../utils/dateFormat';
 import { SearchBar } from './SearchBar';
 import {
   RefreshCw,
@@ -28,13 +28,6 @@ const ROW_HEIGHT_DEFAULT = 56;
 const ROW_HEIGHT_COMPACT = 52;
 const BUFFER_SIZE = 10;
 
-function formatEmailDate(dateStr) {
-  const date = new Date(dateStr);
-  if (isToday(date)) return format(date, 'h:mm a');
-  if (isYesterday(date)) return 'Yesterday';
-  if (isThisWeek(date)) return format(date, 'EEEE');
-  return format(date, 'MMM d');
-}
 
 const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onToggleSelection, isChecked, style }) {
   const saveEmailLocally = useMailStore(s => s.saveEmailLocally);
@@ -121,7 +114,7 @@ const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onT
         </span>
       </div>
 
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity min-w-[60px] justify-end">
         {!email.isArchived && (
           <button
             onClick={handleSave}
@@ -270,7 +263,7 @@ const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSelected,
       </div>
 
       {/* Hover actions */}
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 min-w-[60px] justify-end">
         {!email.isArchived && (
           <button onClick={handleSave} disabled={saving}
             className="p-1 hover:bg-mail-border rounded transition-colors" title="Archive">
@@ -415,7 +408,7 @@ const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectTh
         </span>
       </div>
 
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity min-w-[60px] justify-end">
         {!allArchived && (
           <button
             onClick={handleArchiveThread}
@@ -574,7 +567,7 @@ const CompactThreadRow = React.memo(function CompactThreadRow({ thread, isSelect
       </div>
 
       {/* Hover actions */}
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 min-w-[60px] justify-end">
         {!allArchived && (
           <button onClick={handleArchiveThread} disabled={saving}
             className="p-1 hover:bg-mail-border rounded transition-colors" title="Archive thread">
