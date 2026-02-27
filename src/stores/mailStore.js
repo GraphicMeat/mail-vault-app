@@ -2192,9 +2192,17 @@ export const useMailStore = create((set, get) => ({
         }
 
         if (graphId) {
-          const graphMsg = await api.graphGetMessage(token, graphId);
-          email = graphMessageToEmail(graphMsg, uid);
-          actualSource = 'server';
+          // Fetch MIME, save .eml to Maildir, and get parsed email — all in one Rust call
+          try {
+            email = await api.graphCacheMime(token, graphId, activeAccountId, activeMailbox, uid);
+            actualSource = 'server';
+          } catch (cacheErr) {
+            // Fallback: fetch via Graph JSON API (no .eml caching)
+            console.warn('[selectEmail] graphCacheMime failed, falling back to graphGetMessage:', cacheErr);
+            const graphMsg = await api.graphGetMessage(token, graphId);
+            email = graphMessageToEmail(graphMsg, uid);
+            actualSource = 'server';
+          }
           get().addToCache(cacheKey, email, cacheLimitMB);
 
           // Mark as read on server (if auto mode)
