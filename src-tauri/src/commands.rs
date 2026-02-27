@@ -486,3 +486,72 @@ pub async fn oauth2_refresh(
         "expiresAt": result.expires_at
     }))
 }
+
+// ── Graph API: List folders ─────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn graph_list_folders(access_token: String) -> Result<serde_json::Value, String> {
+    let client = crate::graph::GraphClient::new(&access_token);
+    let folders = client.list_folders().await?;
+    serde_json::to_value(&folders).map_err(|e| e.to_string())
+}
+
+// ── Graph API: List messages (paginated) ────────────────────────────────────
+
+#[tauri::command]
+pub async fn graph_list_messages(
+    access_token: String,
+    folder_id: String,
+    top: u32,
+    skip: u32,
+) -> Result<serde_json::Value, String> {
+    let client = crate::graph::GraphClient::new(&access_token);
+    let (messages, next_link) = client.list_messages(&folder_id, top, skip).await?;
+    let headers: Vec<_> = messages
+        .iter()
+        .enumerate()
+        .map(|(i, m)| m.to_email_header((skip + i as u32 + 1) as u32))
+        .collect();
+    // Also return Graph message IDs so frontend can map UIDs to Graph IDs for body fetches
+    let graph_ids: Vec<String> = messages.iter().map(|m| m.id.clone()).collect();
+    Ok(serde_json::json!({
+        "headers": headers,
+        "nextLink": next_link,
+        "graphMessageIds": graph_ids,
+    }))
+}
+
+// ── Graph API: Get single message ───────────────────────────────────────────
+
+#[tauri::command]
+pub async fn graph_get_message(
+    access_token: String,
+    message_id: String,
+) -> Result<serde_json::Value, String> {
+    let client = crate::graph::GraphClient::new(&access_token);
+    let msg = client.get_message(&message_id).await?;
+    serde_json::to_value(&msg).map_err(|e| e.to_string())
+}
+
+// ── Graph API: Get MIME content (.eml) ──────────────────────────────────────
+
+#[tauri::command]
+pub async fn graph_get_mime(
+    access_token: String,
+    message_id: String,
+) -> Result<Vec<u8>, String> {
+    let client = crate::graph::GraphClient::new(&access_token);
+    client.get_mime_content(&message_id).await
+}
+
+// ── Graph API: Set read status ──────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn graph_set_read(
+    access_token: String,
+    message_id: String,
+    is_read: bool,
+) -> Result<(), String> {
+    let client = crate::graph::GraphClient::new(&access_token);
+    client.set_read_status(&message_id, is_read).await
+}
