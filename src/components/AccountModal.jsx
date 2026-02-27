@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { getOAuth2AuthUrl, exchangeOAuth2Code, testConnection } from '../services/api';
 import { motion } from 'framer-motion';
-import { X, Mail, Lock, Server, Eye, EyeOff, Check, AlertCircle, Loader, Wand2, Shield } from 'lucide-react';
+import { X, Mail, Lock, Server, Eye, EyeOff, Check, AlertCircle, Loader, Wand2, Shield, ChevronRight } from 'lucide-react';
 
 // Common email provider configurations
 const PROVIDER_CONFIGS = {
@@ -127,6 +127,7 @@ export function AccountModal({ onClose }) {
   const [success, setSuccess] = useState(false);
   const [detectedProvider, setDetectedProvider] = useState(null);
   const [showManualConfig, setShowManualConfig] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   // OAuth2 state
   const [authType, setAuthType] = useState('password'); // 'password' | 'oauth2'
@@ -149,7 +150,9 @@ export function AccountModal({ onClose }) {
     oauth2Provider: null,
     oauth2RefreshToken: '',
     oauth2AccessToken: '',
-    oauth2ExpiresAt: null
+    oauth2ExpiresAt: null,
+    oauth2CustomClientId: '',
+    oauth2TenantId: ''
   });
 
   const handleProviderSelect = (key) => {
@@ -304,7 +307,12 @@ export function AccountModal({ onClose }) {
 
     try {
       // Step 1: Get the auth URL from the server (pass email as login_hint + provider)
-      const { authUrl, state } = await getOAuth2AuthUrl(userEnteredEmail, currentProvider);
+      const { authUrl, state } = await getOAuth2AuthUrl(
+        userEnteredEmail,
+        currentProvider,
+        formData.oauth2CustomClientId || undefined,
+        formData.oauth2TenantId || undefined
+      );
 
       // Step 2: Open the auth URL in the default browser
       if (window.__TAURI__) {
@@ -540,6 +548,38 @@ export function AccountModal({ onClose }) {
                         </button>
                       )}
                     </>
+                  )}
+
+                  {/* Advanced (Corporate) section for Microsoft OAuth2 */}
+                  {authType === 'oauth2' && providerConfig?.oauth2Provider === 'microsoft' && (
+                    <div className="mt-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowAdvanced(!showAdvanced)}
+                        className="text-xs text-gray-400 hover:text-gray-300 flex items-center gap-1"
+                      >
+                        <ChevronRight size={12} className={`transition-transform ${showAdvanced ? 'rotate-90' : ''}`} />
+                        Advanced (Corporate)
+                      </button>
+                      {showAdvanced && (
+                        <div className="mt-2 space-y-2">
+                          <input
+                            type="text"
+                            placeholder="Custom Client ID (optional)"
+                            value={formData.oauth2CustomClientId}
+                            onChange={e => setFormData(prev => ({ ...prev, oauth2CustomClientId: e.target.value }))}
+                            className="w-full px-3 py-1.5 text-xs bg-gray-700 border border-gray-600 rounded text-gray-200 placeholder-gray-500"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Tenant ID (optional, e.g. contoso.onmicrosoft.com)"
+                            value={formData.oauth2TenantId}
+                            onChange={e => setFormData(prev => ({ ...prev, oauth2TenantId: e.target.value }))}
+                            className="w-full px-3 py-1.5 text-xs bg-gray-700 border border-gray-600 rounded text-gray-200 placeholder-gray-500"
+                          />
+                        </div>
+                      )}
+                    </div>
                   )}
 
                   {/* OAuth2 connected state */}
