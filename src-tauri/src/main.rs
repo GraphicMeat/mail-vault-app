@@ -18,6 +18,7 @@ use walkdir::WalkDir;
 
 mod archive;
 mod commands;
+pub mod graph;
 mod imap;
 mod oauth2;
 mod smtp;
