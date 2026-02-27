@@ -183,10 +183,16 @@ impl OAuth2Manager {
         provider: Option<String>,
         custom_client_id: Option<String>,
         tenant_id: Option<String>,
+        use_graph: bool,
     ) -> Result<AuthUrlResponse, String> {
         let provider_name = provider.as_deref().unwrap_or("microsoft");
         let mut config = get_provider_config(provider_name)?;
         apply_overrides(&mut config, custom_client_id.as_deref(), tenant_id.as_deref());
+
+        // For personal Microsoft accounts, request Graph API scopes instead of IMAP scopes
+        if use_graph && provider_name == "microsoft" {
+            config.scopes = "offline_access Mail.ReadWrite Mail.Send".to_string();
+        }
 
         let code_verifier = generate_code_verifier();
         let code_challenge = generate_code_challenge(&code_verifier);
