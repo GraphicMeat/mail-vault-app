@@ -261,13 +261,14 @@ export async function searchEmails(account, mailbox = 'INBOX', query, filters = 
 
 // ── OAuth2 API functions ────────────────────────────────────────────────────
 
-export async function getOAuth2AuthUrl(email, provider, customClientId, tenantId) {
+export async function getOAuth2AuthUrl(email, provider, customClientId, tenantId, useGraph) {
   if (IS_TAURI) {
     return tauriInvoke('oauth2_auth_url', {
       email: email || null,
       provider: provider || null,
       customClientId: customClientId || null,
       tenantId: tenantId || null,
+      useGraph: useGraph || false,
     });
   }
   const params = email ? `?login_hint=${encodeURIComponent(email)}` : '';
@@ -329,6 +330,28 @@ export async function bulkDeleteEmails(account, accountId, mailbox, uids) {
       uids,
     });
   }
+}
+
+// ── Graph API functions (personal Microsoft accounts) ─────────────────────
+
+export async function graphListFolders(accessToken) {
+  return await tauriInvoke('graph_list_folders', { accessToken });
+}
+
+export async function graphListMessages(accessToken, folderId, top, skip) {
+  return await tauriInvoke('graph_list_messages', { accessToken, folderId, top, skip: skip || 0 });
+}
+
+export async function graphGetMessage(accessToken, messageId) {
+  return await tauriInvoke('graph_get_message', { accessToken, messageId });
+}
+
+export async function graphGetMime(accessToken, messageId) {
+  return await tauriInvoke('graph_get_mime', { accessToken, messageId });
+}
+
+export async function graphSetRead(accessToken, messageId, isRead) {
+  return await tauriInvoke('graph_set_read', { accessToken, messageId, isRead });
 }
 
 export async function verifyArchivedEmails(accountId, mailbox, uids) {
