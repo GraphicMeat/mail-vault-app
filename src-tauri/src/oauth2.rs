@@ -15,7 +15,7 @@ const CALLBACK_PORT: u16 = 19876;
 // Microsoft constants
 const MS_AUTH_ENDPOINT: &str = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
 const MS_TOKEN_ENDPOINT: &str = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
-const MS_THUNDERBIRD_CLIENT_ID: &str = "9e5f94bc-e8a4-4e73-b8be-63364c29d753";
+const MS_MAILVAULT_CLIENT_ID: &str = "d4e1c192-2c87-4aeb-b2d6-edbb91c577cd";
 
 // Google constants
 const GOOGLE_AUTH_ENDPOINT: &str = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -42,7 +42,7 @@ fn get_provider_config(provider: &str) -> Result<ProviderConfig, String> {
             let client_id = std::env::var("MAILVAULT_MS_CLIENT_ID")
                 .ok()
                 .filter(|s| !s.is_empty() && s != "undefined")
-                .unwrap_or_else(|| MS_THUNDERBIRD_CLIENT_ID.to_string());
+                .unwrap_or_else(|| MS_MAILVAULT_CLIENT_ID.to_string());
             let client_secret = std::env::var("MAILVAULT_MS_CLIENT_SECRET")
                 .ok()
                 .filter(|s| !s.is_empty() && s != "undefined");
