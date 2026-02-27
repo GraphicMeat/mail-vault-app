@@ -2459,6 +2459,10 @@ export const useMailStore = create((set, get) => ({
     if (!account) return;
     account = await ensureFreshToken(account);
 
+    if (isGraphAccount(account)) {
+      throw new Error('Delete is not yet supported for personal Microsoft accounts (Graph API). Use the web interface to delete emails.');
+    }
+
     await api.deleteEmail(account, uid, activeMailbox);
 
     // Immediately remove from emails array so displayEmails flags it as local-only
@@ -2648,6 +2652,10 @@ export const useMailStore = create((set, get) => ({
     let account = accounts.find(a => a.id === activeAccountId);
     if (!account || selectedEmailIds.size === 0) return;
 
+    if (isGraphAccount(account)) {
+      throw new Error('Delete is not yet supported for personal Microsoft accounts (Graph API).');
+    }
+
     const uids = Array.from(selectedEmailIds);
     set({ selectedEmailIds: new Set() });
 
@@ -2717,8 +2725,25 @@ export const useMailStore = create((set, get) => ({
           // Count unread in current view
           const currentEmails = get().emails;
           totalUnread += currentEmails.filter(e => !e.flags?.includes('\\Seen')).length;
+        } else if (isGraphAccount(account)) {
+          // Graph: use Graph API for non-active account header refresh
+          try {
+            const token = account.oauth2AccessToken;
+            const folders = await api.graphListFolders(token);
+            const inbox = folders.find(f => f.displayName === 'Inbox');
+            if (inbox) {
+              const { headers } = await api.graphListMessages(token, inbox.id, 200, 0);
+              if (headers.length > 0) {
+                await db.saveEmailHeaders(account.id, 'INBOX', headers, inbox.totalItemCount);
+                console.log(`[mailStore] Graph: cached ${headers.length} headers for ${account.email}`);
+              }
+              totalUnread += headers.filter(e => !e.flags?.includes('\\Seen')).length;
+            }
+          } catch (e) {
+            console.warn(`[mailStore] Could not load Graph headers for ${account.email}:`, e);
+          }
         } else {
-          // For other accounts, load full headers into cache and count unread
+          // IMAP: load full headers into cache and count unread
           try {
             const allEmails = [];
             let page = 1;
