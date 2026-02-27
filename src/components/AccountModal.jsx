@@ -152,7 +152,8 @@ export function AccountModal({ onClose }) {
     oauth2AccessToken: '',
     oauth2ExpiresAt: null,
     oauth2CustomClientId: '',
-    oauth2TenantId: ''
+    oauth2TenantId: '',
+    oauth2Transport: ''
   });
 
   const handleProviderSelect = (key) => {
@@ -305,13 +306,21 @@ export function AccountModal({ onClose }) {
 
     const currentProvider = providerConfig?.oauth2Provider || 'microsoft';
 
+    // Detect personal Microsoft accounts — these need Graph API scopes (IMAP OAuth broken)
+    const personalMsDomains = ['outlook.com', 'hotmail.com', 'live.com', 'msn.com',
+      'outlook.co.uk', 'hotmail.co.uk', 'live.co.uk', 'outlook.fr', 'hotmail.fr',
+      'live.fr', 'outlook.de', 'hotmail.de', 'live.de', 'outlook.jp', 'hotmail.co.jp', 'live.jp'];
+    const emailDomain = (userEnteredEmail || '').toLowerCase().split('@')[1] || '';
+    const isPersonalMs = currentProvider === 'microsoft' && personalMsDomains.includes(emailDomain);
+
     try {
       // Step 1: Get the auth URL from the server (pass email as login_hint + provider)
       const { authUrl, state } = await getOAuth2AuthUrl(
         userEnteredEmail,
         currentProvider,
         formData.oauth2CustomClientId || undefined,
-        formData.oauth2TenantId || undefined
+        formData.oauth2TenantId || undefined,
+        isPersonalMs
       );
 
       // Step 2: Open the auth URL in the default browser
@@ -336,6 +345,7 @@ export function AccountModal({ onClose }) {
         oauth2AccessToken: tokenData.accessToken,
         oauth2RefreshToken: tokenData.refreshToken,
         oauth2ExpiresAt: tokenData.expiresAt,
+        oauth2Transport: isPersonalMs ? 'graph' : 'imap',
         password: '' // Clear password — not needed for OAuth2
       }));
 

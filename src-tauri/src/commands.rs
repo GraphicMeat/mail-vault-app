@@ -443,8 +443,9 @@ pub async fn oauth2_auth_url(
     provider: Option<String>,
     custom_client_id: Option<String>,
     tenant_id: Option<String>,
+    use_graph: Option<bool>,
 ) -> Result<serde_json::Value, String> {
-    let result = oauth.generate_auth_url(email, provider, custom_client_id, tenant_id).await?;
+    let result = oauth.generate_auth_url(email, provider, custom_client_id, tenant_id, use_graph.unwrap_or(false)).await?;
     Ok(serde_json::json!({
         "success": true,
         "authUrl": result.auth_url,
