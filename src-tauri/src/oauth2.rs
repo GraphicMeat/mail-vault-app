@@ -39,20 +39,13 @@ struct ProviderConfig {
 fn get_provider_config(provider: &str) -> Result<ProviderConfig, String> {
     match provider {
         "microsoft" => {
-            let custom_client_id = std::env::var("MAILVAULT_MS_CLIENT_ID")
+            let client_id = std::env::var("MAILVAULT_MS_CLIENT_ID")
                 .ok()
-                .filter(|s| !s.is_empty() && s != "undefined");
-            let client_id = custom_client_id.clone()
+                .filter(|s| !s.is_empty() && s != "undefined")
                 .unwrap_or_else(|| MS_MAILVAULT_CLIENT_ID.to_string());
-            // Only send client_secret when using a custom client ID (confidential client).
-            // The default MailVault app is a public client — sending a secret causes AADSTS7000215.
-            let client_secret = if custom_client_id.is_some() {
-                std::env::var("MAILVAULT_MS_CLIENT_SECRET")
-                    .ok()
-                    .filter(|s| !s.is_empty() && s != "undefined")
-            } else {
-                None
-            };
+            // Microsoft OAuth2 uses PKCE public client flow — never send client_secret.
+            // Azure AD returns AADSTS7000215 if a secret is sent to a public client app.
+            let client_secret: Option<String> = None;
 
             Ok(ProviderConfig {
                 auth_endpoint: MS_AUTH_ENDPOINT.to_string(),
