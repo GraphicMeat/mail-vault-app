@@ -2166,9 +2166,33 @@ export const useMailStore = create((set, get) => ({
         get().addToCache(cacheKey, email, cacheLimitMB);
       } else if (account && isGraphAccount(account)) {
         // 3a. Graph API: fetch full message by Graph message ID
-        const graphId = _getGraphMessageId(activeAccountId, activeMailbox, uid);
+        const freshAccount = await ensureFreshToken(account);
+        const token = freshAccount.oauth2AccessToken;
+        let graphId = _getGraphMessageId(activeAccountId, activeMailbox, uid);
+
+        // If graphIdMap is stale (e.g. after app restart), rebuild it by re-fetching headers
+        if (!graphId) {
+          console.log('[selectEmail] Graph ID not found for UID', uid, '— rebuilding map');
+          try {
+            const folders = await api.graphListFolders(token);
+            const folder = folders.find(f => {
+              const normalized = normalizeGraphFolderName(f.displayName);
+              return normalized === activeMailbox || f.displayName === activeMailbox;
+            });
+            if (folder) {
+              const { graphMessageIds } = await api.graphListMessages(token, folder.id, 200, 0);
+              const uidMap = new Map();
+              graphMessageIds.forEach((gid, i) => uidMap.set(i + 1, gid));
+              _setGraphIdMap(activeAccountId, activeMailbox, uidMap);
+              graphId = uidMap.get(uid);
+            }
+          } catch (e) {
+            console.warn('[selectEmail] Failed to rebuild Graph ID map:', e);
+          }
+        }
+
         if (graphId) {
-          const graphMsg = await api.graphGetMessage(account.oauth2AccessToken, graphId);
+          const graphMsg = await api.graphGetMessage(token, graphId);
           email = graphMessageToEmail(graphMsg, uid);
           actualSource = 'server';
           get().addToCache(cacheKey, email, cacheLimitMB);
@@ -2177,7 +2201,7 @@ export const useMailStore = create((set, get) => ({
           const markAsReadMode = useSettingsStore.getState().markAsReadMode;
           if (markAsReadMode === 'auto' && !email.flags?.includes('\\Seen')) {
             try {
-              await api.graphSetRead(account.oauth2AccessToken, graphId, true);
+              await api.graphSetRead(token, graphId, true);
               email = { ...email, flags: [...(email.flags || []), '\\Seen'] };
             } catch (e) {
               console.warn('[selectEmail] Graph mark as read failed:', e);
