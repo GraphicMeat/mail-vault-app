@@ -441,8 +441,10 @@ pub async fn oauth2_auth_url(
     oauth: tauri::State<'_, OAuth2Manager>,
     email: Option<String>,
     provider: Option<String>,
+    custom_client_id: Option<String>,
+    tenant_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let result = oauth.generate_auth_url(email, provider).await?;
+    let result = oauth.generate_auth_url(email, provider, custom_client_id, tenant_id).await?;
     Ok(serde_json::json!({
         "success": true,
         "authUrl": result.auth_url,
@@ -473,8 +475,10 @@ pub async fn oauth2_refresh(
     oauth: tauri::State<'_, OAuth2Manager>,
     refresh_token: String,
     provider: Option<String>,
+    custom_client_id: Option<String>,
+    tenant_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let result = oauth.refresh_token(&refresh_token, provider).await?;
+    let result = oauth.refresh_token(&refresh_token, provider, custom_client_id, tenant_id).await?;
     Ok(serde_json::json!({
         "success": true,
         "accessToken": result.access_token,

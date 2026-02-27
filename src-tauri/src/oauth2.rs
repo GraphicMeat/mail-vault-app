@@ -27,8 +27,8 @@ const GOOGLE_THUNDERBIRD_CLIENT_SECRET: &str = "kSmqreRr0qwBWJgbf5Y-PjSU";
 
 
 struct ProviderConfig {
-    auth_endpoint: &'static str,
-    token_endpoint: &'static str,
+    auth_endpoint: String,
+    token_endpoint: String,
     client_id: String,
     client_secret: Option<String>,
     scopes: String,
@@ -48,8 +48,8 @@ fn get_provider_config(provider: &str) -> Result<ProviderConfig, String> {
                 .filter(|s| !s.is_empty() && s != "undefined");
 
             Ok(ProviderConfig {
-                auth_endpoint: MS_AUTH_ENDPOINT,
-                token_endpoint: MS_TOKEN_ENDPOINT,
+                auth_endpoint: MS_AUTH_ENDPOINT.to_string(),
+                token_endpoint: MS_TOKEN_ENDPOINT.to_string(),
                 client_id,
                 client_secret,
                 scopes: [
@@ -73,8 +73,8 @@ fn get_provider_config(provider: &str) -> Result<ProviderConfig, String> {
                 .or_else(|| Some(GOOGLE_THUNDERBIRD_CLIENT_SECRET.to_string()));
 
             Ok(ProviderConfig {
-                auth_endpoint: GOOGLE_AUTH_ENDPOINT,
-                token_endpoint: GOOGLE_TOKEN_ENDPOINT,
+                auth_endpoint: GOOGLE_AUTH_ENDPOINT.to_string(),
+                token_endpoint: GOOGLE_TOKEN_ENDPOINT.to_string(),
                 client_id,
                 client_secret,
                 scopes: "https://mail.google.com/".to_string(),
@@ -142,7 +142,24 @@ type SenderMap = Arc<Mutex<HashMap<String, oneshot::Sender<Result<String, String
 struct PendingOAuth {
     code_verifier: String,
     provider: String,
+    custom_client_id: Option<String>,
+    tenant_id: Option<String>,
     code_rx: Option<oneshot::Receiver<Result<String, String>>>,
+}
+
+/// Apply per-account overrides (custom client ID and tenant ID) to a provider config.
+fn apply_overrides(config: &mut ProviderConfig, custom_client_id: Option<&str>, tenant_id: Option<&str>) {
+    if let Some(cid) = custom_client_id {
+        if !cid.is_empty() {
+            config.client_id = cid.to_string();
+        }
+    }
+    if let Some(tid) = tenant_id {
+        if !tid.is_empty() {
+            config.auth_endpoint = config.auth_endpoint.replace("/common/", &format!("/{}/", tid));
+            config.token_endpoint = config.token_endpoint.replace("/common/", &format!("/{}/", tid));
+        }
+    }
 }
 
 pub struct OAuth2Manager {
@@ -164,9 +181,12 @@ impl OAuth2Manager {
         &self,
         login_hint: Option<String>,
         provider: Option<String>,
+        custom_client_id: Option<String>,
+        tenant_id: Option<String>,
     ) -> Result<AuthUrlResponse, String> {
         let provider_name = provider.as_deref().unwrap_or("microsoft");
-        let config = get_provider_config(provider_name)?;
+        let mut config = get_provider_config(provider_name)?;
+        apply_overrides(&mut config, custom_client_id.as_deref(), tenant_id.as_deref());
 
         let code_verifier = generate_code_verifier();
         let code_challenge = generate_code_challenge(&code_verifier);
@@ -185,6 +205,8 @@ impl OAuth2Manager {
             PendingOAuth {
                 code_verifier,
                 provider: provider_name.to_string(),
+                custom_client_id,
+                tenant_id,
                 code_rx: Some(rx),
             },
         );
@@ -257,6 +279,8 @@ impl OAuth2Manager {
 
         let code_verifier = flow.code_verifier.clone();
         let provider_name = flow.provider.clone();
+        let custom_client_id = flow.custom_client_id.clone();
+        let tenant_id = flow.tenant_id.clone();
         drop(pending);
 
         // Wait for the authorization code from callback server
@@ -265,7 +289,8 @@ impl OAuth2Manager {
             .map_err(|_| "OAuth callback channel dropped".to_string())?
             .map_err(|e| format!("OAuth callback error: {}", e))?;
 
-        let config = get_provider_config(&provider_name)?;
+        let mut config = get_provider_config(&provider_name)?;
+        apply_overrides(&mut config, custom_client_id.as_deref(), tenant_id.as_deref());
 
         let mut params = vec![
             ("client_id".to_string(), config.client_id),
@@ -328,9 +353,12 @@ impl OAuth2Manager {
         &self,
         refresh_token: &str,
         provider: Option<String>,
+        custom_client_id: Option<String>,
+        tenant_id: Option<String>,
     ) -> Result<TokenResponse, String> {
         let provider_name = provider.as_deref().unwrap_or("microsoft");
-        let config = get_provider_config(provider_name)?;
+        let mut config = get_provider_config(provider_name)?;
+        apply_overrides(&mut config, custom_client_id.as_deref(), tenant_id.as_deref());
 
         let mut params = vec![
             ("client_id".to_string(), config.client_id),
