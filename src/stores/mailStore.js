@@ -571,7 +571,13 @@ export const useMailStore = create((set, get) => ({
     // Test connection first
     console.log('[mailStore] Testing connection...');
     try {
-      await api.testConnection(account);
+      if (isGraphAccount(account)) {
+        // For Graph accounts, test by listing folders via Graph API
+        const freshAccount = await ensureFreshToken(account);
+        await api.graphListFolders(freshAccount.oauth2AccessToken);
+      } else {
+        await api.testConnection(account);
+      }
       console.log('[mailStore] Connection test successful');
     } catch (error) {
       console.error('[mailStore] Connection test failed:', error);
