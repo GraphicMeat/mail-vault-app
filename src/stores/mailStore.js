@@ -2460,10 +2460,12 @@ export const useMailStore = create((set, get) => ({
     account = await ensureFreshToken(account);
 
     if (isGraphAccount(account)) {
-      throw new Error('Delete is not yet supported for personal Microsoft accounts (Graph API). Use the web interface to delete emails.');
+      const graphId = getGraphMessageId(activeAccountId, activeMailbox, uid);
+      if (!graphId) throw new Error('Cannot delete: no Graph message ID found for this email.');
+      await api.graphDeleteMessage(account.oauth2AccessToken, graphId);
+    } else {
+      await api.deleteEmail(account, uid, activeMailbox);
     }
-
-    await api.deleteEmail(account, uid, activeMailbox);
 
     // Immediately remove from emails array so displayEmails flags it as local-only
     const filteredEmails = get().emails.filter(e => e.uid !== uid);
@@ -2652,17 +2654,23 @@ export const useMailStore = create((set, get) => ({
     let account = accounts.find(a => a.id === activeAccountId);
     if (!account || selectedEmailIds.size === 0) return;
 
-    if (isGraphAccount(account)) {
-      throw new Error('Delete is not yet supported for personal Microsoft accounts (Graph API).');
-    }
-
     const uids = Array.from(selectedEmailIds);
     set({ selectedEmailIds: new Set() });
 
     account = await ensureFreshToken(account);
+    const isGraph = isGraphAccount(account);
     for (const uid of uids) {
       try {
-        await api.deleteEmail(account, uid, activeMailbox);
+        if (isGraph) {
+          const graphId = getGraphMessageId(activeAccountId, activeMailbox, uid);
+          if (graphId) {
+            await api.graphDeleteMessage(account.oauth2AccessToken, graphId);
+          } else {
+            console.warn(`[deleteSelectedFromServer] No Graph ID for UID ${uid}, skipping`);
+          }
+        } else {
+          await api.deleteEmail(account, uid, activeMailbox);
+        }
       } catch (e) {
         console.error(`Failed to delete email ${uid}:`, e);
       }

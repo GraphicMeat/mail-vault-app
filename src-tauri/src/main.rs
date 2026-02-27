@@ -2828,7 +2828,8 @@ fn main() {
             commands::graph_get_message,
             commands::graph_get_mime,
             commands::graph_cache_mime,
-            commands::graph_set_read
+            commands::graph_set_read,
+            commands::graph_delete_message
         ])
         .setup(|app| {
             // Set up logging to app log directory

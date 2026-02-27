@@ -359,6 +359,10 @@ export async function graphSetRead(accessToken, messageId, isRead) {
   return await tauriInvoke('graph_set_read', { accessToken, messageId, isRead });
 }
 
+export async function graphDeleteMessage(accessToken, messageId) {
+  return await tauriInvoke('graph_delete_message', { accessToken, messageId });
+}
+
 export async function verifyArchivedEmails(accountId, mailbox, uids) {
   if (IS_TAURI) {
     return tauriInvoke('verify_archived_emails', { accountId, mailbox, uids });

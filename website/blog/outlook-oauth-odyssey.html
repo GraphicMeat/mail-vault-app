@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Outlook OAuth Odyssey: IMAP Is Broken, Long Live Graph - MailVault Blog</title>
+  <meta name="description" content="How a Microsoft server-side IMAP regression forced us to register our own Azure AD app, build a full Graph API transport layer in Rust, and debug seven cascading failures along the way.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/blog/outlook-oauth-odyssey.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/blog/outlook-oauth-odyssey.html">
+  <meta property="og:title" content="The Outlook OAuth Odyssey: IMAP Is Broken, Long Live Graph - MailVault Blog">
+  <meta property="og:description" content="How a Microsoft server-side IMAP regression forced us to register our own Azure AD app, build a full Graph API transport layer in Rust, and debug seven cascading failures along the way.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="The Outlook OAuth Odyssey: IMAP Is Broken, Long Live Graph - MailVault Blog">
+  <meta name="twitter:description" content="How a Microsoft server-side IMAP regression forced us to register our own Azure AD app, build a full Graph API transport layer in Rust, and debug seven cascading failures along the way.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc',
+              400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca',
+              800: '#3730a3', 900: '#312e81',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .gradient-text {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .gradient-bg { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); }
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/" class="flex items-center gap-3">
+          <img src="/icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/#features" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Features</a>
+          <a href="/#how-it-works" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">How It Works</a>
+          <a href="/faq.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/blog.html" class="text-primary-500 font-medium">Blog</a>
+          <a href="/#contact" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Contact</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" title="Toggle theme">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex gradient-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Download
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Home</a>
+          <a href="/#features" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Features</a>
+          <a href="/#how-it-works" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">How It Works</a>
+          <a href="/faq.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/blog.html" class="px-3 py-2 rounded-lg text-primary-500 font-medium">Blog</a>
+          <a href="/#contact" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Contact</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg gradient-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Back to Blog
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-02-28" class="text-sm text-primary-500 font-medium">February 28, 2026</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">The Outlook OAuth Odyssey: IMAP Is Broken, Long Live Graph</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>8 min read</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            This is the story of how a single GitHub issue &mdash; "Microsoft account login doesn't work" &mdash; turned into registering our own Azure AD application, building a complete Microsoft Graph REST API transport layer in Rust, and debugging seven cascading failures before emails finally loaded. What should have been a configuration fix became a ground-up reimplementation of how MailVault talks to Microsoft.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">The Bug Report</h3>
+
+          <p>
+            Two users reported the same thing from different angles. Corporate M365 users saw <code>AADSTS900971: No reply address provided</code> when trying to sign in. Personal Outlook.com users got past the login screen but hit <code>AUTHENTICATE failed</code> when the app tried to connect via IMAP. Same symptom &mdash; "login doesn't work" &mdash; but two completely different root causes.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Problem 1: The Borrowed Client ID</h3>
+
+          <p>
+            MailVault's original Microsoft OAuth2 flow used Thunderbird's well-known public client ID. This is a common pattern &mdash; Thunderbird registers OAuth2 apps with Microsoft and Google so other email clients can piggyback. It works great until it doesn't.
+          </p>
+
+          <p>
+            For corporate M365 tenants, the Thunderbird app doesn't have our <code>localhost:19876/callback</code> redirect URI registered. Azure AD requires an exact match, and Thunderbird's app only lists Thunderbird's own redirect URIs. The fix: register MailVault's own Azure AD app with our exact redirect URI, configured as a public client (no secret, PKCE only), supporting both organizational and personal Microsoft accounts.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Problem 2: Microsoft Broke IMAP</h3>
+
+          <p>
+            The personal Outlook.com problem was worse. Since December 2024, Microsoft has had a <a href="https://learn.microsoft.com/en-us/answers/questions/5673167/" class="text-primary-500 hover:text-primary-600 underline" target="_blank" rel="noopener">server-side regression</a> affecting IMAP OAuth2 for personal accounts. After a successful OAuth2 flow, the XOAUTH2 SASL handshake fails with "User is authenticated but not connected." This isn't a client bug &mdash; it's Microsoft's IMAP servers rejecting valid tokens. The thread on Microsoft's support forum has been open for months with no fix in sight.
+          </p>
+
+          <p>
+            App passwords still work for personal accounts, but that defeats the purpose of OAuth2. We needed a different approach entirely.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">The Nuclear Option: Microsoft Graph API</h3>
+
+          <p>
+            If IMAP is broken, don't use IMAP. Microsoft Graph is a REST API that provides direct access to mailboxes without any IMAP involvement. Instead of connecting to <code>outlook.office365.com:993</code> and speaking the IMAP protocol, we make HTTPS requests to <code>graph.microsoft.com/v1.0/me/messages</code> with a Bearer token. Same OAuth2 token, completely different transport.
+          </p>
+
+          <p>
+            Building a Graph transport meant touching almost every layer of the app:
+          </p>
+
+          <p>
+            <strong>Rust backend</strong> &mdash; A new <code>graph.rs</code> module with a <code>GraphClient</code> struct implementing <code>list_folders()</code>, <code>list_messages()</code>, <code>get_message()</code>, <code>delete_message()</code>, <code>set_read_status()</code>, and <code>get_mime_content()</code>. Data structures for Graph's JSON responses (<code>GraphMessage</code>, <code>GraphMailFolder</code>, etc.) with a conversion method to translate Graph messages into our existing <code>EmailHeader</code> struct. Six new Tauri commands to expose it all to the frontend.
+          </p>
+
+          <p>
+            <strong>OAuth2 scope branching</strong> &mdash; IMAP accounts need <code>IMAP.AccessAsUser.All</code> and <code>SMTP.Send</code> scopes. Graph accounts need <code>Mail.ReadWrite</code> and <code>Mail.Send</code>. The scope selection happens at the moment the user clicks "Sign in with Microsoft" based on whether their email domain is a known personal Microsoft domain (outlook.com, hotmail.com, live.com, and 12 regional variants).
+          </p>
+
+          <p>
+            <strong>Frontend store</strong> &mdash; Every email operation in the Zustand store &mdash; loading headers, selecting an email, marking read/unread, deleting, searching, prefetching &mdash; needed an <code>if (isGraphAccount(account))</code> branch. Graph messages use opaque string IDs instead of integer UIDs, so we maintain a mapping layer (<code>_graphIdMap</code>) that assigns synthetic sequential UIDs to Graph messages and translates back when making API calls.
+          </p>
+
+          <p>
+            <strong>Background pipeline</strong> &mdash; The <code>AccountPipeline</code> class that handles background header loading and content caching needed Graph-specific paths for both phases. Header loading uses skip-based pagination through <code>graphListMessages</code> instead of IMAP page fetching. Content caching downloads full MIME via <code>graphCacheMime</code> (a single Rust command that fetches the raw .eml, saves it to Maildir, and parses it) instead of IMAP <code>FETCH</code>.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">The Seven Failures</h3>
+
+          <p>
+            With the implementation done, we deployed and started testing with a real Outlook.com account. What followed was a debugging marathon where each fix revealed the next problem.
+          </p>
+
+          <p>
+            <strong>Failure 1: "Invalid client secret provided"</strong> &mdash; Our CI build was setting <code>MAILVAULT_MS_CLIENT_SECRET</code> as an environment variable. The code dutifully sent it to Azure, which rejected it because our app is registered as a public client (no secret allowed). Fix: hardcode <code>client_secret: None</code> for Microsoft &mdash; a public PKCE client should never send a secret, period.
+          </p>
+
+          <p>
+            <strong>Failure 2: "AUTHENTICATE failed" on connection test</strong> &mdash; After fixing the secret issue, the OAuth2 flow completed successfully. But the app immediately tried to test the connection via IMAP &mdash; the exact protocol that's broken. The <code>addAccount</code> function had a hardcoded IMAP connection test with no Graph branch. Fix: test Graph accounts by calling <code>graphListFolders</code> instead of opening an IMAP session.
+          </p>
+
+          <p>
+            <strong>Failure 3: "Could not load email content"</strong> &mdash; Headers loaded fine via Graph, but clicking on an email to read it failed. The <code>useChatBodyLoader</code> hook &mdash; which progressively loads email bodies in both the chat view and the thread view &mdash; only knew how to fetch bodies via IMAP's <code>fetchEmailLight</code>. For Graph accounts, it needed to use <code>graphGetMessage</code> with the mapped Graph message ID. Fix: add a Graph branch that looks up the Graph ID and fetches via the Graph API.
+          </p>
+
+          <p>
+            <strong>Failure 4: Emails loaded once, then disappeared</strong> &mdash; Emails loaded fine the first time, but navigating away and coming back showed empty threads. The Graph branch was caching email bodies in the in-memory LRU cache but never writing .eml files to disk. When the LRU cache evicted them, they were gone. Fix: after displaying the email via the fast <code>graphGetMessage</code> JSON response, fire a background <code>graphCacheMime</code> call to download the full MIME and save the .eml to Maildir.
+          </p>
+
+          <p>
+            <strong>Failure 5: Endless spinner on email click</strong> &mdash; The initial fix for Failure 4 used <code>graphCacheMime</code> as the primary fetch method (download MIME, save to disk, parse, return). This downloads the entire raw email including all attachments before showing anything. For a 5 MB email with attachments, that's seconds of spinner. Fix: use <code>graphGetMessage</code> (fast JSON with just the HTML body) for immediate display, then <code>graphCacheMime</code> in the background for disk persistence. Two-phase loading: instant display, lazy persistence.
+          </p>
+
+          <p>
+            <strong>Failure 6: Thread view required collapse/expand to see content</strong> &mdash; Emails in the thread conversation view showed "Could not load email content" until manually collapsed and re-expanded. This was a React rendering race condition. The <code>useChatBodyLoader</code> hook stored loaded bodies in a <code>useRef(new Map())</code> that started empty. The <code>ThreadEmailItem</code> component read from this map synchronously during render, but the <code>useEffect</code> that populated it ran <em>after</em> the first render. By the time bodies were available, the component had already rendered "Could not load." Collapsing and expanding triggered a re-render, which found the now-populated map. Fix: pre-populate the bodies map synchronously during the hook body (not inside <code>useEffect</code>) by checking the in-memory cache. The async <code>useEffect</code> still handles fetching uncached bodies, but cached ones are available immediately on first render.
+          </p>
+
+          <p>
+            <strong>Failure 7: Background sync still hitting IMAP</strong> &mdash; The <code>refreshAllAccounts</code> function refreshes all accounts on a timer. For non-active accounts, it was unconditionally using IMAP to fetch headers, causing connection errors and log spam for Graph accounts. Every other code path had been updated, but this one was missed. Fix: add an <code>isGraphAccount</code> branch that uses <code>graphListFolders</code> + <code>graphListMessages</code> for background sync.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">What We Shipped</h3>
+
+          <p>
+            The final result: personal Microsoft accounts (outlook.com, hotmail.com, live.com, and regional variants) are auto-detected during sign-in and routed through the Graph API transport. Users click "Sign in with Microsoft," authenticate in their browser, and the app works. No IMAP involved, no "User is authenticated but not connected" errors.
+          </p>
+
+          <p>
+            Corporate M365 accounts use MailVault's own Azure AD app registration with proper redirect URI support. For organizations with strict OAuth2 policies, users can override the client ID and tenant ID in an "Advanced" section of the account setup.
+          </p>
+
+          <p>
+            Graph accounts support reading, deleting, and marking emails as read/unread. Sending still goes through SMTP (which works fine with OAuth2 tokens). Email bodies are fetched via fast JSON for instant display, with full MIME downloaded in the background for offline access and attachment support.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Lessons</h3>
+
+          <p>
+            The biggest takeaway: when you add a new transport to an email client, you're not adding one code path &mdash; you're forking every code path. Every function that touches the network needs to know which transport to use. Every background job, every prefetch, every sync timer, every connection test. Missing even one creates a bug that only surfaces for users of the new transport.
+          </p>
+
+          <p>
+            The second takeaway: two-phase loading is worth the complexity. Downloading a full MIME message before showing anything creates unacceptable latency. Showing a fast preview from the JSON API and lazily persisting the full content in the background gives users instant feedback while still building up the offline archive.
+          </p>
+
+          <p>
+            The third: React's <code>useRef</code> + <code>useEffect</code> pattern is a footgun for data that needs to be available on first render. If a component reads from a ref during render but the ref is populated in an effect, the first render always sees stale data. Moving the population logic to run synchronously during the hook body (not in an effect) fixes it without introducing extra re-renders.
+          </p>
+
+          <p>
+            Sometimes a "login doesn't work" bug is a configuration fix. Sometimes it's a whole new API transport layer. You don't get to choose which one it'll be.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex items-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacy Policy</a>
+          <a href="/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Terms of Service</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. All rights reserved.
+        </p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+</body>
+</html>

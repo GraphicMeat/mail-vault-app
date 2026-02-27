@@ -592,3 +592,12 @@ pub async fn graph_set_read(
     let client = crate::graph::GraphClient::new(&access_token);
     client.set_read_status(&message_id, is_read).await
 }
+
+#[tauri::command]
+pub async fn graph_delete_message(
+    access_token: String,
+    message_id: String,
+) -> Result<(), String> {
+    let client = crate::graph::GraphClient::new(&access_token);
+    client.delete_message(&message_id).await
+}

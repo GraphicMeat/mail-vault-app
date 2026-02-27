@@ -40,12 +40,36 @@ export function useChatBodyLoader(topicEmails) {
   // Build a stable dependency key from the topic's emails
   const uidsKey = topicEmails?.map(e => emailKey(e)).join(',') || '';
 
+  // ── Synchronous pre-population (runs during render, before any child reads) ──
+  // This fixes the race condition where ThreadEmailItem reads bodiesMapRef
+  // during render but useEffect hasn't populated it yet.
+  const prevUidsKeyRef = useRef('');
+  if (uidsKey !== prevUidsKeyRef.current) {
+    prevUidsKeyRef.current = uidsKey;
+    bodiesMapRef.current.clear();
+    if (topicEmails && topicEmails.length > 0) {
+      const store = useMailStore.getState();
+      const accountId = store.activeAccountId;
+      const inboxMailbox = store.activeMailbox;
+      const sentMailbox = store.getSentMailboxPath();
+      for (const email of topicEmails) {
+        const key = emailKey(email);
+        const mailbox = email._fromSentFolder && sentMailbox ? sentMailbox : inboxMailbox;
+        const cacheKey = `${accountId}-${mailbox}-${email.uid}`;
+        const cached = store.getFromCache(cacheKey);
+        if (cached) {
+          bodiesMapRef.current.set(key, { status: 'loaded', email: cached });
+        } else {
+          bodiesMapRef.current.set(key, { status: 'loading', email: null });
+        }
+      }
+    }
+  }
+
   useEffect(() => {
     if (!topicEmails || topicEmails.length === 0) return;
 
     let cancelled = false;
-    // Clear stale entries from previous topic
-    bodiesMapRef.current.clear();
     const bodiesMap = bodiesMapRef.current;
 
     const store = useMailStore.getState();
@@ -57,19 +81,6 @@ export function useChatBodyLoader(topicEmails) {
 
     // Helper: resolve the correct mailbox for an email
     const getMailbox = (email) => email._fromSentFolder && sentMailbox ? sentMailbox : inboxMailbox;
-
-    // Pre-populate from existing emailCache (instant, no async)
-    for (const email of topicEmails) {
-      const key = emailKey(email);
-      const mailbox = getMailbox(email);
-      const cacheKey = `${accountId}-${mailbox}-${email.uid}`;
-      const cached = store.getFromCache(cacheKey);
-      if (cached) {
-        bodiesMap.set(key, { status: 'loaded', email: cached });
-      } else if (!bodiesMap.has(key) || bodiesMap.get(key).status !== 'loaded') {
-        bodiesMap.set(key, { status: 'loading', email: null });
-      }
-    }
 
     // Collect emails still needing fetch — newest first so the latest messages load first
     const pendingEmails = topicEmails

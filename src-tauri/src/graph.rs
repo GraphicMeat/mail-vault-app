@@ -346,6 +346,31 @@ impl GraphClient {
         Ok(())
     }
 
+    /// Delete a message (moves to Deleted Items by default in Graph API).
+    pub async fn delete_message(&self, message_id: &str) -> Result<(), String> {
+        let url = format!("{}/me/messages/{}", GRAPH_BASE, message_id);
+
+        let resp = self
+            .client
+            .delete(&url)
+            .bearer_auth(&self.access_token)
+            .send()
+            .await
+            .map_err(|e| format!("Graph delete_message request failed: {}", e))?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!(
+                "Graph delete_message failed ({}) {}",
+                status.as_u16(),
+                body
+            ));
+        }
+
+        Ok(())
+    }
+
     /// Download the raw MIME (.eml) content of a message.
     pub async fn get_mime_content(&self, message_id: &str) -> Result<Vec<u8>, String> {
         let url = format!("{}/me/messages/{}/$value", GRAPH_BASE, message_id);
