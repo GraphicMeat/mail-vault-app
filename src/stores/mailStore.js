@@ -7,6 +7,119 @@ import { hasValidCredentials, ensureFreshToken } from '../services/authUtils';
 import { hasRealAttachments } from '../services/attachmentUtils';
 import { buildThreads } from '../utils/emailParser';
 
+// ── Graph transport helpers ─────────────────────────────────────────────────
+
+function isGraphAccount(account) {
+  return account?.oauth2Transport === 'graph';
+}
+
+// Module-level map: UID → Graph message ID (per account+mailbox)
+// Key format: "accountId:mailbox", value: Map<uid, graphMessageId>
+const _graphIdMap = new Map();
+
+function _setGraphIdMap(accountId, mailbox, uidToGraphId) {
+  _graphIdMap.set(`${accountId}:${mailbox}`, uidToGraphId);
+}
+
+function _getGraphMessageId(accountId, mailbox, uid) {
+  const map = _graphIdMap.get(`${accountId}:${mailbox}`);
+  return map?.get(uid) || null;
+}
+
+function _clearGraphIdMap(accountId) {
+  for (const key of _graphIdMap.keys()) {
+    if (key.startsWith(`${accountId}:`)) {
+      _graphIdMap.delete(key);
+    }
+  }
+}
+
+// Map Graph API folder display names to IMAP-style names used by the app
+const GRAPH_FOLDER_NAME_MAP = {
+  'Inbox': 'INBOX',
+  'Sent Items': 'Sent',
+  'Drafts': 'Drafts',
+  'Deleted Items': 'Trash',
+  'Junk Email': 'Junk',
+  'Archive': 'Archive',
+};
+
+function normalizeGraphFolderName(displayName) {
+  return GRAPH_FOLDER_NAME_MAP[displayName] || displayName;
+}
+
+// Reverse map: app mailbox name → Graph display name (for folder ID lookup)
+const APP_TO_GRAPH_FOLDER_MAP = Object.fromEntries(
+  Object.entries(GRAPH_FOLDER_NAME_MAP).map(([k, v]) => [v, k])
+);
+
+// Convert Graph folder objects to MailboxInfo format matching IMAP mailbox shape
+function graphFoldersToMailboxes(graphFolders) {
+  return graphFolders.map(f => ({
+    name: normalizeGraphFolderName(f.displayName),
+    path: normalizeGraphFolderName(f.displayName),
+    specialUse: inferSpecialUse(f.displayName),
+    flags: [],
+    delimiter: '/',
+    noselect: false,
+    children: [],
+    _graphFolderId: f.id, // stash Graph folder ID for message fetching
+  }));
+}
+
+function inferSpecialUse(displayName) {
+  switch (displayName) {
+    case 'Inbox': return '\\Inbox';
+    case 'Sent Items': return '\\Sent';
+    case 'Drafts': return '\\Drafts';
+    case 'Deleted Items': return '\\Trash';
+    case 'Junk Email': return '\\Junk';
+    case 'Archive': return '\\Archive';
+    default: return null;
+  }
+}
+
+// Convert a GraphMessage (from graphGetMessage) to the email object format the UI expects
+function graphMessageToEmail(graphMsg, uid) {
+  const from = graphMsg.from
+    ? { name: graphMsg.from.emailAddress?.name || null, address: graphMsg.from.emailAddress?.address || '' }
+    : { name: 'Unknown', address: 'unknown@unknown.com' };
+
+  const to = (graphMsg.toRecipients || []).map(r => ({
+    name: r.emailAddress?.name || null,
+    address: r.emailAddress?.address || '',
+  }));
+
+  const cc = (graphMsg.ccRecipients || []).map(r => ({
+    name: r.emailAddress?.name || null,
+    address: r.emailAddress?.address || '',
+  }));
+
+  const flags = [];
+  if (graphMsg.isRead) flags.push('\\Seen');
+
+  const bodyType = graphMsg.body?.contentType?.toLowerCase();
+  const bodyContent = graphMsg.body?.content || '';
+
+  return {
+    uid,
+    seq: uid,
+    subject: graphMsg.subject || '',
+    from,
+    to,
+    cc,
+    bcc: [],
+    date: graphMsg.receivedDateTime || null,
+    flags,
+    messageId: graphMsg.internetMessageId || null,
+    hasAttachments: graphMsg.hasAttachments || false,
+    html: bodyType === 'html' ? bodyContent : null,
+    text: bodyType === 'text' ? bodyContent : (bodyType === 'html' ? null : bodyContent),
+    attachments: [],
+    source: 'server',
+  };
+}
+
 // Module-level cache for getChatEmails() — avoids calling set() during render
 let _chatEmailsCache = [];
 let _chatEmailsFingerprint = '';
@@ -490,7 +603,7 @@ export const useMailStore = create((set, get) => ({
   
   removeAccount: async (accountId) => {
     const account = get().accounts.find(a => a.id === accountId);
-    if (account) {
+    if (account && !isGraphAccount(account)) {
       try {
         await api.disconnect(account);
       } catch (e) {
@@ -501,6 +614,7 @@ export const useMailStore = create((set, get) => ({
     await db.deleteAccount(accountId);
     _invalidateAccountCache(accountId);
     _invalidateMailboxCache(accountId);
+    _clearGraphIdMap(accountId);
 
     const newAccounts = get().accounts.filter(a => a.id !== accountId);
 
@@ -757,41 +871,49 @@ export const useMailStore = create((set, get) => ({
 
     try {
       if (isStale()) return;
-      // Fetch mailboxes with retry (sidecar may still be starting)
-      let mailboxes;
-      let lastError;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          mailboxes = await api.fetchMailboxes(account);
-          break;
-        } catch (e) {
-          lastError = e;
-          const isServerNotReady = e.message?.includes('Server unreachable') || e.message?.includes('HTTP 500') || e.status === 500;
-          if (isServerNotReady && attempt < 2) {
-            console.log(`[setActiveAccount] Server not ready, retrying in ${(attempt + 1) * 2}s... (attempt ${attempt + 1}/3)`);
-            await new Promise(r => setTimeout(r, (attempt + 1) * 2000));
-            continue;
+
+      if (isGraphAccount(account)) {
+        // Graph accounts: loadEmails handles mailbox fetching internally
+        await get().loadEmails();
+        // Load cached Sent headers for chat view (non-blocking)
+        if (!isStale()) get().loadSentHeaders(accountId);
+      } else {
+        // IMAP accounts: fetch mailboxes with retry (sidecar may still be starting)
+        let mailboxes;
+        let lastError;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            mailboxes = await api.fetchMailboxes(account);
+            break;
+          } catch (e) {
+            lastError = e;
+            const isServerNotReady = e.message?.includes('Server unreachable') || e.message?.includes('HTTP 500') || e.status === 500;
+            if (isServerNotReady && attempt < 2) {
+              console.log(`[setActiveAccount] Server not ready, retrying in ${(attempt + 1) * 2}s... (attempt ${attempt + 1}/3)`);
+              await new Promise(r => setTimeout(r, (attempt + 1) * 2000));
+              continue;
+            }
+            throw e;
           }
-          throw e;
         }
+        if (isStale()) return;
+        set({
+          mailboxes,
+          connectionStatus: 'connected',
+          connectionError: null,
+          connectionErrorType: null
+        });
+
+        // Cache mailboxes for offline/reconnect fallback (correct server paths)
+        db.saveMailboxes(accountId, mailboxes);
+
+        // Load emails (this will update connection status)
+        if (isStale()) return;
+        await get().loadEmails();
+
+        // Load cached Sent headers for chat view (non-blocking)
+        if (!isStale()) get().loadSentHeaders(accountId);
       }
-      if (isStale()) return;
-      set({
-        mailboxes,
-        connectionStatus: 'connected',
-        connectionError: null,
-        connectionErrorType: null
-      });
-
-      // Cache mailboxes for offline/reconnect fallback (correct server paths)
-      db.saveMailboxes(accountId, mailboxes);
-
-      // Load emails (this will update connection status)
-      if (isStale()) return;
-      await get().loadEmails();
-
-      // Load cached Sent headers for chat view (non-blocking)
-      if (!isStale()) get().loadSentHeaders(accountId);
     } catch (error) {
       console.error('Failed to connect to server:', error);
 
@@ -973,6 +1095,11 @@ export const useMailStore = create((set, get) => ({
     // Proactively refresh OAuth2 token if expiring soon
     account = await ensureFreshToken(account);
     if (isStale()) return;
+
+    // ── Graph API path ────────────────────────────────────────────────────
+    if (isGraphAccount(account)) {
+      return await get()._loadEmailsViaGraph(account, activeAccountId, activeMailbox, generation);
+    }
 
     const invoke = window.__TAURI__?.core?.invoke;
 
@@ -1452,6 +1579,127 @@ export const useMailStore = create((set, get) => ({
     }
   },
 
+  // ── Graph API email loading ──────────────────────────────────────────────
+  _loadEmailsViaGraph: async (account, activeAccountId, activeMailbox, generation) => {
+    const isStale = () => get().activeAccountId !== activeAccountId || _loadEmailsGeneration !== generation;
+
+    // Load local state (saved/archived IDs)
+    const [savedEmailIds, archivedEmailIds] = await Promise.all([
+      db.getSavedEmailIds(activeAccountId, activeMailbox),
+      db.getArchivedEmailIds(activeAccountId, activeMailbox),
+    ]);
+    if (isStale()) return;
+    set({ savedEmailIds, archivedEmailIds });
+
+    // Load archived emails from disk (fire-and-forget, same pattern as IMAP)
+    if (archivedEmailIds.size > 0 && (get().localEmails || []).length === 0) {
+      const archivedAccount = activeAccountId;
+      db.getArchivedEmails(activeAccountId, activeMailbox, archivedEmailIds, (batchEmails) => {
+        if (get().activeAccountId !== archivedAccount) return;
+        set({ localEmails: batchEmails });
+        get().updateSortedEmails();
+      }).catch(e => console.warn('[loadEmailsViaGraph] getArchivedEmails failed:', e));
+    }
+
+    set({ loading: get().emails.length === 0, loadingMore: true, error: null });
+
+    try {
+      // 1. Fetch mailbox list via Graph
+      const graphFolders = await api.graphListFolders(account.oauth2AccessToken);
+      if (isStale()) return;
+
+      const mailboxes = graphFoldersToMailboxes(graphFolders);
+      set({ mailboxes });
+
+      // 2. Find the Graph folder ID for the active mailbox
+      const targetFolder = mailboxes.find(m => m.path === activeMailbox);
+      if (!targetFolder || !targetFolder._graphFolderId) {
+        console.warn('[loadEmailsViaGraph] No matching folder for', activeMailbox);
+        set({ loading: false, loadingMore: false, connectionStatus: 'connected', connectionError: null, connectionErrorType: null });
+        return;
+      }
+
+      // 3. Fetch messages
+      const result = await api.graphListMessages(account.oauth2AccessToken, targetFolder._graphFolderId, 200, 0);
+      if (isStale()) return;
+
+      const headers = result.headers || [];
+      const graphMessageIds = result.graphMessageIds || [];
+
+      // 4. Build UID → Graph message ID mapping
+      const uidToGraphId = new Map();
+      headers.forEach((h, i) => {
+        uidToGraphId.set(h.uid, graphMessageIds[i]);
+      });
+      _setGraphIdMap(activeAccountId, activeMailbox, uidToGraphId);
+
+      // 5. Enrich headers with display metadata
+      const mergedEmails = headers.map((email, idx) => ({
+        ...email,
+        displayIndex: idx,
+        isLocal: savedEmailIds.has(email.uid),
+        source: 'server',
+      }));
+
+      // 6. Build sparse index
+      const emailsByIndex = new Map();
+      mergedEmails.forEach((email, idx) => {
+        emailsByIndex.set(idx, email);
+      });
+
+      const serverTotal = mergedEmails.length; // Graph doesn't give a total independent of results
+      const hasMoreEmails = !!result.nextLink;
+
+      set({
+        emails: mergedEmails,
+        emailsByIndex,
+        loadedRanges: [{ start: 0, end: mergedEmails.length }],
+        connectionStatus: 'connected',
+        connectionError: null,
+        connectionErrorType: null,
+        currentPage: 1,
+        hasMoreEmails,
+        totalEmails: serverTotal,
+        loading: false,
+        loadingMore: false,
+        serverUidSet: new Set(mergedEmails.map(e => e.uid)),
+      });
+
+      get().updateSortedEmails();
+
+      // Save to account cache for instant restore on switch-back
+      _saveToAccountCache(activeAccountId, get());
+
+      // Cache headers for quick-load on next startup
+      db.saveEmailHeaders(activeAccountId, activeMailbox, mergedEmails, serverTotal)
+        .catch(e => console.warn('[loadEmailsViaGraph] Failed to cache headers:', e));
+
+    } catch (error) {
+      console.error('[loadEmailsViaGraph] Failed:', error);
+
+      let errorType = 'serverError';
+      let errorMessage = error.message;
+
+      if (error.message?.includes('network') || error.message?.includes('timeout')) {
+        errorType = 'offline';
+      } else if (error.message?.includes('401') || error.message?.includes('Unauthorized')) {
+        errorType = 'passwordMissing';
+        errorMessage = 'Authentication failed. Your token may have expired. Please re-authenticate in Settings.';
+      }
+
+      if (!isStale()) {
+        set({
+          connectionStatus: 'error',
+          connectionError: errorMessage,
+          connectionErrorType: errorType,
+        });
+        get().updateSortedEmails();
+      }
+    } finally {
+      if (!isStale()) set({ loading: false, loadingMore: false });
+    }
+  },
+
   // Load more emails (called internally for background loading)
   // Uses unlimited exponential backoff on failure: 3s, 9s, 18s, 36s, ...
   _loadMoreRetryDelay: 0,
@@ -1734,23 +1982,39 @@ export const useMailStore = create((set, get) => ({
       set({ sentEmails: cached.emails });
     }
 
-    // Then refresh from IMAP (Sent folder can grow as user sends)
-    const { accounts, connectionStatus } = get();
+    // Then refresh from server (Sent folder can grow as user sends)
+    const { accounts, connectionStatus, mailboxes } = get();
     const account = accounts.find(a => a.id === accountId);
     if (!account || connectionStatus !== 'connected') return;
 
     try {
-      const result = await api.fetchEmails(account, sentPath, 1, 200);
-      // Guard: account may have changed during async IMAP fetch
-      if (get().activeAccountId !== accountId) return;
-      if (result?.emails?.length > 0) {
-        await db.saveEmailHeaders(accountId, sentPath, result.emails, result.total);
-        // Guard: check again after async save
+      if (isGraphAccount(account)) {
+        // Graph API: find Sent folder ID from mailboxes
+        const sentFolder = mailboxes.find(m => m.path === sentPath);
+        if (sentFolder?._graphFolderId) {
+          const freshAccount = await ensureFreshToken(account);
+          const result = await api.graphListMessages(freshAccount.oauth2AccessToken, sentFolder._graphFolderId, 200, 0);
+          if (get().activeAccountId !== accountId) return;
+          const sentHeaders = result.headers || [];
+          if (sentHeaders.length > 0) {
+            await db.saveEmailHeaders(accountId, sentPath, sentHeaders, sentHeaders.length);
+            if (get().activeAccountId !== accountId) return;
+            set({ sentEmails: sentHeaders });
+          }
+        }
+      } else {
+        const result = await api.fetchEmails(account, sentPath, 1, 200);
+        // Guard: account may have changed during async IMAP fetch
         if (get().activeAccountId !== accountId) return;
-        set({ sentEmails: result.emails });
+        if (result?.emails?.length > 0) {
+          await db.saveEmailHeaders(accountId, sentPath, result.emails, result.total);
+          // Guard: check again after async save
+          if (get().activeAccountId !== accountId) return;
+          set({ sentEmails: result.emails });
+        }
       }
     } catch (e) {
-      console.warn('[loadSentHeaders] IMAP fetch failed:', e.message);
+      console.warn('[loadSentHeaders] fetch failed:', e.message);
       // Keep whatever was in cache
     }
   },
@@ -1842,11 +2106,23 @@ export const useMailStore = create((set, get) => ({
           continue;
         }
 
-        // Fallback to IMAP (auto-persists .eml)
+        // Fallback to server fetch
         const account = get().accounts.find(a => a.id === activeAccountId);
         if (!account) break;
-        const email = await api.fetchEmailLight(account, nextEmail.uid, activeMailbox);
-        get().addToCache(cacheKey, email, cacheLimitMB);
+
+        if (isGraphAccount(account)) {
+          // Graph API: fetch full message
+          const graphId = _getGraphMessageId(activeAccountId, activeMailbox, nextEmail.uid);
+          if (!graphId) continue;
+          const freshAccount = await ensureFreshToken(account);
+          const graphMsg = await api.graphGetMessage(freshAccount.oauth2AccessToken, graphId);
+          const email = graphMessageToEmail(graphMsg, nextEmail.uid);
+          get().addToCache(cacheKey, email, cacheLimitMB);
+        } else {
+          // IMAP (auto-persists .eml)
+          const email = await api.fetchEmailLight(account, nextEmail.uid, activeMailbox);
+          get().addToCache(cacheKey, email, cacheLimitMB);
+        }
       } catch (e) {
         // Stop prefetch on network errors — don't waste bandwidth
         break;
@@ -1882,8 +2158,30 @@ export const useMailStore = create((set, get) => ({
         email = localEmail;
         actualSource = source === 'local-only' ? 'local-only' : 'local';
         get().addToCache(cacheKey, email, cacheLimitMB);
+      } else if (account && isGraphAccount(account)) {
+        // 3a. Graph API: fetch full message by Graph message ID
+        const graphId = _getGraphMessageId(activeAccountId, activeMailbox, uid);
+        if (graphId) {
+          const graphMsg = await api.graphGetMessage(account.oauth2AccessToken, graphId);
+          email = graphMessageToEmail(graphMsg, uid);
+          actualSource = 'server';
+          get().addToCache(cacheKey, email, cacheLimitMB);
+
+          // Mark as read on server (if auto mode)
+          const markAsReadMode = useSettingsStore.getState().markAsReadMode;
+          if (markAsReadMode === 'auto' && !email.flags?.includes('\\Seen')) {
+            try {
+              await api.graphSetRead(account.oauth2AccessToken, graphId, true);
+              email = { ...email, flags: [...(email.flags || []), '\\Seen'] };
+            } catch (e) {
+              console.warn('[selectEmail] Graph mark as read failed:', e);
+            }
+          }
+        } else {
+          console.warn('[selectEmail] No Graph message ID found for UID', uid);
+        }
       } else if (account) {
-        // 3. Fetch from server (light — saves full .eml to Maildir in Rust background)
+        // 3b. IMAP: Fetch from server (light — saves full .eml to Maildir in Rust background)
         email = await api.fetchEmailLight(account, uid, activeMailbox);
         actualSource = 'server';
         get().addToCache(cacheKey, email, cacheLimitMB);
@@ -2158,13 +2456,23 @@ export const useMailStore = create((set, get) => ({
     account = await ensureFreshToken(account);
 
     try {
-      await api.updateEmailFlags(
-        account,
-        uid,
-        ['\\Seen'],
-        read ? 'add' : 'remove',
-        activeMailbox
-      );
+      // Route through Graph API or IMAP depending on account transport
+      if (isGraphAccount(account)) {
+        const graphId = _getGraphMessageId(activeAccountId, activeMailbox, uid);
+        if (graphId) {
+          await api.graphSetRead(account.oauth2AccessToken, graphId, read);
+        } else {
+          console.warn('[markEmailReadStatus] No Graph message ID for UID', uid);
+        }
+      } else {
+        await api.updateEmailFlags(
+          account,
+          uid,
+          ['\\Seen'],
+          read ? 'add' : 'remove',
+          activeMailbox
+        );
+      }
 
       // Bump flag change counter so updateSortedEmails and thread caches detect the change
       _flagChangeCounter++;
