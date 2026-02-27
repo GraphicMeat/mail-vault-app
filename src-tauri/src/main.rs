@@ -2822,7 +2822,12 @@ fn main() {
             commands::imap_disconnect,
             commands::oauth2_auth_url,
             commands::oauth2_exchange,
-            commands::oauth2_refresh
+            commands::oauth2_refresh,
+            commands::graph_list_folders,
+            commands::graph_list_messages,
+            commands::graph_get_message,
+            commands::graph_get_mime,
+            commands::graph_set_read
         ])
         .setup(|app| {
             // Set up logging to app log directory
