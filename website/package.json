@@ -5,12 +5,11 @@
   "scripts": {
     "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
     "dev:api": "cd api && npm run dev",
-    "dev:web": "npx serve -p 3000 .",
+    "dev:web": "python3 -m http.server 3000",
     "start:api": "cd api && npm start",
     "build": "echo 'Static site - no build needed'"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2",
-    "serve": "^14.2.1"
+    "concurrently": "^8.2.2"
   }
 }
