@@ -21,7 +21,7 @@ function _setGraphIdMap(accountId, mailbox, uidToGraphId) {
   _graphIdMap.set(`${accountId}:${mailbox}`, uidToGraphId);
 }
 
-function _getGraphMessageId(accountId, mailbox, uid) {
+export function getGraphMessageId(accountId, mailbox, uid) {
   const map = _graphIdMap.get(`${accountId}:${mailbox}`);
   return map?.get(uid) || null;
 }
@@ -80,7 +80,7 @@ function inferSpecialUse(displayName) {
 }
 
 // Convert a GraphMessage (from graphGetMessage) to the email object format the UI expects
-function graphMessageToEmail(graphMsg, uid) {
+export function graphMessageToEmail(graphMsg, uid) {
   const from = graphMsg.from
     ? { name: graphMsg.from.emailAddress?.name || null, address: graphMsg.from.emailAddress?.address || '' }
     : { name: 'Unknown', address: 'unknown@unknown.com' };
@@ -2118,7 +2118,7 @@ export const useMailStore = create((set, get) => ({
 
         if (isGraphAccount(account)) {
           // Graph API: fetch full message
-          const graphId = _getGraphMessageId(activeAccountId, activeMailbox, nextEmail.uid);
+          const graphId = getGraphMessageId(activeAccountId, activeMailbox, nextEmail.uid);
           if (!graphId) continue;
           const freshAccount = await ensureFreshToken(account);
           const graphMsg = await api.graphGetMessage(freshAccount.oauth2AccessToken, graphId);
@@ -2168,7 +2168,7 @@ export const useMailStore = create((set, get) => ({
         // 3a. Graph API: fetch full message by Graph message ID
         const freshAccount = await ensureFreshToken(account);
         const token = freshAccount.oauth2AccessToken;
-        let graphId = _getGraphMessageId(activeAccountId, activeMailbox, uid);
+        let graphId = getGraphMessageId(activeAccountId, activeMailbox, uid);
 
         // If graphIdMap is stale (e.g. after app restart), rebuild it by re-fetching headers
         if (!graphId) {
@@ -2488,7 +2488,7 @@ export const useMailStore = create((set, get) => ({
     try {
       // Route through Graph API or IMAP depending on account transport
       if (isGraphAccount(account)) {
-        const graphId = _getGraphMessageId(activeAccountId, activeMailbox, uid);
+        const graphId = getGraphMessageId(activeAccountId, activeMailbox, uid);
         if (graphId) {
           await api.graphSetRead(account.oauth2AccessToken, graphId, read);
         } else {

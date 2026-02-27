@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { useMailStore } from '../stores/mailStore';
+import { useMailStore, getGraphMessageId, graphMessageToEmail } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import * as db from '../services/db';
 import * as api from '../services/api';
@@ -97,9 +97,18 @@ export function useChatBodyLoader(topicEmails) {
         // 1. Check Maildir .eml (fast disk read)
         let emailBody = await db.getLocalEmailLight(accountId, mailbox, uid);
 
-        // 2. IMAP fetch if not on disk
+        // 2. Fetch from server if not on disk
         if (!emailBody && freshAccount) {
-          emailBody = await api.fetchEmailLight(freshAccount, uid, mailbox);
+          if (freshAccount.oauth2Transport === 'graph') {
+            // Graph API: look up Graph message ID and fetch via Graph
+            const graphId = getGraphMessageId(accountId, mailbox, uid);
+            if (graphId) {
+              const graphMsg = await api.graphGetMessage(freshAccount.oauth2AccessToken, graphId);
+              emailBody = graphMessageToEmail(graphMsg, uid);
+            }
+          } else {
+            emailBody = await api.fetchEmailLight(freshAccount, uid, mailbox);
+          }
         }
 
         if (cancelled) return;
