@@ -54,7 +54,9 @@ export async function ensureFreshToken(account) {
 
       const tokens = await refreshOAuth2Token(
         account.oauth2RefreshToken,
-        account.oauth2Provider
+        account.oauth2Provider,
+        account.oauth2CustomClientId,
+        account.oauth2TenantId
       );
 
       // Persist to Keychain

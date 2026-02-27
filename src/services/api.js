@@ -261,9 +261,14 @@ export async function searchEmails(account, mailbox = 'INBOX', query, filters = 
 
 // ── OAuth2 API functions ────────────────────────────────────────────────────
 
-export async function getOAuth2AuthUrl(email, provider) {
+export async function getOAuth2AuthUrl(email, provider, customClientId, tenantId) {
   if (IS_TAURI) {
-    return tauriInvoke('oauth2_auth_url', { email: email || null, provider: provider || null });
+    return tauriInvoke('oauth2_auth_url', {
+      email: email || null,
+      provider: provider || null,
+      customClientId: customClientId || null,
+      tenantId: tenantId || null,
+    });
   }
   const params = email ? `?login_hint=${encodeURIComponent(email)}` : '';
   return httpRequest(`/oauth2/auth-url${params}`, { method: 'GET' });
@@ -279,9 +284,14 @@ export async function exchangeOAuth2Code(state) {
   });
 }
 
-export async function refreshOAuth2Token(refreshToken, provider) {
+export async function refreshOAuth2Token(refreshToken, provider, customClientId, tenantId) {
   if (IS_TAURI) {
-    return tauriInvoke('oauth2_refresh', { refreshToken, provider: provider || null });
+    return tauriInvoke('oauth2_refresh', {
+      refreshToken,
+      provider: provider || null,
+      customClientId: customClientId || null,
+      tenantId: tenantId || null,
+    });
   }
   return httpRequest('/oauth2/refresh', {
     method: 'POST',
