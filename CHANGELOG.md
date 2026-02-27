@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+- **Microsoft Graph API transport** — personal Outlook.com/Hotmail/Live.com accounts now use Graph REST API instead of IMAP, bypassing the known Microsoft IMAP server-side regression; auto-detected by email domain
+- **Own Azure AD app registration** — replaced borrowed Thunderbird client ID with MailVault's dedicated Azure AD app for more reliable corporate M365 OAuth2 authentication
+- **Advanced OAuth2 fields** — corporate Microsoft users can now specify a custom Client ID and Tenant ID for organizations with strict OAuth2 policies
+
 ## [1.9.0] - 2026-02-26
 
 ### Fixed
