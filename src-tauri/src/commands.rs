@@ -545,6 +545,42 @@ pub async fn graph_get_mime(
     client.get_mime_content(&message_id).await
 }
 
+// ── Graph API: Fetch MIME, cache to Maildir, return light email ─────────────
+
+#[tauri::command]
+pub async fn graph_cache_mime(
+    app_handle: tauri::AppHandle,
+    access_token: String,
+    message_id: String,
+    account_id: String,
+    mailbox: String,
+    uid: u32,
+) -> Result<serde_json::Value, String> {
+    let client = crate::graph::GraphClient::new(&access_token);
+    let raw_bytes = client.get_mime_content(&message_id).await?;
+
+    // Save to Maildir
+    let cur_dir = crate::maildir_cur_path(&app_handle, &account_id, &mailbox)?;
+    std::fs::create_dir_all(&cur_dir)
+        .map_err(|e| format!("Failed to create Maildir directory: {}", e))?;
+
+    if crate::find_file_by_uid(&cur_dir, uid).is_none() {
+        let filename = crate::build_maildir_filename(uid, &[] as &[String]);
+        let file_path = cur_dir.join(&filename);
+        std::fs::write(&file_path, &raw_bytes)
+            .map_err(|e| format!("Failed to write .eml file: {}", e))?;
+        info!("Graph: cached UID {} to {:?} ({} bytes)", uid, file_path, raw_bytes.len());
+    }
+
+    // Parse the .eml to return light email data
+    let email = crate::parse_eml_bytes_light(&raw_bytes, uid, vec![])?;
+
+    Ok(serde_json::json!({
+        "success": true,
+        "email": email
+    }))
+}
+
 // ── Graph API: Set read status ──────────────────────────────────────────────
 
 #[tauri::command]

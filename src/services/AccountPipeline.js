@@ -6,10 +6,33 @@ import { useSettingsStore } from '../stores/settingsStore';
 
 export { hasValidCredentials };
 
+// ── Graph transport helpers ─────────────────────────────────────────────────
+
+function isGraphAccount(account) {
+  return account?.oauth2Transport === 'graph';
+}
+
+// Map Graph API folder display names to IMAP-style names used by the app
+const GRAPH_FOLDER_NAME_MAP = {
+  'Inbox': 'INBOX',
+  'Sent Items': 'Sent',
+  'Drafts': 'Drafts',
+  'Deleted Items': 'Trash',
+  'Junk Email': 'Junk',
+  'Archive': 'Archive',
+};
+
+function normalizeGraphFolderName(displayName) {
+  return GRAPH_FOLDER_NAME_MAP[displayName] || displayName;
+}
+
 /**
  * Manages the complete background loading pipeline for a single account:
  *   Phase 1 — load and cache INBOX headers (paginated)
  *   Phase 2 — download email bodies (.eml) with configurable concurrency
+ *
+ * Supports both IMAP and Graph API transports — Graph accounts are detected
+ * via `account.oauth2Transport === 'graph'` and use Graph API equivalents.
  */
 export class AccountPipeline {
   constructor(account, options = {}) {
@@ -31,6 +54,7 @@ export class AccountPipeline {
     this._destroyed = false;
     this._paused = false;
     this._lastLoadedEmails = null; // Cache loaded headers in memory for content caching phase
+    this._graphIdMap = null; // Map<uid, graphMessageId> for Graph content caching
   }
 
   get state() {
@@ -45,8 +69,9 @@ export class AccountPipeline {
   }
 
   /**
-   * Phase 1: Load all INBOX headers for this account and write to disk cache.
+   * Phase 1: Load all headers for this account and write to disk cache.
    * Does NOT modify Zustand active-account state — purely warms headers.json.
+   * Supports both IMAP (paginated fetch) and Graph API (skip-based pagination).
    */
   async loadHeaders(mailbox = 'INBOX') {
     if (this._destroyed || !hasValidCredentials(this.account)) return;
@@ -55,26 +80,10 @@ export class AccountPipeline {
     this.onProgress(this.state);
 
     try {
-      console.log(`[Pipeline:${this.account.email}] Loading headers for ${mailbox}...`);
-      const allEmails = [];
-      let page = 1;
-      let hasMore = true;
-      let total = 0;
-
-      while (hasMore && !this._destroyed && !this._paused) {
-        this.account = await ensureFreshToken(this.account);
-        const result = await api.fetchEmails(this.account, mailbox, page);
-        allEmails.push(...result.emails);
-        total = result.total;
-        hasMore = result.hasMore;
-        page++;
-        if (hasMore) await new Promise(r => setTimeout(r, 0));
-      }
-
-      if (allEmails.length > 0 && !this._destroyed) {
-        await db.saveEmailHeaders(this.accountId, mailbox, allEmails, total);
-        this._lastLoadedEmails = allEmails; // Keep in memory for content caching phase
-        console.log(`[Pipeline:${this.account.email}] Cached ${allEmails.length}/${total} headers`);
+      if (isGraphAccount(this.account)) {
+        await this._loadHeadersGraph(mailbox);
+      } else {
+        await this._loadHeadersImap(mailbox);
       }
     } catch (e) {
       console.warn(`[Pipeline:${this.account.email}] Header load failed:`, e.message);
@@ -84,6 +93,88 @@ export class AccountPipeline {
     if (!this._destroyed) {
       this._phase = 'idle';
       this.onProgress(this.state);
+    }
+  }
+
+  /** IMAP header loading — paginated via fetchEmails */
+  async _loadHeadersImap(mailbox) {
+    console.log(`[Pipeline:${this.account.email}] Loading headers for ${mailbox}...`);
+    const allEmails = [];
+    let page = 1;
+    let hasMore = true;
+    let total = 0;
+
+    while (hasMore && !this._destroyed && !this._paused) {
+      this.account = await ensureFreshToken(this.account);
+      const result = await api.fetchEmails(this.account, mailbox, page);
+      allEmails.push(...result.emails);
+      total = result.total;
+      hasMore = result.hasMore;
+      page++;
+      if (hasMore) await new Promise(r => setTimeout(r, 0));
+    }
+
+    if (allEmails.length > 0 && !this._destroyed) {
+      await db.saveEmailHeaders(this.accountId, mailbox, allEmails, total);
+      this._lastLoadedEmails = allEmails;
+      console.log(`[Pipeline:${this.account.email}] Cached ${allEmails.length}/${total} headers`);
+    }
+  }
+
+  /** Graph API header loading — uses graphListFolders + graphListMessages with skip pagination */
+  async _loadHeadersGraph(mailbox) {
+    console.log(`[Pipeline:${this.account.email}] Loading Graph headers for ${mailbox}...`);
+
+    this.account = await ensureFreshToken(this.account);
+    const token = this.account.oauth2AccessToken;
+
+    // 1. Fetch folder list to find the Graph folder ID
+    const graphFolders = await api.graphListFolders(token);
+    const targetFolder = graphFolders.find(
+      f => normalizeGraphFolderName(f.displayName) === mailbox
+    );
+
+    if (!targetFolder) {
+      console.warn(`[Pipeline:${this.account.email}] No Graph folder matching "${mailbox}"`);
+      return;
+    }
+
+    // 2. Paginate through all messages
+    const allHeaders = [];
+    const allGraphIds = [];
+    const PAGE_SIZE = 200;
+    let skip = 0;
+    let hasMore = true;
+
+    while (hasMore && !this._destroyed && !this._paused) {
+      this.account = await ensureFreshToken(this.account);
+      const result = await api.graphListMessages(
+        this.account.oauth2AccessToken, targetFolder.id, PAGE_SIZE, skip
+      );
+
+      const headers = result.headers || [];
+      const graphMessageIds = result.graphMessageIds || [];
+      allHeaders.push(...headers);
+      allGraphIds.push(...graphMessageIds);
+
+      hasMore = !!result.nextLink && headers.length === PAGE_SIZE;
+      skip += headers.length;
+
+      if (hasMore) await new Promise(r => setTimeout(r, 0));
+    }
+
+    if (allHeaders.length > 0 && !this._destroyed) {
+      await db.saveEmailHeaders(this.accountId, mailbox, allHeaders, allHeaders.length);
+      this._lastLoadedEmails = allHeaders;
+
+      // Build UID → Graph message ID mapping for content caching phase
+      const idMap = new Map();
+      allHeaders.forEach((h, i) => {
+        if (allGraphIds[i]) idMap.set(h.uid, allGraphIds[i]);
+      });
+      this._graphIdMap = idMap;
+
+      console.log(`[Pipeline:${this.account.email}] Cached ${allHeaders.length} Graph headers for ${mailbox}`);
     }
   }
 
@@ -110,7 +201,7 @@ export class AccountPipeline {
     console.log(`[Pipeline:${this.account.email}] Starting content caching: ${uids.length} emails, concurrency=${this.concurrency}`);
     this.onProgress(this.state);
 
-    // Launch concurrent worker slots with 500ms stagger
+    // Launch concurrent worker slots with 100ms stagger
     for (let i = 0; i < this.concurrency; i++) {
       setTimeout(() => this._workerLoop(i, mailbox), i * 100);
     }
@@ -127,13 +218,31 @@ export class AccountPipeline {
       console.warn(`[Pipeline:${this.account.email}] Token refresh failed before worker loop:`, e.message);
     }
 
+    const isGraph = isGraphAccount(this.account);
+
     while (!this._destroyed && !this._paused) {
       const uid = this._queue.shift();
       if (uid === undefined) break; // queue empty, slot goes idle
 
       try {
-        // Light fetch: auto-persists .eml to Maildir in Rust, returns metadata only
-        const email = await api.fetchEmailLight(this.account, uid, mailbox);
+        let email;
+
+        if (isGraph) {
+          // Graph API: fetch MIME, cache to Maildir, return parsed email
+          const graphId = this._graphIdMap?.get(uid);
+          if (!graphId) {
+            console.warn(`[Pipeline:${this.account.email}] No Graph ID for UID ${uid}, skipping`);
+            this._completed++;
+            this.onProgress(this.state);
+            continue;
+          }
+          email = await api.graphCacheMime(
+            this.account.oauth2AccessToken, graphId, this.accountId, mailbox, uid
+          );
+        } else {
+          // IMAP: light fetch auto-persists .eml to Maildir in Rust, returns metadata only
+          email = await api.fetchEmailLight(this.account, uid, mailbox);
+        }
 
         const cacheKey = `${this.accountId}-${mailbox}-${uid}`;
         const cacheLimitMB = useSettingsStore.getState().cacheLimitMB;
@@ -294,6 +403,7 @@ export class AccountPipeline {
       this._retryTimer = null;
     }
     this._phase = 'idle';
+    this._graphIdMap = null;
     // Resolve any pending waitForComplete() promise so callers don't hang forever
     if (this._waitResolve) {
       this._waitResolve();

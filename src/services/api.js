@@ -350,6 +350,11 @@ export async function graphGetMime(accessToken, messageId) {
   return await tauriInvoke('graph_get_mime', { accessToken, messageId });
 }
 
+export async function graphCacheMime(accessToken, messageId, accountId, mailbox, uid) {
+  const data = await tauriInvoke('graph_cache_mime', { accessToken, messageId, accountId, mailbox, uid });
+  return data.email;
+}
+
 export async function graphSetRead(accessToken, messageId, isRead) {
   return await tauriInvoke('graph_set_read', { accessToken, messageId, isRead });
 }
