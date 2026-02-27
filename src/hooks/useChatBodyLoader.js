@@ -100,16 +100,14 @@ export function useChatBodyLoader(topicEmails) {
         // 2. Fetch from server if not on disk
         if (!emailBody && freshAccount) {
           if (freshAccount.oauth2Transport === 'graph') {
-            // Graph API: fetch MIME, save .eml to Maildir, return parsed email
+            // Graph API: fast JSON fetch for display, background MIME cache for disk
             const graphId = getGraphMessageId(accountId, mailbox, uid);
             if (graphId) {
-              try {
-                emailBody = await api.graphCacheMime(freshAccount.oauth2AccessToken, graphId, accountId, mailbox, uid);
-              } catch (cacheErr) {
-                // Fallback: fetch via Graph JSON API (no disk caching)
-                const graphMsg = await api.graphGetMessage(freshAccount.oauth2AccessToken, graphId);
-                emailBody = graphMessageToEmail(graphMsg, uid);
-              }
+              const graphMsg = await api.graphGetMessage(freshAccount.oauth2AccessToken, graphId);
+              emailBody = graphMessageToEmail(graphMsg, uid);
+              // Background: save .eml to disk for offline access
+              api.graphCacheMime(freshAccount.oauth2AccessToken, graphId, accountId, mailbox, uid)
+                .catch(() => {});
             }
           } else {
             emailBody = await api.fetchEmailLight(freshAccount, uid, mailbox);
