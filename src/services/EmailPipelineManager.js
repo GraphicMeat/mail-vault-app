@@ -4,6 +4,20 @@ import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import * as db from './db';
 
+/** Map Graph folder display names to IMAP-style names used by the app */
+const GRAPH_FOLDER_NAME_MAP = {
+  'Inbox': 'INBOX',
+  'Sent Items': 'Sent',
+  'Drafts': 'Drafts',
+  'Deleted Items': 'Trash',
+  'Junk Email': 'Junk',
+  'Archive': 'Archive',
+};
+
+function _normalizeGraphFolderName(displayName) {
+  return GRAPH_FOLDER_NAME_MAP[displayName] || displayName;
+}
+
 /** Check if an account is hidden in settings */
 function isHidden(accountId) {
   return !!useSettingsStore.getState().hiddenAccounts[accountId];
@@ -127,8 +141,22 @@ class EmailPipelineManager {
         if (!pipeline._destroyed) {
           try {
             const freshAccount = await import('./authUtils').then(m => m.ensureFreshToken(account));
-            const { fetchMailboxes } = await import('./api');
-            const mailboxes = await fetchMailboxes(freshAccount);
+            const apiMod = await import('./api');
+            let mailboxes;
+            if (freshAccount.oauth2Transport === 'graph') {
+              // Graph API: fetch folders and convert to app's mailbox format
+              const graphFolders = await apiMod.graphListFolders(freshAccount.oauth2AccessToken);
+              mailboxes = graphFolders.map(f => ({
+                name: _normalizeGraphFolderName(f.displayName),
+                path: _normalizeGraphFolderName(f.displayName),
+                flags: [],
+                delimiter: '/',
+                noselect: false,
+                children: [],
+              }));
+            } else {
+              mailboxes = await apiMod.fetchMailboxes(freshAccount);
+            }
             await db.saveMailboxes(account.id, mailboxes);
           } catch (e) {
             // Non-fatal: cached mailboxes from last connection will be used

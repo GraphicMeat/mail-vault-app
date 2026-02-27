@@ -1208,7 +1208,7 @@ struct ParsedEmail {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-struct LightEmail {
+pub struct LightEmail {
     uid: u32,
     #[serde(rename = "messageId")]
     message_id: Option<String>,
@@ -1501,7 +1501,7 @@ fn has_real_attachments_full(attachments: &[MaildirAttachment], html: Option<&st
     })
 }
 
-fn parse_eml_bytes_light(raw: &[u8], uid: u32, flags: Vec<String>) -> Result<LightEmail, String> {
+pub fn parse_eml_bytes_light(raw: &[u8], uid: u32, flags: Vec<String>) -> Result<LightEmail, String> {
     let parsed = mailparse::parse_mail(raw)
         .map_err(|e| format!("Failed to parse email: {}", e))?;
 
@@ -2827,6 +2827,7 @@ fn main() {
             commands::graph_list_messages,
             commands::graph_get_message,
             commands::graph_get_mime,
+            commands::graph_cache_mime,
             commands::graph_set_read
         ])
         .setup(|app| {
