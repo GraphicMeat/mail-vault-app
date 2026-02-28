@@ -285,13 +285,14 @@ export async function exchangeOAuth2Code(state) {
   });
 }
 
-export async function refreshOAuth2Token(refreshToken, provider, customClientId, tenantId) {
+export async function refreshOAuth2Token(refreshToken, provider, customClientId, tenantId, useGraph) {
   if (IS_TAURI) {
     return tauriInvoke('oauth2_refresh', {
       refreshToken,
       provider: provider || null,
       customClientId: customClientId || null,
       tenantId: tenantId || null,
+      useGraph: useGraph || false,
     });
   }
   return httpRequest('/oauth2/refresh', {

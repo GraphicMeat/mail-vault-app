@@ -361,10 +361,16 @@ impl OAuth2Manager {
         provider: Option<String>,
         custom_client_id: Option<String>,
         tenant_id: Option<String>,
+        use_graph: bool,
     ) -> Result<TokenResponse, String> {
         let provider_name = provider.as_deref().unwrap_or("microsoft");
         let mut config = get_provider_config(provider_name)?;
         apply_overrides(&mut config, custom_client_id.as_deref(), tenant_id.as_deref());
+
+        // Graph accounts were authorized with Graph scopes — must refresh with the same scopes
+        if use_graph && provider_name == "microsoft" {
+            config.scopes = "offline_access Mail.ReadWrite Mail.Send".to_string();
+        }
 
         let mut params = vec![
             ("client_id".to_string(), config.client_id),
