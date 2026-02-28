@@ -56,7 +56,8 @@ export async function ensureFreshToken(account) {
         account.oauth2RefreshToken,
         account.oauth2Provider,
         account.oauth2CustomClientId,
-        account.oauth2TenantId
+        account.oauth2TenantId,
+        account.oauth2Transport === 'graph'
       );
 
       // Persist to Keychain

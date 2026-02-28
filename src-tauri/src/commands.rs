@@ -478,8 +478,9 @@ pub async fn oauth2_refresh(
     provider: Option<String>,
     custom_client_id: Option<String>,
     tenant_id: Option<String>,
+    use_graph: Option<bool>,
 ) -> Result<serde_json::Value, String> {
-    let result = oauth.refresh_token(&refresh_token, provider, custom_client_id, tenant_id).await?;
+    let result = oauth.refresh_token(&refresh_token, provider, custom_client_id, tenant_id, use_graph.unwrap_or(false)).await?;
     Ok(serde_json::json!({
         "success": true,
         "accessToken": result.access_token,
