@@ -28,6 +28,8 @@ import {
 } from 'lucide-react';
 import { AttachmentItem } from './EmailViewer';
 import { getRealAttachments } from '../services/attachmentUtils';
+import { getQuoteFoldingScript } from '../utils/iframeQuoteFolding';
+import { splitQuotedContent } from '../utils/quoteFolding';
 
 
 export function ChatBubbleView({ correspondent, threadId, userEmail, onBack, onReply }) {
@@ -294,6 +296,7 @@ function ContextMenu({ x, y, onReply, onReplyAll, onForward, onClose }) {
 
 function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOriginalVisible, onToggleOriginal, onContextMenu, onReply, onOpenFullView, bodiesMapRef, registerListener }) {
   const iframeRef = useRef(null);
+  const [quotesExpanded, setQuotesExpanded] = useState(false);
 
   const activeAccountId = useMailStore(s => s.activeAccountId);
   const activeMailbox = useMailStore(s => s.activeMailbox);
@@ -311,7 +314,22 @@ function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOrigina
   const mergedEmail = bodyEntry?.email ? { ...email, ...bodyEntry.email } : email;
   const isBodyLoading = bodyEntry?.status === 'loading';
 
-  const cleanBody = useMemo(() => getCleanMessageBody(mergedEmail), [mergedEmail]);
+  // For detecting if content was stripped (still needs getCleanMessageBody for comparison)
+  const strippedBody = useMemo(() => getCleanMessageBody(mergedEmail), [mergedEmail]);
+
+  // Split plain text into new content and quoted content
+  const plainText = mergedEmail?.text || mergedEmail?.textBody || '';
+  const { newContent: cleanBody, quotedContent } = useMemo(
+    () => {
+      if (!plainText && mergedEmail?.html) {
+        // HTML-only email — quotes handled by iframe script, use stripped body
+        return { newContent: strippedBody, quotedContent: '' };
+      }
+      return splitQuotedContent(plainText);
+    },
+    [plainText, mergedEmail?.html, strippedBody]
+  );
+
   const hasAttachments = mergedEmail.attachments?.length > 0 || mergedEmail.hasAttachments;
   const realAttachments = useMemo(
     () => mergedEmail.attachments ? getRealAttachments(mergedEmail.attachments, mergedEmail.html) : [],
@@ -319,7 +337,7 @@ function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOrigina
   );
   const emailMailbox = email._fromSentFolder ? getSentMailboxPath() : activeMailbox;
   const hasHtml = !!mergedEmail.html;
-  const wasStripped = !hasHtml && cleanBody.length < (mergedEmail.text?.length || 0) * 0.8;
+  const wasStripped = !hasHtml && strippedBody.length < (mergedEmail.text?.length || 0) * 0.8;
 
   // Check if we have displayable content
   const hasDisplayableContent = hasHtml || (cleanBody && cleanBody.trim().length > 0);
@@ -395,19 +413,22 @@ function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOrigina
             div[class*="signature"], div[id*="signature"] {
               display: none !important;
             }
-            /* Style quoted content */
-            .gmail_quote, blockquote[type="cite"] {
-              display: none !important;
-            }
           </style>
         </head>
-        <body>${mergedEmail.html}</body>
+        <body>${mergedEmail.html}${getQuoteFoldingScript()}</body>
       </html>
     `;
   }, [mergedEmail.html, fromUser]);
 
   // Auto-resize iframe
   useEffect(() => {
+    const handleMessage = (e) => {
+      if (e.data?.type === 'iframe-resize' && e.data.height && iframeRef.current) {
+        iframeRef.current.style.height = Math.min(e.data.height + 16, 400) + 'px';
+      }
+    };
+    window.addEventListener('message', handleMessage);
+
     if (iframeRef.current && mergedEmail.html) {
       const iframe = iframeRef.current;
 
@@ -452,6 +473,8 @@ function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOrigina
 
       setTimeout(resizeIframe, 100);
     }
+
+    return () => window.removeEventListener('message', handleMessage);
   }, [mergedEmail.html]);
 
   return (
@@ -517,6 +540,27 @@ function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOrigina
           ) : hasDisplayableContent ? (
             <div className="px-4 py-2.5 whitespace-pre-wrap break-words text-sm">
               {cleanBody}
+              {quotedContent && (
+                <>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setQuotesExpanded(prev => !prev); }}
+                    className={`block mt-1 text-xs cursor-pointer select-none rounded px-2 py-0.5 border transition-colors ${
+                      fromUser
+                        ? 'text-white/70 hover:text-white bg-white/10 border-white/20'
+                        : 'text-mail-text-muted hover:text-mail-accent bg-mail-surface border-mail-border'
+                    }`}
+                  >
+                    {quotesExpanded ? '\u25BE Hide quoted text' : '\u22EF'}
+                  </button>
+                  {quotesExpanded && (
+                    <div className={`mt-1 border-l-2 pl-2 ${
+                      fromUser ? 'text-white/60 border-white/30' : 'text-mail-text-muted border-mail-border'
+                    }`}>
+                      {quotedContent}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           ) : isBodyLoading ? (
             <div className="px-4 py-3 flex items-center gap-2">
