@@ -45,7 +45,8 @@ import {
   Copy,
   Plus,
   Eye,
-  EyeOff
+  EyeOff,
+  PenTool
 } from 'lucide-react';
 
 function ToggleSwitch({ active, onClick }) {
@@ -113,7 +114,9 @@ export function SettingsPage({ onClose, onAddAccount }) {
     dateFormat,
     customDateFormat,
     setDateFormat,
-    setCustomDateFormat
+    setCustomDateFormat,
+    signatureDisplay,
+    setSignatureDisplay
   } = useSettingsStore();
   
   // Close on Escape key
@@ -747,6 +750,37 @@ export function SettingsPage({ onClose, onAddAccount }) {
                       <span className="text-sm font-medium text-mail-text">Compact</span>
                       <span className="text-xs text-mail-text-muted">Sender + subject on two lines</span>
                     </button>
+                  </div>
+                </div>
+
+                {/* Signature Display */}
+                <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+                  <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
+                    <PenTool size={18} className="text-mail-accent" />
+                    Signature Display
+                  </h4>
+                  <p className="text-sm text-mail-text-muted mb-4">
+                    Control how email signatures appear in threads and conversations.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { value: 'smart', label: 'Smart', desc: 'Show once per sender, collapse duplicates' },
+                      { value: 'always-show', label: 'Always Show', desc: 'Never collapse signatures' },
+                      { value: 'always-hide', label: 'Always Hide', desc: 'Collapse all signatures' },
+                      { value: 'collapsed', label: 'Collapsed', desc: 'Collapsed with toggle to expand' },
+                    ].map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setSignatureDisplay(opt.value)}
+                        className={`p-3 rounded-lg border-2 transition-all text-left
+                          ${signatureDisplay === opt.value
+                            ? 'border-mail-accent bg-mail-accent/10'
+                            : 'border-mail-border hover:border-mail-accent/50'}`}
+                      >
+                        <span className="text-sm font-medium text-mail-text block">{opt.label}</span>
+                        <span className="text-xs text-mail-text-muted">{opt.desc}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
 
