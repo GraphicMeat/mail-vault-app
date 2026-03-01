@@ -85,6 +85,12 @@ pub struct EmailHeader {
     pub has_attachments: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
+    #[serde(rename = "replyTo", skip_serializing_if = "Option::is_none")]
+    pub reply_to: Option<EmailAddress>,
+    #[serde(rename = "returnPath", skip_serializing_if = "Option::is_none")]
+    pub return_path: Option<String>,
+    #[serde(rename = "authenticationResults", skip_serializing_if = "Option::is_none")]
+    pub authentication_results: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -342,9 +348,9 @@ impl async_imap::Authenticator for XOAuth2Authenticator {
 
 // ── Fetch spec constants ────────────────────────────────────────────────────
 // Lean spec: no BODYSTRUCTURE/RFC822.SIZE — used for header loading (pages, ranges, delta-sync)
-const HEADER_FETCH_SPEC: &str = "(UID FLAGS ENVELOPE INTERNALDATE BODY.PEEK[HEADER.FIELDS (References)])";
+const HEADER_FETCH_SPEC: &str = "(UID FLAGS ENVELOPE INTERNALDATE BODY.PEEK[HEADER.FIELDS (References Authentication-Results Return-Path Reply-To)])";
 // Full spec: includes BODYSTRUCTURE + RFC822.SIZE — used for search results (smaller sets, full info)
-const HEADER_FETCH_SPEC_FULL: &str = "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (References)])";
+const HEADER_FETCH_SPEC_FULL: &str = "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (References Authentication-Results Return-Path Reply-To)])";
 
 // ── UID helpers ─────────────────────────────────────────────────────────────
 
@@ -1259,13 +1265,25 @@ fn parse_header_from_fetch(fetch: &Fetch) -> Result<EmailHeader, String> {
         .as_ref()
         .map(|s| String::from_utf8_lossy(s).to_string());
 
-    // Parse References from BODY.PEEK[HEADER.FIELDS (References)]
-    let references = fetch.header()
-        .and_then(|data| {
-            let raw = String::from_utf8_lossy(data);
-            let parsed = parse_references_header(&raw);
+    // Parse headers from BODY.PEEK[HEADER.FIELDS (...)]
+    let raw_headers = fetch.header()
+        .map(|data| String::from_utf8_lossy(data).to_string());
+
+    let references = raw_headers.as_ref()
+        .and_then(|raw| {
+            let parsed = parse_references_header(raw);
             if parsed.is_empty() { None } else { Some(parsed) }
         });
+
+    let authentication_results = raw_headers.as_ref()
+        .and_then(|raw| parse_single_header(raw, "Authentication-Results"));
+
+    let return_path = raw_headers.as_ref()
+        .and_then(|raw| parse_single_header(raw, "Return-Path"));
+
+    let reply_to = raw_headers.as_ref()
+        .and_then(|raw| parse_single_header(raw, "Reply-To"))
+        .and_then(|val| parse_email_address_from_header(&val));
 
     let date = envelope
         .date
@@ -1323,6 +1341,9 @@ fn parse_header_from_fetch(fetch: &Fetch) -> Result<EmailHeader, String> {
         size,
         has_attachments,
         source: None,
+        reply_to,
+        return_path,
+        authentication_results,
     })
 }
 
@@ -1354,6 +1375,67 @@ fn parse_references_header(raw: &str) -> Vec<String> {
         }
     }
     refs
+}
+
+/// Parse a single header value from raw header text.
+/// Handles multi-line (folded) headers per RFC 5322.
+fn parse_single_header(raw: &str, header_name: &str) -> Option<String> {
+    let search = format!("{}:", header_name);
+    // Case-insensitive search for the header name
+    let lower_raw = raw.to_lowercase();
+    let lower_search = search.to_lowercase();
+
+    if let Some(start) = lower_raw.find(&lower_search) {
+        let value_start = start + search.len();
+        let rest = &raw[value_start..];
+
+        // Collect lines until we hit a non-continuation line (not starting with whitespace)
+        let mut value = String::new();
+        for (i, line) in rest.lines().enumerate() {
+            if i == 0 {
+                value.push_str(line.trim());
+            } else if line.starts_with(' ') || line.starts_with('\t') {
+                // Continuation line (folded header)
+                value.push(' ');
+                value.push_str(line.trim());
+            } else {
+                break;
+            }
+        }
+
+        let value = value.trim().to_string();
+        if value.is_empty() { None } else { Some(value) }
+    } else {
+        None
+    }
+}
+
+/// Parse an email address from a header value like "<user@example.com>" or "Name <user@example.com>"
+fn parse_email_address_from_header(val: &str) -> Option<EmailAddress> {
+    let trimmed = val.trim();
+    // Try to extract from angle brackets first
+    if let Some(start) = trimmed.find('<') {
+        if let Some(end) = trimmed.find('>') {
+            let addr = trimmed[start + 1..end].trim();
+            if addr.contains('@') {
+                let name_part = trimmed[..start].trim().trim_matches('"');
+                return Some(EmailAddress {
+                    name: if name_part.is_empty() { None } else { Some(name_part.to_string()) },
+                    address: addr.to_string(),
+                });
+            }
+        }
+    }
+    // Bare email address
+    let bare = trimmed.trim_matches(|c: char| c == '<' || c == '>' || c.is_whitespace());
+    if bare.contains('@') {
+        Some(EmailAddress {
+            name: None,
+            address: bare.to_string(),
+        })
+    } else {
+        None
+    }
 }
 
 /// Decode RFC 2047 encoded-words (e.g. `=?windows-1257?Q?Ona_...?=`) in raw
