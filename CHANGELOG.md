@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+- **Quote folding** — quoted reply content (> lines, "On wrote:", Original Message blocks, HTML blockquotes) is detected and collapsed behind a clickable toggle in both thread view and chat view; collapsed by default for cleaner reading
+- **Signature folding** — email signatures detected and handled with configurable display mode: Smart (show once per sender per thread, collapse duplicates), Always Show, Always Hide, or Collapsed with toggle; configurable in Settings > Appearance
+- **Sender verification badges** — two-layer sender spoofing check: header mismatch detection (From vs Reply-To/Return-Path domain) and email authentication parsing (SPF/DKIM/DMARC from Authentication-Results header); shows green shield for verified, orange warning for Reply-To mismatch, red warning for authentication failure
+
 ## [1.9.1] - 2026-02-28
 
 ### Added
