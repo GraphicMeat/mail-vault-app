@@ -5,8 +5,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { ComposeModal } from './ComposeModal';
 import { useChatBodyLoader, emailKey } from '../hooks/useChatBodyLoader';
-import { getQuoteFoldingScript } from '../utils/iframeQuoteFolding';
+import { getQuoteFoldingScript, getSignatureFoldingScript } from '../utils/iframeQuoteFolding';
 import { splitQuotedContent } from '../utils/quoteFolding';
+import { splitSignature, hashSignature } from '../utils/signatureFolding';
+import { useSettingsStore } from '../stores/settingsStore';
 import {
   Reply,
   ReplyAll,
@@ -563,14 +565,25 @@ function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, loadingR
 
 // ── Thread Email Item (one email in a thread conversation view) ──────────────
 
-function ThreadEmailItemContent({ email, loadedEmail, isLoading }) {
+function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDisplay, shouldShowSignature }) {
   const iframeRef = useRef(null);
   const [quotesExpanded, setQuotesExpanded] = useState(false);
+  const [sigExpanded, setSigExpanded] = useState(false);
 
   const { newContent, quotedContent } = useMemo(
     () => splitQuotedContent(loadedEmail?.text || loadedEmail?.textBody || ''),
     [loadedEmail?.text, loadedEmail?.textBody]
   );
+
+  // Split signature from the plain text content (after quote splitting)
+  const { body: bodyWithoutSig, signature } = useMemo(
+    () => splitSignature(newContent),
+    [newContent]
+  );
+
+  // Determine if signature should be shown inline
+  const showSigInline = signatureDisplay === 'always-show'
+    || (signatureDisplay === 'smart' && shouldShowSignature);
 
   const iframeContent = useMemo(() => {
     if (!loadedEmail?.html) return '';
@@ -605,10 +618,10 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading }) {
           pre, code { white-space: pre-wrap; max-width: 100%; overflow-wrap: break-word; }
         </style>
       </head>
-      <body>${bodyHtml}${getQuoteFoldingScript()}</body>
+      <body>${bodyHtml}${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}</body>
     </html>
   `;
-  }, [loadedEmail?.html]);
+  }, [loadedEmail?.html, signatureDisplay]);
 
   // Auto-resize iframe and intercept links
   useEffect(() => {
@@ -705,7 +718,30 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading }) {
         </div>
       ) : (
         <div className="email-content whitespace-pre-wrap text-mail-text mt-2 text-sm break-words overflow-hidden">
-          {newContent || 'No content'}
+          {bodyWithoutSig || 'No content'}
+          {signature && signatureDisplay !== 'always-hide' && (
+            showSigInline
+              ? (
+                <div className="mt-2 text-mail-text-muted text-xs whitespace-pre-wrap opacity-60">
+                  {signature}
+                </div>
+              )
+              : (
+                <>
+                  <button
+                    onClick={() => setSigExpanded(prev => !prev)}
+                    className="block mt-2 text-xs text-mail-text-muted hover:text-mail-accent cursor-pointer select-none"
+                  >
+                    {sigExpanded ? '\u25BE Hide signature' : '\u2014 Show signature'}
+                  </button>
+                  {sigExpanded && (
+                    <div className="mt-1 text-mail-text-muted text-xs whitespace-pre-wrap opacity-60">
+                      {signature}
+                    </div>
+                  )}
+                </>
+              )
+          )}
           {quotedContent && (
             <>
               <button
@@ -727,7 +763,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading }) {
   );
 }
 
-function ThreadEmailItem({ email, bodiesMapRef, registerListener, isLast, activeAccountId, activeMailbox, archivedEmailIds }) {
+function ThreadEmailItem({ email, bodiesMapRef, registerListener, isLast, activeAccountId, activeMailbox, archivedEmailIds, signatureDisplay, shouldShowSignature }) {
   const [expanded, setExpanded] = useState(isLast);
   const [, forceUpdate] = useState(0);
   const [composeMode, setComposeMode] = useState(null);
@@ -800,7 +836,7 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isLast, active
 
           {/* Body */}
           <div className="pl-9 overflow-hidden" style={{ contain: 'inline-size' }}>
-            <ThreadEmailItemContent email={email} loadedEmail={loadedEmail} isLoading={isLoading} />
+            <ThreadEmailItemContent email={email} loadedEmail={loadedEmail} isLoading={isLoading} signatureDisplay={signatureDisplay} shouldShowSignature={shouldShowSignature} />
           </div>
 
           {/* Attachments */}
@@ -875,6 +911,7 @@ function ThreadView({ thread }) {
   const { activeAccountId, activeMailbox, savedEmailIds, archivedEmailIds, saveEmailsLocally } = useMailStore(
     useShallow(s => ({ activeAccountId: s.activeAccountId, activeMailbox: s.activeMailbox, savedEmailIds: s.savedEmailIds, archivedEmailIds: s.archivedEmailIds, saveEmailsLocally: s.saveEmailsLocally }))
   );
+  const signatureDisplay = useSettingsStore(s => s.signatureDisplay);
   const [saving, setSaving] = useState(false);
   const scrollContainerRef = useRef(null);
   const lastEmailRef = useRef(null);
@@ -886,6 +923,32 @@ function ThreadView({ thread }) {
   );
 
   const { bodiesMapRef, registerListener } = useChatBodyLoader(sortedEmails);
+
+  // Smart mode: track seen signatures per sender to show only first occurrence
+  const sigVisMap = useMemo(() => {
+    if (signatureDisplay !== 'smart') return {};
+    const seenBySender = {};
+    const result = {};
+    for (const email of sortedEmails) {
+      const sender = email.from?.address || '';
+      const body = bodiesMapRef.current?.get(emailKey(email));
+      const text = body?.email?.text || body?.email?.textBody || '';
+      const { signature } = splitSignature(text);
+      const sigHash = hashSignature(signature);
+
+      if (!seenBySender[sender]) seenBySender[sender] = new Set();
+
+      if (!signature || !sigHash) {
+        result[email.uid] = true;
+      } else if (!seenBySender[sender].has(sigHash)) {
+        seenBySender[sender].add(sigHash);
+        result[email.uid] = true; // first occurrence — show
+      } else {
+        result[email.uid] = false; // duplicate — collapse
+      }
+    }
+    return result;
+  }, [sortedEmails, signatureDisplay]);
 
   // Scroll to the newest (last) email on mount — scoped to the scroll container
   const threadId = thread.threadId;
@@ -955,6 +1018,8 @@ function ThreadView({ thread }) {
                 activeAccountId={activeAccountId}
                 activeMailbox={activeMailbox}
                 archivedEmailIds={archivedEmailIds}
+                signatureDisplay={signatureDisplay}
+                shouldShowSignature={sigVisMap[email.uid] !== false}
               />
             </div>
           );
