@@ -43,12 +43,17 @@ export function checkSenderVerification(email) {
   const issues = [];
 
   // Layer 1: Header mismatch detection
-  if (email.replyTo) {
-    const replyToDomain = getDomain(email.replyTo.address || email.replyTo);
+  // replyTo can be a single object { address } (from EmailHeader) or an array (from full Email)
+  const replyToAddr = Array.isArray(email.replyTo)
+    ? email.replyTo[0]?.address
+    : (email.replyTo?.address || (typeof email.replyTo === 'string' ? email.replyTo : null));
+
+  if (replyToAddr) {
+    const replyToDomain = getDomain(replyToAddr);
     if (replyToDomain && replyToDomain !== fromDomain) {
       issues.push({
         level: 'warning',
-        text: `Reply-To address (${email.replyTo.address || email.replyTo}) differs from sender`,
+        text: `Reply-To address (${replyToAddr}) differs from sender`,
       });
     }
   }
