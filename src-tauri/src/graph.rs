@@ -184,6 +184,9 @@ impl GraphMessage {
             size: None,
             has_attachments: self.has_attachments.unwrap_or(false),
             source: Some("graph".to_string()),
+            reply_to: None,
+            return_path: None,
+            authentication_results: None,
         }
     }
 
