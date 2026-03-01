@@ -547,7 +547,7 @@ function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOrigina
                   srcDoc={iframeContent}
                   className="w-full border-0 rounded"
                   style={{ minHeight: '100px', maxHeight: '400px' }}
-                  sandbox="allow-same-origin allow-popups"
+                  sandbox="allow-same-origin allow-popups allow-scripts"
                   title="Email content"
                 />
               ) : (
@@ -563,7 +563,7 @@ function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOrigina
                 srcDoc={iframeContent}
                 className="w-full border-0"
                 style={{ minHeight: '50px', maxHeight: '400px' }}
-                sandbox="allow-same-origin allow-popups"
+                sandbox="allow-same-origin allow-popups allow-scripts"
                 title="Email content"
               />
             </div>
@@ -1015,7 +1015,7 @@ function FullViewEmailModal({ email: initialEmail, onClose }) {
               ref={iframeRef}
               srcDoc={iframeContent}
               className="w-full h-full border-0"
-              sandbox="allow-same-origin allow-popups"
+              sandbox="allow-same-origin allow-popups allow-scripts"
               title="Full email content"
             />
           )}

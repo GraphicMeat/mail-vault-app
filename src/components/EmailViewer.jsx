@@ -754,7 +754,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
             srcDoc={iframeContent}
             className="w-full border-0"
             style={{ minHeight: '100px', display: 'block', maxWidth: '100%' }}
-            sandbox="allow-same-origin allow-popups"
+            sandbox="allow-same-origin allow-popups allow-scripts"
             title={`Email from ${email.from?.name || email.from?.address}`}
           />
         </div>
@@ -1558,7 +1558,7 @@ export function EmailViewer() {
                 srcDoc={iframeContent}
                 className="w-full border-0"
                 style={{ minHeight: '300px', display: 'block' }}
-                sandbox="allow-same-origin allow-popups"
+                sandbox="allow-same-origin allow-popups allow-scripts"
                 title="Email content"
                 onContextMenu={e => e.preventDefault()}
               />
