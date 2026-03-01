@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { ComposeModal } from './ComposeModal';
 import { useChatBodyLoader, emailKey } from '../hooks/useChatBodyLoader';
+import { getQuoteFoldingScript } from '../utils/iframeQuoteFolding';
+import { splitQuotedContent } from '../utils/quoteFolding';
 import {
   Reply,
   ReplyAll,
@@ -563,6 +565,12 @@ function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, loadingR
 
 function ThreadEmailItemContent({ email, loadedEmail, isLoading }) {
   const iframeRef = useRef(null);
+  const [quotesExpanded, setQuotesExpanded] = useState(false);
+
+  const { newContent, quotedContent } = useMemo(
+    () => splitQuotedContent(loadedEmail?.text || loadedEmail?.textBody || ''),
+    [loadedEmail?.text, loadedEmail?.textBody]
+  );
 
   const iframeContent = useMemo(() => {
     if (!loadedEmail?.html) return '';
@@ -597,7 +605,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading }) {
           pre, code { white-space: pre-wrap; max-width: 100%; overflow-wrap: break-word; }
         </style>
       </head>
-      <body>${bodyHtml}</body>
+      <body>${bodyHtml}${getQuoteFoldingScript()}</body>
     </html>
   `;
   }, [loadedEmail?.html]);
@@ -649,11 +657,19 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading }) {
       resizeTimers.push(setTimeout(resizeIframe, 1000));
     };
 
+    const handleMessage = (e) => {
+      if (e.data?.type === 'iframe-resize' && e.data.height && iframeRef.current) {
+        iframeRef.current.style.height = Math.max(e.data.height + 32, 100) + 'px';
+      }
+    };
+    window.addEventListener('message', handleMessage);
+
     iframe.addEventListener('load', onLoad);
     resizeTimers.push(setTimeout(resizeIframe, 100));
 
     return () => {
       iframe.removeEventListener('load', onLoad);
+      window.removeEventListener('message', handleMessage);
       resizeTimers.forEach(t => clearTimeout(t));
     };
   }, [loadedEmail?.html]);
@@ -689,7 +705,22 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading }) {
         </div>
       ) : (
         <div className="email-content whitespace-pre-wrap text-mail-text mt-2 text-sm break-words overflow-hidden">
-          {loadedEmail.text || 'No content'}
+          {newContent || 'No content'}
+          {quotedContent && (
+            <>
+              <button
+                onClick={() => setQuotesExpanded(prev => !prev)}
+                className="block mt-2 text-xs text-mail-text-muted hover:text-mail-accent bg-mail-surface border border-mail-border rounded px-2 py-0.5 cursor-pointer select-none"
+              >
+                {quotesExpanded ? '\u25BE Hide quoted text' : '\u22EF'}
+              </button>
+              {quotesExpanded && (
+                <div className="mt-1 text-mail-text-muted border-l-2 border-mail-border pl-3">
+                  {quotedContent}
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
     </>
