@@ -63,10 +63,14 @@ export function getQuoteFoldingScript() {
 export function getSignatureFoldingScript(mode) {
   if (mode === 'always-show') return '';
 
+  // Validate mode to prevent script injection
+  const VALID_MODES = ['smart', 'always-hide', 'collapsed'];
+  const safeMode = VALID_MODES.includes(mode) ? mode : 'collapsed';
+
   return `
 <script>
 (function() {
-  var mode = '${mode}';
+  var mode = '${safeMode}';
   var sigSelectors = ['.gmail_signature', '.yahoo_signature',
     'div[class*="signature"]', 'div[id*="signature"]'];
   var found = [];
