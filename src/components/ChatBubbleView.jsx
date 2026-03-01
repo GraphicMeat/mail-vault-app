@@ -28,8 +28,10 @@ import {
 } from 'lucide-react';
 import { AttachmentItem } from './EmailViewer';
 import { getRealAttachments } from '../services/attachmentUtils';
-import { getQuoteFoldingScript } from '../utils/iframeQuoteFolding';
+import { getQuoteFoldingScript, getSignatureFoldingScript } from '../utils/iframeQuoteFolding';
 import { splitQuotedContent } from '../utils/quoteFolding';
+import { splitSignature } from '../utils/signatureFolding';
+import { useSettingsStore } from '../stores/settingsStore';
 
 
 export function ChatBubbleView({ correspondent, threadId, userEmail, onBack, onReply }) {
@@ -297,7 +299,9 @@ function ContextMenu({ x, y, onReply, onReplyAll, onForward, onClose }) {
 function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOriginalVisible, onToggleOriginal, onContextMenu, onReply, onOpenFullView, bodiesMapRef, registerListener }) {
   const iframeRef = useRef(null);
   const [quotesExpanded, setQuotesExpanded] = useState(false);
+  const [sigExpanded, setSigExpanded] = useState(false);
 
+  const signatureDisplay = useSettingsStore(s => s.signatureDisplay);
   const activeAccountId = useMailStore(s => s.activeAccountId);
   const activeMailbox = useMailStore(s => s.activeMailbox);
   const getSentMailboxPath = useMailStore(s => s.getSentMailboxPath);
@@ -328,6 +332,12 @@ function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOrigina
       return splitQuotedContent(plainText);
     },
     [plainText, mergedEmail?.html, strippedBody]
+  );
+
+  // Split signature from the clean body
+  const { body: bodyWithoutSig, signature } = useMemo(
+    () => splitSignature(cleanBody),
+    [cleanBody]
   );
 
   const hasAttachments = mergedEmail.attachments?.length > 0 || mergedEmail.hasAttachments;
@@ -408,17 +418,12 @@ function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOrigina
               padding-left: 12px;
               color: ${quoteColor};
             }
-            /* Hide signatures in chat view */
-            .gmail_signature, .yahoo_signature,
-            div[class*="signature"], div[id*="signature"] {
-              display: none !important;
-            }
           </style>
         </head>
-        <body>${mergedEmail.html}${getQuoteFoldingScript()}</body>
+        <body>${mergedEmail.html}${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}</body>
       </html>
     `;
-  }, [mergedEmail.html, fromUser]);
+  }, [mergedEmail.html, fromUser, signatureDisplay]);
 
   // Auto-resize iframe
   useEffect(() => {
@@ -539,7 +544,34 @@ function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOrigina
             </div>
           ) : hasDisplayableContent ? (
             <div className="px-4 py-2.5 whitespace-pre-wrap break-words text-sm">
-              {cleanBody}
+              {bodyWithoutSig}
+              {signature && signatureDisplay !== 'always-hide' && (
+                signatureDisplay === 'always-show' ? (
+                  <div className={`mt-2 text-xs whitespace-pre-wrap opacity-60 ${
+                    fromUser ? 'text-white/60' : 'text-mail-text-muted'
+                  }`}>
+                    {signature}
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setSigExpanded(prev => !prev); }}
+                      className={`block mt-2 text-xs cursor-pointer select-none ${
+                        fromUser ? 'text-white/60 hover:text-white' : 'text-mail-text-muted hover:text-mail-accent'
+                      }`}
+                    >
+                      {sigExpanded ? '\u25BE Hide signature' : '\u2014 Show signature'}
+                    </button>
+                    {sigExpanded && (
+                      <div className={`mt-1 text-xs whitespace-pre-wrap opacity-60 ${
+                        fromUser ? 'text-white/60' : 'text-mail-text-muted'
+                      }`}>
+                        {signature}
+                      </div>
+                    )}
+                  </>
+                )
+              )}
               {quotedContent && (
                 <>
                   <button
