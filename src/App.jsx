@@ -182,6 +182,7 @@ function App() {
 
   // Track if quick load is done
   const [quickLoadDone, setQuickLoadDone] = useState(false);
+  const quickLoadHadAccountsRef = useRef(false);
 
   // Quick load: get accounts from disk ASAP so the main UI renders immediately.
   // Email headers/local data are loaded in a second phase to avoid blocking.
@@ -190,7 +191,13 @@ function App() {
       try {
         const db = await import('./services/db');
         await db.initBasic();
+
+        // Start keychain loading in background immediately — the macOS prompt
+        // appears sooner, and getAccounts() in init() won't block as long.
+        db.startKeychainLoad();
+
         const accounts = await db.getAccountsWithoutPasswords();
+        quickLoadHadAccountsRef.current = accounts.length > 0;
         if (accounts.length > 0) {
           const { hiddenAccounts } = useSettingsStore.getState();
           const firstVisible = accounts.find(a => !hiddenAccounts[a.id]) || accounts[0];
@@ -299,9 +306,12 @@ function App() {
   // Only start after onboarding is complete, quick load is done, and UI has had time to render
   useEffect(() => {
     if (!initialized && quickLoadDone && onboardingComplete) {
-      // Short delay to ensure UI has rendered before potential keychain prompt
+      // If quick-load found accounts, wait 500ms so the cached UI renders first.
+      // If no accounts were found (keychain-only install), skip the delay — the user
+      // is staring at a "Loading..." splash and needs the keychain prompt ASAP.
+      const delay = quickLoadHadAccountsRef.current ? 500 : 0;
       const timer = setTimeout(() => {
-        console.log('[App] Full initialization starting (after 500ms delay)...');
+        console.log(`[App] Full initialization starting (after ${delay}ms delay)...`);
 
         // Failsafe: if init hangs (e.g. keychain dialog behind window), unblock after 5s
         const failsafe = setTimeout(() => {
@@ -318,7 +328,7 @@ function App() {
           clearTimeout(failsafe);
           setInitialized(true);
         });
-      }, 500); // 500ms delay - enough for UI to render
+      }, delay);
 
       return () => clearTimeout(timer);
     }
