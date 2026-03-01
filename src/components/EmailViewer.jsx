@@ -32,9 +32,13 @@ import {
   AppWindow,
   Check,
   Code,
-  RefreshCw
+  RefreshCw,
+  ShieldCheck,
+  ShieldAlert,
+  AlertTriangle
 } from 'lucide-react';
 import { getRealAttachments } from '../services/attachmentUtils';
+import { checkSenderVerification } from '../utils/senderCheck';
 
 function getCleanBase64(content) {
   let base64Content = content;
@@ -504,6 +508,7 @@ function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, loadingR
             <span className="font-semibold text-mail-text">
               {email.from?.name || email.from?.address || 'Unknown'}
             </span>
+            <SenderVerificationBadge email={email} />
             {email.from?.name && (
               <span className="text-sm text-mail-text-muted">
                 &lt;{email.from.address}&gt;
@@ -561,6 +566,43 @@ function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, loadingR
       </div>
     </div>
   );
+}
+
+// ── Sender Verification Badge ────────────────────────────────────────────────
+
+function SenderVerificationBadge({ email, size = 14 }) {
+  const { status, tooltip } = useMemo(
+    () => checkSenderVerification(email),
+    [email?.from, email?.replyTo, email?.returnPath, email?.authenticationResults]
+  );
+
+  if (status === 'none') return null;
+
+  if (status === 'verified') {
+    return (
+      <span className="inline-flex items-center text-green-500 flex-shrink-0" title={tooltip}>
+        <ShieldCheck size={size} />
+      </span>
+    );
+  }
+
+  if (status === 'warning') {
+    return (
+      <span className="inline-flex items-center text-orange-500 flex-shrink-0" title={tooltip}>
+        <AlertTriangle size={size} />
+      </span>
+    );
+  }
+
+  if (status === 'danger') {
+    return (
+      <span className="inline-flex items-center text-red-500 flex-shrink-0" title={tooltip}>
+        <ShieldAlert size={size} />
+      </span>
+    );
+  }
+
+  return null;
 }
 
 // ── Thread Email Item (one email in a thread conversation view) ──────────────
@@ -807,6 +849,7 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isLast, active
               <span className="font-semibold text-sm text-mail-text truncate">
                 {email.from?.name || email.from?.address || 'Unknown'}
               </span>
+              <SenderVerificationBadge email={email} />
             </div>
             <div className="flex items-center gap-1.5 flex-shrink-0">
               <span className="text-[11px] text-mail-text-muted">
