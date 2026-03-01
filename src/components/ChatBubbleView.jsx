@@ -24,7 +24,10 @@ import {
   Download,
   MoreVertical,
   ExternalLink,
-  Loader
+  Loader,
+  ShieldCheck,
+  ShieldAlert,
+  AlertTriangle
 } from 'lucide-react';
 import { AttachmentItem } from './EmailViewer';
 import { getRealAttachments } from '../services/attachmentUtils';
@@ -32,7 +35,29 @@ import { getQuoteFoldingScript, getSignatureFoldingScript } from '../utils/ifram
 import { splitQuotedContent } from '../utils/quoteFolding';
 import { splitSignature } from '../utils/signatureFolding';
 import { useSettingsStore } from '../stores/settingsStore';
+import { checkSenderVerification } from '../utils/senderCheck';
 
+function SenderBadge({ email, size = 10 }) {
+  const { status, tooltip } = useMemo(
+    () => checkSenderVerification(email),
+    [email?.from, email?.replyTo, email?.returnPath, email?.authenticationResults]
+  );
+
+  if (status === 'none') return null;
+
+  const config = {
+    verified: { Icon: ShieldCheck, color: 'text-green-500' },
+    warning: { Icon: AlertTriangle, color: 'text-orange-500' },
+    danger: { Icon: ShieldAlert, color: 'text-red-500' },
+  };
+
+  const { Icon, color } = config[status];
+  return (
+    <span className={`inline-flex items-center ${color}`} title={tooltip}>
+      <Icon size={size} />
+    </span>
+  );
+}
 
 export function ChatBubbleView({ correspondent, threadId, userEmail, onBack, onReply }) {
   const scrollRef = useRef(null);
@@ -655,6 +680,7 @@ function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOrigina
           <span className="text-[10px] text-mail-text-muted">
             {formatMessageTime(email.date)}
           </span>
+          <SenderBadge email={email} />
 
           {/* View original toggle (for text messages or to see full HTML) */}
           {(wasStripped || hasHtml) && (
