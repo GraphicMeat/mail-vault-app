@@ -128,6 +128,7 @@
 - **Pages**: `index.html` (homepage), `features.html` (all features), `faq.html`, `changelog.html`, `blog.html`, `privacy.html`, `terms.html`, `blog/*.html` (posts)
 - **Features page**: `website/features.html` — 9 categories with screenshot placeholder slots, sticky anchor nav strip
 - **Comparison table**: Homepage includes MailVault vs Apple Mail vs Thunderbird vs Gmail feature comparison
+- **Navigation must be identical across ALL pages** — desktop and mobile menu items must match: Overview (`/#features`), All Features (`/features.html`), How It Works (`/#how-it-works`), FAQ (`/faq.html`), Changelog (`/changelog.html`), Blog (`/blog.html`), Contact (`/#contact`), Download button, theme toggle, mobile hamburger menu. On homepage, Overview uses `#features` and How It Works/Contact use `#` anchors (no `/` prefix). Logo always links to `/` (on homepage, scrolls to top). The `changelog.html` nav lives in `scripts/generate-changelog.cjs` — update the template there, not the generated file.
 
 ## OAuth2 (Multi-Provider)
 - **Providers**: Microsoft (Azure AD / Entra ID) and Google (Gmail) — both use PKCE authorization code flow
