@@ -26,6 +26,24 @@ export function getRealAttachments(attachments, html) {
 }
 
 /**
+ * Replace cid: URLs in HTML with inline data: URIs from attachment content.
+ * This makes embedded images render correctly inside sandboxed iframes.
+ */
+export function replaceCidUrls(html, attachments) {
+  if (!html || !attachments?.length) return html;
+  let result = html;
+  for (const att of attachments) {
+    if (!att.contentId || !att.content) continue;
+    const cid = att.contentId.replace(/^<|>$/g, '');
+    if (!result.includes(`cid:${cid}`)) continue;
+    const contentType = (att.contentType || 'application/octet-stream').split(';')[0].trim();
+    const dataUri = `data:${contentType};base64,${att.content}`;
+    result = result.replaceAll(`cid:${cid}`, dataUri);
+  }
+  return result;
+}
+
+/**
  * Determine whether an email has real (non-inline) attachments.
  * Used by the store to update `hasAttachments` on list items.
  */

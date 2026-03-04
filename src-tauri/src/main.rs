@@ -2339,6 +2339,69 @@ fn maildir_migrate_json_to_eml(
     Ok(result)
 }
 
+#[tauri::command]
+fn maildir_migrate_email_dirs(
+    app_handle: tauri::AppHandle,
+    account_map: std::collections::HashMap<String, String>,
+) -> Result<serde_json::Value, String> {
+    let base = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not get app data directory: {}", e))?;
+    let maildir_base = base.join("Maildir");
+
+    if !maildir_base.exists() {
+        return Ok(serde_json::json!({ "migrated": 0 }));
+    }
+
+    let mut migrated = 0u32;
+
+    for (email, uuid) in &account_map {
+        let email_dir = maildir_base.join(email);
+        let uuid_dir = maildir_base.join(uuid);
+
+        if !email_dir.exists() || email_dir == uuid_dir {
+            continue;
+        }
+
+        if let Ok(mailbox_entries) = fs::read_dir(&email_dir) {
+            for mb_entry in mailbox_entries.flatten() {
+                if !mb_entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                    continue;
+                }
+                let mb_name = mb_entry.file_name();
+                let src_cur = mb_entry.path().join("cur");
+                if !src_cur.exists() { continue; }
+
+                let dst_cur = uuid_dir.join(&mb_name).join("cur");
+                if let Err(e) = fs::create_dir_all(&dst_cur) {
+                    tracing::warn!("Migration: failed to create {:?}: {}", dst_cur, e);
+                    continue;
+                }
+
+                if let Ok(files) = fs::read_dir(&src_cur) {
+                    for file in files.flatten() {
+                        let fname = file.file_name();
+                        let dst_path = dst_cur.join(&fname);
+                        if !dst_path.exists() {
+                            if let Err(e) = fs::rename(file.path(), &dst_path) {
+                                tracing::warn!("Migration: failed to move {:?}: {}", fname, e);
+                            } else {
+                                migrated += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let _ = fs::remove_dir_all(&email_dir);
+    }
+
+    info!("Maildir migration: moved {} files from email-address dirs to UUID dirs", migrated);
+    Ok(serde_json::json!({ "migrated": migrated }))
+}
+
 // ==========================================
 // Backup export/import (ZIP of .eml files)
 // ==========================================
@@ -2472,6 +2535,41 @@ async fn export_backup(
     let mut email_count: u32 = 0;
     let mut account_count: u32 = 0;
 
+    // Count total files first for progress tracking
+    let mut total_files: u32 = 0;
+    if maildir_base.exists() {
+        if let Ok(account_dirs) = fs::read_dir(&maildir_base) {
+            for account_dir in account_dirs.flatten() {
+                if !account_dir.file_type().map(|ft| ft.is_dir()).unwrap_or(false) { continue; }
+                let acct_id = account_dir.file_name().to_string_lossy().to_string();
+                if !id_to_email.contains_key(&acct_id) { continue; }
+                if let Ok(mailbox_dirs) = fs::read_dir(account_dir.path()) {
+                    for mailbox_dir in mailbox_dirs.flatten() {
+                        if !mailbox_dir.file_type().map(|ft| ft.is_dir()).unwrap_or(false) { continue; }
+                        let cur_dir = mailbox_dir.path().join("cur");
+                        if !cur_dir.exists() { continue; }
+                        if let Ok(files) = fs::read_dir(&cur_dir) {
+                            for file_entry in files.flatten() {
+                                let fname = file_entry.file_name().to_string_lossy().to_string();
+                                if !fname.contains(":2,") { continue; }
+                                if archived_only {
+                                    if let Some(flags_part) = fname.split(":2,").nth(1) {
+                                        if !flags_part.contains('A') { continue; }
+                                    } else { continue; }
+                                }
+                                total_files += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let _ = app_handle.emit("export-progress", serde_json::json!({
+        "total": total_files, "completed": 0, "active": true
+    }));
+
     if maildir_base.exists() {
         // Walk each account directory
         if let Ok(account_dirs) = fs::read_dir(&maildir_base) {
@@ -2540,6 +2638,10 @@ async fn export_backup(
 
                                 email_count += 1;
                                 account_has_emails = true;
+
+                                let _ = app_handle.emit("export-progress", serde_json::json!({
+                                    "total": total_files, "completed": email_count, "active": true
+                                }));
                             }
                         }
                     }
@@ -2568,6 +2670,10 @@ async fn export_backup(
 
     zip.finish()
         .map_err(|e| format!("Failed to finalize ZIP: {}", e))?;
+
+    let _ = app_handle.emit("export-progress", serde_json::json!({
+        "total": total_files, "completed": email_count, "active": false
+    }));
 
     info!("Backup exported: {} emails from {} accounts to {}", email_count, account_count, dest_path);
 
@@ -2647,6 +2753,22 @@ async fn import_backup(
     let mut email_count: u32 = 0;
     let email_prefix = "mailvault-backup/emails/";
 
+    // Count total email entries for progress
+    let total_entries: u32 = (0..archive.len())
+        .filter(|&i| {
+            if let Ok(entry) = archive.by_index(i) {
+                let name = entry.name().to_string();
+                name.starts_with(email_prefix) && !entry.is_dir() && name.contains(":2,")
+            } else {
+                false
+            }
+        })
+        .count() as u32;
+
+    let _ = app_handle.emit("import-progress", serde_json::json!({
+        "total": total_entries, "completed": 0, "active": true
+    }));
+
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i)
             .map_err(|e| format!("Failed to read ZIP entry: {}", e))?;
@@ -2701,7 +2823,15 @@ async fn import_backup(
             .map_err(|e| format!("Failed to write .eml file: {}", e))?;
 
         email_count += 1;
+
+        let _ = app_handle.emit("import-progress", serde_json::json!({
+            "total": total_entries, "completed": email_count, "active": true
+        }));
     }
+
+    let _ = app_handle.emit("import-progress", serde_json::json!({
+        "total": total_entries, "completed": email_count, "active": false
+    }));
 
     let settings_json = manifest.settings
         .map(|s| serde_json::to_string(&s).unwrap_or_default());
@@ -2796,6 +2926,7 @@ fn main() {
             maildir_storage_stats,
             maildir_clear_cache,
             maildir_migrate_json_to_eml,
+            maildir_migrate_email_dirs,
             export_backup,
             import_backup,
             archive_emails,

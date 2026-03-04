@@ -197,23 +197,26 @@ function App() {
         db.startKeychainLoad();
 
         const accounts = await db.getAccountsWithoutPasswords();
+        // One-time migration: move .eml files from email-address dirs to UUID dirs
+        db.migrateMaildirEmailDirs(accounts).catch(() => {});
         quickLoadHadAccountsRef.current = accounts.length > 0;
         if (accounts.length > 0) {
           const { hiddenAccounts } = useSettingsStore.getState();
           const firstVisible = accounts.find(a => !hiddenAccounts[a.id]) || accounts[0];
           debugLog('[QuickLoad] Phase 1: setting', accounts.length, 'accounts, firstVisible:', firstVisible.email);
 
+          // Load cached mailboxes from last session (has correct paths for Gmail etc.)
+          const cachedMailboxes = await db.getCachedMailboxes(firstVisible.id);
+          const defaultMailboxes = [
+            { name: 'INBOX', path: 'INBOX', specialUse: null, children: [] },
+          ];
+
           // Set accounts FIRST so the main UI renders immediately
           useMailStore.setState({
             accounts,
             activeAccountId: firstVisible.id,
             activeMailbox: 'INBOX',
-            mailboxes: [
-              { name: 'INBOX', path: 'INBOX', specialUse: null, children: [] },
-              { name: 'Sent', path: 'Sent', specialUse: '\\Sent', children: [] },
-              { name: 'Drafts', path: 'Drafts', specialUse: '\\Drafts', children: [] },
-              { name: 'Trash', path: 'Trash', specialUse: '\\Trash', children: [] }
-            ],
+            mailboxes: cachedMailboxes || defaultMailboxes,
             loading: true,
           });
 
@@ -275,6 +278,10 @@ function App() {
               });
               useMailStore.getState().updateSortedEmails();
               debugLog('[QuickLoad] Phase 2 done: no server cache, localEmails=' + localEmails.length);
+            } else {
+              // No cached data at all — stop loading spinner, init() will handle server sync
+              useMailStore.setState({ loading: false, loadingMore: true });
+              debugLog('[QuickLoad] Phase 2 done: no cached data, waiting for init()');
             }
           } catch (e) {
             console.warn('[App] Quick load headers failed (non-fatal):', e);

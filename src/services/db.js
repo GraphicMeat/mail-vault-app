@@ -28,18 +28,28 @@ async function loadKeychain() {
   if (keychainLoaded) return keychainCache || {};
   if (!invoke) { keychainLoaded = true; return {}; }
 
-  try {
-    console.log('[db.js] Loading accounts from keychain...');
-    keychainCache = await invoke('get_credentials');
-    keychainLoaded = true;
-    console.log('[db.js] Keychain loaded for', Object.keys(keychainCache).length, 'account(s)');
-    return keychainCache;
-  } catch (error) {
-    console.log('[db.js] No keychain data found or error:', error);
-    keychainCache = {};
-    keychainLoaded = true;
-    return keychainCache;
+  // If a keychain load is already in flight (from startKeychainLoad or a prior call), reuse it
+  if (_keychainLoadPromise) {
+    await _keychainLoadPromise;
+    return keychainCache || {};
   }
+
+  // Create a shared promise so concurrent callers don't fire duplicate invokes
+  _keychainLoadPromise = (async () => {
+    try {
+      console.log('[db.js] Loading accounts from keychain...');
+      keychainCache = await invoke('get_credentials');
+      keychainLoaded = true;
+      console.log('[db.js] Keychain loaded for', Object.keys(keychainCache).length, 'account(s)');
+    } catch (error) {
+      console.log('[db.js] No keychain data found or error:', error);
+      keychainCache = {};
+      keychainLoaded = true;
+    }
+  })();
+
+  await _keychainLoadPromise;
+  return keychainCache || {};
 }
 
 async function saveKeychain(data) {
@@ -911,6 +921,25 @@ export async function getStorageUsage() {
 }
 
 // --- Search ---
+
+export async function migrateMaildirEmailDirs(accounts) {
+  if (!invoke) return;
+  const accountMap = {};
+  for (const a of accounts) {
+    if (a.email && a.id && a.email !== a.id) {
+      accountMap[a.email] = a.id;
+    }
+  }
+  if (Object.keys(accountMap).length === 0) return;
+  try {
+    const result = await invoke('maildir_migrate_email_dirs', { accountMap });
+    if (result.migrated > 0) {
+      console.log(`[db.js] Maildir migration: moved ${result.migrated} files`);
+    }
+  } catch (e) {
+    console.warn('[db.js] Maildir migration failed (non-fatal):', e);
+  }
+}
 
 export async function searchLocalEmails(accountId, query, filters = {}) {
   await initDB();

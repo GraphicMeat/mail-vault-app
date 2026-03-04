@@ -284,6 +284,7 @@ pub async fn imap_get_email_light(
     account: ImapConfig,
     uid: u32,
     mailbox: Option<String>,
+    account_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let mailbox = mailbox.unwrap_or_else(|| "INBOX".to_string());
     let mb_clone = mailbox.clone();
@@ -299,11 +300,11 @@ pub async fn imap_get_email_light(
             // Persist the full .eml to Maildir so attachments/rawSource can be loaded on-demand
             use base64::Engine;
             let raw_b64 = base64::engine::general_purpose::STANDARD.encode(&e.raw_source_bytes);
-            let account_id = account.email.clone();
+            let aid = account_id.unwrap_or_else(|| account.email.clone());
             let mb = mb_clone;
 
             if let Err(err) = crate::maildir_store_raw(
-                &app_handle, &account_id, &mb, e.uid, &raw_b64, &[]
+                &app_handle, &aid, &mb, e.uid, &raw_b64, &[]
             ) {
                 tracing::warn!("Failed to auto-cache .eml for UID {}: {}", e.uid, err);
             }

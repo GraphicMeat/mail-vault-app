@@ -54,31 +54,15 @@
 - **Fields cached**: emails, sortedEmails, localEmails, emailsByIndex, totalEmails, savedEmailIds, archivedEmailIds, loadedRanges, currentPage, hasMoreEmails, sentEmails, mailboxes, serverUidSet, connectionStatus, activeMailbox, lastSyncTimestamp
 
 ## Email Body Pre-fetch
-- **Method**: `_prefetchAdjacentEmails(currentUid)` in mailStore — pre-fetches next 3 email bodies after selecting an email
-- **Strategy**: Check emailCache → Maildir (db.getLocalEmailLight) → IMAP (api.fetchEmailLight); break on network error
-- **Call site**: Fire-and-forget from `selectEmail` finally block
+- `_prefetchAdjacentEmails(currentUid)` in mailStore — pre-fetches next 3 email bodies (cache → Maildir → IMAP) after selecting an email
 
 ## Hide/Unhide Accounts
-- **Store**: `hiddenAccounts` map in settingsStore with `setAccountHidden(accountId, hidden)` and `isAccountHidden(accountId)` methods
-- **Sidebar**: Filters hidden accounts from the account list via `orderedAccounts.filter(a => !hiddenAccounts[a.id])`
-- **Pipeline**: `isHidden()` guard in `EmailPipelineManager.js` prevents starting pipelines for hidden accounts; `restartBackgroundPipelines()` public method resumes background sync on unhide
-- **Store integration**: `refreshAllAccounts` and `init` skip hidden accounts; hiding the active account switches to next visible; unhiding restarts pipeline immediately
-- **Settings UI**: Toggle in Settings > Accounts with EyeOff indicator and dimmed avatar for hidden accounts
-
-## Clear Cache
-- **Settings UI**: "Clear Cache" button in Settings > General > Local Email Caching
-- **Behavior**: Removes all cached `.eml` files and `headers.json` per mailbox; preserves archived emails (with `A` flag); restarts the sync pipeline after clearing
+- `hiddenAccounts` in settingsStore — hidden accounts filtered from sidebar, skipped by pipeline/refresh/init
+- Settings UI toggle in Accounts section; unhiding restarts pipeline immediately
 
 ## Chat Body Loader
-- **Hook**: `src/hooks/useChatBodyLoader.js` — progressively loads email bodies for header-only emails
-- **Pattern**: Pre-populates from in-memory emailCache, then fetches missing bodies from Maildir → IMAP at concurrency=3
-- **Per-bubble updates**: Each MessageBubble registers a per-uid listener; only that bubble re-renders when its body loads
-- **Shared**: Used by both `ChatBubbleView` (chat view) and `ThreadView` (email list thread conversation view)
-
-## Email List Styles
-- **Settings**: `emailListStyle` in settingsStore — `'default'` or `'compact'`
-- **Compact view**: `CompactEmailRow` component — 2-line layout (sender+date on line 1, subject on line 2), `ROW_HEIGHT_COMPACT = 52` vs `ROW_HEIGHT_DEFAULT = 56`
-- **Cloud icon**: Uses `style={{ color: 'rgba(59, 130, 246, 0.5)' }}` instead of CSS opacity to avoid Retina double-compositing
+- `src/hooks/useChatBodyLoader.js` — progressively loads email bodies at concurrency=3 (cache → Maildir → IMAP)
+- Shared by `ChatBubbleView` and `ThreadView`; per-uid listeners for granular re-renders
 
 ## Native IMAP/SMTP (Rust)
 - **IMAP crate**: `async-imap` 0.11 with `async-native-tls` for TLS and `compress` feature for DEFLATE — uses `async_std::net::TcpStream` (async-imap requires futures IO traits, not tokio IO)
@@ -140,6 +124,10 @@
 - DB_HOST must be `127.0.0.1` (not `localhost` — IPv6 `::1` causes access denied)
 - Env vars are set in Hostinger deploy settings, written to `website/api/.env` at build time by `scripts/write-env.cjs`
 - Features: "I Want This" voting, feature voting, newsletter subscription, contact form
+- **No analytics/tracking**: No Plausible, Google Analytics, or any tracking on the website — do NOT add analytics
+- **Pages**: `index.html` (homepage), `features.html` (all features), `faq.html`, `changelog.html`, `blog.html`, `privacy.html`, `terms.html`, `blog/*.html` (posts)
+- **Features page**: `website/features.html` — 9 categories with screenshot placeholder slots, sticky anchor nav strip
+- **Comparison table**: Homepage includes MailVault vs Apple Mail vs Thunderbird vs Gmail feature comparison
 
 ## OAuth2 (Multi-Provider)
 - **Providers**: Microsoft (Azure AD / Entra ID) and Google (Gmail) — both use PKCE authorization code flow
@@ -216,45 +204,11 @@
 - After every version bump, update the "What's New?" section in `website/index.html` (and sync root `index.html`) — replace the summary text and version reference with a brief summary of the new release's highlights from the changelog
 
 
-## Workflow Orchestration
-### 1. PLan Node Default
-- Enter plan mode for ANY non-trivial task (3+ steps or architectural decisions)
-- If something goes sideways, STOP and re-plan immediately - don't keep pushing
-- Use plan mode for verification steps, not just building
-- Write detailed specs upfront to reduce ambiguity
-### 2. Subagent Strategy
-- Use subagents liberally to keep main context window clean
-- Offload research, exploration, and parallel analysis to subagents
-- For complex problems, throw more compute at it via subagents
-- One tack per subagent for focused execution
-### 3. Self-Improvement Loop
-- After ANY correction from the user: update 'tasks/lessons.md" with the pattern
-- Write rules for yourself that prevent the same mistake
-- Ruthlessly iterate on these lessons until mistake rate drops
-- Review lessons at session start for relevant project
-### 4. Verification Before Done
-- Never mark a task complete without proving it works
-- Diff behavior between main and your changes when relevant
-- Ask yourself: "Would a staff engineer approve this?"
-- Run tests, check logs, demonstrate correctness
-### 5. Demand Elegance (Balanced)
-- For non-trivial changes: pause and ask "is there a more elegant way?"
-- If a fix feels hacky: "Knowing everything I know now, implement the elegant solution"
-- Skip this for simple, obvious fixes - don't over-engineer
-- Challenge your own work before presenting it
-### 6. Autonomous Bug Fizing
-- When given a bug report: just fix it. Don't ask for hand-holding
-- Point at logs, errors, failing tests - then resolve them
-- Zero context switching required from the user
-- Go fix failing CI tests without being told how
-## Task Management
-1. **Plan First**: Write plan to tasks/todo.md" with checkable items
-2. **Verify Plan**: Check in before starting implementation
-3. **Track Progress**: Mark items complete as you go
-4. **Explain Changes**: High-level summary at each step
-5. **Document Results**: Add review section to "tasks/todo.md
-6. **Capture Lessons**: Update "tasks/lessons.md"after corrections
-## Core Principles
-- **Simplicity First**: Make every change as simple as possible. Impact minimal code.
-- **No Laziness**: Find root causes. No temporary fixes. Senior developer standards.
-- **Minimat Impact**: Changes should only touch what's necessary. Avoid introducing bugs.
+## Workflow
+- **Plan first**: Enter plan mode for non-trivial tasks (3+ steps or architectural decisions); re-plan if something goes sideways
+- **Subagents**: Offload research, exploration, and parallel analysis to subagents to keep main context clean
+- **Verify before done**: Never claim complete without proving it works — run tests, check logs, demonstrate correctness
+- **Elegance (balanced)**: For non-trivial changes, pause and ask "is there a more elegant way?" — skip for simple fixes
+- **Autonomous bug fixing**: Given a bug report, just fix it — find root cause, no hand-holding needed
+- **Simplicity first**: Make every change as simple as possible; minimal code impact; no temporary fixes
+- **Post-session**: Run `/revise-claude-md` at end of productive sessions to capture learnings
