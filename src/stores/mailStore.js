@@ -310,6 +310,7 @@ export const useMailStore = create((set, get) => ({
   
   // Bulk save progress
   bulkSaveProgress: null, // { total, completed, errors, active }
+  exportProgress: null, // { total, completed, active, mode: 'export'|'import' }
 
   // Unread counts across all accounts
   totalUnreadCount: 0,
@@ -507,7 +508,26 @@ export const useMailStore = create((set, get) => ({
           return;
         }
 
-        if (currentActiveId === firstVisible.id) {
+        // Check credentials before attempting server operations — if keychain
+        // hasn't provided them yet, keep cached emails visible without error.
+        const hasCredentials = firstVisible.password || (firstVisible.authType === 'oauth2' && firstVisible.oauth2AccessToken);
+
+        if (!hasCredentials) {
+          // No credentials yet — show cached data quietly, retry in background
+          console.log('[init] Credentials not yet available for', firstVisible.email, '— will retry');
+          set({ loading: false });
+          const cachedMailboxes = await db.getCachedMailboxes(firstVisible.id);
+          if (cachedMailboxes) set({ mailboxes: cachedMailboxes });
+
+          // Auto-retry: wait for keychain to resolve, then re-init
+          setTimeout(async () => {
+            const { connectionErrorType: currentErrorType } = get();
+            if (currentErrorType === 'passwordMissing' || !get().accounts.find(a => a.id === firstVisible.id)?.password) {
+              console.log('[init] Auto-retrying keychain access...');
+              await get().retryKeychainAccess();
+            }
+          }, 3000);
+        } else if (currentActiveId === firstVisible.id) {
           // Quick-load already set this account — just refresh without resetting state
           console.log('[init] Account already active from quick-load, refreshing...');
           // Load cached mailboxes first (quick-load only sets placeholders)
@@ -515,38 +535,64 @@ export const useMailStore = create((set, get) => ({
           if (cachedMailboxes) {
             set({ mailboxes: cachedMailboxes });
           }
-          // Fetch real mailboxes from server + load emails
-          try {
-            const freshAccount = await ensureFreshToken(firstVisible);
-            const mailboxes = await api.fetchMailboxes(freshAccount);
-            set({ mailboxes, connectionStatus: 'connected', connectionError: null, connectionErrorType: null });
-            db.saveMailboxes(firstVisible.id, mailboxes);
-          } catch (e) {
-            console.warn('[init] Mailbox fetch failed (non-fatal, using cached):', e.message);
-          }
-          await get().loadEmails();
+          // Start email loading immediately — don't wait for mailbox fetch
+          const emailLoadPromise = get().loadEmails();
           get().loadSentHeaders(firstVisible.id);
+          // Fetch real mailboxes from server in parallel (non-blocking)
+          ensureFreshToken(firstVisible).then(freshAccount =>
+            api.fetchMailboxes(freshAccount).then(mailboxes => {
+              set({ mailboxes, connectionStatus: 'connected', connectionError: null, connectionErrorType: null });
+              db.saveMailboxes(firstVisible.id, mailboxes);
+            })
+          ).catch(e => console.warn('[init] Mailbox fetch failed (non-fatal):', e.message));
+          await emailLoadPromise;
         } else {
           await get().setActiveAccount(firstVisible.id);
         }
       }
 
-      // Auto-retry if credentials are missing (keychain may have been slow or prompted behind window)
-      const { connectionErrorType: initErrorType } = get();
-      if (initErrorType === 'passwordMissing') {
-        console.log('[init] Credentials missing after init, scheduling auto-retry in 5s...');
-        setTimeout(async () => {
-          const { connectionErrorType: currentErrorType } = get();
-          if (currentErrorType === 'passwordMissing') {
-            console.log('[init] Auto-retrying keychain access...');
-            await get().retryKeychainAccess();
-          }
-        }, 5000);
-      }
+      // Background: pre-fetch mailboxes for all other visible accounts
+      get()._prefetchAllMailboxes().catch(() => {});
     } catch (error) {
       console.error('Failed to initialize:', error);
       set({ error: error.message, loading: false });
     }
+  },
+
+  // Pre-fetch mailboxes for all visible accounts (background, non-blocking)
+  _prefetchAllMailboxes: async () => {
+    const { accounts, activeAccountId } = get();
+    const { hiddenAccounts } = useSettingsStore.getState();
+
+    const otherAccounts = accounts.filter(a =>
+      a.id !== activeAccountId && !hiddenAccounts[a.id]
+    );
+
+    if (otherAccounts.length === 0) return;
+    console.log('[prefetch] Pre-fetching mailboxes for', otherAccounts.length, 'background accounts');
+
+    await Promise.allSettled(otherAccounts.map(async (account) => {
+      try {
+        const freshAccount = await ensureFreshToken(account);
+        let mailboxes;
+        if (isGraphAccount(freshAccount)) {
+          const graphFolders = await api.graphListFolders(freshAccount.oauth2AccessToken);
+          mailboxes = graphFolders.map(f => ({
+            name: f.displayName,
+            path: f.displayName,
+            specialUse: null,
+            children: [],
+            noselect: false,
+          }));
+        } else {
+          mailboxes = await api.fetchMailboxes(freshAccount);
+        }
+        await db.saveMailboxes(account.id, mailboxes);
+      } catch (e) {
+        console.warn(`[prefetch] Mailbox fetch failed for ${account.email} (non-fatal):`, e.message);
+      }
+    }));
+    console.log('[prefetch] Mailbox pre-fetch complete');
   },
 
   // Account management
@@ -812,8 +858,25 @@ export const useMailStore = create((set, get) => ({
 
     if (isStale()) { console.log('[setActiveAccount] Stale after mailbox cache, aborting'); return; }
 
-    // Check if credentials are missing - local emails are still viewable
-    const hasCredentials = account.password || (account.authType === 'oauth2' && account.oauth2AccessToken);
+    // Check if credentials are missing — try keychain refresh before showing error
+    let hasCredentials = account.password || (account.authType === 'oauth2' && account.oauth2AccessToken);
+    if (!hasCredentials) {
+      // Credentials may not be loaded yet (quick-load uses accounts.json without passwords).
+      // Try fetching from keychain before giving up.
+      console.log('[setActiveAccount] Credentials not in store, trying keychain for', account.email);
+      try {
+        const freshAccount = await db.getAccount(accountId);
+        if (freshAccount && (freshAccount.password || (freshAccount.authType === 'oauth2' && freshAccount.oauth2AccessToken))) {
+          account = freshAccount;
+          hasCredentials = true;
+          // Update store so future calls have the credentials
+          const updatedAccounts = get().accounts.map(a => a.id === accountId ? { ...a, ...freshAccount } : a);
+          set({ accounts: updatedAccounts });
+        }
+      } catch (e) {
+        console.warn('[setActiveAccount] Keychain fetch failed:', e);
+      }
+    }
     if (!hasCredentials) {
       console.error('Credentials missing for account:', account.email);
       if (isStale()) return;
@@ -884,41 +947,26 @@ export const useMailStore = create((set, get) => ({
         // Load cached Sent headers for chat view (non-blocking)
         if (!isStale()) get().loadSentHeaders(accountId);
       } else {
-        // IMAP accounts: fetch mailboxes with retry (sidecar may still be starting)
-        let mailboxes;
-        let lastError;
-        for (let attempt = 0; attempt < 3; attempt++) {
-          try {
-            mailboxes = await api.fetchMailboxes(account);
-            break;
-          } catch (e) {
-            lastError = e;
-            const isServerNotReady = e.message?.includes('Server unreachable') || e.message?.includes('HTTP 500') || e.status === 500;
-            if (isServerNotReady && attempt < 2) {
-              console.log(`[setActiveAccount] Server not ready, retrying in ${(attempt + 1) * 2}s... (attempt ${attempt + 1}/3)`);
-              await new Promise(r => setTimeout(r, (attempt + 1) * 2000));
-              continue;
-            }
-            throw e;
-          }
-        }
-        if (isStale()) return;
-        set({
-          mailboxes,
-          connectionStatus: 'connected',
-          connectionError: null,
-          connectionErrorType: null
-        });
-
-        // Cache mailboxes for offline/reconnect fallback (correct server paths)
-        db.saveMailboxes(accountId, mailboxes);
-
-        // Load emails (this will update connection status)
-        if (isStale()) return;
-        await get().loadEmails();
-
-        // Load cached Sent headers for chat view (non-blocking)
+        // IMAP accounts: start email loading immediately, fetch mailboxes in background
+        const emailLoadPromise = get().loadEmails();
         if (!isStale()) get().loadSentHeaders(accountId);
+
+        // Background: refresh mailboxes from server (non-blocking)
+        ensureFreshToken(account).then(freshAccount =>
+          api.fetchMailboxes(freshAccount).then(freshMailboxes => {
+            if (!isStale()) {
+              set({
+                mailboxes: freshMailboxes,
+                connectionStatus: 'connected',
+                connectionError: null,
+                connectionErrorType: null
+              });
+              db.saveMailboxes(accountId, freshMailboxes);
+            }
+          })
+        ).catch(e => console.warn('[setActiveAccount] Mailbox fetch failed (non-fatal):', e.message));
+
+        await emailLoadPromise;
       }
     } catch (error) {
       console.error('Failed to connect to server:', error);
@@ -1210,8 +1258,22 @@ export const useMailStore = create((set, get) => ({
     // Keep previous/cached emails for degraded modes (password missing, offline)
     const previousEmails = get().emails;
 
-    // Check if credentials are missing - keep cached emails visible
-    const hasCredentials = account.password || (account.authType === 'oauth2' && account.oauth2AccessToken);
+    // Check if credentials are missing — try keychain before showing error
+    let hasCredentials = account.password || (account.authType === 'oauth2' && account.oauth2AccessToken);
+    if (!hasCredentials) {
+      console.log('[loadEmails] Credentials not in store, trying keychain for', account.email);
+      try {
+        const freshAccount = await db.getAccount(activeAccountId);
+        if (freshAccount && (freshAccount.password || (freshAccount.authType === 'oauth2' && freshAccount.oauth2AccessToken))) {
+          account = freshAccount;
+          hasCredentials = true;
+          const updatedAccounts = get().accounts.map(a => a.id === activeAccountId ? { ...a, ...freshAccount } : a);
+          set({ accounts: updatedAccounts });
+        }
+      } catch (e) {
+        console.warn('[loadEmails] Keychain fetch failed:', e);
+      }
+    }
     if (!hasCredentials) {
       console.error('[loadEmails] Credentials missing for account:', account.email);
       if (!isStale()) set({
@@ -1616,6 +1678,7 @@ export const useMailStore = create((set, get) => ({
 
       const mailboxes = graphFoldersToMailboxes(graphFolders);
       set({ mailboxes });
+      db.saveMailboxes(activeAccountId, mailboxes);
 
       // 2. Find the Graph folder ID for the active mailbox
       const targetFolder = mailboxes.find(m => m.path === activeMailbox);
@@ -2126,7 +2189,7 @@ export const useMailStore = create((set, get) => ({
           get().addToCache(cacheKey, email, cacheLimitMB);
         } else {
           // IMAP (auto-persists .eml)
-          const email = await api.fetchEmailLight(account, nextEmail.uid, activeMailbox);
+          const email = await api.fetchEmailLight(account, nextEmail.uid, activeMailbox, activeAccountId);
           get().addToCache(cacheKey, email, cacheLimitMB);
         }
       } catch (e) {
@@ -2217,7 +2280,7 @@ export const useMailStore = create((set, get) => ({
         }
       } else if (account) {
         // 3b. IMAP: Fetch from server (light — saves full .eml to Maildir in Rust background)
-        email = await api.fetchEmailLight(account, uid, activeMailbox);
+        email = await api.fetchEmailLight(account, uid, activeMailbox, activeAccountId);
         actualSource = 'server';
         get().addToCache(cacheKey, email, cacheLimitMB);
 
@@ -2430,6 +2493,12 @@ export const useMailStore = create((set, get) => ({
   // Cancel/dismiss bulk save progress
   dismissBulkProgress: () => {
     set({ bulkSaveProgress: null });
+  },
+  setExportProgress: (progress) => {
+    set({ exportProgress: progress });
+  },
+  dismissExportProgress: () => {
+    set({ exportProgress: null });
   },
   
   // Remove local email

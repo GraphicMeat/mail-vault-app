@@ -37,7 +37,7 @@ import {
   ShieldAlert,
   AlertTriangle
 } from 'lucide-react';
-import { getRealAttachments } from '../services/attachmentUtils';
+import { getRealAttachments, replaceCidUrls } from '../services/attachmentUtils';
 import { checkSenderVerification } from '../utils/senderCheck';
 
 function getCleanBase64(content) {
@@ -629,8 +629,9 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
 
   const iframeContent = useMemo(() => {
     if (!loadedEmail?.html) return '';
-    const bodyMatch = loadedEmail.html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-    const bodyHtml = bodyMatch ? bodyMatch[1] : loadedEmail.html;
+    const htmlWithCid = replaceCidUrls(loadedEmail.html, loadedEmail.attachments);
+    const bodyMatch = htmlWithCid.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    const bodyHtml = bodyMatch ? bodyMatch[1] : htmlWithCid;
     return `
     <!DOCTYPE html>
     <html>
@@ -809,6 +810,10 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isLast, active
   const [expanded, setExpanded] = useState(isLast);
   const [, forceUpdate] = useState(0);
   const [composeMode, setComposeMode] = useState(null);
+  const [headerExpanded, setHeaderExpanded] = useState(false);
+  const [showRaw, setShowRaw] = useState(false);
+  const [rawSource, setRawSource] = useState(null);
+  const [loadingRaw, setLoadingRaw] = useState(false);
   const key = emailKey(email);
 
   // Register for body load notifications
@@ -871,15 +876,80 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isLast, active
         <div className="px-3 pb-3 overflow-hidden" style={{ contain: 'inline-size' }}>
           {/* To/CC line */}
           <div className="text-xs text-mail-text-muted mb-2 pl-9">
-            To: {(Array.isArray(email.to) ? email.to : []).map(t => t.name || t.address).join(', ') || 'Unknown'}
-            {email.cc?.length > 0 && (
-              <span className="ml-2">CC: {email.cc.map(c => c.name || c.address).join(', ')}</span>
-            )}
+            <div>
+              To: {(Array.isArray(email.to) ? email.to : []).map(t => t.name || t.address).join(', ') || 'Unknown'}
+              {email.cc?.length > 0 && (
+                <span className="ml-2">CC: {email.cc.map(c => c.name || c.address).join(', ')}</span>
+              )}
+              <button
+                onClick={(e) => { e.stopPropagation(); setHeaderExpanded(!headerExpanded); }}
+                className="ml-2 text-mail-accent hover:underline"
+              >
+                {headerExpanded ? 'Less' : 'More'}
+              </button>
+            </div>
+            <AnimatePresence>
+              {headerExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="mt-1 space-y-0.5 overflow-hidden"
+                >
+                  <div>Date: {format(new Date(email.date), 'PPpp')}</div>
+                  {email.messageId && <div className="break-all">Message-ID: {email.messageId}</div>}
+                  {email.replyTo?.length > 0 && (
+                    <div>Reply-To: {email.replyTo.map(r => r.address || r).join(', ')}</div>
+                  )}
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (showRaw) { setShowRaw(false); return; }
+                      if (!rawSource) {
+                        setLoadingRaw(true);
+                        try {
+                          const isTauri = !!window.__TAURI__;
+                          if (isTauri) {
+                            const { invoke } = window.__TAURI__.core;
+                            const b64 = await invoke('maildir_read_raw_source', {
+                              accountId: activeAccountId,
+                              mailbox: activeMailbox,
+                              uid: email.uid,
+                            });
+                            setRawSource(b64);
+                          }
+                        } catch (err) {
+                          console.error('[ThreadEmailItem] Failed to load raw source:', err);
+                        } finally {
+                          setLoadingRaw(false);
+                        }
+                      }
+                      setShowRaw(true);
+                    }}
+                    disabled={loadingRaw}
+                    className={`mt-1 flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors
+                               ${showRaw
+                                 ? 'bg-mail-accent text-white'
+                                 : 'bg-mail-surface hover:bg-mail-surface-hover text-mail-text-muted'}
+                               disabled:opacity-50`}
+                  >
+                    {loadingRaw ? <RefreshCw size={12} className="animate-spin" /> : <Code size={12} />}
+                    {loadingRaw ? 'Loading...' : showRaw ? 'Rendered' : 'View Source'}
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Body */}
           <div className="pl-9 overflow-hidden" style={{ contain: 'inline-size' }}>
-            <ThreadEmailItemContent email={email} loadedEmail={loadedEmail} isLoading={isLoading} signatureDisplay={signatureDisplay} shouldShowSignature={shouldShowSignature} />
+            {showRaw && rawSource ? (
+              <pre className="text-xs font-mono text-mail-text bg-mail-surface rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-all">
+                {atob(rawSource)}
+              </pre>
+            ) : (
+              <ThreadEmailItemContent email={email} loadedEmail={loadedEmail} isLoading={isLoading} signatureDisplay={signatureDisplay} shouldShowSignature={shouldShowSignature} />
+            )}
           </div>
 
           {/* Attachments */}
@@ -955,14 +1025,19 @@ function ThreadView({ thread }) {
     useShallow(s => ({ activeAccountId: s.activeAccountId, activeMailbox: s.activeMailbox, savedEmailIds: s.savedEmailIds, archivedEmailIds: s.archivedEmailIds, saveEmailsLocally: s.saveEmailsLocally }))
   );
   const signatureDisplay = useSettingsStore(s => s.signatureDisplay);
+  const threadSortOrder = useSettingsStore(s => s.threadSortOrder);
   const [saving, setSaving] = useState(false);
   const scrollContainerRef = useRef(null);
   const lastEmailRef = useRef(null);
 
-  // Sort emails chronologically (oldest first for conversation flow)
+  // Sort emails by user preference (oldest-first or newest-first)
   const sortedEmails = useMemo(() =>
-    [...thread.emails].sort((a, b) => new Date(a.date) - new Date(b.date)),
-    [thread.emails]
+    [...thread.emails].sort((a, b) =>
+      threadSortOrder === 'newest-first'
+        ? new Date(b.date) - new Date(a.date)
+        : new Date(a.date) - new Date(b.date)
+    ),
+    [thread.emails, threadSortOrder]
   );
 
   const { bodiesMapRef, registerListener } = useChatBodyLoader(sortedEmails);
@@ -1219,7 +1294,7 @@ export function EmailViewer() {
           table { max-width: 100% !important; }
         </style>
       </head>
-      <body>${getEmailBodyContent(selectedEmail.html)}</body>
+      <body>${getEmailBodyContent(replaceCidUrls(selectedEmail.html, selectedEmail.attachments))}</body>
     </html>
   ` : '';
   

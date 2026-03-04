@@ -107,8 +107,8 @@
     "operatingSystem": "macOS",
     "applicationCategory": "BusinessApplication",
     "applicationSubCategory": "EmailApplication",
-    "softwareVersion": "1.6.0",
-    "datePublished": "2026-02-20",
+    "softwareVersion": "1.9.2",
+    "datePublished": "2026-03-04",
     "offers": {
       "@type": "Offer",
       "price": "0",
@@ -121,15 +121,23 @@
       "IMAP support for any email provider",
       "Gmail OAuth2 sign-in",
       "Microsoft 365 OAuth2 sign-in",
+      "Microsoft Graph API for Outlook.com accounts",
       "Offline email access",
-      "Full-text search with filters",
+      "Full-text search with filters and search history",
       "ZIP backup export and import",
       "Email threading (Gmail-style conversations)",
       "Chat conversation view",
-      "Bulk email archiving",
-      "Multi-account support",
+      "Quote folding and signature folding",
+      "Sender verification badges (SPF/DKIM/DMARC)",
+      "Bulk email archiving with progress tracking",
+      "Multi-account support with custom avatars",
       "Dark and light themes",
+      "3-column and 2-column layouts with resizable panes",
+      "CONDSTORE delta sync and COMPRESS=DEFLATE",
+      "Virtual scrolling for 17,000+ emails",
       "Native macOS app (Tauri, not Electron)",
+      "macOS Keychain credential storage",
+      "System tray with background sync",
       "Auto-updater"
     ],
     "screenshot": "https://mailvaultapp.com/og-image.png",
@@ -165,13 +173,13 @@
   <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16">
-        <div class="flex items-center gap-3">
+        <a href="/" class="flex items-center gap-3">
           <img src="icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
           <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
-        </div>
+        </a>
 
         <div class="hidden md:flex items-center gap-8">
-          <a href="#features" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Features</a>
+          <a href="/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Features</a>
           <a href="#how-it-works" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">How It Works</a>
           <a href="/faq.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">FAQ</a>
           <a href="/changelog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Changelog</a>
@@ -204,7 +212,7 @@
       <!-- Mobile menu -->
       <div id="mobile-menu" class="hidden md:hidden pb-4">
         <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-          <a href="#features" class="mobile-nav-link px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Features</a>
+          <a href="/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Features</a>
           <a href="#how-it-works" class="mobile-nav-link px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">How It Works</a>
           <a href="/faq.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">FAQ</a>
           <a href="/changelog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Changelog</a>
@@ -458,8 +466,8 @@
           <ul class="space-y-2 text-slate-600 dark:text-slate-400">
             <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Compose, reply, reply all, and forward</li>
             <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Gmail &amp; Microsoft 365 OAuth2 sign-in</li>
-            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Advanced search (sender, date, attachments, folder)</li>
-            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Bulk operations (select all, batch archive/delete)</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Advanced search with filters &amp; search history</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Bulk archive, delete, or archive+delete</li>
           </ul>
         </div>
 
@@ -473,25 +481,25 @@
           <h3 class="text-xl font-semibold mb-3">Storage & Backup</h3>
           <ul class="space-y-2 text-slate-600 dark:text-slate-400">
             <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg><a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> + <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml (RFC 5322)</a> standard format</li>
-            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>One-click archive to local storage</li>
-            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>ZIP export (archived or all emails)</li>
-            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Portable import &amp; background caching</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>One-click archive &amp; background caching</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>ZIP export &amp; portable import</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Configurable cache size &amp; duration</li>
           </ul>
         </div>
 
-        <!-- Customization -->
+        <!-- Threading & Reading -->
         <div class="feature-card p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-all duration-300 hover:shadow-xl">
           <div class="w-12 h-12 mb-4 rounded-xl gradient-bg flex items-center justify-center">
             <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
             </svg>
           </div>
-          <h3 class="text-xl font-semibold mb-3">Customization</h3>
+          <h3 class="text-xl font-semibold mb-3">Threading & Reading</h3>
           <ul class="space-y-2 text-slate-600 dark:text-slate-400">
-            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Dark/light mode</li>
-            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>3-column or 2-column layout (resizable)</li>
-            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>List or Chat view, view modes (All/Server/Local)</li>
-            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Per-account signatures, notifications &amp; badges</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Gmail-style email threading (JWZ algorithm)</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Quote folding &amp; signature folding</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Sender verification badges (SPF/DKIM/DMARC)</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Chat view &amp; list view with one-click toggle</li>
           </ul>
         </div>
 
@@ -504,12 +512,21 @@
           </div>
           <h3 class="text-xl font-semibold mb-3">Performance & Security</h3>
           <ul class="space-y-2 text-slate-600 dark:text-slate-400">
-            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Virtual scrolling for large mailboxes</li>
-            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>macOS Keychain credential storage</li>
-            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Native Tauri (not Electron) with auto-updater</li>
-            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Open email in new window</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Native Rust (Tauri) — not Electron</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>macOS Keychain &amp; App Sandbox</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Virtual scrolling for 17,000+ emails</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>CONDSTORE delta sync &amp; DEFLATE compression</li>
           </ul>
         </div>
+      </div>
+
+      <div class="text-center mt-10">
+        <a href="/features.html" class="inline-flex items-center gap-2 text-primary-500 hover:text-primary-600 font-semibold transition-colors">
+          See all features
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+          </svg>
+        </a>
       </div>
     </div>
   </section>
@@ -716,75 +733,95 @@
     </div>
   </section>
 
-  <!-- Store & Free Server Section -->
-  <section aria-label="Store locally and free server space" class="py-20">
+  <!-- Comparison Table Section -->
+  <section id="comparison" aria-label="Compare MailVault with other email clients" class="py-20">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="max-w-3xl mx-auto text-center mb-16">
         <h2 class="text-3xl sm:text-4xl font-bold mb-6">
-          Store Locally. <span class="gradient-text">Free Your Server.</span>
+          How MailVault <span class="gradient-text">Compares</span>
         </h2>
         <p class="text-lg text-slate-600 dark:text-slate-400">
-          Running out of server storage? Save emails to your machine, then safely delete them from the server. Your emails stay accessible forever — offline, searchable, and fully yours.
+          See how MailVault stacks up against popular email clients for local backup and offline access.
         </p>
       </div>
 
-      <div class="grid md:grid-cols-3 gap-8">
-        <!-- Step 1 -->
-        <div class="relative p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-          <div class="w-12 h-12 mb-4 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-            <svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/>
-            </svg>
-          </div>
-          <h3 class="text-xl font-semibold mb-2">Sync & Save</h3>
-          <p class="text-slate-600 dark:text-slate-400">
-            MailVault fetches your emails from the server and stores them as standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml files</a> in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format — one file per email, no proprietary database.
-          </p>
-        </div>
-
-        <!-- Step 2 -->
-        <div class="relative p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-          <div class="w-12 h-12 mb-4 rounded-xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-            <svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-            </svg>
-          </div>
-          <h3 class="text-xl font-semibold mb-2">Delete from Server</h3>
-          <p class="text-slate-600 dark:text-slate-400">
-            Once saved locally, safely delete emails from the server to free up storage. Your mailbox stays clean, your data stays safe.
-          </p>
-        </div>
-
-        <!-- Step 3 -->
-        <div class="relative p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-          <div class="w-12 h-12 mb-4 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-            <svg class="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            </svg>
-          </div>
-          <h3 class="text-xl font-semibold mb-2">Access Anytime</h3>
-          <p class="text-slate-600 dark:text-slate-400">
-            Read, search, and browse all your locally saved emails — even without internet. They're yours forever.
-          </p>
-        </div>
-      </div>
-
-      <div class="mt-12 max-w-2xl mx-auto">
-        <div class="p-6 rounded-2xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800/50">
-          <div class="flex items-start gap-4">
-            <div class="w-10 h-10 rounded-lg gradient-bg flex items-center justify-center flex-shrink-0">
-              <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-              </svg>
-            </div>
-            <div>
-              <h4 class="font-semibold text-slate-900 dark:text-white mb-1">Works as a backup too</h4>
-              <p class="text-slate-600 dark:text-slate-400 text-sm">
-                Love your current email client? Use MailVault purely as a silent backup. It syncs in the background from your menu bar — your emails are protected even if you never open the app.
-              </p>
-            </div>
-          </div>
-        </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr>
+              <th class="p-4 text-sm font-semibold text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">Feature</th>
+              <th class="p-4 text-sm font-semibold text-primary-500 border-b border-slate-200 dark:border-slate-700 bg-primary-50 dark:bg-primary-900/20 rounded-tl-lg">MailVault</th>
+              <th class="p-4 text-sm font-semibold text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">Apple Mail</th>
+              <th class="p-4 text-sm font-semibold text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">Thunderbird</th>
+              <th class="p-4 text-sm font-semibold text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">Gmail Web</th>
+            </tr>
+          </thead>
+          <tbody class="text-sm">
+            <tr class="border-b border-slate-100 dark:border-slate-800">
+              <td class="p-4 font-medium text-slate-900 dark:text-white">Local email backup</td>
+              <td class="p-4 bg-primary-50/50 dark:bg-primary-900/10"><span class="text-green-500 font-bold">Yes</span> — one-click archive</td>
+              <td class="p-4"><span class="text-yellow-500">Partial</span> — manual export</td>
+              <td class="p-4"><span class="text-yellow-500">Partial</span> — local folders</td>
+              <td class="p-4"><span class="text-red-500">No</span></td>
+            </tr>
+            <tr class="border-b border-slate-100 dark:border-slate-800">
+              <td class="p-4 font-medium text-slate-900 dark:text-white">Standard .eml format</td>
+              <td class="p-4 bg-primary-50/50 dark:bg-primary-900/10"><span class="text-green-500 font-bold">Yes</span> — Maildir + RFC 5322</td>
+              <td class="p-4"><span class="text-red-500">No</span> — proprietary .emlx</td>
+              <td class="p-4"><span class="text-yellow-500">Partial</span> — mbox format</td>
+              <td class="p-4"><span class="text-red-500">No</span></td>
+            </tr>
+            <tr class="border-b border-slate-100 dark:border-slate-800">
+              <td class="p-4 font-medium text-slate-900 dark:text-white">Offline access</td>
+              <td class="p-4 bg-primary-50/50 dark:bg-primary-900/10"><span class="text-green-500 font-bold">Yes</span> — fully offline</td>
+              <td class="p-4"><span class="text-green-500">Yes</span></td>
+              <td class="p-4"><span class="text-green-500">Yes</span></td>
+              <td class="p-4"><span class="text-red-500">No</span></td>
+            </tr>
+            <tr class="border-b border-slate-100 dark:border-slate-800">
+              <td class="p-4 font-medium text-slate-900 dark:text-white">Bulk archive + delete from server</td>
+              <td class="p-4 bg-primary-50/50 dark:bg-primary-900/10"><span class="text-green-500 font-bold">Yes</span> — with progress bar</td>
+              <td class="p-4"><span class="text-red-500">No</span></td>
+              <td class="p-4"><span class="text-red-500">No</span></td>
+              <td class="p-4"><span class="text-red-500">No</span></td>
+            </tr>
+            <tr class="border-b border-slate-100 dark:border-slate-800">
+              <td class="p-4 font-medium text-slate-900 dark:text-white">ZIP backup export/import</td>
+              <td class="p-4 bg-primary-50/50 dark:bg-primary-900/10"><span class="text-green-500 font-bold">Yes</span> — portable</td>
+              <td class="p-4"><span class="text-red-500">No</span></td>
+              <td class="p-4"><span class="text-red-500">No</span></td>
+              <td class="p-4"><span class="text-yellow-500">Partial</span> — Google Takeout</td>
+            </tr>
+            <tr class="border-b border-slate-100 dark:border-slate-800">
+              <td class="p-4 font-medium text-slate-900 dark:text-white">Chat-style email view</td>
+              <td class="p-4 bg-primary-50/50 dark:bg-primary-900/10"><span class="text-green-500 font-bold">Yes</span> — like iMessage</td>
+              <td class="p-4"><span class="text-red-500">No</span></td>
+              <td class="p-4"><span class="text-red-500">No</span></td>
+              <td class="p-4"><span class="text-red-500">No</span></td>
+            </tr>
+            <tr class="border-b border-slate-100 dark:border-slate-800">
+              <td class="p-4 font-medium text-slate-900 dark:text-white">Sender verification (SPF/DKIM)</td>
+              <td class="p-4 bg-primary-50/50 dark:bg-primary-900/10"><span class="text-green-500 font-bold">Yes</span> — visual badges</td>
+              <td class="p-4"><span class="text-red-500">No</span></td>
+              <td class="p-4"><span class="text-red-500">No</span></td>
+              <td class="p-4"><span class="text-yellow-500">Partial</span> — hidden</td>
+            </tr>
+            <tr class="border-b border-slate-100 dark:border-slate-800">
+              <td class="p-4 font-medium text-slate-900 dark:text-white">Privacy (no cloud/tracking)</td>
+              <td class="p-4 bg-primary-50/50 dark:bg-primary-900/10"><span class="text-green-500 font-bold">Yes</span> — fully local</td>
+              <td class="p-4"><span class="text-yellow-500">Partial</span> — iCloud sync</td>
+              <td class="p-4"><span class="text-green-500">Yes</span></td>
+              <td class="p-4"><span class="text-red-500">No</span> — Google servers</td>
+            </tr>
+            <tr>
+              <td class="p-4 font-medium text-slate-900 dark:text-white">Open source</td>
+              <td class="p-4 bg-primary-50/50 dark:bg-primary-900/10"><span class="text-green-500 font-bold">Yes</span></td>
+              <td class="p-4"><span class="text-red-500">No</span></td>
+              <td class="p-4"><span class="text-green-500">Yes</span></td>
+              <td class="p-4"><span class="text-red-500">No</span></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </section>
@@ -880,27 +917,54 @@
     </div>
   </section>
 
-  <!-- FAQ CTA Section -->
-  <section aria-label="Frequently asked questions" class="py-20 bg-white dark:bg-slate-800/50">
+  <!-- Platform Availability Section -->
+  <section aria-label="Platform availability" class="py-20 bg-white dark:bg-slate-800/50">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="max-w-2xl mx-auto text-center">
-        <div class="w-16 h-16 mx-auto mb-6 rounded-2xl bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
-          <svg class="w-8 h-8 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-          </svg>
-        </div>
-        <h2 class="text-3xl sm:text-4xl font-bold mb-4">
-          Got Questions?
+      <div class="max-w-3xl mx-auto text-center">
+        <h2 class="text-3xl sm:text-4xl font-bold mb-6">
+          Available on <span class="gradient-text">macOS</span>
         </h2>
-        <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
-          Wondering how your emails are stored? What format is used for messages? How do attachments work? Learn about email providers, backup and restore, security, and more.
+        <p class="text-lg text-slate-600 dark:text-slate-400 mb-10">
+          MailVault is currently available for macOS (Intel &amp; Apple Silicon). Want it on your platform?
         </p>
-        <a href="/faq.html" class="inline-flex items-center gap-2 px-8 py-4 rounded-xl font-semibold text-lg border-2 border-primary-500 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">
-          Read the FAQ
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
-          </svg>
-        </a>
+
+        <div class="grid sm:grid-cols-3 gap-6 mb-10">
+          <!-- macOS -->
+          <div class="p-6 rounded-2xl bg-primary-50 dark:bg-primary-900/20 border-2 border-primary-500">
+            <svg class="w-10 h-10 mx-auto mb-3 text-primary-500" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+            </svg>
+            <h3 class="font-semibold text-slate-900 dark:text-white mb-1">macOS</h3>
+            <span class="inline-block px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium rounded-full">Available Now</span>
+          </div>
+
+          <!-- Windows -->
+          <div class="p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+            <svg class="w-10 h-10 mx-auto mb-3 text-slate-400" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/>
+            </svg>
+            <h3 class="font-semibold text-slate-900 dark:text-white mb-1">Windows</h3>
+            <span class="inline-block px-3 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-medium rounded-full">Coming Soon</span>
+          </div>
+
+          <!-- Linux -->
+          <div class="p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+            <svg class="w-10 h-10 mx-auto mb-3 text-slate-400" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12.504 0c-.155 0-.311.002-.466.014C8.756.17 5.944 2.534 5.156 6.03c-.337 1.494-.182 3.09.243 4.578a18.1 18.1 0 001.2 3.126c.324.659.694 1.39.857 2.129.168.76.106 1.473-.14 2.191-.245.713-.618 1.37-.99 2.023-.37.65-.745 1.303-1.003 2.016-.258.714-.378 1.507-.168 2.31.208.795.688 1.48 1.349 1.96.66.48 1.485.762 2.324.835a7.32 7.32 0 002.6-.243 8.36 8.36 0 001.174-.423c.371-.17.741-.37 1.157-.37.416 0 .786.2 1.157.37.365.167.76.313 1.174.423a7.32 7.32 0 002.6.243c.839-.073 1.664-.356 2.324-.835.661-.48 1.141-1.165 1.349-1.96.21-.803.09-1.596-.168-2.31-.258-.713-.633-1.366-1.003-2.016-.372-.653-.745-1.31-.99-2.023-.246-.718-.308-1.431-.14-2.191.163-.74.533-1.47.857-2.129a18.1 18.1 0 001.2-3.126c.425-1.488.58-3.084.243-4.578C18.056 2.534 15.244.17 11.962.014 11.807.002 11.651 0 11.496 0h1.008z"/>
+            </svg>
+            <h3 class="font-semibold text-slate-900 dark:text-white mb-1">Linux</h3>
+            <span class="inline-block px-3 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-medium rounded-full">Coming Soon</span>
+          </div>
+        </div>
+
+        <div class="max-w-md mx-auto">
+          <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">Get notified when MailVault launches on your platform:</p>
+          <form id="platform-notify-form" class="flex gap-2">
+            <input type="email" name="email" placeholder="Your email" required class="flex-1 px-4 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all text-sm">
+            <button type="submit" class="gradient-bg text-white px-5 py-2.5 rounded-lg font-medium text-sm hover:opacity-90 transition-opacity whitespace-nowrap">Notify Me</button>
+          </form>
+          <p id="platform-notify-message" class="mt-2 text-sm hidden"></p>
+        </div>
       </div>
     </div>
   </section>
@@ -918,7 +982,7 @@
           What's New?
         </h2>
         <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
-          Full Microsoft Graph API transport for personal Outlook.com/Hotmail/Live.com accounts (bypassing Microsoft's IMAP regression), dedicated Azure AD app registration for reliable corporate M365 OAuth2, and thread view loading fixes. See everything in v1.9.1.
+          Quote folding and signature folding for cleaner reading, sender verification badges (SPF/DKIM/DMARC), real-time export/import progress, faster folder loading, fixed attachment downloads for OAuth accounts, and inline image support. See everything in the latest release.
         </p>
         <a href="/changelog.html" class="inline-flex items-center gap-2 px-8 py-4 rounded-xl font-semibold text-lg border-2 border-primary-500 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">
           View Changelog
@@ -957,9 +1021,33 @@
           </a>
         </div>
 
-        <p class="mt-6 text-sm text-slate-500 dark:text-slate-400">
+        <p class="mt-4 text-sm text-slate-500 dark:text-slate-400">
           Requires macOS 10.15 (Catalina) or later
         </p>
+
+        <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">
+          <span id="download-count" class="font-medium"></span>
+        </p>
+
+        <!-- Built with -->
+        <div class="flex items-center justify-center gap-3 mt-8 flex-wrap">
+          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 text-xs font-medium">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M23.687 11.709l-10.313-10.3a1.035 1.035 0 00-.453-.266L.905.005A.885.885 0 00.006.903l1.14 12.014a1.018 1.018 0 00.266.453L11.726 23.7a1.048 1.048 0 001.486 0l10.475-10.505a1.048 1.048 0 000-1.486zM7.543 9.493a2.756 2.756 0 110-3.897 2.756 2.756 0 010 3.897z"/></svg>
+            Rust
+          </span>
+          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400 text-xs font-medium">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M14.23 12.004a2.236 2.236 0 0 1-2.235 2.236 2.236 2.236 0 0 1-2.236-2.236 2.236 2.236 0 0 1 2.235-2.236 2.236 2.236 0 0 1 2.236 2.236zm2.648-10.69c-1.346 0-3.107.96-4.888 2.622-1.78-1.653-3.542-2.602-4.887-2.602-.31 0-.594.065-.85.196-1.645.858-1.198 4.22.684 7.23C4.733 10.293 3.6 12.053 3.6 13.62c0 3.59 3.872 5.994 8.4 5.994s8.4-2.404 8.4-5.994c0-1.564-1.128-3.322-3.327-4.862 1.877-3.008 2.327-6.37.684-7.228a1.463 1.463 0 0 0-.677-.166z"/></svg>
+            React
+          </span>
+          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 text-xs font-medium">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0L1.605 6v12L12 24l10.395-6V6L12 0zm0 2.183l8.207 4.738v9.476L12 21.134l-8.207-4.737V6.921L12 2.183z"/></svg>
+            Tauri
+          </span>
+          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">
+            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+            Open Source
+          </span>
+        </div>
       </div>
     </div>
   </section>
@@ -976,6 +1064,7 @@
         </div>
 
         <div class="flex items-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/features.html" class="hover:text-primary-500 transition-colors">Features</a>
           <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacy Policy</a>
           <a href="/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
           <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
@@ -1292,6 +1381,57 @@
         }
       })
       .catch(() => {});
+
+    // ============================================
+    // Download count from GitHub
+    // ============================================
+    fetch('https://api.github.com/repos/GraphicMeat/mail-vault-app/releases')
+      .then(r => r.json())
+      .then(releases => {
+        if (!Array.isArray(releases)) return;
+        let total = 0;
+        releases.forEach(r => {
+          if (r.assets) r.assets.forEach(a => { total += a.download_count || 0; });
+        });
+        if (total > 0) {
+          const el = document.getElementById('download-count');
+          if (el) el.textContent = total.toLocaleString() + ' downloads';
+        }
+      })
+      .catch(() => {});
+
+    // ============================================
+    // Platform Notify Form
+    // ============================================
+    const platformForm = document.getElementById('platform-notify-form');
+    const platformMessage = document.getElementById('platform-notify-message');
+
+    if (platformForm) {
+      platformForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = platformForm.email.value;
+        try {
+          const res = await fetch(`${API_BASE}/api/subscribe`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+          });
+          if (res.ok) {
+            platformMessage.textContent = "We'll notify you when new platforms launch!";
+            platformMessage.className = 'mt-2 text-sm text-green-600 dark:text-green-400';
+            platformForm.reset();
+          } else {
+            throw new Error('Failed');
+          }
+        } catch (e) {
+          platformMessage.textContent = "Thanks for your interest! We'll keep you updated.";
+          platformMessage.className = 'mt-2 text-sm text-green-600 dark:text-green-400';
+          platformForm.reset();
+        }
+        platformMessage.classList.remove('hidden');
+        setTimeout(() => platformMessage.classList.add('hidden'), 5000);
+      });
+    }
 
     // ============================================
     // Smooth scroll for anchor links

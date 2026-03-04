@@ -2,10 +2,20 @@
 
 ## [Unreleased]
 
+## [1.9.2] - 2026-03-04
+
 ### Added
 - **Quote folding** — quoted reply content (> lines, "On wrote:", Original Message blocks, HTML blockquotes) is detected and collapsed behind a clickable toggle in both thread view and chat view; collapsed by default for cleaner reading
 - **Signature folding** — email signatures detected and handled with configurable display mode: Smart (show once per sender per thread, collapse duplicates), Always Show, Always Hide, or Collapsed with toggle; configurable in Settings > Appearance
 - **Sender verification badges** — two-layer sender spoofing check: header mismatch detection (From vs Reply-To/Return-Path domain) and email authentication parsing (SPF/DKIM/DMARC from Authentication-Results header); shows green shield for verified, orange warning for Reply-To mismatch, red warning for authentication failure
+- **Thread sort order** — configurable setting to sort thread emails oldest-first or newest-first; available in Settings > Appearance
+- **Thread email details** — expanded header info (Message-ID, Reply-To, full date) and View Source button now available in thread conversation view, matching single email view
+
+### Fixed
+- **Attachment downloads on IMAP accounts** — fixed "Email UID not found" error when downloading attachments; `.eml` files were being saved under the email-address directory instead of the account UUID directory, causing a path mismatch on read; includes one-time migration of orphaned files
+- **Embedded inline images** — CID-referenced images (e.g. logos, inline photos) now render correctly in email body by replacing `cid:` URLs with inline data URIs; applies to single email, thread, and chat views
+- **Export/import progress** — backup export and import now show a non-blocking progress modal with real-time file count instead of a button spinner; export choice dialog uses clearer wording ("Archived Emails" / "All Local Emails")
+- **Faster folder loading** — mailbox folder list is now cached and loaded instantly on app startup and account switch; server refresh happens in background without blocking the UI; all visible accounts' mailboxes are pre-fetched on startup
 
 ## [1.9.1] - 2026-02-28
 

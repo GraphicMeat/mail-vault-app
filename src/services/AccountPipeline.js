@@ -241,7 +241,7 @@ export class AccountPipeline {
           );
         } else {
           // IMAP: light fetch auto-persists .eml to Maildir in Rust, returns metadata only
-          email = await api.fetchEmailLight(this.account, uid, mailbox);
+          email = await api.fetchEmailLight(this.account, uid, mailbox, this.accountId);
         }
 
         const cacheKey = `${this.accountId}-${mailbox}-${uid}`;

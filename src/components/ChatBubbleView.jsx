@@ -30,7 +30,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { AttachmentItem } from './EmailViewer';
-import { getRealAttachments } from '../services/attachmentUtils';
+import { getRealAttachments, replaceCidUrls } from '../services/attachmentUtils';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../utils/iframeQuoteFolding';
 import { splitQuotedContent } from '../utils/quoteFolding';
 import { splitSignature } from '../utils/signatureFolding';
@@ -445,7 +445,7 @@ function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOrigina
             }
           </style>
         </head>
-        <body>${mergedEmail.html}${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}</body>
+        <body>${replaceCidUrls(mergedEmail.html, mergedEmail.attachments)}${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}</body>
       </html>
     `;
   }, [mergedEmail.html, fromUser, signatureDisplay]);
@@ -906,7 +906,7 @@ function FullViewEmailModal({ email: initialEmail, onClose }) {
             }
           </style>
         </head>
-        <body>${htmlBody}</body>
+        <body>${replaceCidUrls(htmlBody, email.attachments)}</body>
       </html>
     `;
   }, [email]);

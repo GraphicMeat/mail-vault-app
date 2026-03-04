@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MailVault Features — Email Management, Threading, Security, Backup & More</title>
+  <meta name="description" content="Explore every MailVault feature: email threading, chat view, sender verification, local backup, bulk operations, multi-account support, and more. Free and open source for macOS.">
+  <meta name="robots" content="index, follow">
+  <meta name="keywords" content="MailVault features, email backup features, email threading, chat view email, sender verification, local email storage, IMAP backup, macOS email client, email security, bulk email archive">
+  <link rel="canonical" href="https://mailvaultapp.com/features.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/features.html">
+  <meta property="og:title" content="MailVault Features — Email Management, Threading, Security, Backup & More">
+  <meta property="og:description" content="Explore every MailVault feature: email threading, chat view, sender verification, local backup, bulk operations, multi-account support, and more. Free and open source for macOS.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MailVault Features — Email Management, Threading, Security, Backup & More">
+  <meta name="twitter:description" content="Explore every MailVault feature: email threading, chat view, sender verification, local backup, bulk operations, multi-account support, and more. Free and open source for macOS.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+
+  <!-- DNS Prefetch -->
+  <link rel="dns-prefetch" href="https://cdn.tailwindcss.com">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              200: '#c7d2fe',
+              300: '#a5b4fc',
+              400: '#818cf8',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              800: '#3730a3',
+              900: '#312e81',
+            }
+          },
+          fontFamily: {
+            display: ['Inter', 'system-ui', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Inter Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .gradient-text {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .gradient-bg {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    }
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .anchor-nav::-webkit-scrollbar { display: none; }
+    .anchor-nav { scrollbar-width: none; }
+  </style>
+
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "name": "MailVault Features",
+    "description": "Explore every MailVault feature: email management, threading, chat view, sender verification, local backup, bulk operations, multi-account support, and more.",
+    "url": "https://mailvaultapp.com/features.html",
+    "isPartOf": {
+      "@type": "WebSite",
+      "name": "MailVault",
+      "url": "https://mailvaultapp.com"
+    },
+    "about": {
+      "@type": "SoftwareApplication",
+      "name": "MailVault",
+      "operatingSystem": "macOS",
+      "applicationCategory": "BusinessApplication",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      }
+    },
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Home",
+          "item": "https://mailvaultapp.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Features",
+          "item": "https://mailvaultapp.com/features.html"
+        }
+      ]
+    }
+  }
+  </script>
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/" class="flex items-center gap-3">
+          <img src="icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/features.html" class="text-primary-500 font-semibold">Features</a>
+          <a href="/#how-it-works" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">How It Works</a>
+          <a href="/faq.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/#contact" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Contact</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+            <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/>
+            </svg>
+            <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+            </svg>
+          </button>
+          <a href="/#download" class="hidden sm:inline-flex gradient-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Download
+          </a>
+          <!-- Mobile menu button -->
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile menu -->
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/features.html" class="px-3 py-2 rounded-lg text-primary-500 font-semibold bg-primary-50 dark:bg-primary-900/20">Features</a>
+          <a href="/#how-it-works" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">How It Works</a>
+          <a href="/faq.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/#contact" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Contact</a>
+          <a href="/#download" class="sm:hidden mt-1 px-3 py-2 rounded-lg gradient-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main>
+
+  <!-- Hero Section -->
+  <section aria-label="Features hero" class="pt-32 pb-16 relative overflow-hidden">
+    <!-- Background decoration -->
+    <div class="absolute inset-0 overflow-hidden pointer-events-none">
+      <div class="absolute -top-40 -right-40 w-80 h-80 bg-primary-500/20 rounded-full blur-3xl"></div>
+      <div class="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-500/20 rounded-full blur-3xl"></div>
+    </div>
+
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative text-center">
+      <h1 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight mb-6">
+        Every Feature You <span class="gradient-text">Need</span>
+      </h1>
+      <p class="text-lg sm:text-xl text-slate-600 dark:text-slate-400 max-w-3xl mx-auto leading-relaxed">
+        MailVault is a comprehensive email client and backup tool built for macOS. From threaded conversations to local archiving, explore everything MailVault has to offer.
+      </p>
+    </div>
+  </section>
+
+  <!-- Anchor Navigation Strip -->
+  <div class="sticky top-16 z-40 bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-700">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="anchor-nav flex items-center gap-1 overflow-x-auto py-3 -mx-4 px-4">
+        <a href="#email-management" class="shrink-0 px-3 py-1.5 rounded-full text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">Email Management</a>
+        <a href="#threading" class="shrink-0 px-3 py-1.5 rounded-full text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">Threading</a>
+        <a href="#chat-view" class="shrink-0 px-3 py-1.5 rounded-full text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">Chat View</a>
+        <a href="#security" class="shrink-0 px-3 py-1.5 rounded-full text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">Security</a>
+        <a href="#storage" class="shrink-0 px-3 py-1.5 rounded-full text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">Storage</a>
+        <a href="#bulk-operations" class="shrink-0 px-3 py-1.5 rounded-full text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">Bulk Operations</a>
+        <a href="#multi-account" class="shrink-0 px-3 py-1.5 rounded-full text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">Multi-Account</a>
+        <a href="#customization" class="shrink-0 px-3 py-1.5 rounded-full text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">Customization</a>
+        <a href="#performance" class="shrink-0 px-3 py-1.5 rounded-full text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">Performance</a>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ============================================================ -->
+  <!-- 1. Email Management (text left, image right) -->
+  <!-- ============================================================ -->
+  <section id="email-management" class="py-20 scroll-mt-32">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid lg:grid-cols-2 gap-12 items-center">
+        <!-- Text -->
+        <div>
+          <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl gradient-bg mb-6">
+            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"/>
+            </svg>
+          </div>
+          <h2 class="text-3xl sm:text-4xl font-bold mb-4">Email Management</h2>
+          <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
+            Everything you need to read, compose, and organize your email. Sign in with one click, search with precision, and manage your inbox effortlessly.
+          </p>
+          <ul class="space-y-4">
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Compose, reply, reply all, and forward with attachments</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Gmail &amp; Microsoft 365 OAuth2 one-click sign-in</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Microsoft Graph API for Outlook.com — bypasses IMAP regression</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Advanced search with filters — sender, date range, attachments, folder</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Search history &amp; popular filter suggestions</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Mark read/unread, star/flag emails</span>
+            </li>
+          </ul>
+        </div>
+        <!-- Screenshot -->
+        <div class="flex justify-center">
+          <img src="screenshots/compose-email.png" alt="MailVault compose email window showing reply with attachments" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-lg">
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ============================================================ -->
+  <!-- 2. Email Threading & Conversations (image left, text right) -->
+  <!-- ============================================================ -->
+  <section id="threading" class="py-20 bg-slate-100/50 dark:bg-slate-800/30 scroll-mt-32">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid lg:grid-cols-2 gap-12 items-center">
+        <!-- Screenshot -->
+        <div class="flex justify-center order-2 lg:order-1">
+          <img src="screenshots/chat-view-thread.png" alt="MailVault threaded conversation view with emails stacked chronologically and quote folding" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-lg">
+        </div>
+        <!-- Text -->
+        <div class="order-1 lg:order-2">
+          <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl gradient-bg mb-6">
+            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 01-.825-.242m9.345-8.334a2.126 2.126 0 00-.476-.095 48.64 48.64 0 00-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0011.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155"/>
+            </svg>
+          </div>
+          <h2 class="text-3xl sm:text-4xl font-bold mb-4">Email Threading &amp; Conversations</h2>
+          <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
+            Gmail-style threaded conversations powered by the JWZ algorithm. See related emails grouped together, with smart folding for a clutter-free reading experience.
+          </p>
+          <ul class="space-y-4">
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Gmail-style threaded conversations using the JWZ algorithm</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Thread conversation view — all emails stacked chronologically</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Configurable sort order — oldest-first or newest-first</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Quote folding — quoted replies collapsed for cleaner reading</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Signature folding — 4 modes: Smart, Always Show, Always Hide, Collapsed</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ============================================================ -->
+  <!-- 3. Chat View (text left, image right) -->
+  <!-- ============================================================ -->
+  <section id="chat-view" class="py-20 scroll-mt-32">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid lg:grid-cols-2 gap-12 items-center">
+        <!-- Text -->
+        <div>
+          <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl gradient-bg mb-6">
+            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z"/>
+            </svg>
+          </div>
+          <h2 class="text-3xl sm:text-4xl font-bold mb-4">Chat View</h2>
+          <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
+            A unique messaging-style email experience. Sent and received emails merge into one continuous conversation with chat bubbles, just like your favorite messaging app.
+          </p>
+          <ul class="space-y-4">
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Unique messaging-style email view</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Sent and received emails merged into one conversation</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Chat bubbles with sender avatars</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Progressive body loading with per-bubble spinners</span>
+            </li>
+          </ul>
+        </div>
+        <!-- Screenshots side by side -->
+        <div class="flex gap-4 justify-center">
+          <img src="screenshots/chat-view.png" alt="MailVault chat view showing topic list with conversation previews and unread counts" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/2 max-w-xs">
+          <img src="screenshots/chat-view-chat.png" alt="MailVault chat bubble view showing messaging-style email conversation with sender avatars" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/2 max-w-xs">
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ============================================================ -->
+  <!-- 4. Security & Privacy (image left, icons right) -->
+  <!-- ============================================================ -->
+  <section id="security" class="py-20 bg-slate-100/50 dark:bg-slate-800/30 scroll-mt-32">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid lg:grid-cols-2 gap-12 items-center">
+        <!-- Icons illustration -->
+        <div class="flex justify-center order-2 lg:order-1">
+          <div class="grid grid-cols-2 gap-6 max-w-sm">
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-200 dark:border-slate-700 flex flex-col items-center text-center">
+              <div class="w-12 h-12 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center mb-3">
+                <svg class="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/>
+                </svg>
+              </div>
+              <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">SPF/DKIM/DMARC Verification</span>
+            </div>
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-200 dark:border-slate-700 flex flex-col items-center text-center">
+              <div class="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-3">
+                <svg class="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/>
+                </svg>
+              </div>
+              <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">macOS Keychain Storage</span>
+            </div>
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-200 dark:border-slate-700 flex flex-col items-center text-center">
+              <div class="w-12 h-12 rounded-xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mb-3">
+                <svg class="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/>
+                </svg>
+              </div>
+              <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">No Cloud, No Tracking</span>
+            </div>
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-lg border border-slate-200 dark:border-slate-700 flex flex-col items-center text-center">
+              <div class="w-12 h-12 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mb-3">
+                <svg class="w-6 h-6 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5"/>
+                </svg>
+              </div>
+              <span class="text-sm font-semibold text-slate-700 dark:text-slate-300">Open Source Code</span>
+            </div>
+          </div>
+        </div>
+        <!-- Text -->
+        <div class="order-1 lg:order-2">
+          <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl gradient-bg mb-6">
+            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/>
+            </svg>
+          </div>
+          <h2 class="text-3xl sm:text-4xl font-bold mb-4">Security &amp; Privacy</h2>
+          <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
+            Your emails stay on your machine. MailVault verifies senders, stores credentials securely, and runs in a macOS sandbox. No cloud services, no telemetry, no compromise.
+          </p>
+          <ul class="space-y-4">
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Sender verification badges — SPF, DKIM, and DMARC checks</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Header mismatch detection — From vs Reply-To spoofing alerts</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">macOS Keychain credential storage</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">macOS App Sandbox — runs in a secure container</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">No cloud, no tracking, no telemetry</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Open source — inspect every line of code</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ============================================================ -->
+  <!-- 5. Storage & Backup (text left, image right) -->
+  <!-- ============================================================ -->
+  <section id="storage" class="py-20 scroll-mt-32">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid lg:grid-cols-2 gap-12 items-center">
+        <!-- Text -->
+        <div>
+          <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl gradient-bg mb-6">
+            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0l-3-3m3 3l3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"/>
+            </svg>
+          </div>
+          <h2 class="text-3xl sm:text-4xl font-bold mb-4">Storage &amp; Backup</h2>
+          <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
+            Your emails stored in standard formats you can read anywhere. Archive locally with one click, export as ZIP, and restore on any machine. No vendor lock-in, ever.
+          </p>
+          <ul class="space-y-4">
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Standard Maildir + .eml (RFC 5322) format — never locked in</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">One-click archive to local storage</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">ZIP backup export — archived only or all emails, with settings</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Portable import — restore on any machine</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Configurable cache size limit and duration</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Background caching pipeline — syncs silently</span>
+            </li>
+          </ul>
+        </div>
+        <!-- Screenshot -->
+        <div class="flex justify-center">
+          <img src="screenshots/archive-progress.png" alt="MailVault archive progress dialog showing batch email download with progress bar and cancel button" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-lg">
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ============================================================ -->
+  <!-- 6. Bulk Operations (image left, text right) -->
+  <!-- ============================================================ -->
+  <section id="bulk-operations" class="py-20 bg-slate-100/50 dark:bg-slate-800/30 scroll-mt-32">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid lg:grid-cols-2 gap-12 items-center">
+        <!-- Screenshot -->
+        <div class="flex justify-center order-2 lg:order-1">
+          <img src="screenshots/selection-dialog.png" alt="MailVault bulk selection dialog with date range picker, year shortcuts, and action buttons for archive, delete, or archive and delete" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-lg">
+        </div>
+        <!-- Text -->
+        <div class="order-1 lg:order-2">
+          <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl gradient-bg mb-6">
+            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15a2.25 2.25 0 012.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z"/>
+            </svg>
+          </div>
+          <h2 class="text-3xl sm:text-4xl font-bold mb-4">Bulk Operations</h2>
+          <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
+            Select hundreds or thousands of emails at once and archive, delete, or do both in a single operation. Pick a date range, watch the progress, and cancel anytime.
+          </p>
+          <ul class="space-y-4">
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Multi-select with floating action bar</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Batch archive, delete, or archive + delete</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Date range selection — by year or custom range</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Progress bar with cancel button</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Crash-safe operation recovery</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ============================================================ -->
+  <!-- 7. Multi-Account (text left, icon right) -->
+  <!-- ============================================================ -->
+  <section id="multi-account" class="py-20 scroll-mt-32">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid lg:grid-cols-2 gap-12 items-center">
+        <!-- Text -->
+        <div>
+          <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl gradient-bg mb-6">
+            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/>
+            </svg>
+          </div>
+          <h2 class="text-3xl sm:text-4xl font-bold mb-4">Multi-Account</h2>
+          <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
+            Add all your email accounts in one place. Switch between them instantly with no loading delay, and customize each account with its own display name and color.
+          </p>
+          <ul class="space-y-4">
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Add unlimited email accounts</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Gmail, Outlook, Yahoo, iCloud, ProtonMail (Bridge), Fastmail, Zoho, and any IMAP provider</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Custom display names and avatar colors</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Account reordering and hide/unhide</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Instant account switching with LRU state cache</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Per-account mailbox memory — remembers your last folder</span>
+            </li>
+          </ul>
+        </div>
+        <!-- Illustration -->
+        <div class="flex justify-center">
+          <div class="relative w-full max-w-sm">
+            <!-- Simulated account list -->
+            <div class="space-y-3">
+              <div class="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-lg border border-primary-200 dark:border-primary-700 flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-primary-500 flex items-center justify-center text-white font-bold text-sm">JD</div>
+                <div>
+                  <div class="font-semibold text-sm text-slate-800 dark:text-slate-200">john.doe@gmail.com</div>
+                  <div class="text-xs text-slate-500 dark:text-slate-400">Gmail &middot; OAuth2</div>
+                </div>
+                <div class="ml-auto w-2 h-2 bg-green-500 rounded-full"></div>
+              </div>
+              <div class="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-lg border border-slate-200 dark:border-slate-700 flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold text-sm">JD</div>
+                <div>
+                  <div class="font-semibold text-sm text-slate-800 dark:text-slate-200">j.doe@outlook.com</div>
+                  <div class="text-xs text-slate-500 dark:text-slate-400">Microsoft &middot; Graph API</div>
+                </div>
+                <div class="ml-auto w-2 h-2 bg-green-500 rounded-full"></div>
+              </div>
+              <div class="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-lg border border-slate-200 dark:border-slate-700 flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-amber-500 flex items-center justify-center text-white font-bold text-sm">W</div>
+                <div>
+                  <div class="font-semibold text-sm text-slate-800 dark:text-slate-200">work@company.com</div>
+                  <div class="text-xs text-slate-500 dark:text-slate-400">IMAP &middot; Password</div>
+                </div>
+                <div class="ml-auto w-2 h-2 bg-green-500 rounded-full"></div>
+              </div>
+              <div class="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-lg border border-slate-200 dark:border-slate-700 flex items-center gap-3 opacity-50">
+                <div class="w-10 h-10 rounded-full bg-rose-500 flex items-center justify-center text-white font-bold text-sm">O</div>
+                <div>
+                  <div class="font-semibold text-sm text-slate-800 dark:text-slate-200">old@yahoo.com</div>
+                  <div class="text-xs text-slate-500 dark:text-slate-400">Yahoo &middot; Hidden</div>
+                </div>
+                <svg class="ml-auto w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ============================================================ -->
+  <!-- 8. Layout & Customization (image left, text right) -->
+  <!-- ============================================================ -->
+  <section id="customization" class="py-20 bg-slate-100/50 dark:bg-slate-800/30 scroll-mt-32">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid lg:grid-cols-2 gap-12 items-center">
+        <!-- Illustration -->
+        <div class="flex justify-center order-2 lg:order-1">
+          <div class="grid grid-cols-2 gap-4 max-w-md">
+            <!-- Dark/Light toggle -->
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-lg border border-slate-200 dark:border-slate-700 flex flex-col items-center text-center">
+              <div class="flex gap-2 mb-3">
+                <div class="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center">
+                  <svg class="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                </div>
+                <div class="w-8 h-8 rounded-lg bg-slate-800 border border-slate-600 flex items-center justify-center">
+                  <svg class="w-4 h-4 text-blue-300" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/></svg>
+                </div>
+              </div>
+              <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">Dark / Light Mode</span>
+            </div>
+            <!-- Layout -->
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-lg border border-slate-200 dark:border-slate-700 flex flex-col items-center text-center">
+              <div class="flex gap-1 mb-3 h-8">
+                <div class="w-3 bg-primary-200 dark:bg-primary-800 rounded-sm"></div>
+                <div class="w-5 bg-slate-200 dark:bg-slate-600 rounded-sm"></div>
+                <div class="w-8 bg-slate-100 dark:bg-slate-700 rounded-sm"></div>
+              </div>
+              <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">Resizable Panes</span>
+            </div>
+            <!-- Compact view -->
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-lg border border-slate-200 dark:border-slate-700 flex flex-col items-center text-center">
+              <div class="space-y-1 mb-3 w-full">
+                <div class="h-1.5 bg-slate-200 dark:bg-slate-600 rounded-full w-full"></div>
+                <div class="h-1.5 bg-slate-200 dark:bg-slate-600 rounded-full w-3/4"></div>
+                <div class="h-1.5 bg-slate-200 dark:bg-slate-600 rounded-full w-full"></div>
+                <div class="h-1.5 bg-slate-200 dark:bg-slate-600 rounded-full w-2/3"></div>
+              </div>
+              <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">Compact List Style</span>
+            </div>
+            <!-- Date format -->
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-lg border border-slate-200 dark:border-slate-700 flex flex-col items-center text-center">
+              <div class="text-sm font-mono text-slate-600 dark:text-slate-400 mb-3 leading-tight">
+                <div>03/04/2026</div>
+                <div>04.03.2026</div>
+                <div>2026-03-04</div>
+              </div>
+              <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">Date Formats</span>
+            </div>
+          </div>
+        </div>
+        <!-- Text -->
+        <div class="order-1 lg:order-2">
+          <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl gradient-bg mb-6">
+            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+          </div>
+          <h2 class="text-3xl sm:text-4xl font-bold mb-4">Layout &amp; Customization</h2>
+          <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
+            Make MailVault yours. Choose your theme, rearrange panes, pick a date format, and fine-tune the interface to match how you work.
+          </p>
+          <ul class="space-y-4">
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Dark mode and light mode</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">3-column or 2-column layout with resizable panes</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Collapsible sidebar with icon-only mode</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Default or compact email list style</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Configurable date formats — US, EU, ISO, human-readable, or custom</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Desktop notifications and dock badge</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">View source — inspect raw email RFC 5322 source</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Open email in new window</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ============================================================ -->
+  <!-- 9. Performance & Technology (text left, illustration right) -->
+  <!-- ============================================================ -->
+  <section id="performance" class="py-20 scroll-mt-32">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid lg:grid-cols-2 gap-12 items-center">
+        <!-- Text -->
+        <div>
+          <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl gradient-bg mb-6">
+            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/>
+            </svg>
+          </div>
+          <h2 class="text-3xl sm:text-4xl font-bold mb-4">Performance &amp; Technology</h2>
+          <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
+            Built with Rust and Tauri for native speed and minimal resource usage. Smart sync protocols, virtual scrolling, and pre-fetching keep everything fast.
+          </p>
+          <ul class="space-y-4">
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Built with Rust (Tauri) — not Electron</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Native IMAP via async-imap — no Node.js sidecar</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">CONDSTORE delta sync — zero IMAP calls when nothing changed</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">COMPRESS=DEFLATE — 70-80% bandwidth reduction</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Virtual scrolling — handles 17,000+ emails smoothly</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Email body pre-fetching — next 3 emails loaded instantly</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Automatic updates via built-in updater</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">System tray — syncs silently in background</span>
+            </li>
+          </ul>
+        </div>
+        <!-- Illustration -->
+        <div class="flex justify-center">
+          <div class="relative">
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-8 shadow-lg border border-slate-200 dark:border-slate-700 max-w-sm">
+              <div class="text-center mb-6">
+                <div class="text-5xl font-extrabold gradient-text mb-1">~8 MB</div>
+                <div class="text-sm text-slate-500 dark:text-slate-400">App binary size</div>
+              </div>
+              <div class="space-y-4">
+                <div>
+                  <div class="flex justify-between text-sm mb-1">
+                    <span class="text-slate-600 dark:text-slate-400">Memory usage</span>
+                    <span class="font-semibold text-slate-700 dark:text-slate-300">~80 MB</span>
+                  </div>
+                  <div class="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <div class="h-full bg-green-500 rounded-full" style="width: 15%"></div>
+                  </div>
+                </div>
+                <div>
+                  <div class="flex justify-between text-sm mb-1">
+                    <span class="text-slate-600 dark:text-slate-400">CPU idle</span>
+                    <span class="font-semibold text-slate-700 dark:text-slate-300">~0%</span>
+                  </div>
+                  <div class="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <div class="h-full bg-green-500 rounded-full" style="width: 2%"></div>
+                  </div>
+                </div>
+                <div>
+                  <div class="flex justify-between text-sm mb-1">
+                    <span class="text-slate-600 dark:text-slate-400">Startup time</span>
+                    <span class="font-semibold text-slate-700 dark:text-slate-300">&lt;1s</span>
+                  </div>
+                  <div class="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <div class="h-full bg-green-500 rounded-full" style="width: 8%"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700 text-center">
+                <span class="text-xs text-slate-500 dark:text-slate-400">vs Electron apps: 200-500 MB RAM, 150+ MB binary</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ============================================================ -->
+  <!-- CTA Section -->
+  <!-- ============================================================ -->
+  <section class="py-20 relative overflow-hidden">
+    <div class="absolute inset-0 overflow-hidden pointer-events-none">
+      <div class="absolute -top-40 left-1/2 -translate-x-1/2 w-96 h-96 bg-primary-500/10 rounded-full blur-3xl"></div>
+    </div>
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative">
+      <h2 class="text-3xl sm:text-4xl font-bold mb-4">Ready to try MailVault?</h2>
+      <p class="text-lg text-slate-600 dark:text-slate-400 mb-8 max-w-2xl mx-auto">
+        Download for free, add your email accounts, and start backing up your emails locally. No sign-up, no subscription, no strings attached.
+      </p>
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <a href="/#download" class="gradient-bg text-white px-8 py-4 rounded-xl font-semibold text-lg hover:opacity-90 transition-opacity inline-flex items-center gap-2">
+          <svg class="w-5 h-5 shrink-0" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+          </svg>
+          Download for macOS
+        </a>
+        <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" class="px-8 py-4 rounded-xl font-semibold text-lg border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 dark:hover:border-primary-500 text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors inline-flex items-center gap-2">
+          <svg class="w-5 h-5 shrink-0" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+          </svg>
+          View on GitHub
+        </a>
+      </div>
+    </div>
+  </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <div class="flex items-center gap-2">
+          <img src="icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+        <div class="flex items-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacy Policy</a>
+          <a href="/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Terms of Service</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+        <p class="text-sm text-slate-500 dark:text-slate-400">&copy; 2026 MailVault. All rights reserved.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Theme Toggle Script -->
+  <script>
+    const themeToggle = document.getElementById('theme-toggle');
+    const html = document.documentElement;
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      html.classList.add('dark');
+    }
+    themeToggle.addEventListener('click', () => {
+      html.classList.toggle('dark');
+      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
+    });
+  </script>
+
+  <!-- Mobile Menu Script -->
+  <script>
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+
+    mobileMenuBtn.addEventListener('click', () => {
+      const isOpen = !mobileMenu.classList.contains('hidden');
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+
+    // Close mobile menu when clicking a link
+    mobileMenu.querySelectorAll('a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <!-- Anchor Nav Active Highlight Script -->
+  <script>
+    const sections = document.querySelectorAll('section[id]');
+    const anchors = document.querySelectorAll('.anchor-nav a');
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          anchors.forEach(a => {
+            a.classList.remove('text-primary-500', 'bg-primary-50', 'dark:bg-primary-900/20');
+            if (a.getAttribute('href') === '#' + entry.target.id) {
+              a.classList.add('text-primary-500', 'bg-primary-50', 'dark:bg-primary-900/20');
+            }
+          });
+        }
+      });
+    }, { rootMargin: '-20% 0px -70% 0px' });
+
+    sections.forEach(section => observer.observe(section));
+  </script>
+
+</body>
+</html>

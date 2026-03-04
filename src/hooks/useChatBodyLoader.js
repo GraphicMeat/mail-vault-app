@@ -121,7 +121,7 @@ export function useChatBodyLoader(topicEmails) {
                 .catch(() => {});
             }
           } else {
-            emailBody = await api.fetchEmailLight(freshAccount, uid, mailbox);
+            emailBody = await api.fetchEmailLight(freshAccount, uid, mailbox, accountId);
           }
         }
 

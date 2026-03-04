@@ -97,6 +97,7 @@ export const useSettingsStore = create(
       layoutMode: 'three-column', // 'three-column' | 'two-column'
       viewStyle: 'list', // 'list' | 'chat'
       emailListStyle: 'default', // 'default' | 'compact'
+      threadSortOrder: 'oldest-first', // 'oldest-first' | 'newest-first'
       dateFormat: 'auto', // 'auto' | 'MM/dd/yyyy' | 'dd/MM/yyyy' | 'yyyy-MM-dd' | 'dd MMM yyyy' | 'custom'
       customDateFormat: '', // Only used when dateFormat === 'custom'
       signatureDisplay: 'smart', // 'smart' | 'always-show' | 'always-hide' | 'collapsed'
@@ -223,6 +224,7 @@ export const useSettingsStore = create(
       setLayoutMode: (mode) => set({ layoutMode: mode }),
       setViewStyle: (style) => set({ viewStyle: style }),
       setEmailListStyle: (style) => set({ emailListStyle: style }),
+      setThreadSortOrder: (order) => set({ threadSortOrder: order }),
       setDateFormat: (value) => set({ dateFormat: value }),
       setCustomDateFormat: (value) => set({ customDateFormat: value }),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
@@ -327,6 +329,7 @@ export const useSettingsStore = create(
           layoutMode: 'three-column',
           viewStyle: 'list',
           emailListStyle: 'default',
+          threadSortOrder: 'oldest-first',
           dateFormat: 'auto',
           customDateFormat: '',
           signatureDisplay: 'smart',

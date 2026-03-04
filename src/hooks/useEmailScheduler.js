@@ -78,10 +78,11 @@ export function useEmailScheduler() {
       // Update previous count
       previousEmailCount.current = useMailStore.getState().emails.length;
 
-      // Update badge with total unread count across all accounts
+      // Update badge to reflect current mailbox view
       if (result) {
         if (badgeMode === 'unread') {
-          updateBadge(result.totalUnread);
+          const count = useMailStore.getState().emails.filter(e => !e.flags?.includes('\\Seen')).length;
+          updateBadge(count);
         } else {
           updateBadge(useMailStore.getState().emails.length);
         }
@@ -147,11 +148,8 @@ export function useEmailScheduler() {
     if (badgeTimerRef.current) clearTimeout(badgeTimerRef.current);
     badgeTimerRef.current = setTimeout(() => {
       if (badgeMode === 'unread') {
-        // Prefer totalUnreadCount (set by refreshAllAccounts, covers all accounts).
-        // Fall back to counting current emails only when totalUnreadCount hasn't been set yet.
-        const count = totalUnreadCount > 0
-          ? totalUnreadCount
-          : useMailStore.getState().emails.filter(e => !e.flags?.includes('\\Seen')).length;
+        // Count unread in the current mailbox view — matches what the user sees.
+        const count = useMailStore.getState().emails.filter(e => !e.flags?.includes('\\Seen')).length;
         updateBadge(count);
       } else {
         updateBadge(useMailStore.getState().emails.length);
@@ -159,7 +157,7 @@ export function useEmailScheduler() {
     }, 2000);
 
     return () => { if (badgeTimerRef.current) clearTimeout(badgeTimerRef.current); };
-  }, [badgeEnabled, badgeMode, totalUnreadCount]);
+  }, [badgeEnabled, badgeMode, emails.length, totalUnreadCount]);
 
   return { doRefresh };
 }

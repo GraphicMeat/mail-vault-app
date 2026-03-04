@@ -89,6 +89,8 @@ export function SettingsPage({ onClose, onAddAccount }) {
     setViewStyle,
     emailListStyle,
     setEmailListStyle,
+    threadSortOrder,
+    setThreadSortOrder,
     setOnboardingComplete,
     searchHistoryLimit,
     setSearchHistoryLimit,
@@ -135,9 +137,7 @@ export function SettingsPage({ onClose, onAddAccount }) {
   const [saved, setSaved] = useState(false);
   const [movingStorage, setMovingStorage] = useState(false);
   const [supportsFileSystem, setSupportsFileSystem] = useState(false);
-  const [exporting, setExporting] = useState(false);
   const [showExportChoice, setShowExportChoice] = useState(false);
-  const [importing, setImporting] = useState(false);
   const [logs, setLogs] = useState('');
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [logsCopied, setLogsCopied] = useState(false);
@@ -248,7 +248,6 @@ export function SettingsPage({ onClose, onAddAccount }) {
 
   const doExport = async (archivedOnly) => {
     setShowExportChoice(false);
-    setExporting(true);
     try {
       const { save } = await import('@tauri-apps/plugin-dialog');
 
@@ -257,10 +256,7 @@ export function SettingsPage({ onClose, onAddAccount }) {
         filters: [{ name: 'ZIP Archives', extensions: ['zip'] }],
       });
 
-      if (!destPath) {
-        setExporting(false);
-        return;
-      }
+      if (!destPath) return;
 
       const settingsData = {
         theme: safeStorage.getItem('mailvault-theme'),
@@ -276,19 +272,35 @@ export function SettingsPage({ onClose, onAddAccount }) {
         smtpServer: a.smtpServer,
       }));
 
-      const result = await invoke('export_backup', {
-        destPath,
-        archivedOnly,
-        settingsJson: JSON.stringify(settingsData),
-        accountsJson: JSON.stringify(backupAccounts),
+      // Show progress modal
+      const store = useMailStore.getState();
+      store.setExportProgress({ total: 0, completed: 0, active: true, mode: 'export' });
+
+      const { listen } = await import('@tauri-apps/api/event');
+      const unlisten = await listen('export-progress', (event) => {
+        const p = event.payload;
+        useMailStore.getState().setExportProgress({
+          total: p.total, completed: p.completed, active: p.active, mode: 'export'
+        });
       });
 
-      alert(`Backup exported successfully!\n\n${result.emailCount} email(s) from ${result.accountCount} account(s).`);
+      try {
+        await invoke('export_backup', {
+          destPath,
+          archivedOnly,
+          settingsJson: JSON.stringify(settingsData),
+          accountsJson: JSON.stringify(backupAccounts),
+        });
+      } finally {
+        unlisten();
+      }
+
+      // Auto-dismiss after 3 seconds
+      setTimeout(() => useMailStore.getState().dismissExportProgress(), 3000);
     } catch (error) {
       console.error('Export error:', error);
+      useMailStore.getState().dismissExportProgress();
       alert('Failed to export backup: ' + (error.message || error));
-    } finally {
-      setExporting(false);
     }
   };
 
@@ -299,7 +311,6 @@ export function SettingsPage({ onClose, onAddAccount }) {
       return;
     }
 
-    setImporting(true);
     try {
       const { open } = await import('@tauri-apps/plugin-dialog');
 
@@ -308,39 +319,52 @@ export function SettingsPage({ onClose, onAddAccount }) {
         multiple: false,
       });
 
-      if (!sourcePath) {
-        setImporting(false);
-        return;
-      }
+      if (!sourcePath) return;
 
-      const result = await invoke('import_backup', { sourcePath });
+      // Show progress modal
+      const store = useMailStore.getState();
+      store.setExportProgress({ total: 0, completed: 0, active: true, mode: 'import' });
+
+      const { listen } = await import('@tauri-apps/api/event');
+      const unlisten = await listen('import-progress', (event) => {
+        const p = event.payload;
+        useMailStore.getState().setExportProgress({
+          total: p.total, completed: p.completed, active: p.active, mode: 'import'
+        });
+      });
+
+      let result;
+      try {
+        result = await invoke('import_backup', { sourcePath });
+      } finally {
+        unlisten();
+      }
 
       // Restore settings if present
       if (result.settingsJson) {
         try {
           const settings = JSON.parse(result.settingsJson);
-          if (settings.theme) {
-            safeStorage.setItem('mailvault-theme', settings.theme);
-          }
-          if (settings.settings) {
-            safeStorage.setItem('mailvault-settings', settings.settings);
-          }
+          if (settings.theme) safeStorage.setItem('mailvault-theme', settings.theme);
+          if (settings.settings) safeStorage.setItem('mailvault-settings', settings.settings);
         } catch (e) {
           console.warn('Failed to restore settings:', e);
         }
       }
 
-      let msg = `Backup imported successfully!\n\n${result.emailCount} email(s) from ${result.accountCount} account(s).`;
-      if (result.newAccounts.length > 0) {
-        msg += `\n\nNew accounts created (re-enter passwords in Settings):\n• ${result.newAccounts.join('\n• ')}`;
-      }
-
-      alert(msg + '\n\nThe page will reload.');
-      window.location.reload();
+      // Show completion briefly then reload
+      setTimeout(() => {
+        useMailStore.getState().dismissExportProgress();
+        let msg = `Backup imported successfully!\n\n${result.emailCount} email(s) from ${result.accountCount} account(s).`;
+        if (result.newAccounts.length > 0) {
+          msg += `\n\nNew accounts created (re-enter passwords in Settings):\n• ${result.newAccounts.join('\n• ')}`;
+        }
+        alert(msg + '\n\nThe page will reload.');
+        window.location.reload();
+      }, 1500);
     } catch (error) {
       console.error('Import error:', error);
+      useMailStore.getState().dismissExportProgress();
       alert('Failed to import backup: ' + (error.message || error));
-      setImporting(false);
     }
   };
   
@@ -466,7 +490,7 @@ export function SettingsPage({ onClose, onAddAccount }) {
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         className="bg-mail-bg border border-mail-border rounded-xl shadow-2xl 
-                   w-full max-w-5xl h-[80vh] flex overflow-hidden"
+                   w-full max-w-7xl h-[92vh] flex overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Sidebar */}
@@ -749,6 +773,41 @@ export function SettingsPage({ onClose, onAddAccount }) {
                       </div>
                       <span className="text-sm font-medium text-mail-text">Compact</span>
                       <span className="text-xs text-mail-text-muted">Sender + subject on two lines</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Thread Sort Order */}
+                <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+                  <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
+                    <List size={18} className="text-mail-accent" />
+                    Thread Sort Order
+                  </h4>
+                  <p className="text-sm text-mail-text-muted mb-4">
+                    Choose how emails are ordered within a thread conversation.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => setThreadSortOrder('oldest-first')}
+                      className={`p-4 rounded-lg border-2 transition-all flex flex-col items-center gap-3
+                                ${threadSortOrder === 'oldest-first'
+                                  ? 'border-mail-accent bg-mail-accent/10'
+                                  : 'border-mail-border hover:border-mail-accent/50'}`}
+                    >
+                      <ChevronDown size={24} className="text-mail-text-muted" />
+                      <span className="text-sm font-medium text-mail-text">Oldest First</span>
+                      <span className="text-xs text-mail-text-muted">Conversation flows top to bottom</span>
+                    </button>
+                    <button
+                      onClick={() => setThreadSortOrder('newest-first')}
+                      className={`p-4 rounded-lg border-2 transition-all flex flex-col items-center gap-3
+                                ${threadSortOrder === 'newest-first'
+                                  ? 'border-mail-accent bg-mail-accent/10'
+                                  : 'border-mail-border hover:border-mail-accent/50'}`}
+                    >
+                      <ChevronUp size={24} className="text-mail-text-muted" />
+                      <span className="text-sm font-medium text-mail-text">Newest First</span>
+                      <span className="text-xs text-mail-text-muted">Latest reply at the top</span>
                     </button>
                   </div>
                 </div>
@@ -1757,8 +1816,9 @@ export function SettingsPage({ onClose, onAddAccount }) {
                                 // Clear headers cache files
                                 await invoke('clear_email_cache', { accountId: null });
 
-                                // Clear in-memory cache
+                                // Clear in-memory cache and reset emails array so coordinator hook re-triggers
                                 useMailStore.getState().clearEmailCache();
+                                useMailStore.setState({ emails: [], sortedEmails: [], localEmails: [], emailsByIndex: {}, totalEmails: 0, loadedRanges: [], currentPage: 0, hasMoreEmails: true, sentEmails: [] });
 
                                 setClearCacheResult(result);
 
@@ -1767,10 +1827,10 @@ export function SettingsPage({ onClose, onAddAccount }) {
                                 const usage = await getStorageUsage();
                                 setLocalStorageUsage(usage);
 
-                                // Restart pipelines — reset destroyed flag and let coordinator re-trigger
+                                // Re-load emails from server — this repopulates the store and lets the pipeline coordinator restart
                                 const activeAccountId = useMailStore.getState().activeAccountId;
                                 if (activeAccountId) {
-                                  pipelineManager.onAccountSwitch(activeAccountId);
+                                  useMailStore.getState().loadEmails();
                                 }
                               } catch (error) {
                                 console.error('Failed to clear cache:', error);
@@ -1816,32 +1876,22 @@ export function SettingsPage({ onClose, onAddAccount }) {
                   <div className="flex gap-3">
                     <button
                       onClick={handleExportData}
-                      disabled={exporting}
                       className="flex-1 flex items-center justify-center gap-2 px-4 py-3
                                 bg-mail-accent/10 hover:bg-mail-accent/20 text-mail-accent
-                                rounded-lg transition-colors disabled:opacity-50"
+                                rounded-lg transition-colors"
                     >
-                      {exporting ? (
-                        <Loader size={18} className="animate-spin" />
-                      ) : (
-                        <Download size={18} />
-                      )}
-                      {exporting ? 'Exporting...' : 'Export Backup'}
+                      <Download size={18} />
+                      Export Backup
                     </button>
 
                     <button
                       onClick={handleImportData}
-                      disabled={importing}
                       className="flex-1 flex items-center justify-center gap-2 px-4 py-3
                                 bg-mail-surface-hover hover:bg-mail-border text-mail-text
-                                rounded-lg transition-colors disabled:opacity-50"
+                                rounded-lg transition-colors"
                     >
-                      {importing ? (
-                        <Loader size={18} className="animate-spin" />
-                      ) : (
-                        <Upload size={18} />
-                      )}
-                      {importing ? 'Importing...' : 'Import Backup'}
+                      <Upload size={18} />
+                      Import Backup
                     </button>
                   </div>
                 </div>
@@ -2113,20 +2163,22 @@ export function SettingsPage({ onClose, onAddAccount }) {
               <p className="text-sm text-mail-text-muted mb-5">
                 Which emails would you like to export?
               </p>
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-3">
                 <button
                   onClick={() => doExport(true)}
-                  className="w-full px-4 py-2.5 bg-mail-accent hover:bg-mail-accent-hover
-                            text-white rounded-lg font-medium transition-colors"
+                  className="w-full px-4 py-3 bg-mail-accent hover:bg-mail-accent-hover
+                            text-white rounded-lg font-medium transition-colors text-left"
                 >
-                  Archived Only
+                  <span className="block">Archived Emails</span>
+                  <span className="block text-xs font-normal opacity-80 mt-0.5">Only emails you've explicitly saved to your device</span>
                 </button>
                 <button
                   onClick={() => doExport(false)}
-                  className="w-full px-4 py-2.5 bg-mail-surface-hover hover:bg-mail-border
-                            text-mail-text rounded-lg font-medium transition-colors"
+                  className="w-full px-4 py-3 bg-mail-surface-hover hover:bg-mail-border
+                            text-mail-text rounded-lg font-medium transition-colors text-left"
                 >
-                  All Emails
+                  <span className="block">All Local Emails</span>
+                  <span className="block text-xs font-normal text-mail-text-muted mt-0.5">Everything stored locally — archived and cached emails across all accounts</span>
                 </button>
                 <button
                   onClick={() => setShowExportChoice(false)}

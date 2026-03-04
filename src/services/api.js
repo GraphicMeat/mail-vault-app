@@ -189,9 +189,11 @@ export async function fetchEmail(account, uid, mailbox = 'INBOX') {
   return data.email;
 }
 
-export async function fetchEmailLight(account, uid, mailbox = 'INBOX') {
+export async function fetchEmailLight(account, uid, mailbox = 'INBOX', accountId = null) {
   if (IS_TAURI) {
-    const data = await tauriInvoke('imap_get_email_light', { account, uid, mailbox });
+    const params = { account, uid, mailbox };
+    if (accountId) params.accountId = accountId;
+    const data = await tauriInvoke('imap_get_email_light', params);
     return data.email;
   }
   // Dev mode fallback — fetch full email, strip heavy fields client-side
