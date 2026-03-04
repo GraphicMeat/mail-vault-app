@@ -173,13 +173,14 @@
   <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16">
-        <a href="/" class="flex items-center gap-3">
+        <a href="#" onclick="window.scrollTo({top:0,behavior:'smooth'});return false;" class="flex items-center gap-3">
           <img src="icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
           <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
         </a>
 
         <div class="hidden md:flex items-center gap-8">
-          <a href="/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Features</a>
+          <a href="#features" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Overview</a>
+          <a href="/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">All Features</a>
           <a href="#how-it-works" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">How It Works</a>
           <a href="/faq.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">FAQ</a>
           <a href="/changelog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Changelog</a>
@@ -212,7 +213,8 @@
       <!-- Mobile menu -->
       <div id="mobile-menu" class="hidden md:hidden pb-4">
         <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-          <a href="/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Features</a>
+          <a href="#features" class="mobile-nav-link px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Overview</a>
+          <a href="/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">All Features</a>
           <a href="#how-it-works" class="mobile-nav-link px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">How It Works</a>
           <a href="/faq.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">FAQ</a>
           <a href="/changelog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Changelog</a>
