@@ -316,7 +316,7 @@ jobs:
         run: npm run build:server
 
       - name: Build Tauri binary
-        run: npx tauri build --target x86_64-unknown-linux-gnu --bundles none
+        run: npx tauri build --target x86_64-unknown-linux-gnu --no-bundle
 
       - name: Prepare snap staging
         env:
@@ -393,7 +393,7 @@ jobs:
         run: npm run build:server
 
       - name: Build Tauri binary
-        run: npx tauri build --target aarch64-unknown-linux-gnu --bundles none
+        run: npx tauri build --target aarch64-unknown-linux-gnu --no-bundle
 
       - name: Prepare snap staging
         env:
