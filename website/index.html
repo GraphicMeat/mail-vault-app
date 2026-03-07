@@ -139,7 +139,7 @@
       "macOS Keychain and Linux Secret Service credential storage",
       "System tray with background sync",
       "Auto-updater",
-      "Linux support (x86_64 and aarch64) with .deb and AppImage packages",
+      "Linux support (x86_64 and aarch64) via Snap Store and .deb packages",
       "Wayland and X11 display server support"
     ],
     "screenshot": "https://mailvaultapp.com/og-image.png",
@@ -1022,22 +1022,17 @@
         </div>
 
         <!-- Linux -->
-        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">Linux (.deb)</p>
-        <div class="flex flex-col sm:flex-row gap-3 justify-center mb-6">
-          <a id="download-linux-x86" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" class="gradient-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
-            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12.504 0c-.155 0-.311.002-.466.014C8.756.17 5.944 2.534 5.156 6.03c-.337 1.494-.182 3.09.243 4.578a18.1 18.1 0 001.2 3.126c.324.659.694 1.39.857 2.129.168.76.106 1.473-.14 2.191-.245.713-.618 1.37-.99 2.023-.37.65-.745 1.303-1.003 2.016-.258.714-.378 1.507-.168 2.31.208.795.688 1.48 1.349 1.96.66.48 1.485.762 2.324.835a7.32 7.32 0 002.6-.243 8.36 8.36 0 001.174-.423c.371-.17.741-.37 1.157-.37.416 0 .786.2 1.157.37.365.167.76.313 1.174.423a7.32 7.32 0 002.6.243c.839-.073 1.664-.356 2.324-.835.661-.48 1.141-1.165 1.349-1.96.21-.803.09-1.596-.168-2.31-.258-.713-.633-1.366-1.003-2.016-.372-.653-.745-1.31-.99-2.023-.246-.718-.308-1.431-.14-2.191.163-.74.533-1.47.857-2.129a18.1 18.1 0 001.2-3.126c.425-1.488.58-3.084.243-4.578C18.056 2.534 15.244.17 11.962.014 11.807.002 11.651 0 11.496 0h1.008z"/>
-            </svg>
-            Intel / AMD
-            <span class="text-sm opacity-75">x86_64</span>
+        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">Linux</p>
+        <div class="flex flex-col items-center gap-3 mb-6">
+          <a href="https://snapcraft.io/mailvault" target="_blank" rel="noopener" class="gradient-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M13.804 13.367L22 5.17v7.404l-4.674 4.674zm-3.607 3.607L22 5.17H14.15L5.523 13.798zM2 18.83l8.196-8.196 3.608 3.607L5.608 22.438H2zM2 18.83V11.38l4.72-4.72 3.607 3.608z"/></svg>
+            Get it from the Snap Store
           </a>
-          <a id="download-linux-arm" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" class="gradient-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
-            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12.504 0c-.155 0-.311.002-.466.014C8.756.17 5.944 2.534 5.156 6.03c-.337 1.494-.182 3.09.243 4.578a18.1 18.1 0 001.2 3.126c.324.659.694 1.39.857 2.129.168.76.106 1.473-.14 2.191-.245.713-.618 1.37-.99 2.023-.37.65-.745 1.303-1.003 2.016-.258.714-.378 1.507-.168 2.31.208.795.688 1.48 1.349 1.96.66.48 1.485.762 2.324.835a7.32 7.32 0 002.6-.243 8.36 8.36 0 001.174-.423c.371-.17.741-.37 1.157-.37.416 0 .786.2 1.157.37.365.167.76.313 1.174.423a7.32 7.32 0 002.6.243c.839-.073 1.664-.356 2.324-.835.661-.48 1.141-1.165 1.349-1.96.21-.803.09-1.596-.168-2.31-.258-.713-.633-1.366-1.003-2.016-.372-.653-.745-1.31-.99-2.023-.246-.718-.308-1.431-.14-2.191.163-.74.533-1.47.857-2.129a18.1 18.1 0 001.2-3.126c.425-1.488.58-3.084.243-4.578C18.056 2.534 15.244.17 11.962.014 11.807.002 11.651 0 11.496 0h1.008z"/>
-            </svg>
-            ARM
-            <span class="text-sm opacity-75">aarch64</span>
-          </a>
+          <div class="flex gap-2 justify-center text-sm">
+            <a id="download-linux-x86" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" class="text-primary-600 dark:text-primary-400 hover:underline">or download .deb (Intel / AMD)</a>
+            <span class="text-slate-300 dark:text-slate-600">|</span>
+            <a id="download-linux-arm" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" class="text-primary-600 dark:text-primary-400 hover:underline">ARM .deb</a>
+          </div>
         </div>
 
         <div class="flex justify-center mb-4">
