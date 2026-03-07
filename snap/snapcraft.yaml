@@ -1,0 +1,41 @@
+name: mailvault
+version: '2.0.0'
+summary: Privacy-first desktop email client with local Maildir storage
+description: |
+  MailVault is a desktop email client that stores your emails locally in
+  standard Maildir format. Features include IMAP/SMTP support, OAuth2
+  authentication (Microsoft & Google), email threading, background caching,
+  bulk archive, and full import/export of .eml files.
+license: MIT
+grade: stable
+confinement: strict
+base: core22
+icon: src-tauri/icons/128x128.png
+
+apps:
+  mailvault:
+    command: usr/bin/mail-vault
+    extensions: [gnome]
+    environment:
+      WEBKIT_DISABLE_COMPOSITING_MODE: "1"
+    plugs:
+      - network
+      - network-bind
+      - desktop
+      - desktop-legacy
+      - wayland
+      - x11
+      - home
+      - password-manager-service
+
+parts:
+  mailvault:
+    plugin: dump
+    source: snap-staging/
+    stage-packages:
+      - libwebkit2gtk-4.1-0
+      - libgtk-3-0
+      - libayatana-appindicator3-1
+      - librsvg2-2
+      - libssl3
+      - libsecret-1-0
