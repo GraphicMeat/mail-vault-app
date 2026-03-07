@@ -119,14 +119,14 @@
         <!-- Summary Cards -->
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5">
-            <p class="text-sm text-slate-500 dark:text-slate-400 mb-1">DMG Downloads</p>
-            <p id="stat-dmg" class="text-2xl sm:text-3xl font-bold gradient-text">0</p>
-            <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">Actual installs</p>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mb-1">macOS Downloads</p>
+            <p id="stat-macos" class="text-2xl sm:text-3xl font-bold gradient-text">0</p>
+            <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">DMG installs</p>
           </div>
           <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5">
-            <p class="text-sm text-slate-500 dark:text-slate-400 mb-1">Update Checks</p>
-            <p id="stat-updater" class="text-2xl sm:text-3xl font-bold text-slate-400 dark:text-slate-500">0</p>
-            <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">Auto-update pings</p>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mb-1">Linux Downloads</p>
+            <p id="stat-linux" class="text-2xl sm:text-3xl font-bold gradient-text">0</p>
+            <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">.deb installs</p>
           </div>
           <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5">
             <p class="text-sm text-slate-500 dark:text-slate-400 mb-1">Releases</p>
@@ -145,11 +145,11 @@
             <div class="flex items-center gap-4 text-xs">
               <div class="flex items-center gap-1.5">
                 <div class="w-3 h-3 rounded-sm gradient-bg"></div>
-                <span class="text-slate-500 dark:text-slate-400">DMG installs</span>
+                <span class="text-slate-500 dark:text-slate-400">macOS</span>
               </div>
               <div class="flex items-center gap-1.5">
-                <div class="w-3 h-3 rounded-sm bg-slate-300 dark:bg-slate-600"></div>
-                <span class="text-slate-500 dark:text-slate-400">Update checks</span>
+                <div class="w-3 h-3 rounded-sm bg-amber-500"></div>
+                <span class="text-slate-500 dark:text-slate-400">Linux</span>
               </div>
             </div>
           </div>
@@ -167,9 +167,9 @@
                 <tr class="bg-slate-50 dark:bg-slate-800/50 text-left text-slate-500 dark:text-slate-400">
                   <th class="px-6 py-3 font-medium">Version</th>
                   <th class="px-6 py-3 font-medium">Date</th>
-                  <th class="px-6 py-3 font-medium text-right">DMG</th>
+                  <th class="px-6 py-3 font-medium text-right">macOS</th>
+                  <th class="px-6 py-3 font-medium text-right">Linux</th>
                   <th class="px-6 py-3 font-medium text-right">Update Checks</th>
-                  <th class="px-6 py-3 font-medium text-right">Other</th>
                   <th class="px-6 py-3 font-medium text-right">Total</th>
                 </tr>
               </thead>
@@ -244,71 +244,74 @@
     }
 
     function renderStats(releases) {
-      let totalDmg = 0;
+      let totalMacos = 0;
+      let totalLinux = 0;
       let totalUpdater = 0;
-      let totalOther = 0;
 
       const releaseData = releases.map(release => {
-        let dmg = 0, updater = 0, other = 0;
+        let macos = 0, linux = 0, updater = 0;
         for (const asset of release.assets) {
           const name = asset.name.toLowerCase();
           if (name.endsWith('.dmg')) {
-            dmg += asset.download_count;
-          } else if (name === 'latest.json' || name.endsWith('.tar.gz') || name.endsWith('.sig')) {
-            updater += asset.download_count;
+            macos += asset.download_count;
+          } else if (name.endsWith('.deb')) {
+            linux += asset.download_count;
           } else {
-            other += asset.download_count;
+            // latest.json, .tar.gz, .sig — all update-check related
+            updater += asset.download_count;
           }
         }
-        const total = dmg + updater + other;
-        totalDmg += dmg;
+        totalMacos += macos;
+        totalLinux += linux;
         totalUpdater += updater;
-        totalOther += other;
         return {
           tag: release.tag_name,
           name: release.name || release.tag_name,
           date: release.published_at,
           prerelease: release.prerelease,
           draft: release.draft,
-          dmg,
+          macos,
+          linux,
           updater,
-          other,
-          total
+          downloads: macos + linux,
+          total: macos + linux + updater
         };
       });
 
+      // Sort latest first
+      releaseData.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
       // Summary cards
-      document.getElementById('stat-dmg').textContent = totalDmg.toLocaleString();
-      document.getElementById('stat-updater').textContent = totalUpdater.toLocaleString();
+      document.getElementById('stat-macos').textContent = totalMacos.toLocaleString();
+      document.getElementById('stat-linux').textContent = totalLinux.toLocaleString();
       document.getElementById('stat-releases').textContent = releases.length.toLocaleString();
       document.getElementById('stat-latest').textContent = releaseData.length > 0 ? releaseData[0].tag : '\u2014';
 
-      // Bar chart — stacked DMG + updater
-      const maxTotal = Math.max(...releaseData.map(r => r.total), 1);
+      // Bar chart — macOS + Linux stacked, no update checks
+      // Show oldest first in chart (bottom = oldest, top = newest reads naturally)
+      const chartData = [...releaseData].reverse();
+      const maxDownloads = Math.max(...chartData.map(r => r.downloads), 1);
       const chart = document.getElementById('chart');
       chart.innerHTML = '';
 
-      // Show releases in chronological order (oldest first)
-      const chronological = [...releaseData].reverse();
-      for (const r of chronological) {
-        const dmgPct = (r.dmg / maxTotal) * 100;
-        const updaterPct = ((r.updater + r.other) / maxTotal) * 100;
+      for (const r of chartData) {
+        const macosPct = (r.macos / maxDownloads) * 100;
+        const linuxPct = (r.linux / maxDownloads) * 100;
         const row = document.createElement('div');
         row.className = 'flex items-center gap-3';
         row.innerHTML = `
           <span class="text-xs font-mono text-slate-500 dark:text-slate-400 w-16 text-right shrink-0">${r.tag}</span>
           <div class="flex-1 h-7 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden flex">
-            <div class="bar-fill h-full gradient-bg flex items-center justify-end" style="width: 0%" data-width="${dmgPct}">
-              ${r.dmg > 0 ? `<span class="text-[10px] text-white font-medium whitespace-nowrap px-1.5">${r.dmg}</span>` : ''}
+            <div class="bar-fill h-full gradient-bg flex items-center justify-end" style="width: 0%" data-width="${macosPct}">
+              ${r.macos > 0 ? `<span class="text-[10px] text-white font-medium whitespace-nowrap px-1.5">${r.macos}</span>` : ''}
             </div>
-            <div class="bar-fill h-full bg-slate-300 dark:bg-slate-500/50 flex items-center justify-end" style="width: 0%" data-width="${updaterPct}">
-              ${(r.updater + r.other) > 0 ? `<span class="text-[10px] text-slate-600 dark:text-slate-300 font-medium whitespace-nowrap px-1.5">${r.updater + r.other}</span>` : ''}
+            <div class="bar-fill h-full bg-amber-500 flex items-center justify-end" style="width: 0%" data-width="${linuxPct}">
+              ${r.linux > 0 ? `<span class="text-[10px] text-white font-medium whitespace-nowrap px-1.5">${r.linux}</span>` : ''}
             </div>
           </div>
-          <span class="text-xs font-medium text-slate-500 dark:text-slate-400 w-8 text-right shrink-0">${r.total}</span>
+          <span class="text-xs font-medium text-slate-500 dark:text-slate-400 w-8 text-right shrink-0">${r.downloads}</span>
         `;
         chart.appendChild(row);
-        // Animate bars
         requestAnimationFrame(() => {
           row.querySelectorAll('.bar-fill').forEach(bar => {
             bar.style.width = bar.dataset.width + '%';
@@ -320,7 +323,7 @@
         chart.innerHTML = '<p class="text-slate-500 dark:text-slate-400 text-sm text-center py-4">No releases found</p>';
       }
 
-      // Table
+      // Table — latest first
       const tbody = document.getElementById('releases-table');
       tbody.innerHTML = '';
       for (const r of releaseData) {
@@ -334,9 +337,9 @@
             ${r.draft ? '<span class="ml-1.5 text-xs bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 px-1.5 py-0.5 rounded">draft</span>' : ''}
           </td>
           <td class="px-6 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">${date}</td>
-          <td class="px-6 py-3 text-right tabular-nums font-semibold">${r.dmg.toLocaleString()}</td>
+          <td class="px-6 py-3 text-right tabular-nums font-semibold">${r.macos.toLocaleString()}</td>
+          <td class="px-6 py-3 text-right tabular-nums font-semibold">${r.linux.toLocaleString()}</td>
           <td class="px-6 py-3 text-right tabular-nums text-slate-400 dark:text-slate-500">${r.updater.toLocaleString()}</td>
-          <td class="px-6 py-3 text-right tabular-nums text-slate-400 dark:text-slate-500">${r.other.toLocaleString()}</td>
           <td class="px-6 py-3 text-right tabular-nums">${r.total.toLocaleString()}</td>
         `;
         tbody.appendChild(tr);
@@ -344,13 +347,14 @@
 
       // Footer totals row
       const tfoot = document.getElementById('releases-footer');
+      const grandTotal = totalMacos + totalLinux + totalUpdater;
       tfoot.innerHTML = `
         <tr>
           <td class="px-6 py-3" colspan="2">Total</td>
-          <td class="px-6 py-3 text-right tabular-nums">${totalDmg.toLocaleString()}</td>
+          <td class="px-6 py-3 text-right tabular-nums">${totalMacos.toLocaleString()}</td>
+          <td class="px-6 py-3 text-right tabular-nums">${totalLinux.toLocaleString()}</td>
           <td class="px-6 py-3 text-right tabular-nums text-slate-400 dark:text-slate-500">${totalUpdater.toLocaleString()}</td>
-          <td class="px-6 py-3 text-right tabular-nums text-slate-400 dark:text-slate-500">${totalOther.toLocaleString()}</td>
-          <td class="px-6 py-3 text-right tabular-nums">${(totalDmg + totalUpdater + totalOther).toLocaleString()}</td>
+          <td class="px-6 py-3 text-right tabular-nums">${grandTotal.toLocaleString()}</td>
         </tr>
       `;
 
