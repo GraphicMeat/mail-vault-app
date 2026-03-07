@@ -179,16 +179,13 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          APPIMAGE_EXTRACT_AND_RUN: '1'
-        run: npx tauri build --target x86_64-unknown-linux-gnu
+        run: npx tauri build --target x86_64-unknown-linux-gnu --bundles deb
 
       - name: Upload Linux x86_64 artifacts
         uses: actions/upload-artifact@v4
         with:
           name: linux-x86_64-artifacts
           path: |
-            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
-            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage.sig
             src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb
           retention-days: 1
 
@@ -252,16 +249,13 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          APPIMAGE_EXTRACT_AND_RUN: '1'
-        run: npx tauri build --target aarch64-unknown-linux-gnu
+        run: npx tauri build --target aarch64-unknown-linux-gnu --bundles deb
 
       - name: Upload Linux aarch64 artifacts
         uses: actions/upload-artifact@v4
         with:
           name: linux-aarch64-artifacts
           path: |
-            src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
-            src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/appimage/*.AppImage.sig
             src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/deb/*.deb
           retention-days: 1
 
@@ -299,15 +293,13 @@ jobs:
           MACOS_TAR_NAME=$(basename "$MACOS_TAR")
           MACOS_SIG=$(cat "${MACOS_TAR}.sig" 2>/dev/null || echo "")
 
-          # ── Linux x86_64 ──
-          LX86_APPIMAGE=$(find artifacts/linux-x86_64-artifacts -name "*.AppImage" ! -name "*.sig" | head -1)
-          LX86_APPIMAGE_NAME=$(basename "$LX86_APPIMAGE")
-          LX86_SIG=$(cat "${LX86_APPIMAGE}.sig" 2>/dev/null || echo "")
+          # ── Linux x86_64 (.deb) ──
+          LX86_DEB=$(find artifacts/linux-x86_64-artifacts -name "*.deb" | head -1)
+          LX86_DEB_NAME=$(basename "$LX86_DEB")
 
-          # ── Linux aarch64 ──
-          LARM_APPIMAGE=$(find artifacts/linux-aarch64-artifacts -name "*.AppImage" ! -name "*.sig" | head -1)
-          LARM_APPIMAGE_NAME=$(basename "$LARM_APPIMAGE")
-          LARM_SIG=$(cat "${LARM_APPIMAGE}.sig" 2>/dev/null || echo "")
+          # ── Linux aarch64 (.deb) ──
+          LARM_DEB=$(find artifacts/linux-aarch64-artifacts -name "*.deb" | head -1)
+          LARM_DEB_NAME=$(basename "$LARM_DEB")
 
           cat > latest.json <<EOJSON
           {
@@ -316,9 +308,7 @@ jobs:
             "pub_date": "${PUB_DATE}",
             "platforms": {
               "darwin-aarch64": { "signature": "${MACOS_SIG}", "url": "${BASE_URL}/${MACOS_TAR_NAME}" },
-              "darwin-x86_64": { "signature": "${MACOS_SIG}", "url": "${BASE_URL}/${MACOS_TAR_NAME}" },
-              "linux-x86_64": { "signature": "${LX86_SIG}", "url": "${BASE_URL}/${LX86_APPIMAGE_NAME}" },
-              "linux-aarch64": { "signature": "${LARM_SIG}", "url": "${BASE_URL}/${LARM_APPIMAGE_NAME}" }
+              "darwin-x86_64": { "signature": "${MACOS_SIG}", "url": "${BASE_URL}/${MACOS_TAR_NAME}" }
             }
           }
           EOJSON
