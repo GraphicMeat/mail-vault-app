@@ -24,6 +24,12 @@
     <key>com.apple.security.files.user-selected.read-write</key>
     <true/>
 
+    <!-- Allow updater to replace app in /Applications/ -->
+    <key>com.apple.security.temporary-exception.files.absolute-path.read-write</key>
+    <array>
+        <string>/Applications/</string>
+    </array>
+
     <!-- Downloads folder access -->
     <key>com.apple.security.files.downloads.read-write</key>
     <true/>
