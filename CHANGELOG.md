@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-03-07
+
 ### Added
 - **Linux support** — MailVault now runs natively on Linux (x86_64 and aarch64) with .deb and AppImage packages; credentials stored via D-Bus Secret Service (GNOME Keyring / KWallet); native Wayland and X11 support; CI builds macOS + Linux in parallel
 - **Linux app menu** — File menu with Check for Updates, Settings (Ctrl+,), and Quit (Ctrl+Q); Logs menu with Export Logs
