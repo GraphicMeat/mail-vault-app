@@ -141,7 +141,8 @@ jobs:
             libssl-dev \
             libglib2.0-dev \
             libdbus-1-dev \
-            libsecret-1-dev
+            libsecret-1-dev \
+            libfuse2
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -213,7 +214,8 @@ jobs:
             libssl-dev \
             libglib2.0-dev \
             libdbus-1-dev \
-            libsecret-1-dev
+            libsecret-1-dev \
+            libfuse2
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
