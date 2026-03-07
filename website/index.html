@@ -1398,7 +1398,7 @@
         if (debX86) {
           document.getElementById('download-linux-x86').href = debX86.browser_download_url;
         }
-        const debArm = release.assets.find(a => a.name.endsWith('.deb') && a.name.includes('aarch64'));
+        const debArm = release.assets.find(a => a.name.endsWith('.deb') && (a.name.includes('arm64') || a.name.includes('aarch64')));
         if (debArm) {
           document.getElementById('download-linux-arm').href = debArm.browser_download_url;
         }
