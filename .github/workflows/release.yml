@@ -257,7 +257,7 @@ jobs:
           retention-days: 1
 
   create-release:
-    needs: [build-macos, build-linux-x86_64, build-linux-aarch64]
+    needs: [build-macos, build-linux-x86_64]
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -295,22 +295,25 @@ jobs:
           LX86_APPIMAGE_NAME=$(basename "$LX86_APPIMAGE")
           LX86_SIG=$(cat "${LX86_APPIMAGE}.sig" 2>/dev/null || echo "")
 
-          # ── Linux aarch64 ──
-          LARM_APPIMAGE=$(find artifacts/linux-aarch64-artifacts -name "*.AppImage" ! -name "*.sig" | head -1)
-          LARM_APPIMAGE_NAME=$(basename "$LARM_APPIMAGE")
+          # ── Linux aarch64 (optional) ──
+          LARM_APPIMAGE=$(find artifacts/linux-aarch64-artifacts -name "*.AppImage" ! -name "*.sig" 2>/dev/null | head -1)
+          LARM_APPIMAGE_NAME=$(basename "$LARM_APPIMAGE" 2>/dev/null || echo "")
           LARM_SIG=$(cat "${LARM_APPIMAGE}.sig" 2>/dev/null || echo "")
+
+          # Build platforms JSON — aarch64 only if artifacts exist
+          PLATFORMS='"darwin-aarch64": { "signature": "'"${MACOS_SIG}"'", "url": "'"${BASE_URL}/${MACOS_TAR_NAME}"'" }'
+          PLATFORMS="${PLATFORMS}, \"darwin-x86_64\": { \"signature\": \"${MACOS_SIG}\", \"url\": \"${BASE_URL}/${MACOS_TAR_NAME}\" }"
+          PLATFORMS="${PLATFORMS}, \"linux-x86_64\": { \"signature\": \"${LX86_SIG}\", \"url\": \"${BASE_URL}/${LX86_APPIMAGE_NAME}\" }"
+          if [ -n "$LARM_APPIMAGE_NAME" ]; then
+            PLATFORMS="${PLATFORMS}, \"linux-aarch64\": { \"signature\": \"${LARM_SIG}\", \"url\": \"${BASE_URL}/${LARM_APPIMAGE_NAME}\" }"
+          fi
 
           cat > latest.json <<EOJSON
           {
             "version": "${VERSION_NUM}",
             "notes": "See the assets to download and install this version.",
             "pub_date": "${PUB_DATE}",
-            "platforms": {
-              "darwin-aarch64": { "signature": "${MACOS_SIG}", "url": "${BASE_URL}/${MACOS_TAR_NAME}" },
-              "darwin-x86_64": { "signature": "${MACOS_SIG}", "url": "${BASE_URL}/${MACOS_TAR_NAME}" },
-              "linux-x86_64": { "signature": "${LX86_SIG}", "url": "${BASE_URL}/${LX86_APPIMAGE_NAME}" },
-              "linux-aarch64": { "signature": "${LARM_SIG}", "url": "${BASE_URL}/${LARM_APPIMAGE_NAME}" }
-            }
+            "platforms": { ${PLATFORMS} }
           }
           EOJSON
 
