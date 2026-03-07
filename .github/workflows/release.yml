@@ -326,7 +326,7 @@ jobs:
       - name: Install snapcraft and GNOME extension snaps
         run: |
           sudo snap install snapcraft --classic
-          sudo snap install gnome-42-2204 gnome-42-2204-sdk
+          sudo snap install gnome-42-2204 gnome-42-2204-sdk gtk-common-themes
 
       - name: Build snap
         run: snapcraft --destructive-mode
@@ -405,7 +405,7 @@ jobs:
       - name: Install snapcraft and GNOME extension snaps
         run: |
           sudo snap install snapcraft --classic
-          sudo snap install gnome-42-2204 gnome-42-2204-sdk
+          sudo snap install gnome-42-2204 gnome-42-2204-sdk gtk-common-themes
 
       - name: Build snap
         run: snapcraft --destructive-mode
