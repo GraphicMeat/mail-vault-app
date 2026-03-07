@@ -323,8 +323,10 @@ jobs:
           TAURI_TARGET: x86_64-unknown-linux-gnu
         run: bash scripts/build-snap-staging.sh
 
-      - name: Install snapcraft
-        run: sudo snap install snapcraft --classic
+      - name: Install snapcraft and GNOME extension snaps
+        run: |
+          sudo snap install snapcraft --classic
+          sudo snap install gnome-42-2204 gnome-42-2204-sdk
 
       - name: Build snap
         run: snapcraft --destructive-mode
@@ -400,8 +402,10 @@ jobs:
           TAURI_TARGET: aarch64-unknown-linux-gnu
         run: bash scripts/build-snap-staging.sh
 
-      - name: Install snapcraft
-        run: sudo snap install snapcraft --classic
+      - name: Install snapcraft and GNOME extension snaps
+        run: |
+          sudo snap install snapcraft --classic
+          sudo snap install gnome-42-2204 gnome-42-2204-sdk
 
       - name: Build snap
         run: snapcraft --destructive-mode
