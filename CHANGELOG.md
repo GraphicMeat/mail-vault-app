@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+- **Linux support** — MailVault now runs natively on Linux (x86_64 and aarch64) with .deb and AppImage packages; credentials stored via D-Bus Secret Service (GNOME Keyring / KWallet); native Wayland and X11 support; CI builds macOS + Linux in parallel
+- **Linux app menu** — File menu with Check for Updates, Settings (Ctrl+,), and Quit (Ctrl+Q); Logs menu with Export Logs
+
+### Fixed
+- **Memory reduction** — lowered default body cache from 512 MB to 128 MB, reduced account/mailbox LRU cache sizes, excluded derived data from cache snapshots; targets ~200-300 MB total memory (down from ~1.14 GB)
+- **App updater** — "Update Now" button now shows a downloading indicator and displays error dialogs on failure instead of silently doing nothing
+- **Email list overlap** — action buttons (archive, menu) no longer overlap text when the email list panel is narrow; buttons now float over the row on hover
+- **macOS-only Reopen event** — fixed compilation error on Linux where `RunEvent::Reopen` is macOS-only
+
 ## [1.9.2] - 2026-03-04
 
 ### Added

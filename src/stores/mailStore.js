@@ -145,13 +145,13 @@ const _rangeRetryDelays = new Map();
 
 // ── Mailbox LRU cache (max 3 entries) ─────────────────────────────────
 const _mailboxCache = new Map();
-const MAILBOX_CACHE_MAX = 3;
+const MAILBOX_CACHE_MAX = 2;
 
 function _saveToMailboxCache(accountId, mailbox, state) {
   const key = `${accountId}:${mailbox}`;
   _mailboxCache.set(key, {
     emails: state.emails,
-    sortedEmails: state.sortedEmails,
+    // sortedEmails excluded — recomputed via updateSortedEmails() on restore
     localEmails: state.localEmails,
     emailsByIndex: state.emailsByIndex,
     totalEmails: state.totalEmails,
@@ -196,12 +196,13 @@ function _invalidateMailboxCache(accountId) {
 
 // ── Account LRU cache (max 5 entries) — instant account switching ────
 const _accountCache = new Map();
-const ACCOUNT_CACHE_MAX = 5;
+const ACCOUNT_CACHE_MAX = 2;
 
 function _saveToAccountCache(accountId, state) {
   _accountCache.set(accountId, {
     emails: state.emails,
-    sortedEmails: state.sortedEmails,
+    // sortedEmails excluded — recomputed via updateSortedEmails() on restore
+    // serverUidSet excluded — re-fetched via CONDSTORE delta sync on restore
     localEmails: state.localEmails,
     emailsByIndex: state.emailsByIndex,
     totalEmails: state.totalEmails,
@@ -212,7 +213,6 @@ function _saveToAccountCache(accountId, state) {
     hasMoreEmails: state.hasMoreEmails,
     sentEmails: state.sentEmails,
     mailboxes: state.mailboxes,
-    serverUidSet: state.serverUidSet,
     connectionStatus: state.connectionStatus,
     activeMailbox: state.activeMailbox,
     lastSyncTimestamp: Date.now(),
@@ -727,7 +727,6 @@ export const useMailStore = create((set, get) => ({
         activeAccountId: accountId,
         activeMailbox: cachedAccount.activeMailbox,
         emails: cachedAccount.emails,
-        sortedEmails: cachedAccount.sortedEmails,
         localEmails: cachedAccount.localEmails,
         emailsByIndex: cachedAccount.emailsByIndex,
         totalEmails: cachedAccount.totalEmails,
@@ -738,7 +737,7 @@ export const useMailStore = create((set, get) => ({
         hasMoreEmails: cachedAccount.hasMoreEmails,
         sentEmails: cachedAccount.sentEmails,
         mailboxes: cachedAccount.mailboxes,
-        serverUidSet: cachedAccount.serverUidSet,
+        serverUidSet: new Set(), // Re-fetched via CONDSTORE delta sync
         connectionStatus: cachedAccount.connectionStatus,
         selectedEmailId: null,
         selectedEmail: null,
@@ -857,6 +856,9 @@ export const useMailStore = create((set, get) => ({
     ];
 
     if (isStale()) { console.log('[setActiveAccount] Stale after mailbox cache, aborting'); return; }
+
+    // Set cached mailboxes immediately so sidebar isn't blank while background fetch runs
+    set({ mailboxes: defaultMailboxes });
 
     // Check if credentials are missing — try keychain refresh before showing error
     let hasCredentials = account.password || (account.authType === 'oauth2' && account.oauth2AccessToken);
@@ -1028,7 +1030,6 @@ export const useMailStore = create((set, get) => ({
       console.log('[setActiveMailbox] LRU cache hit for', mailbox, '— restoring', cached.emails.length, 'emails');
       set({
         emails: cached.emails,
-        sortedEmails: cached.sortedEmails,
         localEmails: cached.localEmails,
         emailsByIndex: cached.emailsByIndex,
         totalEmails: cached.totalEmails,

@@ -2,11 +2,14 @@
 
 ## Architecture
 - **Desktop app**: Tauri v2 (Rust) + React (Vite) + Zustand state management
+- **Platforms**: macOS (Intel + Apple Silicon) and Linux (x86_64 + aarch64); Linux packages: AppImage and .deb
 - **IMAP/SMTP**: Native Rust via `async-imap` + `lettre` crates — all email operations run in-process via Tauri `invoke()` commands (no sidecar)
 - **Storage**: Maildir format — emails stored as individual `.eml` files on disk (not in a database)
 - **EML support**: App reads/writes standard `.eml` files for email storage and import/export
 - **Website**: Static HTML + Express API on Hostinger (`website/`)
 - **Sandbox**: macOS App Sandbox is enabled — the app runs in a container (`~/Library/Containers/com.mailvault.app/`)
+- **Linux credentials**: `keyring` crate with `sync-secret-service` feature — uses D-Bus Secret Service (GNOME Keyring / KWallet)
+- **Linux display**: Supports both Wayland and X11 via WebKitGTK
 - **Background pipelines**: `EmailPipelineManager` singleton coordinates per-account `AccountPipeline` instances; active account runs content caching at concurrency=3, then cascades to background accounts (headers + content) at concurrency=1; `usePipelineCoordinator` hook bridges React lifecycle to the manager
 
 ## Background Caching Pipeline
@@ -110,9 +113,16 @@
 - Signing config: `scripts/signing-config.sh` (gitignored, has all secrets)
 - Local build script: `scripts/build-developer-id.sh` (builds, signs, notarizes, creates DMG + updater artifacts)
 
+## Linux Build
+- **System deps**: `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`, `patchelf`, `libssl-dev`, `libglib2.0-dev`, `libdbus-1-dev`, `libsecret-1-dev`
+- **Platform-specific Rust**: `#[cfg(target_os = "linux")]` blocks for `show_in_folder` (xdg-open), `open_file`, `open_with_dialog`, tray log viewer, app menu (File: Check Updates + Settings + Quit; Logs: Export Logs), badge count (no-op)
+- **macOS-only code**: `RunEvent::Reopen` is `#[cfg(target_os = "macos")]` — doesn't exist on Linux; `cocoa`/`objc` imports gated behind `#[cfg(target_os = "macos")]`; `titleBarStyle: "Transparent"` + `hiddenTitle: true` are macOS-only (no effect on Linux)
+- **Cross-compilation**: `Cross.toml` configures `ghcr.io/tauri-apps/tauri-cross:aarch64` for aarch64 builds
+- **Test VM**: Ubuntu 24.04 LTS on Parallels (aarch64), user `parallels`, IP `10.211.55.6`
+
 ## CI/CD
-- GitHub Actions: `.github/workflows/release.yml` (manual dispatch, universal macOS build)
-- Creates draft GitHub release with DMG + updater `latest.json`
+- GitHub Actions: `.github/workflows/release.yml` (manual dispatch, macOS + Linux builds)
+- Creates draft GitHub release with DMG + AppImage + .deb + updater `latest.json`
 - Required GitHub secrets: APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, KEYCHAIN_PASSWORD, APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID, TAURI_SIGNING_PRIVATE_KEY, TAURI_SIGNING_PRIVATE_KEY_PASSWORD
 - Optional GitHub secrets: MAILVAULT_MS_CLIENT_ID, MAILVAULT_MS_CLIENT_SECRET (overrides default Thunderbird public client ID for OAuth2)
 

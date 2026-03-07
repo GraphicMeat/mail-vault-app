@@ -2846,6 +2846,99 @@ async fn import_backup(
     })
 }
 
+/// Shared update check logic for both manual menu trigger and startup auto-check.
+/// `show_no_update` controls whether to show a dialog when already up-to-date.
+async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
+    use tauri_plugin_updater::UpdaterExt;
+    use tauri_plugin_dialog::DialogExt;
+
+    info!("Checking for updates (manual={})", show_no_update);
+
+    let updater = match handle.updater() {
+        Ok(u) => u,
+        Err(e) => {
+            error!("Failed to create updater: {}", e);
+            if show_no_update {
+                handle.dialog()
+                    .message(format!("Failed to check for updates: {}", e))
+                    .title("Update Error")
+                    .show(|_| {});
+            }
+            return;
+        }
+    };
+
+    match updater.check().await {
+        Ok(Some(update)) => {
+            info!("Update available: {} -> {}", env!("CARGO_PKG_VERSION"), update.version);
+            let version = update.version.clone();
+            let body = update.body.clone().unwrap_or_default();
+            let handle_clone = handle.clone();
+
+            handle.dialog()
+                .message(format!(
+                    "A new version of MailVault is available!\n\nCurrent: v{}\nNew: v{}\n\n{}",
+                    env!("CARGO_PKG_VERSION"), version, body
+                ))
+                .title("Update Available")
+                .buttons(tauri_plugin_dialog::MessageDialogButtons::OkCancelCustom(
+                    "Update Now".to_string(), "Later".to_string()
+                ))
+                .show(move |confirmed| {
+                    if confirmed {
+                        info!("User accepted update, downloading...");
+                        let h = handle_clone.clone();
+
+                        // Show a "downloading" dialog so the user knows something is happening
+                        h.dialog()
+                            .message("Downloading and installing update...\n\nThe app will restart automatically when complete.")
+                            .title("Updating MailVault")
+                            .show(|_| {});
+
+                        tauri::async_runtime::spawn(async move {
+                            match update.download_and_install(|_, _| {}, || {}).await {
+                                Ok(_) => {
+                                    info!("Update installed successfully, restarting...");
+                                    h.restart();
+                                }
+                                Err(e) => {
+                                    error!("Failed to install update: {}", e);
+                                    h.dialog()
+                                        .message(format!(
+                                            "Failed to install update.\n\n{}\n\nPlease download the latest version manually from the website.",
+                                            e
+                                        ))
+                                        .title("Update Failed")
+                                        .show(|_| {});
+                                }
+                            }
+                        });
+                    } else {
+                        info!("User deferred update");
+                    }
+                });
+        }
+        Ok(None) => {
+            info!("No updates available");
+            if show_no_update {
+                handle.dialog()
+                    .message(format!("You're running the latest version (v{}).", env!("CARGO_PKG_VERSION")))
+                    .title("No Updates Available")
+                    .show(|_| {});
+            }
+        }
+        Err(e) => {
+            error!("Update check failed: {}", e);
+            if show_no_update {
+                handle.dialog()
+                    .message(format!("Failed to check for updates: {}", e))
+                    .title("Update Error")
+                    .show(|_| {});
+            }
+        }
+    }
+}
+
 fn main() {
     // Log panics before abort — set_hook fires even with panic = "abort"
     std::panic::set_hook(Box::new(|info| {
@@ -2989,7 +3082,10 @@ fn main() {
 
             // --- Set up app menu ---
             let check_updates = MenuItem::with_id(app, "check_updates", "Check for Updates...", true, None::<&str>)?;
+            #[cfg(target_os = "macos")]
             let open_settings = MenuItem::with_id(app, "open_settings", "Settings...", true, Some("cmd+,"))?;
+            #[cfg(not(target_os = "macos"))]
+            let open_settings = MenuItem::with_id(app, "open_settings", "Settings...", true, Some("ctrl+,"))?;
             let export_logs = MenuItem::with_id(app, "export_logs", "Export Logs...", true, None::<&str>)?;
             let logs_submenu = Submenu::with_id(app, "logs_submenu", "Logs", true)?;
             logs_submenu.append(&export_logs)?;
@@ -3016,8 +3112,12 @@ fn main() {
 
             #[cfg(not(target_os = "macos"))]
             {
-                let quit_item = PredefinedMenuItem::quit(app, Some("Quit"))?;
+                let sep = PredefinedMenuItem::separator(app)?;
+                let quit_item = MenuItem::with_id(app, "quit_app", "Quit", true, Some("ctrl+q"))?;
                 let file_submenu = Submenu::with_id(app, "file_submenu", "File", true)?;
+                file_submenu.append(&check_updates)?;
+                file_submenu.append(&open_settings)?;
+                file_submenu.append(&sep)?;
                 file_submenu.append(&quit_item)?;
 
                 let menu = Menu::with_items(app, &[
@@ -3033,59 +3133,7 @@ fn main() {
                 if event.id().as_ref() == "check_updates" {
                     let handle = app_handle_for_menu.clone();
                     tauri::async_runtime::spawn(async move {
-                        use tauri_plugin_updater::UpdaterExt;
-                        use tauri_plugin_dialog::DialogExt;
-                        info!("Manual update check triggered");
-                        let updater = match handle.updater() {
-                            Ok(u) => u,
-                            Err(e) => {
-                                error!("Failed to create updater: {}", e);
-                                handle.dialog()
-                                    .message(format!("Failed to check for updates: {}", e))
-                                    .title("Update Error")
-                                    .show(|_| {});
-                                return;
-                            }
-                        };
-                        match updater.check().await {
-                            Ok(Some(update)) => {
-                                info!("Update available: {}", update.version);
-                                let version = update.version.clone();
-                                let body = update.body.clone().unwrap_or_default();
-                                let handle_clone = handle.clone();
-                                handle.dialog()
-                                    .message(format!(
-                                        "A new version of MailVault is available!\n\nCurrent: v{}\nNew: v{}\n\n{}",
-                                        env!("CARGO_PKG_VERSION"), version, body
-                                    ))
-                                    .title("Update Available")
-                                    .buttons(tauri_plugin_dialog::MessageDialogButtons::OkCancelCustom("Update Now".to_string(), "Later".to_string()))
-                                    .show(move |confirmed| {
-                                        if confirmed {
-                                            let h = handle_clone.clone();
-                                            tauri::async_runtime::spawn(async move {
-                                                match update.download_and_install(|_, _| {}, || {}).await {
-                                                    Ok(_) => { h.restart(); }
-                                                    Err(e) => { error!("Failed to install update: {}", e); }
-                                                }
-                                            });
-                                        }
-                                    });
-                            }
-                            Ok(None) => {
-                                handle.dialog()
-                                    .message(format!("You're running the latest version (v{}).", env!("CARGO_PKG_VERSION")))
-                                    .title("No Updates Available")
-                                    .show(|_| {});
-                            }
-                            Err(e) => {
-                                error!("Update check failed: {}", e);
-                                handle.dialog()
-                                    .message(format!("Failed to check for updates: {}", e))
-                                    .title("Update Error")
-                                    .show(|_| {});
-                            }
-                        }
+                        check_for_updates(handle, true).await;
                     });
                 } else if event.id().as_ref() == "open_settings" {
                     let _ = app_handle_for_menu.emit("open-settings", ());
@@ -3106,6 +3154,9 @@ fn main() {
                                 }
                             }
                         });
+                } else if event.id().as_ref() == "quit_app" {
+                    info!("Application quitting via menu");
+                    std::process::exit(0);
                 }
             });
 
@@ -3173,60 +3224,7 @@ fn main() {
             tauri::async_runtime::spawn(async move {
                 // Delay update check to let the app initialize first
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-
-                info!("Checking for updates...");
-                let updater = match update_handle.updater() {
-                    Ok(u) => u,
-                    Err(e) => {
-                        warn!("Failed to create updater: {}", e);
-                        return;
-                    }
-                };
-                match updater.check().await {
-                    Ok(Some(update)) => {
-                        info!("Update available: {} -> {}", env!("CARGO_PKG_VERSION"), update.version);
-
-                        use tauri_plugin_dialog::DialogExt;
-                        let version = update.version.clone();
-                        let body = update.body.clone().unwrap_or_default();
-
-                        let handle_clone = update_handle.clone();
-                        update_handle.dialog()
-                            .message(format!(
-                                "A new version of MailVault is available!\n\nCurrent: v{}\nNew: v{}\n\n{}",
-                                env!("CARGO_PKG_VERSION"),
-                                version,
-                                body
-                            ))
-                            .title("Update Available")
-                            .buttons(tauri_plugin_dialog::MessageDialogButtons::OkCancelCustom("Update Now".to_string(), "Later".to_string()))
-                            .show(move |confirmed| {
-                                if confirmed {
-                                    info!("User accepted update, downloading...");
-                                    let handle = handle_clone.clone();
-                                    tauri::async_runtime::spawn(async move {
-                                        match update.download_and_install(|_, _| {}, || {}).await {
-                                            Ok(_) => {
-                                                info!("Update installed successfully, restarting...");
-                                                handle.restart();
-                                            }
-                                            Err(e) => {
-                                                error!("Failed to install update: {}", e);
-                                            }
-                                        }
-                                    });
-                                } else {
-                                    info!("User deferred update");
-                                }
-                            });
-                    }
-                    Ok(None) => {
-                        info!("No updates available");
-                    }
-                    Err(e) => {
-                        warn!("Failed to check for updates: {}", e);
-                    }
-                }
+                check_for_updates(update_handle, false).await;
             });
 
             info!("Application setup complete");
@@ -3246,6 +3244,7 @@ fn main() {
         .expect("error while building tauri application")
         .run(|app_handle, event| {
             match event {
+                #[cfg(target_os = "macos")]
                 tauri::RunEvent::Reopen { .. } => {
                     if let Some(window) = app_handle.get_webview_window("main") {
                         let _ = window.show();
