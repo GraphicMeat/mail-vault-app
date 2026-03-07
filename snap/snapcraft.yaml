@@ -1,5 +1,5 @@
 name: mailvault
-version: '2.0.0'
+version: '2.0.1'
 summary: Privacy-first desktop email client with local Maildir storage
 description: |
   MailVault is a desktop email client that stores your emails locally in
@@ -14,7 +14,7 @@ icon: src-tauri/icons/128x128.png
 
 apps:
   mailvault:
-    command: usr/bin/mail-vault
+    command: usr/bin/mailvault
     extensions: [gnome]
     environment:
       WEBKIT_DISABLE_COMPOSITING_MODE: "1"
