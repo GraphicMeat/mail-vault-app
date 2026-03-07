@@ -9,7 +9,7 @@ on:
         type: string
 
 jobs:
-  release:
+  build-macos:
     permissions:
       contents: write
     runs-on: macos-latest
@@ -109,54 +109,220 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: bash scripts/build-developer-id.sh
 
-      - name: Create GitHub release
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-artifacts
+          path: |
+            src-tauri/target/universal-apple-darwin/release/bundle/dmg/MailVault-*.dmg
+            src-tauri/target/universal-apple-darwin/release/bundle/dmg/MailVault.app.tar.gz
+            src-tauri/target/universal-apple-darwin/release/bundle/dmg/MailVault.app.tar.gz.sig
+          retention-days: 1
+
+  build-linux-x86_64:
+    permissions:
+      contents: write
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libglib2.0-dev \
+            libdbus-1-dev \
+            libsecret-1-dev
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: linux-x86_64-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            linux-x86_64-cargo-
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build server sidecar
+        env:
+          TAURI_TARGET: x86_64-unknown-linux-gnu
+        run: npm run build:server
+
+      - name: Build Linux x86_64
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npx tauri build --target x86_64-unknown-linux-gnu
+
+      - name: Upload Linux x86_64 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x86_64-artifacts
+          path: |
+            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
+            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage.sig
+            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb
+          retention-days: 1
+
+  build-linux-aarch64:
+    permissions:
+      contents: write
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+
+      - name: Install cross
+        run: cargo install cross --locked
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: linux-aarch64-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            linux-aarch64-cargo-
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build server sidecar for aarch64
+        run: |
+          mkdir -p src-tauri/binaries
+          bun build server/index.js --compile --target=bun-linux-arm64 --outfile src-tauri/binaries/mailvault-server-aarch64-unknown-linux-gnu
+          chmod +x src-tauri/binaries/mailvault-server-aarch64-unknown-linux-gnu
+
+      - name: Build Linux aarch64
+        env:
+          CARGO: cross
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npx tauri build --target aarch64-unknown-linux-gnu
+
+      - name: Upload Linux aarch64 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-aarch64-artifacts
+          path: |
+            src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
+            src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/appimage/*.AppImage.sig
+            src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/deb/*.deb
+          retention-days: 1
+
+  create-release:
+    needs: [build-macos, build-linux-x86_64, build-linux-aarch64]
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Build latest.json and create release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${{ inputs.version }}"
-          BUNDLE_DIR="src-tauri/target/universal-apple-darwin/release/bundle"
-          DMG_DIR="$BUNDLE_DIR/dmg"
-
-          # Find our signed artifacts (not Tauri's unsigned ones)
           VERSION_NUM="${VERSION#v}"
-          DMG="$DMG_DIR/MailVault-v${VERSION_NUM}.dmg"
-          TAR_GZ="$DMG_DIR/MailVault.app.tar.gz"
-          TAR_GZ_SIG="${TAR_GZ}.sig"
-          LATEST_JSON="$DMG_DIR/latest.json"
+          PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+          REPO="${{ github.repository }}"
+          BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
 
-          # Update latest.json URLs with the release version tag
-          if [ -f "$LATEST_JSON" ]; then
-            # Replace version placeholder with actual release tag version
-            TAR_GZ_NAME=$(basename "$TAR_GZ")
-            DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/${VERSION}/${TAR_GZ_NAME}"
-            # Rewrite latest.json with correct download URLs and version
-            SIGNATURE=$(cat "$TAR_GZ_SIG" 2>/dev/null || echo "")
-            PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
-            cat > "$LATEST_JSON" <<EOJSON
+          echo "=== Artifacts collected ==="
+          find artifacts/ -type f | sort
+          echo "=========================="
+
+          # ── macOS ──
+          MACOS_TAR=$(find artifacts/macos-artifacts -name "*.tar.gz" ! -name "*.sig" | head -1)
+          MACOS_TAR_NAME=$(basename "$MACOS_TAR")
+          MACOS_SIG=$(cat "${MACOS_TAR}.sig" 2>/dev/null || echo "")
+
+          # ── Linux x86_64 ──
+          LX86_APPIMAGE=$(find artifacts/linux-x86_64-artifacts -name "*.AppImage" ! -name "*.sig" | head -1)
+          LX86_APPIMAGE_NAME=$(basename "$LX86_APPIMAGE")
+          LX86_SIG=$(cat "${LX86_APPIMAGE}.sig" 2>/dev/null || echo "")
+
+          # ── Linux aarch64 ──
+          LARM_APPIMAGE=$(find artifacts/linux-aarch64-artifacts -name "*.AppImage" ! -name "*.sig" | head -1)
+          LARM_APPIMAGE_NAME=$(basename "$LARM_APPIMAGE")
+          LARM_SIG=$(cat "${LARM_APPIMAGE}.sig" 2>/dev/null || echo "")
+
+          cat > latest.json <<EOJSON
           {
-            "version": "${VERSION#v}",
+            "version": "${VERSION_NUM}",
             "notes": "See the assets to download and install this version.",
             "pub_date": "${PUB_DATE}",
             "platforms": {
-              "darwin-aarch64": { "signature": "${SIGNATURE}", "url": "${DOWNLOAD_URL}" },
-              "darwin-x86_64": { "signature": "${SIGNATURE}", "url": "${DOWNLOAD_URL}" },
-              "darwin-aarch64-app": { "signature": "${SIGNATURE}", "url": "${DOWNLOAD_URL}" },
-              "darwin-x86_64-app": { "signature": "${SIGNATURE}", "url": "${DOWNLOAD_URL}" }
+              "darwin-aarch64": { "signature": "${MACOS_SIG}", "url": "${BASE_URL}/${MACOS_TAR_NAME}" },
+              "darwin-x86_64": { "signature": "${MACOS_SIG}", "url": "${BASE_URL}/${MACOS_TAR_NAME}" },
+              "linux-x86_64": { "signature": "${LX86_SIG}", "url": "${BASE_URL}/${LX86_APPIMAGE_NAME}" },
+              "linux-aarch64": { "signature": "${LARM_SIG}", "url": "${BASE_URL}/${LARM_APPIMAGE_NAME}" }
             }
           }
           EOJSON
-            echo "Updated latest.json with release URLs"
-          fi
 
-          # Collect upload files
-          UPLOAD_FILES=""
-          [ -f "$DMG" ] && UPLOAD_FILES="$UPLOAD_FILES $DMG"
-          [ -f "$TAR_GZ" ] && UPLOAD_FILES="$UPLOAD_FILES $TAR_GZ"
-          [ -f "$TAR_GZ_SIG" ] && UPLOAD_FILES="$UPLOAD_FILES $TAR_GZ_SIG"
-          [ -f "$LATEST_JSON" ] && UPLOAD_FILES="$UPLOAD_FILES $LATEST_JSON"
+          echo "Generated latest.json:"
+          cat latest.json
+
+          # Collect all upload files
+          UPLOAD_FILES="latest.json"
+          for f in $(find artifacts/ -type f); do
+            UPLOAD_FILES="$UPLOAD_FILES $f"
+          done
 
           gh release create "$VERSION" \
-            --title "MailVault v${VERSION#v}" \
+            --title "MailVault v${VERSION_NUM}" \
             --notes "See the assets to download and install this version." \
             --draft \
             $UPLOAD_FILES

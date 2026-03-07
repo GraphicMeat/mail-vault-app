@@ -69,7 +69,7 @@ const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onT
   return (
     <div
       style={style}
-      className={`virtual-row group flex items-center gap-3 px-4 border-b border-mail-border
+      className={`virtual-row group relative flex items-center gap-3 px-4 border-b border-mail-border
                  cursor-pointer transition-colors
                  ${isSelected ? 'bg-mail-accent/10' : 'hover:bg-mail-surface-hover'}
                  ${isUnread ? 'bg-mail-surface' : ''}`}
@@ -84,7 +84,7 @@ const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onT
         />
       </div>
 
-      <div className="w-5 flex items-center justify-center">
+      <div className="w-5 flex items-center justify-center flex-shrink-0">
         {email.source === 'local-only' ? (
           <div title="Local only (deleted from server)">
             <HardDrive size={14} className="text-mail-warning" />
@@ -98,7 +98,7 @@ const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onT
         )}
       </div>
 
-      <div className={`w-48 truncate ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
+      <div className={`w-48 min-w-[80px] truncate flex-shrink ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
         {email.from?.name || email.from?.address || 'Unknown'}
       </div>
 
@@ -114,7 +114,7 @@ const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onT
         </span>
       </div>
 
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity min-w-[60px] justify-end">
+      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-mail-surface-hover rounded-md px-1">
         {!email.isArchived && (
           <button
             onClick={handleSave}
@@ -219,7 +219,7 @@ const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSelected,
   return (
     <div
       style={style}
-      className={`virtual-row group flex items-center gap-2 px-4 border-b border-mail-border
+      className={`virtual-row group relative flex items-center gap-2 px-4 border-b border-mail-border
                  cursor-pointer transition-colors
                  ${isSelected ? 'bg-mail-accent/10' : 'hover:bg-mail-surface-hover'}
                  ${isUnread ? 'bg-mail-surface' : ''}`}
@@ -263,7 +263,7 @@ const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSelected,
       </div>
 
       {/* Hover actions */}
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 min-w-[60px] justify-end">
+      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-mail-surface-hover rounded-md px-1">
         {!email.isArchived && (
           <button onClick={handleSave} disabled={saving}
             className="p-1 hover:bg-mail-border rounded transition-colors" title="Archive">
@@ -366,7 +366,7 @@ const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectTh
   return (
     <div
       style={style}
-      className={`virtual-row group flex items-center gap-3 px-4 border-b border-mail-border
+      className={`virtual-row group relative flex items-center gap-3 px-4 border-b border-mail-border
                  cursor-pointer transition-colors
                  ${isSelected ? 'bg-mail-accent/10' : 'hover:bg-mail-surface-hover'}
                  ${hasUnread ? 'bg-mail-surface' : ''}`}
@@ -376,7 +376,7 @@ const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectTh
         <input type="checkbox" checked={anyChecked} onChange={() => {}} className="custom-checkbox" />
       </div>
 
-      <div className="w-5 flex items-center justify-center">
+      <div className="w-5 flex items-center justify-center flex-shrink-0">
         {latestEmail.source === 'local-only' ? (
           <HardDrive size={14} className="text-mail-warning" title="Local only" />
         ) : latestEmail.isArchived ? (
@@ -386,7 +386,7 @@ const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectTh
         )}
       </div>
 
-      <div className={`w-48 truncate ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
+      <div className={`w-48 min-w-[80px] truncate flex-shrink ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
         {participantNames}
       </div>
 
@@ -408,7 +408,7 @@ const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectTh
         </span>
       </div>
 
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity min-w-[60px] justify-end">
+      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-mail-surface-hover rounded-md px-1">
         {!allArchived && (
           <button
             onClick={handleArchiveThread}
@@ -521,7 +521,7 @@ const CompactThreadRow = React.memo(function CompactThreadRow({ thread, isSelect
   return (
     <div
       style={style}
-      className={`virtual-row group flex items-center gap-2 px-4 border-b border-mail-border
+      className={`virtual-row group relative flex items-center gap-2 px-4 border-b border-mail-border
                  cursor-pointer transition-colors
                  ${isSelected ? 'bg-mail-accent/10' : 'hover:bg-mail-surface-hover'}
                  ${hasUnread ? 'bg-mail-surface' : ''}`}
@@ -567,7 +567,7 @@ const CompactThreadRow = React.memo(function CompactThreadRow({ thread, isSelect
       </div>
 
       {/* Hover actions */}
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 min-w-[60px] justify-end">
+      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-mail-surface-hover rounded-md px-1">
         {!allArchived && (
           <button onClick={handleArchiveThread} disabled={saving}
             className="p-1 hover:bg-mail-border rounded transition-colors" title="Archive thread">

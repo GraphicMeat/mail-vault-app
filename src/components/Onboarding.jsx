@@ -16,11 +16,11 @@ const features = [
   {
     icon: Key,
     title: 'Secure Password Storage',
-    description: 'Passwords stored in macOS Keychain'
+    description: 'Passwords stored securely in system keychain'
   },
   {
     icon: Lock,
-    title: 'Encrypted by macOS',
+    title: 'Encrypted Storage',
     description: 'Never saved in plain text files'
   },
   {

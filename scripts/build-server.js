@@ -78,7 +78,7 @@ async function buildServer() {
     targetTriple = 'x86_64-pc-windows-msvc';
     binaryExt = '.exe';
   } else {
-    targetTriple = 'x86_64-unknown-linux-gnu';
+    targetTriple = arch === 'arm64' ? 'aarch64-unknown-linux-gnu' : 'x86_64-unknown-linux-gnu';
   }
   
   const sidecarName = `mailvault-server-${targetTriple}${binaryExt}`;
@@ -97,6 +97,8 @@ async function buildServer() {
       bunTarget = '--target=bun-darwin-arm64';
     } else if (targetTriple === 'x86_64-unknown-linux-gnu') {
       bunTarget = '--target=bun-linux-x64';
+    } else if (targetTriple === 'aarch64-unknown-linux-gnu') {
+      bunTarget = '--target=bun-linux-arm64';
     }
     // Build --define flags to embed OAuth2 credentials in the binary
     const bunDefines = Object.entries(define)

@@ -314,6 +314,8 @@ export class AccountPipeline {
   async _finish() {
     console.log(`[Pipeline:${this.account.email}] Content caching complete (${this._completed}/${this._total})`);
     this._phase = 'done';
+    this._lastLoadedEmails = null; // Free header data — no longer needed
+    this._graphIdMap = null;
 
     // Refresh saved/archived IDs for this account if it's the active one
     const { activeAccountId, activeMailbox } = useMailStore.getState();

@@ -3,18 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MailVault — Free Local Email Backup for Mac | Store Emails Offline</title>
-  <meta name="description" content="Back up your IMAP emails locally on macOS. MailVault stores emails offline in a local archive — keep them forever, even after server deletion. Free and open source.">
+  <title>MailVault — Free Local Email Backup for Mac &amp; Linux | Store Emails Offline</title>
+  <meta name="description" content="Back up your IMAP emails locally on macOS and Linux. MailVault stores emails offline in a local archive — keep them forever, even after server deletion. Free and open source.">
   <meta name="robots" content="index, follow">
-  <meta name="keywords" content="email backup mac, local email storage, IMAP backup, offline email archive, email client macOS, privacy email app, eml files, Maildir">
+  <meta name="keywords" content="email backup mac, email backup linux, local email storage, IMAP backup, offline email archive, email client macOS, email client linux, privacy email app, eml files, Maildir, AppImage, deb package">
   <link rel="canonical" href="https://mailvaultapp.com/">
   <meta name="theme-color" content="#6366f1">
 
   <!-- Open Graph -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mailvaultapp.com/">
-  <meta property="og:title" content="MailVault — Free Local Email Backup for Mac | Store Emails Offline">
-  <meta property="og:description" content="Back up your IMAP emails locally on macOS. MailVault stores emails offline in a local archive — keep them forever, even after server deletion. Free and open source.">
+  <meta property="og:title" content="MailVault — Free Local Email Backup for Mac &amp; Linux | Store Emails Offline">
+  <meta property="og:description" content="Back up your IMAP emails locally on macOS and Linux. MailVault stores emails offline in a local archive — keep them forever, even after server deletion. Free and open source.">
   <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -22,8 +22,8 @@
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="MailVault — Free Local Email Backup for Mac | Store Emails Offline">
-  <meta name="twitter:description" content="Back up your IMAP emails locally on macOS. MailVault stores emails offline in a local archive — keep them forever, even after server deletion. Free and open source.">
+  <meta name="twitter:title" content="MailVault — Free Local Email Backup for Mac &amp; Linux | Store Emails Offline">
+  <meta name="twitter:description" content="Back up your IMAP emails locally on macOS and Linux. MailVault stores emails offline in a local archive — keep them forever, even after server deletion. Free and open source.">
   <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
   <meta name="twitter:site" content="@GraphicMeat">
 
@@ -103,12 +103,12 @@
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "MailVault",
-    "description": "Back up your IMAP emails locally on macOS. MailVault stores emails offline in a local archive — keep them forever, even after server deletion. Free and open source.",
-    "operatingSystem": "macOS",
+    "description": "Back up your IMAP emails locally on macOS and Linux. MailVault stores emails offline in a local archive — keep them forever, even after server deletion. Free and open source.",
+    "operatingSystem": "macOS, Linux",
     "applicationCategory": "BusinessApplication",
     "applicationSubCategory": "EmailApplication",
-    "softwareVersion": "1.9.2",
-    "datePublished": "2026-03-04",
+    "softwareVersion": "2.0.0",
+    "datePublished": "2026-03-07",
     "offers": {
       "@type": "Offer",
       "price": "0",
@@ -135,10 +135,12 @@
       "3-column and 2-column layouts with resizable panes",
       "CONDSTORE delta sync and COMPRESS=DEFLATE",
       "Virtual scrolling for 17,000+ emails",
-      "Native macOS app (Tauri, not Electron)",
-      "macOS Keychain credential storage",
+      "Native desktop app (Tauri, not Electron)",
+      "macOS Keychain and Linux Secret Service credential storage",
       "System tray with background sync",
-      "Auto-updater"
+      "Auto-updater",
+      "Linux support (x86_64 and aarch64) with .deb and AppImage packages",
+      "Wayland and X11 display server support"
     ],
     "screenshot": "https://mailvaultapp.com/og-image.png",
     "author": {
@@ -241,7 +243,7 @@
         <div>
           <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium mb-6">
             <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-            Now available for macOS
+            Now available for macOS &amp; Linux
           </div>
 
           <h1 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight mb-6">
@@ -250,7 +252,7 @@
           </h1>
 
           <p class="text-lg sm:text-xl text-slate-600 dark:text-slate-400 mb-8 leading-relaxed">
-            Free local email backup and offline archive for Mac.
+            Free local email backup and offline archive for Mac &amp; Linux.
             MailVault stores your IMAP emails locally — keep them safe forever, even after they're deleted from the server.
           </p>
 
@@ -259,7 +261,7 @@
               <svg class="w-5 h-5 shrink-0" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
               </svg>
-              Download for Mac
+              Download Free
             </a>
 
             <button id="want-this-btn" class="group px-8 py-4 rounded-xl font-semibold text-lg border-2 border-primary-500 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors inline-flex items-center justify-center gap-2 w-full">
@@ -707,7 +709,7 @@
           <div class="relative pt-8 pl-4">
             <h3 class="text-xl font-semibold mb-3">Download & Install</h3>
             <p class="text-slate-600 dark:text-slate-400">
-              Download MailVault for macOS. Drag to Applications and launch.
+              Download MailVault for macOS or Linux. Install and launch.
             </p>
           </div>
         </div>
@@ -924,10 +926,10 @@
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="max-w-3xl mx-auto text-center">
         <h2 class="text-3xl sm:text-4xl font-bold mb-6">
-          Available on <span class="gradient-text">macOS</span>
+          Available on <span class="gradient-text">macOS &amp; Linux</span>
         </h2>
         <p class="text-lg text-slate-600 dark:text-slate-400 mb-10">
-          MailVault is currently available for macOS (Intel &amp; Apple Silicon). Want it on your platform?
+          MailVault runs natively on macOS (Intel &amp; Apple Silicon) and Linux (x86_64 &amp; aarch64). Want it on Windows?
         </p>
 
         <div class="grid sm:grid-cols-3 gap-6 mb-10">
@@ -940,6 +942,15 @@
             <span class="inline-block px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium rounded-full">Available Now</span>
           </div>
 
+          <!-- Linux -->
+          <div class="p-6 rounded-2xl bg-primary-50 dark:bg-primary-900/20 border-2 border-primary-500">
+            <svg class="w-10 h-10 mx-auto mb-3 text-primary-500" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12.504 0c-.155 0-.311.002-.466.014C8.756.17 5.944 2.534 5.156 6.03c-.337 1.494-.182 3.09.243 4.578a18.1 18.1 0 001.2 3.126c.324.659.694 1.39.857 2.129.168.76.106 1.473-.14 2.191-.245.713-.618 1.37-.99 2.023-.37.65-.745 1.303-1.003 2.016-.258.714-.378 1.507-.168 2.31.208.795.688 1.48 1.349 1.96.66.48 1.485.762 2.324.835a7.32 7.32 0 002.6-.243 8.36 8.36 0 001.174-.423c.371-.17.741-.37 1.157-.37.416 0 .786.2 1.157.37.365.167.76.313 1.174.423a7.32 7.32 0 002.6.243c.839-.073 1.664-.356 2.324-.835.661-.48 1.141-1.165 1.349-1.96.21-.803.09-1.596-.168-2.31-.258-.713-.633-1.366-1.003-2.016-.372-.653-.745-1.31-.99-2.023-.246-.718-.308-1.431-.14-2.191.163-.74.533-1.47.857-2.129a18.1 18.1 0 001.2-3.126c.425-1.488.58-3.084.243-4.578C18.056 2.534 15.244.17 11.962.014 11.807.002 11.651 0 11.496 0h1.008z"/>
+            </svg>
+            <h3 class="font-semibold text-slate-900 dark:text-white mb-1">Linux</h3>
+            <span class="inline-block px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium rounded-full">New in v2.0</span>
+          </div>
+
           <!-- Windows -->
           <div class="p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
             <svg class="w-10 h-10 mx-auto mb-3 text-slate-400" fill="currentColor" viewBox="0 0 24 24">
@@ -948,19 +959,10 @@
             <h3 class="font-semibold text-slate-900 dark:text-white mb-1">Windows</h3>
             <span class="inline-block px-3 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-medium rounded-full">Coming Soon</span>
           </div>
-
-          <!-- Linux -->
-          <div class="p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-            <svg class="w-10 h-10 mx-auto mb-3 text-slate-400" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12.504 0c-.155 0-.311.002-.466.014C8.756.17 5.944 2.534 5.156 6.03c-.337 1.494-.182 3.09.243 4.578a18.1 18.1 0 001.2 3.126c.324.659.694 1.39.857 2.129.168.76.106 1.473-.14 2.191-.245.713-.618 1.37-.99 2.023-.37.65-.745 1.303-1.003 2.016-.258.714-.378 1.507-.168 2.31.208.795.688 1.48 1.349 1.96.66.48 1.485.762 2.324.835a7.32 7.32 0 002.6-.243 8.36 8.36 0 001.174-.423c.371-.17.741-.37 1.157-.37.416 0 .786.2 1.157.37.365.167.76.313 1.174.423a7.32 7.32 0 002.6.243c.839-.073 1.664-.356 2.324-.835.661-.48 1.141-1.165 1.349-1.96.21-.803.09-1.596-.168-2.31-.258-.713-.633-1.366-1.003-2.016-.372-.653-.745-1.31-.99-2.023-.246-.718-.308-1.431-.14-2.191.163-.74.533-1.47.857-2.129a18.1 18.1 0 001.2-3.126c.425-1.488.58-3.084.243-4.578C18.056 2.534 15.244.17 11.962.014 11.807.002 11.651 0 11.496 0h1.008z"/>
-            </svg>
-            <h3 class="font-semibold text-slate-900 dark:text-white mb-1">Linux</h3>
-            <span class="inline-block px-3 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-medium rounded-full">Coming Soon</span>
-          </div>
         </div>
 
         <div class="max-w-md mx-auto">
-          <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">Get notified when MailVault launches on your platform:</p>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">Get notified when MailVault launches on Windows:</p>
           <form id="platform-notify-form" class="flex gap-2">
             <input type="email" name="email" placeholder="Your email" required class="flex-1 px-4 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all text-sm">
             <button type="submit" class="gradient-bg text-white px-5 py-2.5 rounded-lg font-medium text-sm hover:opacity-90 transition-opacity whitespace-nowrap">Notify Me</button>
@@ -984,7 +986,7 @@
           What's New?
         </h2>
         <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
-          Quote folding and signature folding for cleaner reading, sender verification badges (SPF/DKIM/DMARC), real-time export/import progress, faster folder loading, fixed attachment downloads for OAuth accounts, and inline image support. See everything in the latest release.
+          v2.0 brings native Linux support (x86_64 &amp; aarch64) with .deb and AppImage packages, reduced memory usage (~200 MB, down from ~1 GB), improved app updater with download progress, and email list layout fixes. See everything in the latest release.
         </p>
         <a href="/changelog.html" class="inline-flex items-center gap-2 px-8 py-4 rounded-xl font-semibold text-lg border-2 border-primary-500 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">
           View Changelog
@@ -1013,6 +1015,13 @@
               <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
             </svg>
             Download for macOS
+          </a>
+
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" class="gradient-bg text-white px-8 py-4 rounded-xl font-semibold text-lg hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-3">
+            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12.504 0c-.155 0-.311.002-.466.014C8.756.17 5.944 2.534 5.156 6.03c-.337 1.494-.182 3.09.243 4.578a18.1 18.1 0 001.2 3.126c.324.659.694 1.39.857 2.129.168.76.106 1.473-.14 2.191-.245.713-.618 1.37-.99 2.023-.37.65-.745 1.303-1.003 2.016-.258.714-.378 1.507-.168 2.31.208.795.688 1.48 1.349 1.96.66.48 1.485.762 2.324.835a7.32 7.32 0 002.6-.243 8.36 8.36 0 001.174-.423c.371-.17.741-.37 1.157-.37.416 0 .786.2 1.157.37.365.167.76.313 1.174.423a7.32 7.32 0 002.6.243c.839-.073 1.664-.356 2.324-.835.661-.48 1.141-1.165 1.349-1.96.21-.803.09-1.596-.168-2.31-.258-.713-.633-1.366-1.003-2.016-.372-.653-.745-1.31-.99-2.023-.246-.718-.308-1.431-.14-2.191.163-.74.533-1.47.857-2.129a18.1 18.1 0 001.2-3.126c.425-1.488.58-3.084.243-4.578C18.056 2.534 15.244.17 11.962.014 11.807.002 11.651 0 11.496 0h1.008z"/>
+            </svg>
+            Download for Linux
           </a>
 
           <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-8 py-4 rounded-xl font-semibold text-lg border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-3">
