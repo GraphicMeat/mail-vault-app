@@ -12,7 +12,7 @@ fi
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STAGING="$REPO_ROOT/snap-staging"
 
-TAURI_BIN="$REPO_ROOT/src-tauri/target/$TAURI_TARGET/release/mail-vault"
+TAURI_BIN="$REPO_ROOT/src-tauri/target/$TAURI_TARGET/release/mailvault"
 SIDECAR_BIN="$REPO_ROOT/src-tauri/binaries/mailvault-server-$TAURI_TARGET"
 ICON_SRC="$REPO_ROOT/src-tauri/icons/128x128.png"
 
@@ -30,9 +30,9 @@ mkdir -p "$STAGING/usr/share/applications"
 mkdir -p "$STAGING/usr/share/icons/hicolor/128x128/apps"
 
 # Copy Tauri binary
-cp "$TAURI_BIN" "$STAGING/usr/bin/mail-vault"
-chmod +x "$STAGING/usr/bin/mail-vault"
-echo "Staged: usr/bin/mail-vault"
+cp "$TAURI_BIN" "$STAGING/usr/bin/mailvault"
+chmod +x "$STAGING/usr/bin/mailvault"
+echo "Staged: usr/bin/mailvault"
 
 # Copy sidecar (warn if missing)
 if [[ -f "$SIDECAR_BIN" ]]; then
