@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-03-07
+
 ### Fixed
 - **macOS updater** — added sandbox entitlement for writing to `/Applications/`, allowing in-app updates to complete successfully
 - **DMG installer** — simplified DMG layout with cleaner icon positioning; removed custom background image
