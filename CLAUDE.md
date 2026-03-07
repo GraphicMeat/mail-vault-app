@@ -204,6 +204,7 @@
 - NEVER reveal hosting provider details (name, URLs, hostnames) in any output, commits, or code comments
 - Root `index.html` is the file actually served by the hosting — keep it in sync with `website/index.html`
 - Keep this CLAUDE.md updated when making any big or breaking changes (new features, architectural shifts, storage format changes, new dependencies, etc.)
+- CLAUDE.md and `docs/` are gitignored — do NOT commit them. Updates are local-only.
 - After any significant app changes (new features, UI overhauls, major fixes), ask the user if they want to update the repo README and the website (`website/index.html`, `website/faq.html`) to reflect the changes
 - Automatically update `CHANGELOG.md` for any bigger changes (new features, bug fixes, improvements) — do not ask, just do it
 - New CHANGELOG entries always go under the `## [Unreleased]` section at the top — never create a new version heading manually
