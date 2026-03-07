@@ -261,23 +261,17 @@ if diskutil list | grep -q "MailVault"; then
     hdiutil detach "/Volumes/${APP_NAME}" -force 2>/dev/null || true
 fi
 
-# Use create-dmg for proper .DS_Store generation (gives white labels on dark bg)
-BG_SRC="src-tauri/icons/dmg-background@2x.png"
 CREATE_DMG_ARGS=(
     --volname "$APP_NAME"
     --window-pos 100 100
-    --window-size 600 650
-    --icon-size 128
-    --text-size 14
-    --icon "${APP_NAME}.app" 170 400
-    --app-drop-link 430 400
+    --window-size 660 400
+    --icon-size 96
+    --text-size 12
+    --icon "${APP_NAME}.app" 180 200
+    --app-drop-link 480 200
     --no-internet-enable
     --format UDZO
 )
-
-if [ -f "$BG_SRC" ]; then
-    CREATE_DMG_ARGS+=(--background "$BG_SRC")
-fi
 
 create-dmg "${CREATE_DMG_ARGS[@]}" "$SIGNED_DMG" "$APP_PATH"
 
