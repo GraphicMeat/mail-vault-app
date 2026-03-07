@@ -259,8 +259,191 @@ jobs:
             src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/deb/*.deb
           retention-days: 1
 
+  build-snap-x86_64:
+    permissions:
+      contents: write
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libglib2.0-dev \
+            libdbus-1-dev \
+            libsecret-1-dev \
+            libfuse2
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: linux-x86_64-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            linux-x86_64-cargo-
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build server sidecar
+        env:
+          TAURI_TARGET: x86_64-unknown-linux-gnu
+        run: npm run build:server
+
+      - name: Build Tauri binary
+        run: npx tauri build --target x86_64-unknown-linux-gnu --bundles none
+
+      - name: Prepare snap staging
+        env:
+          TAURI_TARGET: x86_64-unknown-linux-gnu
+        run: bash scripts/build-snap-staging.sh
+
+      - name: Install snapcraft
+        run: sudo snap install snapcraft --classic
+
+      - name: Build snap
+        run: snapcraft --destructive-mode
+
+      - name: Upload snap artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: snap-x86_64-artifact
+          path: "*.snap"
+          retention-days: 1
+
+  build-snap-aarch64:
+    permissions:
+      contents: write
+    runs-on: ubuntu-22.04-arm
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libglib2.0-dev \
+            libdbus-1-dev \
+            libsecret-1-dev \
+            libfuse2
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: linux-aarch64-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            linux-aarch64-cargo-
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build server sidecar
+        env:
+          TAURI_TARGET: aarch64-unknown-linux-gnu
+        run: npm run build:server
+
+      - name: Build Tauri binary
+        run: npx tauri build --target aarch64-unknown-linux-gnu --bundles none
+
+      - name: Prepare snap staging
+        env:
+          TAURI_TARGET: aarch64-unknown-linux-gnu
+        run: bash scripts/build-snap-staging.sh
+
+      - name: Install snapcraft
+        run: sudo snap install snapcraft --classic
+
+      - name: Build snap
+        run: snapcraft --destructive-mode
+
+      - name: Upload snap artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: snap-aarch64-artifact
+          path: "*.snap"
+          retention-days: 1
+
+  publish-snaps:
+    needs: [build-snap-x86_64, build-snap-aarch64]
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download snap artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: snaps
+          pattern: snap-*-artifact
+
+      - name: Install snapcraft
+        run: sudo snap install snapcraft --classic
+
+      - name: Publish to Snap Store
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        run: |
+          if [ -z "$SNAPCRAFT_STORE_CREDENTIALS" ]; then
+            echo "SNAPCRAFT_STORE_CREDENTIALS not set — skipping Snap Store publish"
+            exit 0
+          fi
+          for snap in $(find snaps/ -name "*.snap"); do
+            echo "Publishing: $snap"
+            snapcraft upload "$snap" --release=stable
+          done
+
   create-release:
-    needs: [build-macos, build-linux-x86_64, build-linux-aarch64]
+    needs: [build-macos, build-linux-x86_64, build-linux-aarch64, build-snap-x86_64, build-snap-aarch64]
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -300,6 +483,10 @@ jobs:
           # ── Linux aarch64 (.deb) ──
           LARM_DEB=$(find artifacts/linux-aarch64-artifacts -name "*.deb" | head -1)
           LARM_DEB_NAME=$(basename "$LARM_DEB")
+
+          # ── Snap artifacts (may not exist if snap builds skipped) ──
+          SNAP_X86=$(find artifacts/snap-x86_64-artifact -name "*.snap" 2>/dev/null | head -1 || true)
+          SNAP_ARM=$(find artifacts/snap-aarch64-artifact -name "*.snap" 2>/dev/null | head -1 || true)
 
           cat > latest.json <<EOJSON
           {
