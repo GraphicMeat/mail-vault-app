@@ -603,3 +603,11 @@ pub async fn graph_delete_message(
     let client = crate::graph::GraphClient::new(&access_token);
     client.delete_message(&message_id).await
 }
+
+// ── DNS: Resolve email server settings ───────────────────────────────────
+
+#[tauri::command]
+pub async fn resolve_email_settings(domain: String) -> Result<serde_json::Value, String> {
+    let settings = crate::dns::resolve_email_settings(&domain).await?;
+    serde_json::to_value(settings).map_err(|e| format!("Serialization error: {}", e))
+}

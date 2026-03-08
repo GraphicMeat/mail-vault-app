@@ -18,6 +18,7 @@ use walkdir::WalkDir;
 
 mod archive;
 mod commands;
+mod dns;
 pub mod graph;
 mod imap;
 mod oauth2;
@@ -3053,7 +3054,8 @@ fn main() {
             commands::graph_get_mime,
             commands::graph_cache_mime,
             commands::graph_set_read,
-            commands::graph_delete_message
+            commands::graph_delete_message,
+            commands::resolve_email_settings
         ])
         .setup(|app| {
             // Set up logging to app log directory
