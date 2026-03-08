@@ -366,6 +366,13 @@ export async function graphDeleteMessage(accessToken, messageId) {
   return await tauriInvoke('graph_delete_message', { accessToken, messageId });
 }
 
+export async function resolveEmailSettings(domain) {
+  if (IS_TAURI) {
+    return tauriInvoke('resolve_email_settings', { domain });
+  }
+  throw new ApiError('DNS resolution requires desktop app', 0);
+}
+
 export async function verifyArchivedEmails(accountId, mailbox, uids) {
   if (IS_TAURI) {
     return tauriInvoke('verify_archived_emails', { accountId, mailbox, uids });
