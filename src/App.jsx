@@ -19,6 +19,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw } from 'lucide-react';
 import * as bulkApi from './services/api';
 import { bulkOperationManager } from './services/BulkOperationManager';
+import { version } from '../package.json';
 
 // Resizable divider component
 function ResizeDivider({ orientation, onResize, onResizeEnd }) {
@@ -75,6 +76,7 @@ const debugLog = (...args) => {
 function App() {
   const init = useMailStore(s => s.init);
   const accounts = useMailStore(s => s.accounts);
+  const activeAccountId = useMailStore(s => s.activeAccountId);
   const error = useMailStore(s => s.error);
   const clearError = useMailStore(s => s.clearError);
   const loading = useMailStore(s => s.loading);
@@ -88,7 +90,7 @@ function App() {
     onboardingComplete
   } = useSettingsStore();
   const [showAccountModal, setShowAccountModal] = useState(false);
-  const [showCompose, setShowCompose] = useState(false);
+  const [composeState, setComposeState] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [pendingOperation, setPendingOperation] = useState(null);
@@ -117,6 +119,21 @@ function App() {
       setListPaneSize(newSize);
     }
   }, [layoutMode, setListPaneSize, sidebarCollapsed]);
+
+  const handleReportBug = useCallback(() => {
+    const os = navigator.platform || navigator.userAgent || 'Unknown';
+    const accountCount = accounts.length;
+    const activeAccount = accounts.find(a => a.id === activeAccountId);
+    const activeProvider = activeAccount?.oauth2Provider || 'password';
+
+    setComposeState({
+      initialData: {
+        to: 'hello@mailvaultapp.com',
+        subject: `[Bug Report] MailVault v${version}`,
+        body: `## System Info (auto-collected)\n- App Version: ${version}\n- Platform: ${os}\n- Accounts: ${accountCount}\n- Active Provider: ${activeProvider}\n\n## Description\n[What happened?]\n\n## Steps to Reproduce\n1. \n2. \n3. \n\n## Expected Behavior\n[What should have happened?]\n\n## Actual Behavior\n[What actually happened?]\n`
+      }
+    });
+  }, [accounts, activeAccountId]);
 
   // Debug: log accounts changes
   useEffect(() => {
@@ -402,7 +419,7 @@ function App() {
     <div className="h-screen bg-mail-bg flex overflow-hidden">
       <Sidebar
         onAddAccount={() => setShowAccountModal(true)}
-        onCompose={() => setShowCompose(true)}
+        onCompose={() => setComposeState({})}
         onOpenSettings={() => setShowSettings(true)}
       />
 
@@ -452,17 +469,18 @@ function App() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {showCompose && (
+        {composeState && (
           <ComposeModal
             mode="new"
-            onClose={() => setShowCompose(false)}
+            initialData={composeState.initialData}
+            onClose={() => setComposeState(null)}
           />
         )}
       </AnimatePresence>
 
       <AnimatePresence>
         {showSettings && (
-          <SettingsPage onClose={() => setShowSettings(false)} onAddAccount={() => { setShowSettings(false); setShowAccountModal(true); }} />
+          <SettingsPage onClose={() => setShowSettings(false)} onAddAccount={() => { setShowSettings(false); setShowAccountModal(true); }} onReportBug={handleReportBug} />
         )}
       </AnimatePresence>
 

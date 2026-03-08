@@ -28,7 +28,7 @@ function AttachmentPreview({ attachment, onRemove }) {
   );
 }
 
-export function ComposeModal({ mode = 'new', replyTo = null, onClose }) {
+export function ComposeModal({ mode = 'new', replyTo = null, initialData = null, onClose }) {
   const { accounts, activeAccountId } = useMailStore();
   const { getSignature, getDisplayName } = useSettingsStore();
   const [selectedAccountId, setSelectedAccountId] = useState(activeAccountId);
@@ -61,7 +61,16 @@ export function ComposeModal({ mode = 'new', replyTo = null, onClose }) {
     }
 
     if (!replyTo) {
-      setFormData(prev => ({ ...prev, body: initialBody }));
+      if (initialData) {
+        setFormData(prev => ({
+          ...prev,
+          to: initialData.to || '',
+          subject: initialData.subject || '',
+          body: (initialData.body || '') + initialBody,
+        }));
+      } else {
+        setFormData(prev => ({ ...prev, body: initialBody }));
+      }
       return;
     }
 
@@ -126,7 +135,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, onClose }) {
         })));
       }
     }
-  }, [mode, replyTo, selectedAccountId]);
+  }, [mode, replyTo, initialData, selectedAccountId]);
   
   const handleChange = (e) => {
     const { name, value } = e.target;
