@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.0.3] - 2026-03-08
+
 ### Fixed
 - **Loading guard scope** — moved 20-second loading timeout to cover entire loadEmails function including credential and network checks, preventing stuck spinners during early failures
 - **Bulk operation toast** — fixed React hook ordering violation in BulkOperationProgress component
