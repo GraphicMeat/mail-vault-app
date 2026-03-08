@@ -4,6 +4,14 @@
 
 ### Added
 - **Custom update modal** — replaced native OS update dialog with a styled in-app modal showing full changelog, download progress bar, and three dismiss options: "Update Now", "Remind Me Later" (24h snooze), and "Skip This Version"
+- **Keyboard shortcuts** for all core actions (navigation, compose, reply, archive, delete, move) with customizable bindings, cheat sheet modal (`?`), and settings UI for rebinding
+- **Move to Folder** — move single or bulk-selected emails between server folders via IMAP MOVE/COPY with undo support; Graph API support for Microsoft accounts
+- **Undo Send** — configurable delay (5/10/15/30s) before dispatching emails, with countdown toast and one-click cancel to reopen compose
+- **Unified Inbox** — merged chronological view of all accounts' inboxes with per-account colored indicators and correct reply routing
+- **Notification customization** — per-account and per-folder notification controls with privacy-aware preview toggle (show sender+subject or generic message)
+- **Email templates** — save, manage, and insert reusable email snippets when composing, with save-as-template from any draft
+- **Smart Sender Insights** — collapsible panel in email viewer showing exchange history, frequency, common topics, and accounts used per sender
+- **Auto-Cleanup Rules** — automated email cleanup by age and folder with archive-then-delete or delete actions, dry-run preview, and 24-hour scheduling (Pro feature)
 
 ### Fixed
 - **Loading guard scope** — moved 20-second loading timeout to cover entire loadEmails function including credential and network checks, preventing stuck spinners during early failures
