@@ -2847,6 +2847,22 @@ async fn import_backup(
     })
 }
 
+type PendingUpdate = std::sync::Mutex<Option<tauri_plugin_updater::Update>>;
+
+#[tauri::command]
+async fn install_pending_update(handle: tauri::AppHandle) -> Result<(), String> {
+    let state = handle.state::<PendingUpdate>();
+    let update = state.lock().unwrap().take();
+    match update {
+        Some(u) => {
+            u.download_and_install(|_, _| {}, || {}).await.map_err(|e| e.to_string())?;
+            info!("Update installed successfully, restarting...");
+            handle.restart();
+        }
+        None => Err("No pending update".to_string()),
+    }
+}
+
 /// Shared update check logic for both manual menu trigger and startup auto-check.
 /// `show_no_update` controls whether to show a dialog when already up-to-date.
 async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
@@ -2874,50 +2890,18 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
             info!("Update available: {} -> {}", env!("CARGO_PKG_VERSION"), update.version);
             let version = update.version.clone();
             let body = update.body.clone().unwrap_or_default();
-            let handle_clone = handle.clone();
 
-            handle.dialog()
-                .message(format!(
-                    "A new version of MailVault is available!\n\nCurrent: v{}\nNew: v{}\n\n{}",
-                    env!("CARGO_PKG_VERSION"), version, body
-                ))
-                .title("Update Available")
-                .buttons(tauri_plugin_dialog::MessageDialogButtons::OkCancelCustom(
-                    "Update Now".to_string(), "Later".to_string()
-                ))
-                .show(move |confirmed| {
-                    if confirmed {
-                        info!("User accepted update, downloading...");
-                        let h = handle_clone.clone();
+            // Emit to frontend — React handles the UI
+            let _ = handle.emit("update-available", serde_json::json!({
+                "version": version,
+                "notes": body,
+                "currentVersion": env!("CARGO_PKG_VERSION"),
+                "isManualCheck": show_no_update
+            }));
 
-                        // Show a "downloading" dialog so the user knows something is happening
-                        h.dialog()
-                            .message("Downloading and installing update...\n\nThe app will restart automatically when complete.")
-                            .title("Updating MailVault")
-                            .show(|_| {});
-
-                        tauri::async_runtime::spawn(async move {
-                            match update.download_and_install(|_, _| {}, || {}).await {
-                                Ok(_) => {
-                                    info!("Update installed successfully, restarting...");
-                                    h.restart();
-                                }
-                                Err(e) => {
-                                    error!("Failed to install update: {}", e);
-                                    h.dialog()
-                                        .message(format!(
-                                            "Failed to install update.\n\n{}\n\nPlease download the latest version manually from the website.",
-                                            e
-                                        ))
-                                        .title("Update Failed")
-                                        .show(|_| {});
-                                }
-                            }
-                        });
-                    } else {
-                        info!("User deferred update");
-                    }
-                });
+            // Store the update object for later install
+            let state = handle.state::<PendingUpdate>();
+            *state.lock().unwrap() = Some(update);
         }
         Ok(None) => {
             info!("No updates available");
@@ -2975,8 +2959,10 @@ fn main() {
         .manage(archive::ArchiveCancelToken::default())
         .manage(imap::ImapPool::new())
         .manage(oauth2::OAuth2Manager::new())
+        .manage(PendingUpdate::default())
         .invoke_handler(tauri::generate_handler![
             log_from_frontend,
+            install_pending_update,
             get_app_data_dir,
             read_settings_json,
             write_settings_json,
