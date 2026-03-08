@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added
+- **Custom update modal** — replaced native OS update dialog with a styled in-app modal showing full changelog, download progress bar, and three dismiss options: "Update Now", "Remind Me Later" (24h snooze), and "Skip This Version"
+
+### Fixed
+- **Loading guard scope** — moved 20-second loading timeout to cover entire loadEmails function including credential and network checks, preventing stuck spinners during early failures
+- **Bulk operation toast** — fixed React hook ordering violation in BulkOperationProgress component
+
 ## [2.0.3] - 2026-03-08
 
 ### Fixed

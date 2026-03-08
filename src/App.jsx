@@ -16,6 +16,7 @@ import { ChatViewWrapper } from './components/ChatViewWrapper';
 import { UpdateModal } from './components/UpdateModal';
 import { useEmailScheduler } from './hooks/useEmailScheduler';
 import { usePipelineCoordinator } from './hooks/usePipelineCoordinator';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw } from 'lucide-react';
 import * as bulkApi from './services/api';
