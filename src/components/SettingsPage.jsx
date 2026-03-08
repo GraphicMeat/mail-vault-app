@@ -58,7 +58,7 @@ function ToggleSwitch({ active, onClick }) {
   );
 }
 
-export function SettingsPage({ onClose, onAddAccount }) {
+export function SettingsPage({ onClose, onAddAccount, onReportBug }) {
   const { accounts, removeAccount } = useMailStore();
   const { theme, toggleTheme } = useThemeStore();
   const {
@@ -1164,6 +1164,30 @@ export function SettingsPage({ onClose, onAddAccount }) {
                     >
                       <RotateCcw size={16} />
                       Reset
+                    </button>
+                  </div>
+                </div>
+
+                {/* Help & Support */}
+                <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+                  <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
+                    <Mail size={18} className="text-mail-accent" />
+                    Help & Support
+                  </h4>
+
+                  <div className="flex items-center justify-between py-2">
+                    <div>
+                      <div className="font-medium text-mail-text">Report a Bug</div>
+                      <div className="text-sm text-mail-text-muted">
+                        Send a bug report email to the developer
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => { onReportBug?.(); onClose(); }}
+                      className="px-4 py-2 bg-mail-accent hover:bg-mail-accent-hover
+                                text-white text-sm font-medium rounded-lg transition-colors"
+                    >
+                      Report Bug
                     </button>
                   </div>
                 </div>

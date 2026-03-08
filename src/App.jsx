@@ -197,6 +197,21 @@ function App() {
     return () => { active = false; if (unlisten) unlisten(); };
   }, []);
 
+  // Listen for report-bug event from native menu
+  useEffect(() => {
+    let unlisten;
+    let active = true;
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      listen('report-bug', () => {
+        handleReportBug();
+      }).then(fn => {
+        if (!active) fn();
+        else unlisten = fn;
+      });
+    }).catch(() => {});
+    return () => { active = false; if (unlisten) unlisten(); };
+  }, [handleReportBug]);
+
   // Track if quick load is done
   const [quickLoadDone, setQuickLoadDone] = useState(false);
   const quickLoadHadAccountsRef = useRef(false);
