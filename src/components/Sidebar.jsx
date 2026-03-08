@@ -49,6 +49,13 @@ function getMailboxIcon(mailbox) {
   return Icon;
 }
 
+function getDisplayName(name) {
+  if (!name) return name;
+  const match = name.match(/^inbox\./i);
+  if (match) return name.slice(match[0].length);
+  return name;
+}
+
 export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
   const accounts = useMailStore(s => s.accounts);
   const activeAccountId = useMailStore(s => s.activeAccountId);
@@ -251,7 +258,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                       if (hasChildren) toggleFolder(mailbox.path);
                     }
                   }}
-                  title={mailbox.name}
+                  title={getDisplayName(mailbox.name)}
                 >
                   <Icon size={16} />
                 </button>
@@ -266,7 +273,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                                    ? 'bg-mail-accent/10 text-mail-accent'
                                    : 'text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover'}`}
                       onClick={() => setActiveMailbox(child.path)}
-                      title={child.name}
+                      title={getDisplayName(child.name)}
                     >
                       <ChildIcon size={13} />
                     </button>
@@ -595,7 +602,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                 )}
                 {!hasChildren && <div className="w-5" />}
                 <Icon size={16} />
-                <span className="text-sm flex-1 truncate">{mailbox.name}</span>
+                <span className="text-sm flex-1 truncate">{getDisplayName(mailbox.name)}</span>
               </div>
 
               <AnimatePresence>
@@ -621,7 +628,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                         >
                           <div className="w-5" />
                           <ChildIcon size={14} />
-                          <span className="text-sm truncate">{child.name}</span>
+                          <span className="text-sm truncate">{getDisplayName(child.name)}</span>
                         </div>
                       );
                     })}
