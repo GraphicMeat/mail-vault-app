@@ -604,6 +604,28 @@ pub async fn graph_delete_message(
     client.delete_message(&message_id).await
 }
 
+// ── Graph API: Move emails to folder ─────────────────────────────────────
+
+#[tauri::command]
+pub async fn graph_move_emails(
+    access_token: String,
+    message_ids: Vec<String>,
+    target_folder_id: String,
+) -> Result<serde_json::Value, String> {
+    let client = crate::graph::GraphClient::new(&access_token);
+    let mut moved = 0u32;
+
+    for msg_id in &message_ids {
+        client.move_message(msg_id, &target_folder_id).await?;
+        moved += 1;
+    }
+
+    Ok(serde_json::json!({
+        "success": true,
+        "moved": moved
+    }))
+}
+
 // ── Move emails between folders ──────────────────────────────────────────
 
 #[tauri::command]
