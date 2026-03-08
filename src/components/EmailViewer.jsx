@@ -1291,7 +1291,12 @@ export function EmailViewer() {
             line-height: 1.6;
           }
           img { max-width: 100%; height: auto; }
-          table { max-width: 100% !important; }
+          * { overflow-wrap: break-word; word-wrap: break-word; }
+          body { overflow-x: hidden; max-width: 100%; }
+          table { table-layout: fixed; width: 100% !important; overflow: hidden; }
+          td, th { overflow: hidden; text-overflow: ellipsis; }
+          pre { white-space: pre-wrap; overflow-x: auto; max-width: 100%; }
+          blockquote { margin-left: 0; padding-left: 1em; border-left: 3px solid #ddd; overflow: hidden; }
         </style>
       </head>
       <body>${getEmailBodyContent(replaceCidUrls(selectedEmail.html, selectedEmail.attachments))}</body>
@@ -1627,12 +1632,12 @@ export function EmailViewer() {
               {atob(rawSource)}
             </pre>
           ) : selectedEmail.html ? (
-            <div className="rounded-lg overflow-hidden bg-white">
+            <div className="rounded-lg overflow-hidden bg-white max-w-full" style={{ contain: 'inline-size' }}>
               <iframe
                 ref={iframeRef}
                 srcDoc={iframeContent}
                 className="w-full border-0"
-                style={{ minHeight: '300px', display: 'block' }}
+                style={{ minHeight: '300px', display: 'block', maxWidth: '100%' }}
                 sandbox="allow-same-origin allow-popups allow-scripts"
                 title="Email content"
                 onContextMenu={e => e.preventDefault()}
