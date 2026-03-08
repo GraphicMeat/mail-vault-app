@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  HardDrive, Trash2, Check, AlertCircle, Minimize2, Maximize2
+  HardDrive, Trash2, Check, AlertCircle, Minimize2, Maximize2, X
 } from 'lucide-react';
 
 const PHASE_LABELS = {
@@ -16,9 +16,13 @@ const PHASE_ICONS = {
   delete: Trash2,
 };
 
-export function BulkOperationProgress({ operation, onCancel }) {
+export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
   const [minimized, setMinimized] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+
+  const handleDismiss = useCallback(() => {
+    if (onDismiss) onDismiss();
+  }, [onDismiss]);
 
   if (!operation) return null;
 
@@ -28,6 +32,15 @@ export function BulkOperationProgress({ operation, onCancel }) {
   const isCancelled = status === 'cancelled';
   const isError = status === 'error';
   const isActive = ['archiving', 'verifying', 'deleting'].includes(status);
+  const isDone = isComplete || isCancelled || isError;
+
+  // Auto-dismiss after 4s on success
+  useEffect(() => {
+    if (isComplete && errors === 0) {
+      const timer = setTimeout(handleDismiss, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [isComplete, errors, handleDismiss]);
 
   // Determine phase count for display
   const totalPhases = type === 'archive_and_delete' ? 2 : 1;
@@ -100,7 +113,14 @@ export function BulkOperationProgress({ operation, onCancel }) {
             </div>
 
             <div className="flex items-center gap-1">
-              {isActive && (
+              {isDone ? (
+                <button
+                  onClick={handleDismiss}
+                  className="p-1 hover:bg-mail-border rounded transition-colors"
+                >
+                  <X size={14} className="text-mail-text-muted" />
+                </button>
+              ) : isActive ? (
                 <>
                   <button
                     onClick={() => setMinimized(true)}
@@ -117,7 +137,7 @@ export function BulkOperationProgress({ operation, onCancel }) {
                     Cancel
                   </button>
                 </>
-              )}
+              ) : null}
             </div>
           </div>
 

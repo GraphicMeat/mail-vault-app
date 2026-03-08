@@ -530,22 +530,32 @@ export const useMailStore = create((set, get) => ({
         } else if (currentActiveId === firstVisible.id) {
           // Quick-load already set this account — just refresh without resetting state
           console.log('[init] Account already active from quick-load, refreshing...');
+          // Safety: if quick-load populated emails but loading is stuck, force it off
+          const { emails: currentEmails, loading: currentLoading, sortedEmails: currentSorted } = get();
+          console.log('[init] Current state: emails=%d, sortedEmails=%d, loading=%s', currentEmails.length, currentSorted.length, currentLoading);
+          if (currentEmails.length > 0 && currentLoading) {
+            console.warn('[init] Loading stuck with %d emails — forcing loading=false', currentEmails.length);
+            set({ loading: false });
+            if (currentSorted.length === 0) get().updateSortedEmails();
+          }
           // Load cached mailboxes first (quick-load only sets placeholders)
           const cachedMailboxes = await db.getCachedMailboxes(firstVisible.id);
+          console.log('[init] Cached mailboxes:', cachedMailboxes ? cachedMailboxes.length + ' folders' : 'null');
           if (cachedMailboxes) {
             set({ mailboxes: cachedMailboxes });
           }
-          // Start email loading immediately — don't wait for mailbox fetch
-          const emailLoadPromise = get().loadEmails();
+          // Fire-and-forget: IMAP sync runs in background so init() completes promptly.
+          // Quick-load already displayed cached data — this just refreshes from server.
+          get().loadEmails().catch(e => console.warn('[init] loadEmails failed (non-fatal):', e.message));
           get().loadSentHeaders(firstVisible.id);
           // Fetch real mailboxes from server in parallel (non-blocking)
           ensureFreshToken(firstVisible).then(freshAccount =>
             api.fetchMailboxes(freshAccount).then(mailboxes => {
+              console.log('[init] Server mailbox fetch: %d folders', mailboxes.length);
               set({ mailboxes, connectionStatus: 'connected', connectionError: null, connectionErrorType: null });
               db.saveMailboxes(firstVisible.id, mailboxes);
             })
           ).catch(e => console.warn('[init] Mailbox fetch failed (non-fatal):', e.message));
-          await emailLoadPromise;
         } else {
           await get().setActiveAccount(firstVisible.id);
         }
@@ -1197,6 +1207,8 @@ export const useMailStore = create((set, get) => ({
     // Use existing emails from store (populated by QuickLoad or previous setActiveMailbox)
     const existingStoreEmails = get().emails;
     const hasExistingEmails = existingStoreEmails.length > 0;
+    console.log('[loadEmails] Decision point: hasExistingEmails=%s (%d), cachedHeaders.totalCached=%s, loading=%s',
+      hasExistingEmails, existingStoreEmails.length, cachedHeaders?.totalCached ?? 'null', get().loading);
 
     if (hasExistingEmails) {
       // QuickLoad or setActiveMailbox already populated emails — just update local state
@@ -1335,6 +1347,14 @@ export const useMailStore = create((set, get) => ({
         return;
       }
     }
+
+    // Safety: clear stuck loading state after 20s (IMAP connection may hang on slow servers)
+    const loadingGuard = setTimeout(() => {
+      if (get().activeAccountId === activeAccountId && get().loading) {
+        console.warn('[loadEmails] Loading timeout — clearing stuck loading state after 20s');
+        set({ loading: false, loadingMore: false });
+      }
+    }, 20000);
 
     try {
       // ── Delta-sync: check mailbox status before fetching ──────────────
@@ -1644,6 +1664,7 @@ export const useMailStore = create((set, get) => ({
         get().updateSortedEmails();
       }
     } finally {
+      clearTimeout(loadingGuard);
       if (!isStale()) set({ loading: false, loadingMore: false });
     }
   },
@@ -2412,6 +2433,10 @@ export const useMailStore = create((set, get) => ({
         const { listen } = await import('@tauri-apps/api/event');
         unlisten = await listen('archive-progress', (event) => {
           const p = event.payload;
+          // Don't let late events overwrite final complete state
+          const current = get().bulkSaveProgress;
+          if (current && !current.active) return;
+
           set({ bulkSaveProgress: { total: p.total, completed: p.completed, errors: p.errors, active: p.active } });
 
           // Incrementally update archive icon as each email is archived
@@ -2430,12 +2455,22 @@ export const useMailStore = create((set, get) => ({
       }
 
       try {
-        await invoke('archive_emails', {
+        const result = await invoke('archive_emails', {
           accountId: activeAccountId,
           accountJson: JSON.stringify(account),
           mailbox: activeMailbox,
           uids,
         });
+
+        // Stop listening BEFORE setting final state — prevents late-delivered
+        // Tauri events from overwriting active:false back to active:true
+        if (unlisten) { unlisten(); unlisten = null; }
+
+        // Set final progress from invoke return value (don't rely on async event delivery)
+        console.log('[saveEmailsLocally] invoke result:', JSON.stringify(result));
+        const finalProgress = { total: result?.total ?? uids.length, completed: result?.completed ?? uids.length, errors: result?.errors ?? 0, active: false };
+        console.log('[saveEmailsLocally] Setting final progress:', JSON.stringify(finalProgress));
+        set({ bulkSaveProgress: finalProgress });
 
         // Refresh local state after all writes complete
         const savedEmailIds = await db.getSavedEmailIds(activeAccountId, activeMailbox);
@@ -2445,6 +2480,8 @@ export const useMailStore = create((set, get) => ({
         get().updateSortedEmails();
       } catch (err) {
         console.error('[saveEmailsLocally] archive_emails failed:', err);
+        // Ensure toast shows error state even on failure
+        set({ bulkSaveProgress: { total: uids.length, completed: 0, errors: uids.length, active: false } });
       } finally {
         if (unlisten) unlisten();
       }

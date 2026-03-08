@@ -384,7 +384,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
       </div>
 
       {/* Account Selector */}
-      <div className="p-3 border-b border-mail-border max-h-[50%] overflow-y-auto">
+      <div className="p-3 border-b border-mail-border max-h-[30%] overflow-y-auto">
         <div className="relative">
           {orderedAccounts.map(account => {
             const color = getAccountColor(accountColors, account);
