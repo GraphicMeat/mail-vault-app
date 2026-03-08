@@ -6,6 +6,7 @@ import { formatEmailDate } from '../utils/dateFormat';
 import { safeStorage } from '../stores/safeStorage';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getOAuth2AuthUrl, exchangeOAuth2Code } from '../services/api';
+import { runCleanupRules } from '../services/cleanupEngine';
 import {
   X,
   Sun,
@@ -193,6 +194,8 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug }) {
   const [cleanupAction, setCleanupAction] = useState('delete');
   const [cleanupDeleteConfirm, setCleanupDeleteConfirm] = useState(null);
   const [showCleanupFirstTimeWarning, setShowCleanupFirstTimeWarning] = useState(false);
+  const [cleanupRunning, setCleanupRunning] = useState(false);
+  const [cleanupResult, setCleanupResult] = useState(null);
   const orderedAccounts = getOrderedAccounts(accounts);
 
   const moveAccount = (accountId, direction) => {
@@ -2734,7 +2737,7 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug }) {
                       )}
 
                       {/* Action buttons */}
-                      {!cleanupForm && (
+                      {!cleanupForm && (<>
                         <div className="flex gap-2">
                           <button
                             onClick={() => {
@@ -2755,17 +2758,37 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug }) {
                           </button>
                           {cleanupRules.length > 0 && (
                             <button
-                              onClick={() => {
-                                // Placeholder — will be wired in Task 25
+                              onClick={async () => {
+                                setCleanupRunning(true);
+                                setCleanupResult(null);
+                                try {
+                                  const result = await runCleanupRules();
+                                  if (result.archived > 0 || result.deleted > 0) {
+                                    setCleanupResult(`Cleaned up ${result.deleted} email${result.deleted !== 1 ? 's' : ''}${result.archived > 0 ? ` (${result.archived} archived)` : ''}`);
+                                  } else {
+                                    setCleanupResult('No emails matched cleanup criteria');
+                                  }
+                                } catch (e) {
+                                  setCleanupResult(`Cleanup failed: ${e.message}`);
+                                } finally {
+                                  setCleanupRunning(false);
+                                  setTimeout(() => setCleanupResult(null), 5000);
+                                }
                               }}
-                              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-mail-surface-hover text-mail-text rounded-lg hover:bg-mail-border transition-colors"
+                              disabled={cleanupRunning}
+                              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-mail-surface-hover text-mail-text rounded-lg hover:bg-mail-border transition-colors disabled:opacity-50"
                             >
-                              <Play size={14} />
-                              Run All Now
+                              {cleanupRunning ? <Loader size={14} className="animate-spin" /> : <Play size={14} />}
+                              {cleanupRunning ? 'Running...' : 'Run All Now'}
                             </button>
                           )}
                         </div>
-                      )}
+                        {cleanupResult && (
+                          <p className={`text-xs mt-2 ${cleanupResult.startsWith('Cleanup failed') ? 'text-mail-danger' : 'text-mail-text-muted'}`}>
+                            {cleanupResult}
+                          </p>
+                        )}
+                      </>)}
                     </div>
                   )}
                 </div>
