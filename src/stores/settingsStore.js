@@ -156,6 +156,13 @@ export const useSettingsStore = create(
       keyboardShortcuts: { ...DEFAULT_SHORTCUTS },
       keyboardShortcutsEnabled: true,
 
+      // Paid user flag (placeholder — swap to real payment check later)
+      isPaidUser: false,
+
+      // Auto-cleanup rules
+      // Each: { id, accountEmail: '*' | 'email@...', folder, olderThan: { value: number, unit: 'days'|'months' }, action: 'delete'|'archive-delete', enabled: boolean }
+      cleanupRules: [],
+
       // Per-account mailbox memory
       getLastMailbox: (accountId) => get().lastMailboxPerAccount[accountId] || 'INBOX',
       setLastMailbox: (accountId, mailbox) => set({
@@ -418,6 +425,34 @@ export const useSettingsStore = create(
       setKeyboardShortcutsEnabled: (enabled) => set({ keyboardShortcutsEnabled: enabled }),
       resetKeyboardShortcuts: () => set({ keyboardShortcuts: { ...DEFAULT_SHORTCUTS } }),
 
+      // Auto-cleanup rule methods
+      addCleanupRule: (rule) => {
+        if (!get().isPaidUser) return;
+        set((state) => ({
+          cleanupRules: [...state.cleanupRules, { ...rule, id: crypto.randomUUID() }],
+        }));
+      },
+
+      updateCleanupRule: (id, updates) => {
+        if (!get().isPaidUser) return;
+        set((state) => ({
+          cleanupRules: state.cleanupRules.map(r => r.id === id ? { ...r, ...updates } : r),
+        }));
+      },
+
+      removeCleanupRule: (id) => set((state) => ({
+        cleanupRules: state.cleanupRules.filter(r => r.id !== id),
+      })),
+
+      toggleCleanupRule: (id) => {
+        if (!get().isPaidUser) return;
+        set((state) => ({
+          cleanupRules: state.cleanupRules.map(r =>
+            r.id === id ? { ...r, enabled: !r.enabled } : r
+          ),
+        }));
+      },
+
       // Update notification methods
       setUpdateSnooze: () => set({ updateSnoozeUntil: Date.now() + 24 * 60 * 60 * 1000 }),
       clearUpdateSnooze: () => set({ updateSnoozeUntil: null }),
@@ -473,7 +508,9 @@ export const useSettingsStore = create(
           updateSkippedVersion: null,
           emailTemplates: [],
           keyboardShortcuts: { ...DEFAULT_SHORTCUTS },
-          keyboardShortcutsEnabled: true
+          keyboardShortcutsEnabled: true,
+          isPaidUser: false,
+          cleanupRules: [],
         });
       }
     }),
