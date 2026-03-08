@@ -15,6 +15,7 @@ import { Onboarding } from './components/Onboarding';
 import { ChatViewWrapper } from './components/ChatViewWrapper';
 import { UpdateModal } from './components/UpdateModal';
 import { ShortcutsModal } from './components/ShortcutsModal';
+import { MoveToFolderDropdown } from './components/MoveToFolderDropdown';
 import { useEmailScheduler } from './hooks/useEmailScheduler';
 import { usePipelineCoordinator } from './hooks/usePipelineCoordinator';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -99,6 +100,7 @@ function App() {
   const [initialized, setInitialized] = useState(false);
   const [pendingOperation, setPendingOperation] = useState(null);
   const [updateInfo, setUpdateInfo] = useState(null);
+  const [showMoveDropdown, setShowMoveDropdown] = useState(false);
   const mainContainerRef = useRef(null);
 
   // Initialize email scheduler
@@ -169,7 +171,13 @@ function App() {
     },
     showShortcuts: () => setShowShortcutsModal(prev => !prev),
     openSettings: () => setShowSettings(true),
-    moveToFolder: () => { /* placeholder — Move to Folder UI comes in Task 9 */ },
+    moveToFolder: () => {
+      const { selectedEmailIds, selectedEmailId } = useMailStore.getState();
+      // Only open if there's something to move
+      if (selectedEmailIds.size > 0 || selectedEmailId) {
+        setShowMoveDropdown(true);
+      }
+    },
   });
 
   // Handle resize for email list pane
@@ -630,6 +638,21 @@ function App() {
 
       <SelectionActionBar />
       <BulkSaveProgress />
+
+      {/* Move to Folder dropdown (triggered by keyboard shortcut M) */}
+      {showMoveDropdown && (() => {
+        const { selectedEmailIds, selectedEmailId } = useMailStore.getState();
+        const uids = selectedEmailIds.size > 0 ? [...selectedEmailIds] : selectedEmailId ? [selectedEmailId] : [];
+        if (uids.length === 0) return null;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <MoveToFolderDropdown
+              uids={uids}
+              onClose={() => setShowMoveDropdown(false)}
+            />
+          </div>
+        );
+      })()}
 
       <AnimatePresence>
         {updateInfo && (

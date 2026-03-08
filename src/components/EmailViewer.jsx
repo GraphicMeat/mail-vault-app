@@ -29,6 +29,7 @@ import {
   Mail,
   MailOpen,
   FolderOpen,
+  FolderSymlink,
   AppWindow,
   Check,
   Code,
@@ -38,6 +39,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { getRealAttachments, replaceCidUrls } from '../services/attachmentUtils';
+import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { checkSenderVerification } from '../utils/senderCheck';
 
 function getCleanBase64(content) {
@@ -1174,6 +1176,8 @@ export function EmailViewer() {
   const [showRaw, setShowRaw] = useState(false);
   const [rawSource, setRawSource] = useState(null);
   const [loadingRaw, setLoadingRaw] = useState(false);
+  const [showMoveDropdown, setShowMoveDropdown] = useState(false);
+  const moveButtonRef = useRef(null);
   const iframeRef = useRef(null);
   
   const isCached = selectedEmail && savedEmailIds.has(selectedEmail.uid);
@@ -1499,7 +1503,7 @@ export function EmailViewer() {
                   <MailOpen size={18} className="text-mail-text-muted" />
                 )}
               </button>
-              <button 
+              <button
                 onClick={handleDelete}
                 disabled={deleting}
                 className="p-2 hover:bg-mail-surface rounded-lg transition-colors disabled:opacity-50"
@@ -1507,6 +1511,23 @@ export function EmailViewer() {
               >
                 <Trash2 size={18} className="text-mail-text-muted" />
               </button>
+              <div className="relative">
+                <button
+                  ref={moveButtonRef}
+                  onClick={() => setShowMoveDropdown(v => !v)}
+                  className="p-2 hover:bg-mail-surface rounded-lg transition-colors"
+                  title="Move to folder"
+                >
+                  <FolderSymlink size={18} className="text-mail-text-muted" />
+                </button>
+                {showMoveDropdown && selectedEmail && (
+                  <MoveToFolderDropdown
+                    uids={[selectedEmail.uid]}
+                    onClose={() => setShowMoveDropdown(false)}
+                    anchorRect={moveButtonRef.current?.getBoundingClientRect()}
+                  />
+                )}
+              </div>
             </>
           )}
         </div>
