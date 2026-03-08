@@ -49,7 +49,7 @@ function getMailboxIcon(mailbox) {
   return Icon;
 }
 
-function getDisplayName(name) {
+function getMailboxDisplayName(name) {
   if (!name) return name;
   const match = name.match(/^inbox\./i);
   if (match) return name.slice(match[0].length);
@@ -258,7 +258,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                       if (hasChildren) toggleFolder(mailbox.path);
                     }
                   }}
-                  title={getDisplayName(mailbox.name)}
+                  title={getMailboxDisplayName(mailbox.name)}
                 >
                   <Icon size={16} />
                 </button>
@@ -273,7 +273,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                                    ? 'bg-mail-accent/10 text-mail-accent'
                                    : 'text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover'}`}
                       onClick={() => setActiveMailbox(child.path)}
-                      title={getDisplayName(child.name)}
+                      title={getMailboxDisplayName(child.name)}
                     >
                       <ChildIcon size={13} />
                     </button>
@@ -602,7 +602,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                 )}
                 {!hasChildren && <div className="w-5" />}
                 <Icon size={16} />
-                <span className="text-sm flex-1 truncate">{getDisplayName(mailbox.name)}</span>
+                <span className="text-sm flex-1 truncate">{getMailboxDisplayName(mailbox.name)}</span>
               </div>
 
               <AnimatePresence>
@@ -628,7 +628,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                         >
                           <div className="w-5" />
                           <ChildIcon size={14} />
-                          <span className="text-sm truncate">{getDisplayName(child.name)}</span>
+                          <span className="text-sm truncate">{getMailboxDisplayName(child.name)}</span>
                         </div>
                       );
                     })}
