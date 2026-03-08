@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useMailStore } from '../stores/mailStore';
-import { useSettingsStore } from '../stores/settingsStore';
+import { useSettingsStore, getAccountColor } from '../stores/settingsStore';
 import { buildThreads } from '../utils/emailParser';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatEmailDate } from '../utils/dateFormat';
@@ -33,6 +33,8 @@ const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onT
   const saveEmailLocally = useMailStore(s => s.saveEmailLocally);
   const removeLocalEmail = useMailStore(s => s.removeLocalEmail);
   const deleteEmailFromServer = useMailStore(s => s.deleteEmailFromServer);
+  const unifiedInbox = useMailStore(s => s.unifiedInbox);
+  const accountColors = useSettingsStore(s => s.accountColors);
   const [menuOpen, setMenuOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -98,8 +100,15 @@ const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onT
         )}
       </div>
 
-      <div className={`w-48 min-w-[80px] truncate flex-shrink ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
-        {email.from?.name || email.from?.address || 'Unknown'}
+      <div className={`w-48 min-w-[80px] truncate flex-shrink flex items-center gap-1.5 ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
+        {unifiedInbox && email._accountEmail && (
+          <span
+            className="w-2 h-2 rounded-full flex-shrink-0"
+            style={{ backgroundColor: getAccountColor(accountColors, { id: email._accountId, email: email._accountEmail }) }}
+            title={email._accountEmail}
+          />
+        )}
+        <span className="truncate">{email.from?.name || email.from?.address || 'Unknown'}</span>
       </div>
 
       <div className="flex-1 min-w-0 flex items-center gap-2">
@@ -187,6 +196,8 @@ const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSelected,
   const saveEmailLocally = useMailStore(s => s.saveEmailLocally);
   const removeLocalEmail = useMailStore(s => s.removeLocalEmail);
   const deleteEmailFromServer = useMailStore(s => s.deleteEmailFromServer);
+  const unifiedInbox = useMailStore(s => s.unifiedInbox);
+  const accountColors = useSettingsStore(s => s.accountColors);
   const [menuOpen, setMenuOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -244,6 +255,13 @@ const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSelected,
       <div className="flex-1 min-w-0 py-1.5">
         {/* Line 1: Sender ... Date */}
         <div className="flex items-center gap-2">
+          {unifiedInbox && email._accountEmail && (
+            <span
+              className="w-2 h-2 rounded-full flex-shrink-0"
+              style={{ backgroundColor: getAccountColor(accountColors, { id: email._accountId, email: email._accountEmail }) }}
+              title={email._accountEmail}
+            />
+          )}
           <span className={`truncate text-xs ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
             {email.from?.name || email.from?.address || 'Unknown'}
           </span>
