@@ -14,6 +14,7 @@ import { SelectionActionBar } from './components/SelectionActionBar';
 import { Onboarding } from './components/Onboarding';
 import { ChatViewWrapper } from './components/ChatViewWrapper';
 import { UpdateModal } from './components/UpdateModal';
+import { ShortcutsModal } from './components/ShortcutsModal';
 import { useEmailScheduler } from './hooks/useEmailScheduler';
 import { usePipelineCoordinator } from './hooks/usePipelineCoordinator';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -636,6 +637,12 @@ function App() {
             updateInfo={updateInfo}
             onClose={() => setUpdateInfo(null)}
           />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showShortcutsModal && (
+          <ShortcutsModal onClose={() => setShowShortcutsModal(false)} />
         )}
       </AnimatePresence>
 
