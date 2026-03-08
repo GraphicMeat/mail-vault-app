@@ -603,6 +603,22 @@ const CompactThreadRow = React.memo(function CompactThreadRow({ thread, isSelect
   );
 });
 
+function getDateRange(emails) {
+  if (!emails || emails.length === 0) return null;
+  let oldest = null;
+  let newest = null;
+  for (const e of emails) {
+    const d = e.date ? new Date(e.date) : null;
+    if (!d || isNaN(d)) continue;
+    if (!oldest || d < oldest) oldest = d;
+    if (!newest || d > newest) newest = d;
+  }
+  if (!oldest || !newest) return null;
+  const fmt = (d) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  if (oldest.toDateString() === newest.toDateString()) return fmt(newest);
+  return `${fmt(oldest)} – ${fmt(newest)}`;
+}
+
 export function EmailList({ layoutMode = 'three-column' }) {
   // Individual selectors — component only re-renders when these specific fields change
   const loading = useMailStore(s => s.loading);
@@ -610,6 +626,7 @@ export function EmailList({ layoutMode = 'three-column' }) {
   const activeMailbox = useMailStore(s => s.activeMailbox);
   const activeAccountId = useMailStore(s => s.activeAccountId);
   const viewMode = useMailStore(s => s.viewMode);
+  const totalEmails = useMailStore(s => s.totalEmails);
   const selectedEmailId = useMailStore(s => s.selectedEmailId);
   const selectedEmailIds = useMailStore(s => s.selectedEmailIds);
   const sortedEmails = useMailStore(s => s.sortedEmails);
@@ -653,6 +670,8 @@ export function EmailList({ layoutMode = 'three-column' }) {
     () => searchActive ? searchResults : sortedEmails,
     [searchActive, searchResults, sortedEmails]
   );
+
+  const dateRange = useMemo(() => getDateRange(displayEmails), [displayEmails]);
 
   // Deferred threading — buildThreads(17k+) is too slow for synchronous render.
   // Show flat list instantly, then compute threads in background and re-render.
@@ -894,11 +913,22 @@ export function EmailList({ layoutMode = 'three-column' }) {
               </button>
             </div>
           ) : (
-            <>
+            <div className="flex flex-col">
               <h2 className="text-lg font-semibold text-mail-text">
                 {activeMailbox}
               </h2>
-            </>
+              <div className="text-xs text-mail-text-muted mt-0.5 flex items-center gap-1.5">
+                <span>{totalEmails.toLocaleString()} emails</span>
+                <span>·</span>
+                <span className="capitalize">{viewMode}</span>
+                {dateRange && (
+                  <>
+                    <span>·</span>
+                    <span>{dateRange}</span>
+                  </>
+                )}
+              </div>
+            </div>
           )}
         </div>
 
