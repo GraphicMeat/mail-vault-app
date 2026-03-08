@@ -1157,6 +1157,16 @@ export const useMailStore = create((set, get) => ({
     // Helper: check if this loadEmails call is still current
     const isStale = () => get().activeAccountId !== activeAccountId || _loadEmailsGeneration !== generation;
 
+    // Safety: clear stuck loading state after 20s — covers the ENTIRE function,
+    // including credential checks, network checks, and IMAP operations.
+    const loadingGuard = setTimeout(() => {
+      if (get().activeAccountId === activeAccountId && get().loading) {
+        console.warn('[loadEmails] Loading timeout — clearing stuck loading state after 20s');
+        set({ loading: false, loadingMore: false });
+      }
+    }, 20000);
+
+    try {
     // Proactively refresh OAuth2 token if expiring soon
     account = await ensureFreshToken(account);
     if (isStale()) return;
@@ -1347,16 +1357,6 @@ export const useMailStore = create((set, get) => ({
         return;
       }
     }
-
-    // Safety: clear stuck loading state after 20s (IMAP connection may hang on slow servers)
-    const loadingGuard = setTimeout(() => {
-      if (get().activeAccountId === activeAccountId && get().loading) {
-        console.warn('[loadEmails] Loading timeout — clearing stuck loading state after 20s');
-        set({ loading: false, loadingMore: false });
-      }
-    }, 20000);
-
-    try {
       // ── Delta-sync: check mailbox status before fetching ──────────────
       const existingEmails = get().emails;
       const cachedUidValidity = cachedHeaders?.uidValidity;
@@ -1656,7 +1656,7 @@ export const useMailStore = create((set, get) => ({
       // Local emails are merged via updateSortedEmails in 'all' mode — don't mix into `emails`.
       if (!isStale()) {
         set({
-          emails: previousEmails,
+          emails: previousEmails ?? get().emails,
           connectionStatus: 'error',
           connectionError: errorMessage,
           connectionErrorType: errorType
