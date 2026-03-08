@@ -6,3 +6,4 @@ export { ComposeModal } from './ComposeModal';
 export { SettingsPage } from './SettingsPage';
 export { Toast } from './Toast';
 export { BulkSaveProgress } from './BulkSaveProgress';
+export { MoveToFolderDropdown } from './MoveToFolderDropdown';
