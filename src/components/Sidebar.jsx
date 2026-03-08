@@ -82,11 +82,15 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
   const [expandedFolders, setExpandedFolders] = useState(new Set(['INBOX']));
   const [showErrorModal, setShowErrorModal] = useState(false);
 
+  const unifiedInbox = useMailStore(s => s.unifiedInbox);
+  const setUnifiedInbox = useMailStore(s => s.setUnifiedInbox);
+
   const orderedAccounts = useMemo(
     () => getOrderedAccounts(accounts).filter(a => !hiddenAccounts[a.id]),
     [accounts, hiddenAccounts, getOrderedAccounts]
   );
   const collapsed = sidebarCollapsed;
+  const showUnifiedInbox = orderedAccounts.length >= 2;
 
   // Sort mailboxes: INBOX first, then alphabetically; children sorted alphabetically too
   const sortedMailboxes = useMemo(() => {
@@ -193,6 +197,22 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
           </button>
         </div>
 
+        {/* All Inboxes (collapsed) */}
+        {showUnifiedInbox && (
+          <div className="w-full py-2 border-b border-mail-border flex justify-center">
+            <button
+              onClick={() => setUnifiedInbox(true)}
+              className={`p-2 rounded-lg transition-all
+                         ${unifiedInbox
+                           ? 'bg-mail-accent/10 text-mail-accent'
+                           : 'text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover'}`}
+              title="All Inboxes"
+            >
+              <Inbox size={16} />
+            </button>
+          </div>
+        )}
+
         {/* Account icons */}
         <div className="w-full py-2 border-b border-mail-border flex flex-col items-center gap-1">
           {orderedAccounts.map(account => {
@@ -202,10 +222,10 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
               <button
                 key={account.id}
                 className={`relative p-1.5 rounded-lg transition-all
-                           ${account.id === activeAccountId
+                           ${account.id === activeAccountId && !unifiedInbox
                              ? 'ring-2 ring-offset-1 ring-offset-mail-surface'
                              : 'hover:bg-mail-surface-hover'}`}
-                style={account.id === activeAccountId ? { '--tw-ring-color': color } : undefined}
+                style={account.id === activeAccountId && !unifiedInbox ? { '--tw-ring-color': color } : undefined}
                 onClick={() => setActiveAccount(account.id)}
                 title={account.name || account.email}
               >
@@ -215,7 +235,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                 >
                   {initial}
                 </div>
-                {account.id === activeAccountId && (
+                {account.id === activeAccountId && !unifiedInbox && (
                   <div
                     className={`absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border-2 border-mail-surface
                                ${connectionStatus === 'connected' ? 'bg-mail-success' :
@@ -386,6 +406,22 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
       {/* Account Selector */}
       <div className="p-3 border-b border-mail-border max-h-[30%] overflow-y-auto">
         <div className="relative">
+          {/* All Inboxes (expanded) */}
+          {showUnifiedInbox && (
+            <div
+              className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all mb-1
+                         ${unifiedInbox
+                           ? 'bg-mail-accent/10 text-mail-accent'
+                           : 'hover:bg-mail-surface-hover text-mail-text'}`}
+              onClick={() => setUnifiedInbox(true)}
+            >
+              <div className="w-8 h-8 rounded-full flex items-center justify-center bg-mail-accent/15">
+                <Inbox size={16} className={unifiedInbox ? 'text-mail-accent' : 'text-mail-text-muted'} />
+              </div>
+              <div className="text-sm font-medium">All Inboxes</div>
+            </div>
+          )}
+
           {orderedAccounts.map(account => {
             const color = getAccountColor(accountColors, account);
             const initial = getAccountInitial(account, getDisplayName(account.id));
@@ -393,7 +429,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
               <div
                 key={account.id}
                 className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all
-                           ${account.id === activeAccountId
+                           ${account.id === activeAccountId && !unifiedInbox
                              ? 'bg-mail-accent/10 text-mail-accent'
                              : 'hover:bg-mail-surface-hover text-mail-text'}`}
                 onClick={() => setActiveAccount(account.id)}
@@ -405,7 +441,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                   >
                     {initial}
                   </div>
-                  {account.id === activeAccountId && (
+                  {account.id === activeAccountId && !unifiedInbox && (
                     <div
                       className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-mail-surface
                                  ${connectionStatus === 'connected' ? 'bg-mail-success' :
