@@ -243,6 +243,37 @@ function _invalidateAccountCache(accountId) {
   _accountCache.delete(accountId);
 }
 
+/**
+ * Returns cached emails across all accounts (for cross-account analytics).
+ * Includes both the active account and any LRU-cached accounts.
+ */
+export function getAccountCacheEmails() {
+  const result = [];
+  const seen = new Set();
+
+  for (const [accountEmail, cached] of _accountCache.entries()) {
+    seen.add(accountEmail);
+    result.push({
+      accountEmail,
+      emails: cached.emails || [],
+      sentEmails: cached.sentEmails || [],
+    });
+  }
+
+  // Include current active account if not already in cache
+  const state = useMailStore.getState();
+  const activeId = state.activeAccountId;
+  if (activeId && !seen.has(activeId)) {
+    result.push({
+      accountEmail: activeId,
+      emails: state.emails || [],
+      sentEmails: state.sentEmails || [],
+    });
+  }
+
+  return result;
+}
+
 export const useMailStore = create((set, get) => ({
   // Accounts
   accounts: [],
