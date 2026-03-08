@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Added
+- **Bug report email** — "Report Bug" button in Settings > Help & Support and in the app menu; opens a pre-filled compose window with system info (version, OS, account count, provider) and structured bug report template, sent to the developer
+- **DNS-based email auto-detection** — when adding a custom-domain account, the app now resolves SRV records (RFC 6186), Mozilla autoconfig XML, and MX records to automatically detect IMAP/SMTP server settings; includes known provider mapping (Google Workspace, Microsoft 365, Hostinger, Zoho, Yahoo, Fastmail, ProtonMail) with pattern-guess fallback
+- **Email list info bar** — folder header now displays total email count, current view mode (All/Server/Local), and date range of loaded emails
+
+### Fixed
+- **Bulk save toast** — "Operation complete" notification now auto-dismisses after 4 seconds on success; X button available for immediate dismiss; error completions stay visible until manually closed
+- **Account modal dismiss protection** — clicking outside or pressing Escape while adding an account now shows a confirmation dialog if any data has been entered, preventing accidental loss of typed details
+- **Folder name display** — stripped `INBOX.` prefix from folder names in sidebar (e.g., "INBOX.Trash" now displays as "Trash"); internal folder paths unchanged
+- **Email content responsiveness** — single-email view now uses the same responsive iframe sizing as thread view, with proper overflow handling for wide tables, images, and preformatted text
+- **Sidebar scrollability** — accounts section is now independently scrollable with a 50% max height cap, ensuring folders remain visible even with many accounts
+- **Export backup clarity** — removed confusing "All Local Emails" option from export backup modal; only the "Archived Emails" export remains
+
 ## [2.0.1] - 2026-03-07
 
 ### Fixed
