@@ -2991,6 +2991,7 @@ export const useMailStore = create((set, get) => ({
 
     let totalUnread = 0;
     let previousEmailCount = get().emails.length;
+    const perAccountResults = []; // Per-account new-email details for notification dispatch
 
     for (let account of accounts) {
       // Skip hidden accounts
@@ -3008,10 +3009,26 @@ export const useMailStore = create((set, get) => ({
       try {
         // If this is the active account, refresh the current mailbox
         if (account.id === activeAccountId) {
+          const beforeCount = get().emails.length;
+          const beforeUids = new Set(get().emails.map(e => e.uid));
           await get().loadEmails();
           // Count unread in current view
           const currentEmails = get().emails;
           totalUnread += currentEmails.filter(e => !e.flags?.includes('\\Seen')).length;
+          // Detect new emails for this account
+          const afterEmails = get().emails;
+          const newForAccount = afterEmails.filter(e => !beforeUids.has(e.uid));
+          if (newForAccount.length > 0) {
+            const newest = newForAccount[0]; // First = highest UID = newest
+            perAccountResults.push({
+              accountId: account.id,
+              accountEmail: account.email,
+              folder: get().activeMailbox || 'INBOX',
+              newCount: newForAccount.length,
+              newestSender: newest.from || newest.sender || '',
+              newestSubject: newest.subject || '',
+            });
+          }
         } else if (isGraphAccount(account)) {
           // Graph: use Graph API for non-active account header refresh
           try {
@@ -3019,12 +3036,30 @@ export const useMailStore = create((set, get) => ({
             const folders = await api.graphListFolders(token);
             const inbox = folders.find(f => f.displayName === 'Inbox');
             if (inbox) {
+              // Load existing cached UIDs before fetching
+              const cached = await db.getEmailHeaders(account.id, 'INBOX').catch(() => null);
+              const cachedUids = new Set(cached?.emails?.map(e => e.uid) || []);
+
               const { headers } = await api.graphListMessages(token, inbox.id, 200, 0);
               if (headers.length > 0) {
                 await db.saveEmailHeaders(account.id, 'INBOX', headers, inbox.totalItemCount);
                 console.log(`[mailStore] Graph: cached ${headers.length} headers for ${account.email}`);
               }
               totalUnread += headers.filter(e => !e.flags?.includes('\\Seen')).length;
+
+              // Detect new emails
+              const newHeaders = headers.filter(e => !cachedUids.has(e.uid));
+              if (newHeaders.length > 0 && cachedUids.size > 0) {
+                const newest = newHeaders[0];
+                perAccountResults.push({
+                  accountId: account.id,
+                  accountEmail: account.email,
+                  folder: 'INBOX',
+                  newCount: newHeaders.length,
+                  newestSender: newest.from || newest.sender || '',
+                  newestSubject: newest.subject || '',
+                });
+              }
             }
           } catch (e) {
             console.warn(`[mailStore] Could not load Graph headers for ${account.email}:`, e);
@@ -3032,6 +3067,10 @@ export const useMailStore = create((set, get) => ({
         } else {
           // IMAP: load full headers into cache and count unread
           try {
+            // Load existing cached UIDs before fetching
+            const cached = await db.getEmailHeaders(account.id, 'INBOX').catch(() => null);
+            const cachedUids = new Set(cached?.emails?.map(e => e.uid) || []);
+
             const allEmails = [];
             let page = 1;
             let hasMore = true;
@@ -3052,6 +3091,20 @@ export const useMailStore = create((set, get) => ({
             }
 
             totalUnread += allEmails.filter(e => !e.flags?.includes('\\Seen')).length;
+
+            // Detect new emails
+            const newHeaders = allEmails.filter(e => !cachedUids.has(e.uid));
+            if (newHeaders.length > 0 && cachedUids.size > 0) {
+              const newest = newHeaders[0];
+              perAccountResults.push({
+                accountId: account.id,
+                accountEmail: account.email,
+                folder: 'INBOX',
+                newCount: newHeaders.length,
+                newestSender: newest.from || newest.sender || '',
+                newestSubject: newest.subject || '',
+              });
+            }
           } catch (e) {
             console.warn(`[mailStore] Could not load headers for ${account.email}:`, e);
           }
@@ -3069,7 +3122,7 @@ export const useMailStore = create((set, get) => ({
 
     console.log(`[mailStore] All accounts refreshed. Total unread: ${totalUnread}, New emails: ${newEmails}`);
 
-    return { newEmails, totalUnread };
+    return { newEmails, totalUnread, perAccountResults };
   },
 
   // Clear error
