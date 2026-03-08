@@ -94,6 +94,7 @@ function App() {
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [composeState, setComposeState] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showShortcutsModal, setShowShortcutsModal] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [pendingOperation, setPendingOperation] = useState(null);
   const [updateInfo, setUpdateInfo] = useState(null);
@@ -104,6 +105,71 @@ function App() {
 
   // Pipeline coordinator — manages background caching for all accounts
   usePipelineCoordinator();
+
+  // Keyboard shortcuts — wire all shortcut actions to app state/store methods
+  useKeyboardShortcuts({
+    compose: () => setComposeState({}),
+    reply: () => {
+      const email = useMailStore.getState().selectedEmail;
+      if (email) setComposeState({ mode: 'reply', replyTo: email });
+    },
+    replyAll: () => {
+      const email = useMailStore.getState().selectedEmail;
+      if (email) setComposeState({ mode: 'replyAll', replyTo: email });
+    },
+    forward: () => {
+      const email = useMailStore.getState().selectedEmail;
+      if (email) setComposeState({ mode: 'forward', replyTo: email });
+    },
+    archive: () => {
+      const uid = useMailStore.getState().selectedEmailId;
+      if (uid) useMailStore.getState().saveEmailsLocally([uid]);
+    },
+    delete: () => {
+      const uid = useMailStore.getState().selectedEmailId;
+      if (uid) useMailStore.getState().deleteEmailFromServer(uid);
+    },
+    nextEmail: () => {
+      const { sortedEmails, selectedEmailId, selectEmail } = useMailStore.getState();
+      if (!sortedEmails.length) return;
+      const idx = sortedEmails.findIndex(e => e.uid === selectedEmailId);
+      const next = idx < sortedEmails.length - 1 ? idx + 1 : idx;
+      if (sortedEmails[next]) selectEmail(sortedEmails[next].uid);
+    },
+    prevEmail: () => {
+      const { sortedEmails, selectedEmailId, selectEmail } = useMailStore.getState();
+      if (!sortedEmails.length) return;
+      const idx = sortedEmails.findIndex(e => e.uid === selectedEmailId);
+      const prev = idx > 0 ? idx - 1 : 0;
+      if (sortedEmails[prev]) selectEmail(sortedEmails[prev].uid);
+    },
+    goToInbox: () => useMailStore.getState().setActiveMailbox('INBOX'),
+    goToSent: () => useMailStore.getState().setActiveMailbox('Sent'),
+    goToDrafts: () => useMailStore.getState().setActiveMailbox('Drafts'),
+    toggleSelect: () => {
+      const uid = useMailStore.getState().selectedEmailId;
+      if (uid) useMailStore.getState().toggleEmailSelection(uid);
+    },
+    escape: () => {
+      const { selectedEmailIds, clearSelection } = useMailStore.getState();
+      if (selectedEmailIds.size > 0) {
+        clearSelection();
+      } else if (composeState) {
+        setComposeState(null);
+      } else if (showSettings) {
+        setShowSettings(false);
+      } else if (showShortcutsModal) {
+        setShowShortcutsModal(false);
+      }
+    },
+    focusSearch: () => {
+      const input = document.querySelector('input[placeholder*="Search"]');
+      if (input) input.focus();
+    },
+    showShortcuts: () => setShowShortcutsModal(prev => !prev),
+    openSettings: () => setShowSettings(true),
+    moveToFolder: () => { /* placeholder — Move to Folder UI comes in Task 9 */ },
+  });
 
   // Handle resize for email list pane
   const handleListResize = useCallback((position) => {
@@ -530,7 +596,8 @@ function App() {
       <AnimatePresence>
         {composeState && (
           <ComposeModal
-            mode="new"
+            mode={composeState.mode || 'new'}
+            replyTo={composeState.replyTo || null}
             initialData={composeState.initialData}
             onClose={() => setComposeState(null)}
           />
