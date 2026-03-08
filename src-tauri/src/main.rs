@@ -21,6 +21,7 @@ mod commands;
 mod dns;
 pub mod graph;
 mod imap;
+mod move_emails;
 mod oauth2;
 mod smtp;
 
@@ -3056,6 +3057,7 @@ fn main() {
             commands::graph_cache_mime,
             commands::graph_set_read,
             commands::graph_delete_message,
+            commands::imap_move_emails,
             commands::resolve_email_settings
         ])
         .setup(|app| {
