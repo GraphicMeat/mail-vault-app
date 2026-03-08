@@ -315,6 +315,9 @@ export const useMailStore = create((set, get) => ({
   bulkSaveProgress: null, // { total, completed, errors, active }
   exportProgress: null, // { total, completed, active, mode: 'export'|'import' }
 
+  // Unified inbox mode
+  unifiedInbox: false,
+
   // Unread counts across all accounts
   totalUnreadCount: 0,
 
@@ -764,6 +767,7 @@ export const useMailStore = create((set, get) => ({
       set({
         activeAccountId: accountId,
         activeMailbox: cachedAccount.activeMailbox,
+        unifiedInbox: false,
         emails: cachedAccount.emails,
         localEmails: cachedAccount.localEmails,
         emailsByIndex: cachedAccount.emailsByIndex,
@@ -804,6 +808,7 @@ export const useMailStore = create((set, get) => ({
     set({
       activeAccountId: accountId,
       activeMailbox: lastMailbox,
+      unifiedInbox: false,
       emails: [],
       localEmails: [],
       sentEmails: [],
@@ -1037,6 +1042,81 @@ export const useMailStore = create((set, get) => ({
     } finally {
       if (!isStale()) set({ loading: false });
     }
+  },
+
+  // ── Unified Inbox ─────────────────────────────────────────────────────────
+
+  setUnifiedInbox: (enabled) => {
+    set({ unifiedInbox: enabled });
+    if (enabled) {
+      get().loadUnifiedInbox();
+    }
+  },
+
+  loadUnifiedInbox: () => {
+    const { accounts } = get();
+    const { hiddenAccounts } = useSettingsStore.getState();
+
+    // Collect cached INBOX emails from all visible accounts
+    const allEmails = [];
+    for (const account of accounts) {
+      if (hiddenAccounts[account.id]) continue;
+
+      const cached = _getFromAccountCache(account.id);
+      if (!cached || !cached.emails) continue;
+      // Only include emails that were from INBOX
+      if (cached.activeMailbox && cached.activeMailbox !== 'INBOX') continue;
+
+      for (const email of cached.emails) {
+        allEmails.push({
+          ...email,
+          _accountEmail: account.email,
+          _accountId: account.id,
+        });
+      }
+    }
+
+    // Also include currently active account's emails if it's on INBOX
+    const { activeAccountId, activeMailbox, emails: currentEmails } = get();
+    if (activeAccountId && activeMailbox === 'INBOX' && !hiddenAccounts[activeAccountId]) {
+      const activeAccount = accounts.find(a => a.id === activeAccountId);
+      if (activeAccount) {
+        const existingUids = new Set(allEmails.map(e => `${e._accountId}:${e.uid}`));
+        for (const email of currentEmails) {
+          const key = `${activeAccountId}:${email.uid}`;
+          if (!existingUids.has(key)) {
+            allEmails.push({
+              ...email,
+              _accountEmail: activeAccount.email,
+              _accountId: activeAccount.id,
+            });
+          }
+        }
+      }
+    }
+
+    // Sort by date descending
+    allEmails.sort((a, b) => {
+      const dateA = a.date ? new Date(a.date).getTime() : 0;
+      const dateB = b.date ? new Date(b.date).getTime() : 0;
+      return dateB - dateA;
+    });
+
+    set({
+      emails: allEmails,
+      sortedEmails: allEmails,
+      _sortedEmailsFingerprint: `unified-${allEmails.length}-${Date.now()}`,
+      activeMailbox: 'UNIFIED',
+      totalEmails: allEmails.length,
+      selectedEmailId: null,
+      selectedEmail: null,
+      selectedEmailSource: null,
+      selectedThread: null,
+      selectedEmailIds: new Set(),
+      hasMoreEmails: false,
+      currentPage: 1,
+      loading: false,
+    });
   },
 
   // Mailbox management
