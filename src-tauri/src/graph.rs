@@ -374,6 +374,41 @@ impl GraphClient {
         Ok(())
     }
 
+    /// Move a message to a different folder. Returns the new message ID.
+    pub async fn move_message(
+        &self,
+        message_id: &str,
+        destination_folder_id: &str,
+    ) -> Result<String, String> {
+        let url = format!("{}/me/messages/{}/move", GRAPH_BASE, message_id);
+
+        let resp = self
+            .client
+            .post(&url)
+            .bearer_auth(&self.access_token)
+            .json(&serde_json::json!({ "destinationId": destination_folder_id }))
+            .send()
+            .await
+            .map_err(|e| format!("Graph move_message request failed: {}", e))?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!(
+                "Graph move_message failed ({}) {}",
+                status.as_u16(),
+                body
+            ));
+        }
+
+        let moved: GraphMessage = resp
+            .json()
+            .await
+            .map_err(|e| format!("Graph move_message parse error: {}", e))?;
+
+        Ok(moved.id)
+    }
+
     /// Download the raw MIME (.eml) content of a message.
     pub async fn get_mime_content(&self, message_id: &str) -> Result<Vec<u8>, String> {
         let url = format!("{}/me/messages/{}/$value", GRAPH_BASE, message_id);
