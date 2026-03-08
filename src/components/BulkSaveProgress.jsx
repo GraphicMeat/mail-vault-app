@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HardDrive, Check, X, AlertCircle, Download, Upload } from 'lucide-react';
@@ -62,6 +62,15 @@ function BulkSaveProgressInner({ progress, onDismiss, onCancel, mode = 'archive'
   const isComplete = !active && completed + errors >= total;
   const config = MODE_CONFIG[mode] || MODE_CONFIG.archive;
   const Icon = config.icon;
+
+  useEffect(() => {
+    if (isComplete && errors === 0) {
+      const timer = setTimeout(() => {
+        onDismiss();
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [isComplete, errors, onDismiss]);
 
   return (
     <motion.div
