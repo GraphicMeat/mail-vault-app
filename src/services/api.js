@@ -251,6 +251,16 @@ export async function disconnect(account) {
   });
 }
 
+export async function moveEmails(account, uids, sourceMailbox, targetMailbox) {
+  if (IS_TAURI) {
+    return tauriInvoke('imap_move_emails', { account, uids, sourceMailbox, targetMailbox });
+  }
+  return httpRequest('/move-emails', {
+    method: 'POST',
+    body: JSON.stringify({ account, uids, sourceMailbox, targetMailbox }),
+  });
+}
+
 export async function searchEmails(account, mailbox = 'INBOX', query, filters = {}) {
   if (IS_TAURI) {
     return tauriInvoke('imap_search_emails', { account, mailbox, query, filters });
@@ -364,6 +374,10 @@ export async function graphSetRead(accessToken, messageId, isRead) {
 
 export async function graphDeleteMessage(accessToken, messageId) {
   return await tauriInvoke('graph_delete_message', { accessToken, messageId });
+}
+
+export async function graphMoveEmails(accessToken, messageIds, targetFolderId) {
+  return await tauriInvoke('graph_move_emails', { accessToken, messageIds, targetFolderId });
 }
 
 export async function resolveEmailSettings(domain) {
