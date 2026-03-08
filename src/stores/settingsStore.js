@@ -149,6 +149,9 @@ export const useSettingsStore = create(
       updateSnoozeUntil: null,
       updateSkippedVersion: null,
 
+      // Email templates
+      emailTemplates: [], // Each: { id: string, name: string, body: string, createdAt: string (ISO) }
+
       // Keyboard shortcuts
       keyboardShortcuts: { ...DEFAULT_SHORTCUTS },
       keyboardShortcutsEnabled: true,
@@ -386,6 +389,28 @@ export const useSettingsStore = create(
 
       clearFilterHistory: () => set({ filterUsageHistory: [] }),
 
+      // Email template methods
+      addEmailTemplate: (name, body) => set((state) => ({
+        emailTemplates: [...state.emailTemplates, {
+          id: crypto.randomUUID(),
+          name,
+          body,
+          createdAt: new Date().toISOString(),
+        }],
+      })),
+
+      updateEmailTemplate: (id, updates) => set((state) => ({
+        emailTemplates: state.emailTemplates.map(t =>
+          t.id === id ? { ...t, ...updates } : t
+        ),
+      })),
+
+      removeEmailTemplate: (id) => set((state) => ({
+        emailTemplates: state.emailTemplates.filter(t => t.id !== id),
+      })),
+
+      reorderEmailTemplates: (templates) => set({ emailTemplates: templates }),
+
       // Keyboard shortcut methods
       setKeyboardShortcut: (action, keybinding) => set((state) => ({
         keyboardShortcuts: { ...state.keyboardShortcuts, [action]: keybinding },
@@ -446,6 +471,7 @@ export const useSettingsStore = create(
           filterUsageHistory: [],
           updateSnoozeUntil: null,
           updateSkippedVersion: null,
+          emailTemplates: [],
           keyboardShortcuts: { ...DEFAULT_SHORTCUTS },
           keyboardShortcutsEnabled: true
         });
