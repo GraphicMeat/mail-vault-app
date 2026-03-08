@@ -6,6 +6,7 @@
 - **Bug report email** — "Report Bug" button in Settings > Help & Support and in the app menu; opens a pre-filled compose window with system info (version, OS, account count, provider) and structured bug report template, sent to the developer
 - **DNS-based email auto-detection** — when adding a custom-domain account, the app now resolves SRV records (RFC 6186), Mozilla autoconfig XML, and MX records to automatically detect IMAP/SMTP server settings; includes known provider mapping (Google Workspace, Microsoft 365, Hostinger, Zoho, Yahoo, Fastmail, ProtonMail) with pattern-guess fallback
 - **Email list info bar** — folder header now displays total email count, current view mode (All/Server/Local), and date range of loaded emails
+- **Progressive archive icons** — email list icons now update in real-time during batch archive as each email is saved, instead of waiting for the entire operation to complete
 
 ### Fixed
 - **Bulk save toast** — "Operation complete" notification now auto-dismisses after 4 seconds on success; X button available for immediate dismiss; error completions stay visible until manually closed
