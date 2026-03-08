@@ -1,10 +1,10 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMailStore } from '../stores/mailStore';
 import {
-  MailOpen, Mail, Trash2, Archive, X, AlertTriangle
+  MailOpen, Mail, Trash2, Archive, X, AlertTriangle, FolderSymlink
 } from 'lucide-react';
-import { useState } from 'react';
+import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 
 export function SelectionActionBar() {
   const selectedEmailIds = useMailStore(s => s.selectedEmailIds);
@@ -16,6 +16,8 @@ export function SelectionActionBar() {
   const getSelectionSummary = useMailStore(s => s.getSelectionSummary);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showMoveDropdown, setShowMoveDropdown] = useState(false);
+  const moveButtonRef = useRef(null);
 
   const hasSelection = selectedEmailIds.size > 0;
   const summary = useMemo(() => {
@@ -91,6 +93,26 @@ export function SelectionActionBar() {
               <Archive size={15} />
               <span className="text-xs font-medium">Archive</span>
             </button>
+            <div className="relative">
+              <button
+                ref={moveButtonRef}
+                onClick={() => setShowMoveDropdown(v => !v)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-mail-text-muted hover:bg-mail-surface-hover"
+                title="Move to folder"
+              >
+                <FolderSymlink size={15} />
+                <span className="text-xs font-medium">Move</span>
+              </button>
+              {showMoveDropdown && (
+                <div className="absolute bottom-full mb-2 left-0">
+                  <MoveToFolderDropdown
+                    uids={[...selectedEmailIds]}
+                    onClose={() => setShowMoveDropdown(false)}
+                    anchorRect={null}
+                  />
+                </div>
+              )}
+            </div>
             <button
               onClick={handleDelete}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-mail-danger"
