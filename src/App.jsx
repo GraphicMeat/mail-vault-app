@@ -15,6 +15,7 @@ import { Onboarding } from './components/Onboarding';
 import { ChatViewWrapper } from './components/ChatViewWrapper';
 import { UpdateModal } from './components/UpdateModal';
 import { ShortcutsModal } from './components/ShortcutsModal';
+import { UndoSendToast } from './components/UndoSendToast';
 import { MoveToFolderDropdown } from './components/MoveToFolderDropdown';
 import { useEmailScheduler } from './hooks/useEmailScheduler';
 import { usePipelineCoordinator } from './hooks/usePipelineCoordinator';
@@ -638,6 +639,7 @@ function App() {
 
       <SelectionActionBar />
       <BulkSaveProgress />
+      <UndoSendToast onUndo={(composeState) => setComposeState(composeState)} />
 
       {/* Move to Folder dropdown (triggered by keyboard shortcut M) */}
       {showMoveDropdown && (() => {
