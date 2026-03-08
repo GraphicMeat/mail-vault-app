@@ -2606,6 +2606,60 @@ export const useMailStore = create((set, get) => ({
     if (!skipRefresh) get().loadEmails();
   },
   
+  // Move emails to a different mailbox/folder
+  moveEmails: async (uids, targetMailbox) => {
+    const { activeAccountId, accounts, activeMailbox, mailboxes, selectedEmailId } = get();
+    let account = accounts.find(a => a.id === activeAccountId);
+    if (!account) return;
+    account = await ensureFreshToken(account);
+
+    if (isGraphAccount(account)) {
+      // Resolve Graph message IDs from UIDs
+      const messageIds = uids
+        .map(uid => getGraphMessageId(activeAccountId, activeMailbox, uid))
+        .filter(Boolean);
+      if (messageIds.length === 0) throw new Error('Cannot move: no Graph message IDs found for selected emails.');
+
+      // Find the Graph folder ID for the target mailbox
+      const targetFolder = mailboxes.find(m => m.path === targetMailbox || m.name === targetMailbox);
+      if (!targetFolder || !targetFolder._graphFolderId) {
+        throw new Error(`Cannot move: target folder "${targetMailbox}" not found.`);
+      }
+
+      await api.graphMoveEmails(account.oauth2AccessToken, messageIds, targetFolder._graphFolderId);
+    } else {
+      await api.moveEmails(account, uids, activeMailbox, targetMailbox);
+    }
+
+    // Remove moved emails from current view
+    const uidSet = new Set(uids);
+    const filteredEmails = get().emails.filter(e => !uidSet.has(e.uid));
+    const newTotal = Math.max(0, (get().totalEmails || 0) - uids.length);
+    const updates = {
+      emails: filteredEmails,
+      totalEmails: newTotal,
+      selectedEmailIds: new Set(), // clear multi-selection
+    };
+
+    // Clear single-selection if the selected email was moved
+    if (uidSet.has(selectedEmailId)) {
+      updates.selectedEmailId = null;
+      updates.selectedEmail = null;
+      updates.selectedEmailSource = null;
+      updates.selectedThread = null;
+    }
+    set(updates);
+
+    // Update cached headers on disk
+    await db.saveEmailHeaders(activeAccountId, activeMailbox, filteredEmails, newTotal);
+
+    // Invalidate caches for both source and target mailboxes
+    _invalidateMailboxCache(activeAccountId);
+
+    // Background refresh to sync with server
+    get().loadEmails();
+  },
+
   // Mark email as read/unread
   markEmailReadStatus: async (uid, read) => {
     const { activeAccountId, accounts, activeMailbox, selectedEmail } = get();
