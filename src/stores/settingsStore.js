@@ -115,6 +115,10 @@ export const useSettingsStore = create(
       topFiltersLimit: 20, // Number of top filters to show (1-50)
       filterUsageHistory: [], // Array of { filter, timestamp } for tracking usage
 
+      // Update notification settings
+      updateSnoozeUntil: null,
+      updateSkippedVersion: null,
+
       // Per-account mailbox memory
       getLastMailbox: (accountId) => get().lastMailboxPerAccount[accountId] || 'INBOX',
       setLastMailbox: (accountId, mailbox) => set({
@@ -303,6 +307,12 @@ export const useSettingsStore = create(
 
       clearFilterHistory: () => set({ filterUsageHistory: [] }),
 
+      // Update notification methods
+      setUpdateSnooze: () => set({ updateSnoozeUntil: Date.now() + 24 * 60 * 60 * 1000 }),
+      clearUpdateSnooze: () => set({ updateSnoozeUntil: null }),
+      setSkippedVersion: (version) => set({ updateSkippedVersion: version }),
+      clearSkippedVersion: () => set({ updateSkippedVersion: null }),
+
       // Reset settings
       resetSettings: () => {
         set({
@@ -341,7 +351,9 @@ export const useSettingsStore = create(
           searchHistory: [],
           filterHistoryPeriodDays: 30,
           topFiltersLimit: 20,
-          filterUsageHistory: []
+          filterUsageHistory: [],
+          updateSnoozeUntil: null,
+          updateSkippedVersion: null
         });
       }
     }),
