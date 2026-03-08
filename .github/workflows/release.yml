@@ -492,10 +492,23 @@ jobs:
           SNAP_X86=$(find artifacts/snap-x86_64-artifact -name "*.snap" 2>/dev/null | head -1 || true)
           SNAP_ARM=$(find artifacts/snap-aarch64-artifact -name "*.snap" 2>/dev/null | head -1 || true)
 
+          # Extract changelog for this version from CHANGELOG.md
+          CHANGELOG_NOTES=$(python3 -c "
+          import re
+          version = '${VERSION_NUM}'
+          with open('CHANGELOG.md') as f:
+              content = f.read()
+          pattern = rf'^## \[{re.escape(version)}\].*?\n(.*?)(?=^## \[|\Z)'
+          m = re.search(pattern, content, re.MULTILINE | re.DOTALL)
+          print(m.group(1).strip() if m else 'Bug fixes and improvements.')
+          ")
+          # JSON-escape for latest.json (handles newlines, quotes, backslashes)
+          CHANGELOG_JSON=$(python3 -c "import sys,json; print(json.dumps(sys.stdin.read().strip()))" <<< "$CHANGELOG_NOTES")
+
           cat > latest.json <<EOJSON
           {
             "version": "${VERSION_NUM}",
-            "notes": "See the assets to download and install this version.",
+            "notes": ${CHANGELOG_JSON},
             "pub_date": "${PUB_DATE}",
             "platforms": {
               "darwin-aarch64": { "signature": "${MACOS_SIG}", "url": "${BASE_URL}/${MACOS_TAR_NAME}" },
@@ -515,7 +528,7 @@ jobs:
 
           gh release create "$VERSION" \
             --title "MailVault v${VERSION_NUM}" \
-            --notes "See the assets to download and install this version." \
+            --notes "${CHANGELOG_NOTES:-See the assets to download and install this version.}" \
             --draft \
             $UPLOAD_FILES
 
