@@ -44,6 +44,9 @@ sed -i '' "s/^version = \"$CURRENT\"/version = \"$NEW\"/" "$ROOT/src-tauri/Cargo
 # src-tauri/tauri.conf.json
 sed -i '' "s/\"version\": \"$CURRENT\"/\"version\": \"$NEW\"/" "$ROOT/src-tauri/tauri.conf.json"
 
+# snap/snapcraft.yaml
+sed -i '' "s/^version: '$CURRENT'/version: '$NEW'/" "$ROOT/snap/snapcraft.yaml"
+
 # Update Cargo.lock by running cargo check
 (cd "$ROOT/src-tauri" && cargo update -p mailvault 2>/dev/null || true)
 
@@ -65,5 +68,6 @@ echo "Updated files:"
 echo "  package.json            → $NEW"
 echo "  src-tauri/Cargo.toml    → $NEW"
 echo "  src-tauri/tauri.conf.json → $NEW"
+echo "  snap/snapcraft.yaml     → $NEW"
 echo ""
 echo "Done! Version is now $NEW"
