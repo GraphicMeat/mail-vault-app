@@ -13,6 +13,7 @@ import { BulkSaveProgress } from './components/BulkSaveProgress';
 import { SelectionActionBar } from './components/SelectionActionBar';
 import { Onboarding } from './components/Onboarding';
 import { ChatViewWrapper } from './components/ChatViewWrapper';
+import { UpdateModal } from './components/UpdateModal';
 import { useEmailScheduler } from './hooks/useEmailScheduler';
 import { usePipelineCoordinator } from './hooks/usePipelineCoordinator';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -94,6 +95,7 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [pendingOperation, setPendingOperation] = useState(null);
+  const [updateInfo, setUpdateInfo] = useState(null);
   const mainContainerRef = useRef(null);
 
   // Initialize email scheduler
@@ -211,6 +213,44 @@ function App() {
     }).catch(() => {});
     return () => { active = false; if (unlisten) unlisten(); };
   }, [handleReportBug]);
+
+  // Listen for update-available event from Rust updater
+  useEffect(() => {
+    let unlisten;
+    let active = true;
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      listen('update-available', (event) => {
+        const { version: newVersion, isManualCheck } = event.payload;
+        const { updateSnoozeUntil, updateSkippedVersion } = useSettingsStore.getState();
+
+        // For auto-checks: respect snooze and skip-version
+        if (!isManualCheck) {
+          if (updateSnoozeUntil && Date.now() < updateSnoozeUntil) {
+            console.log('[App] Update snoozed until', new Date(updateSnoozeUntil).toISOString());
+            return;
+          }
+          if (updateSkippedVersion === newVersion) {
+            console.log('[App] Version', newVersion, 'skipped by user');
+            return;
+          }
+        }
+
+        // Manual check: clear stale snooze/skip so modal always shows
+        if (isManualCheck) {
+          useSettingsStore.getState().clearUpdateSnooze();
+          if (updateSkippedVersion === newVersion) {
+            useSettingsStore.getState().clearSkippedVersion();
+          }
+        }
+
+        setUpdateInfo(event.payload);
+      }).then(fn => {
+        if (!active) fn();
+        else unlisten = fn;
+      });
+    }).catch(() => {});
+    return () => { active = false; if (unlisten) unlisten(); };
+  }, []);
 
   // Track if quick load is done
   const [quickLoadDone, setQuickLoadDone] = useState(false);
@@ -521,6 +561,15 @@ function App() {
 
       <SelectionActionBar />
       <BulkSaveProgress />
+
+      <AnimatePresence>
+        {updateInfo && (
+          <UpdateModal
+            updateInfo={updateInfo}
+            onClose={() => setUpdateInfo(null)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Pending bulk operation resume banner */}
       {pendingOperation && (
