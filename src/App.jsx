@@ -296,9 +296,10 @@ function App() {
                 ...(cachedHeaders.serverUids ? { serverUidSet: cachedHeaders.serverUids } : {}),
               });
               useMailStore.getState().updateSortedEmails();
-              const { sortedEmails } = useMailStore.getState();
+              const { sortedEmails, loading: postLoading } = useMailStore.getState();
               debugLog('[QuickLoad] Phase 2 done: emails=' + cachedHeaders.emails.length +
-                ', sortedEmails=' + sortedEmails.length + ', totalEmails=' + cachedHeaders.totalEmails);
+                ', sortedEmails=' + sortedEmails.length + ', totalEmails=' + cachedHeaders.totalEmails +
+                ', loading=' + postLoading);
             } else if (localEmails.length > 0) {
               // No cached server headers but we have local emails — show them immediately
               useMailStore.setState({
@@ -359,7 +360,9 @@ function App() {
         }, 5000);
 
         init().then(() => {
-          console.log('[App] Full init completed');
+          const state = useMailStore.getState();
+          console.log('[App] Full init completed — emails=%d, sortedEmails=%d, loading=%s, mailboxes=%d',
+            state.emails.length, state.sortedEmails.length, state.loading, state.mailboxes.length);
           clearTimeout(failsafe);
           setInitialized(true);
         }).catch((err) => {

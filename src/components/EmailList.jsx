@@ -745,6 +745,15 @@ export function EmailList({ layoutMode = 'three-column' }) {
 
   // Hand-rolled virtual scroll — proven to feel smoother than @tanstack/react-virtual
   const rowCount = threadedDisplay.length;
+
+  // Diagnostic: trace loading spinner condition
+  useEffect(() => {
+    if (loading && rowCount === 0) {
+      const state = useMailStore.getState();
+      console.log('[EmailList] SPINNER VISIBLE — loading=%s, rowCount=%d, emails=%d, sortedEmails=%d, viewMode=%s, activeMailbox=%s',
+        loading, rowCount, state.emails.length, state.sortedEmails.length, state.viewMode, state.activeMailbox);
+    }
+  }, [loading, rowCount]);
   const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - BUFFER_SIZE);
   const visibleCount = Math.ceil(containerHeight / ROW_HEIGHT) + 2 * BUFFER_SIZE;
   const endIndex = Math.min(rowCount, startIndex + visibleCount);
@@ -1093,6 +1102,7 @@ export function EmailList({ layoutMode = 'three-column' }) {
       <BulkOperationProgress
         operation={bulkOpProgress}
         onCancel={handleBulkCancel}
+        onDismiss={() => setBulkOpProgress(null)}
       />
     </div>
   );
