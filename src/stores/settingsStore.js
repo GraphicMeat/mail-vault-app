@@ -42,6 +42,27 @@ export function getAccountColor(accountColors, account) {
   return accountColors[account.id] || hashColor(account.email || account.id);
 }
 
+// Default keyboard shortcuts — extracted so resetKeyboardShortcuts can reference it
+export const DEFAULT_SHORTCUTS = {
+  nextEmail: 'j',
+  prevEmail: 'k',
+  goToInbox: 'g i',
+  goToSent: 'g s',
+  goToDrafts: 'g d',
+  reply: 'r',
+  replyAll: 'a',
+  forward: 'f',
+  archive: 'e',
+  delete: '#',
+  moveToFolder: 'm',
+  compose: 'c',
+  toggleSelect: 'x',
+  escape: 'Escape',
+  focusSearch: '/',
+  showShortcuts: '?',
+  openSettings: 'Meta+,',
+};
+
 export const useSettingsStore = create(
   persist(
     (set, get) => ({
@@ -118,6 +139,10 @@ export const useSettingsStore = create(
       // Update notification settings
       updateSnoozeUntil: null,
       updateSkippedVersion: null,
+
+      // Keyboard shortcuts
+      keyboardShortcuts: { ...DEFAULT_SHORTCUTS },
+      keyboardShortcutsEnabled: true,
 
       // Per-account mailbox memory
       getLastMailbox: (accountId) => get().lastMailboxPerAccount[accountId] || 'INBOX',
@@ -307,6 +332,13 @@ export const useSettingsStore = create(
 
       clearFilterHistory: () => set({ filterUsageHistory: [] }),
 
+      // Keyboard shortcut methods
+      setKeyboardShortcut: (action, keybinding) => set((state) => ({
+        keyboardShortcuts: { ...state.keyboardShortcuts, [action]: keybinding },
+      })),
+      setKeyboardShortcutsEnabled: (enabled) => set({ keyboardShortcutsEnabled: enabled }),
+      resetKeyboardShortcuts: () => set({ keyboardShortcuts: { ...DEFAULT_SHORTCUTS } }),
+
       // Update notification methods
       setUpdateSnooze: () => set({ updateSnoozeUntil: Date.now() + 24 * 60 * 60 * 1000 }),
       clearUpdateSnooze: () => set({ updateSnoozeUntil: null }),
@@ -353,7 +385,9 @@ export const useSettingsStore = create(
           topFiltersLimit: 20,
           filterUsageHistory: [],
           updateSnoozeUntil: null,
-          updateSkippedVersion: null
+          updateSkippedVersion: null,
+          keyboardShortcuts: { ...DEFAULT_SHORTCUTS },
+          keyboardShortcutsEnabled: true
         });
       }
     }),
