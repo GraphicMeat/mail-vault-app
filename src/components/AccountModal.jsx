@@ -1,7 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { getOAuth2AuthUrl, exchangeOAuth2Code, testConnection } from '../services/api';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { X, Mail, Lock, Server, Eye, EyeOff, Check, AlertCircle, Loader, Wand2, Shield, ChevronRight } from 'lucide-react';
 
 // Common email provider configurations
@@ -135,6 +135,8 @@ export function AccountModal({ onClose }) {
   const [oauthConnected, setOauthConnected] = useState(false);
   const oauthAbortRef = useRef(null);
 
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -154,6 +156,35 @@ export function AccountModal({ onClose }) {
     oauth2CustomClientId: '',
     oauth2TenantId: '',
     oauth2Transport: ''
+  });
+
+  const isDirty = () => {
+    if (step === 1) return false;
+    return !!(
+      formData.email.trim() ||
+      formData.name.trim() ||
+      formData.password.trim() ||
+      oauthConnected
+    );
+  };
+
+  const handleClose = () => {
+    if (isDirty()) {
+      setShowDiscardConfirm(true);
+    } else {
+      onClose();
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        handleClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   });
 
   const handleProviderSelect = (key) => {
@@ -413,14 +444,14 @@ export function AccountModal({ onClose }) {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50"
-      onClick={onClose}
+      onClick={handleClose}
     >
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         className="bg-mail-surface border border-mail-border rounded-2xl shadow-2xl
-                   w-full max-w-md overflow-hidden max-h-[90vh] flex flex-col"
+                   w-full max-w-md overflow-hidden max-h-[90vh] flex flex-col relative"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -429,7 +460,7 @@ export function AccountModal({ onClose }) {
             {step === 1 ? 'Choose Email Provider' : 'Add Account'}
           </h2>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="p-1 hover:bg-mail-border rounded-lg transition-colors"
           >
             <X size={20} className="text-mail-text-muted" />
@@ -851,6 +882,47 @@ export function AccountModal({ onClose }) {
             </form>
           )}
         </div>
+
+        <AnimatePresence>
+          {showDiscardConfirm && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/40 flex items-center justify-center z-10 rounded-2xl"
+              onClick={() => setShowDiscardConfirm(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-mail-surface border border-mail-border rounded-xl shadow-xl p-6 mx-4 max-w-xs"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 className="text-base font-semibold text-mail-text mb-2">Discard changes?</h3>
+                <p className="text-sm text-mail-text-muted mb-4">
+                  All entered details will be lost.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowDiscardConfirm(false)}
+                    className="flex-1 px-3 py-2 text-sm font-medium text-mail-text
+                               bg-mail-surface-hover hover:bg-mail-border rounded-lg transition-colors"
+                  >
+                    Keep Editing
+                  </button>
+                  <button
+                    onClick={onClose}
+                    className="flex-1 px-3 py-2 text-sm font-medium text-white
+                               bg-mail-danger hover:bg-mail-danger/80 rounded-lg transition-colors"
+                  >
+                    Discard
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     </motion.div>
   );
