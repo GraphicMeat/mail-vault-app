@@ -2173,14 +2173,6 @@ export function SettingsPage({ onClose, onAddAccount }) {
                   <span className="block text-xs font-normal opacity-80 mt-0.5">Only emails you've explicitly saved to your device</span>
                 </button>
                 <button
-                  onClick={() => doExport(false)}
-                  className="w-full px-4 py-3 bg-mail-surface-hover hover:bg-mail-border
-                            text-mail-text rounded-lg font-medium transition-colors text-left"
-                >
-                  <span className="block">All Local Emails</span>
-                  <span className="block text-xs font-normal text-mail-text-muted mt-0.5">Everything stored locally — archived and cached emails across all accounts</span>
-                </button>
-                <button
                   onClick={() => setShowExportChoice(false)}
                   className="w-full px-4 py-2 text-sm text-mail-text-muted hover:text-mail-text
                             transition-colors"
