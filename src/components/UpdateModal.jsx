@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Download, X, Clock, SkipForward, AlertCircle, RefreshCw } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -62,14 +62,35 @@ function renderInlineMarkdown(text) {
 }
 
 export function UpdateModal({ updateInfo, onClose }) {
-  const [state, setState] = useState('idle'); // 'idle' | 'downloading' | 'error'
+  const [state, setState] = useState('idle'); // 'idle' | 'downloading' | 'installing' | 'error'
   const [errorMsg, setErrorMsg] = useState('');
+  const [downloadPercent, setDownloadPercent] = useState(0);
 
   const setUpdateSnooze = useSettingsStore(s => s.setUpdateSnooze);
   const setSkippedVersion = useSettingsStore(s => s.setSkippedVersion);
 
   const newVersion = updateInfo?.version || 'unknown';
   const notes = updateInfo?.notes || '';
+
+  // Listen for download progress events from Rust
+  useEffect(() => {
+    if (state !== 'downloading') return;
+    let unlisten;
+    let active = true;
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      listen('update-download-progress', (event) => {
+        const { percent } = event.payload;
+        setDownloadPercent(percent);
+        if (percent >= 100) {
+          setState('installing');
+        }
+      }).then(fn => {
+        if (!active) fn();
+        else unlisten = fn;
+      });
+    }).catch(() => {});
+    return () => { active = false; if (unlisten) unlisten(); };
+  }, [state]);
 
   const handleSkip = () => {
     setSkippedVersion(newVersion);
@@ -83,6 +104,7 @@ export function UpdateModal({ updateInfo, onClose }) {
 
   const handleUpdateNow = async () => {
     setState('downloading');
+    setDownloadPercent(0);
     try {
       await window.__TAURI__?.core?.invoke('install_pending_update');
       // App auto-restarts on success — this line may not execute
@@ -179,9 +201,29 @@ export function UpdateModal({ updateInfo, onClose }) {
 
           {/* Downloading state */}
           {state === 'downloading' && (
-            <div className="px-5 py-10 flex flex-col items-center gap-3">
+            <div className="px-5 py-8 flex flex-col items-center gap-3">
+              <Download size={24} className="text-mail-accent" />
+              <p className="text-sm text-mail-text">Downloading v{newVersion}...</p>
+              <div className="w-full max-w-xs">
+                <div className="h-2 bg-mail-border rounded-full overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${downloadPercent}%` }}
+                    transition={{ duration: 0.3, ease: 'easeOut' }}
+                    className="h-full bg-mail-accent rounded-full"
+                  />
+                </div>
+                <p className="text-xs text-mail-text-muted text-center mt-1.5">{downloadPercent}%</p>
+              </div>
+            </div>
+          )}
+
+          {/* Installing state */}
+          {state === 'installing' && (
+            <div className="px-5 py-8 flex flex-col items-center gap-3">
               <RefreshCw size={24} className="text-mail-accent animate-spin" />
-              <p className="text-sm text-mail-text-muted">Downloading and installing...</p>
+              <p className="text-sm text-mail-text">Installing update...</p>
+              <p className="text-xs text-mail-text-muted">The app will restart automatically</p>
             </div>
           )}
 

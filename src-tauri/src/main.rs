@@ -2855,7 +2855,22 @@ async fn install_pending_update(handle: tauri::AppHandle) -> Result<(), String> 
     let update = state.lock().unwrap().take();
     match update {
         Some(u) => {
-            u.download_and_install(|_, _| {}, || {}).await.map_err(|e| e.to_string())?;
+            let h = handle.clone();
+            let mut total_downloaded: u64 = 0;
+            u.download_and_install(
+                move |chunk_length, content_length| {
+                    total_downloaded += chunk_length as u64;
+                    let percent = content_length
+                        .map(|total| ((total_downloaded as f64 / total as f64) * 100.0).min(100.0) as u8)
+                        .unwrap_or(0);
+                    let _ = h.emit("update-download-progress", serde_json::json!({
+                        "downloaded": total_downloaded,
+                        "total": content_length,
+                        "percent": percent
+                    }));
+                },
+                || {},
+            ).await.map_err(|e| e.to_string())?;
             info!("Update installed successfully, restarting...");
             handle.restart();
         }
