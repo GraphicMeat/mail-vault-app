@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { pipelineManager } from '../services/EmailPipelineManager';
+import { runCleanupRules, shouldRunCleanup } from '../services/cleanupEngine';
 
 /**
  * React bridge for the EmailPipelineManager.
@@ -81,6 +82,33 @@ export function usePipelineCoordinator() {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  // Auto-cleanup rules — run once after initial sync, then check hourly
+  const cleanupRanRef = useRef(false);
+  useEffect(() => {
+    if (!activeAccountId || emails.length === 0 || loading) return;
+    if (cleanupRanRef.current) return;
+
+    // Run cleanup after initial sync settles (5s delay to avoid competing with pipeline)
+    const initialTimer = setTimeout(() => {
+      if (shouldRunCleanup()) {
+        cleanupRanRef.current = true;
+        runCleanupRules().catch(e => console.error('[PipelineCoordinator] Cleanup failed:', e));
+      }
+    }, 5000);
+
+    // Check hourly whether 24h has passed since last run
+    const hourlyInterval = setInterval(() => {
+      if (shouldRunCleanup()) {
+        runCleanupRules().catch(e => console.error('[PipelineCoordinator] Scheduled cleanup failed:', e));
+      }
+    }, 60 * 60 * 1000);
+
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(hourlyInterval);
+    };
+  }, [activeAccountId, emails.length, loading]);
 
   // Cleanup on unmount
   useEffect(() => {
