@@ -24,9 +24,12 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
     if (onDismiss) onDismiss();
   }, [onDismiss]);
 
-  if (!operation) return null;
-
-  const { status, currentPhase, total, completed, errors, type } = operation;
+  const status = operation?.status;
+  const currentPhase = operation?.currentPhase;
+  const total = operation?.total ?? 0;
+  const completed = operation?.completed ?? 0;
+  const errors = operation?.errors ?? 0;
+  const type = operation?.type;
   const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
   const isComplete = status === 'complete';
   const isCancelled = status === 'cancelled';
@@ -41,6 +44,8 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
       return () => clearTimeout(timer);
     }
   }, [isComplete, errors, handleDismiss]);
+
+  if (!operation) return null;
 
   // Determine phase count for display
   const totalPhases = type === 'archive_and_delete' ? 2 : 1;
