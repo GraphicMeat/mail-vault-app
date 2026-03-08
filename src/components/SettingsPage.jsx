@@ -48,7 +48,12 @@ import {
   EyeOff,
   PenTool,
   Keyboard,
-  SendHorizontal
+  SendHorizontal,
+  Lock,
+  Play,
+  Pencil,
+  AlertTriangle,
+  Sparkles
 } from 'lucide-react';
 
 function ToggleSwitch({ active, onClick }) {
@@ -136,7 +141,13 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug }) {
     emailTemplates,
     addEmailTemplate,
     updateEmailTemplate,
-    removeEmailTemplate
+    removeEmailTemplate,
+    isPaidUser,
+    cleanupRules,
+    addCleanupRule,
+    updateCleanupRule,
+    removeCleanupRule,
+    toggleCleanupRule
   } = useSettingsStore();
   
   // Close on Escape key
@@ -174,6 +185,14 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug }) {
   const [templateForm, setTemplateForm] = useState(null); // null | { mode: 'add' } | { mode: 'edit', id }
   const [templateName, setTemplateName] = useState('');
   const [templateBody, setTemplateBody] = useState('');
+  const [cleanupForm, setCleanupForm] = useState(null); // null | { mode: 'add' } | { mode: 'edit', id }
+  const [cleanupAccount, setCleanupAccount] = useState('all');
+  const [cleanupFolder, setCleanupFolder] = useState('INBOX');
+  const [cleanupAge, setCleanupAge] = useState(30);
+  const [cleanupUnit, setCleanupUnit] = useState('days');
+  const [cleanupAction, setCleanupAction] = useState('delete');
+  const [cleanupDeleteConfirm, setCleanupDeleteConfirm] = useState(null);
+  const [showCleanupFirstTimeWarning, setShowCleanupFirstTimeWarning] = useState(false);
   const orderedAccounts = getOrderedAccounts(accounts);
 
   const moveAccount = (accountId, direction) => {
@@ -2436,6 +2455,319 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug }) {
                       </div>
                     )}
                   </div>
+                </div>
+
+                {/* Auto-Cleanup Rules */}
+                <div className="bg-mail-surface border border-mail-border rounded-xl p-5 relative overflow-hidden">
+                  <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
+                    <Clock size={18} className="text-mail-accent" />
+                    Auto-Cleanup
+                    {!isPaidUser && (
+                      <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-full">
+                        <Sparkles size={10} />
+                        Pro
+                      </span>
+                    )}
+                  </h4>
+
+                  {!isPaidUser ? (
+                    /* Locked state for non-paid users */
+                    <div className="relative">
+                      {/* Blurred preview of what the UI looks like */}
+                      <div className="opacity-30 blur-[1px] pointer-events-none select-none" aria-hidden="true">
+                        <div className="space-y-2 mb-3">
+                          <div className="flex items-center justify-between p-2.5 bg-mail-bg rounded-lg">
+                            <div className="flex items-center gap-3 text-sm text-mail-text">
+                              <span>INBOX</span>
+                              <span className="text-mail-text-muted">All accounts</span>
+                              <span className="text-mail-text-muted">Older than 90 days</span>
+                              <span className="text-mail-text-muted">Archive locally then delete</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between p-2.5 bg-mail-bg rounded-lg">
+                            <div className="flex items-center gap-3 text-sm text-mail-text">
+                              <span>Trash</span>
+                              <span className="text-mail-text-muted">All accounts</span>
+                              <span className="text-mail-text-muted">Older than 30 days</span>
+                              <span className="text-mail-text-muted">Delete from server</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <div className="px-3 py-1.5 text-sm bg-mail-accent/10 text-mail-accent rounded-lg">Add Rule</div>
+                          <div className="px-3 py-1.5 text-sm bg-mail-surface-hover text-mail-text rounded-lg">Run All Now</div>
+                        </div>
+                      </div>
+
+                      {/* Lock overlay */}
+                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-mail-surface/60 backdrop-blur-[1px] rounded-lg">
+                        <div className="flex flex-col items-center gap-3 text-center px-6">
+                          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 flex items-center justify-center">
+                            <Lock size={20} className="text-amber-500" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-mail-text mb-1">Available in MailVault Pro</p>
+                            <p className="text-xs text-mail-text-muted max-w-[280px]">
+                              Automatically clean up old emails with custom rules. Set per-folder age thresholds, choose to archive or delete, and keep your mailbox tidy.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Full rule management UI for paid users */
+                    <div className="space-y-4">
+                      <p className="text-sm text-mail-text-muted">
+                        Automatically clean up old emails with custom rules. Rules run in the background periodically.
+                      </p>
+
+                      {/* Existing rules list */}
+                      {cleanupRules.length > 0 && (
+                        <div className="space-y-2">
+                          {cleanupRules.map((rule) => (
+                            <div key={rule.id} className="flex items-center justify-between p-3 bg-mail-bg rounded-lg group">
+                              <div className="flex items-center gap-3 text-sm min-w-0 flex-1">
+                                <span className="font-medium text-mail-text">{rule.folder}</span>
+                                <span className="text-mail-text-muted truncate">
+                                  {rule.account === 'all' ? 'All accounts' : rule.account}
+                                </span>
+                                <span className="text-mail-text-muted whitespace-nowrap">
+                                  {'>'} {rule.age} {rule.unit}
+                                </span>
+                                <span className={`text-xs px-1.5 py-0.5 rounded whitespace-nowrap ${
+                                  rule.action === 'delete'
+                                    ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                    : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                }`}>
+                                  {rule.action === 'delete' ? 'Delete from server' : 'Archive then delete'}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 ml-3 shrink-0">
+                                <ToggleSwitch
+                                  active={rule.enabled}
+                                  onClick={() => toggleCleanupRule(rule.id)}
+                                />
+                                <button
+                                  onClick={() => {
+                                    setCleanupForm({ mode: 'edit', id: rule.id });
+                                    setCleanupAccount(rule.account);
+                                    setCleanupFolder(rule.folder);
+                                    setCleanupAge(rule.age);
+                                    setCleanupUnit(rule.unit);
+                                    setCleanupAction(rule.action);
+                                  }}
+                                  className="p-1.5 text-mail-text-muted hover:text-mail-accent rounded-md hover:bg-mail-surface transition-colors opacity-0 group-hover:opacity-100"
+                                  title="Edit rule"
+                                >
+                                  <Pencil size={14} />
+                                </button>
+                                {cleanupDeleteConfirm === rule.id ? (
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      onClick={() => setCleanupDeleteConfirm(null)}
+                                      className="px-2 py-1 text-xs text-mail-text-muted hover:bg-mail-surface rounded transition-colors"
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        removeCleanupRule(rule.id);
+                                        setCleanupDeleteConfirm(null);
+                                      }}
+                                      className="px-2 py-1 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => setCleanupDeleteConfirm(rule.id)}
+                                    className="p-1.5 text-mail-text-muted hover:text-red-500 rounded-md hover:bg-mail-surface transition-colors opacity-0 group-hover:opacity-100"
+                                    title="Delete rule"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {cleanupRules.length === 0 && !cleanupForm && (
+                        <div className="text-center py-6 text-mail-text-muted text-sm">
+                          No cleanup rules yet. Add a rule to get started.
+                        </div>
+                      )}
+
+                      {/* Inline add/edit form */}
+                      {cleanupForm && (
+                        <div className="bg-mail-bg border border-mail-border rounded-lg p-4 space-y-3">
+                          <h5 className="text-sm font-medium text-mail-text">
+                            {cleanupForm.mode === 'add' ? 'Add Cleanup Rule' : 'Edit Cleanup Rule'}
+                          </h5>
+
+                          {/* First-time warning */}
+                          {showCleanupFirstTimeWarning && (
+                            <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                              <AlertTriangle size={16} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                              <p className="text-xs text-amber-800 dark:text-amber-300">
+                                Auto-cleanup rules run automatically. Deleted emails cannot be recovered from server.
+                              </p>
+                            </div>
+                          )}
+
+                          <div className="grid grid-cols-2 gap-3">
+                            {/* Account dropdown */}
+                            <div>
+                              <label className="text-xs text-mail-text-muted mb-1 block">Account</label>
+                              <select
+                                value={cleanupAccount}
+                                onChange={(e) => setCleanupAccount(e.target.value)}
+                                className="w-full px-3 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent"
+                              >
+                                <option value="all">All accounts</option>
+                                {accounts
+                                  .filter(a => !hiddenAccounts.includes(a.id))
+                                  .map(a => (
+                                    <option key={a.id} value={a.email}>{a.email}</option>
+                                  ))
+                                }
+                              </select>
+                            </div>
+
+                            {/* Folder dropdown */}
+                            <div>
+                              <label className="text-xs text-mail-text-muted mb-1 block">Folder</label>
+                              <select
+                                value={cleanupFolder}
+                                onChange={(e) => setCleanupFolder(e.target.value)}
+                                className="w-full px-3 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent"
+                              >
+                                {['INBOX', 'Sent', 'Drafts', 'Trash', 'Junk', 'Archive'].map(f => (
+                                  <option key={f} value={f}>{f}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* Age threshold */}
+                            <div>
+                              <label className="text-xs text-mail-text-muted mb-1 block">Older than</label>
+                              <div className="flex gap-2">
+                                <input
+                                  type="number"
+                                  min={cleanupUnit === 'days' ? 7 : 1}
+                                  value={cleanupAge}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value) || 0;
+                                    setCleanupAge(val);
+                                  }}
+                                  className="w-20 px-3 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent"
+                                />
+                                <select
+                                  value={cleanupUnit}
+                                  onChange={(e) => {
+                                    setCleanupUnit(e.target.value);
+                                    if (e.target.value === 'days' && cleanupAge < 7) setCleanupAge(7);
+                                  }}
+                                  className="flex-1 px-3 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent"
+                                >
+                                  <option value="days">days</option>
+                                  <option value="months">months</option>
+                                </select>
+                              </div>
+                              {cleanupUnit === 'days' && cleanupAge < 7 && cleanupAge > 0 && (
+                                <p className="text-[10px] text-red-500 mt-1">Minimum 7 days</p>
+                              )}
+                            </div>
+
+                            {/* Action dropdown */}
+                            <div>
+                              <label className="text-xs text-mail-text-muted mb-1 block">Action</label>
+                              <select
+                                value={cleanupAction}
+                                onChange={(e) => setCleanupAction(e.target.value)}
+                                className="w-full px-3 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent"
+                              >
+                                <option value="delete">Delete from server</option>
+                                <option value="archive-then-delete">Archive locally then delete</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="flex justify-end gap-2 pt-1">
+                            <button
+                              onClick={() => {
+                                setCleanupForm(null);
+                                setShowCleanupFirstTimeWarning(false);
+                              }}
+                              className="px-3 py-1.5 text-sm text-mail-text-muted hover:bg-mail-surface rounded-lg transition-colors"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => {
+                                const effectiveAge = cleanupUnit === 'days' ? Math.max(7, cleanupAge) : Math.max(1, cleanupAge);
+                                const ruleData = {
+                                  account: cleanupAccount,
+                                  folder: cleanupFolder,
+                                  age: effectiveAge,
+                                  unit: cleanupUnit,
+                                  action: cleanupAction,
+                                  enabled: true,
+                                };
+                                if (cleanupForm.mode === 'edit') {
+                                  updateCleanupRule(cleanupForm.id, ruleData);
+                                } else {
+                                  addCleanupRule(ruleData);
+                                }
+                                setCleanupForm(null);
+                                setShowCleanupFirstTimeWarning(false);
+                              }}
+                              disabled={cleanupUnit === 'days' && cleanupAge < 7}
+                              className="px-3 py-1.5 text-sm font-medium bg-mail-accent text-white rounded-lg hover:bg-mail-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {cleanupForm.mode === 'edit' ? 'Save' : 'Add Rule'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Action buttons */}
+                      {!cleanupForm && (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setCleanupForm({ mode: 'add' });
+                              setCleanupAccount('all');
+                              setCleanupFolder('INBOX');
+                              setCleanupAge(30);
+                              setCleanupUnit('days');
+                              setCleanupAction('delete');
+                              if (cleanupRules.length === 0) {
+                                setShowCleanupFirstTimeWarning(true);
+                              }
+                            }}
+                            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-mail-accent/10 text-mail-accent rounded-lg hover:bg-mail-accent/20 transition-colors"
+                          >
+                            <Plus size={14} />
+                            Add Rule
+                          </button>
+                          {cleanupRules.length > 0 && (
+                            <button
+                              onClick={() => {
+                                // Placeholder — will be wired in Task 25
+                              }}
+                              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-mail-surface-hover text-mail-text rounded-lg hover:bg-mail-border transition-colors"
+                            >
+                              <Play size={14} />
+                              Run All Now
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Backup & Restore */}
