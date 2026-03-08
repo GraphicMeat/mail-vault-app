@@ -614,7 +614,7 @@ function getDateRange(emails) {
     if (!newest || d > newest) newest = d;
   }
   if (!oldest || !newest) return null;
-  const fmt = (d) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const fmt = (d) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   if (oldest.toDateString() === newest.toDateString()) return fmt(newest);
   return `${fmt(oldest)} – ${fmt(newest)}`;
 }
