@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-03-08
+
 ### Added
 - **Bug report email** — "Report Bug" button in Settings > Help & Support and in the app menu; opens a pre-filled compose window with system info (version, OS, account count, provider) and structured bug report template, sent to the developer
 - **DNS-based email auto-detection** — when adding a custom-domain account, the app now resolves SRV records (RFC 6186), Mozilla autoconfig XML, and MX records to automatically detect IMAP/SMTP server settings; includes known provider mapping (Google Workspace, Microsoft 365, Hostinger, Zoho, Yahoo, Fastmail, ProtonMail) with pattern-guess fallback
