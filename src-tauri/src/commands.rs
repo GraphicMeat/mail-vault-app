@@ -604,6 +604,37 @@ pub async fn graph_delete_message(
     client.delete_message(&message_id).await
 }
 
+// ── Move emails between folders ──────────────────────────────────────────
+
+#[tauri::command]
+pub async fn imap_move_emails(
+    pool: tauri::State<'_, ImapPool>,
+    account: ImapConfig,
+    uids: Vec<u32>,
+    source_mailbox: String,
+    target_mailbox: String,
+) -> Result<serde_json::Value, String> {
+    let has_move = pool.has_capability(&account, "MOVE").await;
+
+    let moved = with_priority(&pool, &account, |mut session| async move {
+        let result = crate::move_emails::move_emails(
+            &mut session,
+            &source_mailbox,
+            &target_mailbox,
+            &uids,
+            has_move,
+        )
+        .await?;
+        Ok((result, session, Some(source_mailbox)))
+    })
+    .await?;
+
+    Ok(serde_json::json!({
+        "success": true,
+        "moved": moved
+    }))
+}
+
 // ── DNS: Resolve email server settings ───────────────────────────────────
 
 #[tauri::command]
