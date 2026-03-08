@@ -59,7 +59,8 @@ const MODE_CONFIG = {
 function BulkSaveProgressInner({ progress, onDismiss, onCancel, mode = 'archive' }) {
   const { total, completed, errors = 0, active } = progress;
   const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
-  const isComplete = !active && completed + errors >= total;
+  // Treat as complete when all emails are processed, even if active flag is stale
+  const isComplete = total > 0 && completed + errors >= total;
   const config = MODE_CONFIG[mode] || MODE_CONFIG.archive;
   const Icon = config.icon;
 
