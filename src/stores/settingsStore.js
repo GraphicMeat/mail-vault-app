@@ -95,6 +95,10 @@ export const useSettingsStore = create(
       // Default settings
       defaultSignatureEnabled: true,
       
+      // Undo send settings
+      undoSendEnabled: false,  // OFF by default
+      undoSendDelay: 5,        // seconds: 5, 10, 15, 30
+
       // Auto-save drafts
       autoSaveDrafts: true,
       autoSaveInterval: 30, // seconds
@@ -234,6 +238,10 @@ export const useSettingsStore = create(
       },
       isAccountHidden: (accountId) => !!get().hiddenAccounts[accountId],
 
+      // Undo send settings
+      setUndoSendEnabled: (enabled) => set({ undoSendEnabled: enabled }),
+      setUndoSendDelay: (delay) => set({ undoSendDelay: delay }),
+
       // Email sync settings
       setRefreshInterval: (minutes) => set({ refreshInterval: minutes }),
       setRefreshOnLaunch: (enabled) => set({ refreshOnLaunch: enabled }),
@@ -359,6 +367,8 @@ export const useSettingsStore = create(
           displayNames: {},
           accountColors: {},
           defaultSignatureEnabled: true,
+          undoSendEnabled: false,
+          undoSendDelay: 5,
           autoSaveDrafts: true,
           autoSaveInterval: 30,
           refreshInterval: 5,
