@@ -13,7 +13,8 @@
 - **Account modal dismiss protection** — clicking outside or pressing Escape while adding an account now shows a confirmation dialog if any data has been entered, preventing accidental loss of typed details
 - **Folder name display** — stripped `INBOX.` prefix from folder names in sidebar (e.g., "INBOX.Trash" now displays as "Trash"); internal folder paths unchanged
 - **Email content responsiveness** — single-email view now uses the same responsive iframe sizing as thread view, with proper overflow handling for wide tables, images, and preformatted text
-- **Sidebar scrollability** — accounts section is now independently scrollable with a 50% max height cap, ensuring folders remain visible even with many accounts
+- **Sidebar scrollability** — accounts section is now independently scrollable with a 30% max height cap, ensuring folders remain visible even with many accounts
+- **Startup loading spinner** — fixed stuck loading spinner on app launch when cached emails exist; added safety guard in init() and 20-second timeout failsafe
 - **Export backup clarity** — removed confusing "All Local Emails" option from export backup modal; only the "Archived Emails" export remains
 
 ## [2.0.1] - 2026-03-07
