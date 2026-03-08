@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useMailStore } from '../stores/mailStore';
-import { getOAuth2AuthUrl, exchangeOAuth2Code, testConnection } from '../services/api';
+import { getOAuth2AuthUrl, exchangeOAuth2Code, testConnection, resolveEmailSettings } from '../services/api';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Mail, Lock, Server, Eye, EyeOff, Check, AlertCircle, Loader, Wand2, Shield, ChevronRight } from 'lucide-react';
 
@@ -254,6 +254,30 @@ export function AccountModal({ onClose }) {
       setDetectedProvider(detected);
       setAutoDetecting(false);
       return;
+    }
+
+    // Try DNS-based detection (SRV, autoconfig, MX)
+    try {
+      const domain = formData.email.split('@')[1]?.toLowerCase();
+      if (domain) {
+        console.log('[AccountModal] Trying DNS resolution for %s', domain);
+        const dnsResult = await resolveEmailSettings(domain);
+        if (dnsResult && (dnsResult.imapHost || dnsResult.smtpHost)) {
+          console.log('[AccountModal] DNS resolved: %s (source: %s)', dnsResult.imapHost, dnsResult.source);
+          setFormData(prev => ({
+            ...prev,
+            imapHost: dnsResult.imapHost || prev.imapHost,
+            imapPort: dnsResult.imapPort || prev.imapPort,
+            smtpHost: dnsResult.smtpHost || prev.smtpHost,
+            smtpPort: dnsResult.smtpPort || prev.smtpPort,
+          }));
+          setDetectedProvider({ key: 'custom', config: { name: dnsResult.provider || domain } });
+          setAutoDetecting(false);
+          return;
+        }
+      }
+    } catch (e) {
+      console.log('[AccountModal] DNS resolution failed, falling back to pattern guessing: %s', e.message);
     }
 
     // Try common patterns by actually testing connections
