@@ -21,16 +21,53 @@ export function useEmailScheduler() {
 
   const intervalRef = useRef(null);
   const hasRefreshedOnLaunch = useRef(false);
-  const previousEmailCount = useRef(0);
   const lastBadgeCount = useRef(-1);
 
-  // Send notification
+  // Send notification via Tauri
   const sendNotification = async (title, body) => {
-    if (!invoke || !notificationSettings.enabled) return;
+    if (!invoke) return;
     try {
       await invoke('send_notification', { title, body });
     } catch (error) {
       console.error('[scheduler] Failed to send notification:', error);
+    }
+  };
+
+  // Dispatch per-account notifications using shouldNotify + showPreview
+  const dispatchNotifications = (perAccountResults) => {
+    if (!invoke || !perAccountResults || perAccountResults.length === 0) return;
+
+    const { shouldNotify } = useSettingsStore.getState();
+    const { showPreview } = useSettingsStore.getState().notificationSettings;
+
+    for (const result of perAccountResults) {
+      const { accountId, accountEmail, folder, newCount, newestSender, newestSubject } = result;
+
+      // Per-account per-folder filtering
+      if (!shouldNotify(accountId, folder)) continue;
+
+      if (newCount === 1) {
+        // Single new email
+        if (showPreview) {
+          const sender = newestSender || 'Unknown sender';
+          const subject = newestSubject || '(No subject)';
+          sendNotification(sender, subject);
+        } else {
+          sendNotification('New Email', `New email in ${accountEmail}`);
+        }
+      } else {
+        // Multiple new emails
+        if (showPreview) {
+          const sender = newestSender || 'Unknown sender';
+          const subject = newestSubject || '(No subject)';
+          sendNotification(
+            `${newCount} New Emails`,
+            `${sender}: ${subject} (and ${newCount - 1} more)`
+          );
+        } else {
+          sendNotification('New Email', `${newCount} new emails in ${accountEmail}`);
+        }
+      }
     }
   };
 
@@ -60,23 +97,16 @@ export function useEmailScheduler() {
   // Refresh function that also updates last refresh time
   const doRefresh = async () => {
     console.log('[scheduler] Starting scheduled refresh...');
-    const oldEmailCount = previousEmailCount.current;
 
     try {
       const result = await refreshAllAccounts();
       setLastRefreshTime(Date.now());
       console.log('[scheduler] Refresh completed:', result);
 
-      // Check for new emails and notify
-      if (result && result.newEmails > 0 && oldEmailCount > 0) {
-        sendNotification(
-          'New Email',
-          `You have ${result.newEmails} new email${result.newEmails > 1 ? 's' : ''}`
-        );
+      // Dispatch per-account notifications (replaces old aggregate notification)
+      if (result && result.perAccountResults) {
+        dispatchNotifications(result.perAccountResults);
       }
-
-      // Update previous count
-      previousEmailCount.current = useMailStore.getState().emails.length;
 
       // Update badge to reflect current mailbox view
       if (result) {
