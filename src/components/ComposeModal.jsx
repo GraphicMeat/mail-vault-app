@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { motion } from 'framer-motion';
-import { X, Send, Paperclip, Loader, Minimize2, Maximize2, FileText, Trash2, ChevronDown } from 'lucide-react';
+import { X, Send, Paperclip, Loader, Minimize2, Maximize2, FileText, Trash2, ChevronDown, BookTemplate } from 'lucide-react';
 import * as api from '../services/api';
 import { ensureFreshToken } from '../services/authUtils';
 
@@ -30,7 +30,7 @@ function AttachmentPreview({ attachment, onRemove }) {
 
 export function ComposeModal({ mode = 'new', replyTo = null, initialData = null, onClose }) {
   const { accounts, activeAccountId } = useMailStore();
-  const { getSignature, getDisplayName } = useSettingsStore();
+  const { getSignature, getDisplayName, emailTemplates, addEmailTemplate } = useSettingsStore();
   // In unified inbox, prefer the email's source account for replies
   const initialAccountId = replyTo?._accountId || activeAccountId;
   const [selectedAccountId, setSelectedAccountId] = useState(initialAccountId);
@@ -40,7 +40,12 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const [error, setError] = useState(null);
   const [minimized, setMinimized] = useState(false);
   const [attachments, setAttachments] = useState([]);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState('');
   const fileInputRef = useRef(null);
+  const bodyRef = useRef(null);
+  const templatesRef = useRef(null);
   
   const [formData, setFormData] = useState({
     to: '',
@@ -182,6 +187,59 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     setAttachments(prev => prev.filter((_, i) => i !== index));
   };
   
+  // Close templates dropdown on click outside or Escape
+  useEffect(() => {
+    if (!showTemplates) return;
+    const handleClick = (e) => {
+      if (templatesRef.current && !templatesRef.current.contains(e.target)) {
+        setShowTemplates(false);
+        setSavingTemplate(false);
+      }
+    };
+    const handleKey = (e) => {
+      if (e.key === 'Escape') {
+        setShowTemplates(false);
+        setSavingTemplate(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [showTemplates]);
+
+  const insertTemplate = (template) => {
+    const textarea = bodyRef.current;
+    if (!textarea) {
+      // Fallback: append to end
+      setFormData(prev => ({ ...prev, body: prev.body + template.body }));
+    } else {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const currentBody = formData.body;
+      const newBody = currentBody.slice(0, start) + template.body + currentBody.slice(end);
+      setFormData(prev => ({ ...prev, body: newBody }));
+      // Restore cursor position after the inserted text
+      requestAnimationFrame(() => {
+        const newPos = start + template.body.length;
+        textarea.setSelectionRange(newPos, newPos);
+        textarea.focus();
+      });
+    }
+    setShowTemplates(false);
+  };
+
+  const handleSaveTemplate = () => {
+    const name = templateName.trim();
+    if (!name) return;
+    addEmailTemplate(name, formData.body);
+    setTemplateName('');
+    setSavingTemplate(false);
+    setShowTemplates(false);
+  };
+
   const handleSend = async (e) => {
     e.preventDefault();
 
@@ -441,6 +499,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           {/* Body */}
           <div className="flex-1 overflow-hidden">
             <textarea
+              ref={bodyRef}
               name="body"
               value={formData.body}
               onChange={handleChange}
@@ -477,6 +536,75 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               >
                 <Paperclip size={18} className="text-mail-text-muted" />
               </button>
+              <div className="relative" ref={templatesRef}>
+                <button
+                  type="button"
+                  onClick={() => { setShowTemplates(v => !v); setSavingTemplate(false); }}
+                  className="p-2 hover:bg-mail-border rounded-lg transition-colors"
+                  title="Templates"
+                >
+                  <BookTemplate size={18} className="text-mail-text-muted" />
+                </button>
+                {showTemplates && (
+                  <div className="absolute bottom-full left-0 mb-1 w-64 bg-mail-surface border border-mail-border
+                                  rounded-lg shadow-xl z-50 overflow-hidden">
+                    {emailTemplates.length > 0 && (
+                      <div className="max-h-48 overflow-y-auto">
+                        {emailTemplates.map(t => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => insertTemplate(t)}
+                            className="w-full text-left px-3 py-2 text-sm text-mail-text
+                                      hover:bg-mail-surface-hover transition-colors truncate"
+                          >
+                            {t.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {emailTemplates.length === 0 && (
+                      <div className="px-3 py-2 text-xs text-mail-text-muted">
+                        No templates yet
+                      </div>
+                    )}
+                    <div className="border-t border-mail-border">
+                      {savingTemplate ? (
+                        <div className="flex items-center gap-1 p-2">
+                          <input
+                            type="text"
+                            value={templateName}
+                            onChange={(e) => setTemplateName(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSaveTemplate(); } }}
+                            placeholder="Template name..."
+                            autoFocus
+                            className="flex-1 bg-transparent text-sm text-mail-text placeholder-mail-text-muted
+                                      outline-none border border-mail-border rounded px-2 py-1"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleSaveTemplate}
+                            disabled={!templateName.trim()}
+                            className="px-2 py-1 text-xs bg-mail-accent text-white rounded
+                                      hover:bg-mail-accent-hover disabled:opacity-50 transition-colors"
+                          >
+                            Save
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setSavingTemplate(true)}
+                          className="w-full text-left px-3 py-2 text-sm text-mail-accent
+                                    hover:bg-mail-surface-hover transition-colors"
+                        >
+                          Save as Template
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
             
             <div className="flex items-center gap-2">
