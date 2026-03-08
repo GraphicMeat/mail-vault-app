@@ -18,6 +18,9 @@ pub struct ArchiveProgress {
     pub active: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "lastUid")]
+    pub last_uid: Option<u32>,
 }
 
 // ── Cancellation token (shared app state) ─────────────────────────────────────
@@ -48,7 +51,7 @@ pub async fn run(
         .map_err(|e| format!("Bad account JSON: {}", e))?;
 
     let _ = app_handle.emit("archive-progress", ArchiveProgress {
-        total, completed: 0, errors: 0, active: true, last_error: None,
+        total, completed: 0, errors: 0, active: true, last_error: None, last_uid: None,
     });
 
     let sem = Arc::new(Semaphore::new(5));
@@ -96,12 +99,14 @@ pub async fn run(
             let c = completed.load(Ordering::Relaxed);
             let e = errors.load(Ordering::Relaxed);
             let is_cancelled = cancel.load(Ordering::Relaxed);
+            let success_uid = if last_error.is_none() { Some(uid) } else { None };
             let _ = app.emit("archive-progress", ArchiveProgress {
                 total,
                 completed: c,
                 errors: e,
                 active: !is_cancelled && (c + e) < total,
                 last_error,
+                last_uid: success_uid,
             });
         });
     }
@@ -122,6 +127,7 @@ pub async fn run(
         errors: final_errors,
         active: false,
         last_error: None,
+        last_uid: None,
     };
 
     let _ = app_handle.emit("archive-progress", result.clone());
@@ -262,6 +268,7 @@ pub async fn bulk_delete(
         errors: final_errors,
         active: false,
         last_error: None,
+        last_uid: None,
     })
 }
 

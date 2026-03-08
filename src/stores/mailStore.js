@@ -2413,6 +2413,17 @@ export const useMailStore = create((set, get) => ({
         unlisten = await listen('archive-progress', (event) => {
           const p = event.payload;
           set({ bulkSaveProgress: { total: p.total, completed: p.completed, errors: p.errors, active: p.active } });
+
+          // Incrementally update archive icon as each email is archived
+          if (p.lastUid) {
+            const { archivedEmailIds } = get();
+            if (!archivedEmailIds.has(p.lastUid)) {
+              const updated = new Set(archivedEmailIds);
+              updated.add(p.lastUid);
+              set({ archivedEmailIds: updated });
+              get().updateSortedEmails();
+            }
+          }
         });
       } catch (e) {
         console.warn('[saveEmailsLocally] Failed to register event listener:', e);
@@ -2436,7 +2447,6 @@ export const useMailStore = create((set, get) => ({
         console.error('[saveEmailsLocally] archive_emails failed:', err);
       } finally {
         if (unlisten) unlisten();
-        setTimeout(() => set({ bulkSaveProgress: null }), 3000);
       }
       return;
     }
