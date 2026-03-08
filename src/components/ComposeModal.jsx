@@ -65,9 +65,17 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         setFormData(prev => ({
           ...prev,
           to: initialData.to || '',
+          cc: initialData.cc || '',
+          bcc: initialData.bcc || '',
           subject: initialData.subject || '',
           body: (initialData.body || '') + initialBody,
+          inReplyTo: initialData.inReplyTo || '',
+          references: initialData.references || '',
         }));
+        // Restore attachments if provided (e.g. from undo send)
+        if (initialData.attachments?.length) {
+          setAttachments(initialData.attachments);
+        }
       } else {
         setFormData(prev => ({ ...prev, body: initialBody }));
       }
@@ -174,12 +182,12 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   
   const handleSend = async (e) => {
     e.preventDefault();
-    
+
     if (!formData.to.trim()) {
       setError('Please enter at least one recipient');
       return;
     }
-    
+
     if (!selectedAccount) {
       setError('No account selected');
       return;
@@ -189,35 +197,56 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     setError(null);
 
     try {
-      // Refresh OAuth2 token if needed before sending
-      const freshAccount = await ensureFreshToken(selectedAccount);
-
-      // Get display name from settings or account
-      const displayName = getDisplayName(selectedAccountId) || freshAccount.name || freshAccount.email;
-
-      // Prepare attachments for nodemailer
-      const emailAttachments = attachments.map(att => ({
-        filename: att.filename,
-        content: att.content,
-        encoding: 'base64',
-        contentType: att.contentType
-      }));
-
-      await api.sendEmail(
-        { ...freshAccount, name: displayName },
-        {
+      // Capture compose state for undo
+      const composeState = {
+        mode,
+        replyTo,
+        initialData: {
           to: formData.to,
-          cc: formData.cc || undefined,
-          bcc: formData.bcc || undefined,
+          cc: formData.cc,
+          bcc: formData.bcc,
           subject: formData.subject,
-          text: formData.body,
-          html: formData.body.replace(/\n/g, '<br>'),
-          inReplyTo: formData.inReplyTo || undefined,
-          references: formData.references || undefined,
-          attachments: emailAttachments.length > 0 ? emailAttachments : undefined
-        }
-      );
-      
+          body: formData.body,
+          inReplyTo: formData.inReplyTo,
+          references: formData.references,
+          attachments: [...attachments],
+        },
+      };
+
+      // The actual send function
+      const sendFn = async () => {
+        // Refresh OAuth2 token if needed before sending
+        const freshAccount = await ensureFreshToken(selectedAccount);
+
+        // Get display name from settings or account
+        const displayName = getDisplayName(selectedAccountId) || freshAccount.name || freshAccount.email;
+
+        // Prepare attachments for nodemailer
+        const emailAttachments = attachments.map(att => ({
+          filename: att.filename,
+          content: att.content,
+          encoding: 'base64',
+          contentType: att.contentType
+        }));
+
+        await api.sendEmail(
+          { ...freshAccount, name: displayName },
+          {
+            to: formData.to,
+            cc: formData.cc || undefined,
+            bcc: formData.bcc || undefined,
+            subject: formData.subject,
+            text: formData.body,
+            html: formData.body.replace(/\n/g, '<br>'),
+            inReplyTo: formData.inReplyTo || undefined,
+            references: formData.references || undefined,
+            attachments: emailAttachments.length > 0 ? emailAttachments : undefined
+          }
+        );
+      };
+
+      // Queue send (may delay if undo send is enabled)
+      useMailStore.getState().queueSend(composeState, sendFn);
       onClose();
     } catch (err) {
       setError(err.message || 'Failed to send email');
