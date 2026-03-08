@@ -36,10 +36,12 @@ import {
   RefreshCw,
   ShieldCheck,
   ShieldAlert,
-  AlertTriangle
+  AlertTriangle,
+  Info
 } from 'lucide-react';
 import { getRealAttachments, replaceCidUrls } from '../services/attachmentUtils';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
+import { SenderInsightsPanel } from './SenderInsightsPanel';
 import { checkSenderVerification } from '../utils/senderCheck';
 
 function getCleanBase64(content) {
@@ -491,7 +493,7 @@ function DownloadAllButton({ attachments, emailUid, account, folder }) {
   );
 }
 
-function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, loadingRaw }) {
+function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, loadingRaw, showInsights, onToggleInsights }) {
   return (
     <div
       className="p-4 border-b border-mail-border cursor-pointer"
@@ -516,6 +518,13 @@ function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, loadingR
                 &lt;{email.from.address}&gt;
               </span>
             )}
+            <button
+              onClick={(e) => { e.stopPropagation(); onToggleInsights?.(); }}
+              className={`p-0.5 rounded transition-colors flex-shrink-0 ${showInsights ? 'text-mail-accent' : 'text-mail-text-muted hover:text-mail-text'}`}
+              title="Sender insights"
+            >
+              <Info size={14} />
+            </button>
           </div>
 
           <div className="text-sm text-mail-text-muted">
@@ -1177,6 +1186,7 @@ export function EmailViewer() {
   const [rawSource, setRawSource] = useState(null);
   const [loadingRaw, setLoadingRaw] = useState(false);
   const [showMoveDropdown, setShowMoveDropdown] = useState(false);
+  const [showInsights, setShowInsights] = useState(false);
   const moveButtonRef = useRef(null);
   const iframeRef = useRef(null);
   
@@ -1191,6 +1201,7 @@ export function EmailViewer() {
     setRawSource(null);
     setConfirmDelete(false);
     setConfirmUnarchive(false);
+    setShowInsights(false);
   }, [selectedEmail?.uid]);
   
   const handleSave = async () => {
@@ -1616,6 +1627,8 @@ export function EmailViewer() {
         onToggle={() => setHeaderExpanded(!headerExpanded)}
         showRaw={showRaw}
         loadingRaw={loadingRaw}
+        showInsights={showInsights}
+        onToggleInsights={() => setShowInsights(!showInsights)}
         onToggleRaw={async () => {
           if (showRaw) {
             setShowRaw(false);
@@ -1644,6 +1657,13 @@ export function EmailViewer() {
           setShowRaw(true);
         }}
       />
+
+      {/* Sender Insights */}
+      <AnimatePresence>
+        {showInsights && selectedEmail?.from?.address && (
+          <SenderInsightsPanel senderEmail={selectedEmail.from.address} />
+        )}
+      </AnimatePresence>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto min-h-0">
