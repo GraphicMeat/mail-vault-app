@@ -3086,6 +3086,7 @@ fn main() {
             let open_settings = MenuItem::with_id(app, "open_settings", "Settings...", true, Some("cmd+,"))?;
             #[cfg(not(target_os = "macos"))]
             let open_settings = MenuItem::with_id(app, "open_settings", "Settings...", true, Some("ctrl+,"))?;
+            let report_bug = MenuItem::with_id(app, "report_bug", "Report Bug...", true, None::<&str>)?;
             let export_logs = MenuItem::with_id(app, "export_logs", "Export Logs...", true, None::<&str>)?;
             let logs_submenu = Submenu::with_id(app, "logs_submenu", "Logs", true)?;
             logs_submenu.append(&export_logs)?;
@@ -3102,7 +3103,8 @@ fn main() {
                             let _ = app_submenu.insert(&sep1, 1);
                             let _ = app_submenu.insert(&check_updates, 2);
                             let _ = app_submenu.insert(&open_settings, 3);
-                            let _ = app_submenu.insert(&sep2, 4);
+                            let _ = app_submenu.insert(&report_bug, 4);
+                            let _ = app_submenu.insert(&sep2, 5);
                         }
                     }
                 }
@@ -3117,6 +3119,7 @@ fn main() {
                 let file_submenu = Submenu::with_id(app, "file_submenu", "File", true)?;
                 file_submenu.append(&check_updates)?;
                 file_submenu.append(&open_settings)?;
+                file_submenu.append(&report_bug)?;
                 file_submenu.append(&sep)?;
                 file_submenu.append(&quit_item)?;
 
@@ -3137,6 +3140,8 @@ fn main() {
                     });
                 } else if event.id().as_ref() == "open_settings" {
                     let _ = app_handle_for_menu.emit("open-settings", ());
+                } else if event.id().as_ref() == "report_bug" {
+                    let _ = app_handle_for_menu.emit("report-bug", ());
                 } else if event.id().as_ref() == "export_logs" {
                     use tauri_plugin_dialog::DialogExt;
                     let app_clone = app_handle_for_menu.clone();
