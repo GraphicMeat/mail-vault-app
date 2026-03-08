@@ -14,7 +14,7 @@ export function useEmailScheduler() {
     refreshInterval,
     refreshOnLaunch,
     setLastRefreshTime,
-    notificationsEnabled,
+    notificationSettings,
     badgeEnabled,
     badgeMode
   } = useSettingsStore();
@@ -26,7 +26,7 @@ export function useEmailScheduler() {
 
   // Send notification
   const sendNotification = async (title, body) => {
-    if (!invoke || !notificationsEnabled) return;
+    if (!invoke || !notificationSettings.enabled) return;
     try {
       await invoke('send_notification', { title, body });
     } catch (error) {

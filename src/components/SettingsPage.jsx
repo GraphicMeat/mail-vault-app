@@ -77,8 +77,8 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug }) {
     refreshOnLaunch,
     setRefreshOnLaunch,
     lastRefreshTime,
-    notificationsEnabled,
-    setNotificationsEnabled,
+    notificationSettings,
+    setNotificationEnabled,
     badgeEnabled,
     setBadgeEnabled,
     badgeMode,
@@ -1062,8 +1062,8 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug }) {
                         </div>
                       </div>
                       <ToggleSwitch
-                        active={notificationsEnabled}
-                        onClick={() => setNotificationsEnabled(!notificationsEnabled)}
+                        active={notificationSettings.enabled}
+                        onClick={() => setNotificationEnabled(!notificationSettings.enabled)}
                       />
                     </div>
 

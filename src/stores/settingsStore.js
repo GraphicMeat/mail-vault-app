@@ -109,7 +109,12 @@ export const useSettingsStore = create(
       lastRefreshTime: null,
 
       // Notification settings
-      notificationsEnabled: true,
+      notificationSettings: {
+        enabled: true,
+        showPreview: true,
+        accounts: {},
+        // New accounts get default: { enabled: true, folders: ['INBOX'] }
+      },
 
       // Badge settings
       badgeEnabled: true,
@@ -248,7 +253,48 @@ export const useSettingsStore = create(
       setLastRefreshTime: (time) => set({ lastRefreshTime: time }),
 
       // Notification settings
-      setNotificationsEnabled: (enabled) => set({ notificationsEnabled: enabled }),
+      setNotificationEnabled: (enabled) => set((state) => ({
+        notificationSettings: { ...state.notificationSettings, enabled },
+      })),
+
+      setNotificationShowPreview: (show) => set((state) => ({
+        notificationSettings: { ...state.notificationSettings, showPreview: show },
+      })),
+
+      setAccountNotificationEnabled: (accountId, enabled) => set((state) => ({
+        notificationSettings: {
+          ...state.notificationSettings,
+          accounts: {
+            ...state.notificationSettings.accounts,
+            [accountId]: {
+              ...(state.notificationSettings.accounts[accountId] || { enabled: true, folders: ['INBOX'] }),
+              enabled,
+            },
+          },
+        },
+      })),
+
+      setAccountNotificationFolders: (accountId, folders) => set((state) => ({
+        notificationSettings: {
+          ...state.notificationSettings,
+          accounts: {
+            ...state.notificationSettings.accounts,
+            [accountId]: {
+              ...(state.notificationSettings.accounts[accountId] || { enabled: true, folders: ['INBOX'] }),
+              folders,
+            },
+          },
+        },
+      })),
+
+      shouldNotify: (accountId, folder) => {
+        const { notificationSettings } = get();
+        if (!notificationSettings.enabled) return false;
+        const acctConfig = notificationSettings.accounts[accountId];
+        if (!acctConfig) return true; // Unconfigured accounts default to enabled INBOX
+        if (!acctConfig.enabled) return false;
+        return acctConfig.folders.includes(folder);
+      },
 
       // Badge settings
       setBadgeEnabled: (enabled) => set({ badgeEnabled: enabled }),
@@ -374,7 +420,11 @@ export const useSettingsStore = create(
           refreshInterval: 5,
           refreshOnLaunch: true,
           lastRefreshTime: null,
-          notificationsEnabled: true,
+          notificationSettings: {
+            enabled: true,
+            showPreview: true,
+            accounts: {},
+          },
           badgeEnabled: true,
           badgeMode: 'unread',
           markAsReadMode: 'auto',
@@ -408,6 +458,14 @@ export const useSettingsStore = create(
       onRehydrateStorage: () => (state) => {
         if (state && state.cacheLimitMB >= 512) {
           setTimeout(() => useSettingsStore.setState({ cacheLimitMB: 128 }), 0);
+        }
+        // Migrate old notificationsEnabled → notificationSettings
+        if (state && 'notificationsEnabled' in state && !state.notificationSettings) {
+          const enabled = state.notificationsEnabled;
+          setTimeout(() => useSettingsStore.setState({
+            notificationSettings: { enabled, showPreview: true, accounts: {} },
+            notificationsEnabled: undefined,
+          }), 0);
         }
       }
     }
