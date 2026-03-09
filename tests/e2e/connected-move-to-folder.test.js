@@ -65,18 +65,17 @@ describe('Move to Folder', function () {
     await pressKey('m');
     await browser.pause(500);
 
-    // Verify the dropdown appeared — it should show folder names
+    // Verify the dropdown appeared
     const dropdownVisible = await browser.execute(() => {
-      // MoveToFolderDropdown renders a list of mailbox/folder buttons
+      // Check via data-testid first
+      const dropdown = document.querySelector('[data-testid="move-to-folder-dropdown"]');
+      if (dropdown && dropdown.offsetHeight > 0) return true;
+      // Fallback: look for folder names or filter input
       const text = document.body.innerText;
-      // Look for common folder names that would appear in the dropdown
       const hasFolders = text.includes('INBOX') || text.includes('Trash') ||
         text.includes('Sent') || text.includes('Drafts') ||
         text.includes('Junk') || text.includes('Spam');
-
-      // Also look for a filter/search input in the dropdown
-      const filterInput = document.querySelector('input[placeholder*="filter" i], input[placeholder*="search" i], input[placeholder*="folder" i]');
-
+      const filterInput = document.querySelector('[data-testid="move-folder-search"]');
       return hasFolders || filterInput !== null;
     });
 
@@ -106,8 +105,10 @@ describe('Move to Folder', function () {
   });
 
   it('should support typing to filter folders', async function () {
-    // Type a filter string — look for an input inside the dropdown
+    // Check for filter input via data-testid
     const hasFilterInput = await browser.execute(() => {
+      const input = document.querySelector('[data-testid="move-folder-search"]');
+      if (input && input.offsetHeight > 0) return true;
       const inputs = document.querySelectorAll('input');
       for (const input of inputs) {
         if (input.offsetHeight > 0 &&
@@ -117,7 +118,6 @@ describe('Move to Folder', function () {
           return true;
         }
       }
-      // Even if no specific filter input, the dropdown may accept keyboard input
       return false;
     });
 
@@ -163,15 +163,19 @@ describe('Move to Folder', function () {
   });
 
   it('should open the dropdown via the "Move to folder" toolbar button', async function () {
-    // Find and click the toolbar "Move to folder" button
+    // Use data-testid for the toolbar button
     const clicked = await browser.execute(() => {
+      const btn = document.querySelector('[data-testid="move-to-folder-btn"]');
+      if (btn && btn.offsetHeight > 0) {
+        btn.click();
+        return true;
+      }
+      // Fallback
       const buttons = document.querySelectorAll('button');
-      for (const btn of buttons) {
-        const title = (btn.getAttribute('title') || '').toLowerCase();
-        const text = (btn.textContent || '').toLowerCase();
-        if ((title.includes('move to folder') || title.includes('move') ||
-             text.includes('move')) && btn.offsetHeight > 0) {
-          btn.click();
+      for (const b of buttons) {
+        const title = (b.getAttribute('title') || '').toLowerCase();
+        if (title.includes('move to folder') && b.offsetHeight > 0) {
+          b.click();
           return true;
         }
       }

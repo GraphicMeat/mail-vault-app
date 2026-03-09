@@ -28,7 +28,11 @@ describe('Unified Inbox', function () {
 
   it('should show the "All Inboxes" button in the sidebar', async function () {
     const found = await browser.execute(() => {
-      const sidebar = document.querySelector('aside') || document.querySelector('nav');
+      // Use data-testid first
+      const btn = document.querySelector('[data-testid="all-inboxes-btn"]');
+      if (btn && btn.offsetHeight > 0) return true;
+      // Fallback
+      const sidebar = document.querySelector('[data-testid="sidebar"]') || document.querySelector('aside') || document.querySelector('nav');
       if (!sidebar) return false;
       const els = sidebar.querySelectorAll('button, div, span');
       for (const el of els) {
@@ -43,9 +47,15 @@ describe('Unified Inbox', function () {
   });
 
   it('should activate unified inbox when clicking "All Inboxes"', async function () {
-    // Click "All Inboxes"
+    // Click "All Inboxes" via data-testid
     const clicked = await browser.execute(() => {
-      const sidebar = document.querySelector('aside') || document.querySelector('nav');
+      const btn = document.querySelector('[data-testid="all-inboxes-btn"]');
+      if (btn && btn.offsetHeight > 0) {
+        btn.click();
+        return true;
+      }
+      // Fallback
+      const sidebar = document.querySelector('[data-testid="sidebar"]') || document.querySelector('aside') || document.querySelector('nav');
       if (!sidebar) return false;
       const els = sidebar.querySelectorAll('button, div');
       for (const el of els) {
@@ -78,17 +88,18 @@ describe('Unified Inbox', function () {
 
   it('should show colored account indicator dots on email rows', async function () {
     // In unified inbox mode, each email row may have a colored dot indicating
-    // which account it belongs to. These are typically small colored circles.
+    // which account it belongs to.
     const hasDots = await browser.execute(() => {
-      // Look for small colored indicator elements in the email list area
+      // Use data-testid first
+      const dots = document.querySelectorAll('[data-testid="account-dot"]');
+      if (dots.length > 0) return true;
+      // Fallback
       const listArea = document.querySelector('[class*="email-list"], [class*="EmailList"]') ||
         document.querySelector('main') ||
         document.querySelector('[class*="list"]');
       if (!listArea) return false;
-
-      // Look for dot indicators — small elements with inline background-color or bg-* classes
-      const dots = listArea.querySelectorAll('[class*="rounded-full"], [class*="dot"], [class*="indicator"]');
-      return dots.length > 0;
+      const fallbackDots = listArea.querySelectorAll('[class*="rounded-full"], [class*="dot"], [class*="indicator"]');
+      return fallbackDots.length > 0;
     });
 
     // This is a soft check — dots may not exist if only one account has emails
@@ -101,7 +112,7 @@ describe('Unified Inbox', function () {
   it('should switch back to single-account view when clicking an account', async function () {
     // Click the first account in the sidebar to exit unified mode
     const clicked = await browser.execute((testEmail) => {
-      const sidebar = document.querySelector('aside') || document.querySelector('nav');
+      const sidebar = document.querySelector('[data-testid="sidebar"]') || document.querySelector('aside') || document.querySelector('nav');
       if (!sidebar) return false;
 
       // Find account entries — buttons or divs with title containing the email
@@ -134,7 +145,7 @@ describe('Unified Inbox', function () {
     // The "All Inboxes" button should no longer be in an active/selected state
     const isUnified = await browser.execute(() => {
       // Check if unified inbox is still active — look for indicators
-      const sidebar = document.querySelector('aside') || document.querySelector('nav');
+      const sidebar = document.querySelector('[data-testid="sidebar"]') || document.querySelector('aside') || document.querySelector('nav');
       if (!sidebar) return false;
       const allInboxBtn = [...sidebar.querySelectorAll('button, div')].find(
         el => (el.textContent || '').trim() === 'All Inboxes' || (el.getAttribute('title') || '') === 'All Inboxes'

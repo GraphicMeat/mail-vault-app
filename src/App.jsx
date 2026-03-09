@@ -552,11 +552,13 @@ function App() {
   
   return (
     <div className="h-screen bg-mail-bg flex overflow-hidden">
-      <Sidebar
-        onAddAccount={() => setShowAccountModal(true)}
-        onCompose={() => setComposeState({})}
-        onOpenSettings={() => setShowSettings(true)}
-      />
+      <div data-testid="sidebar">
+        <Sidebar
+          onAddAccount={() => setShowAccountModal(true)}
+          onCompose={() => setComposeState({})}
+          onOpenSettings={() => setShowSettings(true)}
+        />
+      </div>
 
       {/* Main content area with layout support */}
       <div

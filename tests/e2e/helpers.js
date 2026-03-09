@@ -41,12 +41,12 @@ export function isApprovedAccount(email) {
  */
 export async function waitForApp(timeout = 30_000) {
   // The sidebar is the primary indicator that the app has booted.
-  // Try multiple selectors since no data-testid exists yet.
   await browser.waitUntil(
     async () => {
       const ready = await browser.execute(() => {
-        // Look for the sidebar element — it contains account avatars and mailbox list
-        const sidebar = document.querySelector('aside') ||
+        // Use data-testid first, fall back to heuristics
+        const sidebar = document.querySelector('[data-testid="sidebar"]') ||
+          document.querySelector('aside') ||
           document.querySelector('[class*="sidebar"]') ||
           document.querySelector('nav');
         return sidebar !== null && sidebar.offsetHeight > 0;
@@ -156,9 +156,8 @@ export async function openSettings() {
 
   // Check if settings opened
   const opened = await browser.execute(() => {
-    const settingsEl = document.querySelector(
-      '[class*="settings"], [class*="Settings"], [data-testid="settings-page"]',
-    );
+    const settingsEl = document.querySelector('[data-testid="settings-page"]') ||
+      document.querySelector('[class*="settings"], [class*="Settings"]');
     return settingsEl !== null && settingsEl.offsetHeight > 0;
   });
 

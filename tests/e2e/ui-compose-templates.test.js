@@ -107,28 +107,27 @@ describe('Compose Modal & Templates', function () {
       await browser.pause(500);
 
       const opened = await browser.execute(() => {
-        // Compose modal has a Subject input
-        const subjectInput = document.querySelector('input[placeholder*="Subject"]');
+        const modal = document.querySelector('[data-testid="compose-modal"]');
+        if (modal && modal.offsetHeight > 0) return true;
+        const subjectInput = document.querySelector('[data-testid="compose-subject"]');
         return subjectInput !== null && subjectInput.offsetHeight > 0;
       });
       expect(opened).toBe(true);
     });
 
     it('should find and click the Templates button in compose footer', async function () {
-      // The Templates button has title="Templates" and contains a BookTemplate icon
       const clicked = await browser.execute(() => {
-        const btn = document.querySelector('button[title="Templates"]');
+        // Use data-testid first
+        const btn = document.querySelector('[data-testid="compose-templates-btn"]');
         if (btn && btn.offsetHeight > 0) {
           btn.click();
           return true;
         }
-        // Fallback: look for button containing BookTemplate text or icon
-        const buttons = document.querySelectorAll('button');
-        for (const b of buttons) {
-          if (b.getAttribute('title') === 'Templates') {
-            b.click();
-            return true;
-          }
+        // Fallback: look for button with title="Templates"
+        const fallback = document.querySelector('button[title="Templates"]');
+        if (fallback && fallback.offsetHeight > 0) {
+          fallback.click();
+          return true;
         }
         return false;
       });
@@ -166,6 +165,8 @@ describe('Compose Modal & Templates', function () {
 
       // Verify the compose body textarea contains the template text
       const bodyContainsTemplate = await browser.execute((expectedText) => {
+        const body = document.querySelector('[data-testid="compose-body"]');
+        if (body && body.value && body.value.includes(expectedText)) return true;
         const textareas = document.querySelectorAll('textarea');
         for (const ta of textareas) {
           if (ta.value && ta.value.includes(expectedText)) {
@@ -182,7 +183,9 @@ describe('Compose Modal & Templates', function () {
       await browser.pause(400);
 
       const closed = await browser.execute(() => {
-        const subjectInput = document.querySelector('input[placeholder*="Subject"]');
+        const modal = document.querySelector('[data-testid="compose-modal"]');
+        if (modal && modal.offsetHeight > 0) return false;
+        const subjectInput = document.querySelector('[data-testid="compose-subject"]');
         return subjectInput === null || subjectInput.offsetHeight === 0;
       });
       expect(closed).toBe(true);

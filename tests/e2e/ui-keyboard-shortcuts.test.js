@@ -22,9 +22,10 @@ describe('Keyboard Shortcuts', function () {
       await pressKey('?');
       await browser.pause(500);
 
-      // The ShortcutsModal renders "Keyboard Shortcuts" in its header
-      // and section headings like "Navigation", "Actions", "Selection", "UI"
+      // Check for the shortcuts modal via data-testid, fall back to text content
       const found = await browser.execute(() => {
+        const modal = document.querySelector('[data-testid="shortcuts-modal"]');
+        if (modal && modal.offsetHeight > 0) return true;
         const allText = document.body.innerText;
         return allText.includes('Keyboard Shortcuts') &&
                allText.includes('Navigation') &&
@@ -39,7 +40,9 @@ describe('Keyboard Shortcuts', function () {
       await browser.pause(400);
 
       const stillOpen = await browser.execute(() => {
-        // The modal has a heading "Keyboard Shortcuts" — check it is gone
+        // Check via data-testid first
+        const modal = document.querySelector('[data-testid="shortcuts-modal"]');
+        if (modal && modal.offsetHeight > 0) return true;
         const headings = document.querySelectorAll('h2');
         for (const h of headings) {
           if (h.textContent.includes('Keyboard Shortcuts') && h.offsetHeight > 0) {
@@ -58,16 +61,13 @@ describe('Keyboard Shortcuts', function () {
       await pressKey('c');
       await browser.pause(500);
 
-      // ComposeModal renders a Send button and a To field
+      // Check for compose modal via data-testid, fall back to heuristics
       const found = await browser.execute(() => {
-        const allText = document.body.innerText;
-        // The compose modal has "Send" button and input fields
-        const hasComposeUI = allText.includes('Send') || allText.includes('To');
-        // Look for a textarea or input with placeholder containing "To"
-        const toInput = document.querySelector('input[placeholder*="To"], input[type="email"]');
-        // Also check for the compose modal's close button or subject input
-        const subjectInput = document.querySelector('input[placeholder*="Subject"]');
-        return hasComposeUI && (toInput !== null || subjectInput !== null);
+        const modal = document.querySelector('[data-testid="compose-modal"]');
+        if (modal && modal.offsetHeight > 0) return true;
+        const toInput = document.querySelector('[data-testid="compose-to"]');
+        const subjectInput = document.querySelector('[data-testid="compose-subject"]');
+        return (toInput !== null || subjectInput !== null);
       });
 
       expect(found).toBe(true);
@@ -78,7 +78,9 @@ describe('Keyboard Shortcuts', function () {
       await browser.pause(400);
 
       const stillOpen = await browser.execute(() => {
-        const subjectInput = document.querySelector('input[placeholder*="Subject"]');
+        const modal = document.querySelector('[data-testid="compose-modal"]');
+        if (modal && modal.offsetHeight > 0) return true;
+        const subjectInput = document.querySelector('[data-testid="compose-subject"]');
         return subjectInput !== null && subjectInput.offsetHeight > 0;
       });
 
@@ -117,7 +119,7 @@ describe('Keyboard Shortcuts', function () {
 
       // Verify the app is still responsive
       const responsive = await browser.execute(() => {
-        return document.querySelector('aside, nav') !== null;
+        return document.querySelector('[data-testid="sidebar"]') !== null;
       });
 
       expect(responsive).toBe(true);
@@ -128,7 +130,7 @@ describe('Keyboard Shortcuts', function () {
       await browser.pause(500);
 
       const responsive = await browser.execute(() => {
-        return document.querySelector('aside, nav') !== null;
+        return document.querySelector('[data-testid="sidebar"]') !== null;
       });
 
       expect(responsive).toBe(true);
@@ -139,7 +141,7 @@ describe('Keyboard Shortcuts', function () {
       await browser.pause(500);
 
       const responsive = await browser.execute(() => {
-        return document.querySelector('aside, nav') !== null;
+        return document.querySelector('[data-testid="sidebar"]') !== null;
       });
 
       expect(responsive).toBe(true);

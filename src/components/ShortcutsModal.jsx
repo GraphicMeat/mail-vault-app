@@ -112,7 +112,7 @@ export function ShortcutsModal({ onClose }) {
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div data-testid="shortcuts-modal" className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
       <motion.div
         initial={{ opacity: 0 }}
