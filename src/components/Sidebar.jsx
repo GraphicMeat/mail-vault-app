@@ -201,6 +201,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
         {showUnifiedInbox && (
           <div className="w-full py-2 border-b border-mail-border flex justify-center">
             <button
+              data-testid="all-inboxes-btn"
               onClick={() => setUnifiedInbox(true)}
               className={`p-2 rounded-lg transition-all
                          ${unifiedInbox
@@ -247,6 +248,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
           })}
           {orderedAccounts.length === 0 && (
             <button
+              data-testid="add-account-btn"
               onClick={onAddAccount}
               className="p-1.5 hover:bg-mail-surface-hover rounded-lg transition-all"
               title="Add Account"
@@ -409,6 +411,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
           {/* All Inboxes (expanded) */}
           {showUnifiedInbox && (
             <div
+              data-testid="all-inboxes-btn"
               className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all mb-1
                          ${unifiedInbox
                            ? 'bg-mail-accent/10 text-mail-accent'
@@ -555,6 +558,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
 
           {orderedAccounts.length === 0 && (
             <button
+              data-testid="add-account-btn"
               onClick={onAddAccount}
               className="w-full mt-2 flex items-center gap-2 p-2 text-sm text-mail-text-muted
                         hover:text-mail-text hover:bg-mail-surface-hover rounded-lg transition-all"

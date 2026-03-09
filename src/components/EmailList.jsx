@@ -70,6 +70,7 @@ const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onT
 
   return (
     <div
+      data-testid="email-row"
       style={style}
       className={`virtual-row group relative flex items-center gap-3 px-4 border-b border-mail-border
                  cursor-pointer transition-colors
@@ -103,6 +104,7 @@ const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onT
       <div className={`w-48 min-w-[80px] truncate flex-shrink flex items-center gap-1.5 ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
         {unifiedInbox && email._accountEmail && (
           <span
+            data-testid="account-dot"
             className="w-2 h-2 rounded-full flex-shrink-0"
             style={{ backgroundColor: getAccountColor(accountColors, { id: email._accountId, email: email._accountEmail }) }}
             title={email._accountEmail}
@@ -229,6 +231,7 @@ const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSelected,
 
   return (
     <div
+      data-testid="email-row"
       style={style}
       className={`virtual-row group relative flex items-center gap-2 px-4 border-b border-mail-border
                  cursor-pointer transition-colors
@@ -257,6 +260,7 @@ const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSelected,
         <div className="flex items-center gap-2">
           {unifiedInbox && email._accountEmail && (
             <span
+              data-testid="account-dot"
               className="w-2 h-2 rounded-full flex-shrink-0"
               style={{ backgroundColor: getAccountColor(accountColors, { id: email._accountId, email: email._accountEmail }) }}
               title={email._accountEmail}
@@ -383,6 +387,7 @@ const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectTh
 
   return (
     <div
+      data-testid="email-row"
       style={style}
       className={`virtual-row group relative flex items-center gap-3 px-4 border-b border-mail-border
                  cursor-pointer transition-colors
@@ -538,6 +543,7 @@ const CompactThreadRow = React.memo(function CompactThreadRow({ thread, isSelect
 
   return (
     <div
+      data-testid="email-row"
       style={style}
       className={`virtual-row group relative flex items-center gap-2 px-4 border-b border-mail-border
                  cursor-pointer transition-colors

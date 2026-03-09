@@ -331,7 +331,7 @@ describe('Connected Account Setup', function () {
       await browser.pause(2000);
 
       const accountsVisible = await browser.execute((email1, email2) => {
-        const sidebar = document.querySelector('aside') || document.querySelector('nav');
+        const sidebar = document.querySelector('[data-testid="sidebar"]') || document.querySelector('aside') || document.querySelector('nav');
         if (!sidebar) return { email1: false, email2: false };
 
         const text = sidebar.innerText || '';

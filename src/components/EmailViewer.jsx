@@ -519,6 +519,7 @@ function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, loadingR
               </span>
             )}
             <button
+              data-testid="sender-insights-toggle"
               onClick={(e) => { e.stopPropagation(); onToggleInsights?.(); }}
               className={`p-0.5 rounded transition-colors flex-shrink-0 ${showInsights ? 'text-mail-accent' : 'text-mail-text-muted hover:text-mail-text'}`}
               title="Sender insights"
@@ -1525,6 +1526,7 @@ export function EmailViewer() {
               <div className="relative">
                 <button
                   ref={moveButtonRef}
+                  data-testid="move-to-folder-btn"
                   onClick={() => setShowMoveDropdown(v => !v)}
                   className="p-2 hover:bg-mail-surface rounded-lg transition-colors"
                   title="Move to folder"

@@ -371,7 +371,8 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
-        className="bg-mail-surface border border-mail-border rounded-xl shadow-2xl 
+        data-testid="compose-modal"
+        className="bg-mail-surface border border-mail-border rounded-xl shadow-2xl
                    w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
@@ -426,6 +427,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               <input
                 type="text"
                 name="to"
+                data-testid="compose-to"
                 value={formData.to}
                 onChange={handleChange}
                 placeholder="recipient@example.com"
@@ -468,6 +470,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               <input
                 type="text"
                 name="subject"
+                data-testid="compose-subject"
                 value={formData.subject}
                 onChange={handleChange}
                 placeholder="Subject"
@@ -501,10 +504,11 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             <textarea
               ref={bodyRef}
               name="body"
+              data-testid="compose-body"
               value={formData.body}
               onChange={handleChange}
               placeholder="Write your message..."
-              className="w-full h-full p-4 bg-transparent text-mail-text 
+              className="w-full h-full p-4 bg-transparent text-mail-text
                         placeholder-mail-text-muted outline-none resize-none
                         text-sm leading-relaxed min-h-[300px]"
             />
@@ -539,6 +543,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               <div className="relative" ref={templatesRef}>
                 <button
                   type="button"
+                  data-testid="compose-templates-btn"
                   onClick={() => { setShowTemplates(v => !v); setSavingTemplate(false); }}
                   className="p-2 hover:bg-mail-border rounded-lg transition-colors"
                   title="Templates"
@@ -618,8 +623,9 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               </button>
               <button
                 type="submit"
+                data-testid="compose-send"
                 disabled={sending}
-                className="flex items-center gap-2 px-4 py-2 bg-mail-accent 
+                className="flex items-center gap-2 px-4 py-2 bg-mail-accent
                           hover:bg-mail-accent-hover disabled:opacity-50
                           text-white font-medium rounded-lg transition-all text-sm"
               >

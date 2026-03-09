@@ -54,7 +54,7 @@ export function UndoSendToast({ onUndo }) {
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
           className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60]"
         >
-          <div className="flex items-center gap-3 px-5 py-3 bg-mail-surface border border-mail-border
+          <div data-testid="undo-send-toast" className="flex items-center gap-3 px-5 py-3 bg-mail-surface border border-mail-border
                           rounded-xl shadow-2xl min-w-[280px]">
             {showSent && !pendingSend ? (
               <>
@@ -68,6 +68,7 @@ export function UndoSendToast({ onUndo }) {
                 </span>
                 <div className="flex-1" />
                 <button
+                  data-testid="undo-send-btn"
                   onClick={handleUndo}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium
                              text-mail-accent hover:bg-mail-surface-hover rounded-lg

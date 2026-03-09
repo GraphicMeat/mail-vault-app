@@ -642,6 +642,7 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug }) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      data-testid="settings-page"
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
       onClick={onClose}
     >
@@ -1076,7 +1077,7 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug }) {
                 </div>
 
                 {/* Notifications */}
-                <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+                <div data-testid="settings-notifications" className="bg-mail-surface border border-mail-border rounded-xl p-5">
                   <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
                     <Bell size={18} className="text-mail-accent" />
                     Notifications
@@ -1260,7 +1261,7 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug }) {
                 </div>
 
                 {/* Sending */}
-                <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+                <div data-testid="settings-undo-send" className="bg-mail-surface border border-mail-border rounded-xl p-5">
                   <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
                     <SendHorizontal size={18} className="text-mail-accent" />
                     Sending
@@ -1449,7 +1450,7 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug }) {
                 </div>
 
                 {/* Email Templates */}
-                <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+                <div data-testid="settings-templates" className="bg-mail-surface border border-mail-border rounded-xl p-5">
                   <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
                     <FileText size={18} className="text-mail-accent" />
                     Email Templates
@@ -1594,7 +1595,7 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug }) {
                 </div>
 
                 {/* Keyboard Shortcuts */}
-                <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+                <div data-testid="settings-shortcuts" className="bg-mail-surface border border-mail-border rounded-xl p-5">
                   <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
                     <Keyboard size={18} className="text-mail-accent" />
                     Keyboard Shortcuts
@@ -2461,7 +2462,7 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug }) {
                 </div>
 
                 {/* Auto-Cleanup Rules */}
-                <div className="bg-mail-surface border border-mail-border rounded-xl p-5 relative overflow-hidden">
+                <div data-testid="settings-auto-cleanup" className="bg-mail-surface border border-mail-border rounded-xl p-5 relative overflow-hidden">
                   <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
                     <Clock size={18} className="text-mail-accent" />
                     Auto-Cleanup

@@ -35,6 +35,8 @@ describe('Settings Page', function () {
 
     it('should have the Undo Send section', async function () {
       const found = await browser.execute(() => {
+        const section = document.querySelector('[data-testid="settings-undo-send"]');
+        if (section && section.offsetHeight > 0) return true;
         return document.body.innerText.includes('Enable Undo Send');
       });
       expect(found).toBe(true);
@@ -102,6 +104,8 @@ describe('Settings Page', function () {
 
     it('should have the Email Templates section', async function () {
       const found = await browser.execute(() => {
+        const section = document.querySelector('[data-testid="settings-templates"]');
+        if (section && section.offsetHeight > 0) return true;
         return document.body.innerText.includes('Email Templates');
       });
       expect(found).toBe(true);
@@ -223,6 +227,10 @@ describe('Settings Page', function () {
 
     it('should have the Notifications section with master toggle', async function () {
       const found = await browser.execute(() => {
+        const section = document.querySelector('[data-testid="settings-notifications"]');
+        if (section && section.offsetHeight > 0) {
+          return section.innerText.includes('Enable desktop notifications');
+        }
         const text = document.body.innerText;
         return text.includes('Notifications') &&
                text.includes('Enable desktop notifications');
@@ -251,6 +259,11 @@ describe('Settings Page', function () {
     it('should have the Keyboard Shortcuts section', async function () {
       // Scroll down to find it — it is further down in the General tab
       const found = await browser.execute(() => {
+        const section = document.querySelector('[data-testid="settings-shortcuts"]');
+        if (section) {
+          section.scrollIntoView();
+          return true;
+        }
         const headings = document.querySelectorAll('h4');
         for (const h of headings) {
           if (h.textContent.includes('Keyboard Shortcuts')) {
@@ -293,6 +306,11 @@ describe('Settings Page', function () {
     it('should have the Auto-Cleanup section', async function () {
       // Scroll to Auto-Cleanup
       const found = await browser.execute(() => {
+        const section = document.querySelector('[data-testid="settings-auto-cleanup"]');
+        if (section) {
+          section.scrollIntoView();
+          return true;
+        }
         const headings = document.querySelectorAll('h4');
         for (const h of headings) {
           if (h.textContent.includes('Auto-Cleanup')) {
@@ -308,10 +326,13 @@ describe('Settings Page', function () {
 
     it('should show Pro badge on Auto-Cleanup for non-paid users', async function () {
       const hasBadge = await browser.execute(() => {
+        const section = document.querySelector('[data-testid="settings-auto-cleanup"]');
+        if (section) {
+          return section.innerText.includes('Pro');
+        }
         const headings = document.querySelectorAll('h4');
         for (const h of headings) {
           if (h.textContent.includes('Auto-Cleanup')) {
-            // The Pro badge is a span inside the same h4
             return h.textContent.includes('Pro');
           }
         }
