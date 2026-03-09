@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=MailVault
+Comment=Privacy-first desktop email client with local Maildir storage
+Exec=mailvault
+Icon=${SNAP}/meta/gui/mailvault.png
+Categories=Network;Email;Office;
+StartupWMClass=MailVault
+Terminal=false
