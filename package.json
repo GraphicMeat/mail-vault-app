@@ -20,7 +20,7 @@
     "build:appstore": "./scripts/build-appstore.sh",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "npm run tauri:build:debug && wdio run wdio.conf.js",
+    "test:e2e": "cd src-tauri && cargo build --features webdriver && cd .. && wdio run wdio.conf.js",
     "test:e2e:ui": "wdio run wdio.conf.js --suite ui",
     "test:e2e:connected": "wdio run wdio.conf.js --suite connected"
   },
