@@ -41,10 +41,6 @@ describe('Settings Page — Extended', function () {
     await waitForApp();
   });
 
-  after(async function () {
-    await closeSettingsReliable();
-  });
-
   // -----------------------------------------------------------------------
   // General Tab — Appearance
   // -----------------------------------------------------------------------
@@ -376,7 +372,9 @@ describe('Settings Page — Extended', function () {
         const buttons = document.querySelectorAll('button');
         let count = 0;
         for (const btn of buttons) {
-          if (btn.classList.contains('rounded-full') && btn.style.backgroundColor) {
+          if (btn.classList.contains('rounded-full') &&
+              btn.offsetHeight >= 20 && btn.offsetHeight <= 40 &&
+              (btn.style.backgroundColor || window.getComputedStyle(btn).backgroundColor !== 'rgba(0, 0, 0, 0)')) {
             count++;
           }
         }
