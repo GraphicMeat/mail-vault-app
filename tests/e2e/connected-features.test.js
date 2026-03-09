@@ -91,7 +91,7 @@ describe('Connected Features', function () {
 
       // Verify compose modal is open
       const opened = await browser.execute(() => {
-        return document.querySelector('input[placeholder*="Subject"]') !== null;
+        return document.querySelector('[data-testid="compose-modal"]') !== null;
       });
       expect(opened).toBe(true);
 
@@ -144,15 +144,21 @@ describe('Connected Features', function () {
     });
 
     it('should show countdown toast after clicking Send', async function () {
-      // Click Send button
+      // Click Send button via data-testid
       const clicked = await browser.execute(() => {
+        const btn = document.querySelector('[data-testid="compose-send"]');
+        if (btn && btn.offsetHeight > 0 && !btn.disabled) {
+          btn.click();
+          return true;
+        }
+        // Fallback
         const buttons = document.querySelectorAll('button');
-        for (const btn of buttons) {
-          const text = (btn.textContent || '').trim();
+        for (const b of buttons) {
+          const text = (b.textContent || '').trim();
           if ((text === 'Send' || text.includes('Send')) &&
-              btn.offsetHeight > 0 && !btn.disabled &&
+              b.offsetHeight > 0 && !b.disabled &&
               !text.includes('Undo')) {
-            btn.click();
+            b.click();
             return true;
           }
         }
@@ -171,13 +177,19 @@ describe('Connected Features', function () {
     });
 
     it('should undo the send and reopen compose', async function () {
-      // Click the Undo button on the toast
+      // Click the Undo button on the toast via data-testid
       const clickedUndo = await browser.execute(() => {
+        const btn = document.querySelector('[data-testid="undo-send-btn"]');
+        if (btn && btn.offsetHeight > 0) {
+          btn.click();
+          return true;
+        }
+        // Fallback
         const buttons = document.querySelectorAll('button');
-        for (const btn of buttons) {
-          const text = (btn.textContent || '').trim();
-          if (text.includes('Undo') && btn.offsetHeight > 0) {
-            btn.click();
+        for (const b of buttons) {
+          const text = (b.textContent || '').trim();
+          if (text.includes('Undo') && b.offsetHeight > 0) {
+            b.click();
             return true;
           }
         }
@@ -189,7 +201,7 @@ describe('Connected Features', function () {
 
       // Verify compose modal reopened with the subject intact
       const composeReopened = await browser.execute(() => {
-        const subjectInput = document.querySelector('input[placeholder*="Subject"]');
+        const subjectInput = document.querySelector('[data-testid="compose-subject"]');
         if (!subjectInput || subjectInput.offsetHeight === 0) return false;
         return (subjectInput.value || '').includes('E2E Undo Test');
       });
@@ -221,8 +233,9 @@ describe('Connected Features', function () {
 
       // Verify compose is closed
       const closed = await browser.execute(() => {
-        const subjectInput = document.querySelector('input[placeholder*="Subject"]');
-        return subjectInput === null || subjectInput.offsetHeight === 0;
+        const modal = document.querySelector('[data-testid="compose-modal"]');
+        if (modal && modal.offsetHeight > 0) return false;
+        return true;
       });
 
       expect(closed).toBe(true);
@@ -294,21 +307,18 @@ describe('Connected Features', function () {
     });
 
     it('should find and click the sender insights icon', async function () {
-      // The insights button has title="Sender insights" and contains an Info icon
       const clicked = await browser.execute(() => {
-        const btn = document.querySelector('button[title="Sender insights"]');
+        // Use data-testid first
+        const btn = document.querySelector('[data-testid="sender-insights-toggle"]');
         if (btn && btn.offsetHeight > 0) {
           btn.click();
           return true;
         }
-        // Fallback: look for any button with Info icon near sender name
-        const buttons = document.querySelectorAll('button');
-        for (const b of buttons) {
-          const title = (b.getAttribute('title') || '').toLowerCase();
-          if (title.includes('insight') && b.offsetHeight > 0) {
-            b.click();
-            return true;
-          }
+        // Fallback
+        const fallback = document.querySelector('button[title="Sender insights"]');
+        if (fallback && fallback.offsetHeight > 0) {
+          fallback.click();
+          return true;
         }
         return false;
       });
@@ -319,8 +329,9 @@ describe('Connected Features', function () {
 
     it('should show the sender insights panel', async function () {
       const panelVisible = await browser.execute(() => {
+        const panel = document.querySelector('[data-testid="sender-insights-panel"]');
+        if (panel && panel.offsetHeight > 0) return true;
         const text = document.body.innerText;
-        // SenderInsightsPanel shows "Emails exchanged", "received", "sent"
         return text.includes('exchanged') || text.includes('received') ||
                text.includes('Sender Insights') || text.includes('sender insights');
       });
@@ -331,7 +342,7 @@ describe('Connected Features', function () {
     it('should hide the insights panel when clicking the icon again', async function () {
       // Click the insights button again to toggle off
       const clicked = await browser.execute(() => {
-        const btn = document.querySelector('button[title="Sender insights"]');
+        const btn = document.querySelector('[data-testid="sender-insights-toggle"]');
         if (btn && btn.offsetHeight > 0) {
           btn.click();
           return true;

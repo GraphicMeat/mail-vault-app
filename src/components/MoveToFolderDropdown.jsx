@@ -103,6 +103,7 @@ export function MoveToFolderDropdown({ uids, onClose, anchorRect }) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.15 }}
+      data-testid="move-to-folder-dropdown"
       className="bg-mail-bg border border-mail-border rounded-xl shadow-2xl overflow-hidden w-64"
       style={style}
     >
@@ -113,6 +114,7 @@ export function MoveToFolderDropdown({ uids, onClose, anchorRect }) {
           <input
             ref={inputRef}
             type="text"
+            data-testid="move-folder-search"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             placeholder="Search folders..."
