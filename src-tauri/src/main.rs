@@ -2956,7 +2956,7 @@ fn main() {
         eprintln!("PANIC at {}: {}", location, payload);
     }));
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             // When a second instance is launched, focus the main window
             if let Some(window) = app.get_webview_window("main") {
@@ -2971,7 +2971,12 @@ fn main() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_http::init());
+
+    #[cfg(feature = "webdriver")]
+    let builder = builder.plugin(tauri_plugin_webdriver_automation::init());
+
+    builder
         .manage(archive::ArchiveCancelToken::default())
         .manage(imap::ImapPool::new())
         .manage(oauth2::OAuth2Manager::new())
