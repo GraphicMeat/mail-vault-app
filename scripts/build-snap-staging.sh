@@ -26,8 +26,6 @@ fi
 # Clean and recreate staging directory
 rm -rf "$STAGING"
 mkdir -p "$STAGING/usr/bin"
-mkdir -p "$STAGING/usr/share/applications"
-mkdir -p "$STAGING/usr/share/icons/hicolor/128x128/apps"
 
 # Copy Tauri binary
 cp "$TAURI_BIN" "$STAGING/usr/bin/mailvault"
@@ -43,27 +41,9 @@ else
   echo "WARNING: Sidecar not found at $SIDECAR_BIN — skipping"
 fi
 
-# Create .desktop file
-cat > "$STAGING/usr/share/applications/mailvault.desktop" <<'DESKTOP'
-[Desktop Entry]
-Type=Application
-Name=MailVault
-Comment=Secure desktop email client with local storage
-Exec=mailvault
-Icon=${SNAP}/usr/share/icons/hicolor/128x128/apps/mailvault.png
-Categories=Network;Email;Office;
-StartupWMClass=MailVault
-Terminal=false
-DESKTOP
-echo "Staged: usr/share/applications/mailvault.desktop"
-
-# Copy icon
-if [[ -f "$ICON_SRC" ]]; then
-  cp "$ICON_SRC" "$STAGING/usr/share/icons/hicolor/128x128/apps/mailvault.png"
-  echo "Staged: usr/share/icons/hicolor/128x128/apps/mailvault.png"
-else
-  echo "WARNING: Icon not found at $ICON_SRC — skipping"
-fi
+# Desktop file and icon are in snap/gui/ — snapd handles them automatically.
+# snap/gui/mailvault.desktop → meta/gui/mailvault.desktop (with Icon=${SNAP}/meta/gui/mailvault.png)
+# snap/gui/mailvault.png → meta/gui/mailvault.png
 
 # Summary
 echo ""
