@@ -11,29 +11,6 @@
 
 import { waitForApp, openSettings, closeSettings, pressKey } from './helpers.js';
 
-/**
- * Close settings with Escape key fallback for WKWebView reliability.
- */
-async function closeSettingsReliable() {
-  await pressKey('Escape');
-  await browser.pause(300);
-
-  const stillOpen = await browser.execute(() => {
-    const el = document.querySelector('[data-testid="settings-page"]') ||
-      document.querySelector('[class*="settings"], [class*="Settings"]');
-    return el !== null && el.offsetHeight > 0;
-  });
-
-  if (stillOpen) {
-    await browser.execute(() => {
-      document.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true,
-      }));
-    });
-    await browser.pause(300);
-  }
-}
-
 describe('Settings Page — Extended', function () {
   this.timeout(30000);
 
@@ -51,7 +28,7 @@ describe('Settings Page — Extended', function () {
     });
 
     after(async function () {
-      await closeSettingsReliable();
+      await closeSettings();
     });
 
     it('should have the theme toggle (light/dark)', async function () {
@@ -145,7 +122,7 @@ describe('Settings Page — Extended', function () {
     });
 
     after(async function () {
-      await closeSettingsReliable();
+      await closeSettings();
     });
 
     it('should have layout mode options (3-Column and 2-Column)', async function () {
@@ -202,7 +179,7 @@ describe('Settings Page — Extended', function () {
     });
 
     after(async function () {
-      await closeSettingsReliable();
+      await closeSettings();
     });
 
     it('should have search history limit slider', async function () {
@@ -264,7 +241,7 @@ describe('Settings Page — Extended', function () {
     });
 
     after(async function () {
-      await closeSettingsReliable();
+      await closeSettings();
     });
 
     it('should have badge count toggle', async function () {
@@ -317,7 +294,7 @@ describe('Settings Page — Extended', function () {
     });
 
     after(async function () {
-      await closeSettingsReliable();
+      await closeSettings();
     });
 
     it('should show the Accounts tab content', async function () {

@@ -11,29 +11,6 @@
 import { waitForApp, openSettings, closeSettings, pressKey } from './helpers.js';
 
 /**
- * Close settings with Escape key fallback for WKWebView reliability.
- */
-async function closeSettingsReliable() {
-  await pressKey('Escape');
-  await browser.pause(300);
-
-  const stillOpen = await browser.execute(() => {
-    const el = document.querySelector('[data-testid="settings-page"]') ||
-      document.querySelector('[class*="settings"], [class*="Settings"]');
-    return el !== null && el.offsetHeight > 0;
-  });
-
-  if (stillOpen) {
-    await browser.execute(() => {
-      document.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true,
-      }));
-    });
-    await browser.pause(300);
-  }
-}
-
-/**
  * Click a settings option button by its exact text content.
  * Scrolls the button into view first to handle off-screen elements.
  * @param {string} buttonText - The visible text of the button to click
@@ -90,7 +67,7 @@ describe('Layout, View & List Style Switching', function () {
       const clicked = await clickSettingsButton('Two Columns');
       expect(clicked).toBe(true);
 
-      await closeSettingsReliable();
+      await closeSettings();
 
       // Verify the main content area uses flex-col (2-column layout)
       const usesFlexCol = await browser.execute(() => {
@@ -117,7 +94,7 @@ describe('Layout, View & List Style Switching', function () {
       const clicked = await clickSettingsButton('Three Columns');
       expect(clicked).toBe(true);
 
-      await closeSettingsReliable();
+      await closeSettings();
 
       // Verify the main content area uses flex-row (3-column layout)
       const usesFlexRow = await browser.execute(() => {
@@ -152,7 +129,7 @@ describe('Layout, View & List Style Switching', function () {
       const isActive = await isButtonActive('Chat View');
       expect(isActive).toBe(true);
 
-      await closeSettingsReliable();
+      await closeSettings();
     });
 
     it('should switch back to List view', async function () {
@@ -166,7 +143,7 @@ describe('Layout, View & List Style Switching', function () {
       const isActive = await isButtonActive('List View');
       expect(isActive).toBe(true);
 
-      await closeSettingsReliable();
+      await closeSettings();
     });
   });
 
@@ -198,7 +175,7 @@ describe('Layout, View & List Style Switching', function () {
       const isActive = await isButtonActive('Compact');
       expect(isActive).toBe(true);
 
-      await closeSettingsReliable();
+      await closeSettings();
     });
 
     it('should switch back to Default style', async function () {
@@ -225,7 +202,7 @@ describe('Layout, View & List Style Switching', function () {
       const isActive = await isButtonActive('Default');
       expect(isActive).toBe(true);
 
-      await closeSettingsReliable();
+      await closeSettings();
     });
   });
 });

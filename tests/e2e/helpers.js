@@ -36,29 +36,68 @@ export function isApprovedAccount(email) {
 // ---------------------------------------------------------------------------
 
 /**
- * Wait for the app to fully load (sidebar visible).
- * Times out after 30 seconds.
+ * Wait for the app to fully load.
+ *
+ * Handles three startup screens automatically:
+ * 1. Onboarding — auto-dismisses by clicking "Get Started"
+ * 2. Welcome (no accounts) — returns 'welcome' so tests can branch
+ * 3. Main UI (sidebar visible) — returns 'ready'
+ *
+ * @returns {'ready' | 'welcome'}
  */
 export async function waitForApp(timeout = 30_000) {
-  // The sidebar is the primary indicator that the app has booted.
+  // First, wait for *any* content to render (onboarding, welcome, or sidebar)
   await browser.waitUntil(
     async () => {
-      const ready = await browser.execute(() => {
-        // Use data-testid first, fall back to heuristics
-        const sidebar = document.querySelector('[data-testid="sidebar"]') ||
-          document.querySelector('aside') ||
-          document.querySelector('[class*="sidebar"]') ||
-          document.querySelector('nav');
-        return sidebar !== null && sidebar.offsetHeight > 0;
+      return browser.execute(() => {
+        return document.querySelector('[data-testid="sidebar"]') !== null ||
+          (document.body?.textContent || '').includes('Get Started') ||
+          (document.body?.textContent || '').includes('Add Your First Account');
       });
-      return ready;
     },
     {
       timeout,
-      timeoutMsg: `App did not load within ${timeout}ms (sidebar not visible)`,
+      timeoutMsg: `App did not render any content within ${timeout}ms`,
       interval: 500,
     },
   );
+
+  // Auto-dismiss onboarding if present
+  const dismissedOnboarding = await browser.execute(() => {
+    const buttons = document.querySelectorAll('button');
+    for (const btn of buttons) {
+      if ((btn.textContent || '').trim().includes('Get Started')) {
+        btn.click();
+        return true;
+      }
+    }
+    return false;
+  });
+
+  if (dismissedOnboarding) {
+    // Wait for onboarding to transition out
+    await browser.pause(500);
+  }
+
+  // Now check if we land on sidebar (has accounts) or welcome screen (no accounts)
+  const state = await browser.waitUntil(
+    async () => {
+      return browser.execute(() => {
+        const sidebar = document.querySelector('[data-testid="sidebar"]');
+        if (sidebar && sidebar.offsetHeight > 0) return 'ready';
+        if (document.body.textContent.includes('Add Your First Account')) return 'welcome';
+        // Still loading (keychain prompt, etc.)
+        return null;
+      });
+    },
+    {
+      timeout: timeout - 5000,
+      timeoutMsg: `App stuck after onboarding — neither sidebar nor welcome screen appeared`,
+      interval: 500,
+    },
+  );
+
+  return state;
 }
 
 /**
@@ -198,10 +237,26 @@ export async function openSettings() {
 
 /**
  * Close the Settings page by pressing Escape.
+ * Includes a dispatch fallback for WKWebView reliability.
  */
 export async function closeSettings() {
   await pressKey('Escape');
   await browser.pause(300);
+
+  const stillOpen = await browser.execute(() => {
+    const el = document.querySelector('[data-testid="settings-page"]') ||
+      document.querySelector('[class*="settings"], [class*="Settings"]');
+    return el !== null && el.offsetHeight > 0;
+  });
+
+  if (stillOpen) {
+    await browser.execute(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true,
+      }));
+    });
+    await browser.pause(300);
+  }
 }
 
 /**

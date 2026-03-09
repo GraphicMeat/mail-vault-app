@@ -382,6 +382,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           <div className="flex items-center gap-1">
             <button
               onClick={() => setMinimized(true)}
+              title="Minimize"
               className="p-1.5 hover:bg-mail-border rounded transition-colors"
             >
               <Minimize2 size={16} className="text-mail-text-muted" />

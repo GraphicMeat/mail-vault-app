@@ -199,68 +199,13 @@ describe('Connected Compose Extended', function () {
       });
       await browser.pause(300);
 
-      // Find and click the minimize button in the compose header area.
-      // It's a small button with an SVG icon, not the close (X) button.
+      // Click the minimize button (has title="Minimize")
       const clickedMinimize = await browser.execute(() => {
-        const modal = document.querySelector('[data-testid="compose-modal"]');
-        if (!modal) return false;
-
-        // Look for buttons in the header area (first ~60px of modal)
-        const allButtons = modal.querySelectorAll('button');
-        const candidates = [];
-
-        for (const btn of allButtons) {
-          // Get button position relative to modal
-          const modalRect = modal.getBoundingClientRect();
-          const btnRect = btn.getBoundingClientRect();
-          const relativeTop = btnRect.top - modalRect.top;
-
-          // Only buttons in the header area (top 60px)
-          if (relativeTop > 60) continue;
-          if (btn.offsetHeight === 0) continue;
-
-          const text = (btn.textContent || '').trim().toLowerCase();
-          // Skip send button, close button (usually has X or "close" text)
-          if (text.includes('send') || text.includes('template')) continue;
-
-          // Look for minimize — has SVG icon, is small
-          const hasSvg = btn.querySelector('svg') !== null;
-          if (hasSvg) {
-            candidates.push({ btn, relativeTop, text, width: btnRect.width });
-          }
-        }
-
-        // Among candidate buttons with SVG in header area,
-        // the minimize button is typically NOT the rightmost (close is rightmost)
-        // Sort by x position
-        candidates.sort((a, b) => {
-          const aRect = a.btn.getBoundingClientRect();
-          const bRect = b.btn.getBoundingClientRect();
-          return aRect.left - bRect.left;
-        });
-
-        // Try to find a minimize-specific attribute
-        for (const c of candidates) {
-          const title = (c.btn.getAttribute('title') || '').toLowerCase();
-          const ariaLabel = (c.btn.getAttribute('aria-label') || '').toLowerCase();
-          if (title.includes('minim') || ariaLabel.includes('minim')) {
-            c.btn.click();
-            return true;
-          }
-        }
-
-        // Fallback: the minimize button is usually the first SVG button in header
-        // that is not the close button (close is typically the last one)
-        if (candidates.length >= 2) {
-          // Click the first candidate (not the last, which is likely close)
-          candidates[0].btn.click();
-          return true;
-        } else if (candidates.length === 1) {
-          // Only one button — try it
-          candidates[0].btn.click();
+        const btn = document.querySelector('[data-testid="compose-modal"] button[title="Minimize"]');
+        if (btn && btn.offsetHeight > 0) {
+          btn.click();
           return true;
         }
-
         return false;
       });
 
@@ -300,32 +245,8 @@ describe('Connected Compose Extended', function () {
 
       // Minimize
       await browser.execute(() => {
-        const modal = document.querySelector('[data-testid="compose-modal"]');
-        if (!modal) return;
-        const allButtons = modal.querySelectorAll('button');
-        const candidates = [];
-        for (const btn of allButtons) {
-          const modalRect = modal.getBoundingClientRect();
-          const btnRect = btn.getBoundingClientRect();
-          const relativeTop = btnRect.top - modalRect.top;
-          if (relativeTop > 60 || btn.offsetHeight === 0) continue;
-          const text = (btn.textContent || '').trim().toLowerCase();
-          if (text.includes('send') || text.includes('template')) continue;
-          if (btn.querySelector('svg')) {
-            const title = (btn.getAttribute('title') || '').toLowerCase();
-            const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
-            candidates.push({ btn, title, ariaLabel });
-          }
-        }
-        // Try titled minimize first
-        for (const c of candidates) {
-          if (c.title.includes('minim') || c.ariaLabel.includes('minim')) {
-            c.btn.click();
-            return;
-          }
-        }
-        if (candidates.length >= 2) candidates[0].btn.click();
-        else if (candidates.length === 1) candidates[0].btn.click();
+        const btn = document.querySelector('[data-testid="compose-modal"] button[title="Minimize"]');
+        if (btn) btn.click();
       });
       await browser.pause(500);
 
