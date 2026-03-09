@@ -151,7 +151,7 @@ describe('Settings Page — Extended', function () {
     it('should have layout mode options (3-Column and 2-Column)', async function () {
       const found = await browser.execute(() => {
         const text = document.body.innerText;
-        return text.includes('3-Column') && text.includes('2-Column');
+        return text.includes('Three Columns') && text.includes('Two Columns');
       });
       expect(found).toBe(true);
     });
@@ -159,7 +159,7 @@ describe('Settings Page — Extended', function () {
     it('should have view style options (List and Chat)', async function () {
       const found = await browser.execute(() => {
         const text = document.body.innerText;
-        return text.includes('List') && text.includes('Chat');
+        return text.includes('List View') && text.includes('Chat View');
       });
       expect(found).toBe(true);
     });
@@ -215,11 +215,12 @@ describe('Settings Page — Extended', function () {
 
     it('should have clear search history button', async function () {
       const found = await browser.execute(() => {
-        const buttons = document.querySelectorAll('button');
-        for (const btn of buttons) {
-          const text = (btn.textContent || '').toLowerCase();
-          if (text.includes('clear') && text.includes('search')) {
-            return true;
+        // The "Clear" button is inside a row container that also contains "Search history" text
+        const rows = document.querySelectorAll('.flex.items-center.justify-between');
+        for (const row of rows) {
+          if (row.textContent.includes('Search history')) {
+            const btn = row.querySelector('button');
+            if (btn && btn.textContent.trim() === 'Clear') return true;
           }
         }
         return false;
@@ -229,11 +230,12 @@ describe('Settings Page — Extended', function () {
 
     it('should have filter history section with clear button', async function () {
       const found = await browser.execute(() => {
-        const buttons = document.querySelectorAll('button');
-        for (const btn of buttons) {
-          const text = (btn.textContent || '').toLowerCase();
-          if (text.includes('clear') && text.includes('filter')) {
-            return true;
+        // The "Clear" button is inside a row container that also contains "Filter history" text
+        const rows = document.querySelectorAll('.flex.items-center.justify-between');
+        for (const row of rows) {
+          if (row.textContent.includes('Filter history')) {
+            const btn = row.querySelector('button');
+            if (btn && btn.textContent.trim() === 'Clear') return true;
           }
         }
         return false;
@@ -275,7 +277,10 @@ describe('Settings Page — Extended', function () {
 
     it('should have mark as read mode dropdown', async function () {
       const options = await browser.execute(() => {
-        const selects = document.querySelectorAll('select');
+        // Scope to the notifications section to avoid matching the date-format dropdown
+        const section = document.querySelector('[data-testid="settings-notifications"]');
+        const container = section || document;
+        const selects = container.querySelectorAll('select');
         for (const select of selects) {
           const opts = Array.from(select.options).map(o => o.value);
           if (opts.includes('auto') && opts.includes('manual')) {
@@ -372,9 +377,9 @@ describe('Settings Page — Extended', function () {
         const buttons = document.querySelectorAll('button');
         let count = 0;
         for (const btn of buttons) {
-          if (btn.classList.contains('rounded-full') &&
-              btn.offsetHeight >= 20 && btn.offsetHeight <= 40 &&
-              (btn.style.backgroundColor || window.getComputedStyle(btn).backgroundColor !== 'rgba(0, 0, 0, 0)')) {
+          // Avatar color buttons have: rounded-full class, title="#hexcolor", and inline backgroundColor
+          const title = btn.getAttribute('title') || '';
+          if (btn.classList.contains('rounded-full') && title.startsWith('#')) {
             count++;
           }
         }
