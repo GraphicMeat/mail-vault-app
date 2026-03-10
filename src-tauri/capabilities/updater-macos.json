@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "updater-macos",
+  "description": "Sparkle updater capability for macOS",
+  "windows": ["main"],
+  "platforms": ["macOS"],
+  "permissions": [
+    "sparkle-updater:default"
+  ]
+}
