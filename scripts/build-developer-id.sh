@@ -203,9 +203,42 @@ echo -e "${YELLOW}🔏 Signing the application...${NC}"
 # Sign all nested components first (sidecar binary, frameworks, etc.)
 echo "   Signing nested components..."
 
-# Sign any frameworks
+# Sign Sparkle framework nested components (inside-out for notarization)
+SPARKLE_FW="$APP_PATH/Contents/Frameworks/Sparkle.framework"
+if [ -d "$SPARKLE_FW" ]; then
+    # Sign XPC services first
+    for xpc in "$SPARKLE_FW"/Versions/B/XPCServices/*.xpc; do
+        if [ -d "$xpc" ]; then
+            codesign --force --options runtime --timestamp \
+                --sign "$SIGNING_ID" $KEYCHAIN_ARG \
+                "$xpc"
+            echo "   ✓ Signed $(basename "$xpc")"
+        fi
+    done
+    # Sign Updater.app
+    if [ -d "$SPARKLE_FW/Versions/B/Updater.app" ]; then
+        codesign --force --options runtime --timestamp \
+            --sign "$SIGNING_ID" $KEYCHAIN_ARG \
+            "$SPARKLE_FW/Versions/B/Updater.app"
+        echo "   ✓ Signed Updater.app"
+    fi
+    # Sign Autoupdate binary
+    if [ -f "$SPARKLE_FW/Versions/B/Autoupdate" ]; then
+        codesign --force --options runtime --timestamp \
+            --sign "$SIGNING_ID" $KEYCHAIN_ARG \
+            "$SPARKLE_FW/Versions/B/Autoupdate"
+        echo "   ✓ Signed Autoupdate"
+    fi
+    # Sign the framework itself last
+    codesign --force --options runtime --timestamp \
+        --sign "$SIGNING_ID" $KEYCHAIN_ARG \
+        "$SPARKLE_FW"
+    echo "   ✓ Signed Sparkle.framework"
+fi
+
+# Sign any other frameworks
 for framework in "$APP_PATH/Contents/Frameworks"/*.framework; do
-    if [ -d "$framework" ]; then
+    if [ -d "$framework" ] && [ "$(basename "$framework")" != "Sparkle.framework" ]; then
         codesign --force --options runtime --timestamp \
             --sign "$SIGNING_ID" $KEYCHAIN_ARG \
             "$framework"
