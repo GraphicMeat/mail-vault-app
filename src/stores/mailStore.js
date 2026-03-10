@@ -34,6 +34,18 @@ function _clearGraphIdMap(accountId) {
   }
 }
 
+// ── Unified inbox helpers ───────────────────────────────────────────────────
+
+// Resolve real account + mailbox for a UID in unified inbox mode.
+// Unified inbox emails carry _accountId/_accountEmail; the real mailbox is always INBOX.
+function _resolveUnifiedContext(uid, state) {
+  const email = state.emails.find(e => e.uid === uid);
+  if (!email?._accountId) return null;
+  const account = state.accounts.find(a => a.id === email._accountId);
+  if (!account) return null;
+  return { account, accountId: email._accountId, mailbox: 'INBOX' };
+}
+
 // Map Graph API folder display names to IMAP-style names used by the app
 const GRAPH_FOLDER_NAME_MAP = {
   'Inbox': 'INBOX',
@@ -142,6 +154,8 @@ let _loadEmailsGeneration = 0;
 
 // Module-level range retry state — avoids polluting Zustand store with dynamic keys
 const _rangeRetryDelays = new Map();
+const MAILBOX_CACHE_FRESH_MS = 10 * 60 * 1000;
+const MAILBOX_PREFETCH_LIMIT = 2;
 
 // ── Mailbox LRU cache (max 3 entries) ─────────────────────────────────
 const _mailboxCache = new Map();
@@ -196,7 +210,7 @@ function _invalidateMailboxCache(accountId) {
 
 // ── Account LRU cache (max 5 entries) — instant account switching ────
 const _accountCache = new Map();
-const ACCOUNT_CACHE_MAX = 2;
+const ACCOUNT_CACHE_MAX = 8;
 
 function _saveToAccountCache(accountId, state) {
   _accountCache.set(accountId, {
@@ -213,6 +227,7 @@ function _saveToAccountCache(accountId, state) {
     hasMoreEmails: state.hasMoreEmails,
     sentEmails: state.sentEmails,
     mailboxes: state.mailboxes,
+    mailboxesFetchedAt: state.mailboxesFetchedAt ?? null,
     connectionStatus: state.connectionStatus,
     activeMailbox: state.activeMailbox,
     lastSyncTimestamp: Date.now(),
@@ -241,6 +256,58 @@ function _getFromAccountCache(accountId) {
 
 function _invalidateAccountCache(accountId) {
   _accountCache.delete(accountId);
+}
+
+function isMailboxCacheFresh(fetchedAt) {
+  return !!fetchedAt && (Date.now() - fetchedAt) < MAILBOX_CACHE_FRESH_MS;
+}
+
+function countMailboxes(mailboxes = []) {
+  let count = 0;
+  const visit = (nodes) => {
+    for (const node of nodes || []) {
+      count += 1;
+      if (node.children?.length) visit(node.children);
+    }
+  };
+  visit(mailboxes);
+  return count;
+}
+
+function isMailboxTreeComplete(mailboxes = []) {
+  const total = countMailboxes(mailboxes);
+  if (total === 0) return false;
+  if (total > 1) return true;
+  const only = mailboxes[0];
+  return !!only && only.path !== 'INBOX';
+}
+
+function shouldUseFreshMailboxCache(entry) {
+  return isMailboxCacheFresh(entry?.fetchedAt) && isMailboxTreeComplete(entry?.mailboxes);
+}
+
+async function fetchAccountMailboxes(account) {
+  const freshAccount = await ensureFreshToken(account);
+  if (isGraphAccount(freshAccount)) {
+    const graphFolders = await api.graphListFolders(freshAccount.oauth2AccessToken);
+    return graphFoldersToMailboxes(graphFolders);
+  }
+  return api.fetchMailboxes(freshAccount);
+}
+
+function createPerfTrace(scope, meta = {}) {
+  const startedAt = Date.now();
+  const prefix = `[perf:${scope}]`;
+  console.log(`${prefix} start`, meta);
+
+  return {
+    mark(stage, extra = {}) {
+      console.log(`${prefix} ${stage} +${Date.now() - startedAt}ms`, extra);
+    },
+    end(stage = 'done', extra = {}) {
+      console.log(`${prefix} ${stage} +${Date.now() - startedAt}ms`, extra);
+    }
+  };
 }
 
 /**
@@ -281,6 +348,7 @@ export const useMailStore = create((set, get) => ({
   
   // Mailboxes
   mailboxes: [],
+  mailboxesFetchedAt: null,
   activeMailbox: 'INBOX',
   
   // Emails
@@ -578,8 +646,10 @@ export const useMailStore = create((set, get) => ({
           // No credentials yet — show cached data quietly, retry in background
           console.log('[init] Credentials not yet available for', firstVisible.email, '— will retry');
           set({ loading: false });
-          const cachedMailboxes = await db.getCachedMailboxes(firstVisible.id);
-          if (cachedMailboxes) set({ mailboxes: cachedMailboxes });
+          const cachedMailboxEntry = await db.getCachedMailboxEntry(firstVisible.id);
+          if (cachedMailboxEntry?.mailboxes) {
+            set({ mailboxes: cachedMailboxEntry.mailboxes, mailboxesFetchedAt: cachedMailboxEntry.fetchedAt });
+          }
 
           // Auto-retry: wait for keychain to resolve, then re-init
           setTimeout(async () => {
@@ -601,30 +671,40 @@ export const useMailStore = create((set, get) => ({
             if (currentSorted.length === 0) get().updateSortedEmails();
           }
           // Load cached mailboxes first (quick-load only sets placeholders)
-          const cachedMailboxes = await db.getCachedMailboxes(firstVisible.id);
+          const cachedMailboxEntry = await db.getCachedMailboxEntry(firstVisible.id);
+          const cachedMailboxes = cachedMailboxEntry?.mailboxes || null;
           console.log('[init] Cached mailboxes:', cachedMailboxes ? cachedMailboxes.length + ' folders' : 'null');
           if (cachedMailboxes) {
-            set({ mailboxes: cachedMailboxes });
+            set({ mailboxes: cachedMailboxes, mailboxesFetchedAt: cachedMailboxEntry?.fetchedAt ?? null });
           }
           // Fire-and-forget: IMAP sync runs in background so init() completes promptly.
           // Quick-load already displayed cached data — this just refreshes from server.
           get().loadEmails().catch(e => console.warn('[init] loadEmails failed (non-fatal):', e.message));
           get().loadSentHeaders(firstVisible.id);
           // Fetch real mailboxes from server in parallel (non-blocking)
-          ensureFreshToken(firstVisible).then(freshAccount =>
-            api.fetchMailboxes(freshAccount).then(mailboxes => {
+          if (!shouldUseFreshMailboxCache(cachedMailboxEntry)) {
+            fetchAccountMailboxes(firstVisible).then(mailboxes => {
               console.log('[init] Server mailbox fetch: %d folders', mailboxes.length);
-              set({ mailboxes, connectionStatus: 'connected', connectionError: null, connectionErrorType: null });
+              set({ mailboxes, mailboxesFetchedAt: Date.now(), connectionStatus: 'connected', connectionError: null, connectionErrorType: null });
               db.saveMailboxes(firstVisible.id, mailboxes);
-            })
-          ).catch(e => console.warn('[init] Mailbox fetch failed (non-fatal):', e.message));
+            }).catch(e => console.warn('[init] Mailbox fetch failed (non-fatal):', e.message));
+          }
         } else {
           await get().setActiveAccount(firstVisible.id);
         }
       }
 
-      // Background: pre-fetch mailboxes for all other visible accounts
-      get()._prefetchAllMailboxes().catch(() => {});
+      // Background: pre-warm account cache, then prefetch a small number of stale mailbox trees when idle.
+      get()._prewarmAccountCaches()
+        .catch(() => {})
+        .then(() => {
+          const schedulePrefetch = () => get()._prefetchAllMailboxes({ limit: MAILBOX_PREFETCH_LIMIT }).catch(() => {});
+          if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+            window.requestIdleCallback(() => setTimeout(schedulePrefetch, 5000), { timeout: 15000 });
+          } else {
+            setTimeout(schedulePrefetch, 15000);
+          }
+        });
     } catch (error) {
       console.error('Failed to initialize:', error);
       set({ error: error.message, loading: false });
@@ -632,7 +712,7 @@ export const useMailStore = create((set, get) => ({
   },
 
   // Pre-fetch mailboxes for all visible accounts (background, non-blocking)
-  _prefetchAllMailboxes: async () => {
+  _prefetchAllMailboxes: async ({ limit = MAILBOX_PREFETCH_LIMIT } = {}) => {
     const { accounts, activeAccountId } = get();
     const { hiddenAccounts } = useSettingsStore.getState();
 
@@ -641,30 +721,83 @@ export const useMailStore = create((set, get) => ({
     );
 
     if (otherAccounts.length === 0) return;
-    console.log('[prefetch] Pre-fetching mailboxes for', otherAccounts.length, 'background accounts');
+    const mailboxEntries = await Promise.all(otherAccounts.map(async account => ({
+      account,
+      entry: await db.getCachedMailboxEntry(account.id).catch(() => null),
+    })));
+    const staleAccounts = mailboxEntries
+      .filter(({ entry }) => !shouldUseFreshMailboxCache(entry))
+      .sort((a, b) => (a.entry?.fetchedAt || 0) - (b.entry?.fetchedAt || 0))
+      .slice(0, limit);
 
-    await Promise.allSettled(otherAccounts.map(async (account) => {
+    if (staleAccounts.length === 0) return;
+    console.log('[prefetch] Pre-fetching mailboxes for', staleAccounts.length, 'background accounts');
+
+    await Promise.allSettled(staleAccounts.map(async ({ account, entry }) => {
       try {
-        const freshAccount = await ensureFreshToken(account);
-        let mailboxes;
-        if (isGraphAccount(freshAccount)) {
-          const graphFolders = await api.graphListFolders(freshAccount.oauth2AccessToken);
-          mailboxes = graphFolders.map(f => ({
-            name: f.displayName,
-            path: f.displayName,
-            specialUse: null,
-            children: [],
-            noselect: false,
-          }));
-        } else {
-          mailboxes = await api.fetchMailboxes(freshAccount);
-        }
+        if (shouldUseFreshMailboxCache(entry)) return;
+        const mailboxes = await fetchAccountMailboxes(account);
         await db.saveMailboxes(account.id, mailboxes);
+        // Update in-memory account cache if entry exists
+        const cached = _getFromAccountCache(account.id);
+        if (cached) {
+          cached.mailboxes = mailboxes;
+          cached.mailboxesFetchedAt = Date.now();
+        }
       } catch (e) {
         console.warn(`[prefetch] Mailbox fetch failed for ${account.email} (non-fatal):`, e.message);
       }
     }));
     console.log('[prefetch] Mailbox pre-fetch complete');
+  },
+
+  // Pre-warm account cache with headers.json for all non-active visible accounts
+  // so that account switching and unified inbox are instant from first use
+  _prewarmAccountCaches: async () => {
+    const { accounts, activeAccountId } = get();
+    const { hiddenAccounts } = useSettingsStore.getState();
+
+    const otherAccounts = accounts.filter(a =>
+      a.id !== activeAccountId && !hiddenAccounts[a.id]
+    );
+
+    if (otherAccounts.length === 0) return;
+    console.log('[prewarm] Pre-warming account cache for', otherAccounts.length, 'background accounts');
+
+    await Promise.allSettled(otherAccounts.map(async (account) => {
+      // Skip if already in cache
+      if (_getFromAccountCache(account.id)) return;
+
+      try {
+        const cachedHeaders = await db.getEmailHeadersPartial(account.id, 'INBOX', 200);
+        if (!cachedHeaders || !cachedHeaders.emails || cachedHeaders.emails.length === 0) return;
+
+        // Also try to load cached mailboxes
+        const cachedMailboxEntry = await db.getCachedMailboxEntry(account.id).catch(() => null);
+        const cachedMailboxes = cachedMailboxEntry?.mailboxes || null;
+
+        _saveToAccountCache(account.id, {
+          emails: cachedHeaders.emails,
+          localEmails: [],
+          emailsByIndex: new Map(),
+          totalEmails: cachedHeaders.totalEmails || cachedHeaders.emails.length,
+          savedEmailIds: new Set(),
+          archivedEmailIds: new Set(),
+          loadedRanges: [{ start: 0, end: cachedHeaders.emails.length }],
+          currentPage: 1,
+          hasMoreEmails: cachedHeaders.emails.length < (cachedHeaders.totalEmails || cachedHeaders.emails.length),
+          sentEmails: [],
+          mailboxes: cachedMailboxes || [],
+          mailboxesFetchedAt: cachedMailboxEntry?.fetchedAt ?? null,
+          connectionStatus: 'disconnected',
+          activeMailbox: 'INBOX',
+        });
+        console.log('[prewarm] Cached', cachedHeaders.emails.length, 'headers for', account.email);
+      } catch (e) {
+        console.warn(`[prewarm] Failed for ${account.email} (non-fatal):`, e.message);
+      }
+    }));
+    console.log('[prewarm] Account cache pre-warm complete');
   },
 
   // Account management
@@ -753,6 +886,7 @@ export const useMailStore = create((set, get) => ({
         set({
           activeAccountId: null,
           mailboxes: [],
+          mailboxesFetchedAt: null,
           emails: [],
           localEmails: [],
           savedEmailIds: new Set(),
@@ -767,9 +901,14 @@ export const useMailStore = create((set, get) => ({
   },
   
   setActiveAccount: async (accountId) => {
+    const activationTrace = createPerfTrace('setActiveAccount', { accountId });
     let account = get().accounts.find(a => a.id === accountId);
-    if (!account) return;
+    if (!account) {
+      activationTrace.end('missing-account');
+      return;
+    }
     account = await ensureFreshToken(account);
+    activationTrace.mark('token-ready', { email: account.email });
 
     const invoke = window.__TAURI__?.core?.invoke;
     const { activeAccountId: currentAccountId, emails: currentEmails, totalEmails: currentTotalEmails } = get();
@@ -778,8 +917,9 @@ export const useMailStore = create((set, get) => ({
     const isSameAccount = currentAccountId === accountId;
     const hasExistingData = currentEmails.length > 0 || currentTotalEmails > 0;
 
-    if (isSameAccount && hasExistingData) {
+    if (isSameAccount && hasExistingData && !get().unifiedInbox) {
       console.log('[setActiveAccount] Same account with existing data, calling loadEmails');
+      activationTrace.end('same-account-refresh');
       await get().loadEmails();
       return;
     }
@@ -795,6 +935,17 @@ export const useMailStore = create((set, get) => ({
       console.log('[setActiveAccount] Account cache HIT for', accountId, '— restoring', cachedAccount.emails.length, 'emails instantly');
       _chatEmailsFingerprint = '';
       _threadsFingerprint = '';
+
+      // Ensure mailboxes aren't empty — fall back to disk cache
+      let mailboxes = cachedAccount.mailboxes;
+      if (!mailboxes || mailboxes.length === 0) {
+        const cachedMailboxEntry = await db.getCachedMailboxEntry(accountId);
+        mailboxes = cachedMailboxEntry?.mailboxes || [{ name: 'INBOX', path: 'INBOX', specialUse: null, children: [] }];
+        if (!cachedAccount.mailboxesFetchedAt) {
+          cachedAccount.mailboxesFetchedAt = cachedMailboxEntry?.fetchedAt ?? null;
+        }
+      }
+
       set({
         activeAccountId: accountId,
         activeMailbox: cachedAccount.activeMailbox,
@@ -809,7 +960,8 @@ export const useMailStore = create((set, get) => ({
         currentPage: cachedAccount.currentPage,
         hasMoreEmails: cachedAccount.hasMoreEmails,
         sentEmails: cachedAccount.sentEmails,
-        mailboxes: cachedAccount.mailboxes,
+        mailboxes,
+        mailboxesFetchedAt: cachedAccount.mailboxesFetchedAt ?? null,
         serverUidSet: new Set(), // Re-fetched via CONDSTORE delta sync
         connectionStatus: cachedAccount.connectionStatus,
         selectedEmailId: null,
@@ -822,15 +974,36 @@ export const useMailStore = create((set, get) => ({
         error: null,
       });
       get().updateSortedEmails();
+      activationTrace.mark('cache-restored', {
+        emailCount: cachedAccount.emails.length,
+        mailbox: cachedAccount.activeMailbox,
+      });
 
       // Fire-and-forget: silent CONDSTORE refresh in background
       get().loadEmails().catch(() => {});
       get().loadSentHeaders(accountId);
+
+      // Background: refresh mailboxes from server
+      if (!shouldUseFreshMailboxCache({ mailboxes: cachedAccount.mailboxes, fetchedAt: cachedAccount.mailboxesFetchedAt })) {
+        fetchAccountMailboxes(account).then(freshMailboxes => {
+          if (get().activeAccountId === accountId) {
+            set({ mailboxes: freshMailboxes, mailboxesFetchedAt: Date.now() });
+          }
+          db.saveMailboxes(accountId, freshMailboxes);
+          const cached = _getFromAccountCache(accountId);
+          if (cached) {
+            cached.mailboxes = freshMailboxes;
+            cached.mailboxesFetchedAt = Date.now();
+          }
+        });
+      }
+
+      activationTrace.end('cache-hit-return');
       return;
     }
 
     // Different account or no data - need to reset and load
-    const lastMailbox = useSettingsStore.getState().getLastMailbox(accountId);
+    let lastMailbox = useSettingsStore.getState().getLastMailbox(accountId);
     console.log('[setActiveAccount] Switching to account:', accountId, 'mailbox:', lastMailbox);
 
     // Reset all email state immediately to prevent stale data from rendering
@@ -840,6 +1013,7 @@ export const useMailStore = create((set, get) => ({
       activeAccountId: accountId,
       activeMailbox: lastMailbox,
       unifiedInbox: false,
+      mailboxes: [],
       emails: [],
       localEmails: [],
       sentEmails: [],
@@ -859,6 +1033,7 @@ export const useMailStore = create((set, get) => ({
       savedEmailIds: new Set(),
       archivedEmailIds: new Set(),
       serverUidSet: new Set(),
+      mailboxesFetchedAt: null,
       connectionStatus: 'disconnected',
       connectionError: null,
       connectionErrorType: null,
@@ -868,10 +1043,43 @@ export const useMailStore = create((set, get) => ({
     // Helper: check if this setActiveAccount call is still current
     const isStale = () => get().activeAccountId !== accountId;
 
+    // Restore cached mailbox tree before loading header caches so folders switch immediately.
+    const cachedMailboxEntryPromise = db.getCachedMailboxEntry(accountId);
+    const cachedMailboxEntry = await cachedMailboxEntryPromise;
+    const defaultMailboxes = cachedMailboxEntry?.mailboxes || [
+      { name: 'INBOX', path: 'INBOX', specialUse: null, children: [] }
+    ];
+
+    if (isStale()) { console.log('[setActiveAccount] Stale after mailbox cache, aborting'); return; }
+
+    set({ mailboxes: defaultMailboxes, mailboxesFetchedAt: cachedMailboxEntry?.fetchedAt ?? null });
+    activationTrace.mark('mailboxes-ready', { mailboxCount: defaultMailboxes.length });
+
+    // Validate lastMailbox exists in the mailbox list — fall back to INBOX if not
+    const allPaths = new Set();
+    const collectPaths = (mboxes) => {
+      for (const m of mboxes) {
+        allPaths.add(m.path);
+        if (m.children?.length) collectPaths(m.children);
+      }
+    };
+    collectPaths(defaultMailboxes);
+    if (lastMailbox !== 'INBOX' && !allPaths.has(lastMailbox)) {
+      console.warn(`[setActiveAccount] Remembered mailbox "${lastMailbox}" not found, falling back to INBOX`);
+      lastMailbox = 'INBOX';
+      set({ activeMailbox: 'INBOX' });
+      useSettingsStore.getState().setLastMailbox(accountId, 'INBOX');
+    }
+
     // Fast partial load: only first 200 headers from cache (~200KB instead of 16MB for large accounts).
     // Full cache loads later during loadEmails() network sync.
     const cachedHeaders = await db.getEmailHeadersPartial(accountId, lastMailbox, 200);
     if (isStale()) { console.log('[setActiveAccount] Stale after cache load, aborting'); return; }
+    activationTrace.mark('partial-cache-loaded', {
+      mailbox: lastMailbox,
+      cachedCount: cachedHeaders?.emails?.length || 0,
+      totalCached: cachedHeaders?.totalCached || 0,
+    });
 
     if (cachedHeaders && cachedHeaders.emails.length > 0) {
       console.log('[setActiveAccount] Found cached data:', cachedHeaders.emails.length, 'of', cachedHeaders.totalCached, 'emails (partial load)');
@@ -898,8 +1106,13 @@ export const useMailStore = create((set, get) => ({
       });
       get().updateSortedEmails();
       console.log('[setActiveAccount] Showing cached data, will refresh from server...');
+      activationTrace.mark('cached-headers-rendered', {
+        emailCount: cachedHeaders.emails.length,
+        totalEmails: cachedHeaders.totalEmails,
+      });
     } else {
       set({ loading: true });
+      activationTrace.mark('no-cached-headers');
     }
 
     // Fire-and-forget: load saved/archived IDs, then archived email headers from disk.
@@ -921,18 +1134,6 @@ export const useMailStore = create((set, get) => ({
       }
       if (!isStale()) get().updateSortedEmails();
     }).catch(e => console.warn('[setActiveAccount] ID load failed:', e));
-
-    // Use cached mailboxes from last successful connection, or INBOX-only as safe fallback.
-    // Never use hardcoded paths like "Sent" — some servers require "INBOX.Sent" prefix.
-    const cachedMailboxes = await db.getCachedMailboxes(accountId);
-    const defaultMailboxes = cachedMailboxes || [
-      { name: 'INBOX', path: 'INBOX', specialUse: null, children: [] }
-    ];
-
-    if (isStale()) { console.log('[setActiveAccount] Stale after mailbox cache, aborting'); return; }
-
-    // Set cached mailboxes immediately so sidebar isn't blank while background fetch runs
-    set({ mailboxes: defaultMailboxes });
 
     // Check if credentials are missing — try keychain refresh before showing error
     let hasCredentials = account.password || (account.authType === 'oauth2' && account.oauth2AccessToken);
@@ -958,12 +1159,14 @@ export const useMailStore = create((set, get) => ({
       if (isStale()) return;
       set({
         mailboxes: defaultMailboxes,
+        mailboxesFetchedAt: cachedMailboxEntry?.fetchedAt ?? null,
         connectionStatus: 'error',
         connectionError: 'Password not found. Please re-enter your password in Settings.',
         connectionErrorType: 'passwordMissing',
         loading: false
       });
       get().loadSentHeaders(accountId);
+      activationTrace.end('missing-credentials');
       return;
     }
 
@@ -978,12 +1181,14 @@ export const useMailStore = create((set, get) => ({
           console.error('[setActiveAccount] No network connectivity detected!');
           set({
             mailboxes: defaultMailboxes,
+            mailboxesFetchedAt: cachedMailboxEntry?.fetchedAt ?? null,
             connectionStatus: 'error',
             connectionError: 'No internet connection. Showing locally archived emails.',
             connectionErrorType: 'offline',
             loading: false
           });
           get().loadSentHeaders(accountId);
+          activationTrace.end('offline');
           return;
         }
       } catch (e) {
@@ -992,11 +1197,13 @@ export const useMailStore = create((set, get) => ({
         // If connectivity check fails, assume offline
         set({
           mailboxes: defaultMailboxes,
+          mailboxesFetchedAt: cachedMailboxEntry?.fetchedAt ?? null,
           connectionStatus: 'error',
           connectionError: 'Could not check internet connection. Showing locally archived emails.',
           connectionErrorType: 'offline',
           loading: false
         });
+        activationTrace.end('connectivity-check-failed');
         return;
       }
     } else {
@@ -1005,11 +1212,13 @@ export const useMailStore = create((set, get) => ({
         console.error('[setActiveAccount] Browser reports offline');
         set({
           mailboxes: defaultMailboxes,
+          mailboxesFetchedAt: cachedMailboxEntry?.fetchedAt ?? null,
           connectionStatus: 'error',
           connectionError: 'No internet connection. Showing locally archived emails.',
           connectionErrorType: 'offline',
           loading: false
         });
+        activationTrace.end('browser-offline');
         return;
       }
     }
@@ -1023,27 +1232,42 @@ export const useMailStore = create((set, get) => ({
         // Load cached Sent headers for chat view (non-blocking)
         if (!isStale()) get().loadSentHeaders(accountId);
       } else {
-        // IMAP accounts: start email loading immediately, fetch mailboxes in background
+        // IMAP accounts: start email loading immediately, fetch mailboxes in background only if stale
         const emailLoadPromise = get().loadEmails();
         if (!isStale()) get().loadSentHeaders(accountId);
 
-        // Background: refresh mailboxes from server (non-blocking)
-        ensureFreshToken(account).then(freshAccount =>
-          api.fetchMailboxes(freshAccount).then(freshMailboxes => {
+        if (!shouldUseFreshMailboxCache(cachedMailboxEntry)) {
+          fetchAccountMailboxes(account).then(freshMailboxes => {
             if (!isStale()) {
-              set({
+              // Validate activeMailbox still exists in fresh mailbox list
+              const currentMailbox = get().activeMailbox;
+              const freshPaths = new Set();
+              const collect = (mboxes) => { for (const m of mboxes) { freshPaths.add(m.path); if (m.children?.length) collect(m.children); } };
+              collect(freshMailboxes);
+              const updates = {
                 mailboxes: freshMailboxes,
+                mailboxesFetchedAt: Date.now(),
                 connectionStatus: 'connected',
                 connectionError: null,
                 connectionErrorType: null
-              });
+              };
+              if (currentMailbox !== 'INBOX' && currentMailbox !== 'UNIFIED' && !freshPaths.has(currentMailbox)) {
+                console.warn(`[setActiveAccount] Active mailbox "${currentMailbox}" not found on server, switching to INBOX`);
+                updates.activeMailbox = 'INBOX';
+                useSettingsStore.getState().setLastMailbox(accountId, 'INBOX');
+              }
+              set(updates);
               db.saveMailboxes(accountId, freshMailboxes);
             }
-          })
-        ).catch(e => console.warn('[setActiveAccount] Mailbox fetch failed (non-fatal):', e.message));
+          }).catch(e => console.warn('[setActiveAccount] Mailbox fetch failed (non-fatal):', e.message));
+        }
 
         await emailLoadPromise;
       }
+      activationTrace.end('load-finished', {
+        emailCount: get().emails.length,
+        totalEmails: get().totalEmails,
+      });
     } catch (error) {
       console.error('Failed to connect to server:', error);
 
@@ -1065,11 +1289,13 @@ export const useMailStore = create((set, get) => ({
       if (!isStale()) {
         set({
           mailboxes: defaultMailboxes,
+          mailboxesFetchedAt: cachedMailboxEntry?.fetchedAt ?? null,
           connectionStatus: 'error',
           connectionError: errorMessage,
           connectionErrorType: errorType
         });
       }
+      activationTrace.end('load-error', { message: error.message });
     } finally {
       if (!isStale()) set({ loading: false });
     }
@@ -1078,43 +1304,85 @@ export const useMailStore = create((set, get) => ({
   // ── Unified Inbox ─────────────────────────────────────────────────────────
 
   setUnifiedInbox: (enabled) => {
-    set({ unifiedInbox: enabled });
     if (enabled) {
-      get().loadUnifiedInbox();
+      // Snapshot current account's INBOX emails before clearing state,
+      // so loadUnifiedInbox can include them (activeMailbox will be 'UNIFIED' after set)
+      const { activeAccountId, activeMailbox, emails: currentEmails } = get();
+      const preUnifiedSnapshot = (activeMailbox === 'INBOX') ? { activeAccountId, emails: currentEmails } : null;
+
+      // Save current account state to cache so loadUnifiedInbox can find it
+      if (activeAccountId && activeMailbox && activeMailbox !== 'UNIFIED') {
+        _saveToAccountCache(activeAccountId, get());
+      }
+
+      set({
+        unifiedInbox: true,
+        activeMailbox: 'UNIFIED',
+        selectedEmailId: null,
+        selectedEmail: null,
+        selectedEmailSource: null,
+        selectedThread: null,
+        selectedEmailIds: new Set(),
+      });
+      get().loadUnifiedInbox(preUnifiedSnapshot);
+    } else {
+      set({ unifiedInbox: false });
     }
   },
 
-  loadUnifiedInbox: () => {
+  loadUnifiedInbox: async (preUnifiedSnapshot = null) => {
     const { accounts } = get();
     const { hiddenAccounts } = useSettingsStore.getState();
 
     // Collect cached INBOX emails from all visible accounts
+    // Try in-memory cache first, fall back to disk-cached headers.json
     const allEmails = [];
+    const diskFetchPromises = [];
+
     for (const account of accounts) {
       if (hiddenAccounts[account.id]) continue;
 
       const cached = _getFromAccountCache(account.id);
-      if (!cached || !cached.emails) continue;
-      // Only include emails that were from INBOX
-      if (cached.activeMailbox && cached.activeMailbox !== 'INBOX') continue;
-
-      for (const email of cached.emails) {
-        allEmails.push({
-          ...email,
-          _accountEmail: account.email,
-          _accountId: account.id,
-        });
+      if (cached && cached.emails) {
+        // Only include emails that were from INBOX
+        if (cached.activeMailbox && cached.activeMailbox !== 'INBOX') continue;
+        for (const email of cached.emails) {
+          allEmails.push({
+            ...email,
+            _accountEmail: account.email,
+            _accountId: account.id,
+          });
+        }
+      } else {
+        // No in-memory cache — read from disk (headers.json)
+        diskFetchPromises.push(
+          db.getEmailHeadersPartial(account.id, 'INBOX', 500).then(diskData => {
+            if (!diskData || !diskData.emails) return [];
+            return diskData.emails.map(email => ({
+              ...email,
+              _accountEmail: account.email,
+              _accountId: account.id,
+            }));
+          }).catch(() => [])
+        );
       }
     }
 
-    // Also include currently active account's emails if it's on INBOX
-    const { activeAccountId, activeMailbox, emails: currentEmails } = get();
-    if (activeAccountId && activeMailbox === 'INBOX' && !hiddenAccounts[activeAccountId]) {
-      const activeAccount = accounts.find(a => a.id === activeAccountId);
+    // Await all disk reads in parallel
+    if (diskFetchPromises.length > 0) {
+      const diskResults = await Promise.all(diskFetchPromises);
+      for (const emails of diskResults) {
+        allEmails.push(...emails);
+      }
+    }
+
+    // Include the pre-switch snapshot (active account's INBOX emails captured before state change)
+    if (preUnifiedSnapshot && !hiddenAccounts[preUnifiedSnapshot.activeAccountId]) {
+      const activeAccount = accounts.find(a => a.id === preUnifiedSnapshot.activeAccountId);
       if (activeAccount) {
         const existingUids = new Set(allEmails.map(e => `${e._accountId}:${e.uid}`));
-        for (const email of currentEmails) {
-          const key = `${activeAccountId}:${email.uid}`;
+        for (const email of preUnifiedSnapshot.emails) {
+          const key = `${preUnifiedSnapshot.activeAccountId}:${email.uid}`;
           if (!existingUids.has(key)) {
             allEmails.push({
               ...email,
@@ -1158,14 +1426,15 @@ export const useMailStore = create((set, get) => ({
     // Remember this mailbox for the account
     useSettingsStore.getState().setLastMailbox(activeAccountId, mailbox);
 
-    // Save previous mailbox state to LRU cache before switching
-    if (previousMailbox && previousMailbox !== mailbox) {
+    // Save previous mailbox state to LRU cache before switching (skip virtual UNIFIED)
+    if (previousMailbox && previousMailbox !== mailbox && previousMailbox !== 'UNIFIED') {
       _saveToMailboxCache(activeAccountId, previousMailbox, get());
     }
 
     // Clear selection but don't reset email data yet - loadEmails will handle cache
     set({
       activeMailbox: mailbox,
+      unifiedInbox: false,
       selectedEmailId: null,
       selectedEmail: null,
       selectedEmailSource: null,
@@ -1289,6 +1558,7 @@ export const useMailStore = create((set, get) => ({
     const { activeAccountId, accounts, activeMailbox } = get();
     let account = accounts.find(a => a.id === activeAccountId);
     if (!account) return;
+    const loadTrace = createPerfTrace('loadEmails', { accountId: activeAccountId, mailbox: activeMailbox });
 
     // Bump generation — any previous in-flight loadEmails call becomes stale
     const generation = ++_loadEmailsGeneration;
@@ -1302,6 +1572,7 @@ export const useMailStore = create((set, get) => ({
       if (get().activeAccountId === activeAccountId && get().loading) {
         console.warn('[loadEmails] Loading timeout — clearing stuck loading state after 20s');
         set({ loading: false, loadingMore: false });
+        loadTrace.mark('loading-guard-fired');
       }
     }, 20000);
 
@@ -1309,6 +1580,7 @@ export const useMailStore = create((set, get) => ({
     // Proactively refresh OAuth2 token if expiring soon
     account = await ensureFreshToken(account);
     if (isStale()) return;
+    loadTrace.mark('token-ready', { email: account.email });
 
     // ── Graph API path ────────────────────────────────────────────────────
     if (isGraphAccount(account)) {
@@ -1337,6 +1609,12 @@ export const useMailStore = create((set, get) => ({
       ]);
     }
     if (isStale()) return;
+    loadTrace.mark('cache-meta-ready', {
+      cacheIsFresh: !!cacheIsFresh,
+      cachedTotal: cachedHeaders?.totalCached || 0,
+      savedCount: savedEmailIds?.size || 0,
+      archivedCount: archivedEmailIds?.size || 0,
+    });
     set({ savedEmailIds, archivedEmailIds });
 
     // Fire-and-forget: load archived email headers from disk in background.
@@ -1370,6 +1648,10 @@ export const useMailStore = create((set, get) => ({
         hasMoreEmails: existingStoreEmails.length < (cachedHeaders?.totalEmails ?? existingStoreEmails.length)
       });
       get().updateSortedEmails();
+      loadTrace.mark('existing-emails-reused', {
+        existingCount: existingStoreEmails.length,
+        totalEmails: cachedHeaders?.totalEmails ?? existingStoreEmails.length,
+      });
     } else if (cachedHeaders && cachedHeaders.totalCached > 0) {
       // No emails in store but cache exists — load partial (200 most recent) for fast display
       console.log('[loadEmails] Store empty, loading 200 from cache (total cached: %d)', cachedHeaders.totalCached);
@@ -1398,6 +1680,10 @@ export const useMailStore = create((set, get) => ({
           hasMoreEmails: partialHeaders.emails.length < cachedHeaders.totalEmails
         });
         get().updateSortedEmails();
+        loadTrace.mark('partial-cache-rendered', {
+          emailCount: partialHeaders.emails.length,
+          totalEmails: cachedHeaders.totalEmails,
+        });
       }
     } else {
       // No cache - reset state to empty. Local emails are shown via updateSortedEmails
@@ -1415,6 +1701,7 @@ export const useMailStore = create((set, get) => ({
         emails: []
       });
       get().updateSortedEmails();
+      loadTrace.mark('fresh-empty-state-rendered');
     }
 
     // Keep previous/cached emails for degraded modes (password missing, offline)
@@ -1446,6 +1733,7 @@ export const useMailStore = create((set, get) => ({
         loading: false,
         loadingMore: false
       });
+      loadTrace.end('missing-credentials');
       return;
     }
 
@@ -1466,6 +1754,7 @@ export const useMailStore = create((set, get) => ({
             loading: false,
             loadingMore: false
           });
+          loadTrace.end('offline');
           return;
         }
       } catch (e) {
@@ -1480,6 +1769,7 @@ export const useMailStore = create((set, get) => ({
           loading: false,
           loadingMore: false
         });
+        loadTrace.end('connectivity-check-failed');
         return;
       }
     } else {
@@ -1493,6 +1783,7 @@ export const useMailStore = create((set, get) => ({
           loading: false,
           loadingMore: false
         });
+        loadTrace.end('browser-offline');
         return;
       }
     }
@@ -1512,6 +1803,11 @@ export const useMailStore = create((set, get) => ({
       if (hasCachedSync) {
         // We have uidValidity/uidNext from last sync — try delta-sync
         const status = await api.checkMailboxStatus(account, activeMailbox);
+        loadTrace.mark('mailbox-status-ready', {
+          exists: status.exists,
+          uidNext: status.uidNext,
+          highestModseq: status.highestModseq ?? null,
+        });
         newUidValidity = status.uidValidity;
         newUidNext = status.uidNext;
         newHighestModseq = status.highestModseq ?? null;
@@ -1542,6 +1838,10 @@ export const useMailStore = create((set, get) => ({
           });
           get().updateSortedEmails();
           set({ loading: false, loadingMore: false });
+          loadTrace.end('condstore-noop', {
+            existingCount: existingEmails.length,
+            serverTotal,
+          });
           // If store is partial, load remaining from disk cache then IMAP
           if (existingEmails.length < serverTotal) {
             console.log('[loadEmails] CONDSTORE: store partial (%d/%d), loading remaining from cache...', existingEmails.length, serverTotal);
@@ -1584,6 +1884,10 @@ export const useMailStore = create((set, get) => ({
               });
               get().updateSortedEmails();
               set({ loading: false, loadingMore: false });
+              loadTrace.end('condstore-flags-only', {
+                changedFlags: changes.length,
+                serverTotal,
+              });
               // If store is partial, load remaining from disk cache then IMAP
               if (existingEmails.length < serverTotal) {
                 console.log('[loadEmails] CONDSTORE flag-sync: store partial (%d/%d), scheduling loadMoreEmails', existingEmails.length, serverTotal);
@@ -1610,6 +1914,10 @@ export const useMailStore = create((set, get) => ({
           });
           get().updateSortedEmails();
           set({ loading: false, loadingMore: false });
+          loadTrace.end('delta-noop', {
+            existingCount: existingEmails.length,
+            serverTotal,
+          });
           // If store only has partial data (QuickLoad), schedule loadMoreEmails to paginate from IMAP
           if (existingEmails.length < serverTotal) {
             console.log('[loadEmails] Delta-sync: store partial (%d/%d), scheduling loadMoreEmails', existingEmails.length, serverTotal);
@@ -1756,9 +2064,16 @@ export const useMailStore = create((set, get) => ({
       });
 
       get().updateSortedEmails();
+      loadTrace.end('server-headers-merged', {
+        mergedCount: mergedEmails.length,
+        serverTotal,
+        hasMoreEmails,
+      });
 
-      // Save to account cache for instant restore on switch-back
-      _saveToAccountCache(activeAccountId, get());
+      // Save to account cache for instant restore on switch-back (skip in unified inbox mode)
+      if (!get().unifiedInbox) {
+        _saveToAccountCache(activeAccountId, get());
+      }
 
       // Save merged headers with uidValidity/uidNext/highestModseq for next delta-sync
       db.saveEmailHeaders(activeAccountId, activeMailbox, mergedEmails, serverTotal, {
@@ -1802,6 +2117,7 @@ export const useMailStore = create((set, get) => ({
         });
         get().updateSortedEmails();
       }
+      loadTrace.end('error', { message: error.message });
     } finally {
       clearTimeout(loadingGuard);
       if (!isStale()) set({ loading: false, loadingMore: false });
@@ -1833,13 +2149,21 @@ export const useMailStore = create((set, get) => ({
     set({ loading: get().emails.length === 0, loadingMore: true, error: null });
 
     try {
-      // 1. Fetch mailbox list via Graph
-      const graphFolders = await api.graphListFolders(account.oauth2AccessToken);
-      if (isStale()) return;
+      // 1. Use cached mailbox list when fresh enough; otherwise refresh from Graph.
+      const cachedMailboxEntry = await db.getCachedMailboxEntry(activeAccountId).catch(() => null);
+      let mailboxes = cachedMailboxEntry?.mailboxes || get().mailboxes || [];
+      const cachedTarget = mailboxes.find(m => m.path === activeMailbox && m._graphFolderId);
+      const shouldRefreshMailboxes = !shouldUseFreshMailboxCache(cachedMailboxEntry) || !cachedTarget;
 
-      const mailboxes = graphFoldersToMailboxes(graphFolders);
-      set({ mailboxes });
-      db.saveMailboxes(activeAccountId, mailboxes);
+      if (shouldRefreshMailboxes) {
+        const graphFolders = await api.graphListFolders(account.oauth2AccessToken);
+        if (isStale()) return;
+        mailboxes = graphFoldersToMailboxes(graphFolders);
+        set({ mailboxes, mailboxesFetchedAt: Date.now() });
+        db.saveMailboxes(activeAccountId, mailboxes);
+      } else if (mailboxes.length > 0) {
+        set({ mailboxes, mailboxesFetchedAt: cachedMailboxEntry?.fetchedAt ?? null });
+      }
 
       // 2. Find the Graph folder ID for the active mailbox
       const targetFolder = mailboxes.find(m => m.path === activeMailbox);
@@ -1897,8 +2221,10 @@ export const useMailStore = create((set, get) => ({
 
       get().updateSortedEmails();
 
-      // Save to account cache for instant restore on switch-back
-      _saveToAccountCache(activeAccountId, get());
+      // Save to account cache for instant restore on switch-back (skip in unified inbox mode)
+      if (!get().unifiedInbox) {
+        _saveToAccountCache(activeAccountId, get());
+      }
 
       // Cache headers for quick-load on next startup
       db.saveEmailHeaders(activeAccountId, activeMailbox, mergedEmails, serverTotal)
@@ -1997,8 +2323,10 @@ export const useMailStore = create((set, get) => ({
 
         get().updateSortedEmails();
 
-        // Update account cache with latest state
-        _saveToAccountCache(activeAccountId, get());
+        // Update account cache with latest state (skip in unified inbox mode)
+        if (!get().unifiedInbox) {
+          _saveToAccountCache(activeAccountId, get());
+        }
 
         db.saveEmailHeaders(activeAccountId, activeMailbox, newEmails, serverResult.total)
           .catch(e => console.warn('[loadMoreEmails] Failed to cache headers:', e));
@@ -2316,6 +2644,7 @@ export const useMailStore = create((set, get) => ({
   // Pre-fetch adjacent email bodies for instant navigation
   _prefetchAdjacentEmails: async (currentUid) => {
     const { sortedEmails, activeAccountId, activeMailbox, emailCache } = get();
+    const isUnified = activeMailbox === 'UNIFIED';
     const cacheLimitMB = useSettingsStore.getState().cacheLimitMB;
     const currentIndex = sortedEmails.findIndex(e => e.uid === currentUid);
     if (currentIndex < 0) return;
@@ -2325,24 +2654,27 @@ export const useMailStore = create((set, get) => ({
       const nextEmail = sortedEmails[currentIndex + i];
       if (!nextEmail) break;
 
-      const cacheKey = `${activeAccountId}-${activeMailbox}-${nextEmail.uid}`;
+      // In unified mode, resolve per-email account context
+      const prefetchAccountId = (isUnified && nextEmail._accountId) ? nextEmail._accountId : activeAccountId;
+      const prefetchMailbox = isUnified ? 'INBOX' : activeMailbox;
+      const cacheKey = `${prefetchAccountId}-${prefetchMailbox}-${nextEmail.uid}`;
       if (emailCache.has(cacheKey)) continue; // Already cached
 
       try {
         // Try Maildir first (fast, local disk)
-        const localEmail = await db.getLocalEmailLight(activeAccountId, activeMailbox, nextEmail.uid);
+        const localEmail = await db.getLocalEmailLight(prefetchAccountId, prefetchMailbox, nextEmail.uid);
         if (localEmail && localEmail.html !== undefined) {
           get().addToCache(cacheKey, localEmail, cacheLimitMB);
           continue;
         }
 
         // Fallback to server fetch
-        const account = get().accounts.find(a => a.id === activeAccountId);
+        const account = get().accounts.find(a => a.id === prefetchAccountId);
         if (!account) break;
 
         if (isGraphAccount(account)) {
           // Graph API: fetch full message
-          const graphId = getGraphMessageId(activeAccountId, activeMailbox, nextEmail.uid);
+          const graphId = getGraphMessageId(prefetchAccountId, prefetchMailbox, nextEmail.uid);
           if (!graphId) continue;
           const freshAccount = await ensureFreshToken(account);
           const graphMsg = await api.graphGetMessage(freshAccount.oauth2AccessToken, graphId);
@@ -2350,7 +2682,7 @@ export const useMailStore = create((set, get) => ({
           get().addToCache(cacheKey, email, cacheLimitMB);
         } else {
           // IMAP (auto-persists .eml)
-          const email = await api.fetchEmailLight(account, nextEmail.uid, activeMailbox, activeAccountId);
+          const email = await api.fetchEmailLight(account, nextEmail.uid, prefetchMailbox, prefetchAccountId);
           get().addToCache(cacheKey, email, cacheLimitMB);
         }
       } catch (e) {
@@ -2362,10 +2694,14 @@ export const useMailStore = create((set, get) => ({
 
   // Select email
   selectEmail: async (uid, source = 'server') => {
-    const { activeAccountId, accounts, activeMailbox } = get();
-    let account = accounts.find(a => a.id === activeAccountId);
+    const state = get();
+    const isUnified = state.activeMailbox === 'UNIFIED';
+    const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
+    const accountId = unified?.accountId || state.activeAccountId;
+    const mailbox = unified?.mailbox || state.activeMailbox;
+    let account = unified?.account || state.accounts.find(a => a.id === accountId);
     account = await ensureFreshToken(account);
-    const cacheKey = `${activeAccountId}-${activeMailbox}-${uid}`;
+    const cacheKey = `${accountId}-${mailbox}-${uid}`;
     const cacheLimitMB = useSettingsStore.getState().cacheLimitMB;
 
     set({ selectedThread: null, selectedEmailId: uid, loadingEmail: true, selectedEmail: null, selectedEmailSource: source });
@@ -2382,7 +2718,7 @@ export const useMailStore = create((set, get) => ({
       }
 
       // 2. Check Maildir for cached .eml file (light — no attachment binaries or rawSource)
-      const localEmail = await db.getLocalEmailLight(activeAccountId, activeMailbox, uid);
+      const localEmail = await db.getLocalEmailLight(accountId, mailbox, uid);
 
       if (source === 'local-only' || (localEmail && localEmail.html !== undefined)) {
         email = localEmail;
@@ -2392,7 +2728,7 @@ export const useMailStore = create((set, get) => ({
         // 3a. Graph API: fetch full message by Graph message ID
         const freshAccount = await ensureFreshToken(account);
         const token = freshAccount.oauth2AccessToken;
-        let graphId = getGraphMessageId(activeAccountId, activeMailbox, uid);
+        let graphId = getGraphMessageId(accountId, mailbox, uid);
 
         // If graphIdMap is stale (e.g. after app restart), rebuild it by re-fetching headers
         if (!graphId) {
@@ -2401,13 +2737,13 @@ export const useMailStore = create((set, get) => ({
             const folders = await api.graphListFolders(token);
             const folder = folders.find(f => {
               const normalized = normalizeGraphFolderName(f.displayName);
-              return normalized === activeMailbox || f.displayName === activeMailbox;
+              return normalized === mailbox || f.displayName === mailbox;
             });
             if (folder) {
               const { graphMessageIds } = await api.graphListMessages(token, folder.id, 200, 0);
               const uidMap = new Map();
               graphMessageIds.forEach((gid, i) => uidMap.set(i + 1, gid));
-              _setGraphIdMap(activeAccountId, activeMailbox, uidMap);
+              _setGraphIdMap(accountId, mailbox, uidMap);
               graphId = uidMap.get(uid);
             }
           } catch (e) {
@@ -2423,7 +2759,7 @@ export const useMailStore = create((set, get) => ({
           get().addToCache(cacheKey, email, cacheLimitMB);
 
           // Background: download full MIME and save .eml to disk for offline access
-          api.graphCacheMime(token, graphId, activeAccountId, activeMailbox, uid)
+          api.graphCacheMime(token, graphId, accountId, mailbox, uid)
             .catch(e => console.warn('[selectEmail] Background MIME cache failed:', e));
 
           // Mark as read on server (if auto mode)
@@ -2441,13 +2777,13 @@ export const useMailStore = create((set, get) => ({
         }
       } else if (account) {
         // 3b. IMAP: Fetch from server (light — saves full .eml to Maildir in Rust background)
-        email = await api.fetchEmailLight(account, uid, activeMailbox, activeAccountId);
+        email = await api.fetchEmailLight(account, uid, mailbox, accountId);
         actualSource = 'server';
         get().addToCache(cacheKey, email, cacheLimitMB);
 
         // Update saved IDs (the light IMAP fetch auto-persists to Maildir in Rust)
         try {
-          const savedEmailIds = await db.getSavedEmailIds(activeAccountId, activeMailbox);
+          const savedEmailIds = await db.getSavedEmailIds(accountId, mailbox);
           set({ savedEmailIds });
         } catch (e) {
           console.warn('[selectEmail] Failed to update saved IDs:', e);
@@ -2457,7 +2793,7 @@ export const useMailStore = create((set, get) => ({
         const markAsReadMode = useSettingsStore.getState().markAsReadMode;
         if (markAsReadMode === 'auto' && !email.flags?.includes('\\Seen')) {
           try {
-            await api.updateEmailFlags(account, uid, ['\\Seen'], 'add', activeMailbox);
+            await api.updateEmailFlags(account, uid, ['\\Seen'], 'add', mailbox);
             email = { ...email, flags: [...(email.flags || []), '\\Seen'] };
           } catch (e) {
             console.warn('Failed to mark as read:', e);
@@ -2487,17 +2823,29 @@ export const useMailStore = create((set, get) => ({
       console.error('[selectEmail] Error details:', { name: error.name, message: error.message, status: error.status, stack: error.stack });
       // Fallback to Maildir if server fails
       try {
-        const localEmail = await db.getLocalEmailLight(activeAccountId, activeMailbox, uid);
+        const localEmail = await db.getLocalEmailLight(accountId, mailbox, uid);
         if (localEmail) {
           set({ selectedEmail: localEmail, selectedEmailSource: 'local-only' });
         } else {
-          const detail = error.message || String(error);
-          set({ error: `Failed to load email (UID ${uid}, ${activeMailbox}): ${detail}` });
+          // Final fallback: show the header-only email so user sees something
+          const headerEmail = get().emails.find(e => e.uid === uid);
+          if (headerEmail) {
+            set({ selectedEmail: { ...headerEmail, text: headerEmail.snippet || headerEmail.subject || '' }, selectedEmailSource: 'header-only' });
+          } else {
+            const detail = error.message || String(error);
+            set({ error: `Failed to load email (UID ${uid}, ${mailbox}): ${detail}` });
+          }
         }
       } catch (fallbackError) {
         console.error('[selectEmail] Fallback also failed:', fallbackError);
-        const detail = error.message || String(error);
-        set({ error: `Failed to load email (UID ${uid}, ${activeMailbox}): ${detail}` });
+        // Final fallback: show header data
+        const headerEmail = get().emails.find(e => e.uid === uid);
+        if (headerEmail) {
+          set({ selectedEmail: { ...headerEmail, text: headerEmail.snippet || headerEmail.subject || '' }, selectedEmailSource: 'header-only' });
+        } else {
+          const detail = error.message || String(error);
+          set({ error: `Failed to load email (UID ${uid}, ${mailbox}): ${detail}` });
+        }
       }
     } finally {
       set({ loadingEmail: false });
@@ -2508,21 +2856,25 @@ export const useMailStore = create((set, get) => ({
 
   // Archive email locally (save .eml with 'A' flag)
   saveEmailLocally: async (uid) => {
-    const { activeAccountId, accounts, activeMailbox, selectedEmail } = get();
-    const account = accounts.find(a => a.id === activeAccountId);
+    const state = get();
+    const isUnified = state.activeMailbox === 'UNIFIED';
+    const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
+    const accountId = unified?.accountId || state.activeAccountId;
+    const mailbox = unified?.mailbox || state.activeMailbox;
+    const account = unified?.account || state.accounts.find(a => a.id === accountId);
     if (!account) return;
 
-    const cacheKey = `${activeAccountId}-${activeMailbox}-${uid}`;
+    const cacheKey = `${accountId}-${mailbox}-${uid}`;
     const cacheLimitMB = useSettingsStore.getState().cacheLimitMB;
 
     try {
       // Check if already cached in Maildir — just set archive flag
-      const alreadyCached = await db.isEmailSaved(activeAccountId, activeMailbox, uid);
+      const alreadyCached = await db.isEmailSaved(accountId, mailbox, uid);
       if (alreadyCached) {
-        await db.archiveEmail(activeAccountId, activeMailbox, uid);
+        await db.archiveEmail(accountId, mailbox, uid);
       } else {
         // Need full email content (with rawSource) to save .eml
-        const email = await api.fetchEmail(account, uid, activeMailbox);
+        const email = await api.fetchEmail(account, uid, mailbox);
 
         if (!email.rawSource) {
           throw new Error('Email has no raw source data');
@@ -2531,27 +2883,28 @@ export const useMailStore = create((set, get) => ({
         // Store .eml with archived + seen flags
         const invoke = window.__TAURI__?.core?.invoke;
         await invoke('maildir_store', {
-          accountId: activeAccountId,
-          mailbox: activeMailbox,
+          accountId: accountId,
+          mailbox: mailbox,
           uid: email.uid,
           rawSourceBase64: email.rawSource,
           flags: ['archived', 'seen'],
         });
       }
 
-      // Update state
-      const savedEmailIds = await db.getSavedEmailIds(activeAccountId, activeMailbox);
-      const archivedEmailIds = await db.getArchivedEmailIds(activeAccountId, activeMailbox);
-      const localEmails = await db.getLocalEmails(activeAccountId, activeMailbox);
-
-      set({ savedEmailIds, archivedEmailIds, localEmails });
+      // Update state (skip if unified — IDs are per-account, not global)
+      if (!isUnified) {
+        const savedEmailIds = await db.getSavedEmailIds(accountId, mailbox);
+        const archivedEmailIds = await db.getArchivedEmailIds(accountId, mailbox);
+        const localEmails = await db.getLocalEmails(accountId, mailbox);
+        set({ savedEmailIds, archivedEmailIds, localEmails });
+      }
       get().updateSortedEmails();
     } catch (error) {
       set({ error: `Failed to archive email: ${error.message}` });
       throw error;
     }
   },
-  
+
   // Archive multiple emails via Rust thread (concurrent fetch + write with progress)
   saveEmailsLocally: async (uids) => {
     const { activeAccountId, accounts, activeMailbox } = get();
@@ -2690,14 +3043,19 @@ export const useMailStore = create((set, get) => ({
   
   // Remove local email
   removeLocalEmail: async (uid) => {
-    const { activeAccountId, activeMailbox, selectedEmailId } = get();
-    const localId = `${activeAccountId}-${activeMailbox}-${uid}`;
-    
+    const state = get();
+    const isUnified = state.activeMailbox === 'UNIFIED';
+    const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
+    const accountId = unified?.accountId || state.activeAccountId;
+    const mailbox = unified?.mailbox || state.activeMailbox;
+    const selectedEmailId = state.selectedEmailId;
+    const localId = `${accountId}-${mailbox}-${uid}`;
+
     await db.deleteLocalEmail(localId);
 
-    const savedEmailIds = await db.getSavedEmailIds(activeAccountId, activeMailbox);
-    const archivedEmailIds = await db.getArchivedEmailIds(activeAccountId, activeMailbox);
-    const localEmails = await db.getLocalEmails(activeAccountId, activeMailbox);
+    const savedEmailIds = await db.getSavedEmailIds(accountId, mailbox);
+    const archivedEmailIds = await db.getArchivedEmailIds(accountId, mailbox);
+    const localEmails = await db.getLocalEmails(accountId, mailbox);
 
     // Clear selection if we deleted the selected email
     if (selectedEmailId === uid) {
@@ -2710,17 +3068,22 @@ export const useMailStore = create((set, get) => ({
   
   // Delete email from server
   deleteEmailFromServer: async (uid, { skipRefresh = false } = {}) => {
-    const { activeAccountId, accounts, activeMailbox, selectedEmailId } = get();
-    let account = accounts.find(a => a.id === activeAccountId);
+    const state = get();
+    const isUnified = state.activeMailbox === 'UNIFIED';
+    const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
+    const accountId = unified?.accountId || state.activeAccountId;
+    const mailbox = unified?.mailbox || state.activeMailbox;
+    let account = unified?.account || state.accounts.find(a => a.id === accountId);
+    const selectedEmailId = state.selectedEmailId;
     if (!account) return;
     account = await ensureFreshToken(account);
 
     if (isGraphAccount(account)) {
-      const graphId = getGraphMessageId(activeAccountId, activeMailbox, uid);
+      const graphId = getGraphMessageId(accountId, mailbox, uid);
       if (!graphId) throw new Error('Cannot delete: no Graph message ID found for this email.');
       await api.graphDeleteMessage(account.oauth2AccessToken, graphId);
     } else {
-      await api.deleteEmail(account, uid, activeMailbox);
+      await api.deleteEmail(account, uid, mailbox);
     }
 
     // Immediately remove from emails array so displayEmails flags it as local-only
@@ -2739,35 +3102,54 @@ export const useMailStore = create((set, get) => ({
     set(updates);
 
     // Update cached headers on disk so loadEmails doesn't restore the deleted email
-    await db.saveEmailHeaders(activeAccountId, activeMailbox, filteredEmails, newTotal);
+    if (!isUnified) {
+      await db.saveEmailHeaders(accountId, mailbox, filteredEmails, newTotal);
+    }
 
     // Background refresh to sync with server (skip during batch operations)
-    if (!skipRefresh) get().loadEmails();
+    if (!skipRefresh && !isUnified) get().loadEmails();
   },
   
   // Move emails to a different mailbox/folder
   moveEmails: async (uids, targetMailbox) => {
-    const { activeAccountId, accounts, activeMailbox, mailboxes, selectedEmailId } = get();
-    let account = accounts.find(a => a.id === activeAccountId);
-    if (!account) return;
-    account = await ensureFreshToken(account);
+    const state = get();
+    const isUnified = state.activeMailbox === 'UNIFIED';
+    const selectedEmailId = state.selectedEmailId;
 
-    if (isGraphAccount(account)) {
-      // Resolve Graph message IDs from UIDs
-      const messageIds = uids
-        .map(uid => getGraphMessageId(activeAccountId, activeMailbox, uid))
-        .filter(Boolean);
-      if (messageIds.length === 0) throw new Error('Cannot move: no Graph message IDs found for selected emails.');
-
-      // Find the Graph folder ID for the target mailbox
-      const targetFolder = mailboxes.find(m => m.path === targetMailbox || m.name === targetMailbox);
-      if (!targetFolder || !targetFolder._graphFolderId) {
-        throw new Error(`Cannot move: target folder "${targetMailbox}" not found.`);
+    if (isUnified) {
+      // In unified mode, group UIDs by account and move each group separately
+      const groups = new Map(); // accountId → { account, uids, mailbox }
+      for (const uid of uids) {
+        const ctx = _resolveUnifiedContext(uid, state);
+        if (!ctx) continue;
+        if (!groups.has(ctx.accountId)) groups.set(ctx.accountId, { account: ctx.account, mailbox: ctx.mailbox, uids: [] });
+        groups.get(ctx.accountId).uids.push(uid);
       }
-
-      await api.graphMoveEmails(account.oauth2AccessToken, messageIds, targetFolder._graphFolderId);
+      for (const [, group] of groups) {
+        const freshAccount = await ensureFreshToken(group.account);
+        await api.moveEmails(freshAccount, group.uids, group.mailbox, targetMailbox);
+      }
     } else {
-      await api.moveEmails(account, uids, activeMailbox, targetMailbox);
+      const { activeAccountId, accounts, activeMailbox, mailboxes } = state;
+      let account = accounts.find(a => a.id === activeAccountId);
+      if (!account) return;
+      account = await ensureFreshToken(account);
+
+      if (isGraphAccount(account)) {
+        const messageIds = uids
+          .map(uid => getGraphMessageId(activeAccountId, activeMailbox, uid))
+          .filter(Boolean);
+        if (messageIds.length === 0) throw new Error('Cannot move: no Graph message IDs found for selected emails.');
+
+        const targetFolder = mailboxes.find(m => m.path === targetMailbox || m.name === targetMailbox);
+        if (!targetFolder || !targetFolder._graphFolderId) {
+          throw new Error(`Cannot move: target folder "${targetMailbox}" not found.`);
+        }
+
+        await api.graphMoveEmails(account.oauth2AccessToken, messageIds, targetFolder._graphFolderId);
+      } else {
+        await api.moveEmails(account, uids, activeMailbox, targetMailbox);
+      }
     }
 
     // Remove moved emails from current view
@@ -2801,15 +3183,19 @@ export const useMailStore = create((set, get) => ({
 
   // Mark email as read/unread
   markEmailReadStatus: async (uid, read) => {
-    const { activeAccountId, accounts, activeMailbox, selectedEmail } = get();
-    let account = accounts.find(a => a.id === activeAccountId);
+    const state = get();
+    const isUnified = state.activeMailbox === 'UNIFIED';
+    const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
+    const accountId = unified?.accountId || state.activeAccountId;
+    const mailbox = unified?.mailbox || state.activeMailbox;
+    let account = unified?.account || state.accounts.find(a => a.id === accountId);
     if (!account) return;
     account = await ensureFreshToken(account);
 
     try {
       // Route through Graph API or IMAP depending on account transport
       if (isGraphAccount(account)) {
-        const graphId = getGraphMessageId(activeAccountId, activeMailbox, uid);
+        const graphId = getGraphMessageId(accountId, mailbox, uid);
         if (graphId) {
           await api.graphSetRead(account.oauth2AccessToken, graphId, read);
         } else {
@@ -2821,7 +3207,7 @@ export const useMailStore = create((set, get) => ({
           uid,
           ['\\Seen'],
           read ? 'add' : 'remove',
-          activeMailbox
+          mailbox
         );
       }
 
@@ -2906,9 +3292,10 @@ export const useMailStore = create((set, get) => ({
 
   // Bulk mark as read — clears selection immediately, optimistic UI update
   markSelectedAsRead: async () => {
-    const { selectedEmailIds, activeAccountId, accounts, activeMailbox } = get();
-    let account = accounts.find(a => a.id === activeAccountId);
-    if (!account || selectedEmailIds.size === 0) return;
+    const state = get();
+    const { selectedEmailIds, accounts } = state;
+    const isUnified = state.activeMailbox === 'UNIFIED';
+    if (selectedEmailIds.size === 0) return;
 
     const uids = Array.from(selectedEmailIds);
     // Optimistic: update UI immediately + clear selection
@@ -2921,10 +3308,14 @@ export const useMailStore = create((set, get) => ({
       selectedEmailIds: new Set()
     }));
 
-    account = await ensureFreshToken(account);
     for (const uid of uids) {
       try {
-        await api.updateEmailFlags(account, uid, ['\\Seen'], 'add', activeMailbox);
+        const ctx = isUnified ? _resolveUnifiedContext(uid, state) : null;
+        const accountId = ctx?.accountId || state.activeAccountId;
+        const mailbox = ctx?.mailbox || state.activeMailbox;
+        let account = ctx?.account || accounts.find(a => a.id === accountId);
+        account = await ensureFreshToken(account);
+        await api.updateEmailFlags(account, uid, ['\\Seen'], 'add', mailbox);
       } catch (e) {
         console.error(`Failed to mark email ${uid} as read:`, e);
       }
@@ -2933,9 +3324,10 @@ export const useMailStore = create((set, get) => ({
 
   // Bulk mark as unread — clears selection immediately, optimistic UI update
   markSelectedAsUnread: async () => {
-    const { selectedEmailIds, activeAccountId, accounts, activeMailbox } = get();
-    let account = accounts.find(a => a.id === activeAccountId);
-    if (!account || selectedEmailIds.size === 0) return;
+    const state = get();
+    const { selectedEmailIds, accounts } = state;
+    const isUnified = state.activeMailbox === 'UNIFIED';
+    if (selectedEmailIds.size === 0) return;
 
     const uids = Array.from(selectedEmailIds);
     // Optimistic: update UI immediately + clear selection
@@ -2948,10 +3340,14 @@ export const useMailStore = create((set, get) => ({
       selectedEmailIds: new Set()
     }));
 
-    account = await ensureFreshToken(account);
     for (const uid of uids) {
       try {
-        await api.updateEmailFlags(account, uid, ['\\Seen'], 'remove', activeMailbox);
+        const ctx = isUnified ? _resolveUnifiedContext(uid, state) : null;
+        const accountId = ctx?.accountId || state.activeAccountId;
+        const mailbox = ctx?.mailbox || state.activeMailbox;
+        let account = ctx?.account || accounts.find(a => a.id === accountId);
+        account = await ensureFreshToken(account);
+        await api.updateEmailFlags(account, uid, ['\\Seen'], 'remove', mailbox);
       } catch (e) {
         console.error(`Failed to mark email ${uid} as unread:`, e);
       }
@@ -2960,39 +3356,48 @@ export const useMailStore = create((set, get) => ({
 
   // Bulk delete from server — clears selection immediately
   deleteSelectedFromServer: async () => {
-    const { selectedEmailIds, activeAccountId, accounts, activeMailbox } = get();
-    let account = accounts.find(a => a.id === activeAccountId);
-    if (!account || selectedEmailIds.size === 0) return;
+    const state = get();
+    const { selectedEmailIds, accounts } = state;
+    const isUnified = state.activeMailbox === 'UNIFIED';
+    if (selectedEmailIds.size === 0) return;
 
     const uids = Array.from(selectedEmailIds);
     set({ selectedEmailIds: new Set() });
 
-    account = await ensureFreshToken(account);
-    const isGraph = isGraphAccount(account);
     for (const uid of uids) {
       try {
-        if (isGraph) {
-          const graphId = getGraphMessageId(activeAccountId, activeMailbox, uid);
+        const ctx = isUnified ? _resolveUnifiedContext(uid, state) : null;
+        const accountId = ctx?.accountId || state.activeAccountId;
+        const mailbox = ctx?.mailbox || state.activeMailbox;
+        let account = ctx?.account || accounts.find(a => a.id === accountId);
+        account = await ensureFreshToken(account);
+
+        if (isGraphAccount(account)) {
+          const graphId = getGraphMessageId(accountId, mailbox, uid);
           if (graphId) {
             await api.graphDeleteMessage(account.oauth2AccessToken, graphId);
           } else {
             console.warn(`[deleteSelectedFromServer] No Graph ID for UID ${uid}, skipping`);
           }
         } else {
-          await api.deleteEmail(account, uid, activeMailbox);
+          await api.deleteEmail(account, uid, mailbox);
         }
       } catch (e) {
         console.error(`Failed to delete email ${uid}:`, e);
       }
     }
 
-    await get().loadEmails();
+    if (!isUnified) await get().loadEmails();
   },
 
   // Export email
   exportEmail: async (uid) => {
-    const { activeAccountId, activeMailbox } = get();
-    const localId = `${activeAccountId}-${activeMailbox}-${uid}`;
+    const state = get();
+    const isUnified = state.activeMailbox === 'UNIFIED';
+    const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
+    const accountId = unified?.accountId || state.activeAccountId;
+    const mailbox = unified?.mailbox || state.activeMailbox;
+    const localId = `${accountId}-${mailbox}-${uid}`;
     return db.exportEmail(localId);
   },
 

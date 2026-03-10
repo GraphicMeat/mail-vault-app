@@ -13,9 +13,17 @@
 - **Smart Sender Insights** — collapsible panel in email viewer showing exchange history, frequency, common topics, and accounts used per sender
 - **Auto-Cleanup Rules** — automated email cleanup by age and folder with archive-then-delete or delete actions, dry-run preview, and 24-hour scheduling (Pro feature)
 
+### Improved
+- **Performance** — unified inbox loads instantly from disk cache on launch; account cache increased to 8 with pre-warming from headers.json; chat view uses deferred threading, React.memo, and virtualization; layout switch uses debounced ResizeObserver
+- **Folder caching** — mailbox folders persist to disk and restore instantly on cold launch; background IMAP refresh updates silently; removed folder expand/collapse animation for snappier UI
+- **Email content fallback** — retry with exponential backoff when body loading fails; graceful degradation shows email text/snippet instead of error message
+
 ### Fixed
 - **Loading guard scope** — moved 20-second loading timeout to cover entire loadEmails function including credential and network checks, preventing stuck spinners during early failures
 - **Bulk operation toast** — fixed React hook ordering violation in BulkOperationProgress component
+- **Unified Inbox** — fixed all email operations (select, read/unread, delete, move, archive, export) passing virtual "UNIFIED" mailbox to IMAP instead of resolving the real account and INBOX; fixed stale content flash when entering/leaving unified view; fixed account switch from unified inbox showing combined emails instead of individual account; fixed "All Inboxes" header persisting after leaving unified view
+- **Account switching** — fixed selecting an account from unified inbox doing nothing when it was the previously active account; fixed invalid remembered mailbox (deleted/renamed folder) causing blank screen — now falls back to INBOX
+- **Snap Store** — added CA certificate bundle and SSL environment variables to fix "Failed to connect to email server" in strict confinement
 
 ## [2.0.3] - 2026-03-08
 

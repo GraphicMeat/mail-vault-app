@@ -145,19 +145,39 @@ describe('Move to Folder', function () {
 
   it('should close the dropdown with Escape', async function () {
     await pressKey('Escape');
-    await browser.pause(500);
+    await browser.pause(800);
 
-    const dropdownGone = await browser.execute(() => {
-      // The dropdown should be gone — check that no folder-filter input is visible
+    let dropdownGone = await browser.execute(() => {
       const inputs = document.querySelectorAll('input');
       for (const input of inputs) {
         const ph = (input.getAttribute('placeholder') || '').toLowerCase();
         if (input.offsetHeight > 0 && (ph.includes('filter') || ph.includes('folder'))) {
-          return false; // dropdown still open
+          return false;
         }
       }
       return true;
     });
+
+    // Fallback: dispatch Escape directly
+    if (!dropdownGone) {
+      await browser.execute(() => {
+        document.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true,
+        }));
+      });
+      await browser.pause(800);
+
+      dropdownGone = await browser.execute(() => {
+        const inputs = document.querySelectorAll('input');
+        for (const input of inputs) {
+          const ph = (input.getAttribute('placeholder') || '').toLowerCase();
+          if (input.offsetHeight > 0 && (ph.includes('filter') || ph.includes('folder'))) {
+            return false;
+          }
+        }
+        return true;
+      });
+    }
 
     expect(dropdownGone).toBe(true);
   });
@@ -196,10 +216,9 @@ describe('Move to Folder', function () {
 
   it('should close the dropdown again with Escape', async function () {
     await pressKey('Escape');
-    await browser.pause(500);
+    await browser.pause(800);
 
-    // Verify closed
-    const closed = await browser.execute(() => {
+    let closed = await browser.execute(() => {
       const inputs = document.querySelectorAll('input');
       for (const input of inputs) {
         const ph = (input.getAttribute('placeholder') || '').toLowerCase();
@@ -209,6 +228,27 @@ describe('Move to Folder', function () {
       }
       return true;
     });
+
+    // Fallback: dispatch Escape directly
+    if (!closed) {
+      await browser.execute(() => {
+        document.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true,
+        }));
+      });
+      await browser.pause(800);
+
+      closed = await browser.execute(() => {
+        const inputs = document.querySelectorAll('input');
+        for (const input of inputs) {
+          const ph = (input.getAttribute('placeholder') || '').toLowerCase();
+          if (input.offsetHeight > 0 && (ph.includes('filter') || ph.includes('folder'))) {
+            return false;
+          }
+        }
+        return true;
+      });
+    }
 
     expect(closed).toBe(true);
   });

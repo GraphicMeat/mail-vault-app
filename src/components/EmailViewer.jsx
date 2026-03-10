@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { memo, useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useShallow } from 'zustand/react/shallow';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -752,8 +752,8 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
 
   if (!loadedEmail) {
     return (
-      <div className="py-4 text-sm text-mail-text-muted">
-        Could not load email content
+      <div className="py-3 text-sm text-mail-text-muted italic">
+        {email.text || email.textBody || email.snippet || email.subject || 'No content available'}
       </div>
     );
   }
@@ -1161,7 +1161,7 @@ function ThreadView({ thread }) {
 
 // ── Single Email Viewer ─────────────────────────────────────────────────────
 
-export function EmailViewer() {
+function EmailViewerComponent() {
   const selectedEmail = useMailStore(s => s.selectedEmail);
   const selectedEmailSource = useMailStore(s => s.selectedEmailSource);
   const selectedThread = useMailStore(s => s.selectedThread);
@@ -1820,3 +1820,5 @@ export function EmailViewer() {
     </div>
   );
 }
+
+export const EmailViewer = memo(EmailViewerComponent);

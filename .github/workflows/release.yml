@@ -9,6 +9,53 @@ on:
         type: string
 
 jobs:
+  # ── E2E Tests (disabled — uncomment to enable) ──
+  # Runs UI-only E2E tests on macOS. Connected tests are skipped in CI
+  # because they require IMAP accounts in the system keychain.
+  # Uses tauri-webdriver-automation (macOS WKWebView only).
+  #
+  # e2e-tests:
+  #   permissions:
+  #     contents: read
+  #   runs-on: macos-latest
+  #   timeout-minutes: 30
+  #
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Install Rust stable
+  #       uses: dtolnay/rust-toolchain@stable
+  #
+  #     - name: Cache Rust dependencies
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: |
+  #           ~/.cargo/registry
+  #           ~/.cargo/git
+  #           src-tauri/target
+  #         key: macos-e2e-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+  #         restore-keys: |
+  #           macos-e2e-cargo-
+  #
+  #     - name: Install Node.js
+  #       uses: actions/setup-node@v4
+  #       with:
+  #         node-version: 20
+  #         cache: 'npm'
+  #
+  #     - name: Install frontend dependencies
+  #       run: npm ci
+  #
+  #     - name: Install tauri-webdriver-automation
+  #       run: cargo install tauri-webdriver-automation
+  #
+  #     - name: Build debug binary with WebDriver support
+  #       run: npx tauri build --debug --features webdriver
+  #
+  #     - name: Run UI E2E tests
+  #       run: npm run test:e2e:ui
+
   build-macos:
     permissions:
       contents: write
