@@ -140,6 +140,9 @@ jobs:
       - name: Install create-dmg
         run: brew install create-dmg
 
+      - name: Download Sparkle framework
+        run: bash scripts/download-sparkle.sh
+
       - name: Build, sign, notarize, and package
         env:
           CI: 'true'
@@ -147,8 +150,7 @@ jobs:
           SKIP_SERVER_BUILD: 'true'
           SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           KEYCHAIN_PATH: ${{ env.KEYCHAIN_PATH }}
-          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          SPARKLE_EDDSA_PRIVATE_KEY: ${{ secrets.SPARKLE_EDDSA_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -162,8 +164,7 @@ jobs:
           name: macos-artifacts
           path: |
             src-tauri/target/universal-apple-darwin/release/bundle/dmg/MailVault-*.dmg
-            src-tauri/target/universal-apple-darwin/release/bundle/dmg/MailVault.app.tar.gz
-            src-tauri/target/universal-apple-darwin/release/bundle/dmg/MailVault.app.tar.gz.sig
+            src-tauri/target/universal-apple-darwin/release/bundle/dmg/appcast.xml
           retention-days: 1
 
   build-linux-x86_64:
@@ -522,10 +523,12 @@ jobs:
           find artifacts/ -type f | sort
           echo "=========================="
 
-          # ── macOS ──
-          MACOS_TAR=$(find artifacts/macos-artifacts -name "*.tar.gz" ! -name "*.sig" | head -1)
-          MACOS_TAR_NAME=$(basename "$MACOS_TAR")
-          MACOS_SIG=$(cat "${MACOS_TAR}.sig" 2>/dev/null || echo "")
+          # ── macOS (Sparkle — uses appcast.xml, not latest.json) ──
+          APPCAST=$(find artifacts/macos-artifacts -name "appcast.xml" | head -1)
+          if [ -n "$APPCAST" ]; then
+            cp "$APPCAST" appcast.xml
+            echo "Found appcast.xml for macOS Sparkle updater"
+          fi
 
           # ── Linux x86_64 (.deb) ──
           LX86_DEB=$(find artifacts/linux-x86_64-artifacts -name "*.deb" | head -1)
@@ -552,23 +555,24 @@ jobs:
           # JSON-escape for latest.json (handles newlines, quotes, backslashes)
           CHANGELOG_JSON=$(python3 -c "import sys,json; print(json.dumps(sys.stdin.read().strip()))" <<< "$CHANGELOG_NOTES")
 
+          # latest.json for Linux updater only (macOS uses Sparkle appcast.xml)
           cat > latest.json <<EOJSON
           {
             "version": "${VERSION_NUM}",
             "notes": ${CHANGELOG_JSON},
             "pub_date": "${PUB_DATE}",
-            "platforms": {
-              "darwin-aarch64": { "signature": "${MACOS_SIG}", "url": "${BASE_URL}/${MACOS_TAR_NAME}" },
-              "darwin-x86_64": { "signature": "${MACOS_SIG}", "url": "${BASE_URL}/${MACOS_TAR_NAME}" }
-            }
+            "platforms": {}
           }
           EOJSON
 
-          echo "Generated latest.json:"
+          echo "Generated latest.json (Linux):"
           cat latest.json
 
           # Collect all upload files
           UPLOAD_FILES="latest.json"
+          if [ -f "appcast.xml" ]; then
+            UPLOAD_FILES="$UPLOAD_FILES appcast.xml"
+          fi
           for f in $(find artifacts/ -type f); do
             UPLOAD_FILES="$UPLOAD_FILES $f"
           done
