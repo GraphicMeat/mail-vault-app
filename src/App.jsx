@@ -309,8 +309,11 @@ function App() {
     return () => { active = false; if (unlisten) unlisten(); };
   }, [handleReportBug]);
 
-  // Listen for update-available event from Rust updater
+  // Listen for update-available event from Rust updater (Linux only — macOS uses Sparkle native UI)
+  const isMacOS = navigator.platform?.startsWith('Mac') || navigator.userAgent?.includes('Macintosh');
   useEffect(() => {
+    if (isMacOS) return; // Sparkle handles updates natively on macOS
+
     let unlisten;
     let active = true;
     import('@tauri-apps/api/event').then(({ listen }) => {
