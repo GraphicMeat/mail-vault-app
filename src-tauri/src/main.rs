@@ -4,7 +4,6 @@
 use tauri::{Emitter, Manager};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri_plugin_updater::UpdaterExt;
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -2848,8 +2847,10 @@ async fn import_backup(
     })
 }
 
+#[cfg(target_os = "linux")]
 type PendingUpdate = std::sync::Mutex<Option<tauri_plugin_updater::Update>>;
 
+#[cfg(target_os = "linux")]
 #[tauri::command]
 async fn install_pending_update(handle: tauri::AppHandle) -> Result<(), String> {
     let state = handle.state::<PendingUpdate>();
@@ -2879,8 +2880,15 @@ async fn install_pending_update(handle: tauri::AppHandle) -> Result<(), String> 
     }
 }
 
+#[cfg(target_os = "macos")]
+#[tauri::command]
+async fn install_pending_update(_handle: tauri::AppHandle) -> Result<(), String> {
+    Err("Use Sparkle for updates on macOS".to_string())
+}
+
 /// Shared update check logic for both manual menu trigger and startup auto-check.
 /// `show_no_update` controls whether to show a dialog when already up-to-date.
+#[cfg(target_os = "linux")]
 async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
     use tauri_plugin_updater::UpdaterExt;
     use tauri_plugin_dialog::DialogExt;
@@ -2940,6 +2948,28 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
     }
 }
 
+#[cfg(target_os = "macos")]
+async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
+    use tauri_plugin_sparkle_updater::SparkleUpdaterExt;
+
+    if let Some(updater) = handle.sparkle_updater() {
+        if show_no_update {
+            updater.check_for_updates();
+        } else {
+            updater.check_for_updates_in_background();
+        }
+    } else {
+        info!("Sparkle updater not available (dev mode?)");
+        if show_no_update {
+            use tauri_plugin_dialog::DialogExt;
+            handle.dialog()
+                .message("Update checking is only available in the packaged app.")
+                .title("Updates")
+                .show(|_| {});
+        }
+    }
+}
+
 fn main() {
     // Log panics before abort — set_hook fires even with panic = "abort"
     std::panic::set_hook(Box::new(|info| {
@@ -2969,18 +2999,27 @@ fn main() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_http::init());
 
     #[cfg(feature = "webdriver")]
     let builder = builder.plugin(tauri_plugin_webdriver_automation::init());
 
-    builder
+    // Updater plugin — Sparkle on macOS, tauri-plugin-updater on Linux
+    #[cfg(target_os = "macos")]
+    let builder = builder.plugin(tauri_plugin_sparkle_updater::init());
+    #[cfg(target_os = "linux")]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+
+    let builder = builder
         .manage(archive::ArchiveCancelToken::default())
         .manage(imap::ImapPool::new())
-        .manage(oauth2::OAuth2Manager::new())
-        .manage(PendingUpdate::default())
+        .manage(oauth2::OAuth2Manager::new());
+
+    #[cfg(target_os = "linux")]
+    let builder = builder.manage(PendingUpdate::default());
+
+    builder
         .invoke_handler(tauri::generate_handler![
             log_from_frontend,
             install_pending_update,
