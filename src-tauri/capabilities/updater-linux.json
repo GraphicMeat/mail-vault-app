@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "updater-linux",
+  "description": "Tauri updater capability for Linux",
+  "windows": ["main"],
+  "platforms": ["linux"],
+  "permissions": [
+    "updater:default"
+  ]
+}
