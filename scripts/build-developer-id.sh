@@ -96,16 +96,23 @@ if [ -n "$KEYCHAIN_PATH" ]; then
     KEYCHAIN_ARG="--keychain $KEYCHAIN_PATH"
 fi
 
-# ── Tauri Updater Key ──────────────────────────────────────────────
+# ── Sparkle EdDSA Signing Key ─────────────────────────────────────
 
 echo ""
-echo -e "${YELLOW}🔍 Checking Tauri updater signing key...${NC}"
-if [ -n "$TAURI_PRIVATE_KEY" ]; then
-    echo -e "${GREEN}✅ TAURI_PRIVATE_KEY is set — updater artifacts will be signed${NC}"
-    UPDATER_SIGN=true
+echo -e "${YELLOW}🔍 Checking Sparkle EdDSA signing key...${NC}"
+if [ -n "${SPARKLE_EDDSA_PRIVATE_KEY:-}" ]; then
+    echo -e "${GREEN}✅ SPARKLE_EDDSA_PRIVATE_KEY is set — Sparkle artifacts will be signed${NC}"
+    SPARKLE_SIGN=true
 else
-    echo -e "${YELLOW}⚠️  TAURI_PRIVATE_KEY not set — updater artifacts will NOT be signed${NC}"
-    UPDATER_SIGN=false
+    echo -e "${YELLOW}⚠️  SPARKLE_EDDSA_PRIVATE_KEY not set — checking Keychain...${NC}"
+    # generate_keys -x exports from Keychain; if it fails, we can't sign
+    if ./src-tauri/sparkle-bin/generate_keys -x /dev/null >/dev/null 2>&1; then
+        echo -e "${GREEN}✅ EdDSA key found in Keychain${NC}"
+        SPARKLE_SIGN=true
+    else
+        echo -e "${YELLOW}⚠️  No Sparkle EdDSA key found — updater artifacts will NOT be signed${NC}"
+        SPARKLE_SIGN=false
+    fi
 fi
 
 # ── Notarization Check ─────────────────────────────────────────────
@@ -320,73 +327,64 @@ if [ "$NOTARIZE" = true ]; then
     echo -e "${GREEN}✅ Notarization verified${NC}"
 fi
 
-# ── Updater Artifacts ──────────────────────────────────────────────
+# ── Sparkle Updater Artifacts ─────────────────────────────────────
 
-UPDATER_BUNDLE_DIR="$TARGET_DIR/bundle/macos"
-UPDATE_TAR_GZ=""
-UPDATE_SIG=""
-
-if [ "$UPDATER_SIGN" = true ]; then
+if [ "$SPARKLE_SIGN" = true ]; then
     echo ""
-    echo -e "${YELLOW}🔄 Processing Tauri updater artifacts...${NC}"
+    echo -e "${YELLOW}🔄 Processing Sparkle updater artifacts...${NC}"
 
-    UPDATE_TAR_GZ="$UPDATER_BUNDLE_DIR/${APP_NAME}.app.tar.gz"
+    # Find the DMG for Sparkle signing
+    DMG_FILE=$(find "$DMG_DIR" -name "*.dmg" | head -1)
 
-    # Always recreate .tar.gz from the correctly signed app (Tauri's was signed differently)
-    echo "   Creating updater archive from signed app..."
-    rm -f "$UPDATE_TAR_GZ" "${UPDATE_TAR_GZ}.sig"
-    cd "$UPDATER_BUNDLE_DIR"
-    tar -czf "${APP_NAME}.app.tar.gz" "${APP_NAME}.app"
-    cd "$PROJECT_DIR"
-
-    echo -e "${GREEN}✅ Created updater archive: $(basename "$UPDATE_TAR_GZ")${NC}"
-
-    # Sign with Tauri updater key
-    echo "   Signing updater archive..."
-    npx @tauri-apps/cli signer sign "$UPDATE_TAR_GZ" \
-        --private-key "$TAURI_PRIVATE_KEY" \
-        --password "$TAURI_KEY_PASSWORD" 2>&1
-    UPDATE_SIG="${UPDATE_TAR_GZ}.sig"
-
-    if [ -f "$UPDATE_SIG" ]; then
-        echo -e "${GREEN}✅ Updater signature created${NC}"
+    if [ -z "$DMG_FILE" ]; then
+        echo -e "${RED}❌ No DMG found for Sparkle signing${NC}"
     else
-        echo -e "${RED}❌ Failed to create updater signature${NC}"
-        UPDATER_SIGN=false
+        DMG_NAME=$(basename "$DMG_FILE")
+        DMG_SIZE=$(stat -f%z "$DMG_FILE")
+
+        # Sign the DMG with Sparkle EdDSA key
+        echo "   Signing DMG with Sparkle EdDSA key..."
+        if [ -n "${SPARKLE_EDDSA_PRIVATE_KEY:-}" ]; then
+            SPARKLE_SIG=$(echo -n "$SPARKLE_EDDSA_PRIVATE_KEY" | ./src-tauri/sparkle-bin/sign_update "$DMG_FILE" --ed-key-file -)
+        else
+            SPARKLE_SIG=$(./src-tauri/sparkle-bin/sign_update "$DMG_FILE")
+        fi
+
+        EDDSA_SIGNATURE=$(echo "$SPARKLE_SIG" | grep 'sparkle:edSignature=' | sed 's/.*sparkle:edSignature="\([^"]*\)".*/\1/')
+        echo -e "${GREEN}✅ Sparkle EdDSA signature created${NC}"
+
+        # Generate appcast.xml
+        echo ""
+        echo -e "${YELLOW}📝 Generating appcast.xml...${NC}"
+
+        PUB_DATE=$(date -u "+%a, %d %b %Y %H:%M:%S %z")
+        APPCAST_FILE="$DMG_DIR/appcast.xml"
+
+        cat > "$APPCAST_FILE" <<EOXML
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>MailVault Updates</title>
+    <link>https://mailvault.app</link>
+    <description>Most recent changes with links to updates.</description>
+    <language>en</language>
+    <item>
+      <title>Version ${VERSION}</title>
+      <pubDate>${PUB_DATE}</pubDate>
+      <sparkle:version>${VERSION}</sparkle:version>
+      <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
+      <enclosure url="https://github.com/GraphicMeat/mail-vault-app/releases/download/v${VERSION}/${DMG_NAME}"
+                 sparkle:edSignature="${EDDSA_SIGNATURE}"
+                 length="${DMG_SIZE}"
+                 type="application/octet-stream" />
+    </item>
+  </channel>
+</rss>
+EOXML
+
+        echo -e "${GREEN}✅ appcast.xml generated${NC}"
     fi
-
-    # Copy updater artifacts next to DMG for easy access
-    cp "$UPDATE_TAR_GZ" "$DMG_DIR/"
-    cp "$UPDATE_SIG" "$DMG_DIR/" 2>/dev/null
-
-    # Generate latest.json for the updater endpoint
-    echo ""
-    echo -e "${YELLOW}📝 Generating latest.json updater manifest...${NC}"
-
-    SIGNATURE=$(cat "$UPDATE_SIG" 2>/dev/null || echo "")
-    PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    TAR_GZ_NAME=$(basename "$UPDATE_TAR_GZ")
-
-    LATEST_JSON="$DMG_DIR/latest.json"
-    cat > "$LATEST_JSON" <<EOJSON
-{
-  "version": "${VERSION}",
-  "notes": "MailVault v${VERSION}",
-  "pub_date": "${PUB_DATE}",
-  "platforms": {
-    "darwin-aarch64": {
-      "signature": "${SIGNATURE}",
-      "url": "https://github.com/GraphicMeat/mail-vault-app/releases/download/v${VERSION}/${TAR_GZ_NAME}"
-    },
-    "darwin-x86_64": {
-      "signature": "${SIGNATURE}",
-      "url": "https://github.com/GraphicMeat/mail-vault-app/releases/download/v${VERSION}/${TAR_GZ_NAME}"
-    }
-  }
-}
-EOJSON
-
-    echo -e "${GREEN}✅ latest.json generated${NC}"
 fi
 
 # ── Summary ────────────────────────────────────────────────────────
@@ -399,10 +397,8 @@ echo ""
 echo "📦 Output:"
 echo "   App:  $APP_PATH"
 echo "   DMG:  $SIGNED_DMG"
-if [ "$UPDATER_SIGN" = true ] && [ -n "$UPDATE_TAR_GZ" ]; then
-    echo "   Update archive:   $DMG_DIR/$(basename "$UPDATE_TAR_GZ")"
-    echo "   Update signature: $DMG_DIR/$(basename "$UPDATE_SIG")"
-    echo "   Update manifest:  $LATEST_JSON"
+if [ "$SPARKLE_SIGN" = true ] && [ -f "$DMG_DIR/appcast.xml" ]; then
+    echo "   Appcast: $DMG_DIR/appcast.xml"
 fi
 echo ""
 if [ "$NOTARIZE" = true ]; then
@@ -411,8 +407,8 @@ else
     echo -e "${YELLOW}⚠️  The DMG is signed but NOT notarized.${NC}"
     echo "   Users may see Gatekeeper warnings."
 fi
-if [ "$UPDATER_SIGN" = true ]; then
-    echo -e "${GREEN}✅ Updater artifacts are signed - upload latest.json and .tar.gz to your GitHub release${NC}"
+if [ "$SPARKLE_SIGN" = true ]; then
+    echo -e "${GREEN}✅ Sparkle updater artifacts signed - upload appcast.xml and DMG to your GitHub release${NC}"
 fi
 echo ""
 
