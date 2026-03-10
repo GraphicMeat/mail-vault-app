@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-03-10
+
 ### Changed
 - **macOS updater**: Replaced broken Tauri updater with Sparkle 2 framework — native macOS update UI, sandbox-safe XPC installer, EdDSA-signed appcast.xml; Linux keeps tauri-plugin-updater with custom UpdateModal
 
