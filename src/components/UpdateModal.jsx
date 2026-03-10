@@ -139,6 +139,7 @@ export function UpdateModal({ updateInfo, onClose }) {
           exit={{ opacity: 0, scale: 0.95 }}
           className="relative bg-mail-bg border border-mail-border rounded-xl shadow-2xl
                      w-full max-w-lg mx-4 overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-mail-border">
@@ -233,20 +234,24 @@ export function UpdateModal({ updateInfo, onClose }) {
               <div className="flex items-start gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-lg mb-4">
                 <AlertCircle size={20} className="text-mail-danger flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-medium text-mail-text">Update failed</p>
-                  <p className="text-xs text-mail-text-muted mt-1">{errorMsg}</p>
+                  <p className="text-sm font-medium text-mail-text">Failed to install update</p>
+                  <p className="text-xs text-mail-text-muted mt-1">
+                    {errorMsg.includes('os error 30') || errorMsg.includes('Read-only')
+                      ? 'The app cannot update itself due to file system restrictions. Please download the new version manually.'
+                      : errorMsg}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center justify-between">
                 <a
-                  href="https://mailvaultapp.com"
+                  href={`https://github.com/GraphicMeat/mail-vault-app/releases/tag/v${newVersion}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-mail-accent
-                             hover:text-mail-accent-hover transition-colors"
+                  className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium text-white
+                             bg-mail-accent hover:bg-mail-accent-hover rounded-lg transition-colors"
                 >
                   <Download size={14} />
-                  Download Manually
+                  Download v{newVersion}
                 </a>
                 <button
                   onClick={onClose}
