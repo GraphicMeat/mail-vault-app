@@ -107,8 +107,8 @@
     "operatingSystem": "macOS, Linux",
     "applicationCategory": "BusinessApplication",
     "applicationSubCategory": "EmailApplication",
-    "softwareVersion": "2.0.3",
-    "datePublished": "2026-03-08",
+    "softwareVersion": "2.1.0",
+    "datePublished": "2026-03-10",
     "offers": {
       "@type": "Offer",
       "price": "0",
@@ -138,7 +138,14 @@
       "Native desktop app (Tauri, not Electron)",
       "macOS Keychain and Linux Secret Service credential storage",
       "System tray with background sync",
-      "Auto-updater",
+      "Auto-updater with in-app changelog and progress bar",
+      "Unified Inbox — merged view of all accounts",
+      "Keyboard shortcuts for all core actions with customizable bindings",
+      "Move to Folder — reorganize emails between server folders",
+      "Undo Send with configurable delay",
+      "Email templates — save and reuse compose snippets",
+      "Smart Sender Insights — exchange history and frequency per contact",
+      "Notification customization — per-account, per-folder controls",
       "Linux support (x86_64 and aarch64) via Snap Store and .deb packages",
       "Wayland and X11 display server support"
     ],
@@ -298,7 +305,7 @@
               <svg class="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
                 <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
               </svg>
-              macOS Native
+              macOS &amp; Linux
             </div>
           </div>
         </div>
@@ -468,9 +475,9 @@
           </div>
           <h3 class="text-xl font-semibold mb-3">Email Management</h3>
           <ul class="space-y-2 text-slate-600 dark:text-slate-400">
-            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Compose, reply, reply all, and forward</li>
-            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Gmail &amp; Microsoft 365 OAuth2 sign-in</li>
-            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Advanced search with filters &amp; search history</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Compose, reply, forward with undo send</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Unified inbox, keyboard shortcuts, templates</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Move to folder &amp; advanced search with filters</li>
             <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Bulk archive, delete, or archive+delete</li>
           </ul>
         </div>
@@ -517,7 +524,7 @@
           <h3 class="text-xl font-semibold mb-3">Performance & Security</h3>
           <ul class="space-y-2 text-slate-600 dark:text-slate-400">
             <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Native Rust (Tauri) — not Electron</li>
-            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>macOS Keychain &amp; App Sandbox</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Keychain (macOS) &amp; Secret Service (Linux)</li>
             <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Virtual scrolling for 17,000+ emails</li>
             <li class="flex items-start gap-2"><svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>CONDSTORE delta sync &amp; DEFLATE compression</li>
           </ul>
@@ -811,6 +818,27 @@
               <td class="p-4"><span class="text-yellow-500">Partial</span> — hidden</td>
             </tr>
             <tr class="border-b border-slate-100 dark:border-slate-800">
+              <td class="p-4 font-medium text-slate-900 dark:text-white">Unified inbox</td>
+              <td class="p-4 bg-primary-50/50 dark:bg-primary-900/10"><span class="text-green-500 font-bold">Yes</span> — all accounts merged</td>
+              <td class="p-4"><span class="text-green-500">Yes</span></td>
+              <td class="p-4"><span class="text-green-500">Yes</span></td>
+              <td class="p-4"><span class="text-red-500">No</span></td>
+            </tr>
+            <tr class="border-b border-slate-100 dark:border-slate-800">
+              <td class="p-4 font-medium text-slate-900 dark:text-white">Keyboard shortcuts</td>
+              <td class="p-4 bg-primary-50/50 dark:bg-primary-900/10"><span class="text-green-500 font-bold">Yes</span> — customizable</td>
+              <td class="p-4"><span class="text-yellow-500">Partial</span> — limited</td>
+              <td class="p-4"><span class="text-green-500">Yes</span></td>
+              <td class="p-4"><span class="text-green-500">Yes</span></td>
+            </tr>
+            <tr class="border-b border-slate-100 dark:border-slate-800">
+              <td class="p-4 font-medium text-slate-900 dark:text-white">Undo send</td>
+              <td class="p-4 bg-primary-50/50 dark:bg-primary-900/10"><span class="text-green-500 font-bold">Yes</span> — configurable delay</td>
+              <td class="p-4"><span class="text-green-500">Yes</span></td>
+              <td class="p-4"><span class="text-red-500">No</span></td>
+              <td class="p-4"><span class="text-green-500">Yes</span></td>
+            </tr>
+            <tr class="border-b border-slate-100 dark:border-slate-800">
               <td class="p-4 font-medium text-slate-900 dark:text-white">Privacy (no cloud/tracking)</td>
               <td class="p-4 bg-primary-50/50 dark:bg-primary-900/10"><span class="text-green-500 font-bold">Yes</span> — fully local</td>
               <td class="p-4"><span class="text-yellow-500">Partial</span> — iCloud sync</td>
@@ -986,7 +1014,7 @@
           What's New?
         </h2>
         <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
-          v2.0.3 fixes startup loading reliability and bulk operation toast dismissal, building on v2.0.2's DNS-based email auto-detection, bug report button, and real-time archive progress icons. See everything in the latest release.
+          v2.1.0 brings unified inbox across all accounts, keyboard shortcuts, move to folder, undo send, email templates, sender insights, and major performance gains — instant account switching, faster chat view, and persistent folder caching.
         </p>
         <a href="/changelog.html" class="inline-flex items-center gap-2 px-8 py-4 rounded-xl font-semibold text-lg border-2 border-primary-500 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">
           View Changelog

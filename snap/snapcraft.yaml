@@ -18,6 +18,8 @@ apps:
     extensions: [gnome]
     environment:
       WEBKIT_DISABLE_COMPOSITING_MODE: "1"
+      SSL_CERT_FILE: $SNAP/etc/ssl/certs/ca-certificates.crt
+      SSL_CERT_DIR: $SNAP/etc/ssl/certs
     plugs:
       - network
       - network-bind
@@ -39,3 +41,4 @@ parts:
       - librsvg2-2
       - libssl3
       - libsecret-1-0
+      - ca-certificates

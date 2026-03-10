@@ -29,6 +29,8 @@ export const config = {
   suites: {
     ui: ['./tests/e2e/ui-*.test.js'],
     connected: ['./tests/e2e/connected-*.test.js'],
+    perf: ['./tests/e2e/connected-performance.test.js'],
+    coldstart: ['./tests/e2e/connected-cold-start.test.js'],
   },
   maxInstances: 1,
   capabilities: [{
@@ -52,17 +54,16 @@ export const config = {
       });
 
       let started = false;
-      tauriWd.stdout.on('data', (data) => {
+      function checkOutput(data, stream) {
         const output = data.toString();
-        console.log('[tauri-wd]', output.trim());
+        console.log(`[tauri-wd]`, output.trim());
         if (!started && (output.includes('listening') || output.includes('4444'))) {
           started = true;
           resolve();
         }
-      });
-      tauriWd.stderr.on('data', (data) => {
-        console.error('[tauri-wd]', data.toString().trim());
-      });
+      }
+      tauriWd.stdout.on('data', (data) => checkOutput(data, 'stdout'));
+      tauriWd.stderr.on('data', (data) => checkOutput(data, 'stderr'));
 
       // Fallback resolve after 5s
       setTimeout(() => {
@@ -76,7 +77,11 @@ export const config = {
 
   onComplete: function () {
     if (tauriWd) {
-      tauriWd.kill();
+      tauriWd.kill('SIGTERM');
+      // Give it a moment, then force-kill
+      setTimeout(() => {
+        try { tauriWd.kill('SIGKILL'); } catch (_) { /* already dead */ }
+      }, 2000);
     }
   },
 

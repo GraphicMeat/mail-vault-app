@@ -48,11 +48,10 @@ describe('Connected Features', function () {
           if ((label.textContent || '').trim() === 'Enable Undo Send') {
             const container = label.closest('.flex') || label.parentElement?.parentElement;
             if (!container) continue;
-            const toggle = container.querySelector('button, [role="switch"]');
+            const toggle = container.querySelector('.toggle-switch');
             if (toggle) {
-              // Check if already on — look for aria-checked or bg-accent class
-              const isOn = toggle.getAttribute('aria-checked') === 'true' ||
-                (toggle.className || '').includes('accent');
+              // Check if already on — ToggleSwitch uses .active class
+              const isOn = (toggle.className || '').includes('active');
               if (!isOn) {
                 toggle.click();
               }
@@ -252,7 +251,7 @@ describe('Connected Features', function () {
           if ((label.textContent || '').trim() === 'Enable Undo Send') {
             const container = label.closest('.flex') || label.parentElement?.parentElement;
             if (!container) continue;
-            const toggle = container.querySelector('button, [role="switch"]');
+            const toggle = container.querySelector('.toggle-switch');
             if (toggle) {
               const isOn = toggle.getAttribute('aria-checked') === 'true' ||
                 (toggle.className || '').includes('accent');

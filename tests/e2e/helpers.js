@@ -119,7 +119,8 @@ export async function waitForEmails(timeout = 60_000) {
         if (listArea && listArea.children.length > 0) return true;
         // Fallback: virtualized rows from react-window
         const virtualRows = document.querySelectorAll('[style*="position: absolute"][style*="top:"]');
-        return virtualRows.length > 2; // at least a couple of real rows
+        if (virtualRows.length > 2) return true; // at least a couple of real rows
+        return document.querySelector('[data-testid="email-list-empty-state"]') !== null;
       });
       return found;
     },
@@ -201,11 +202,12 @@ export async function openSettings() {
   });
 
   if (!opened) {
-    // Fallback: click the settings icon/button in the sidebar
+    // Fallback: click the visible settings icon/button in the sidebar
+    // (sidebar renders both collapsed and expanded button sets — only click the visible one)
     const settingsBtn = await browser.execute(() => {
-      // Look for a settings button (gear icon) in the sidebar
       const buttons = document.querySelectorAll('button, a');
       for (const btn of buttons) {
+        if (btn.offsetHeight === 0) continue;
         const text = (btn.textContent || '').toLowerCase();
         const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
         const title = (btn.getAttribute('title') || '').toLowerCase();
@@ -214,11 +216,10 @@ export async function openSettings() {
           return true;
         }
       }
-      // Look for lucide Settings icon (svg with specific path)
       const svgs = document.querySelectorAll('svg');
       for (const svg of svgs) {
         const parent = svg.closest('button') || svg.parentElement;
-        if (parent && (parent.getAttribute('aria-label') || '').toLowerCase().includes('settings')) {
+        if (parent && parent.offsetHeight > 0 && (parent.getAttribute('aria-label') || '').toLowerCase().includes('settings')) {
           parent.click();
           return true;
         }

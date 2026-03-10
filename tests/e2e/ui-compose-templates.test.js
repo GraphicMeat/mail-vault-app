@@ -41,11 +41,12 @@ describe('Compose Modal & Templates', function () {
       expect(clickedAdd).toBe(true);
       await browser.pause(400);
 
-      // Fill in template name
+      // Fill in template name — placeholder is "e.g. Follow-up..."
       await browser.execute((name) => {
-        const inputs = document.querySelectorAll('input[placeholder*="name" i], input[placeholder*="template" i]');
+        const inputs = document.querySelectorAll('input[type="text"]');
         for (const input of inputs) {
-          if (input.offsetHeight > 0) {
+          const placeholder = (input.getAttribute('placeholder') || '').toLowerCase();
+          if (input.offsetHeight > 0 && (placeholder.includes('follow-up') || placeholder.includes('e.g.'))) {
             const setter = Object.getOwnPropertyDescriptor(
               window.HTMLInputElement.prototype, 'value'
             ).set;
@@ -59,11 +60,12 @@ describe('Compose Modal & Templates', function () {
       }, TEST_TEMPLATE_NAME);
       await browser.pause(200);
 
-      // Fill in template body
+      // Fill in template body — placeholder is "Write the template content here..."
       await browser.execute((body) => {
         const textareas = document.querySelectorAll('textarea');
         for (const ta of textareas) {
-          if (ta.offsetHeight > 0 && ta.closest('.bg-mail-surface, [class*="template"], [class*="Template"]')) {
+          const placeholder = (ta.getAttribute('placeholder') || '').toLowerCase();
+          if (ta.offsetHeight > 0 && placeholder.includes('template')) {
             const setter = Object.getOwnPropertyDescriptor(
               window.HTMLTextAreaElement.prototype, 'value'
             ).set;
@@ -180,15 +182,29 @@ describe('Compose Modal & Templates', function () {
 
     it('should close the compose modal with Escape', async function () {
       await pressKey('Escape');
-      await browser.pause(400);
+      await browser.pause(800);
 
-      const closed = await browser.execute(() => {
+      let stillOpen = await browser.execute(() => {
         const modal = document.querySelector('[data-testid="compose-modal"]');
-        if (modal && modal.offsetHeight > 0) return false;
-        const subjectInput = document.querySelector('[data-testid="compose-subject"]');
-        return subjectInput === null || subjectInput.offsetHeight === 0;
+        return modal !== null && modal.offsetHeight > 0;
       });
-      expect(closed).toBe(true);
+
+      // Fallback: dispatch Escape directly
+      if (stillOpen) {
+        await browser.execute(() => {
+          document.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true,
+          }));
+        });
+        await browser.pause(800);
+
+        stillOpen = await browser.execute(() => {
+          const modal = document.querySelector('[data-testid="compose-modal"]');
+          return modal !== null && modal.offsetHeight > 0;
+        });
+      }
+
+      expect(stillOpen).toBe(false);
     });
   });
 

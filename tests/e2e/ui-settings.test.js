@@ -43,43 +43,45 @@ describe('Settings Page', function () {
     });
 
     it('should show delay dropdown when undo send is toggled on', async function () {
-      // Find the "Enable Undo Send" toggle and ensure it is on
-      const toggled = await browser.execute(() => {
-        const labels = document.querySelectorAll('div');
-        for (const label of labels) {
-          if (label.textContent.trim() === 'Enable Undo Send') {
-            // The toggle is a sibling — find the nearest ToggleSwitch (button or div with role)
-            const container = label.closest('.flex') || label.parentElement?.parentElement;
-            if (!container) continue;
-            const toggle = container.querySelector('button, [role="switch"]');
-            if (toggle) {
-              toggle.click();
-              return true;
-            }
-          }
-        }
-        return false;
-      });
-
-      await browser.pause(400);
-
-      // Check if delay dropdown appeared
-      const hasDropdown = await browser.execute(() => {
+      // First, check if undo send is already on (state persists between sessions)
+      const alreadyOn = await browser.execute(() => {
         return document.body.innerText.includes('Undo send delay');
       });
 
-      // If the toggle was already on, the dropdown was already visible.
-      // Either way, we expect the text to be present after toggling.
+      if (!alreadyOn) {
+        // Toggle it ON
+        await browser.execute(() => {
+          const labels = document.querySelectorAll('div');
+          for (const label of labels) {
+            if (label.textContent.trim() === 'Enable Undo Send') {
+              const container = label.closest('.flex') || label.parentElement?.parentElement;
+              if (!container) continue;
+              const toggle = container.querySelector('.toggle-switch');
+              if (toggle) {
+                toggle.click();
+                return true;
+              }
+            }
+          }
+          return false;
+        });
+        await browser.pause(400);
+      }
+
+      // Check if delay dropdown is visible
+      const hasDropdown = await browser.execute(() => {
+        return document.body.innerText.includes('Undo send delay');
+      });
       expect(hasDropdown).toBe(true);
 
-      // Toggle it back off to restore state
+      // Toggle back off to restore state
       await browser.execute(() => {
         const labels = document.querySelectorAll('div');
         for (const label of labels) {
           if (label.textContent.trim() === 'Enable Undo Send') {
             const container = label.closest('.flex') || label.parentElement?.parentElement;
             if (!container) continue;
-            const toggle = container.querySelector('button, [role="switch"]');
+            const toggle = container.querySelector('.toggle-switch');
             if (toggle) {
               toggle.click();
               return true;
@@ -126,11 +128,12 @@ describe('Settings Page', function () {
       expect(clickedAdd).toBe(true);
       await browser.pause(400);
 
-      // Fill in template name
+      // Fill in template name — placeholder is "e.g. Follow-up..."
       await browser.execute(() => {
-        const inputs = document.querySelectorAll('input[placeholder*="name" i], input[placeholder*="template" i]');
+        const inputs = document.querySelectorAll('input[type="text"]');
         for (const input of inputs) {
-          if (input.offsetHeight > 0) {
+          const placeholder = (input.getAttribute('placeholder') || '').toLowerCase();
+          if (input.offsetHeight > 0 && (placeholder.includes('follow-up') || placeholder.includes('e.g.'))) {
             const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
               window.HTMLInputElement.prototype, 'value'
             ).set;
@@ -144,11 +147,12 @@ describe('Settings Page', function () {
       });
       await browser.pause(200);
 
-      // Fill in template body
+      // Fill in template body — placeholder is "Write the template content here..."
       await browser.execute(() => {
         const textareas = document.querySelectorAll('textarea');
         for (const ta of textareas) {
-          if (ta.offsetHeight > 0 && ta.closest('.bg-mail-surface, [class*="template"], [class*="Template"]')) {
+          const placeholder = (ta.getAttribute('placeholder') || '').toLowerCase();
+          if (ta.offsetHeight > 0 && placeholder.includes('template')) {
             const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(
               window.HTMLTextAreaElement.prototype, 'value'
             ).set;

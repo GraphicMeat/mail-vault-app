@@ -258,8 +258,9 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
           )}
         </div>
 
-        {/* Folder icons with expandable children */}
-        <div className="flex-1 overflow-y-auto w-full py-2 flex flex-col items-center gap-0.5">
+        {/* Folder icons with expandable children — hidden in unified inbox mode */}
+        {unifiedInbox && <div className="flex-1" />}
+        {!unifiedInbox && <div className="flex-1 overflow-y-auto w-full py-2 flex flex-col items-center gap-0.5">
           {sortedMailboxes.map(mailbox => {
             const Icon = getMailboxIcon(mailbox);
             const isActive = activeMailbox === mailbox.path;
@@ -304,7 +305,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
               </div>
             );
           })}
-        </div>
+        </div>}
 
         {/* Footer icons */}
         <div className="w-full py-2 border-t border-mail-border flex flex-col items-center gap-1">
@@ -597,8 +598,9 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
         </div>
       </div>
 
-      {/* Mailboxes */}
-      <div className="flex-1 overflow-y-auto p-3">
+      {/* Mailboxes — hidden in unified inbox mode */}
+      {unifiedInbox && <div className="flex-1" />}
+      {!unifiedInbox && <div className="flex-1 overflow-y-auto p-3">
         <div className="text-xs text-mail-text-muted uppercase tracking-wide mb-2">
           Folders
         </div>
@@ -612,7 +614,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
           return (
             <div key={mailbox.path}>
               <div
-                className={`flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all
+                className={`flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors
                            ${mailbox.noselect ? 'cursor-default' : 'cursor-pointer'}
                            ${isActive && !mailbox.noselect
                              ? 'bg-mail-accent/10 text-mail-accent'
@@ -645,40 +647,33 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                 <span className="text-sm flex-1 truncate">{getMailboxDisplayName(mailbox.name)}</span>
               </div>
 
-              <AnimatePresence>
-                {hasChildren && isExpanded && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="ml-4 overflow-hidden"
-                  >
-                    {mailbox.children.map(child => {
-                      const ChildIcon = getMailboxIcon(child);
-                      const isChildActive = activeMailbox === child.path;
+              {hasChildren && isExpanded && (
+                <div className="ml-4">
+                  {mailbox.children.map(child => {
+                    const ChildIcon = getMailboxIcon(child);
+                    const isChildActive = activeMailbox === child.path;
 
-                      return (
-                        <div
-                          key={child.path}
-                          className={`flex items-center gap-2 px-2 py-1.5 rounded-lg
-                                     cursor-pointer transition-all ${isChildActive
-                                       ? 'bg-mail-accent/10 text-mail-accent'
-                                       : 'text-mail-text hover:bg-mail-surface-hover'}`}
-                          onClick={() => setActiveMailbox(child.path)}
-                        >
-                          <div className="w-5" />
-                          <ChildIcon size={14} />
-                          <span className="text-sm truncate">{getMailboxDisplayName(child.name)}</span>
-                        </div>
-                      );
-                    })}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                    return (
+                      <div
+                        key={child.path}
+                        className={`flex items-center gap-2 px-2 py-1.5 rounded-lg
+                                   cursor-pointer transition-colors ${isChildActive
+                                     ? 'bg-mail-accent/10 text-mail-accent'
+                                     : 'text-mail-text hover:bg-mail-surface-hover'}`}
+                        onClick={() => setActiveMailbox(child.path)}
+                      >
+                        <div className="w-5" />
+                        <ChildIcon size={14} />
+                        <span className="text-sm truncate">{getMailboxDisplayName(child.name)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           );
         })}
-      </div>
+      </div>}
 
       {/* Footer */}
       <div className="p-3 border-t border-mail-border">

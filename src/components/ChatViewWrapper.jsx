@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { memo, useState, useMemo, useEffect, useRef } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useShallow } from 'zustand/react/shallow';
 import { groupByCorrespondent, buildThreads } from '../utils/emailParser';
@@ -8,7 +8,7 @@ import { ChatTopicsList } from './ChatTopicsList';
 import { ChatBubbleView } from './ChatBubbleView';
 import { ComposeModal } from './ComposeModal';
 
-export function ChatViewWrapper({ layoutMode }) {
+function ChatViewWrapperComponent() {
   const { accounts, activeAccountId, getChatEmails, emails, localEmails, sentEmails, viewMode } = useMailStore(
     useShallow(s => ({ accounts: s.accounts, activeAccountId: s.activeAccountId, getChatEmails: s.getChatEmails, emails: s.emails, localEmails: s.localEmails, sentEmails: s.sentEmails, viewMode: s.viewMode }))
   );
@@ -44,6 +44,48 @@ export function ChatViewWrapper({ layoutMode }) {
   const selectedCorrespondent = selectedCorrespondentEmail
     ? correspondentMap.get(selectedCorrespondentEmail) || null
     : null;
+
+  // Compute threads ONCE per correspondent — shared by ChatTopicsList and ChatBubbleView
+  const threadCache = useRef({ fingerprint: '', threads: null, sortedTopics: [] });
+
+  const threadFingerprint = useMemo(() => {
+    if (!selectedCorrespondent) return '';
+    const emails = selectedCorrespondent.emails;
+    return `${selectedCorrespondentEmail}-${emails.length}-${emails[0]?.uid || 0}-${emails[emails.length - 1]?.uid || 0}`;
+  }, [selectedCorrespondent, selectedCorrespondentEmail]);
+
+  const [threadsMap, setThreadsMap] = useState(null);
+  const [sortedTopics, setSortedTopics] = useState([]);
+
+  useEffect(() => {
+    if (!selectedCorrespondent) {
+      setThreadsMap(null);
+      setSortedTopics([]);
+      return;
+    }
+
+    // Use cached result if fingerprint matches
+    if (threadCache.current.fingerprint === threadFingerprint) {
+      setThreadsMap(threadCache.current.threads);
+      setSortedTopics(threadCache.current.sortedTopics);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      const threads = buildThreads(selectedCorrespondent.emails);
+      const sorted = Array.from(threads.values())
+        .sort((a, b) => {
+          const dateA = a.dateRange.end || new Date(0);
+          const dateB = b.dateRange.end || new Date(0);
+          return dateB - dateA;
+        });
+      threadCache.current = { fingerprint: threadFingerprint, threads, sortedTopics: sorted };
+      setThreadsMap(threads);
+      setSortedTopics(sorted);
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [selectedCorrespondent, threadFingerprint]);
 
   // Helper to update navigation state for current account
   const updateNavState = (updates) => {
@@ -93,7 +135,7 @@ export function ChatViewWrapper({ layoutMode }) {
       : 'senders';
 
   return (
-    <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden bg-mail-bg">
+    <div data-testid="chat-view" className="flex-1 flex flex-col h-full min-h-0 overflow-hidden bg-mail-bg">
       <AnimatePresence mode="wait">
         {currentView === 'senders' && (
           <motion.div
@@ -119,6 +161,7 @@ export function ChatViewWrapper({ layoutMode }) {
           >
             <ChatTopicsList
               correspondent={selectedCorrespondent}
+              topics={sortedTopics}
               onBack={handleBackFromTopics}
               onSelectTopic={handleSelectTopic}
             />
@@ -137,6 +180,7 @@ export function ChatViewWrapper({ layoutMode }) {
             <ChatBubbleView
               correspondent={selectedCorrespondent}
               threadId={selectedThreadId}
+              threadsMap={threadsMap}
               userEmail={userEmail}
               onBack={handleBackFromChat}
               onReply={handleReply}
@@ -158,3 +202,5 @@ export function ChatViewWrapper({ layoutMode }) {
     </div>
   );
 }
+
+export const ChatViewWrapper = memo(ChatViewWrapperComponent);

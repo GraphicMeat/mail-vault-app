@@ -103,6 +103,9 @@ function App() {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [showMoveDropdown, setShowMoveDropdown] = useState(false);
   const mainContainerRef = useRef(null);
+  const listPaneStyle = layoutMode === 'three-column'
+    ? { width: listPaneSize, minWidth: 240, maxWidth: 600 }
+    : { height: listPaneSize, minHeight: 100 };
 
   // Initialize email scheduler
   useEmailScheduler();
@@ -268,6 +271,21 @@ function App() {
     import('@tauri-apps/api/event').then(({ listen }) => {
       listen('open-settings', () => {
         setShowSettings(true);
+      }).then(fn => {
+        if (!active) fn();
+        else unlisten = fn;
+      });
+    }).catch(() => {});
+    return () => { active = false; if (unlisten) unlisten(); };
+  }, []);
+
+  // Listen for open-shortcuts event from native menu
+  useEffect(() => {
+    let unlisten;
+    let active = true;
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      listen('open-shortcuts', () => {
+        setShowShortcutsModal(prev => !prev);
       }).then(fn => {
         if (!active) fn();
         else unlisten = fn;
@@ -567,19 +585,16 @@ function App() {
       >
         {viewStyle === 'chat' ? (
           /* Chat View */
-          <ChatViewWrapper layoutMode={layoutMode} />
+          <ChatViewWrapper />
         ) : (
           /* Traditional List View */
           <>
             {/* Email List */}
             <div
-              style={layoutMode === 'three-column'
-                ? { width: listPaneSize, minWidth: 240, maxWidth: 600 }
-                : { height: listPaneSize, minHeight: 100 }
-              }
-              className="flex-shrink-0 min-h-0 flex flex-col"
+              style={listPaneStyle}
+              className={`flex-shrink-0 min-h-0 flex flex-col ${layoutMode === 'three-column' ? 'border-r border-mail-border' : 'border-b border-mail-border'}`}
             >
-              <EmailList layoutMode={layoutMode} />
+              <EmailList />
             </div>
 
             {/* Resizable divider */}
