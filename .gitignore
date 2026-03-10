@@ -9,6 +9,8 @@ src-tauri/target/
 src-tauri/WixTools/
 src-tauri/Cargo.lock
 src-tauri/binaries/
+src-tauri/Sparkle.framework/
+src-tauri/sparkle-bin/
 
 # Logs
 *.log
