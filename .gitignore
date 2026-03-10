@@ -29,6 +29,9 @@ CLAUDE.md
 # Plans
 docs/plans/
 
+# Worktrees
+.worktrees/
+
 # Environment files
 .env
 .env.local
