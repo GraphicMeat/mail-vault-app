@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import React, { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore, getAccountColor } from '../stores/settingsStore';
 import { buildThreads } from '../utils/emailParser';
@@ -643,7 +643,7 @@ function getDateRange(emails) {
   return `${fmt(oldest)} – ${fmt(newest)}`;
 }
 
-export function EmailList({ layoutMode = 'three-column' }) {
+function EmailListComponent() {
   // Individual selectors — component only re-renders when these specific fields change
   const loading = useMailStore(s => s.loading);
   const loadingMore = useMailStore(s => s.loadingMore);
@@ -800,9 +800,19 @@ export function EmailList({ layoutMode = 'three-column' }) {
       }
     };
     updateHeight();
-    const observer = new ResizeObserver(updateHeight);
+    let rafId;
+    const observer = new ResizeObserver((entries) => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        const height = entries[0]?.contentRect?.height;
+        if (height) setContainerHeight(height);
+      });
+    });
     observer.observe(scrollContainerRef.current);
-    return () => observer.disconnect();
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      observer.disconnect();
+    };
   }, []);
 
   // Auto-load more emails when approaching the end of the loaded list
@@ -912,7 +922,7 @@ export function EmailList({ layoutMode = 'three-column' }) {
   };
 
   return (
-    <div className={`flex flex-col h-full min-h-0 overflow-hidden ${layoutMode === 'three-column' ? 'border-r border-mail-border' : 'border-b border-mail-border'}`}>
+    <div className="flex flex-col h-full min-h-0 overflow-hidden">
       {/* Header */}
       <div data-tauri-drag-region className="flex items-center justify-between px-4 py-3 border-b border-mail-border bg-mail-surface flex-shrink-0 min-h-[48px]">
         <div className="flex items-center gap-3">
@@ -948,7 +958,7 @@ export function EmailList({ layoutMode = 'three-column' }) {
           ) : (
             <div className="flex flex-col">
               <h2 className="text-lg font-semibold text-mail-text">
-                {activeMailbox}
+                {activeMailbox === 'UNIFIED' ? 'All Inboxes' : activeMailbox}
               </h2>
               <div className="text-xs text-mail-text-muted mt-0.5 flex items-center gap-1.5">
                 <span>{totalEmails.toLocaleString()} emails</span>
@@ -1026,7 +1036,10 @@ export function EmailList({ layoutMode = 'three-column' }) {
             <RefreshCw size={24} className="animate-spin text-mail-accent" />
           </div>
         ) : rowCount === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-mail-text-muted">
+          <div
+            data-testid="email-list-empty-state"
+            className="flex flex-col items-center justify-center h-full text-mail-text-muted"
+          >
             {searchActive ? (
               <>
                 <Search size={48} className="mb-4 opacity-50" />
@@ -1131,3 +1144,5 @@ export function EmailList({ layoutMode = 'three-column' }) {
     </div>
   );
 }
+
+export const EmailList = memo(EmailListComponent);

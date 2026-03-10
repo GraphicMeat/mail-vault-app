@@ -3120,6 +3120,21 @@ fn main() {
                     }
                 }
                 menu.append(&logs_submenu)?;
+
+                // Populate the Help menu (default menu creates it empty)
+                let website_item = MenuItem::with_id(app, "open_website", "MailVault Website", true, None::<&str>)?;
+                let shortcuts_item = MenuItem::with_id(app, "open_shortcuts", "Keyboard Shortcuts", true, Some("cmd+/"))?;
+                if let Ok(items) = menu.items() {
+                    for item in &items {
+                        if let Some(sub) = item.as_submenu() {
+                            if sub.text().unwrap_or_default() == "Help" {
+                                let _ = sub.append(&website_item);
+                                let _ = sub.append(&shortcuts_item);
+                                break;
+                            }
+                        }
+                    }
+                }
                 app.set_menu(menu)?;
             }
 
@@ -3170,6 +3185,11 @@ fn main() {
                                 }
                             }
                         });
+                } else if event.id().as_ref() == "open_website" {
+                    use tauri_plugin_shell::ShellExt;
+                    let _ = app_handle_for_menu.shell().open("https://mailvault.app", None::<tauri_plugin_shell::open::Program>);
+                } else if event.id().as_ref() == "open_shortcuts" {
+                    let _ = app_handle_for_menu.emit("open-shortcuts", ());
                 } else if event.id().as_ref() == "quit_app" {
                     info!("Application quitting via menu");
                     std::process::exit(0);

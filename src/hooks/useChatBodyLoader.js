@@ -54,8 +54,11 @@ export function useChatBodyLoader(topicEmails) {
       const sentMailbox = store.getSentMailboxPath();
       for (const email of topicEmails) {
         const key = emailKey(email);
-        const mailbox = email._fromSentFolder && sentMailbox ? sentMailbox : inboxMailbox;
-        const cacheKey = `${accountId}-${mailbox}-${email.uid}`;
+        // Resolve real account/mailbox (handles unified inbox)
+        const emailAccountId = email._accountId || accountId;
+        let mailbox = email._fromSentFolder && sentMailbox ? sentMailbox : inboxMailbox;
+        if (mailbox === 'UNIFIED') mailbox = email._fromSentFolder ? 'Sent' : 'INBOX';
+        const cacheKey = `${emailAccountId}-${mailbox}-${email.uid}`;
         const cached = store.getFromCache(cacheKey);
         if (cached) {
           bodiesMapRef.current.set(key, { status: 'loaded', email: cached });
@@ -92,36 +95,56 @@ export function useChatBodyLoader(topicEmails) {
     let activeCount = 0;
     let queueIndex = 0;
 
-    const fetchOne = async (email) => {
+    // Resolve real account/mailbox for an email (handles unified inbox)
+    const resolveContext = (email) => {
+      let resolvedAccount = account;
+      let resolvedAccountId = accountId;
+      let resolvedMailbox = getMailbox(email);
+
+      // In unified inbox, resolve the real account from email metadata
+      if (email._accountId && email._accountId !== accountId) {
+        resolvedAccountId = email._accountId;
+        resolvedAccount = store.accounts.find(a => a.id === email._accountId) || account;
+        resolvedMailbox = email._fromSentFolder ? 'Sent' : 'INBOX';
+      }
+      // Never use virtual 'UNIFIED' as a real mailbox
+      if (resolvedMailbox === 'UNIFIED') {
+        resolvedMailbox = email._fromSentFolder ? 'Sent' : 'INBOX';
+      }
+
+      return { resolvedAccount, resolvedAccountId, resolvedMailbox };
+    };
+
+    const MAX_RETRIES = 2;
+
+    const fetchOne = async (email, retryCount = 0) => {
       if (cancelled) return;
       const key = emailKey(email);
       const uid = email.uid;
-      const mailbox = getMailbox(email);
-      const cacheKey = `${accountId}-${mailbox}-${uid}`;
+      const { resolvedAccount, resolvedAccountId, resolvedMailbox } = resolveContext(email);
+      const cacheKey = `${resolvedAccountId}-${resolvedMailbox}-${uid}`;
 
       try {
-        let freshAccount = account;
+        let freshAccount = resolvedAccount;
         if (freshAccount) {
           try { freshAccount = await ensureFreshToken(freshAccount); } catch (_) {}
         }
 
         // 1. Check Maildir .eml (fast disk read)
-        let emailBody = await db.getLocalEmailLight(accountId, mailbox, uid);
+        let emailBody = await db.getLocalEmailLight(resolvedAccountId, resolvedMailbox, uid);
 
         // 2. Fetch from server if not on disk
         if (!emailBody && freshAccount) {
           if (freshAccount.oauth2Transport === 'graph') {
-            // Graph API: fast JSON fetch for display, background MIME cache for disk
-            const graphId = getGraphMessageId(accountId, mailbox, uid);
+            const graphId = getGraphMessageId(resolvedAccountId, resolvedMailbox, uid);
             if (graphId) {
               const graphMsg = await api.graphGetMessage(freshAccount.oauth2AccessToken, graphId);
               emailBody = graphMessageToEmail(graphMsg, uid);
-              // Background: save .eml to disk for offline access
-              api.graphCacheMime(freshAccount.oauth2AccessToken, graphId, accountId, mailbox, uid)
+              api.graphCacheMime(freshAccount.oauth2AccessToken, graphId, resolvedAccountId, resolvedMailbox, uid)
                 .catch(() => {});
             }
           } else {
-            emailBody = await api.fetchEmailLight(freshAccount, uid, mailbox, accountId);
+            emailBody = await api.fetchEmailLight(freshAccount, uid, resolvedMailbox, resolvedAccountId);
           }
         }
 
@@ -130,11 +153,19 @@ export function useChatBodyLoader(topicEmails) {
         if (emailBody) {
           store.addToCache(cacheKey, emailBody, cacheLimitMB);
           bodiesMap.set(key, { status: 'loaded', email: emailBody });
+        } else if (retryCount < MAX_RETRIES) {
+          // Retry after a short delay
+          await new Promise(r => setTimeout(r, 1000 * (retryCount + 1)));
+          if (!cancelled) return fetchOne(email, retryCount + 1);
         } else {
           bodiesMap.set(key, { status: 'error', email: null });
         }
       } catch (err) {
-        console.warn(`[useChatBodyLoader] Failed to load UID ${uid}:`, err);
+        console.warn(`[useChatBodyLoader] Failed to load UID ${uid} (attempt ${retryCount + 1}):`, err);
+        if (!cancelled && retryCount < MAX_RETRIES) {
+          await new Promise(r => setTimeout(r, 1000 * (retryCount + 1)));
+          if (!cancelled) return fetchOne(email, retryCount + 1);
+        }
         if (!cancelled) {
           bodiesMap.set(key, { status: 'error', email: null });
         }

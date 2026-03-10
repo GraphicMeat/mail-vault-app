@@ -766,7 +766,7 @@ export async function exportEmail(localId) {
 export async function saveMailboxes(accountId, mailboxes) {
   if (invoke) {
     try {
-      const data = JSON.stringify({ mailboxes, lastSynced: Date.now() });
+      const data = JSON.stringify({ mailboxes, fetchedAt: Date.now(), lastSynced: Date.now() });
       await invoke('save_email_cache', { accountId, mailbox: '__mailboxes__', data });
     } catch (error) {
       console.warn('[db.js] Failed to save mailbox cache:', error);
@@ -774,19 +774,30 @@ export async function saveMailboxes(accountId, mailboxes) {
   }
 }
 
-export async function getCachedMailboxes(accountId) {
+export async function getCachedMailboxEntry(accountId) {
   if (invoke) {
     try {
       const data = await invoke('load_email_cache', { accountId, mailbox: '__mailboxes__' });
       if (data) {
         const entry = JSON.parse(data);
-        return entry.mailboxes || null;
+        if (Array.isArray(entry)) {
+          return { mailboxes: entry, fetchedAt: null };
+        }
+        return {
+          mailboxes: entry.mailboxes || null,
+          fetchedAt: entry.fetchedAt ?? entry.lastSynced ?? null,
+        };
       }
     } catch (error) {
       console.warn('[db.js] Failed to load mailbox cache:', error);
     }
   }
   return null;
+}
+
+export async function getCachedMailboxes(accountId) {
+  const entry = await getCachedMailboxEntry(accountId);
+  return entry?.mailboxes || null;
 }
 
 // ── Email header cache ───────────────────────────────────────────────────

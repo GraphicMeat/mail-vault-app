@@ -97,24 +97,26 @@ describe('Sidebar Interactions', function () {
     });
 
     it('should toggle theme when clicked', async function () {
-      // Get initial theme state
+      // Get initial theme state (app uses data-theme attribute, not dark class)
       const wasDark = await browser.execute(() => {
-        return document.documentElement.classList.contains('dark');
+        return document.documentElement.getAttribute('data-theme') === 'dark';
       });
 
-      // Click the appropriate theme toggle button
+      // Click the visible theme toggle button (sidebar renders both collapsed and expanded versions)
       await browser.execute((isDark) => {
         const selector = isDark
           ? 'button[title="Switch to light mode"]'
           : 'button[title="Switch to dark mode"]';
-        const btn = document.querySelector(selector);
-        if (btn) btn.click();
+        const buttons = document.querySelectorAll(selector);
+        for (const btn of buttons) {
+          if (btn.offsetHeight > 0) { btn.click(); break; }
+        }
       }, wasDark);
       await browser.pause(500);
 
       // Verify theme changed
       const isDarkNow = await browser.execute(() => {
-        return document.documentElement.classList.contains('dark');
+        return document.documentElement.getAttribute('data-theme') === 'dark';
       });
       expect(isDarkNow).toBe(!wasDark);
 
@@ -123,14 +125,16 @@ describe('Sidebar Interactions', function () {
         const selector = isDark
           ? 'button[title="Switch to light mode"]'
           : 'button[title="Switch to dark mode"]';
-        const btn = document.querySelector(selector);
-        if (btn) btn.click();
+        const buttons = document.querySelectorAll(selector);
+        for (const btn of buttons) {
+          if (btn.offsetHeight > 0) { btn.click(); break; }
+        }
       }, isDarkNow);
       await browser.pause(500);
 
       // Verify restored
       const restored = await browser.execute(() => {
-        return document.documentElement.classList.contains('dark');
+        return document.documentElement.getAttribute('data-theme') === 'dark';
       });
       expect(restored).toBe(wasDark);
     });
@@ -138,9 +142,17 @@ describe('Sidebar Interactions', function () {
 
   describe('Compose Button', function () {
     it('should open compose modal when clicking compose button', async function () {
+      // Find visible compose button (collapsed has title="Compose", expanded has text "Compose")
       await browser.execute(() => {
-        const btn = document.querySelector('button[title="Compose"]');
-        if (btn) btn.click();
+        const sidebar = document.querySelector('[data-testid="sidebar"]');
+        if (!sidebar) return;
+        const buttons = sidebar.querySelectorAll('button');
+        for (const btn of buttons) {
+          if (btn.offsetHeight === 0) continue;
+          const title = btn.getAttribute('title') || '';
+          const text = btn.textContent.trim();
+          if (title === 'Compose' || text === 'Compose') { btn.click(); return; }
+        }
       });
       await browser.pause(500);
 
@@ -172,9 +184,17 @@ describe('Sidebar Interactions', function () {
 
   describe('Settings Button', function () {
     it('should open settings when clicking settings button', async function () {
+      // Find visible settings button (collapsed has title="Settings", expanded has text "Settings")
       await browser.execute(() => {
-        const btn = document.querySelector('button[title="Settings"]');
-        if (btn) btn.click();
+        const sidebar = document.querySelector('[data-testid="sidebar"]');
+        if (!sidebar) return;
+        const buttons = sidebar.querySelectorAll('button');
+        for (const btn of buttons) {
+          if (btn.offsetHeight === 0) continue;
+          const title = btn.getAttribute('title') || '';
+          const text = btn.textContent.trim();
+          if (title === 'Settings' || text === 'Settings') { btn.click(); return; }
+        }
       });
       await browser.pause(500);
 

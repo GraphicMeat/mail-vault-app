@@ -20,7 +20,7 @@ async function clickSettingsButton(buttonText) {
   const clicked = await browser.execute((text) => {
     const buttons = document.querySelectorAll('button');
     for (const btn of buttons) {
-      if (btn.textContent.trim() === text && btn.offsetHeight > 0) {
+      if (btn.offsetHeight > 0 && btn.textContent.trim().startsWith(text)) {
         btn.scrollIntoView({ behavior: 'instant', block: 'center' });
         btn.click();
         return true;
@@ -41,7 +41,7 @@ async function isButtonActive(buttonText) {
   return browser.execute((text) => {
     const buttons = document.querySelectorAll('button');
     for (const btn of buttons) {
-      if (btn.textContent.trim() === text && btn.offsetHeight > 0) {
+      if (btn.offsetHeight > 0 && btn.textContent.trim().startsWith(text)) {
         return btn.className.includes('border-mail-accent');
       }
     }

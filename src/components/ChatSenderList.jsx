@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { memo, useMemo, useState, useCallback, useRef } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useShallow } from 'zustand/react/shallow';
 import { motion } from 'framer-motion';
@@ -10,20 +10,21 @@ import {
 } from '../utils/emailParser';
 import { MessageSquare, Search } from 'lucide-react';
 
+const INITIAL_VISIBLE = 50;
+const LOAD_MORE_COUNT = 50;
+
 export function ChatSenderList({ onSelectSender }) {
-  // Subscribe to all state values that affect email display to ensure re-renders
+  // getChatEmails already merges emails/localEmails/sentEmails internally
   const {
     getChatEmails,
     accounts,
-    activeAccountId,
-    emails,        // Subscribe to trigger re-render when server emails change
-    localEmails,   // Subscribe to trigger re-render when local emails change
-    sentEmails,    // Subscribe to trigger re-render when sent emails load
-    viewMode       // Subscribe to trigger re-render when view mode changes
+    activeAccountId
   } = useMailStore(
-    useShallow(s => ({ getChatEmails: s.getChatEmails, accounts: s.accounts, activeAccountId: s.activeAccountId, emails: s.emails, localEmails: s.localEmails, sentEmails: s.sentEmails, viewMode: s.viewMode }))
+    useShallow(s => ({ getChatEmails: s.getChatEmails, accounts: s.accounts, activeAccountId: s.activeAccountId }))
   );
   const [searchQuery, setSearchQuery] = React.useState('');
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
+  const scrollContainerRef = useRef(null);
 
   // Get current user's email
   const userEmail = useMemo(() => {
@@ -31,7 +32,7 @@ export function ChatSenderList({ onSelectSender }) {
     return activeAccount?.email || '';
   }, [accounts, activeAccountId]);
 
-  // Get emails directly - subscribing to emails/localEmails/sentEmails/viewMode above ensures this updates
+  // Get merged emails — parent ChatViewWrapper subscribes to underlying state slices
   const combinedEmails = getChatEmails();
 
   // Group emails by correspondent
@@ -59,6 +60,30 @@ export function ChatSenderList({ onSelectSender }) {
     );
   }, [correspondents, searchQuery]);
 
+  // Reset visible count when search query changes
+  const prevSearchRef = useRef(searchQuery);
+  if (prevSearchRef.current !== searchQuery) {
+    prevSearchRef.current = searchQuery;
+    if (visibleCount !== INITIAL_VISIBLE) setVisibleCount(INITIAL_VISIBLE);
+  }
+
+  // Slice to visible count for incremental rendering
+  const visibleCorrespondents = useMemo(() => {
+    return filteredCorrespondents.slice(0, visibleCount);
+  }, [filteredCorrespondents, visibleCount]);
+
+  const hasMore = visibleCount < filteredCorrespondents.length;
+
+  // Load more senders when scrolled near bottom
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el || !hasMore) return;
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distFromBottom < 200) {
+      setVisibleCount(prev => Math.min(prev + LOAD_MORE_COUNT, filteredCorrespondents.length));
+    }
+  }, [hasMore, filteredCorrespondents.length]);
+
   if (correspondents.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-mail-text-muted p-8">
@@ -72,7 +97,7 @@ export function ChatSenderList({ onSelectSender }) {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div data-testid="chat-sender-list" className="flex flex-col h-full">
       {/* Search Bar — matches sidebar header height (px-4 py-3) */}
       <div data-tauri-drag-region className="px-4 py-3 border-b border-mail-border flex items-center">
         <div className="relative w-full">
@@ -90,35 +115,43 @@ export function ChatSenderList({ onSelectSender }) {
       </div>
 
       {/* Sender List */}
-      <div className="flex-1 overflow-y-auto">
+      <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto">
         {filteredCorrespondents.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 text-mail-text-muted">
             <p className="text-sm">No matches found</p>
           </div>
         ) : (
-          filteredCorrespondents.map((correspondent, index) => (
-            <SenderRow
-              key={correspondent.email}
-              correspondent={correspondent}
-              onClick={() => onSelectSender(correspondent)}
-              index={index}
-            />
-          ))
+          <>
+            {visibleCorrespondents.map((correspondent, index) => (
+              <SenderRow
+                key={correspondent.email}
+                correspondent={correspondent}
+                onClick={() => onSelectSender(correspondent)}
+                index={index}
+              />
+            ))}
+            {hasMore && (
+              <div className="py-3 text-center text-xs text-mail-text-muted">
+                Loading more...
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
   );
 }
 
-function SenderRow({ correspondent, onClick, index }) {
+const SenderRow = memo(function SenderRow({ correspondent, onClick, index }) {
   const avatarColor = getAvatarColor(correspondent.email);
   const initials = getInitials(correspondent.name, correspondent.email);
 
   return (
     <motion.div
+      data-testid="sender-row"
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.02 }}
+      transition={{ delay: 0 }}
       onClick={onClick}
       className="flex items-center gap-3 px-4 py-3 border-b border-mail-border
                 cursor-pointer hover:bg-mail-surface-hover transition-colors"
@@ -163,4 +196,4 @@ function SenderRow({ correspondent, onClick, index }) {
       </div>
     </motion.div>
   );
-}
+});

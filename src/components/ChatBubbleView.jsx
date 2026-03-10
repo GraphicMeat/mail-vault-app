@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useEffect, useState } from 'react';
+import React, { memo, useMemo, useRef, useEffect, useState } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useShallow } from 'zustand/react/shallow';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -6,7 +6,6 @@ import {
   getAvatarColor,
   getInitials,
   getCleanMessageBody,
-  buildThreads,
   formatMessageTime,
   formatDateSeparator,
   isDifferentDay,
@@ -59,18 +58,20 @@ function SenderBadge({ email, size = 10 }) {
   );
 }
 
-export function ChatBubbleView({ correspondent, threadId, userEmail, onBack, onReply }) {
+export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail, onBack, onReply }) {
   const scrollRef = useRef(null);
   const stickToBottomRef = useRef(true);
   const [showOriginal, setShowOriginal] = useState(null); // email uid or null
   const [contextMenu, setContextMenu] = useState(null); // { x, y, email } or null
   const [fullViewEmail, setFullViewEmail] = useState(null); // email to show in full view modal
 
-  // Derive thread from live correspondent data using RFC header-based threading
+  // Use pre-computed thread from parent (ChatViewWrapper) — no local buildThreads()
   const topic = useMemo(() => {
-    const threads = buildThreads(correspondent.emails);
-    return threads.get(threadId) || { subject: threadId, emails: [] };
-  }, [correspondent.emails, threadId]);
+    if (threadsMap) {
+      return threadsMap.get(threadId) || { subject: threadId, emails: [] };
+    }
+    return { subject: threadId, emails: [] };
+  }, [threadsMap, threadId]);
 
   const { bodiesMapRef, registerListener } = useChatBodyLoader(topic.emails);
 
@@ -321,7 +322,7 @@ function ContextMenu({ x, y, onReply, onReplyAll, onForward, onClose }) {
   );
 }
 
-function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOriginalVisible, onToggleOriginal, onContextMenu, onReply, onOpenFullView, bodiesMapRef, registerListener }) {
+const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOriginalVisible, onToggleOriginal, onContextMenu, onReply, onOpenFullView, bodiesMapRef, registerListener }) {
   const iframeRef = useRef(null);
   const [quotesExpanded, setQuotesExpanded] = useState(false);
   const [sigExpanded, setSigExpanded] = useState(false);
@@ -627,9 +628,9 @@ function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOrigina
               </span>
             </div>
           ) : (
-            <div className="px-4 py-3 flex flex-col items-center gap-2">
-              <p className={`text-sm ${fromUser ? 'text-white/70' : 'text-mail-text-muted'}`}>
-                Content cannot be displayed
+            <div className="px-4 py-3 flex flex-col gap-2">
+              <p className={`text-sm italic ${fromUser ? 'text-white/70' : 'text-mail-text-muted'}`}>
+                {email.text || email.textBody || email.snippet || email.subject || 'No content available'}
               </p>
               <button
                 onClick={handleOpenFullView}
@@ -676,7 +677,7 @@ function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOrigina
         </div>
 
         {/* Meta row */}
-        <div className={`flex items-center gap-2 mt-1 px-1 ${fromUser ? 'justify-end' : 'justify-start'}`}>
+        <div className={`flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 px-1 ${fromUser ? 'justify-end' : 'justify-start'}`}>
           <span className="text-[10px] text-mail-text-muted">
             {formatMessageTime(email.date)}
           </span>
@@ -716,7 +717,7 @@ function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOrigina
       {fromUser && <div className="w-8 flex-shrink-0" />}
     </motion.div>
   );
-}
+});
 
 // Modal for viewing full original email
 export function OriginalEmailModal({ email, onClose }) {

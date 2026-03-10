@@ -1,7 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
-  buildThreads,
   getAvatarColor,
   getInitials,
   formatRelativeTime
@@ -9,22 +8,9 @@ import {
 import { ChevronLeft, MessageCircle, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 
-export function ChatTopicsList({ correspondent, onBack, onSelectTopic }) {
+export function ChatTopicsList({ correspondent, topics, onBack, onSelectTopic }) {
   const avatarColor = getAvatarColor(correspondent.email);
   const initials = getInitials(correspondent.name, correspondent.email);
-
-  // Group emails into threads using RFC header chains + subject fallback
-  const topics = useMemo(() => {
-    const threads = buildThreads(correspondent.emails);
-
-    // Convert to array and sort by most recent message
-    return Array.from(threads.values())
-      .sort((a, b) => {
-        const dateA = a.dateRange.end || new Date(0);
-        const dateB = b.dateRange.end || new Date(0);
-        return dateB - dateA;
-      });
-  }, [correspondent.emails]);
 
   return (
     <div className="flex flex-col h-full">
@@ -74,7 +60,7 @@ export function ChatTopicsList({ correspondent, onBack, onSelectTopic }) {
   );
 }
 
-function TopicRow({ topic, onClick, index }) {
+const TopicRow = memo(function TopicRow({ topic, onClick, index }) {
   const unreadCount = topic.emails.filter(e => !e.flags?.includes('\\Seen')).length;
   const hasAttachments = topic.emails.some(e => e.hasAttachments);
 
@@ -97,7 +83,7 @@ function TopicRow({ topic, onClick, index }) {
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.02 }}
+      transition={{ delay: 0 }}
       onClick={onClick}
       className="flex items-start gap-3 px-4 py-3 border-b border-mail-border
                 cursor-pointer hover:bg-mail-surface-hover transition-colors"
@@ -145,4 +131,4 @@ function TopicRow({ topic, onClick, index }) {
       <ChevronLeft size={16} className="text-mail-text-muted rotate-180 flex-shrink-0 mt-1" />
     </motion.div>
   );
-}
+});

@@ -2467,9 +2467,9 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug }) {
                     <Clock size={18} className="text-mail-accent" />
                     Auto-Cleanup
                     {!isPaidUser && (
-                      <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-full">
-                        <Sparkles size={10} />
-                        Pro
+                      <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full">
+                        <Clock size={10} />
+                        Coming Soon
                       </span>
                     )}
                   </h4>
@@ -2506,11 +2506,11 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug }) {
                       {/* Lock overlay */}
                       <div className="absolute inset-0 flex flex-col items-center justify-center bg-mail-surface/60 backdrop-blur-[1px] rounded-lg">
                         <div className="flex flex-col items-center gap-3 text-center px-6">
-                          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 flex items-center justify-center">
-                            <Lock size={20} className="text-amber-500" />
+                          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500/20 to-indigo-500/20 border border-blue-500/30 flex items-center justify-center">
+                            <Clock size={20} className="text-blue-500" />
                           </div>
                           <div>
-                            <p className="text-sm font-semibold text-mail-text mb-1">Available in MailVault Pro</p>
+                            <p className="text-sm font-semibold text-mail-text mb-1">Coming Soon</p>
                             <p className="text-xs text-mail-text-muted max-w-[280px]">
                               Automatically clean up old emails with custom rules. Set per-folder age thresholds, choose to archive or delete, and keep your mailbox tidy.
                             </p>
