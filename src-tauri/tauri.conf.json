@@ -47,11 +47,15 @@
     "macOS": {
       "entitlements": "entitlements.plist",
       "exceptionDomain": "",
-      "frameworks": [],
+      "frameworks": ["Sparkle.framework"],
       "providerShortName": null,
       "signingIdentity": null,
-      "minimumSystemVersion": "10.15",
-      "hardenedRuntime": true
+      "minimumSystemVersion": "11.0",
+      "hardenedRuntime": true,
+      "infoPlist": {
+        "SUFeedURL": "https://github.com/GraphicMeat/mail-vault-app/releases/latest/download/appcast.xml",
+        "SUPublicEDKey": "9OobPkT0p5WGp0wf2aSbADivVllEKZaz0gKhElMocU0="
+      }
     },
     "resources": [],
     "shortDescription": "Reactive Email Client with Local Storage",
