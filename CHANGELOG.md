@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-03-10
+
 ### Added
 - **Custom update modal** — replaced native OS update dialog with a styled in-app modal showing full changelog, download progress bar, and three dismiss options: "Update Now", "Remind Me Later" (24h snooze), and "Skip This Version"
 - **Keyboard shortcuts** for all core actions (navigation, compose, reply, archive, delete, move) with customizable bindings, cheat sheet modal (`?`), and settings UI for rebinding
