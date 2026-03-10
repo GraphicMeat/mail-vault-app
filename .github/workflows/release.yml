@@ -574,6 +574,8 @@ jobs:
             UPLOAD_FILES="$UPLOAD_FILES appcast.xml"
           fi
           for f in $(find artifacts/ -type f); do
+            # Skip appcast.xml from artifacts — already added from the copy above
+            if [ "$(basename "$f")" = "appcast.xml" ]; then continue; fi
             UPLOAD_FILES="$UPLOAD_FILES $f"
           done
 
