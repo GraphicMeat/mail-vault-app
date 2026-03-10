@@ -24,10 +24,11 @@
     <key>com.apple.security.files.user-selected.read-write</key>
     <true/>
 
-    <!-- Allow updater to replace app in /Applications/ -->
-    <key>com.apple.security.temporary-exception.files.absolute-path.read-write</key>
+    <!-- Sparkle XPC services for sandbox-safe updates -->
+    <key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
     <array>
-        <string>/Applications/</string>
+        <string>com.mailvault.app-spks</string>
+        <string>com.mailvault.app-spki</string>
     </array>
 
     <!-- Downloads folder access -->
