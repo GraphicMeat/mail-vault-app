@@ -44,7 +44,6 @@
     "process:default",
     "process:allow-exit",
     "process:allow-restart",
-    "updater:default",
     "notification:default",
     "notification:allow-notify",
     "notification:allow-request-permission",
