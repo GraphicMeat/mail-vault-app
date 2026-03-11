@@ -5,9 +5,9 @@ import { useSenderInsights } from '../hooks/useSenderInsights';
 
 function StatRow({ label, value }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 py-0.5">
-      <span className="text-xs text-mail-text-muted whitespace-nowrap">{label}</span>
-      <span className="text-xs text-mail-text text-right truncate">{value}</span>
+    <div className="flex items-baseline justify-between gap-3 py-0.5 min-w-0">
+      <span className="text-xs text-mail-text-muted whitespace-nowrap shrink-0">{label}</span>
+      <span className="text-xs text-mail-text text-right truncate min-w-0">{value}</span>
     </div>
   );
 }
@@ -35,7 +35,7 @@ export function SenderInsightsPanel({ senderEmail }) {
       transition={{ duration: 0.2, ease: 'easeInOut' }}
       className="overflow-hidden"
     >
-      <div data-testid="sender-insights-panel" className="mx-4 mb-2 px-3 py-2.5 rounded-lg border border-mail-border"
+      <div data-testid="sender-insights-panel" className="mx-4 mb-2 px-3 py-2.5 rounded-lg border border-mail-border overflow-hidden"
            style={{ backgroundColor: 'color-mix(in srgb, var(--mail-surface) 60%, transparent)' }}>
         <div className="space-y-0.5">
           <StatRow

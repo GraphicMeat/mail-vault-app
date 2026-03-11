@@ -203,51 +203,33 @@ echo -e "${YELLOW}🔏 Signing the application...${NC}"
 # Sign all nested components first (sidecar binary, frameworks, etc.)
 echo "   Signing nested components..."
 
-# Sign Sparkle framework nested components (inside-out for notarization)
-# IMPORTANT: XPC services and Updater.app have their own embedded entitlements
-# (sandbox, mach-lookup, etc.) that must be preserved during re-signing.
-# Without --entitlements, codesign --force strips them, causing
-# "An error occurred while launching the installer" on sandboxed apps.
+# Sign Sparkle framework nested components (inside-out per official docs:
+# https://sparkle-project.org/documentation/sandboxing/)
+# Key: Installer.xpc needs no entitlements preserved, Downloader.xpc does.
+# Do NOT use --deep.
 SPARKLE_FW="$APP_PATH/Contents/Frameworks/Sparkle.framework"
 if [ -d "$SPARKLE_FW" ]; then
-    # Sign XPC services first (preserve their embedded entitlements)
-    for xpc in "$SPARKLE_FW"/Versions/B/XPCServices/*.xpc; do
-        if [ -d "$xpc" ]; then
-            # Extract original entitlements from Sparkle's pre-signed XPC service
-            XPC_ENT_FILE=$(mktemp)
-            codesign -d --entitlements - "$xpc" 2>/dev/null | sed '1,/^<\?xml/{ /^<\?xml/!d; }' > "$XPC_ENT_FILE" || true
-            if [ -s "$XPC_ENT_FILE" ]; then
-                codesign --force --options runtime --timestamp \
-                    --entitlements "$XPC_ENT_FILE" \
-                    --sign "$SIGNING_ID" $KEYCHAIN_ARG \
-                    "$xpc"
-                echo "   ✓ Signed $(basename "$xpc") (entitlements preserved)"
-            else
-                codesign --force --options runtime --timestamp \
-                    --sign "$SIGNING_ID" $KEYCHAIN_ARG \
-                    "$xpc"
-                echo "   ✓ Signed $(basename "$xpc") (no entitlements found)"
-            fi
-            rm -f "$XPC_ENT_FILE"
-        fi
-    done
-    # Sign Updater.app (preserve its entitlements)
+    # Sign Installer.xpc (no --preserve-metadata needed)
+    if [ -d "$SPARKLE_FW/Versions/B/XPCServices/Installer.xpc" ]; then
+        codesign --force --options runtime --timestamp \
+            --sign "$SIGNING_ID" $KEYCHAIN_ARG \
+            "$SPARKLE_FW/Versions/B/XPCServices/Installer.xpc"
+        echo "   ✓ Signed Installer.xpc"
+    fi
+    # Sign Downloader.xpc (preserve its entitlements)
+    if [ -d "$SPARKLE_FW/Versions/B/XPCServices/Downloader.xpc" ]; then
+        codesign --force --options runtime --timestamp \
+            --preserve-metadata=entitlements \
+            --sign "$SIGNING_ID" $KEYCHAIN_ARG \
+            "$SPARKLE_FW/Versions/B/XPCServices/Downloader.xpc"
+        echo "   ✓ Signed Downloader.xpc (entitlements preserved)"
+    fi
+    # Sign Updater.app
     if [ -d "$SPARKLE_FW/Versions/B/Updater.app" ]; then
-        UPDATER_ENT_FILE=$(mktemp)
-        codesign -d --entitlements - "$SPARKLE_FW/Versions/B/Updater.app" 2>/dev/null | sed '1,/^<\?xml/{ /^<\?xml/!d; }' > "$UPDATER_ENT_FILE" || true
-        if [ -s "$UPDATER_ENT_FILE" ]; then
-            codesign --force --options runtime --timestamp \
-                --entitlements "$UPDATER_ENT_FILE" \
-                --sign "$SIGNING_ID" $KEYCHAIN_ARG \
-                "$SPARKLE_FW/Versions/B/Updater.app"
-            echo "   ✓ Signed Updater.app (entitlements preserved)"
-        else
-            codesign --force --options runtime --timestamp \
-                --sign "$SIGNING_ID" $KEYCHAIN_ARG \
-                "$SPARKLE_FW/Versions/B/Updater.app"
-            echo "   ✓ Signed Updater.app (no entitlements found)"
-        fi
-        rm -f "$UPDATER_ENT_FILE"
+        codesign --force --options runtime --timestamp \
+            --sign "$SIGNING_ID" $KEYCHAIN_ARG \
+            "$SPARKLE_FW/Versions/B/Updater.app"
+        echo "   ✓ Signed Updater.app"
     fi
     # Sign Autoupdate binary
     if [ -f "$SPARKLE_FW/Versions/B/Autoupdate" ]; then

@@ -28,8 +28,8 @@ CLAUDE.md
 *.swp
 *.swo
 
-# Plans
-docs/plans/
+# Plans & docs
+docs/
 
 # Worktrees
 .worktrees/

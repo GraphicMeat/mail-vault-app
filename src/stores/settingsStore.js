@@ -121,7 +121,8 @@ export const useSettingsStore = create(
       badgeMode: 'unread', // 'unread' | 'total'
 
       // Mark as read settings
-      markAsReadMode: 'auto', // 'auto' | 'manual'
+      markAsReadMode: 'delay', // 'delay' | 'auto' | 'manual'
+      markAsReadDelay: 3, // seconds to wait before marking as read (when mode is 'delay')
 
       // Layout settings
       layoutMode: 'three-column', // 'three-column' | 'two-column'
@@ -312,6 +313,7 @@ export const useSettingsStore = create(
 
       // Mark as read settings
       setMarkAsReadMode: (mode) => set({ markAsReadMode: mode }),
+      setMarkAsReadDelay: (delay) => set({ markAsReadDelay: delay }),
 
       // Layout settings
       setLayoutMode: (mode) => set({ layoutMode: mode }),
@@ -487,7 +489,8 @@ export const useSettingsStore = create(
           },
           badgeEnabled: true,
           badgeMode: 'unread',
-          markAsReadMode: 'auto',
+          markAsReadMode: 'delay',
+          markAsReadDelay: 3,
           layoutMode: 'three-column',
           viewStyle: 'list',
           emailListStyle: 'default',

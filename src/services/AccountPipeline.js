@@ -3,28 +3,9 @@ import * as db from './db';
 import { hasValidCredentials, ensureFreshToken } from './authUtils';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import { isGraphAccount, GRAPH_FOLDER_NAME_MAP, normalizeGraphFolderName } from './graphConfig';
 
 export { hasValidCredentials };
-
-// ── Graph transport helpers ─────────────────────────────────────────────────
-
-function isGraphAccount(account) {
-  return account?.oauth2Transport === 'graph';
-}
-
-// Map Graph API folder display names to IMAP-style names used by the app
-const GRAPH_FOLDER_NAME_MAP = {
-  'Inbox': 'INBOX',
-  'Sent Items': 'Sent',
-  'Drafts': 'Drafts',
-  'Deleted Items': 'Trash',
-  'Junk Email': 'Junk',
-  'Archive': 'Archive',
-};
-
-function normalizeGraphFolderName(displayName) {
-  return GRAPH_FOLDER_NAME_MAP[displayName] || displayName;
-}
 
 /**
  * Manages the complete background loading pipeline for a single account:

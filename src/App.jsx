@@ -150,9 +150,9 @@ function App() {
       const prev = idx > 0 ? idx - 1 : 0;
       if (sortedEmails[prev]) selectEmail(sortedEmails[prev].uid);
     },
-    goToInbox: () => useMailStore.getState().setActiveMailbox('INBOX'),
-    goToSent: () => useMailStore.getState().setActiveMailbox('Sent'),
-    goToDrafts: () => useMailStore.getState().setActiveMailbox('Drafts'),
+    goToInbox: () => { const s = useMailStore.getState(); s.activateAccount(s.activeAccountId, 'INBOX'); },
+    goToSent: () => { const s = useMailStore.getState(); s.activateAccount(s.activeAccountId, 'Sent'); },
+    goToDrafts: () => { const s = useMailStore.getState(); s.activateAccount(s.activeAccountId, 'Drafts'); },
     toggleSelect: () => {
       const uid = useMailStore.getState().selectedEmailId;
       if (uid) useMailStore.getState().toggleEmailSelection(uid);
@@ -351,8 +351,7 @@ function App() {
   const [quickLoadDone, setQuickLoadDone] = useState(false);
   const quickLoadHadAccountsRef = useRef(false);
 
-  // Quick load: get accounts from disk ASAP so the main UI renders immediately.
-  // Email headers/local data are loaded in a second phase to avoid blocking.
+  // Quick load: get accounts from disk ASAP, then activateAccount handles all email loading.
   useEffect(() => {
     const quickLoadAccounts = async () => {
       try {
@@ -370,92 +369,21 @@ function App() {
         if (accounts.length > 0) {
           const { hiddenAccounts } = useSettingsStore.getState();
           const firstVisible = accounts.find(a => !hiddenAccounts[a.id]) || accounts[0];
-          debugLog('[QuickLoad] Phase 1: setting', accounts.length, 'accounts, firstVisible:', firstVisible.email);
-
-          // Load cached mailboxes from last session (has correct paths for Gmail etc.)
-          const cachedMailboxes = await db.getCachedMailboxes(firstVisible.id);
-          const defaultMailboxes = [
-            { name: 'INBOX', path: 'INBOX', specialUse: null, children: [] },
-          ];
+          debugLog('[QuickLoad] Setting', accounts.length, 'accounts, firstVisible:', firstVisible.email);
 
           // Set accounts FIRST so the main UI renders immediately
           useMailStore.setState({
             accounts,
             activeAccountId: firstVisible.id,
             activeMailbox: 'INBOX',
-            mailboxes: cachedMailboxes || defaultMailboxes,
             loading: true,
           });
 
-          // Phase 2: Load partial cached headers (fast) — only first 200 to avoid blocking
-          // on large mailboxes (17k+ emails = 15-20MB JSON). Full cache loads during init.
-          try {
-            // Load server headers, archived IDs, and saved IDs in parallel
-            const [cachedHeaders, archivedEmailIds, savedEmailIds] = await Promise.all([
-              db.getEmailHeadersPartial(firstVisible.id, 'INBOX', 200),
-              db.getArchivedEmailIds(firstVisible.id, 'INBOX'),
-              db.getSavedEmailIds(firstVisible.id, 'INBOX'),
-            ]);
+          // activateAccount handles all local cache + server loading in parallel
+          useMailStore.getState().activateAccount(firstVisible.id, 'INBOX')
+            .catch(e => console.warn('[QuickLoad] activateAccount failed (non-fatal):', e));
 
-            // Load local emails from archived set (uses fast sidecar cache path)
-            const localEmails = archivedEmailIds.size > 0
-              ? await db.getArchivedEmails(firstVisible.id, 'INBOX', archivedEmailIds)
-              : [];
-
-            debugLog('[QuickLoad] Phase 2: cachedHeaders=' +
-              (cachedHeaders ? cachedHeaders.emails.length + ' of ' + cachedHeaders.totalCached + ' emails' : 'null') +
-              ', archivedIds=' + archivedEmailIds.size + ', localEmails=' + localEmails.length);
-
-            if (cachedHeaders && cachedHeaders.emails.length > 0) {
-              const emailsByIndex = new Map();
-              cachedHeaders.emails.forEach((email, idx) => {
-                const index = email.displayIndex !== undefined ? email.displayIndex : idx;
-                emailsByIndex.set(index, {
-                  ...email,
-                  source: email.source || 'server'
-                });
-              });
-
-              useMailStore.setState({
-                emails: cachedHeaders.emails,
-                emailsByIndex,
-                loadedRanges: [{ start: 0, end: cachedHeaders.emails.length }],
-                totalEmails: cachedHeaders.totalEmails,
-                loading: false,
-                loadingMore: true, // Full cache + server sync will follow
-                hasMoreEmails: cachedHeaders.emails.length < cachedHeaders.totalEmails,
-                currentPage: Math.ceil(cachedHeaders.emails.length / 50) || 1,
-                archivedEmailIds,
-                savedEmailIds,
-                localEmails,
-                ...(cachedHeaders.serverUids ? { serverUidSet: cachedHeaders.serverUids } : {}),
-              });
-              useMailStore.getState().updateSortedEmails();
-              const { sortedEmails, loading: postLoading } = useMailStore.getState();
-              debugLog('[QuickLoad] Phase 2 done: emails=' + cachedHeaders.emails.length +
-                ', sortedEmails=' + sortedEmails.length + ', totalEmails=' + cachedHeaders.totalEmails +
-                ', loading=' + postLoading);
-            } else if (localEmails.length > 0) {
-              // No cached server headers but we have local emails — show them immediately
-              useMailStore.setState({
-                loading: false,
-                loadingMore: true,
-                archivedEmailIds,
-                savedEmailIds,
-                localEmails,
-              });
-              useMailStore.getState().updateSortedEmails();
-              debugLog('[QuickLoad] Phase 2 done: no server cache, localEmails=' + localEmails.length);
-            } else {
-              // No cached data at all — stop loading spinner, init() will handle server sync
-              useMailStore.setState({ loading: false, loadingMore: true });
-              debugLog('[QuickLoad] Phase 2 done: no cached data, waiting for init()');
-            }
-          } catch (e) {
-            console.warn('[App] Quick load headers failed (non-fatal):', e);
-          }
-
-          // Phase 3: Check for pending bulk operations
+          // Check for pending bulk operations
           try {
             const pending = await bulkApi.readPendingOperation();
             if (pending && pending.status !== 'complete') {

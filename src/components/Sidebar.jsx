@@ -70,10 +70,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
   const loading = useMailStore(s => s.loading);
   const loadingMore = useMailStore(s => s.loadingMore);
   const hasMoreEmails = useMailStore(s => s.hasMoreEmails);
-  const setActiveAccount = useMailStore(s => s.setActiveAccount);
-  const setActiveMailbox = useMailStore(s => s.setActiveMailbox);
+  const activateAccount = useMailStore(s => s.activateAccount);
   const setViewMode = useMailStore(s => s.setViewMode);
-  const loadEmails = useMailStore(s => s.loadEmails);
   const retryKeychainAccess = useMailStore(s => s.retryKeychainAccess);
 
   const { theme, toggleTheme } = useThemeStore();
@@ -227,7 +225,10 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                              ? 'ring-2 ring-offset-1 ring-offset-mail-surface'
                              : 'hover:bg-mail-surface-hover'}`}
                 style={account.id === activeAccountId && !unifiedInbox ? { '--tw-ring-color': color } : undefined}
-                onClick={() => setActiveAccount(account.id)}
+                onClick={() => {
+                  const lastMailbox = useSettingsStore.getState().getLastMailbox(account.id);
+                  activateAccount(account.id, lastMailbox || 'INBOX');
+                }}
                 title={account.name || account.email}
               >
                 <div
@@ -277,7 +278,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                     if (mailbox.noselect && hasChildren) {
                       toggleFolder(mailbox.path);
                     } else if (!mailbox.noselect) {
-                      setActiveMailbox(mailbox.path);
+                      activateAccount(activeAccountId, mailbox.path);
                       if (hasChildren) toggleFolder(mailbox.path);
                     }
                   }}
@@ -295,7 +296,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                                  ${isChildActive
                                    ? 'bg-mail-accent/10 text-mail-accent'
                                    : 'text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover'}`}
-                      onClick={() => setActiveMailbox(child.path)}
+                      onClick={() => activateAccount(activeAccountId, child.path)}
                       title={getMailboxDisplayName(child.name)}
                     >
                       <ChildIcon size={13} />
@@ -321,7 +322,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
             )}
           </button>
           <button
-            onClick={() => useMailStore.getState().loadEmails()}
+            onClick={() => { const s = useMailStore.getState(); s.activateAccount(s.activeAccountId, s.activeMailbox); }}
             className="p-2 hover:bg-mail-surface-hover rounded-lg transition-colors"
             title="Refresh emails"
           >
@@ -377,7 +378,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
             )}
           </button>
           <button
-            onClick={() => useMailStore.getState().loadEmails()}
+            onClick={() => { const s = useMailStore.getState(); s.activateAccount(s.activeAccountId, s.activeMailbox); }}
             className="p-2 hover:bg-mail-surface-hover rounded-lg transition-colors"
             title="Refresh emails"
           >
@@ -436,7 +437,10 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                            ${account.id === activeAccountId && !unifiedInbox
                              ? 'bg-mail-accent/10 text-mail-accent'
                              : 'hover:bg-mail-surface-hover text-mail-text'}`}
-                onClick={() => setActiveAccount(account.id)}
+                onClick={() => {
+                  const lastMailbox = useSettingsStore.getState().getLastMailbox(account.id);
+                  activateAccount(account.id, lastMailbox || 'INBOX');
+                }}
               >
                 <div className="relative">
                   <div
@@ -529,6 +533,16 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                       <ServerOff size={14} />
                       <span>Microsoft issue</span>
                     </>
+                  ) : connectionErrorType === 'oauthExpired' ? (
+                    <>
+                      <Key size={14} />
+                      <span>OAuth2 expired</span>
+                    </>
+                  ) : connectionErrorType === 'timeout' ? (
+                    <>
+                      <RefreshCw size={14} />
+                      <span>Timed out</span>
+                    </>
                   ) : (
                     <>
                       <ServerOff size={14} />
@@ -545,7 +559,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                     <Info size={12} />
                   </button>
                     <button
-                      onClick={() => loadEmails()}
+                      onClick={() => activateAccount(activeAccountId, activeMailbox)}
                       className="p-1 hover:bg-mail-danger/20 rounded transition-colors"
                       title="Retry connection"
                     >
@@ -623,7 +637,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                   if (mailbox.noselect && hasChildren) {
                     toggleFolder(mailbox.path);
                   } else if (!mailbox.noselect) {
-                    setActiveMailbox(mailbox.path);
+                    activateAccount(activeAccountId, mailbox.path);
                   }
                 }}
               >
@@ -660,7 +674,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                                    cursor-pointer transition-colors ${isChildActive
                                      ? 'bg-mail-accent/10 text-mail-accent'
                                      : 'text-mail-text hover:bg-mail-surface-hover'}`}
-                        onClick={() => setActiveMailbox(child.path)}
+                        onClick={() => activateAccount(activeAccountId, child.path)}
                       >
                         <div className="w-5" />
                         <ChildIcon size={14} />
