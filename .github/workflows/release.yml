@@ -515,8 +515,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION="${{ inputs.version }}"
-          VERSION_NUM="${VERSION#v}"
+          INPUT_VERSION="${{ inputs.version }}"
+          VERSION_NUM="${INPUT_VERSION#v}"
+          VERSION="v${VERSION_NUM}"
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
           REPO="${{ github.repository }}"
           BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
