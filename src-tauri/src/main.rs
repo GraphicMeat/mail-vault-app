@@ -3001,6 +3001,41 @@ fn main() {
         eprintln!("PANIC at {}: {}", location, payload);
     }));
 
+    // Linux fallback: flock-based lock to prevent multiple instances.
+    // The tauri-plugin-single-instance uses D-Bus which may not work in all Linux environments
+    // (AppImage, Snap, restricted D-Bus sessions). flock is kernel-managed: automatically
+    // released on process exit (even SIGKILL/crash), works in Snap strict confinement,
+    // and has no stale lock issues.
+    #[cfg(target_os = "linux")]
+    let _lock_file = {
+        use std::os::unix::io::AsRawFd;
+
+        let lock_dir = dirs::data_dir()
+            .unwrap_or_else(|| PathBuf::from("/tmp"))
+            .join("com.mailvault.app");
+        let _ = fs::create_dir_all(&lock_dir);
+        let lock_path = lock_dir.join("mailvault.lock");
+
+        match fs::File::create(&lock_path) {
+            Ok(file) => {
+                let fd = file.as_raw_fd();
+                // LOCK_EX = exclusive lock, LOCK_NB = non-blocking (fail immediately if locked)
+                let ret = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
+                if ret != 0 {
+                    eprintln!("MailVault is already running. Use the system tray to show the window.");
+                    std::process::exit(0);
+                }
+                // Keep the file handle alive for the entire process lifetime.
+                // When the process exits (normally or crashes), the kernel releases the lock.
+                Some(file)
+            }
+            Err(e) => {
+                eprintln!("Warning: could not create lock file: {}", e);
+                None
+            }
+        }
+    };
+
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             // When a second instance is launched, focus the main window
