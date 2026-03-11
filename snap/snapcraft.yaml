@@ -1,5 +1,5 @@
 name: mailvault
-version: '2.1.4'
+version: '2.1.3'
 summary: Privacy-first desktop email client with local Maildir storage
 description: |
   MailVault is a desktop email client that stores your emails locally in
@@ -11,10 +11,6 @@ grade: stable
 confinement: strict
 base: core22
 icon: src-tauri/icons/128x128.png
-
-layout:
-  /usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR/webkit2gtk-4.1:
-    bind: $SNAP/usr/lib/$CRAFT_ARCH_TRIPLET_BUILD_FOR/webkit2gtk-4.1
 
 apps:
   mailvault:

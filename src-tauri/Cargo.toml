@@ -56,6 +56,7 @@ tauri-plugin-sparkle-updater = "0.2"
 keyring = { version = "3", features = ["sync-secret-service"] }
 tauri-plugin-updater = "2"
 libc = "0.2"
+signal-hook = "0.3"
 
 [features]
 default = ["custom-protocol"]
