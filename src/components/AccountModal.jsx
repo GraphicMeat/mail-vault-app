@@ -453,7 +453,7 @@ export function AccountModal({ onClose }) {
       }, 1500);
     } catch (err) {
       console.error('[AccountModal] addAccount failed:', err);
-      setError(err.message || 'Failed to connect to email server');
+      setError(typeof err === 'string' ? err : (err.message || 'Failed to connect to email server'));
     } finally {
       setTesting(false);
     }
