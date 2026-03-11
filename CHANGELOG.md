@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.1.2] - 2026-03-11
+
 ### Fixed
 - **Snap updater**: Detect snap environment and show "Updates managed by Snap Store" instead of cryptic "builder error"; `.deb` installs show helpful message directing to website
 - **Snap keyring**: `password-manager-service` plug requires manual connection (`sudo snap connect mailvault:password-manager-service`) — documented and improved error handling
