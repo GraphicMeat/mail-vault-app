@@ -832,7 +832,7 @@ export const useMailStore = create((set, get) => ({
       console.log('[mailStore] Connection test successful');
     } catch (error) {
       console.error('[mailStore] Connection test failed:', error);
-      throw error;
+      throw typeof error === 'string' ? new Error(error) : error;
     }
 
     // Save to Maildir
