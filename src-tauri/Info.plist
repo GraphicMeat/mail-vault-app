@@ -6,5 +6,7 @@
     <string>https://github.com/GraphicMeat/mail-vault-app/releases/latest/download/appcast.xml</string>
     <key>SUPublicEDKey</key>
     <string>9OobPkT0p5WGp0wf2aSbADivVllEKZaz0gKhElMocU0=</string>
+    <key>SUEnableInstallerLauncherService</key>
+    <true/>
 </dict>
 </plist>

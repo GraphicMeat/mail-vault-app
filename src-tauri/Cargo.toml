@@ -1,6 +1,6 @@
 [package]
 name = "mailvault"
-version = "2.1.2"
+version = "2.1.3"
 description = "A reactive email client with local storage"
 authors = ["MailVault"]
 edition = "2021"
@@ -55,6 +55,7 @@ tauri-plugin-sparkle-updater = "0.2"
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "3", features = ["sync-secret-service"] }
 tauri-plugin-updater = "2"
+libc = "0.2"
 
 [features]
 default = ["custom-protocol"]

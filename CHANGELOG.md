@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [2.1.3] - 2026-03-11
+
+### Fixed
+- **macOS updater**: Added `SUEnableInstallerLauncherService` to Info.plist — required for sandboxed Sparkle updates; fixes "An error occurred while launching the installer" on v2.1.1+
+- **Linux single instance**: Enforce single app instance via `flock` kernel lock — prevents email disappearance caused by multiple concurrent instances; works across AppImage, .deb, Snap, and Flatpak
+- **IMAP error messages**: Show actual IMAP error instead of generic "Failed to connect" when adding accounts
+
 ## [2.1.2] - 2026-03-11
 
 ### Fixed
