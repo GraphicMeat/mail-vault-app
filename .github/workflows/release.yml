@@ -235,6 +235,7 @@ jobs:
           name: linux-x86_64-artifacts
           path: |
             src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb
+            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb.sig
           retention-days: 1
 
   build-linux-aarch64:
@@ -305,6 +306,7 @@ jobs:
           name: linux-aarch64-artifacts
           path: |
             src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/deb/*.deb
+            src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/deb/*.deb.sig
           retention-days: 1
 
   build-snap-x86_64:
@@ -533,10 +535,12 @@ jobs:
           # ── Linux x86_64 (.deb) ──
           LX86_DEB=$(find artifacts/linux-x86_64-artifacts -name "*.deb" | head -1)
           LX86_DEB_NAME=$(basename "$LX86_DEB")
+          LX86_SIG=$(find artifacts/linux-x86_64-artifacts -name "*.deb.sig" 2>/dev/null | head -1 || true)
 
           # ── Linux aarch64 (.deb) ──
           LARM_DEB=$(find artifacts/linux-aarch64-artifacts -name "*.deb" | head -1)
           LARM_DEB_NAME=$(basename "$LARM_DEB")
+          LARM_SIG=$(find artifacts/linux-aarch64-artifacts -name "*.deb.sig" 2>/dev/null | head -1 || true)
 
           # ── Snap artifacts (may not exist if snap builds skipped) ──
           SNAP_X86=$(find artifacts/snap-x86_64-artifact -name "*.snap" 2>/dev/null | head -1 || true)
@@ -555,13 +559,25 @@ jobs:
           # JSON-escape for latest.json (handles newlines, quotes, backslashes)
           CHANGELOG_JSON=$(python3 -c "import sys,json; print(json.dumps(sys.stdin.read().strip()))" <<< "$CHANGELOG_NOTES")
 
-          # latest.json for Linux updater only (macOS uses Sparkle appcast.xml)
+          # Build Linux platform entries for latest.json
+          # (macOS uses Sparkle appcast.xml, not latest.json)
+          LINUX_PLATFORMS=""
+          if [ -n "$LX86_SIG" ]; then
+            LX86_SIG_CONTENT=$(cat "$LX86_SIG")
+            LINUX_PLATFORMS="\"linux-x86_64\": { \"signature\": \"${LX86_SIG_CONTENT}\", \"url\": \"${BASE_URL}/${LX86_DEB_NAME}\" }"
+          fi
+          if [ -n "$LARM_SIG" ]; then
+            LARM_SIG_CONTENT=$(cat "$LARM_SIG")
+            if [ -n "$LINUX_PLATFORMS" ]; then LINUX_PLATFORMS="${LINUX_PLATFORMS}, "; fi
+            LINUX_PLATFORMS="${LINUX_PLATFORMS}\"linux-aarch64\": { \"signature\": \"${LARM_SIG_CONTENT}\", \"url\": \"${BASE_URL}/${LARM_DEB_NAME}\" }"
+          fi
+
           cat > latest.json <<EOJSON
           {
             "version": "${VERSION_NUM}",
             "notes": ${CHANGELOG_JSON},
             "pub_date": "${PUB_DATE}",
-            "platforms": {}
+            "platforms": { ${LINUX_PLATFORMS} }
           }
           EOJSON
 

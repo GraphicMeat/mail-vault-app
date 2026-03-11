@@ -6447,58 +6447,514 @@
           "markdownDescription": "Denies the stdin_write command without any pre-configured scope."
         },
         {
-          "description": "This permission set configures which kind of\nupdater functions are exposed to the frontend.\n\n#### Granted Permissions\n\nThe full workflow from checking for updates to installing them\nis enabled.\n\n\n#### This default permission set includes:\n\n- `allow-check`\n- `allow-download`\n- `allow-install`\n- `allow-download-and-install`",
+          "description": "Default permissions for the Sparkle updater plugin\n#### This default permission set includes:\n\n- `allow-check-for-updates`\n- `allow-check-for-updates-in-background`\n- `allow-can-check-for-updates`\n- `allow-current-version`\n- `allow-feed-url`\n- `allow-set-feed-url`\n- `allow-automatically-checks-for-updates`\n- `allow-set-automatically-checks-for-updates`\n- `allow-automatically-downloads-updates`\n- `allow-set-automatically-downloads-updates`\n- `allow-last-update-check-date`\n- `allow-reset-update-cycle`\n- `allow-update-check-interval`\n- `allow-set-update-check-interval`\n- `allow-check-for-update-information`\n- `allow-session-in-progress`\n- `allow-http-headers`\n- `allow-set-http-headers`\n- `allow-user-agent-string`\n- `allow-set-user-agent-string`\n- `allow-sends-system-profile`\n- `allow-set-sends-system-profile`\n- `allow-clear-feed-url-from-user-defaults`\n- `allow-reset-update-cycle-after-short-delay`\n- `allow-allowed-channels`\n- `allow-set-allowed-channels`\n- `allow-feed-url-override`\n- `allow-set-feed-url-override`\n- `allow-feed-parameters`\n- `allow-set-feed-parameters`\n- `allow-should-download-release-notes`\n- `allow-set-should-download-release-notes`\n- `allow-should-relaunch-application`\n- `allow-set-should-relaunch-application`\n- `allow-may-check-for-updates-config`\n- `allow-set-may-check-for-updates-config`\n- `allow-should-proceed-with-update`\n- `allow-set-should-proceed-with-update`\n- `allow-decryption-password`\n- `allow-set-decryption-password`\n- `allow-last-found-update`",
           "type": "string",
-          "const": "updater:default",
-          "markdownDescription": "This permission set configures which kind of\nupdater functions are exposed to the frontend.\n\n#### Granted Permissions\n\nThe full workflow from checking for updates to installing them\nis enabled.\n\n\n#### This default permission set includes:\n\n- `allow-check`\n- `allow-download`\n- `allow-install`\n- `allow-download-and-install`"
+          "const": "sparkle-updater:default",
+          "markdownDescription": "Default permissions for the Sparkle updater plugin\n#### This default permission set includes:\n\n- `allow-check-for-updates`\n- `allow-check-for-updates-in-background`\n- `allow-can-check-for-updates`\n- `allow-current-version`\n- `allow-feed-url`\n- `allow-set-feed-url`\n- `allow-automatically-checks-for-updates`\n- `allow-set-automatically-checks-for-updates`\n- `allow-automatically-downloads-updates`\n- `allow-set-automatically-downloads-updates`\n- `allow-last-update-check-date`\n- `allow-reset-update-cycle`\n- `allow-update-check-interval`\n- `allow-set-update-check-interval`\n- `allow-check-for-update-information`\n- `allow-session-in-progress`\n- `allow-http-headers`\n- `allow-set-http-headers`\n- `allow-user-agent-string`\n- `allow-set-user-agent-string`\n- `allow-sends-system-profile`\n- `allow-set-sends-system-profile`\n- `allow-clear-feed-url-from-user-defaults`\n- `allow-reset-update-cycle-after-short-delay`\n- `allow-allowed-channels`\n- `allow-set-allowed-channels`\n- `allow-feed-url-override`\n- `allow-set-feed-url-override`\n- `allow-feed-parameters`\n- `allow-set-feed-parameters`\n- `allow-should-download-release-notes`\n- `allow-set-should-download-release-notes`\n- `allow-should-relaunch-application`\n- `allow-set-should-relaunch-application`\n- `allow-may-check-for-updates-config`\n- `allow-set-may-check-for-updates-config`\n- `allow-should-proceed-with-update`\n- `allow-set-should-proceed-with-update`\n- `allow-decryption-password`\n- `allow-set-decryption-password`\n- `allow-last-found-update`"
         },
         {
-          "description": "Enables the check command without any pre-configured scope.",
+          "description": "Enables the allowed_channels command without any pre-configured scope.",
           "type": "string",
-          "const": "updater:allow-check",
-          "markdownDescription": "Enables the check command without any pre-configured scope."
+          "const": "sparkle-updater:allow-allowed-channels",
+          "markdownDescription": "Enables the allowed_channels command without any pre-configured scope."
         },
         {
-          "description": "Enables the download command without any pre-configured scope.",
+          "description": "Enables the automatically_checks_for_updates command without any pre-configured scope.",
           "type": "string",
-          "const": "updater:allow-download",
-          "markdownDescription": "Enables the download command without any pre-configured scope."
+          "const": "sparkle-updater:allow-automatically-checks-for-updates",
+          "markdownDescription": "Enables the automatically_checks_for_updates command without any pre-configured scope."
         },
         {
-          "description": "Enables the download_and_install command without any pre-configured scope.",
+          "description": "Enables the automatically_downloads_updates command without any pre-configured scope.",
           "type": "string",
-          "const": "updater:allow-download-and-install",
-          "markdownDescription": "Enables the download_and_install command without any pre-configured scope."
+          "const": "sparkle-updater:allow-automatically-downloads-updates",
+          "markdownDescription": "Enables the automatically_downloads_updates command without any pre-configured scope."
         },
         {
-          "description": "Enables the install command without any pre-configured scope.",
+          "description": "Enables the can_check_for_updates command without any pre-configured scope.",
           "type": "string",
-          "const": "updater:allow-install",
-          "markdownDescription": "Enables the install command without any pre-configured scope."
+          "const": "sparkle-updater:allow-can-check-for-updates",
+          "markdownDescription": "Enables the can_check_for_updates command without any pre-configured scope."
         },
         {
-          "description": "Denies the check command without any pre-configured scope.",
+          "description": "Enables the check_for_update_information command without any pre-configured scope.",
           "type": "string",
-          "const": "updater:deny-check",
-          "markdownDescription": "Denies the check command without any pre-configured scope."
+          "const": "sparkle-updater:allow-check-for-update-information",
+          "markdownDescription": "Enables the check_for_update_information command without any pre-configured scope."
         },
         {
-          "description": "Denies the download command without any pre-configured scope.",
+          "description": "Enables the check_for_updates command without any pre-configured scope.",
           "type": "string",
-          "const": "updater:deny-download",
-          "markdownDescription": "Denies the download command without any pre-configured scope."
+          "const": "sparkle-updater:allow-check-for-updates",
+          "markdownDescription": "Enables the check_for_updates command without any pre-configured scope."
         },
         {
-          "description": "Denies the download_and_install command without any pre-configured scope.",
+          "description": "Enables the check_for_updates_in_background command without any pre-configured scope.",
           "type": "string",
-          "const": "updater:deny-download-and-install",
-          "markdownDescription": "Denies the download_and_install command without any pre-configured scope."
+          "const": "sparkle-updater:allow-check-for-updates-in-background",
+          "markdownDescription": "Enables the check_for_updates_in_background command without any pre-configured scope."
         },
         {
-          "description": "Denies the install command without any pre-configured scope.",
+          "description": "Enables the clear_feed_url_from_user_defaults command without any pre-configured scope.",
           "type": "string",
-          "const": "updater:deny-install",
-          "markdownDescription": "Denies the install command without any pre-configured scope."
+          "const": "sparkle-updater:allow-clear-feed-url-from-user-defaults",
+          "markdownDescription": "Enables the clear_feed_url_from_user_defaults command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the current_version command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-current-version",
+          "markdownDescription": "Enables the current_version command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the decryption_password command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-decryption-password",
+          "markdownDescription": "Enables the decryption_password command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the feed_parameters command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-feed-parameters",
+          "markdownDescription": "Enables the feed_parameters command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the feed_url command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-feed-url",
+          "markdownDescription": "Enables the feed_url command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the feed_url_override command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-feed-url-override",
+          "markdownDescription": "Enables the feed_url_override command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the http_headers command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-http-headers",
+          "markdownDescription": "Enables the http_headers command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the last_found_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-last-found-update",
+          "markdownDescription": "Enables the last_found_update command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the last_update_check_date command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-last-update-check-date",
+          "markdownDescription": "Enables the last_update_check_date command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the may_check_for_updates_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-may-check-for-updates-config",
+          "markdownDescription": "Enables the may_check_for_updates_config command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the ping command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-ping",
+          "markdownDescription": "Enables the ping command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the reset_update_cycle command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-reset-update-cycle",
+          "markdownDescription": "Enables the reset_update_cycle command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the reset_update_cycle_after_short_delay command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-reset-update-cycle-after-short-delay",
+          "markdownDescription": "Enables the reset_update_cycle_after_short_delay command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the sends_system_profile command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-sends-system-profile",
+          "markdownDescription": "Enables the sends_system_profile command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the session_in_progress command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-session-in-progress",
+          "markdownDescription": "Enables the session_in_progress command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_allowed_channels command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-set-allowed-channels",
+          "markdownDescription": "Enables the set_allowed_channels command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_automatically_checks_for_updates command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-set-automatically-checks-for-updates",
+          "markdownDescription": "Enables the set_automatically_checks_for_updates command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_automatically_downloads_updates command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-set-automatically-downloads-updates",
+          "markdownDescription": "Enables the set_automatically_downloads_updates command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_decryption_password command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-set-decryption-password",
+          "markdownDescription": "Enables the set_decryption_password command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_feed_parameters command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-set-feed-parameters",
+          "markdownDescription": "Enables the set_feed_parameters command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_feed_url command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-set-feed-url",
+          "markdownDescription": "Enables the set_feed_url command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_feed_url_override command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-set-feed-url-override",
+          "markdownDescription": "Enables the set_feed_url_override command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_http_headers command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-set-http-headers",
+          "markdownDescription": "Enables the set_http_headers command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_may_check_for_updates_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-set-may-check-for-updates-config",
+          "markdownDescription": "Enables the set_may_check_for_updates_config command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_sends_system_profile command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-set-sends-system-profile",
+          "markdownDescription": "Enables the set_sends_system_profile command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_should_download_release_notes command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-set-should-download-release-notes",
+          "markdownDescription": "Enables the set_should_download_release_notes command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_should_proceed_with_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-set-should-proceed-with-update",
+          "markdownDescription": "Enables the set_should_proceed_with_update command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_should_relaunch_application command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-set-should-relaunch-application",
+          "markdownDescription": "Enables the set_should_relaunch_application command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_update_check_interval command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-set-update-check-interval",
+          "markdownDescription": "Enables the set_update_check_interval command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the set_user_agent_string command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-set-user-agent-string",
+          "markdownDescription": "Enables the set_user_agent_string command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the should_download_release_notes command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-should-download-release-notes",
+          "markdownDescription": "Enables the should_download_release_notes command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the should_proceed_with_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-should-proceed-with-update",
+          "markdownDescription": "Enables the should_proceed_with_update command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the should_relaunch_application command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-should-relaunch-application",
+          "markdownDescription": "Enables the should_relaunch_application command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the update_check_interval command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-update-check-interval",
+          "markdownDescription": "Enables the update_check_interval command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the user_agent_string command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:allow-user-agent-string",
+          "markdownDescription": "Enables the user_agent_string command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the allowed_channels command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-allowed-channels",
+          "markdownDescription": "Denies the allowed_channels command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the automatically_checks_for_updates command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-automatically-checks-for-updates",
+          "markdownDescription": "Denies the automatically_checks_for_updates command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the automatically_downloads_updates command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-automatically-downloads-updates",
+          "markdownDescription": "Denies the automatically_downloads_updates command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the can_check_for_updates command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-can-check-for-updates",
+          "markdownDescription": "Denies the can_check_for_updates command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the check_for_update_information command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-check-for-update-information",
+          "markdownDescription": "Denies the check_for_update_information command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the check_for_updates command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-check-for-updates",
+          "markdownDescription": "Denies the check_for_updates command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the check_for_updates_in_background command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-check-for-updates-in-background",
+          "markdownDescription": "Denies the check_for_updates_in_background command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the clear_feed_url_from_user_defaults command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-clear-feed-url-from-user-defaults",
+          "markdownDescription": "Denies the clear_feed_url_from_user_defaults command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the current_version command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-current-version",
+          "markdownDescription": "Denies the current_version command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the decryption_password command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-decryption-password",
+          "markdownDescription": "Denies the decryption_password command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the feed_parameters command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-feed-parameters",
+          "markdownDescription": "Denies the feed_parameters command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the feed_url command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-feed-url",
+          "markdownDescription": "Denies the feed_url command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the feed_url_override command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-feed-url-override",
+          "markdownDescription": "Denies the feed_url_override command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the http_headers command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-http-headers",
+          "markdownDescription": "Denies the http_headers command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the last_found_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-last-found-update",
+          "markdownDescription": "Denies the last_found_update command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the last_update_check_date command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-last-update-check-date",
+          "markdownDescription": "Denies the last_update_check_date command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the may_check_for_updates_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-may-check-for-updates-config",
+          "markdownDescription": "Denies the may_check_for_updates_config command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the ping command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-ping",
+          "markdownDescription": "Denies the ping command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the reset_update_cycle command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-reset-update-cycle",
+          "markdownDescription": "Denies the reset_update_cycle command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the reset_update_cycle_after_short_delay command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-reset-update-cycle-after-short-delay",
+          "markdownDescription": "Denies the reset_update_cycle_after_short_delay command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the sends_system_profile command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-sends-system-profile",
+          "markdownDescription": "Denies the sends_system_profile command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the session_in_progress command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-session-in-progress",
+          "markdownDescription": "Denies the session_in_progress command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_allowed_channels command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-set-allowed-channels",
+          "markdownDescription": "Denies the set_allowed_channels command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_automatically_checks_for_updates command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-set-automatically-checks-for-updates",
+          "markdownDescription": "Denies the set_automatically_checks_for_updates command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_automatically_downloads_updates command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-set-automatically-downloads-updates",
+          "markdownDescription": "Denies the set_automatically_downloads_updates command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_decryption_password command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-set-decryption-password",
+          "markdownDescription": "Denies the set_decryption_password command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_feed_parameters command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-set-feed-parameters",
+          "markdownDescription": "Denies the set_feed_parameters command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_feed_url command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-set-feed-url",
+          "markdownDescription": "Denies the set_feed_url command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_feed_url_override command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-set-feed-url-override",
+          "markdownDescription": "Denies the set_feed_url_override command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_http_headers command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-set-http-headers",
+          "markdownDescription": "Denies the set_http_headers command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_may_check_for_updates_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-set-may-check-for-updates-config",
+          "markdownDescription": "Denies the set_may_check_for_updates_config command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_sends_system_profile command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-set-sends-system-profile",
+          "markdownDescription": "Denies the set_sends_system_profile command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_should_download_release_notes command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-set-should-download-release-notes",
+          "markdownDescription": "Denies the set_should_download_release_notes command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_should_proceed_with_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-set-should-proceed-with-update",
+          "markdownDescription": "Denies the set_should_proceed_with_update command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_should_relaunch_application command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-set-should-relaunch-application",
+          "markdownDescription": "Denies the set_should_relaunch_application command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_update_check_interval command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-set-update-check-interval",
+          "markdownDescription": "Denies the set_update_check_interval command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_user_agent_string command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-set-user-agent-string",
+          "markdownDescription": "Denies the set_user_agent_string command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the should_download_release_notes command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-should-download-release-notes",
+          "markdownDescription": "Denies the should_download_release_notes command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the should_proceed_with_update command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-should-proceed-with-update",
+          "markdownDescription": "Denies the should_proceed_with_update command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the should_relaunch_application command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-should-relaunch-application",
+          "markdownDescription": "Denies the should_relaunch_application command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the update_check_interval command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-update-check-interval",
+          "markdownDescription": "Denies the update_check_interval command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the user_agent_string command without any pre-configured scope.",
+          "type": "string",
+          "const": "sparkle-updater:deny-user-agent-string",
+          "markdownDescription": "Denies the user_agent_string command without any pre-configured scope."
         }
       ]
     },
