@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.1.5] - 2026-03-11
+
 ### Fixed
 - **Linux window activation**: Clicking app icon while already running now brings window to front via SIGUSR2 signal between instances (previously second instance exited silently)
 
