@@ -1,5 +1,6 @@
 import React, { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useMailStore } from '../stores/mailStore';
+import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore, getAccountColor } from '../stores/settingsStore';
 import { buildThreads } from '../utils/emailParser';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -656,8 +657,8 @@ function EmailListComponent() {
   const sortedEmails = useMailStore(s => s.sortedEmails);
   const sentEmails = useMailStore(s => s.sentEmails);
   const hasMoreEmails = useMailStore(s => s.hasMoreEmails);
-  const searchActive = useMailStore(s => s.searchActive);
-  const searchResults = useMailStore(s => s.searchResults);
+  const searchActive = useSearchStore(s => s.searchActive);
+  const searchResults = useSearchStore(s => s.searchResults);
   const flagSeq = useMailStore(s => s._flagSeq);
   // Actions (stable references — never cause re-renders)
   const loadEmails = useMailStore(s => s.loadEmails);
@@ -667,7 +668,7 @@ function EmailListComponent() {
   const toggleEmailSelection = useMailStore(s => s.toggleEmailSelection);
   const selectAllEmails = useMailStore(s => s.selectAllEmails);
   const clearSelection = useMailStore(s => s.clearSelection);
-  const clearSearch = useMailStore(s => s.clearSearch);
+  const clearSearch = useSearchStore(s => s.clearSearch);
   const getChatEmails = useMailStore(s => s.getChatEmails);
 
   const emailListStyle = useSettingsStore(s => s.emailListStyle);

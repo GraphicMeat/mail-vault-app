@@ -63,18 +63,25 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
           return true;
         case 'year':
           return date.getFullYear() === selectedRange.year;
-        case 'this_year':
-          return date.getFullYear() === now.getFullYear();
-        case 'last_year':
-          return date.getFullYear() === now.getFullYear() - 1;
-        case 'ytd': {
-          const startOfYear = new Date(now.getFullYear(), 0, 1);
-          return date >= startOfYear && date <= now;
+        case 'today': {
+          const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          return date >= start;
         }
+        case 'yesterday': {
+          const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+          const dayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          return date >= dayStart && date < dayEnd;
+        }
+        case 'last_week':
+          return (now - date) <= 7 * 24 * 60 * 60 * 1000;
         case 'last_30':
           return (now - date) <= 30 * 24 * 60 * 60 * 1000;
         case 'last_90':
           return (now - date) <= 90 * 24 * 60 * 60 * 1000;
+        case 'this_year':
+          return date.getFullYear() === now.getFullYear();
+        case 'last_year':
+          return date.getFullYear() === now.getFullYear() - 1;
         case 'custom': {
           const from = customFrom ? new Date(customFrom) : new Date(0);
           const to = customTo ? new Date(customTo + 'T23:59:59') : now;
@@ -217,12 +224,14 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                 <label className="text-xs font-medium text-mail-text-muted uppercase tracking-wide mb-2 block">Presets</label>
                 <div className="flex flex-wrap gap-2">
                   {[
-                    { type: 'this_year', label: 'This Year' },
-                    { type: 'last_year', label: 'Last Year' },
-                    { type: 'ytd', label: 'Year to Date' },
+                    { type: 'today', label: 'Today' },
+                    { type: 'yesterday', label: 'Yesterday' },
+                    { type: 'last_week', label: 'Last Week' },
                     { type: 'last_30', label: 'Last 30 Days' },
                     { type: 'last_90', label: 'Last 90 Days' },
-                    { type: 'all', label: 'All Loaded' },
+                    { type: 'this_year', label: 'This Year' },
+                    { type: 'last_year', label: 'Last Year' },
+                    { type: 'all', label: 'All' },
                   ].map(preset => {
                     const isActive = selectedRange?.type === preset.type;
                     return (

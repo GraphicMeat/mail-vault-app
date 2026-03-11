@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useMailStore } from '../stores/mailStore';
+import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -26,15 +27,15 @@ const LOCATION_OPTIONS = [
 ];
 
 export function SearchBar() {
-  const searchQuery = useMailStore(s => s.searchQuery);
-  const searchFilters = useMailStore(s => s.searchFilters);
-  const searchActive = useMailStore(s => s.searchActive);
-  const isSearching = useMailStore(s => s.isSearching);
-  const searchResults = useMailStore(s => s.searchResults);
-  const setSearchQuery = useMailStore(s => s.setSearchQuery);
-  const setSearchFilters = useMailStore(s => s.setSearchFilters);
-  const performSearch = useMailStore(s => s.performSearch);
-  const clearSearch = useMailStore(s => s.clearSearch);
+  const searchQuery = useSearchStore(s => s.searchQuery);
+  const searchFilters = useSearchStore(s => s.searchFilters);
+  const searchActive = useSearchStore(s => s.searchActive);
+  const isSearching = useSearchStore(s => s.isSearching);
+  const searchResults = useSearchStore(s => s.searchResults);
+  const setSearchQuery = useSearchStore(s => s.setSearchQuery);
+  const setSearchFilters = useSearchStore(s => s.setSearchFilters);
+  const performSearch = useSearchStore(s => s.performSearch);
+  const clearSearch = useSearchStore(s => s.clearSearch);
   const mailboxes = useMailStore(s => s.mailboxes);
   const activeMailbox = useMailStore(s => s.activeMailbox);
 

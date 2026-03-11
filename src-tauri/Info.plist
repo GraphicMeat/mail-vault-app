@@ -8,5 +8,7 @@
     <string>9OobPkT0p5WGp0wf2aSbADivVllEKZaz0gKhElMocU0=</string>
     <key>SUEnableInstallerLauncherService</key>
     <true/>
+    <key>SUEnableAutomaticChecks</key>
+    <false/>
 </dict>
 </plist>

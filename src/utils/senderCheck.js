@@ -13,7 +13,7 @@ function getDomain(email) {
 /**
  * Parse Authentication-Results header for SPF/DKIM/DMARC results.
  */
-function parseAuthResults(header) {
+export function parseAuthResults(header) {
   if (!header) return { spf: null, dkim: null, dmarc: null };
 
   const results = { spf: null, dkim: null, dmarc: null };
