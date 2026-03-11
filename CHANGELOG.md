@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-03-11
+
 ### Improved
 - **Email loading**: Refactored to two-stream architecture — local cache and server data load in parallel via `activateAccount()`, replacing 6 overlapping phases with a clean Promise-based model; eliminates "empty emails" bug on rapid account/mailbox switching via AbortController cancellation
 - **Codebase refactor**: Extracted Graph config, LRU caches, search, and performance tracing into dedicated modules; SettingsPage and EmailViewer split into focused sub-components; bulk operations presets reordered by duration (Today → All)
