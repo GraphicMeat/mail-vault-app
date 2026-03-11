@@ -2893,16 +2893,31 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
     use tauri_plugin_updater::UpdaterExt;
     use tauri_plugin_dialog::DialogExt;
 
+    // Snap packages update via the Snap Store — skip Tauri updater
+    if std::env::var("SNAP").is_ok() {
+        info!("Running as snap — updates managed by Snap Store");
+        if show_no_update {
+            handle.dialog()
+                .message("This app was installed from the Snap Store.\nUpdates are delivered automatically through the Snap Store.")
+                .title("Updates")
+                .show(|_| {});
+        }
+        return;
+    }
+
     info!("Checking for updates (manual={})", show_no_update);
 
+    // Check for updates via latest.json
+    // Note: Auto-update only works for AppImage installs. For .deb installs,
+    // we can detect new versions but users must download manually.
     let updater = match handle.updater() {
         Ok(u) => u,
         Err(e) => {
             error!("Failed to create updater: {}", e);
             if show_no_update {
                 handle.dialog()
-                    .message(format!("Failed to check for updates: {}", e))
-                    .title("Update Error")
+                    .message("Auto-update is not available for this installation type.\nVisit https://mailvault.app to check for new versions.")
+                    .title("Updates")
                     .show(|_| {});
             }
             return;
@@ -2940,7 +2955,7 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
             error!("Update check failed: {}", e);
             if show_no_update {
                 handle.dialog()
-                    .message(format!("Failed to check for updates: {}", e))
+                    .message("Could not check for updates.\nVisit https://mailvault.app to check for new versions.")
                     .title("Update Error")
                     .show(|_| {});
             }

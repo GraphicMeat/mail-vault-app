@@ -12,7 +12,10 @@ console.log('[db.js] invoke available:', !!invoke);
 
 if (invoke) {
   invoke('get_app_data_dir')
-    .then(result => console.log('[db.js] Tauri invoke working. App data dir:', result))
+    .then(result => {
+      console.log('[db.js] Tauri invoke working. App data dir:', result);
+      _isSnap = typeof result === 'string' && result.includes('/snap/');
+    })
     .catch(error => console.error('[db.js] Tauri invoke failed:', error));
 }
 
@@ -43,6 +46,9 @@ async function loadKeychain() {
       console.log('[db.js] Keychain loaded for', Object.keys(keychainCache).length, 'account(s)');
     } catch (error) {
       console.log('[db.js] No keychain data found or error:', error);
+      if (isSnap()) {
+        console.error('[db.js] Snap keyring access failed — password-manager-service plug may be disconnected');
+      }
       keychainCache = {};
       keychainLoaded = true;
     }
@@ -60,8 +66,22 @@ async function saveKeychain(data) {
     console.log('[db.js] Keychain saved for', Object.keys(data).length, 'account(s)');
   } catch (error) {
     console.error('[db.js] Failed to save keychain:', error);
+    // Detect snap keyring permission issue
+    if (isSnap()) {
+      throw new Error(
+        'Cannot access system keyring. Run this command in a terminal to fix:\n\n' +
+        'sudo snap connect mailvault:password-manager-service\n\n' +
+        'Then restart MailVault.'
+      );
+    }
     throw error;
   }
+}
+
+// Detect snap confinement by checking if app data dir is under ~/snap/
+let _isSnap = null;
+function isSnap() {
+  return _isSnap === true;
 }
 
 export function clearCredentialsCache() {

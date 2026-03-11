@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Snap updater**: Detect snap environment and show "Updates managed by Snap Store" instead of cryptic "builder error"; `.deb` installs show helpful message directing to website
+- **Snap keyring**: `password-manager-service` plug requires manual connection (`sudo snap connect mailvault:password-manager-service`) — documented and improved error handling
+- **Linux error messages**: Fixed generic "Failed to connect to email server" when actual IMAP error was available — Tauri invoke errors are strings, not Error objects
+
 ## [2.1.1] - 2026-03-10
 
 ### Changed
