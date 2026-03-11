@@ -315,6 +315,34 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     }
   };
   
+  // Track the initial form state to detect user edits
+  const initialSnapshot = useRef(null);
+  useEffect(() => {
+    // Capture the form right after initialization (next tick)
+    const timer = setTimeout(() => {
+      initialSnapshot.current = {
+        to: formData.to,
+        subject: formData.subject,
+        body: formData.body,
+      };
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [mode, replyTo, initialData, selectedAccountId]);
+
+  const hasUserContent = initialSnapshot.current
+    ? (formData.to !== initialSnapshot.current.to ||
+       formData.subject !== initialSnapshot.current.subject ||
+       formData.body !== initialSnapshot.current.body ||
+       attachments.some(a => !a.isFromOriginal))
+    : false;
+
+  const confirmClose = () => {
+    if (hasUserContent) {
+      if (!window.confirm('You have unsaved changes. Discard this message?')) return;
+    }
+    onClose();
+  };
+
   const getTitle = () => {
     switch (mode) {
       case 'reply': return 'Reply';
@@ -348,7 +376,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               <Maximize2 size={14} className="text-mail-text-muted" />
             </button>
             <button
-              onClick={(e) => { e.stopPropagation(); onClose(); }}
+              onClick={(e) => { e.stopPropagation(); confirmClose(); }}
               className="p-1 hover:bg-mail-border rounded"
             >
               <X size={14} className="text-mail-text-muted" />
@@ -365,7 +393,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-      onClick={onClose}
+      onClick={confirmClose}
     >
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
@@ -373,7 +401,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         exit={{ scale: 0.95, opacity: 0 }}
         data-testid="compose-modal"
         className="bg-mail-surface border border-mail-border rounded-xl shadow-2xl
-                   w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
+                   w-full max-w-4xl max-h-[90vh] h-[80vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -388,14 +416,14 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               <Minimize2 size={16} className="text-mail-text-muted" />
             </button>
             <button
-              onClick={onClose}
+              onClick={confirmClose}
               className="p-1.5 hover:bg-mail-border rounded transition-colors"
             >
               <X size={16} className="text-mail-text-muted" />
             </button>
           </div>
         </div>
-        
+
         {/* Form */}
         <form onSubmit={handleSend} className="flex-1 flex flex-col overflow-hidden">
           <div className="px-4 py-2 space-y-2 border-b border-mail-border">
@@ -616,7 +644,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={confirmClose}
                 className="px-4 py-2 text-mail-text-muted hover:text-mail-text
                           transition-colors text-sm"
               >

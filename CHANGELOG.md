@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Linux window activation**: Clicking app icon while already running now brings window to front via SIGUSR2 signal between instances (previously second instance exited silently)
+
+### Improved
+- **Compose modal**: Larger compose window (max-w-4xl, 80vh height) for more writing space; unsaved changes confirmation prevents accidental dismissal
+
 ## [2.1.4] - 2026-03-11
 
 ### Fixed

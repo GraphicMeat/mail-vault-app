@@ -3096,8 +3096,11 @@ fn main() {
     // (AppImage, Snap, restricted D-Bus sessions). flock is kernel-managed: automatically
     // released on process exit (even SIGKILL/crash), works in Snap strict confinement,
     // and has no stale lock issues.
+    // When a second instance detects the lock, it sends SIGUSR1 to the running instance
+    // which triggers window show+focus (handles clicking the app icon while already running).
     #[cfg(target_os = "linux")]
     let _lock_file = {
+        use std::io::{Read as _, Write as _};
         use std::os::unix::io::AsRawFd;
 
         let lock_dir = dirs::data_dir()
@@ -3106,15 +3109,24 @@ fn main() {
         let _ = fs::create_dir_all(&lock_dir);
         let lock_path = lock_dir.join("mailvault.lock");
 
-        match fs::File::create(&lock_path) {
-            Ok(file) => {
+        match fs::OpenOptions::new().read(true).write(true).create(true).truncate(false).open(&lock_path) {
+            Ok(mut file) => {
                 let fd = file.as_raw_fd();
                 // LOCK_EX = exclusive lock, LOCK_NB = non-blocking (fail immediately if locked)
                 let ret = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
                 if ret != 0 {
-                    eprintln!("MailVault is already running. Use the system tray to show the window.");
+                    // Already running — read the PID and signal it to show the window
+                    let mut pid_str = String::new();
+                    let _ = file.read_to_string(&mut pid_str);
+                    if let Ok(pid) = pid_str.trim().parse::<i32>() {
+                        unsafe { libc::kill(pid, libc::SIGUSR2); }
+                    }
                     std::process::exit(0);
                 }
+                // Write our PID so second instances can signal us
+                let _ = file.set_len(0);
+                let _ = file.write_all(std::process::id().to_string().as_bytes());
+                let _ = file.sync_all();
                 // Keep the file handle alive for the entire process lifetime.
                 // When the process exits (normally or crashes), the kernel releases the lock.
                 Some(file)
@@ -3157,7 +3169,7 @@ fn main() {
     #[cfg(target_os = "linux")]
     let builder = builder.manage(PendingUpdate::default());
 
-    builder
+    let app = builder
         .invoke_handler(tauri::generate_handler![
             log_from_frontend,
             install_pending_update,
@@ -3454,8 +3466,17 @@ fn main() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("error while building tauri application")
-        .run(|app_handle, event| {
+        .expect("error while building tauri application");
+
+    // Linux: listen for SIGUSR1 from second instances to show+focus the window
+    #[cfg(target_os = "linux")]
+    let sigusr1_flag = {
+        let flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let _ = signal_hook::flag::register(signal_hook::consts::SIGUSR2, std::sync::Arc::clone(&flag));
+        flag
+    };
+
+    app.run(move |app_handle, event| {
             match event {
                 #[cfg(target_os = "macos")]
                 tauri::RunEvent::Reopen { .. } => {
@@ -3467,6 +3488,18 @@ fn main() {
                 }
                 tauri::RunEvent::Exit => {
                     info!("Application exiting");
+                }
+                #[cfg(target_os = "linux")]
+                tauri::RunEvent::MainEventsCleared => {
+                    if sigusr1_flag.load(std::sync::atomic::Ordering::Relaxed) {
+                        sigusr1_flag.store(false, std::sync::atomic::Ordering::Relaxed);
+                        info!("SIGUSR2 received — bringing window to front");
+                        if let Some(window) = app_handle.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                    }
                 }
                 _ => {}
             }

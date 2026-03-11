@@ -288,8 +288,8 @@
       document.getElementById('stat-latest').textContent = releaseData.length > 0 ? releaseData[0].tag : '\u2014';
 
       // Bar chart — macOS + Linux stacked, no update checks
-      // Show oldest first in chart (bottom = oldest, top = newest reads naturally)
-      const chartData = [...releaseData].reverse();
+      // Newest versions at the top
+      const chartData = releaseData;
       const maxDownloads = Math.max(...chartData.map(r => r.downloads), 1);
       const chart = document.getElementById('chart');
       chart.innerHTML = '';
