@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [2.1.4] - 2026-03-11
+
+### Fixed
+- **macOS updater**: Replaced Sparkle XPC installer with custom appcast-based updater — checks GitHub releases, shows in-app update modal with direct DMG download link; eliminates "An error occurred while launching the installer" permanently
+
 ## [2.1.3] - 2026-03-11
 
 ### Fixed
