@@ -2,7 +2,7 @@ import React, { memo, useState, useCallback, useRef, useEffect, useMemo } from '
 import { useMailStore } from '../stores/mailStore';
 import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore, getAccountColor } from '../stores/settingsStore';
-import { buildThreads } from '../utils/emailParser';
+import { buildThreads, groupBySender, getAvatarColor, getInitials } from '../utils/emailParser';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatEmailDate } from '../utils/dateFormat';
 import { SearchBar } from './SearchBar';
@@ -19,7 +19,8 @@ import {
   X,
   Layers,
   Search,
-  MessageSquare
+  MessageSquare,
+  Users
 } from 'lucide-react';
 import { BulkOperationsModal } from './BulkOperationsModal';
 import { BulkOperationProgress } from './BulkOperationProgress';
@@ -672,6 +673,8 @@ function EmailListComponent() {
   const getChatEmails = useMailStore(s => s.getChatEmails);
 
   const emailListStyle = useSettingsStore(s => s.emailListStyle);
+  const emailListGrouping = useSettingsStore(s => s.emailListGrouping);
+  const setEmailListGrouping = useSettingsStore(s => s.setEmailListGrouping);
   const isCompact = emailListStyle === 'compact';
   const ROW_HEIGHT = isCompact ? ROW_HEIGHT_COMPACT : ROW_HEIGHT_DEFAULT;
   const RowComponent = isCompact ? CompactEmailRow : EmailRow;
@@ -977,6 +980,20 @@ function EmailListComponent() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Sender grouping toggle */}
+          <button
+            onClick={() => setEmailListGrouping(
+              emailListGrouping === 'chronological' ? 'sender' : 'chronological'
+            )}
+            className={`p-1.5 rounded-lg transition-colors ${
+              emailListGrouping === 'sender'
+                ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+                : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+            }`}
+            title={emailListGrouping === 'sender' ? 'Switch to chronological view' : 'Group by sender'}
+          >
+            <Users size={16} />
+          </button>
           <button
             onClick={() => setShowSearch(!showSearch)}
             className={`p-2 rounded-lg transition-colors ${
