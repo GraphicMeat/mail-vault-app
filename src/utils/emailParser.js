@@ -166,6 +166,96 @@ export function groupByTopic(emails) {
 }
 
 /**
+ * Groups emails by sender address, then by normalized subject within each sender.
+ * Returns an array of sender objects sorted by most recent email (descending).
+ */
+export function groupBySender(emails) {
+  if (!emails || emails.length === 0) return [];
+
+  // Step 1: Group by normalized sender address
+  const senderMap = new Map();
+  for (const email of emails) {
+    const fromAddr = (email.from?.address || '').toLowerCase().trim();
+    const fromName = email.from?.name || fromAddr.split('@')[0] || '';
+    if (!senderMap.has(fromAddr)) {
+      senderMap.set(fromAddr, { senderEmail: fromAddr, senderName: fromName, emails: [] });
+    }
+    senderMap.get(fromAddr).emails.push(email);
+    if (fromName && fromName !== fromAddr.split('@')[0]) {
+      senderMap.get(fromAddr).senderName = fromName;
+    }
+  }
+
+  // Step 2: Within each sender, sub-group by normalized subject
+  const result = [];
+  for (const [senderEmail, senderData] of senderMap) {
+    const topicMap = new Map();
+    for (const email of senderData.emails) {
+      const normSubj = normalizeSubject(email.subject);
+      if (!topicMap.has(normSubj)) {
+        topicMap.set(normSubj, {
+          subject: normSubj,
+          originalSubject: email.subject || '(No subject)',
+          emails: [],
+          participants: new Set(),
+          lastDate: null,
+          unreadCount: 0,
+        });
+      }
+      const topic = topicMap.get(normSubj);
+      topic.emails.push(email);
+
+      const from = (email.from?.address || '').toLowerCase().trim();
+      if (from) topic.participants.add(from);
+      if (email.to) {
+        for (const recipient of email.to) {
+          const addr = (recipient?.address || '').toLowerCase().trim();
+          if (addr) topic.participants.add(addr);
+        }
+      }
+
+      const emailDate = email.date ? new Date(email.date) : null;
+      if (emailDate && (!topic.lastDate || emailDate > topic.lastDate)) {
+        topic.lastDate = emailDate;
+      }
+
+      if (!email.flags?.includes('\\Seen')) {
+        topic.unreadCount++;
+      }
+    }
+
+    const topics = [];
+    for (const [, topic] of topicMap) {
+      topic.emails.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+      topic.participants = Array.from(topic.participants);
+      topics.push(topic);
+    }
+
+    topics.sort((a, b) => (b.lastDate || 0) - (a.lastDate || 0));
+
+    let senderUnread = 0;
+    let senderLastDate = null;
+    for (const topic of topics) {
+      senderUnread += topic.unreadCount;
+      if (topic.lastDate && (!senderLastDate || topic.lastDate > senderLastDate)) {
+        senderLastDate = topic.lastDate;
+      }
+    }
+
+    result.push({
+      senderEmail,
+      senderName: senderData.senderName,
+      unreadCount: senderUnread,
+      lastDate: senderLastDate,
+      topics,
+    });
+  }
+
+  result.sort((a, b) => (b.lastDate || 0) - (a.lastDate || 0));
+  return result;
+}
+
+/**
  * Build email threads using RFC 2822 header chains (References, In-Reply-To)
  * with normalized subject as fallback.
  *
