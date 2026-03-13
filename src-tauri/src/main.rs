@@ -1701,6 +1701,98 @@ fn maildir_store(
     Ok(())
 }
 
+// ── Local index (local-index.json) ──────────────────────────────────────────
+
+#[tauri::command]
+async fn local_index_read(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    mailbox: String,
+) -> Result<Option<String>, String> {
+    let data_dir = app_handle.path().app_data_dir()
+        .map_err(|e| format!("No app data dir: {}", e))?;
+    let index_path = data_dir.join("maildir").join(&account_id).join(&mailbox).join("local-index.json");
+
+    if !index_path.exists() {
+        return Ok(None);
+    }
+
+    let content = tokio::fs::read_to_string(&index_path).await
+        .map_err(|e| format!("Failed to read local-index.json: {}", e))?;
+    Ok(Some(content))
+}
+
+#[tauri::command]
+async fn local_index_append(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    mailbox: String,
+    entries_json: String,
+) -> Result<(), String> {
+    let data_dir = app_handle.path().app_data_dir()
+        .map_err(|e| format!("No app data dir: {}", e))?;
+    let dir_path = data_dir.join("maildir").join(&account_id).join(&mailbox);
+    tokio::fs::create_dir_all(&dir_path).await
+        .map_err(|e| format!("Failed to create dir: {}", e))?;
+    let index_path = dir_path.join("local-index.json");
+
+    let new_entries: Vec<serde_json::Value> = serde_json::from_str(&entries_json)
+        .map_err(|e| format!("Failed to parse entries: {}", e))?;
+
+    let mut existing: Vec<serde_json::Value> = if index_path.exists() {
+        let content = tokio::fs::read_to_string(&index_path).await.unwrap_or_default();
+        serde_json::from_str(&content).unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
+    let new_uids: std::collections::HashSet<u64> = new_entries.iter()
+        .filter_map(|e| e.get("uid").and_then(|u| u.as_u64()))
+        .collect();
+    existing.retain(|e| {
+        e.get("uid").and_then(|u| u.as_u64()).map_or(true, |uid| !new_uids.contains(&uid))
+    });
+    existing.extend(new_entries);
+
+    let tmp_path = index_path.with_extension("json.tmp");
+    let data = serde_json::to_string(&existing)
+        .map_err(|e| format!("Failed to serialize: {}", e))?;
+    tokio::fs::write(&tmp_path, &data).await
+        .map_err(|e| format!("Failed to write tmp: {}", e))?;
+    tokio::fs::rename(&tmp_path, &index_path).await
+        .map_err(|e| format!("Failed to rename: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn local_index_remove(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    mailbox: String,
+    uid: u32,
+) -> Result<(), String> {
+    let data_dir = app_handle.path().app_data_dir()
+        .map_err(|e| format!("No app data dir: {}", e))?;
+    let index_path = data_dir.join("maildir").join(&account_id).join(&mailbox).join("local-index.json");
+
+    if !index_path.exists() {
+        return Ok(());
+    }
+
+    let content = tokio::fs::read_to_string(&index_path).await
+        .map_err(|e| format!("Failed to read: {}", e))?;
+    let mut entries: Vec<serde_json::Value> = serde_json::from_str(&content).unwrap_or_default();
+    entries.retain(|e| e.get("uid").and_then(|u| u.as_u64()) != Some(uid as u64));
+
+    let data = serde_json::to_string(&entries)
+        .map_err(|e| format!("Failed to serialize: {}", e))?;
+    tokio::fs::write(&index_path, &data).await
+        .map_err(|e| format!("Failed to write: {}", e))?;
+
+    Ok(())
+}
+
 #[tauri::command]
 async fn archive_emails(
     app_handle: tauri::AppHandle,
@@ -3219,6 +3311,9 @@ fn main() {
             maildir_migrate_email_dirs,
             export_backup,
             import_backup,
+            local_index_read,
+            local_index_append,
+            local_index_remove,
             archive_emails,
             cancel_archive,
             bulk_delete_emails,
