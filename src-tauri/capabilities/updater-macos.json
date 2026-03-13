@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "updater-macos",
-  "description": "macOS updater capability (custom appcast check + Sparkle)",
+  "description": "macOS updater capability (custom appcast check)",
   "windows": ["main"],
   "platforms": ["macOS"],
-  "permissions": ["sparkle-updater:default"]
+  "permissions": []
 }

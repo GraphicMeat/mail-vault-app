@@ -50,7 +50,6 @@ tauri-plugin-webdriver-automation = { version = "0.1", optional = true }
 cocoa = "0.26"
 objc = "0.2"
 keyring = { version = "3", features = ["apple-native"] }
-tauri-plugin-sparkle-updater = "0.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "3", features = ["sync-secret-service"] }

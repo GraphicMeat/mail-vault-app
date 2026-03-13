@@ -247,7 +247,7 @@ fi
 
 # Sign any other frameworks
 for framework in "$APP_PATH/Contents/Frameworks"/*.framework; do
-    if [ -d "$framework" ] && [ "$(basename "$framework")" != "Sparkle.framework" ]; then
+    if [ -d "$framework" ]; then
         codesign --force --options runtime --timestamp \
             --sign "$SIGNING_ID" $KEYCHAIN_ARG \
             "$framework"

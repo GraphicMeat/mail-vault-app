@@ -24,13 +24,6 @@
     <key>com.apple.security.files.user-selected.read-write</key>
     <true/>
 
-    <!-- Sparkle XPC services for sandbox-safe updates -->
-    <key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
-    <array>
-        <string>com.mailvault.app-spks</string>
-        <string>com.mailvault.app-spki</string>
-    </array>
-
     <!-- Downloads folder access -->
     <key>com.apple.security.files.downloads.read-write</key>
     <true/>

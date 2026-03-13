@@ -2883,7 +2883,7 @@ async fn install_pending_update(handle: tauri::AppHandle) -> Result<(), String> 
 #[cfg(target_os = "macos")]
 #[tauri::command]
 async fn install_pending_update(_handle: tauri::AppHandle) -> Result<(), String> {
-    Err("Use Sparkle for updates on macOS".to_string())
+    Err("macOS updates are installed via DMG download".to_string())
 }
 
 /// Shared update check logic for both manual menu trigger and startup auto-check.
@@ -3157,9 +3157,7 @@ fn main() {
     #[cfg(feature = "webdriver")]
     let builder = builder.plugin(tauri_plugin_webdriver_automation::init());
 
-    // Updater plugins — Sparkle (native) + custom appcast on macOS, tauri-plugin-updater on Linux
-    #[cfg(target_os = "macos")]
-    let builder = builder.plugin(tauri_plugin_sparkle_updater::init());
+    // Updater plugins — custom appcast on macOS, tauri-plugin-updater on Linux
     #[cfg(target_os = "linux")]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
 
@@ -3285,8 +3283,6 @@ fn main() {
             // --- Set up app menu ---
             let check_updates = MenuItem::with_id(app, "check_updates", "Check for Updates...", true, None::<&str>)?;
             #[cfg(target_os = "macos")]
-            let check_updates_sparkle = MenuItem::with_id(app, "check_updates_sparkle", "Check for Updates (Sparkle)...", true, None::<&str>)?;
-            #[cfg(target_os = "macos")]
             let open_settings = MenuItem::with_id(app, "open_settings", "Settings...", true, Some("cmd+,"))?;
             #[cfg(not(target_os = "macos"))]
             let open_settings = MenuItem::with_id(app, "open_settings", "Settings...", true, Some("ctrl+,"))?;
@@ -3306,10 +3302,9 @@ fn main() {
                             let sep2 = PredefinedMenuItem::separator(app)?;
                             let _ = app_submenu.insert(&sep1, 1);
                             let _ = app_submenu.insert(&check_updates, 2);
-                            let _ = app_submenu.insert(&check_updates_sparkle, 3);
-                            let _ = app_submenu.insert(&open_settings, 4);
-                            let _ = app_submenu.insert(&report_bug, 5);
-                            let _ = app_submenu.insert(&sep2, 6);
+                            let _ = app_submenu.insert(&open_settings, 3);
+                            let _ = app_submenu.insert(&report_bug, 4);
+                            let _ = app_submenu.insert(&sep2, 5);
                         }
                     }
                 }
@@ -3358,18 +3353,6 @@ fn main() {
                     tauri::async_runtime::spawn(async move {
                         check_for_updates(handle, true).await;
                     });
-                } else if event.id().as_ref() == "check_updates_sparkle" {
-                    #[cfg(target_os = "macos")]
-                    {
-                        use tauri_plugin_sparkle_updater::SparkleUpdaterExt;
-                        if let Some(updater) = app_handle_for_menu.sparkle_updater() {
-                            if let Err(e) = updater.check_for_updates() {
-                                error!("Sparkle check_for_updates failed: {}", e);
-                            }
-                        } else {
-                            warn!("Sparkle updater not available (running outside bundle?)");
-                        }
-                    }
                 } else if event.id().as_ref() == "open_settings" {
                     let _ = app_handle_for_menu.emit("open-settings", ());
                 } else if event.id().as_ref() == "report_bug" {
