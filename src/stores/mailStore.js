@@ -3000,12 +3000,12 @@ export const useMailStore = create((set, get) => ({
   },
 
   // Select email
-  selectEmail: async (uid, source = 'server') => {
+  selectEmail: async (uid, source = 'server', mailboxOverride = null) => {
     const state = get();
     const isUnified = state.activeMailbox === 'UNIFIED';
     const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
     const accountId = unified?.accountId || state.activeAccountId;
-    const mailbox = unified?.mailbox || state.activeMailbox;
+    const mailbox = mailboxOverride || unified?.mailbox || state.activeMailbox;
     let account = unified?.account || state.accounts.find(a => a.id === accountId);
     account = await ensureFreshToken(account);
     const cacheKey = `${accountId}-${mailbox}-${uid}`;
