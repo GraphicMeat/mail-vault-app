@@ -543,6 +543,30 @@ export async function getLocalEmails(accountId, mailbox) {
 }
 
 /**
+ * Read local-index.json for fast archived email metadata.
+ * Returns null if the file doesn't exist (caller should fall back to getLocalEmails).
+ */
+export async function readLocalEmailIndex(accountId, mailbox) {
+  await initBasic();
+  if (!invoke) return null;
+  try {
+    const data = await invoke('local_index_read', { accountId, mailbox });
+    if (data) {
+      const entries = JSON.parse(data);
+      return entries.map(e => ({
+        ...e,
+        source: 'local',
+        isLocal: true,
+        isArchived: true,
+      }));
+    }
+  } catch (e) {
+    console.warn('[db] Failed to read local-index.json:', e);
+  }
+  return null;
+}
+
+/**
  * Load only archived emails from Maildir (fast — reads only archived .eml files, not all).
  * Uses archivedEmailIds (already loaded via fast maildir_list) to read only the subset.
  */

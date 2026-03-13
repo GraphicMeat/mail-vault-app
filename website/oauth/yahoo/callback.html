@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MailVault - Yahoo Sign-in</title>
+    <meta name="robots" content="noindex, nofollow">
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: #1a1a2e;
+            color: #e0e0e0;
+        }
+        .container { text-align: center; }
+        p { color: #a0a0b0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Redirecting to MailVault...</h2>
+        <p>If nothing happens, <a href="#" id="manual-link" style="color:#6c9fff">click here</a>.</p>
+    </div>
+    <script>
+        var localUrl = 'http://localhost:19876/callback' + window.location.search;
+        document.getElementById('manual-link').href = localUrl;
+        window.location.replace(localUrl);
+    </script>
+</body>
+</html>

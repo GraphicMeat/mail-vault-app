@@ -661,6 +661,7 @@ function EmailListComponent() {
   const searchActive = useSearchStore(s => s.searchActive);
   const searchResults = useSearchStore(s => s.searchResults);
   const flagSeq = useMailStore(s => s._flagSeq);
+  const archivedSize = useMailStore(s => s.archivedEmailIds.size);
   // Actions (stable references — never cause re-renders)
   const loadEmails = useMailStore(s => s.loadEmails);
   const loadMoreEmails = useMailStore(s => s.loadMoreEmails);
@@ -822,8 +823,8 @@ function EmailListComponent() {
     [searchActive, getChatEmails, sortedEmails, sentEmails]
   );
   const threadFingerprint = useMemo(
-    () => mergedEmails ? `${viewMode}-${mergedEmails.length}-${mergedEmails[0]?.uid || 0}-${mergedEmails[mergedEmails.length - 1]?.uid || 0}-${flagSeq}` : '',
-    [mergedEmails, flagSeq, viewMode]
+    () => mergedEmails ? `${viewMode}-${mergedEmails.length}-${mergedEmails[0]?.uid || 0}-${mergedEmails[mergedEmails.length - 1]?.uid || 0}-${flagSeq}-${archivedSize}` : '',
+    [mergedEmails, flagSeq, viewMode, archivedSize]
   );
 
   // Compute threads in a deferred callback to avoid blocking render
@@ -858,7 +859,7 @@ function EmailListComponent() {
     }
 
     const emails = displayEmails;
-    const fp = `sender-${emails.length}-${emails[0]?.uid}-${emails[emails.length - 1]?.uid}-${flagSeq}`;
+    const fp = `sender-${emails.length}-${emails[0]?.uid}-${emails[emails.length - 1]?.uid}-${flagSeq}-${archivedSize}`;
 
     if (senderGroupCacheRef.current.fingerprint === fp) {
       setSenderGroups(senderGroupCacheRef.current.groups);
@@ -872,7 +873,7 @@ function EmailListComponent() {
     }, 0);
 
     return () => clearTimeout(timer);
-  }, [displayEmails, emailListGrouping, flagSeq]);
+  }, [displayEmails, emailListGrouping, flagSeq, archivedSize]);
 
   // Build display list: use threads if available, flat list as fallback
   const threadedDisplay = useMemo(() => {
@@ -1364,9 +1365,18 @@ function EmailListComponent() {
                                         </div>
                                       )}
                                     </div>
-                                    {email.has_attachments && (
-                                      <Paperclip size={12} className="text-gray-400 flex-shrink-0" />
-                                    )}
+                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                      {email.has_attachments && (
+                                        <Paperclip size={12} className="text-gray-400" />
+                                      )}
+                                      {email.source === 'local-only' ? (
+                                        <HardDrive size={13} className="text-mail-warning" title="Local only" />
+                                      ) : email.isArchived ? (
+                                        <HardDrive size={13} className="text-mail-local" title="Archived" />
+                                      ) : (
+                                        <Cloud size={13} style={{ color: 'rgba(59, 130, 246, 0.5)' }} />
+                                      )}
+                                    </div>
                                   </button>
 
                                   {/* Inline expanded email body (plain text) */}
