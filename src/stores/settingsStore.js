@@ -17,7 +17,7 @@ export const AVATAR_COLORS = [
 ];
 
 // Deterministic color from email string
-function hashColor(email) {
+export function hashColor(email) {
   let hash = 0;
   for (let i = 0; i < email.length; i++) {
     hash = ((hash << 5) - hash) + email.charCodeAt(i);
