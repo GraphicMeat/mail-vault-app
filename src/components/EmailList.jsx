@@ -682,6 +682,13 @@ function EmailListComponent() {
   const [showSearch, setShowSearch] = useState(false);
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [bulkOpProgress, setBulkOpProgress] = useState(null);
+
+  // Sender-grouped accordion state
+  const [senderGroups, setSenderGroups] = useState(null);
+  const senderGroupCacheRef = useRef({ fingerprint: null, groups: null });
+  const [expandedSender, setExpandedSender] = useState(null);
+  const [expandedTopics, setExpandedTopics] = useState(new Set());
+  const [expandedEmail, setExpandedEmail] = useState(null);
   const scrollContainerRef = useRef(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(600);
@@ -739,6 +746,30 @@ function EmailListComponent() {
 
     return () => clearTimeout(timer);
   }, [mergedEmails, threadFingerprint, searchActive, viewMode]);
+
+  // Deferred sender grouping computation
+  useEffect(() => {
+    if (emailListGrouping !== 'sender') {
+      setSenderGroups(null);
+      return;
+    }
+
+    const emails = displayEmails;
+    const fp = `sender-${emails.length}-${emails[0]?.uid}-${emails[emails.length - 1]?.uid}-${flagSeq}`;
+
+    if (senderGroupCacheRef.current.fingerprint === fp) {
+      setSenderGroups(senderGroupCacheRef.current.groups);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      const groups = groupBySender(emails);
+      senderGroupCacheRef.current = { fingerprint: fp, groups };
+      setSenderGroups(groups);
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [displayEmails, emailListGrouping, flagSeq]);
 
   // Build display list: use threads if available, flat list as fallback
   const threadedDisplay = useMemo(() => {
@@ -1093,7 +1124,167 @@ function EmailListComponent() {
               </>
             )}
           </div>
+        ) : emailListGrouping === 'sender' ? (
+          /* Sender-grouped accordion view */
+          senderGroups === null ? (
+            <div className="flex items-center justify-center h-32 text-gray-400">
+              <RefreshCw size={16} className="animate-spin mr-2" />
+              Grouping...
+            </div>
+          ) : senderGroups.length === 0 ? null : (
+            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+              {senderGroups.map((sender) => (
+                <div key={sender.senderEmail}>
+                  {/* Sender row - avatar, name, email, unread badge, date */}
+                  <button
+                    onClick={() => {
+                      setExpandedSender(expandedSender === sender.senderEmail ? null : sender.senderEmail);
+                      setExpandedTopics(new Set());
+                      setExpandedEmail(null);
+                    }}
+                    className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${
+                      expandedSender === sender.senderEmail ? 'bg-gray-50 dark:bg-gray-800/50' : ''
+                    }`}
+                  >
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0"
+                      style={{ backgroundColor: getAvatarColor(sender.senderEmail) }}
+                    >
+                      {getInitials(sender.senderName || sender.senderEmail)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-sm truncate ${sender.unreadCount > 0 ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300'}`}>
+                          {sender.senderName || sender.senderEmail}
+                        </span>
+                        {sender.senderName && sender.senderName !== sender.senderEmail && (
+                          <span className="text-xs text-gray-400 truncate hidden sm:inline">
+                            {sender.senderEmail}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {sender.unreadCount > 0 && (
+                      <span className="px-1.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded-full">
+                        {sender.unreadCount}
+                      </span>
+                    )}
+                    <span className="text-xs text-gray-400 flex-shrink-0">
+                      {sender.lastDate ? formatEmailDate(sender.lastDate) : ''}
+                    </span>
+                  </button>
+
+                  {/* Expanded sender: show topics */}
+                  {expandedSender === sender.senderEmail && (
+                    <div className="bg-gray-50/50 dark:bg-gray-800/30">
+                      {sender.topics.map((topic) => {
+                        const topicKey = `${sender.senderEmail}-${topic.subject}`;
+                        return (
+                        <div key={topicKey}>
+                          <button
+                            onClick={() => {
+                              setExpandedTopics(prev => {
+                                const next = new Set(prev);
+                                if (next.has(topicKey)) next.delete(topicKey);
+                                else next.add(topicKey);
+                                return next;
+                              });
+                              setExpandedEmail(null);
+                            }}
+                            className={`w-full flex items-center gap-3 pl-12 pr-4 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors ${
+                              expandedTopics.has(topicKey) ? 'bg-gray-100 dark:bg-gray-700/50' : ''
+                            }`}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className={`text-sm truncate ${topic.unreadCount > 0 ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400'}`}>
+                                {topic.originalSubject || '(No subject)'}
+                              </div>
+                              <div className="text-xs text-gray-400 truncate mt-0.5">
+                                {topic.participants
+                                  .filter(p => p !== sender.senderEmail)
+                                  .map(p => p.split('@')[0])
+                                  .join(', ')
+                                  || 'No other participants'
+                                }
+                                {topic.participants.filter(p => p !== sender.senderEmail).length > 0 && (
+                                  <span> · {topic.emails.length} email{topic.emails.length !== 1 ? 's' : ''}</span>
+                                )}
+                              </div>
+                            </div>
+                            {topic.unreadCount > 0 && (
+                              <span className="px-1.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded-full">
+                                {topic.unreadCount}
+                              </span>
+                            )}
+                            <span className="text-xs text-gray-400 flex-shrink-0">
+                              {topic.lastDate ? formatEmailDate(topic.lastDate) : ''}
+                            </span>
+                          </button>
+
+                          {/* Expanded topic: show emails */}
+                          {expandedTopics.has(topicKey) && (
+                            <div className="bg-white dark:bg-gray-900">
+                              {topic.emails.map((email) => (
+                                <div key={email.uid}>
+                                  <button
+                                    onClick={() => {
+                                      selectEmail(email);
+                                      if (expandedEmail === email.uid) {
+                                        setExpandedEmail(null);
+                                      } else {
+                                        setExpandedEmail(email.uid);
+                                      }
+                                    }}
+                                    className={`w-full flex items-center gap-3 pl-16 pr-4 py-2 text-left hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors ${
+                                      expandedEmail === email.uid ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                                    } ${selectedEmailId === email.uid ? 'ring-1 ring-blue-300 dark:ring-blue-700' : ''}`}
+                                  >
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs text-gray-400">
+                                          {email.date ? formatEmailDate(new Date(email.date)) : ''}
+                                        </span>
+                                        <span className={`text-xs ${!email.flags?.includes('\\Seen') ? 'font-semibold text-gray-700 dark:text-gray-300' : 'text-gray-500 dark:text-gray-400'}`}>
+                                          {email.from?.name || (email.from?.address || '').split('@')[0]}
+                                        </span>
+                                      </div>
+                                      {email.snippet && (
+                                        <div className="text-xs text-gray-400 truncate mt-0.5">
+                                          {email.snippet}
+                                        </div>
+                                      )}
+                                    </div>
+                                    {email.has_attachments && (
+                                      <Paperclip size={12} className="text-gray-400 flex-shrink-0" />
+                                    )}
+                                  </button>
+
+                                  {/* Inline expanded email body (plain text) */}
+                                  {expandedEmail === email.uid && (
+                                    <div className="pl-16 pr-4 py-3 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900">
+                                      <div className="text-xs text-gray-500 mb-2">
+                                        From: {email.from?.name || email.from?.address} · To: {email.to?.[0]?.address || ''}
+                                      </div>
+                                      <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                                        {email.text || email.textBody || email.snippet || email.subject || 'No content available'}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )
         ) : (
+          /* Original chronological virtual scroll rendering */
           <div key={`${activeAccountId}-${viewMode}`} style={{ height: totalHeight, position: 'relative' }}>
             {visibleRows.map(({ index, item, top }) => {
               if (!item) return null;
