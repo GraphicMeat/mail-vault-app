@@ -1,8 +1,8 @@
 import React, { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useSearchStore } from '../stores/searchStore';
-import { useSettingsStore, getAccountColor } from '../stores/settingsStore';
-import { buildThreads, groupBySender, getAvatarColor, getInitials } from '../utils/emailParser';
+import { useSettingsStore, getAccountColor, getAccountInitial, hashColor } from '../stores/settingsStore';
+import { buildThreads, groupBySender } from '../utils/emailParser';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatEmailDate } from '../utils/dateFormat';
 import { SearchBar } from './SearchBar';
@@ -715,6 +715,7 @@ function EmailListComponent() {
 
       if (e.key === 'j' || e.key === 'k') {
         e.preventDefault();
+        e.stopImmediatePropagation();
         const items = [];
         for (const sender of groups) {
           items.push({ type: 'sender', senderEmail: sender.senderEmail });
@@ -748,6 +749,7 @@ function EmailListComponent() {
 
       if (e.key === 'Enter' && focusedRowRef.current) {
         e.preventDefault();
+        e.stopImmediatePropagation();
         const fr = focusedRowRef.current;
         if (fr.type === 'sender') {
           setExpandedSender(expandedSenderRef.current === fr.senderEmail ? null : fr.senderEmail);
@@ -1249,9 +1251,9 @@ function EmailListComponent() {
                   >
                     <div
                       className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0"
-                      style={{ backgroundColor: getAvatarColor(sender.senderEmail) }}
+                      style={{ backgroundColor: hashColor(sender.senderEmail) }}
                     >
-                      {getInitials(sender.senderName || sender.senderEmail)}
+                      {getAccountInitial({ email: sender.senderEmail }, sender.senderName)}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
@@ -1307,9 +1309,7 @@ function EmailListComponent() {
                                   .join(', ')
                                   || 'No other participants'
                                 }
-                                {topic.participants.filter(p => p !== sender.senderEmail).length > 0 && (
-                                  <span> · {topic.emails.length} email{topic.emails.length !== 1 ? 's' : ''}</span>
-                                )}
+                                <span> · {topic.emails.length} email{topic.emails.length !== 1 ? 's' : ''}</span>
                               </div>
                             </div>
                             {topic.unreadCount > 0 && (
@@ -1347,7 +1347,7 @@ function EmailListComponent() {
                                         {email._accountId && (
                                           <div
                                             className="w-2 h-2 rounded-full flex-shrink-0"
-                                            style={{ backgroundColor: getAvatarColor(email._accountId) }}
+                                            style={{ backgroundColor: hashColor(email._accountId) }}
                                             title={email._accountId}
                                           />
                                         )}
