@@ -30,12 +30,14 @@ const PROVIDER_CONFIGS = {
   },
   yahoo: {
     name: 'Yahoo Mail',
-    domains: ['yahoo.com', 'yahoo.co.uk', 'ymail.com'],
+    domains: ['yahoo.com', 'yahoo.co.uk', 'yahoo.co.jp', 'yahoo.fr', 'yahoo.de', 'yahoo.it', 'yahoo.es', 'yahoo.com.br', 'yahoo.com.au', 'yahoo.ca', 'yahoo.in', 'ymail.com', 'rocketmail.com', 'myyahoo.com'],
     imapHost: 'imap.mail.yahoo.com',
     imapPort: 993,
     smtpHost: 'smtp.mail.yahoo.com',
     smtpPort: 587,
-    note: 'Generate an App Password in Yahoo settings'
+    note: 'Yahoo requires an App Password',
+    helpUrl: 'https://login.yahoo.com/myc/security/app-passwords',
+    helpLabel: 'Generate App Password'
   },
   icloud: {
     name: 'iCloud Mail',
@@ -44,7 +46,9 @@ const PROVIDER_CONFIGS = {
     imapPort: 993,
     smtpHost: 'smtp.mail.me.com',
     smtpPort: 587,
-    note: 'Generate an App-Specific Password'
+    note: 'iCloud requires an App-Specific Password',
+    helpUrl: 'https://support.apple.com/en-us/102654',
+    helpLabel: 'Generate App-Specific Password'
   },
   aol: {
     name: 'AOL Mail',
@@ -53,7 +57,9 @@ const PROVIDER_CONFIGS = {
     imapPort: 993,
     smtpHost: 'smtp.aol.com',
     smtpPort: 587,
-    note: 'Use an App Password'
+    note: 'AOL requires an App Password',
+    helpUrl: 'https://help.aol.com/articles/Create-and-manage-app-password',
+    helpLabel: 'Generate App Password'
   },
   zoho: {
     name: 'Zoho Mail',
@@ -408,7 +414,7 @@ export function AccountModal({ onClose }) {
     } catch (err) {
       if (cancelled) return; // User cancelled — don't show error
       console.error('[AccountModal] OAuth2 sign-in failed:', err);
-      const providerLabel = currentProvider === 'google' ? 'Google' : 'Microsoft';
+      const providerLabel = { google: 'Google', microsoft: 'Microsoft', yahoo: 'Yahoo' }[currentProvider] || 'provider';
       setError(err.message || `${providerLabel} sign-in failed. Please try again.`);
     } finally {
       if (!cancelled) setOauthLoading(false);
@@ -536,7 +542,24 @@ export function AccountModal({ onClose }) {
               {provider && providerConfig?.note && (
                 <div className="flex items-start gap-3 p-3 bg-mail-accent/10 rounded-lg text-sm">
                   <AlertCircle size={16} className="text-mail-accent mt-0.5 flex-shrink-0" />
-                  <span className="text-mail-text">{providerConfig.note}</span>
+                  <div className="text-mail-text">
+                    <span>{providerConfig.note}</span>
+                    {providerConfig.helpUrl && (
+                      <button
+                        type="button"
+                        className="ml-2 text-mail-accent hover:underline font-medium"
+                        onClick={() => {
+                          import('@tauri-apps/plugin-shell').then(({ open }) => {
+                            open(providerConfig.helpUrl);
+                          }).catch(() => {
+                            window.open(providerConfig.helpUrl, '_blank');
+                          });
+                        }}
+                      >
+                        {providerConfig.helpLabel || 'Learn more'} &rarr;
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -593,12 +616,12 @@ export function AccountModal({ onClose }) {
                         {oauthLoading ? (
                           <>
                             <Loader size={18} className="animate-spin" />
-                            Waiting for {providerConfig?.oauth2Provider === 'google' ? 'Google' : 'Microsoft'} sign-in...
+                            Waiting for {({ google: 'Google', microsoft: 'Microsoft', yahoo: 'Yahoo' }[providerConfig?.oauth2Provider] || providerConfig?.name || 'provider')} sign-in...
                           </>
                         ) : (
                           <>
                             <Shield size={18} />
-                            Sign in with {providerConfig?.oauth2Provider === 'google' ? 'Google' : 'Microsoft'}
+                            Sign in with {({ google: 'Google', microsoft: 'Microsoft', yahoo: 'Yahoo' }[providerConfig?.oauth2Provider] || providerConfig?.name || 'provider')}
                           </>
                         )}
                       </button>
@@ -652,7 +675,7 @@ export function AccountModal({ onClose }) {
                     <div className="flex items-center gap-3 p-3 bg-mail-success/10 border border-mail-success/20 rounded-lg text-sm">
                       <Check size={16} className="text-mail-success flex-shrink-0" />
                       <div>
-                        <span className="text-mail-text font-medium">{providerConfig?.oauth2Provider === 'google' ? 'Google' : 'Microsoft'} account connected</span>
+                        <span className="text-mail-text font-medium">{({ google: 'Google', microsoft: 'Microsoft', yahoo: 'Yahoo' }[providerConfig?.oauth2Provider] || providerConfig?.name || 'provider')} account connected</span>
                         {formData.email && (
                           <span className="text-mail-text-muted ml-1">({formData.email})</span>
                         )}

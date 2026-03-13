@@ -421,6 +421,13 @@ export async function deleteAccount(id) {
     } catch (error) {
       console.warn('[db.js] Failed to clear email cache:', error);
     }
+
+    // Clear mailbox cache
+    try {
+      await invoke('delete_mailbox_cache', { accountId: id });
+    } catch (error) {
+      console.warn('[db.js] Failed to clear mailbox cache:', error);
+    }
   }
 }
 
@@ -810,8 +817,8 @@ export async function exportEmail(localId) {
 export async function saveMailboxes(accountId, mailboxes) {
   if (invoke) {
     try {
-      const data = JSON.stringify({ mailboxes, fetchedAt: Date.now(), lastSynced: Date.now() });
-      await invoke('save_email_cache', { accountId, mailbox: '__mailboxes__', data });
+      const data = JSON.stringify({ mailboxes, fetchedAt: Date.now() });
+      await invoke('save_mailbox_cache', { accountId, data });
     } catch (error) {
       console.warn('[db.js] Failed to save mailbox cache:', error);
     }
@@ -821,7 +828,7 @@ export async function saveMailboxes(accountId, mailboxes) {
 export async function getCachedMailboxEntry(accountId) {
   if (invoke) {
     try {
-      const data = await invoke('load_email_cache', { accountId, mailbox: '__mailboxes__' });
+      const data = await invoke('load_mailbox_cache', { accountId });
       if (data) {
         const entry = JSON.parse(data);
         if (Array.isArray(entry)) {

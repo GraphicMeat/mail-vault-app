@@ -4,6 +4,8 @@
 
 ### Added
 - **Sender-grouped view**: New toggle in email list toolbar groups emails by sender → topics → individual emails in an accordion layout
+- **Dedicated mailbox cache**: Mailbox list cached separately per account for instant folder loading
+- **App-specific password help links**: iCloud and AOL provider notes now include direct links to generate app passwords
 
 ### Improved
 - **Mailbox loading performance**: Local email index cache (`local-index.json`) eliminates .eml MIME parsing on load; progressive chunked rendering shows emails instantly with background loading; switching mailboxes/accounts cancels in-progress loads via AbortController
