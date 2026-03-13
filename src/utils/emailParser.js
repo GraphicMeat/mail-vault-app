@@ -169,10 +169,99 @@ export function groupByTopic(emails) {
  * Groups emails by sender address, then by normalized subject within each sender.
  * Returns an array of sender objects sorted by most recent email (descending).
  */
-export function groupBySender(emails) {
+export function groupBySender(emails, userEmail) {
   if (!emails || emails.length === 0) return [];
 
-  // Step 1: Group by normalized sender address
+  // When userEmail provided, use threading + correspondent-based grouping
+  if (userEmail) {
+    const threads = buildThreads(emails);
+    const senderMap = new Map();
+
+    for (const [, thread] of threads) {
+      // Determine correspondent from the thread's emails
+      // Use the first non-user email to find the external party
+      let correspondent = null;
+      for (const email of thread.emails) {
+        const c = getCorrespondent(email, userEmail);
+        if (c.email && c.email !== userEmail.toLowerCase()) {
+          correspondent = c;
+          break;
+        }
+      }
+      if (!correspondent) {
+        correspondent = getCorrespondent(thread.emails[0], userEmail);
+      }
+
+      const corrAddr = correspondent.email;
+      if (!senderMap.has(corrAddr)) {
+        senderMap.set(corrAddr, { senderEmail: corrAddr, senderName: correspondent.name, topics: [] });
+      }
+      const group = senderMap.get(corrAddr);
+      if (correspondent.name && correspondent.name !== corrAddr.split('@')[0]) {
+        group.senderName = correspondent.name;
+      }
+
+      // Build topic from thread — sort chronologically (oldest first) for conversation flow
+      const topicEmails = [...thread.emails].sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+      const participants = new Set();
+      let lastDate = null;
+      let unreadCount = 0;
+
+      for (const email of topicEmails) {
+        const from = (email.from?.address || '').toLowerCase().trim();
+        if (from) participants.add(from);
+        if (email.to) {
+          for (const r of email.to) {
+            const addr = (r?.address || '').toLowerCase().trim();
+            if (addr) participants.add(addr);
+          }
+        }
+        const emailDate = email.date ? new Date(email.date) : null;
+        if (emailDate && (!lastDate || emailDate > lastDate)) lastDate = emailDate;
+        if (!email._fromSentFolder && !email.flags?.includes('\\Seen')) unreadCount++;
+      }
+
+      group.topics.push({
+        subject: normalizeSubject(thread.subject),
+        originalSubject: thread.subject || topicEmails[0]?.subject || '(No subject)',
+        emails: topicEmails,
+        participants: Array.from(participants),
+        lastDate,
+        unreadCount,
+      });
+    }
+
+    // Build result with sorted topics and aggregated stats
+    const result = [];
+    for (const [senderEmail, group] of senderMap) {
+      group.topics.sort((a, b) => (b.lastDate || 0) - (a.lastDate || 0));
+
+      let senderUnread = 0;
+      let senderLastDate = null;
+      let totalEmails = 0;
+      for (const topic of group.topics) {
+        senderUnread += topic.unreadCount;
+        totalEmails += topic.emails.length;
+        if (topic.lastDate && (!senderLastDate || topic.lastDate > senderLastDate)) {
+          senderLastDate = topic.lastDate;
+        }
+      }
+
+      result.push({
+        senderEmail,
+        senderName: group.senderName,
+        unreadCount: senderUnread,
+        totalEmails,
+        lastDate: senderLastDate,
+        topics: group.topics,
+      });
+    }
+
+    result.sort((a, b) => (b.lastDate || 0) - (a.lastDate || 0));
+    return result;
+  }
+
+  // Fallback: original logic when no userEmail (backward compat)
   const senderMap = new Map();
   for (const email of emails) {
     const fromAddr = (email.from?.address || '').toLowerCase().trim();
@@ -186,7 +275,6 @@ export function groupBySender(emails) {
     }
   }
 
-  // Step 2: Within each sender, sub-group by normalized subject
   const result = [];
   for (const [senderEmail, senderData] of senderMap) {
     const topicMap = new Map();

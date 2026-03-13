@@ -672,6 +672,7 @@ function EmailListComponent() {
   const clearSelection = useMailStore(s => s.clearSelection);
   const clearSearch = useSearchStore(s => s.clearSearch);
   const getChatEmails = useMailStore(s => s.getChatEmails);
+  const activeAccountEmail = useMailStore(s => s.accounts.find(a => a.id === s.activeAccountId)?.email);
 
   const emailListStyle = useSettingsStore(s => s.emailListStyle);
   const emailListGrouping = useSettingsStore(s => s.emailListGrouping);
@@ -858,8 +859,9 @@ function EmailListComponent() {
       return;
     }
 
-    const emails = displayEmails;
-    const fp = `sender-${emails.length}-${emails[0]?.uid}-${emails[emails.length - 1]?.uid}-${flagSeq}-${archivedSize}`;
+    // Use merged INBOX + Sent emails when activeAccountEmail is available
+    const emails = activeAccountEmail ? getChatEmails() : displayEmails;
+    const fp = `sender-${emails.length}-${emails[0]?.uid}-${emails[emails.length - 1]?.uid}-${flagSeq}-${archivedSize}-${activeAccountEmail}-${sentEmails.length}`;
 
     if (senderGroupCacheRef.current.fingerprint === fp) {
       setSenderGroups(senderGroupCacheRef.current.groups);
@@ -867,13 +869,13 @@ function EmailListComponent() {
     }
 
     const timer = setTimeout(() => {
-      const groups = groupBySender(emails);
+      const groups = groupBySender(emails, activeAccountEmail);
       senderGroupCacheRef.current = { fingerprint: fp, groups };
       setSenderGroups(groups);
     }, 0);
 
     return () => clearTimeout(timer);
-  }, [displayEmails, emailListGrouping, flagSeq, archivedSize]);
+  }, [displayEmails, sentEmails, emailListGrouping, flagSeq, archivedSize, activeAccountEmail]);
 
   // Build display list: use threads if available, flat list as fallback
   const threadedDisplay = useMemo(() => {
@@ -1261,6 +1263,11 @@ function EmailListComponent() {
                         <span className={`text-sm truncate ${sender.unreadCount > 0 ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300'}`}>
                           {sender.senderName || sender.senderEmail}
                         </span>
+                        {sender.totalEmails && (
+                          <span className="text-xs text-gray-400">
+                            ({sender.totalEmails})
+                          </span>
+                        )}
                         {sender.senderName && sender.senderName !== sender.senderEmail && (
                           <span className="text-xs text-gray-400 truncate hidden sm:inline">
                             {sender.senderEmail}
@@ -1356,8 +1363,13 @@ function EmailListComponent() {
                                           {email.date ? formatEmailDate(new Date(email.date)) : ''}
                                         </span>
                                         <span className={`text-xs ${!email.flags?.includes('\\Seen') ? 'font-semibold text-gray-700 dark:text-gray-300' : 'text-gray-500 dark:text-gray-400'}`}>
-                                          {email.from?.name || (email.from?.address || '').split('@')[0]}
+                                          {email._fromSentFolder ? 'You' : (email.from?.name || (email.from?.address || '').split('@')[0])}
                                         </span>
+                                        {email._fromSentFolder && (
+                                          <span className="text-[10px] px-1 py-0.5 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-500 dark:text-blue-400 font-medium">
+                                            Sent
+                                          </span>
+                                        )}
                                       </div>
                                       {email.snippet && (
                                         <div className="text-xs text-gray-400 truncate mt-0.5">
