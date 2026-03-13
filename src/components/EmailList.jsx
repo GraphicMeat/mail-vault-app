@@ -675,6 +675,7 @@ function EmailListComponent() {
   const emailListStyle = useSettingsStore(s => s.emailListStyle);
   const emailListGrouping = useSettingsStore(s => s.emailListGrouping);
   const setEmailListGrouping = useSettingsStore(s => s.setEmailListGrouping);
+  const layoutMode = useSettingsStore(s => s.layoutMode);
   const isCompact = emailListStyle === 'compact';
   const ROW_HEIGHT = isCompact ? ROW_HEIGHT_COMPACT : ROW_HEIGHT_DEFAULT;
   const RowComponent = isCompact ? CompactEmailRow : EmailRow;
@@ -1329,10 +1330,12 @@ function EmailListComponent() {
                                   <button
                                     onClick={() => {
                                       selectEmail(email);
-                                      if (expandedEmail === email.uid) {
-                                        setExpandedEmail(null);
-                                      } else {
-                                        setExpandedEmail(email.uid);
+                                      if (layoutMode !== 'three-column') {
+                                        if (expandedEmail === email.uid) {
+                                          setExpandedEmail(null);
+                                        } else {
+                                          setExpandedEmail(email.uid);
+                                        }
                                       }
                                     }}
                                     className={`w-full flex items-center gap-3 pl-16 pr-4 py-2 text-left hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors ${
@@ -1341,6 +1344,13 @@ function EmailListComponent() {
                                   >
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center gap-2">
+                                        {email._accountId && (
+                                          <div
+                                            className="w-2 h-2 rounded-full flex-shrink-0"
+                                            style={{ backgroundColor: getAvatarColor(email._accountId) }}
+                                            title={email._accountId}
+                                          />
+                                        )}
                                         <span className="text-xs text-gray-400">
                                           {email.date ? formatEmailDate(new Date(email.date)) : ''}
                                         </span>
@@ -1360,7 +1370,7 @@ function EmailListComponent() {
                                   </button>
 
                                   {/* Inline expanded email body (plain text) */}
-                                  {expandedEmail === email.uid && (
+                                  {expandedEmail === email.uid && layoutMode !== 'three-column' && (
                                     <div className="pl-16 pr-4 py-3 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900">
                                       <div className="text-xs text-gray-500 mb-2">
                                         From: {email.from?.name || email.from?.address} · To: {email.to?.[0]?.address || ''}
