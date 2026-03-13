@@ -783,6 +783,13 @@ function EmailListComponent() {
     setFocusedRow(null);
   }, [emailListGrouping]);
 
+  useEffect(() => {
+    setExpandedSender(null);
+    setExpandedTopics(new Set());
+    setExpandedEmail(null);
+    setFocusedRow(null);
+  }, [activeAccountId, activeMailbox]);
+
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(600);
 
