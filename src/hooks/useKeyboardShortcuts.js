@@ -112,7 +112,7 @@ export function useKeyboardShortcuts(actionHandlers) {
 
       // Check if candidate is a prefix of a longer sequence
       const prefixEntry = shortcutMap[candidate];
-      if (prefixEntry && prefixEntry._isPrefix) {
+      if (prefixEntry && prefixEntry._isPrefix && !typing) {
         // Start / continue sequence — wait for next key
         sequenceRef.current = candidate;
         if (sequenceTimerRef.current) clearTimeout(sequenceTimerRef.current);
@@ -144,7 +144,7 @@ export function useKeyboardShortcuts(actionHandlers) {
 
         // Check single-key match
         const singlePrefix = shortcutMap[keyStr];
-        if (singlePrefix && singlePrefix._isPrefix) {
+        if (singlePrefix && singlePrefix._isPrefix && !typing) {
           sequenceRef.current = keyStr;
           sequenceTimerRef.current = setTimeout(resetSequence, SEQUENCE_TIMEOUT);
           e.preventDefault();

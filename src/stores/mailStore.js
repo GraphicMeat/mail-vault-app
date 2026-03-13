@@ -49,6 +49,9 @@ let _loadEmailsRetried = false;
 // ── AbortController for activateAccount — cancels previous activation on rapid switch ──
 let _activeController = null;
 
+// ── AbortController for progressive loading — cancels background loading on switch ──
+let _loadAbortController = null;
+
 // Module-level range retry state — avoids polluting Zustand store with dynamic keys
 const _rangeRetryDelays = new Map();
 const MAILBOX_CACHE_FRESH_MS = 10 * 60 * 1000;
@@ -442,6 +445,9 @@ export const useMailStore = create((set, get) => ({
   bulkSaveProgress: null, // { total, completed, errors, active }
   exportProgress: null, // { total, completed, active, mode: 'export'|'import' }
 
+  // Progressive loading progress
+  loadingProgress: null, // { loaded: N, total: M } during background loading
+
   // Unified inbox mode
   unifiedInbox: false,
 
@@ -784,11 +790,12 @@ export const useMailStore = create((set, get) => ({
 
         const cachedMailboxes = cachedMailboxEntry?.mailboxes || null;
 
-        // Load archived emails from disk so unified inbox can find them
+        // Load archived emails — try local-index.json first (fast), fall back to .eml scanning
         let localEmails = [];
         if (archivedEmailIds.size > 0) {
           try {
-            localEmails = await db.getArchivedEmails(account.id, 'INBOX', archivedEmailIds);
+            localEmails = await db.readLocalEmailIndex(account.id, 'INBOX') ||
+              await db.getArchivedEmails(account.id, 'INBOX', archivedEmailIds);
           } catch (e) {
             console.warn(`[prewarm] Failed to load local emails for ${account.email}:`, e.message);
           }
@@ -936,8 +943,9 @@ export const useMailStore = create((set, get) => ({
   activateAccount: async (accountId, mailbox, options = {}) => {
     const activationTrace = createPerfTrace('activateAccount', { accountId, mailbox });
 
-    // Cancel any previous activation
+    // Cancel any previous activation and progressive loading
     if (_activeController) _activeController.abort();
+    if (_loadAbortController) _loadAbortController.abort();
     _activeController = new AbortController();
     const { signal } = _activeController;
 
@@ -1580,13 +1588,22 @@ export const useMailStore = create((set, get) => ({
       });
       get().loadUnifiedInbox(preUnifiedSnapshot);
     } else {
-      set({ unifiedInbox: false });
+      // Abort any in-progress unified inbox loading
+      if (_loadAbortController) _loadAbortController.abort();
+      set({ unifiedInbox: false, loadingProgress: null });
     }
   },
 
   loadUnifiedInbox: async (preUnifiedSnapshot = null) => {
     const { accounts } = get();
     const { hiddenAccounts } = useSettingsStore.getState();
+
+    // Abort any previous progressive loading
+    if (_loadAbortController) _loadAbortController.abort();
+    _loadAbortController = new AbortController();
+    const signal = _loadAbortController.signal;
+
+    const CHUNK_SIZE = 50;
 
     // Collect cached INBOX emails from all visible accounts
     // Try in-memory cache first, fall back to disk-cached headers.json
@@ -1630,6 +1647,8 @@ export const useMailStore = create((set, get) => ({
       }
     }
 
+    if (signal.aborted) return;
+
     // Include the pre-switch snapshot (active account's INBOX emails captured before state change)
     if (preUnifiedSnapshot && !hiddenAccounts[preUnifiedSnapshot.activeAccountId]) {
       const activeAccount = accounts.find(a => a.id === preUnifiedSnapshot.activeAccountId);
@@ -1655,20 +1674,75 @@ export const useMailStore = create((set, get) => ({
       return dateB - dateA;
     });
 
-    // Load local email data for all accounts so viewMode filtering works in unified
+    // Progressive rendering: commit first chunk immediately, then background chunks
+    const total = allEmails.length;
+    const firstBatch = allEmails.slice(0, CHUNK_SIZE);
+
+    // Build serverUidSet progressively
+    const allServerUids = new Set();
+    for (const e of firstBatch) allServerUids.add(e.uid);
+
+    // First paint: show first chunk instantly
+    set({
+      emails: firstBatch,
+      serverUidSet: allServerUids,
+      _sortedEmailsFingerprint: '', // force updateSortedEmails to recompute
+      activeMailbox: 'UNIFIED',
+      totalEmails: total,
+      selectedEmailId: null,
+      selectedEmail: null,
+      selectedEmailSource: null,
+      selectedThread: null,
+      selectedEmailIds: new Set(),
+      hasMoreEmails: false,
+      currentPage: 1,
+      loading: false,
+      loadingProgress: total > CHUNK_SIZE ? { loaded: Math.min(CHUNK_SIZE, total), total } : null,
+    });
+    get().updateSortedEmails();
+
+    // Background: render remaining chunks progressively
+    if (total > CHUNK_SIZE) {
+      let offset = CHUNK_SIZE;
+      while (offset < total) {
+        if (signal.aborted) break;
+        await new Promise(r => setTimeout(r, 0)); // yield to render
+
+        offset += CHUNK_SIZE;
+        const chunk = allEmails.slice(0, Math.min(offset, total));
+        const chunkServerUids = new Set();
+        for (const e of chunk) chunkServerUids.add(e.uid);
+
+        if (signal.aborted) break;
+
+        set({
+          emails: chunk,
+          serverUidSet: chunkServerUids,
+          totalEmails: total,
+          _sortedEmailsFingerprint: '',
+          loadingProgress: { loaded: Math.min(offset, total), total },
+        });
+        get().updateSortedEmails();
+      }
+      if (!signal.aborted) set({ loadingProgress: null });
+    }
+
+    if (signal.aborted) return;
+
+    // Load local email data for all accounts (fire-and-forget for speed)
     const allLocalEmails = [];
     const allSavedIds = new Set();
     const allArchivedIds = new Set();
-    const allServerUids = new Set();
     const localPromises = accounts
       .filter(a => !hiddenAccounts[a.id])
       .map(async (account) => {
         try {
-          const [saved, archived, locals] = await Promise.all([
+          const [saved, archived] = await Promise.all([
             db.getSavedEmailIds(account.id, 'INBOX'),
             db.getArchivedEmailIds(account.id, 'INBOX'),
-            db.getLocalEmails(account.id, 'INBOX'),
           ]);
+          let locals = await db.readLocalEmailIndex(account.id, 'INBOX');
+          if (!locals) locals = await db.getLocalEmails(account.id, 'INBOX');
           for (const uid of saved) allSavedIds.add(uid);
           for (const uid of archived) allArchivedIds.add(uid);
           for (const e of locals) {
@@ -1678,26 +1752,11 @@ export const useMailStore = create((set, get) => ({
       });
     await Promise.all(localPromises);
 
-    // Build serverUidSet from all unified emails
-    for (const e of allEmails) allServerUids.add(e.uid);
-
+    if (signal.aborted) return;
     set({
-      emails: allEmails,
       localEmails: allLocalEmails,
       savedEmailIds: allSavedIds,
       archivedEmailIds: allArchivedIds,
-      serverUidSet: allServerUids,
-      _sortedEmailsFingerprint: '', // force updateSortedEmails to recompute
-      activeMailbox: 'UNIFIED',
-      totalEmails: allEmails.length,
-      selectedEmailId: null,
-      selectedEmail: null,
-      selectedEmailSource: null,
-      selectedThread: null,
-      selectedEmailIds: new Set(),
-      hasMoreEmails: false,
-      currentPage: 1,
-      loading: false,
     });
     get().updateSortedEmails();
   },
@@ -1724,11 +1783,12 @@ export const useMailStore = create((set, get) => ({
         Promise.all(
           accounts.filter(a => !hiddenAccounts[a.id]).map(async (account) => {
             try {
-              const [saved, archived, locals] = await Promise.all([
+              const [saved, archived] = await Promise.all([
                 db.getSavedEmailIds(account.id, 'INBOX'),
                 db.getArchivedEmailIds(account.id, 'INBOX'),
-                db.getLocalEmails(account.id, 'INBOX'),
               ]);
+              let locals = await db.readLocalEmailIndex(account.id, 'INBOX');
+              if (!locals) locals = await db.getLocalEmails(account.id, 'INBOX');
               for (const uid of saved) allSavedIds.add(uid);
               for (const uid of archived) allArchivedIds.add(uid);
               for (const e of locals) {
@@ -1743,14 +1803,16 @@ export const useMailStore = create((set, get) => ({
       } else {
         const { activeAccountId, activeMailbox } = get();
         if (activeAccountId && activeMailbox) {
-          Promise.all([
-            db.getSavedEmailIds(activeAccountId, activeMailbox),
-            db.getArchivedEmailIds(activeAccountId, activeMailbox),
-            db.getLocalEmails(activeAccountId, activeMailbox),
-          ]).then(([savedEmailIds, archivedEmailIds, localEmails]) => {
+          (async () => {
+            const [savedEmailIds, archivedEmailIds] = await Promise.all([
+              db.getSavedEmailIds(activeAccountId, activeMailbox),
+              db.getArchivedEmailIds(activeAccountId, activeMailbox),
+            ]);
+            let localEmails = await db.readLocalEmailIndex(activeAccountId, activeMailbox);
+            if (!localEmails) localEmails = await db.getLocalEmails(activeAccountId, activeMailbox);
             set({ savedEmailIds, archivedEmailIds, localEmails });
             get().updateSortedEmails();
-          });
+          })();
         }
       }
     }
@@ -1762,6 +1824,11 @@ export const useMailStore = create((set, get) => ({
     let account = accounts.find(a => a.id === activeAccountId);
     if (!account) return;
     const loadTrace = createPerfTrace('loadEmails', { accountId: activeAccountId, mailbox: activeMailbox });
+
+    // Abort any previous progressive loading
+    if (_loadAbortController) _loadAbortController.abort();
+    _loadAbortController = new AbortController();
+    const loadSignal = _loadAbortController.signal;
 
     // Bump generation — any previous in-flight loadEmails call becomes stale
     const generation = ++_loadEmailsGeneration;
@@ -1834,14 +1901,22 @@ export const useMailStore = create((set, get) => ({
     // IMPORTANT: localEmails is managed ONLY by this fire-and-forget chain — never overwritten
     // by IMAP sync set() calls. This ensures archived emails persist once loaded.
     if (archivedEmailIds.size > 0 && (get().localEmails || []).length === 0) {
-      // Use account-only staleness check (not generation) — archived emails should
-      // persist regardless of which loadEmails iteration triggered them.
       const archivedAccount = activeAccountId;
-      db.getArchivedEmails(activeAccountId, activeMailbox, archivedEmailIds, (batchEmails) => {
-        if (get().activeAccountId !== archivedAccount) return;
-        set({ localEmails: batchEmails });
-        get().updateSortedEmails();
-      }).catch(e => console.warn('[loadEmails] getArchivedEmails failed:', e));
+      (async () => {
+        try {
+          // Try local-index.json first (fast, no MIME parsing)
+          let localEmails = await db.readLocalEmailIndex(activeAccountId, activeMailbox);
+          if (!localEmails) {
+            // Fallback: .eml scanning via batched reader
+            localEmails = await db.getArchivedEmails(activeAccountId, activeMailbox, archivedEmailIds);
+          }
+          if (get().activeAccountId !== archivedAccount || loadSignal.aborted) return;
+          set({ localEmails });
+          get().updateSortedEmails();
+        } catch (e) {
+          console.warn('[loadEmails] archived emails failed:', e);
+        }
+      })();
     }
 
     // Use existing emails from store (populated by QuickLoad or activateAccount)
@@ -2352,7 +2427,7 @@ export const useMailStore = create((set, get) => ({
       loadTrace.end('error', { message: error.message });
     } finally {
       clearTimeout(loadingGuard);
-      if (!isStale()) set({ loading: false, loadingMore: false });
+      if (!isStale()) set({ loading: false, loadingMore: false, loadingProgress: null });
     }
   },
 
@@ -3160,6 +3235,30 @@ export const useMailStore = create((set, get) => ({
         });
       }
 
+      // Append to local-index.json
+      try {
+        const emailData = get().emails?.find(e => e.uid === uid) || get().sortedEmails?.find(e => e.uid === uid);
+        if (emailData) {
+          const indexEntry = {
+            uid: emailData.uid,
+            from: emailData.from,
+            to: emailData.to,
+            subject: emailData.subject,
+            date: emailData.date,
+            flags: emailData.flags || [],
+            has_attachments: emailData.hasAttachments || emailData.has_attachments || false,
+            message_id: emailData.messageId || emailData.message_id || null,
+            in_reply_to: emailData.inReplyTo || emailData.in_reply_to || null,
+            references: emailData.references || null,
+            snippet: emailData.snippet || '',
+            source: 'local',
+          };
+          await api.appendLocalIndex(accountId, mailbox, [indexEntry]);
+        }
+      } catch (e) {
+        console.warn('[mailStore] Failed to update local-index.json:', e);
+      }
+
       // Update state (skip if unified — IDs are per-account, not global)
       if (!isUnified) {
         const savedEmailIds = await db.getSavedEmailIds(accountId, mailbox);
@@ -3236,7 +3335,8 @@ export const useMailStore = create((set, get) => ({
         // Refresh local state after all writes complete
         const savedEmailIds = await db.getSavedEmailIds(activeAccountId, activeMailbox);
         const archivedEmailIds = await db.getArchivedEmailIds(activeAccountId, activeMailbox);
-        const localEmails = await db.getLocalEmails(activeAccountId, activeMailbox);
+        let localEmails = await db.readLocalEmailIndex(activeAccountId, activeMailbox);
+        if (!localEmails) localEmails = await db.getLocalEmails(activeAccountId, activeMailbox);
         set({ savedEmailIds, archivedEmailIds, localEmails });
         get().updateSortedEmails();
       } catch (err) {
@@ -3321,6 +3421,13 @@ export const useMailStore = create((set, get) => ({
     const localId = `${accountId}-${mailbox}-${uid}`;
 
     await db.deleteLocalEmail(localId);
+
+    // Remove from local-index.json
+    try {
+      await api.removeFromLocalIndex(accountId, mailbox, uid);
+    } catch (e) {
+      console.warn('[mailStore] Failed to remove from local-index.json:', e);
+    }
 
     const savedEmailIds = await db.getSavedEmailIds(accountId, mailbox);
     const archivedEmailIds = await db.getArchivedEmailIds(accountId, mailbox);
@@ -3507,6 +3614,7 @@ export const useMailStore = create((set, get) => ({
 
         return { emails, selectedEmail: updatedSelectedEmail, _flagSeq: state._flagSeq + 1 };
       });
+      get().updateSortedEmails();
     } catch (error) {
       set({ error: `Failed to update read status: ${error.message}` });
     }

@@ -57,7 +57,7 @@ pub async fn run(
     let sem = Arc::new(Semaphore::new(5));
     let completed = Arc::new(AtomicUsize::new(0));
     let errors = Arc::new(AtomicUsize::new(0));
-    let mut set: JoinSet<()> = JoinSet::new();
+    let mut set: JoinSet<Option<serde_json::Value>> = JoinSet::new();
 
     // Get the IMAP pool from managed state
     let pool = app_handle.state::<ImapPool>();
@@ -82,36 +82,86 @@ pub async fn run(
             let _permit = sem.acquire().await.unwrap();
 
             if cancel.load(Ordering::Relaxed) {
-                return;
+                return None;
             }
 
-            let last_error = fetch_and_store(
+            match fetch_and_store(
                 &pool, &app, &account_id, &account, &mailbox, uid,
-            ).await.err();
-
-            if last_error.is_none() {
-                completed.fetch_add(1, Ordering::Relaxed);
-            } else {
-                errors.fetch_add(1, Ordering::Relaxed);
-                warn!("archive_emails: UID {} failed: {:?}", uid, last_error);
+            ).await {
+                Ok(index_entry) => {
+                    completed.fetch_add(1, Ordering::Relaxed);
+                    let c = completed.load(Ordering::Relaxed);
+                    let e = errors.load(Ordering::Relaxed);
+                    let is_cancelled = cancel.load(Ordering::Relaxed);
+                    let _ = app.emit("archive-progress", ArchiveProgress {
+                        total,
+                        completed: c,
+                        errors: e,
+                        active: !is_cancelled && (c + e) < total,
+                        last_error: None,
+                        last_uid: Some(uid),
+                    });
+                    Some(index_entry)
+                }
+                Err(last_error) => {
+                    errors.fetch_add(1, Ordering::Relaxed);
+                    warn!("archive_emails: UID {} failed: {:?}", uid, last_error);
+                    let c = completed.load(Ordering::Relaxed);
+                    let e = errors.load(Ordering::Relaxed);
+                    let is_cancelled = cancel.load(Ordering::Relaxed);
+                    let _ = app.emit("archive-progress", ArchiveProgress {
+                        total,
+                        completed: c,
+                        errors: e,
+                        active: !is_cancelled && (c + e) < total,
+                        last_error: Some(last_error),
+                        last_uid: None,
+                    });
+                    None
+                }
             }
-
-            let c = completed.load(Ordering::Relaxed);
-            let e = errors.load(Ordering::Relaxed);
-            let is_cancelled = cancel.load(Ordering::Relaxed);
-            let success_uid = if last_error.is_none() { Some(uid) } else { None };
-            let _ = app.emit("archive-progress", ArchiveProgress {
-                total,
-                completed: c,
-                errors: e,
-                active: !is_cancelled && (c + e) < total,
-                last_error,
-                last_uid: success_uid,
-            });
         });
     }
 
-    while set.join_next().await.is_some() {}
+    // Collect index entries from completed tasks
+    let mut index_entries: Vec<serde_json::Value> = Vec::new();
+    while let Some(result) = set.join_next().await {
+        if let Ok(Some(entry)) = result {
+            index_entries.push(entry);
+        }
+    }
+
+    // Write to local-index.json if any entries were archived
+    if !index_entries.is_empty() {
+        if let Ok(data_dir) = app_handle.path().app_data_dir() {
+            let dir_path = data_dir.join("maildir").join(&account_id).join(&mailbox);
+            let index_path = dir_path.join("local-index.json");
+
+            let mut existing: Vec<serde_json::Value> = if index_path.exists() {
+                tokio::fs::read_to_string(&index_path).await.ok()
+                    .and_then(|c| serde_json::from_str(&c).ok())
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+
+            let new_uids: std::collections::HashSet<u64> = index_entries.iter()
+                .filter_map(|e| e.get("uid").and_then(|u| u.as_u64()))
+                .collect();
+            existing.retain(|e| {
+                e.get("uid").and_then(|u| u.as_u64()).map_or(true, |uid| !new_uids.contains(&uid))
+            });
+            existing.extend(index_entries);
+
+            if let Ok(data) = serde_json::to_string(&existing) {
+                let tmp_path = index_path.with_extension("json.tmp");
+                if tokio::fs::write(&tmp_path, &data).await.is_ok() {
+                    let _ = tokio::fs::rename(&tmp_path, &index_path).await;
+                }
+            }
+            info!("archive_emails: wrote {} entries to local-index.json", new_uids.len());
+        }
+    }
 
     let final_completed = completed.load(Ordering::Relaxed);
     let final_errors = errors.load(Ordering::Relaxed);
@@ -143,7 +193,7 @@ async fn fetch_and_store(
     account: &ImapConfig,
     mailbox: &str,
     uid: u32,
-) -> Result<(), String> {
+) -> Result<serde_json::Value, String> {
     use base64::Engine;
     use std::fs;
 
@@ -174,11 +224,79 @@ async fn fetch_and_store(
         .decode(&email.raw_source)
         .map_err(|e| format!("base64 decode: {}", e))?;
 
+    // Parse In-Reply-To and References from raw email for threading
+    let (in_reply_to, references) = parse_threading_headers(&raw_bytes);
+
+    // Generate snippet from text body
+    let snippet = email.text.as_deref()
+        .unwrap_or("")
+        .chars().take(150).collect::<String>()
+        .replace('\n', " ").replace('\r', "");
+
     fs::write(cur_dir.join(&filename), &raw_bytes)
         .map_err(|e| format!("write .eml: {}", e))?;
 
     info!("archive_emails: stored UID {} ({} bytes)", uid, raw_bytes.len());
-    Ok(())
+
+    // Build local-index entry
+    let index_entry = serde_json::json!({
+        "uid": email.uid,
+        "from": { "address": email.from.address, "name": email.from.name },
+        "to": email.to.iter().map(|a| serde_json::json!({ "address": a.address, "name": a.name })).collect::<Vec<_>>(),
+        "subject": email.subject,
+        "date": email.date,
+        "flags": email.flags,
+        "has_attachments": email.has_attachments,
+        "message_id": email.message_id,
+        "in_reply_to": in_reply_to,
+        "references": references,
+        "snippet": snippet,
+        "source": "local",
+    });
+
+    Ok(index_entry)
+}
+
+/// Extract In-Reply-To and References headers from raw email bytes for threading
+fn parse_threading_headers(raw: &[u8]) -> (Option<String>, Option<Vec<String>>) {
+    let raw_str = String::from_utf8_lossy(raw);
+    // Only look at headers (before first blank line)
+    let header_section = raw_str.split("\r\n\r\n").next()
+        .or_else(|| raw_str.split("\n\n").next())
+        .unwrap_or(&raw_str);
+    let lower = header_section.to_lowercase();
+
+    let in_reply_to = lower.find("in-reply-to:")
+        .and_then(|idx| {
+            let after = &header_section[idx + "in-reply-to:".len()..];
+            let start = after.find('<')?;
+            let end = after[start..].find('>')? + start;
+            Some(after[start..=end].trim().to_string())
+        });
+
+    let references = lower.find("references:")
+        .map(|idx| {
+            let after = &header_section[idx + "references:".len()..];
+            let mut refs = Vec::new();
+            let mut start = None;
+            for (i, ch) in after.char_indices() {
+                match ch {
+                    '<' => start = Some(i),
+                    '>' => {
+                        if let Some(s) = start {
+                            refs.push(after[s..=i].trim().to_string());
+                            start = None;
+                        }
+                    }
+                    '\n' if !matches!(after.as_bytes().get(i + 1), Some(b' ' | b'\t')) => break,
+                    _ => {}
+                }
+            }
+            refs
+        })
+        .filter(|r| !r.is_empty());
+
+    (in_reply_to, references)
 }
 
 // ── Bulk delete runner ──────────────────────────────────────────────────────

@@ -393,3 +393,25 @@ export async function verifyArchivedEmails(accountId, mailbox, uids) {
   }
   return { verified: uids, missing: [] };
 }
+
+// ── Local index ───────────────────────────────────────────────────────────────
+
+export async function readLocalIndex(accountId, mailbox) {
+  if (IS_TAURI) {
+    return tauriInvoke('local_index_read', { accountId, mailbox });
+  }
+  return null;
+}
+
+export async function appendLocalIndex(accountId, mailbox, entries) {
+  if (IS_TAURI) {
+    const entriesJson = JSON.stringify(entries);
+    return tauriInvoke('local_index_append', { accountId, mailbox, entriesJson });
+  }
+}
+
+export async function removeFromLocalIndex(accountId, mailbox, uid) {
+  if (IS_TAURI) {
+    return tauriInvoke('local_index_remove', { accountId, mailbox, uid });
+  }
+}
