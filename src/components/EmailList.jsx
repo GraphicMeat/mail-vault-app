@@ -862,10 +862,12 @@ function EmailListComponent() {
 
     // Use merged INBOX + Sent emails when activeAccountEmail is available
     const emails = activeAccountEmail ? getChatEmails() : displayEmails;
-    const fp = `sender-${emails.length}-${emails[0]?.uid}-${emails[emails.length - 1]?.uid}-${flagSeq}-${archivedSize}-${activeAccountEmail}-${sentEmails.length}`;
+    const fp = `sender-${emails.length}-${emails[0]?.uid}-${emails[emails.length - 1]?.uid}-${archivedSize}-${activeAccountEmail}-${sentEmails.length}`;
 
     if (senderGroupCacheRef.current.fingerprint === fp) {
-      setSenderGroups(senderGroupCacheRef.current.groups);
+      if (senderGroups !== senderGroupCacheRef.current.groups) {
+        setSenderGroups(senderGroupCacheRef.current.groups);
+      }
       return;
     }
 
@@ -876,7 +878,7 @@ function EmailListComponent() {
     }, 0);
 
     return () => clearTimeout(timer);
-  }, [displayEmails, sentEmails, emailListGrouping, flagSeq, archivedSize, activeAccountEmail]);
+  }, [displayEmails, sentEmails, emailListGrouping, archivedSize, activeAccountEmail]);
 
   // Build display list: use threads if available, flat list as fallback
   const threadedDisplay = useMemo(() => {
@@ -1335,7 +1337,7 @@ function EmailListComponent() {
                           {expandedTopics.has(topicKey) && (
                             <div className="bg-white dark:bg-gray-900">
                               {topic.emails.map((email) => (
-                                <div key={email.uid}>
+                                <div key={email._fromSentFolder ? `sent-${email.uid}` : email.uid}>
                                   <button
                                     onClick={() => {
                                       const mailbox = email._fromSentFolder ? getSentMailboxPath() : null;
