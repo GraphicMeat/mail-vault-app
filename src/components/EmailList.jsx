@@ -672,6 +672,7 @@ function EmailListComponent() {
   const clearSelection = useMailStore(s => s.clearSelection);
   const clearSearch = useSearchStore(s => s.clearSearch);
   const getChatEmails = useMailStore(s => s.getChatEmails);
+  const getSentMailboxPath = useMailStore(s => s.getSentMailboxPath);
   const activeAccountEmail = useMailStore(s => s.accounts.find(a => a.id === s.activeAccountId)?.email);
 
   const emailListStyle = useSettingsStore(s => s.emailListStyle);
@@ -1337,7 +1338,8 @@ function EmailListComponent() {
                                 <div key={email.uid}>
                                   <button
                                     onClick={() => {
-                                      selectEmail(email.uid, email.source);
+                                      const mailbox = email._fromSentFolder ? getSentMailboxPath() : null;
+                                      selectEmail(email.uid, email.source, mailbox);
                                       if (layoutMode !== 'three-column') {
                                         if (expandedEmail === email.uid) {
                                           setExpandedEmail(null);
