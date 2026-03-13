@@ -689,7 +689,100 @@ function EmailListComponent() {
   const [expandedSender, setExpandedSender] = useState(null);
   const [expandedTopics, setExpandedTopics] = useState(new Set());
   const [expandedEmail, setExpandedEmail] = useState(null);
+  const [focusedRow, setFocusedRow] = useState(null);
   const scrollContainerRef = useRef(null);
+
+  const expandedSenderRef = useRef(expandedSender);
+  const expandedTopicsRef = useRef(expandedTopics);
+  const expandedEmailRef = useRef(expandedEmail);
+  const focusedRowRef = useRef(focusedRow);
+  const senderGroupsRef = useRef(senderGroups);
+
+  useEffect(() => { expandedSenderRef.current = expandedSender; }, [expandedSender]);
+  useEffect(() => { expandedTopicsRef.current = expandedTopics; }, [expandedTopics]);
+  useEffect(() => { expandedEmailRef.current = expandedEmail; }, [expandedEmail]);
+  useEffect(() => { focusedRowRef.current = focusedRow; }, [focusedRow]);
+  useEffect(() => { senderGroupsRef.current = senderGroups; }, [senderGroups]);
+
+  useEffect(() => {
+    if (emailListGrouping !== 'sender') return;
+
+    const handleKeyDown = (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      const groups = senderGroupsRef.current;
+      if (!groups?.length) return;
+
+      if (e.key === 'j' || e.key === 'k') {
+        e.preventDefault();
+        const items = [];
+        for (const sender of groups) {
+          items.push({ type: 'sender', senderEmail: sender.senderEmail });
+          if (expandedSenderRef.current === sender.senderEmail) {
+            sender.topics.forEach((topic) => {
+              const topicKey = `${sender.senderEmail}-${topic.subject}`;
+              items.push({ type: 'topic', senderEmail: sender.senderEmail, topicKey });
+              if (expandedTopicsRef.current.has(topicKey)) {
+                topic.emails.forEach(email => {
+                  items.push({ type: 'email', senderEmail: sender.senderEmail, topicKey, emailUid: email.uid });
+                });
+              }
+            });
+          }
+        }
+
+        const current = focusedRowRef.current;
+        const currentIdx = current ? items.findIndex(item =>
+          item.type === current.type &&
+          item.senderEmail === current.senderEmail &&
+          item.topicKey === current.topicKey &&
+          item.emailUid === current.emailUid
+        ) : -1;
+
+        const nextIdx = e.key === 'j'
+          ? Math.min(currentIdx + 1, items.length - 1)
+          : Math.max(currentIdx - 1, 0);
+
+        setFocusedRow(items[nextIdx] || null);
+      }
+
+      if (e.key === 'Enter' && focusedRowRef.current) {
+        e.preventDefault();
+        const fr = focusedRowRef.current;
+        if (fr.type === 'sender') {
+          setExpandedSender(expandedSenderRef.current === fr.senderEmail ? null : fr.senderEmail);
+          setExpandedTopics(new Set());
+          setExpandedEmail(null);
+        } else if (fr.type === 'topic') {
+          setExpandedTopics(prev => {
+            const next = new Set(prev);
+            if (next.has(fr.topicKey)) next.delete(fr.topicKey);
+            else next.add(fr.topicKey);
+            return next;
+          });
+          setExpandedEmail(null);
+        } else if (fr.type === 'email') {
+          if (expandedEmailRef.current === fr.emailUid) {
+            setExpandedEmail(null);
+          } else {
+            setExpandedEmail(fr.emailUid);
+            const groups = senderGroupsRef.current;
+            const sender = groups.find(s => s.senderEmail === fr.senderEmail);
+            const topic = sender?.topics.find(t => `${fr.senderEmail}-${t.subject}` === fr.topicKey);
+            const email = topic?.emails.find(e => e.uid === fr.emailUid);
+            if (email) selectEmail(email);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [emailListGrouping, selectEmail]);
+
+  useEffect(() => {
+    setFocusedRow(null);
+  }, [emailListGrouping]);
+
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(600);
 
@@ -1144,7 +1237,7 @@ function EmailListComponent() {
                     }}
                     className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${
                       expandedSender === sender.senderEmail ? 'bg-gray-50 dark:bg-gray-800/50' : ''
-                    }`}
+                    } ${focusedRow?.type === 'sender' && focusedRow?.senderEmail === sender.senderEmail ? 'ring-2 ring-blue-400 ring-inset' : ''}`}
                   >
                     <div
                       className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0"
@@ -1193,7 +1286,7 @@ function EmailListComponent() {
                             }}
                             className={`w-full flex items-center gap-3 pl-12 pr-4 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors ${
                               expandedTopics.has(topicKey) ? 'bg-gray-100 dark:bg-gray-700/50' : ''
-                            }`}
+                            } ${focusedRow?.type === 'topic' && focusedRow?.topicKey === topicKey ? 'ring-2 ring-blue-400 ring-inset' : ''}`}
                           >
                             <div className="flex-1 min-w-0">
                               <div className={`text-sm truncate ${topic.unreadCount > 0 ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400'}`}>
@@ -1237,7 +1330,7 @@ function EmailListComponent() {
                                     }}
                                     className={`w-full flex items-center gap-3 pl-16 pr-4 py-2 text-left hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors ${
                                       expandedEmail === email.uid ? 'bg-blue-50 dark:bg-blue-900/20' : ''
-                                    } ${selectedEmailId === email.uid ? 'ring-1 ring-blue-300 dark:ring-blue-700' : ''}`}
+                                    } ${selectedEmailId === email.uid ? 'ring-1 ring-blue-300 dark:ring-blue-700' : ''} ${focusedRow?.type === 'email' && focusedRow?.emailUid === email.uid ? 'ring-2 ring-blue-400 ring-inset' : ''}`}
                                   >
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center gap-2">
