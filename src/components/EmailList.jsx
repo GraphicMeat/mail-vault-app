@@ -772,7 +772,7 @@ function EmailListComponent() {
             const sender = groups.find(s => s.senderEmail === fr.senderEmail);
             const topic = sender?.topics.find(t => `${fr.senderEmail}-${t.subject}` === fr.topicKey);
             const email = topic?.emails.find(e => e.uid === fr.emailUid);
-            if (email) selectEmail(email);
+            if (email) selectEmail(email.uid, email.source);
           }
         }
       }
@@ -1329,7 +1329,7 @@ function EmailListComponent() {
                                 <div key={email.uid}>
                                   <button
                                     onClick={() => {
-                                      selectEmail(email);
+                                      selectEmail(email.uid, email.source);
                                       if (layoutMode !== 'three-column') {
                                         if (expandedEmail === email.uid) {
                                           setExpandedEmail(null);
