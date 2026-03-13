@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Startup crash**: Removed Sparkle updater framework that caused `dispatch_sync` deadlock crash on macOS launch; custom appcast updater remains fully functional
+- **Unified inbox**: Fixed local/archived emails not showing for accounts with overlapping UIDs in unified view
+
 ## [2.2.0] - 2026-03-11
 
 ### Improved
