@@ -585,6 +585,65 @@ async fn save_email_cache(app_handle: tauri::AppHandle, account_id: String, mail
     }).await.map_err(|e| format!("Task join error: {}", e))?
 }
 
+// ── Dedicated mailbox cache (instant folder loading) ─────────────────────
+
+#[tauri::command]
+fn save_mailbox_cache(app_handle: tauri::AppHandle, account_id: String, data: String) -> Result<(), String> {
+    let dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not get app data directory: {}", e))?
+        .join("mailboxes")
+        .join(&account_id);
+
+    fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create mailbox cache directory: {}", e))?;
+
+    fs::write(dir.join("mailboxes.json"), data.as_bytes())
+        .map_err(|e| format!("Failed to write mailboxes.json: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn load_mailbox_cache(app_handle: tauri::AppHandle, account_id: String) -> Result<Option<String>, String> {
+    let file = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not get app data directory: {}", e))?
+        .join("mailboxes")
+        .join(&account_id)
+        .join("mailboxes.json");
+
+    if !file.exists() {
+        return Ok(None);
+    }
+
+    let data = fs::read_to_string(&file)
+        .map_err(|e| format!("Failed to read mailboxes.json: {}", e))?;
+
+    Ok(Some(data))
+}
+
+#[tauri::command]
+fn delete_mailbox_cache(app_handle: tauri::AppHandle, account_id: String) -> Result<(), String> {
+    let dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not get app data directory: {}", e))?
+        .join("mailboxes")
+        .join(&account_id);
+
+    if dir.exists() {
+        fs::remove_dir_all(&dir)
+            .map_err(|e| format!("Failed to remove mailbox cache: {}", e))?;
+    }
+
+    Ok(())
+}
+
+// ── Email header cache ───────────────────────────────────────────────────
+
 #[tauri::command]
 fn load_email_cache(app_handle: tauri::AppHandle, account_id: String, mailbox: String) -> Result<Option<String>, String> {
     let base_dir = app_handle
@@ -3287,6 +3346,9 @@ fn main() {
             load_email_cache_meta,
             load_email_cache_by_uids,
             clear_email_cache,
+            save_mailbox_cache,
+            load_mailbox_cache,
+            delete_mailbox_cache,
             save_attachment,
             save_attachment_to,
             show_in_folder,
