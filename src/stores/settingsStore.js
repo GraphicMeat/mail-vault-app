@@ -128,6 +128,7 @@ export const useSettingsStore = create(
       layoutMode: 'three-column', // 'three-column' | 'two-column'
       viewStyle: 'list', // 'list' | 'chat'
       emailListStyle: 'default', // 'default' | 'compact'
+      emailListGrouping: 'chronological', // 'chronological' | 'sender'
       threadSortOrder: 'oldest-first', // 'oldest-first' | 'newest-first'
       dateFormat: 'auto', // 'auto' | 'MM/dd/yyyy' | 'dd/MM/yyyy' | 'yyyy-MM-dd' | 'dd MMM yyyy' | 'custom'
       customDateFormat: '', // Only used when dateFormat === 'custom'
@@ -319,6 +320,7 @@ export const useSettingsStore = create(
       setLayoutMode: (mode) => set({ layoutMode: mode }),
       setViewStyle: (style) => set({ viewStyle: style }),
       setEmailListStyle: (style) => set({ emailListStyle: style }),
+      setEmailListGrouping: (grouping) => set({ emailListGrouping: grouping }),
       setThreadSortOrder: (order) => set({ threadSortOrder: order }),
       setDateFormat: (value) => set({ dateFormat: value }),
       setCustomDateFormat: (value) => set({ customDateFormat: value }),
@@ -494,6 +496,7 @@ export const useSettingsStore = create(
           layoutMode: 'three-column',
           viewStyle: 'list',
           emailListStyle: 'default',
+          emailListGrouping: 'chronological',
           threadSortOrder: 'oldest-first',
           dateFormat: 'auto',
           customDateFormat: '',
