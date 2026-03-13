@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- **Sender-grouped view**: New toggle in email list toolbar groups emails by sender → topics → individual emails in an accordion layout
+
 ### Fixed
 - **Startup crash**: Removed Sparkle updater framework that caused `dispatch_sync` deadlock crash on macOS launch; custom appcast updater remains fully functional
 - **Unified inbox**: Fixed local/archived emails not showing for accounts with overlapping UIDs in unified view
