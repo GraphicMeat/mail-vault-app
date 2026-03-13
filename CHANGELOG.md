@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-03-13
+
 ### Added
 - **Sender-grouped view**: New toggle in email list toolbar groups emails by sender → topics → individual emails in an accordion layout
 - **Dedicated mailbox cache**: Mailbox list cached separately per account for instant folder loading
