@@ -3,17 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Blog - MailVault</title>
-  <meta name="description" content="Behind the scenes of building MailVault. Development updates, technical deep dives, and release notes.">
+  <title>Docs — MailVault</title>
+  <meta name="description" content="MailVault documentation, setup guides, and archiving workflows. Learn how to archive emails locally, free up server space, and set up your accounts.">
   <meta name="robots" content="index, follow">
-  <link rel="canonical" href="https://mailvaultapp.com/blog.html">
+  <link rel="canonical" href="https://mailvaultapp.com/docs.html">
   <meta name="theme-color" content="#6366f1">
 
   <!-- Open Graph -->
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://mailvaultapp.com/blog.html">
-  <meta property="og:title" content="Blog - MailVault">
-  <meta property="og:description" content="Behind the scenes of building MailVault. Development updates, technical deep dives, and release notes.">
+  <meta property="og:url" content="https://mailvaultapp.com/docs.html">
+  <meta property="og:title" content="Docs — MailVault">
+  <meta property="og:description" content="MailVault documentation, setup guides, and archiving workflows. Learn how to archive emails locally, free up server space, and set up your accounts.">
   <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -21,8 +21,8 @@
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Blog - MailVault">
-  <meta name="twitter:description" content="Behind the scenes of building MailVault. Development updates, technical deep dives, and release notes.">
+  <meta name="twitter:title" content="Docs — MailVault">
+  <meta name="twitter:description" content="MailVault documentation, setup guides, and archiving workflows. Learn how to archive emails locally, free up server space, and set up your accounts.">
   <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
   <meta name="twitter:site" content="@GraphicMeat">
 
@@ -87,7 +87,7 @@
         <div class="hidden md:flex items-center gap-8">
           <a href="/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Features</a>
           <a href="/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Use Cases</a>
-          <a href="/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/docs.html" class="text-primary-500 font-medium">Docs</a>
           <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
         </div>
 
@@ -114,7 +114,7 @@
         <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
           <a href="/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Features</a>
           <a href="/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Use Cases</a>
-          <a href="/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/docs.html" class="px-3 py-2 rounded-lg text-primary-500 font-medium">Docs</a>
           <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
           <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg gradient-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
         </div>
@@ -125,59 +125,73 @@
   <main class="pt-24 pb-20">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
 
-      <h1 class="text-4xl font-bold mb-2">Blog</h1>
-      <p class="text-slate-500 dark:text-slate-400 mb-12">Behind the scenes of building MailVault</p>
+      <h1 class="text-4xl font-bold mb-2">Documentation</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-12">Guides, workflows, and answers for getting the most out of MailVault.</p>
 
-      <div class="space-y-6">
+      <!-- Guides -->
+      <h2 class="text-2xl font-bold mb-4">Guides</h2>
+      <div class="space-y-4 mb-12">
 
-        <!-- Refactoring MailVault -->
-        <a href="/blog/refactoring-mailvault-from-monolith-to-modules.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <time datetime="2026-03-13" class="text-sm text-primary-500 font-medium">March 13, 2026</time>
-          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">Refactoring MailVault: From Monolith to Modules</h2>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">How we refactored MailVault's codebase &mdash; splitting a 4,300-line store into focused modules, redesigning email loading as a two-stream architecture, and planning a 5-phase decomposition without breaking a single feature.</p>
-          <div class="flex items-center gap-2 mt-3 text-xs text-slate-400 dark:text-slate-500">
-            <span>7 min read</span>
-          </div>
+        <a href="/guides/archive-imap-emails-locally.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">How to Archive IMAP Emails Locally</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Learn how to download and archive your IMAP emails to local storage on macOS and Linux.</p>
         </a>
 
-        <!-- How We Test MailVault -->
-        <a href="/blog/how-we-test-mailvault.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <time datetime="2026-03-11" class="text-sm text-primary-500 font-medium">March 11, 2026</time>
-          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">How We Test MailVault: 600+ Tests, Real Emails, Real Servers</h2>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">A look inside our four-layer testing strategy: 55 Rust unit tests, 13 JavaScript test suites, integration tests against real IMAP servers with 500 seeded emails, and end-to-end tests that drive the actual desktop app.</p>
-          <div class="flex items-center gap-2 mt-3 text-xs text-slate-400 dark:text-slate-500">
-            <span>6 min read</span>
-          </div>
+        <a href="/guides/free-up-email-storage.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">How to Free Up Email Storage</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Mailbox full? Archive emails locally, then safely delete from the server to reclaim space.</p>
         </a>
 
-        <!-- Outlook OAuth Odyssey -->
-        <a href="/blog/outlook-oauth-odyssey.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <time datetime="2026-02-28" class="text-sm text-primary-500 font-medium">February 28, 2026</time>
-          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">The Outlook OAuth Odyssey: IMAP Is Broken, Long Live Graph</h2>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">How a Microsoft server-side IMAP regression forced us to register our own Azure AD app, build a full Graph API transport layer in Rust, and debug seven cascading failures along the way.</p>
-          <div class="flex items-center gap-2 mt-3 text-xs text-slate-400 dark:text-slate-500">
-            <span>8 min read</span>
-          </div>
+        <a href="/guides/keep-emails-after-server-deletion.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">How to Keep Emails After Server Deletion</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Delete emails from your server without losing them. Archive locally first, keep forever.</p>
         </a>
 
-        <!-- Gmail OAuth2 -->
-        <a href="/blog/gmail-oauth2.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <time datetime="2026-02-20" class="text-sm text-primary-500 font-medium">February 20, 2026</time>
-          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">Adding Gmail OAuth2: One Flow, Two Providers</h2>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">How we made MailVault's existing Microsoft OAuth2 PKCE flow provider-agnostic and added Google sign-in — no app passwords, no IMAP settings to find.</p>
-          <div class="flex items-center gap-2 mt-3 text-xs text-slate-400 dark:text-slate-500">
-            <span>4 min read</span>
-          </div>
+        <a href="/guides/mailstore-alternative-mac.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Best MailStore Alternative for Mac</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Looking for a MailStore alternative on Mac? Compare MailVault &mdash; free, open source, native macOS.</p>
         </a>
 
-        <!-- Sandbox Signing Saga -->
-        <a href="/blog/sandbox-signing-saga.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <time datetime="2026-02-18" class="text-sm text-primary-500 font-medium">February 18, 2026</time>
-          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">The macOS Sandbox Signing Saga (or Why v1.4.0 Through v1.4.5 Exist)</h2>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Six patch releases in a single day. macOS code signing, App Sandbox, and Bun-compiled sidecars don't mix well — here's the full story of how we fixed it.</p>
-          <div class="flex items-center gap-2 mt-3 text-xs text-slate-400 dark:text-slate-500">
-            <span>5 min read</span>
-          </div>
+      </div>
+
+      <!-- Compare -->
+      <h2 class="text-2xl font-bold mb-4">Compare</h2>
+      <div class="space-y-4 mb-12">
+
+        <a href="/compare/mailvault-vs-apple-mail.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">MailVault vs Apple Mail</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">How MailVault's dedicated archiving compares to Apple Mail for local email backup.</p>
+        </a>
+
+        <a href="/compare/mailvault-vs-thunderbird.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">MailVault vs Thunderbird</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Compare archiving workflows, storage formats, and which is better for email retention.</p>
+        </a>
+
+        <a href="/compare/mailvault-vs-paying-for-storage.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">MailVault vs Paying for More Storage</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Stop paying for more email storage. Archive locally and downgrade your plan.</p>
+        </a>
+
+      </div>
+
+      <!-- Reference -->
+      <h2 class="text-2xl font-bold mb-4">Reference</h2>
+      <div class="space-y-4">
+
+        <a href="/faq.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">FAQ</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Common questions about MailVault, email formats, storage, security, and providers.</p>
+        </a>
+
+        <a href="/features.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">All Features</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Complete feature list with details on email management, security, performance, and more.</p>
+        </a>
+
+        <a href="/changelog.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Changelog</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Release history and what's new in each version.</p>
         </a>
 
       </div>
@@ -194,7 +208,7 @@
           <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
         </div>
 
-        <div class="flex items-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
           <a href="/docs.html" class="hover:text-primary-500 transition-colors">Docs</a>
           <a href="/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
           <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacy</a>
