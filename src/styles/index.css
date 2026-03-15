@@ -108,6 +108,7 @@ body {
 .border-mail-accent { border-color: var(--mail-accent); }
 .border-mail-success { border-color: var(--mail-success); }
 .border-mail-danger { border-color: var(--mail-danger); }
+.divide-mail-border > * + * { border-color: var(--mail-border); }
 
 /* Hover states */
 .hover\:bg-mail-surface-hover:hover { background-color: var(--mail-surface-hover); }
