@@ -1241,7 +1241,7 @@ function EmailListComponent() {
               Grouping...
             </div>
           ) : senderGroups.length === 0 ? null : (
-            <div className="divide-y divide-gray-100 dark:divide-gray-800">
+            <div className="divide-y divide-mail-border">
               {senderGroups.map((sender) => (
                 <div key={sender.senderEmail}>
                   {/* Sender row - avatar, name, email, unread badge, date */}
@@ -1251,9 +1251,9 @@ function EmailListComponent() {
                       setExpandedTopics(new Set());
                       setExpandedEmail(null);
                     }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${
-                      expandedSender === sender.senderEmail ? 'bg-gray-50 dark:bg-gray-800/50' : ''
-                    } ${focusedRow?.type === 'sender' && focusedRow?.senderEmail === sender.senderEmail ? 'ring-2 ring-blue-400 ring-inset' : ''}`}
+                    className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-mail-surface-hover transition-colors ${
+                      expandedSender === sender.senderEmail ? 'bg-mail-surface-hover' : ''
+                    } ${focusedRow?.type === 'sender' && focusedRow?.senderEmail === sender.senderEmail ? 'ring-2 ring-mail-accent ring-inset' : ''}`}
                   >
                     <div
                       className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0"
@@ -1263,34 +1263,34 @@ function EmailListComponent() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className={`text-sm truncate ${sender.unreadCount > 0 ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300'}`}>
+                        <span className={`text-sm truncate ${sender.unreadCount > 0 ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
                           {sender.senderName || sender.senderEmail}
                         </span>
                         {sender.totalEmails && (
-                          <span className="text-xs text-gray-400">
+                          <span className="text-xs text-mail-text-muted">
                             ({sender.totalEmails})
                           </span>
                         )}
                         {sender.senderName && sender.senderName !== sender.senderEmail && (
-                          <span className="text-xs text-gray-400 truncate hidden sm:inline">
+                          <span className="text-xs text-mail-text-muted truncate hidden sm:inline">
                             {sender.senderEmail}
                           </span>
                         )}
                       </div>
                     </div>
                     {sender.unreadCount > 0 && (
-                      <span className="px-1.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded-full">
+                      <span className="px-1.5 py-0.5 text-xs font-medium bg-mail-accent/15 text-mail-accent rounded-full">
                         {sender.unreadCount}
                       </span>
                     )}
-                    <span className="text-xs text-gray-400 flex-shrink-0">
+                    <span className="text-xs text-mail-text-muted flex-shrink-0">
                       {sender.lastDate ? formatEmailDate(sender.lastDate) : ''}
                     </span>
                   </button>
 
                   {/* Expanded sender: show topics */}
                   {expandedSender === sender.senderEmail && (
-                    <div className="bg-gray-50/50 dark:bg-gray-800/30">
+                    <div className="bg-mail-surface-hover/50">
                       {sender.topics.map((topic) => {
                         const topicKey = `${sender.senderEmail}-${topic.subject}`;
                         return (
@@ -1305,15 +1305,15 @@ function EmailListComponent() {
                               });
                               setExpandedEmail(null);
                             }}
-                            className={`w-full flex items-center gap-3 pl-12 pr-4 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors ${
-                              expandedTopics.has(topicKey) ? 'bg-gray-100 dark:bg-gray-700/50' : ''
-                            } ${focusedRow?.type === 'topic' && focusedRow?.topicKey === topicKey ? 'ring-2 ring-blue-400 ring-inset' : ''}`}
+                            className={`w-full flex items-center gap-3 pl-12 pr-4 py-2.5 text-left hover:bg-mail-surface-hover transition-colors ${
+                              expandedTopics.has(topicKey) ? 'bg-mail-surface-hover' : ''
+                            } ${focusedRow?.type === 'topic' && focusedRow?.topicKey === topicKey ? 'ring-2 ring-mail-accent ring-inset' : ''}`}
                           >
                             <div className="flex-1 min-w-0">
-                              <div className={`text-sm truncate ${topic.unreadCount > 0 ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400'}`}>
+                              <div className={`text-sm truncate ${topic.unreadCount > 0 ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
                                 {topic.originalSubject || '(No subject)'}
                               </div>
-                              <div className="text-xs text-gray-400 truncate mt-0.5">
+                              <div className="text-xs text-mail-text-muted truncate mt-0.5">
                                 {topic.participants
                                   .filter(p => p !== sender.senderEmail)
                                   .map(p => p.split('@')[0])
@@ -1324,18 +1324,18 @@ function EmailListComponent() {
                               </div>
                             </div>
                             {topic.unreadCount > 0 && (
-                              <span className="px-1.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded-full">
+                              <span className="px-1.5 py-0.5 text-xs font-medium bg-mail-accent/15 text-mail-accent rounded-full">
                                 {topic.unreadCount}
                               </span>
                             )}
-                            <span className="text-xs text-gray-400 flex-shrink-0">
+                            <span className="text-xs text-mail-text-muted flex-shrink-0">
                               {topic.lastDate ? formatEmailDate(topic.lastDate) : ''}
                             </span>
                           </button>
 
                           {/* Expanded topic: show emails */}
                           {expandedTopics.has(topicKey) && (
-                            <div className="bg-white dark:bg-gray-900">
+                            <div className="bg-mail-surface">
                               {topic.emails.map((email) => (
                                 <div key={email._fromSentFolder ? `sent-${email.uid}` : email.uid}>
                                   <button
@@ -1350,9 +1350,9 @@ function EmailListComponent() {
                                         }
                                       }
                                     }}
-                                    className={`w-full flex items-center gap-3 pl-16 pr-4 py-2 text-left hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors ${
-                                      expandedEmail === email.uid ? 'bg-blue-50 dark:bg-blue-900/20' : ''
-                                    } ${selectedEmailId === email.uid ? 'ring-1 ring-blue-300 dark:ring-blue-700' : ''} ${focusedRow?.type === 'email' && focusedRow?.emailUid === email.uid ? 'ring-2 ring-blue-400 ring-inset' : ''}`}
+                                    className={`w-full flex items-center gap-3 pl-16 pr-4 py-2 text-left hover:bg-mail-surface-hover transition-colors ${
+                                      expandedEmail === email.uid ? 'bg-mail-accent/10' : ''
+                                    } ${selectedEmailId === email.uid ? 'ring-1 ring-mail-accent/50' : ''} ${focusedRow?.type === 'email' && focusedRow?.emailUid === email.uid ? 'ring-2 ring-mail-accent ring-inset' : ''}`}
                                   >
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center gap-2">
@@ -1363,27 +1363,27 @@ function EmailListComponent() {
                                             title={email._accountId}
                                           />
                                         )}
-                                        <span className="text-xs text-gray-400">
+                                        <span className="text-xs text-mail-text-muted">
                                           {email.date ? formatEmailDate(new Date(email.date)) : ''}
                                         </span>
-                                        <span className={`text-xs ${!email.flags?.includes('\\Seen') ? 'font-semibold text-gray-700 dark:text-gray-300' : 'text-gray-500 dark:text-gray-400'}`}>
+                                        <span className={`text-xs ${!email.flags?.includes('\\Seen') ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
                                           {email._fromSentFolder ? 'You' : (email.from?.name || (email.from?.address || '').split('@')[0])}
                                         </span>
                                         {email._fromSentFolder && (
-                                          <span className="text-[10px] px-1 py-0.5 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-500 dark:text-blue-400 font-medium">
+                                          <span className="text-[10px] px-1 py-0.5 rounded bg-mail-accent/10 text-mail-accent font-medium">
                                             Sent
                                           </span>
                                         )}
                                       </div>
                                       {email.snippet && (
-                                        <div className="text-xs text-gray-400 truncate mt-0.5">
+                                        <div className="text-xs text-mail-text-muted truncate mt-0.5">
                                           {email.snippet}
                                         </div>
                                       )}
                                     </div>
                                     <div className="flex items-center gap-1.5 flex-shrink-0">
                                       {email.has_attachments && (
-                                        <Paperclip size={12} className="text-gray-400" />
+                                        <Paperclip size={12} className="text-mail-text-muted" />
                                       )}
                                       {email.source === 'local-only' ? (
                                         <HardDrive size={13} className="text-mail-warning" title="Local only" />
@@ -1397,11 +1397,11 @@ function EmailListComponent() {
 
                                   {/* Inline expanded email body (plain text) */}
                                   {expandedEmail === email.uid && layoutMode !== 'three-column' && (
-                                    <div className="pl-16 pr-4 py-3 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900">
-                                      <div className="text-xs text-gray-500 mb-2">
+                                    <div className="pl-16 pr-4 py-3 border-t border-mail-border bg-mail-surface">
+                                      <div className="text-xs text-mail-text-muted mb-2">
                                         From: {email.from?.name || email.from?.address} · To: {email.to?.[0]?.address || ''}
                                       </div>
-                                      <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                                      <div className="text-sm text-mail-text whitespace-pre-wrap">
                                         {email.text || email.textBody || email.snippet || email.subject || 'No content available'}
                                       </div>
                                     </div>
