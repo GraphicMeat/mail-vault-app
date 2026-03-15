@@ -1335,7 +1335,7 @@ function EmailListComponent() {
 
                           {/* Expanded topic: show emails */}
                           {expandedTopics.has(topicKey) && (
-                            <div className="bg-mail-surface">
+                            <div className="bg-mail-surface divide-y divide-mail-border">
                               {topic.emails.map((email) => (
                                 <div key={email._fromSentFolder ? `sent-${email.uid}` : email.uid}>
                                   <button
