@@ -39,19 +39,32 @@ export function parseAuthResults(header) {
 export function checkSenderVerification(email) {
   if (!email?.from) return { status: 'none', tooltip: '' };
 
-  const fromDomain = getDomain(email.from.address);
+  const fromAddress = (email.from.address || '').toLowerCase().trim();
+  const fromDomain = getDomain(fromAddress);
   const issues = [];
 
   // Layer 0: Display name impersonation detection
-  // e.g., sender name "ledger.com" but actual email from "firebaseapp.com"
-  const fromName = (email.from.name || '').trim().toLowerCase();
+  const fromName = (email.from.name || '').trim();
+  const fromNameLower = fromName.toLowerCase();
   if (fromName) {
-    // Check if display name looks like a domain (contains a dot and no spaces)
-    const nameLooksDomain = /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(fromName);
-    if (nameLooksDomain && fromName !== fromDomain) {
+    // Check if display name looks like an email address that differs from actual sender
+    const nameIsEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fromName);
+    if (nameIsEmail && fromNameLower !== fromAddress) {
+      const nameDomain = getDomain(fromNameLower);
+      issues.push({
+        level: 'danger',
+        text: `Display name shows "${fromName}" but actual sender is ${email.from.address} — likely impersonation`,
+        details: { displayName: fromName, actualAddress: email.from.address, displayDomain: nameDomain, actualDomain: fromDomain },
+      });
+    }
+
+    // Check if display name looks like a domain (e.g., "ledger.com") that differs from sender domain
+    const nameLooksDomain = /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(fromNameLower);
+    if (!nameIsEmail && nameLooksDomain && fromNameLower !== fromDomain) {
       issues.push({
         level: 'warning',
-        text: `Sender name "${email.from.name}" impersonates a domain that differs from actual sender domain (${fromDomain})`,
+        text: `Sender name "${fromName}" impersonates domain that differs from actual sender (${fromDomain})`,
+        details: { displayName: fromName, actualDomain: fromDomain },
       });
     }
   }
@@ -105,6 +118,7 @@ export function checkSenderVerification(email) {
     return {
       status: 'danger',
       tooltip: issues.map(i => i.text).join('\n'),
+      issues,
     };
   }
 
@@ -112,6 +126,7 @@ export function checkSenderVerification(email) {
     return {
       status: 'warning',
       tooltip: issues.map(i => i.text).join('\n'),
+      issues,
     };
   }
 
@@ -119,8 +134,9 @@ export function checkSenderVerification(email) {
     return {
       status: 'verified',
       tooltip: 'Sender verified (SPF, DKIM pass)',
+      issues: [],
     };
   }
 
-  return { status: 'none', tooltip: '' };
+  return { status: 'none', tooltip: '', issues: [] };
 }

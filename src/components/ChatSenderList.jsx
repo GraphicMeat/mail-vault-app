@@ -11,6 +11,7 @@ import {
 import { MessageSquare, Search } from 'lucide-react';
 import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
 import { LinkAlertIcon } from './LinkAlertIcon';
+import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
 
 const INITIAL_VISIBLE = 50;
 const LOAD_MORE_COUNT = 50;
@@ -179,6 +180,7 @@ const SenderRow = memo(function SenderRow({ correspondent, onClick, index }) {
 
         <div className="flex items-center justify-between gap-2 mt-0.5">
           <span className="text-sm text-mail-text-muted truncate flex items-center gap-1">
+            {(() => { const sa = getSenderAlertLevel(correspondent.emails); return sa ? <SenderAlertIcon level={sa.level} email={sa.email} size={12} /> : null; })()}
             <LinkAlertIcon level={getLinkAlertLevel(correspondent.emails)} size={12} alerts={getAlertsForEmails(correspondent.emails)} />
             {correspondent.lastMessage?.subject || 'No messages'}
           </span>
