@@ -619,6 +619,16 @@ export const useMailStore = create((set, get) => ({
     }
     result.sort((a, b) => b._ts - a._ts);
 
+    // Apply persisted link safety alerts from settingsStore
+    const { linkAlerts } = useSettingsStore.getState();
+    if (linkAlerts && Object.keys(linkAlerts).length > 0) {
+      for (const e of result) {
+        if (!e._linkAlert && linkAlerts[e.uid]) {
+          e._linkAlert = linkAlerts[e.uid];
+        }
+      }
+    }
+
     _chatEmailsFingerprint = ''; // Invalidate module-level chat cache
     _threadsFingerprint = ''; // Invalidate module-level threads cache
     set({ sortedEmails: result, _sortedEmailsFingerprint: fp });
