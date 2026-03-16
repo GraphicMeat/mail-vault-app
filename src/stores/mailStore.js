@@ -827,6 +827,10 @@ export const useMailStore = create((set, get) => ({
           connectionStatus: 'disconnected',
           activeMailbox: 'INBOX',
         });
+        // Update unread count from cached headers (instant badge on launch)
+        const unread = cachedHeaders.emails.filter(e => !e.flags?.includes('\\Seen')).length;
+        useSettingsStore.getState().setUnreadForAccount(account.id, unread);
+
         console.log('[prewarm] Cached', cachedHeaders.emails.length, 'headers +', localEmails.length, 'local emails for', account.email);
       } catch (e) {
         console.warn(`[prewarm] Failed for ${account.email} (non-fatal):`, e.message);
@@ -1152,6 +1156,12 @@ export const useMailStore = create((set, get) => ({
             ...(cachedHeaders.serverUids ? { serverUidSet: cachedHeaders.serverUids } : {}),
           });
           localTrace.mark('first-paint', { emailCount: cachedHeaders.emails.length });
+
+          // Update unread count from cache for instant sidebar badge
+          if (resolvedMailbox === 'INBOX') {
+            const unread = cachedHeaders.emails.filter(e => !e.flags?.includes('\\Seen')).length;
+            useSettingsStore.getState().setUnreadForAccount(accountId, unread);
+          }
         } else if (!isBackgroundRefresh) {
           set({ loading: true });
         }
