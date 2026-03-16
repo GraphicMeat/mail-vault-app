@@ -42,6 +42,20 @@ export function checkSenderVerification(email) {
   const fromDomain = getDomain(email.from.address);
   const issues = [];
 
+  // Layer 0: Display name impersonation detection
+  // e.g., sender name "ledger.com" but actual email from "firebaseapp.com"
+  const fromName = (email.from.name || '').trim().toLowerCase();
+  if (fromName) {
+    // Check if display name looks like a domain (contains a dot and no spaces)
+    const nameLooksDomain = /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(fromName);
+    if (nameLooksDomain && fromName !== fromDomain) {
+      issues.push({
+        level: 'warning',
+        text: `Sender name "${email.from.name}" impersonates a domain that differs from actual sender domain (${fromDomain})`,
+      });
+    }
+  }
+
   // Layer 1: Header mismatch detection
   // replyTo can be a single object { address } (from EmailHeader) or an array (from full Email)
   const replyToAddr = Array.isArray(email.replyTo)
