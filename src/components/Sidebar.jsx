@@ -76,7 +76,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
   const unreadPerAccount = useSettingsStore(s => s.unreadPerAccount);
 
   const { theme, toggleTheme } = useThemeStore();
-  const { getOrderedAccounts, getDisplayName, accountColors, hiddenAccounts, sidebarCollapsed, toggleSidebarCollapsed } = useSettingsStore();
+  const { getOrderedAccounts, getDisplayName, accountColors, hiddenAccounts, sidebarCollapsed, toggleSidebarCollapsed, accountOrder } = useSettingsStore();
 
   const [expandedFolders, setExpandedFolders] = useState(new Set(['INBOX']));
   const [showErrorModal, setShowErrorModal] = useState(false);
@@ -86,7 +86,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
 
   const orderedAccounts = useMemo(
     () => getOrderedAccounts(accounts).filter(a => !hiddenAccounts[a.id]),
-    [accounts, hiddenAccounts, getOrderedAccounts]
+    [accounts, hiddenAccounts, getOrderedAccounts, accountOrder]
   );
   const collapsed = sidebarCollapsed;
   const showUnifiedInbox = orderedAccounts.length >= 2;
