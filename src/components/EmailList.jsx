@@ -2,7 +2,7 @@ import React, { memo, useState, useCallback, useRef, useEffect, useMemo } from '
 import { useMailStore } from '../stores/mailStore';
 import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore, getAccountColor, getAccountInitial, hashColor } from '../stores/settingsStore';
-import { buildThreads, groupBySender } from '../utils/emailParser';
+import { buildThreads, groupBySender, getSenderName } from '../utils/emailParser';
 import { getLinkAlertLevel, getCachedAlerts, getAlertsForEmails } from '../utils/linkSafety';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
@@ -115,7 +115,7 @@ const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onT
             title={email._accountEmail}
           />
         )}
-        <span className="truncate">{email.from?.name || email.from?.address || 'Unknown'}</span>
+        <span className="truncate">{getSenderName(email)}</span>
       </div>
 
       <div className="flex-1 min-w-0 flex items-center gap-2">
@@ -274,7 +274,7 @@ const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSelected,
             />
           )}
           <span className={`truncate text-xs ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
-            {email.from?.name || email.from?.address || 'Unknown'}
+            {getSenderName(email)}
           </span>
           <span className="text-xs text-mail-text-muted whitespace-nowrap ml-auto">
             {formatEmailDate(email.date)}
@@ -356,7 +356,7 @@ const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectTh
     const seen = new Set();
     const names = [];
     for (const email of thread.emails) {
-      const name = email.from?.name || email.from?.address || 'Unknown';
+      const name = getSenderName(email);
       const addr = email.from?.address?.toLowerCase() || '';
       if (!seen.has(addr)) {
         seen.add(addr);
@@ -516,7 +516,7 @@ const CompactThreadRow = React.memo(function CompactThreadRow({ thread, isSelect
     const seen = new Set();
     const names = [];
     for (const email of thread.emails) {
-      const name = email.from?.name || email.from?.address || 'Unknown';
+      const name = getSenderName(email);
       const addr = email.from?.address?.toLowerCase() || '';
       if (!seen.has(addr)) {
         seen.add(addr);
@@ -1380,7 +1380,7 @@ function EmailListComponent() {
                                           {email.date ? formatEmailDate(new Date(email.date)) : ''}
                                         </span>
                                         <span className={`text-xs ${!email.flags?.includes('\\Seen') ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
-                                          {email._fromSentFolder ? 'You' : (email.from?.name || (email.from?.address || '').split('@')[0])}
+                                          {email._fromSentFolder ? 'You' : getSenderName(email)}
                                         </span>
                                         {email._fromSentFolder && (
                                           <span className="text-[10px] px-1 py-0.5 rounded bg-mail-accent/10 text-mail-accent font-medium">
@@ -1412,7 +1412,7 @@ function EmailListComponent() {
                                   {expandedEmail === email.uid && layoutMode !== 'three-column' && (
                                     <div className="pl-16 pr-4 py-3 border-t border-mail-border bg-mail-surface">
                                       <div className="text-xs text-mail-text-muted mb-2">
-                                        From: {email.from?.name || email.from?.address} · To: {email.to?.[0]?.address || ''}
+                                        From: {getSenderName(email)} · To: {email.to?.[0]?.address || ''}
                                       </div>
                                       <div className="text-sm text-mail-text whitespace-pre-wrap">
                                         {email.text || email.textBody || email.snippet || email.subject || 'No content available'}

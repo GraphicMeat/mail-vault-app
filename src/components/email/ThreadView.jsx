@@ -28,6 +28,7 @@ import { SenderInsightsPanel } from '../SenderInsightsPanel';
 import { SenderVerificationBadge } from './EmailHeaderComponent';
 import { AttachmentItem } from './AttachmentBar';
 import { scanEmailLinks, checkLinkAlert } from '../../utils/linkSafety';
+import { getSenderName } from '../../utils/emailParser';
 import { LinkSafetyModal } from '../LinkSafetyModal';
 import { LinkAlertIcon } from '../LinkAlertIcon';
 
@@ -207,7 +208,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
             className="w-full border-0"
             style={{ minHeight: '100px', display: 'block', maxWidth: '100%' }}
             sandbox="allow-same-origin allow-popups allow-scripts"
-            title={`Email from ${email.from?.name || email.from?.address}`}
+            title={`Email from ${getSenderName(email)}`}
           />
         </div>
       ) : (
@@ -300,7 +301,7 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isLast, active
         {/* Avatar */}
         <div className="w-7 h-7 bg-mail-accent rounded-full flex items-center justify-center flex-shrink-0">
           <span className="text-white font-semibold text-[11px]">
-            {(email.from?.name || email.from?.address || '?')[0].toUpperCase()}
+            {getSenderName(email)[0].toUpperCase()}
           </span>
         </div>
 
@@ -315,7 +316,7 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isLast, active
                 <Cloud size={12} className="flex-shrink-0" style={{ color: 'rgba(59, 130, 246, 0.5)' }} title="Server" />
               )}
               <span className="font-semibold text-sm text-mail-text truncate">
-                {email.from?.name || email.from?.address || 'Unknown'}
+                {getSenderName(email)}
               </span>
               <SenderVerificationBadge email={email} />
               {email.from?.name && (
