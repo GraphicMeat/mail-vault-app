@@ -11,19 +11,26 @@ export function getCorrespondent(email, userEmail) {
   const fromAddress = email.from?.address?.toLowerCase() || '';
   const userEmailLower = userEmail?.toLowerCase() || '';
 
+  // Helper: clean up display name — if it's an email address, use the local part instead
+  const cleanName = (name, address) => {
+    if (!name) return address ? address.split('@')[0] : 'Unknown';
+    if (name.includes('@')) return (address || name).split('@')[0];
+    return name;
+  };
+
   // If the email is from the user, the correspondent is the recipient
   if (fromAddress === userEmailLower) {
     const to = email.to?.[0];
     return {
       email: to?.address?.toLowerCase() || '',
-      name: to?.name || to?.address || 'Unknown'
+      name: cleanName(to?.name, to?.address)
     };
   }
 
   // Otherwise, the correspondent is the sender
   return {
     email: fromAddress,
-    name: email.from?.name || email.from?.address || 'Unknown'
+    name: cleanName(email.from?.name, email.from?.address)
   };
 }
 
