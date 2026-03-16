@@ -35,6 +35,8 @@ import { splitQuotedContent } from '../utils/quoteFolding';
 import { splitSignature } from '../utils/signatureFolding';
 import { useSettingsStore } from '../stores/settingsStore';
 import { checkSenderVerification } from '../utils/senderCheck';
+import { scanEmailLinks, checkLinkAlert } from '../utils/linkSafety';
+import { LinkSafetyModal } from './LinkSafetyModal';
 
 function SenderBadge({ email, size = 10 }) {
   const { status, tooltip } = useMemo(
@@ -326,8 +328,11 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
   const iframeRef = useRef(null);
   const [quotesExpanded, setQuotesExpanded] = useState(false);
   const [sigExpanded, setSigExpanded] = useState(false);
+  const [linkSafetyAlert, setLinkSafetyAlert] = useState(null);
 
   const signatureDisplay = useSettingsStore(s => s.signatureDisplay);
+  const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
+  const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
   const activeAccountId = useMailStore(s => s.activeAccountId);
   const activeMailbox = useMailStore(s => s.activeMailbox);
   const getSentMailboxPath = useMailStore(s => s.getSentMailboxPath);
@@ -401,7 +406,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     const quoteColor = fromUser ? 'rgba(255,255,255,0.6)' : '#6b7280';
     const quoteBorder = fromUser ? 'rgba(255,255,255,0.3)' : '#d1d5db';
 
-    return `
+    let builtHtml = `
       <!DOCTYPE html>
       <html>
         <head>
@@ -449,7 +454,13 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
         <body>${replaceCidUrls(mergedEmail.html, mergedEmail.attachments)}${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}</body>
       </html>
     `;
-  }, [mergedEmail.html, fromUser, signatureDisplay]);
+    if (linkSafetyEnabled) {
+      const { modifiedHtml, maxAlertLevel } = scanEmailLinks(builtHtml, email.uid);
+      builtHtml = modifiedHtml;
+      if (maxAlertLevel && !email._linkAlert) email._linkAlert = maxAlertLevel;
+    }
+    return builtHtml;
+  }, [mergedEmail.html, fromUser, signatureDisplay, linkSafetyEnabled]);
 
   // Auto-resize iframe
   useEffect(() => {
@@ -489,14 +500,18 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
             doc.addEventListener('contextmenu', (e) => e.preventDefault());
             doc.addEventListener('click', (e) => {
               const link = e.target.closest('a');
-              if (link && link.href && !link.href.startsWith('cid:')) {
-                e.preventDefault();
-                import('@tauri-apps/plugin-shell').then(({ open }) => {
-                  open(link.href);
-                }).catch(() => {
-                  window.open(link.href, '_blank');
-                });
+              if (!link || !link.href) return;
+              if (link.href.startsWith('cid:') || link.href.startsWith('mailto:') || link.href.startsWith('tel:') || link.href.startsWith('#')) return;
+              e.preventDefault();
+              if (linkSafetyEnabled && linkSafetyClickConfirm) {
+                const alert = checkLinkAlert(link);
+                if (alert) { setLinkSafetyAlert(alert); return; }
               }
+              import('@tauri-apps/plugin-shell').then(({ open }) => {
+                open(link.href);
+              }).catch(() => {
+                window.open(link.href, '_blank');
+              });
             });
           }
         } catch (e) { /* iframe access error */ }
@@ -715,6 +730,16 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
 
       {/* Spacer for user messages (to align with avatar space) */}
       {fromUser && <div className="w-8 flex-shrink-0" />}
+
+      <LinkSafetyModal
+        alert={linkSafetyAlert}
+        onCancel={() => setLinkSafetyAlert(null)}
+        onOpenAnyway={() => {
+          const url = linkSafetyAlert.actualUrl;
+          setLinkSafetyAlert(null);
+          import('@tauri-apps/plugin-shell').then(({ open }) => open(url)).catch(() => window.open(url, '_blank'));
+        }}
+      />
     </motion.div>
   );
 });
@@ -817,6 +842,9 @@ function FullViewEmailModal({ email: initialEmail, onClose }) {
   );
   const iframeRef = useRef(null);
   const [fetchedEmail, setFetchedEmail] = useState(null);
+  const [linkSafetyAlert, setLinkSafetyAlert] = useState(null);
+  const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
+  const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
 
   // Fetch full email content if not already available
   useEffect(() => {
@@ -932,14 +960,18 @@ function FullViewEmailModal({ email: initialEmail, onClose }) {
         doc.addEventListener('contextmenu', (e) => e.preventDefault());
         doc.addEventListener('click', (e) => {
           const link = e.target.closest('a');
-          if (link && link.href && !link.href.startsWith('cid:')) {
-            e.preventDefault();
-            import('@tauri-apps/plugin-shell').then(({ open }) => {
+          if (!link || !link.href) return;
+          if (link.href.startsWith('cid:') || link.href.startsWith('mailto:') || link.href.startsWith('tel:') || link.href.startsWith('#')) return;
+          e.preventDefault();
+          if (linkSafetyEnabled && linkSafetyClickConfirm) {
+            const alert = checkLinkAlert(link);
+            if (alert) { setLinkSafetyAlert(alert); return; }
+          }
+          import('@tauri-apps/plugin-shell').then(({ open }) => {
               open(link.href);
             }).catch(() => {
               window.open(link.href, '_blank');
             });
-          }
         });
       } catch (e) { /* iframe access error */ }
     };
@@ -1046,6 +1078,15 @@ function FullViewEmailModal({ email: initialEmail, onClose }) {
           ) : null;
         })()}
       </motion.div>
+      <LinkSafetyModal
+        alert={linkSafetyAlert}
+        onCancel={() => setLinkSafetyAlert(null)}
+        onOpenAnyway={() => {
+          const url = linkSafetyAlert.actualUrl;
+          setLinkSafetyAlert(null);
+          import('@tauri-apps/plugin-shell').then(({ open }) => open(url)).catch(() => window.open(url, '_blank'));
+        }}
+      />
     </motion.div>
   );
 }

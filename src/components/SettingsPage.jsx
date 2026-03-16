@@ -9,11 +9,13 @@ import {
   HardDrive,
   Palette,
   ScrollText,
+  Shield,
 } from 'lucide-react';
 import { GeneralSettings } from './settings/GeneralSettings';
 import { AccountSettings } from './settings/AccountSettings';
 import { TemplateSettings } from './settings/TemplateSettings';
 import { StorageSettings } from './settings/StorageSettings';
+import { SecuritySettings } from './settings/SecuritySettings';
 import { LogsSettings } from './settings/LogsSettings';
 import { HelpSettings } from './settings/HelpSettings';
 
@@ -36,6 +38,7 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug }) {
     { id: 'accounts', label: 'Accounts', icon: User },
     { id: 'templates', label: 'Templates', icon: FileText },
     { id: 'storage', label: 'Storage', icon: HardDrive },
+    { id: 'security', label: 'Security', icon: Shield },
     { id: 'logs', label: 'Logs', icon: ScrollText },
     { id: 'help', label: 'Help & Support', icon: Mail },
   ];
@@ -112,6 +115,10 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug }) {
 
             {activeTab === 'storage' && (
               <StorageSettings accounts={accounts} />
+            )}
+
+            {activeTab === 'security' && (
+              <SecuritySettings />
             )}
 
             {activeTab === 'logs' && (

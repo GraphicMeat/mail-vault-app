@@ -161,6 +161,12 @@ export const useSettingsStore = create(
       // Paid user flag (placeholder — swap to real payment check later)
       isPaidUser: false,
 
+      // Link safety (premium feature — enabled for all while isPaidUser is unwired)
+      linkSafetyEnabled: true,
+      linkSafetyClickConfirm: true,
+      setLinkSafetyEnabled: (v) => set({ linkSafetyEnabled: v }),
+      setLinkSafetyClickConfirm: (v) => set({ linkSafetyClickConfirm: v }),
+
       // Auto-cleanup rules
       // Each: { id, accountEmail: '*' | 'email@...', folder, olderThan: { value: number, unit: 'days'|'months' }, action: 'delete'|'archive-delete', enabled: boolean }
       cleanupRules: [],
@@ -516,6 +522,8 @@ export const useSettingsStore = create(
           keyboardShortcuts: { ...DEFAULT_SHORTCUTS },
           keyboardShortcutsEnabled: true,
           isPaidUser: false,
+          linkSafetyEnabled: true,
+          linkSafetyClickConfirm: true,
           cleanupRules: [],
         });
       }

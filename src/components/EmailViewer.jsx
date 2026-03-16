@@ -24,6 +24,9 @@ import { SenderInsightsPanel } from './SenderInsightsPanel';
 import { ThreadView } from './email/ThreadView';
 import { EmailHeader } from './email/EmailHeaderComponent';
 import { AttachmentItem, DownloadAllButton } from './email/AttachmentBar';
+import { scanEmailLinks, checkLinkAlert } from '../utils/linkSafety';
+import { LinkSafetyModal } from './LinkSafetyModal';
+import { useSettingsStore } from '../stores/settingsStore';
 
 // Re-export AttachmentItem for any external consumers
 export { AttachmentItem } from './email/AttachmentBar';
@@ -45,6 +48,9 @@ function EmailViewerComponent() {
   const activeAccountId = useMailStore(s => s.activeAccountId);
   const activeMailbox = useMailStore(s => s.activeMailbox);
 
+  const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
+  const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
+  const [linkSafetyAlert, setLinkSafetyAlert] = useState(null);
   const [headerExpanded, setHeaderExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [composeMode, setComposeMode] = useState(null);
@@ -155,7 +161,9 @@ function EmailViewerComponent() {
 
   // Render email with its original styling on a light background (like Apple Mail)
   // Email HTML is designed for light backgrounds — forcing dark mode breaks formatting
-  const iframeContent = selectedEmail?.html ? `
+  const iframeContent = (() => {
+    if (!selectedEmail?.html) return '';
+    let html = `
     <!DOCTYPE html>
     <html>
       <head>
@@ -185,8 +193,16 @@ function EmailViewerComponent() {
         </style>
       </head>
       <body>${getEmailBodyContent(replaceCidUrls(selectedEmail.html, selectedEmail.attachments))}</body>
-    </html>
-  ` : '';
+    </html>`;
+    if (linkSafetyEnabled) {
+      const { modifiedHtml, maxAlertLevel } = scanEmailLinks(html, selectedEmail.uid);
+      html = modifiedHtml;
+      if (maxAlertLevel && !selectedEmail._linkAlert) {
+        selectedEmail._linkAlert = maxAlertLevel;
+      }
+    }
+    return html;
+  })();
 
   // Auto-resize iframe and apply dark mode overrides
   useEffect(() => {
@@ -215,16 +231,24 @@ function EmailViewerComponent() {
     // Named handlers so we can remove them in cleanup
     const handleClick = (e) => {
       const link = e.target.closest('a');
-      if (link && link.href && !link.href.startsWith('cid:')) {
-        e.preventDefault();
-        e.stopPropagation();
-        const url = link.href;
-        import('@tauri-apps/plugin-shell').then(({ open }) => {
-          open(url);
-        }).catch(() => {
-          window.open(url, '_blank');
-        });
+      if (!link || !link.href) return;
+      if (link.href.startsWith('cid:') || link.href.startsWith('mailto:') || link.href.startsWith('tel:') || link.href.startsWith('#')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      // Check link safety before opening
+      if (linkSafetyEnabled && linkSafetyClickConfirm) {
+        const alert = checkLinkAlert(link);
+        if (alert) {
+          setLinkSafetyAlert(alert);
+          return;
+        }
       }
+      const url = link.href;
+      import('@tauri-apps/plugin-shell').then(({ open }) => {
+        open(url);
+      }).catch(() => {
+        window.open(url, '_blank');
+      });
     };
 
     const handleContextMenu = (e) => {
@@ -686,6 +710,16 @@ function EmailViewerComponent() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <LinkSafetyModal
+        alert={linkSafetyAlert}
+        onCancel={() => setLinkSafetyAlert(null)}
+        onOpenAnyway={() => {
+          const url = linkSafetyAlert.actualUrl;
+          setLinkSafetyAlert(null);
+          import('@tauri-apps/plugin-shell').then(({ open }) => open(url)).catch(() => window.open(url, '_blank'));
+        }}
+      />
     </div>
   );
 }
