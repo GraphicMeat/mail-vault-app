@@ -874,8 +874,9 @@ function EmailListComponent() {
       return;
     }
 
-    // Use merged INBOX + Sent emails when activeAccountEmail is available
-    const emails = activeAccountEmail ? getChatEmails() : displayEmails;
+    // Only merge INBOX + Sent when viewing INBOX; other folders use their own emails
+    const usesMerged = activeAccountEmail && activeMailbox === 'INBOX';
+    const emails = usesMerged ? getChatEmails() : displayEmails;
     const fp = `sender-${emails.length}-${emails[0]?.uid}-${emails[emails.length - 1]?.uid}-${archivedSize}-${activeAccountEmail}-${sentEmails.length}-${alertCount}`;
 
     if (senderGroupCacheRef.current.fingerprint === fp) {
@@ -892,7 +893,7 @@ function EmailListComponent() {
     }, 0);
 
     return () => clearTimeout(timer);
-  }, [displayEmails, sentEmails, emailListGrouping, archivedSize, activeAccountEmail, alertCount]);
+  }, [displayEmails, sentEmails, emailListGrouping, archivedSize, activeAccountEmail, activeMailbox, alertCount]);
 
   // Build display list: use threads if available, flat list as fallback
   const threadedDisplay = useMemo(() => {
