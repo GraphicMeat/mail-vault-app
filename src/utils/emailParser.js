@@ -87,6 +87,20 @@ export function groupByCorrespondent(emails, userEmail) {
 }
 
 /**
+ * Get a display-friendly sender name from an email.
+ * If the display name is just the email address, returns the local part (before @) instead.
+ */
+export function getSenderName(email) {
+  const name = email?.from?.name || '';
+  const address = email?.from?.address || '';
+  if (!name && !address) return 'Unknown';
+  if (!name) return address.split('@')[0];
+  // If name looks like an email address (contains @), use the local part from the actual address instead
+  if (name.includes('@')) return address.split('@')[0] || name;
+  return name;
+}
+
+/**
  * Get a preview snippet from an email
  */
 export function getPreview(email, maxLength = 50) {

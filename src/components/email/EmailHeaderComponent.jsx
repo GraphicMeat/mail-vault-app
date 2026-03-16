@@ -12,6 +12,7 @@ import {
   Info,
 } from 'lucide-react';
 import { checkSenderVerification, parseAuthResults } from '../../utils/senderCheck';
+import { getSenderName } from '../../utils/emailParser';
 
 // ── Auth Detail Popover ────────────────────────────────────────────────
 
@@ -152,14 +153,14 @@ export function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, l
         {/* Avatar */}
         <div className="w-10 h-10 bg-mail-accent rounded-full flex items-center justify-center flex-shrink-0">
           <span className="text-white font-semibold text-sm">
-            {(email.from?.name || email.from?.address || '?')[0].toUpperCase()}
+            {getSenderName(email)[0].toUpperCase()}
           </span>
         </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <span className="font-semibold text-mail-text">
-              {email.from?.name || email.from?.address || 'Unknown'}
+              {getSenderName(email)}
             </span>
             <SenderVerificationBadge email={email} />
             {email.from?.name && (
