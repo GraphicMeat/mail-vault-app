@@ -457,7 +457,12 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     if (linkSafetyEnabled) {
       const { modifiedHtml, maxAlertLevel } = scanEmailLinks(builtHtml, email.uid);
       builtHtml = modifiedHtml;
-      if (maxAlertLevel && !email._linkAlert) email._linkAlert = maxAlertLevel;
+      if (maxAlertLevel && !email._linkAlert) {
+        email._linkAlert = maxAlertLevel;
+        useMailStore.setState(state => ({
+          emails: state.emails.map(e => e.uid === email.uid ? { ...e, _linkAlert: maxAlertLevel } : e),
+        }));
+      }
     }
     return builtHtml;
   }, [mergedEmail.html, fromUser, signatureDisplay, linkSafetyEnabled]);
