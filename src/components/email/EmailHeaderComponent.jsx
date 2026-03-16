@@ -18,6 +18,7 @@ import { checkSenderVerification, parseAuthResults } from '../../utils/senderChe
 export function AuthDetailPopover({ email, onClose }) {
   const popoverRef = useRef(null);
   const auth = useMemo(() => parseAuthResults(email?.authenticationResults), [email?.authenticationResults]);
+  const verification = useMemo(() => checkSenderVerification(email), [email?.from, email?.replyTo, email?.returnPath, email?.authenticationResults]);
   const hasAuth = auth.spf !== null || auth.dkim !== null || auth.dmarc !== null;
 
   // Check reply-to match
@@ -40,12 +41,43 @@ export function AuthDetailPopover({ email, onClose }) {
     return <span className="inline-block w-2 h-2 rounded-full bg-gray-400" />;
   };
 
+  const senderIssues = verification.issues?.filter(i => i.level === 'danger' || i.level === 'warning') || [];
+
   return (
-    <div ref={popoverRef} className="absolute z-50 top-full left-0 mt-1 bg-mail-surface border border-mail-border rounded-lg shadow-lg p-3 min-w-[200px]"
+    <div ref={popoverRef} className="absolute z-50 top-full left-0 mt-1 bg-mail-surface border border-mail-border rounded-lg shadow-lg p-3 min-w-[240px] max-w-[320px]"
          onClick={(e) => e.stopPropagation()}>
-      <div className="text-xs font-semibold text-mail-text mb-2">Authentication Details</div>
+      <div className="text-xs font-semibold text-mail-text mb-2">Sender Details</div>
+
+      {/* Sender identity */}
+      <div className="space-y-1 mb-2 text-xs">
+        <div className="flex items-start gap-2">
+          <span className="text-mail-text-muted w-16 flex-shrink-0">From</span>
+          <span className="text-mail-text break-all">{email?.from?.address || 'unknown'}</span>
+        </div>
+        {email?.from?.name && email.from.name !== email.from.address && (
+          <div className="flex items-start gap-2">
+            <span className="text-mail-text-muted w-16 flex-shrink-0">Name</span>
+            <span className="text-mail-text break-all">{email.from.name}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Sender issues (impersonation, mismatches) */}
+      {senderIssues.length > 0 && (
+        <div className="space-y-1.5 mb-2 border-t border-mail-border pt-2">
+          {senderIssues.map((issue, i) => (
+            <div key={i} className="flex items-start gap-2 text-xs">
+              <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 mt-1 ${issue.level === 'danger' ? 'bg-red-500' : 'bg-orange-500'}`} />
+              <span className={issue.level === 'danger' ? 'text-red-500' : 'text-orange-500'}>{issue.text}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Authentication results */}
       {hasAuth ? (
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 border-t border-mail-border pt-2">
+          <div className="text-xs font-semibold text-mail-text mb-1">Authentication</div>
           <div className="flex items-center gap-2 text-xs">
             <StatusDot result={auth.spf} />
             <span className="text-mail-text-muted w-12">SPF</span>
@@ -69,9 +101,11 @@ export function AuthDetailPopover({ email, onClose }) {
             </div>
           )}
         </div>
-      ) : (
-        <div className="text-xs text-mail-text-muted">No authentication data available</div>
-      )}
+      ) : senderIssues.length === 0 ? (
+        <div className="text-xs text-mail-text-muted border-t border-mail-border pt-2">
+          No authentication data available for this email. The sender's mail server did not include SPF, DKIM, or DMARC headers.
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -619,11 +619,31 @@ export const useMailStore = create((set, get) => ({
     result.sort((a, b) => b._ts - a._ts);
 
     // Apply persisted link safety alerts from settingsStore
-    const { linkAlerts } = useSettingsStore.getState();
+    const { linkAlerts, linkSafetyEnabled } = useSettingsStore.getState();
     if (linkAlerts && Object.keys(linkAlerts).length > 0) {
       for (const e of result) {
         if (!e._linkAlert && linkAlerts[e.uid]) {
           e._linkAlert = linkAlerts[e.uid];
+        }
+      }
+    }
+
+    // Detect sender impersonation (display name looks like different email/domain)
+    if (linkSafetyEnabled) {
+      for (const e of result) {
+        if (e._senderAlert !== undefined) continue;
+        const name = (e.from?.name || '').trim();
+        const addr = (e.from?.address || '').toLowerCase();
+        if (!name || !addr) continue;
+        const nameLower = name.toLowerCase();
+        // Display name is an email that doesn't match actual sender
+        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(name) && nameLower !== addr) {
+          e._senderAlert = 'red';
+        }
+        // Display name is a domain that doesn't match sender domain
+        else if (/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(nameLower)) {
+          const senderDomain = addr.split('@')[1] || '';
+          if (nameLower !== senderDomain) e._senderAlert = 'yellow';
         }
       }
     }

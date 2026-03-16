@@ -5,6 +5,7 @@ import { useSettingsStore, getAccountColor, getAccountInitial, hashColor } from 
 import { buildThreads, groupBySender } from '../utils/emailParser';
 import { getLinkAlertLevel, getCachedAlerts, getAlertsForEmails } from '../utils/linkSafety';
 import { LinkAlertIcon } from './LinkAlertIcon';
+import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatEmailDate } from '../utils/dateFormat';
 import { SearchBar } from './SearchBar';
@@ -118,6 +119,7 @@ const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onT
       </div>
 
       <div className="flex-1 min-w-0 flex items-center gap-2">
+        <SenderAlertIcon level={email._senderAlert} email={email} />
         <LinkAlertIcon level={email._linkAlert} alerts={getCachedAlerts(email.uid)} />
         <span className={`truncate ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
           {email.subject}
@@ -280,6 +282,7 @@ const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSelected,
         </div>
         {/* Line 2: Subject + attachment */}
         <div className="flex items-center gap-1.5">
+          <SenderAlertIcon level={email._senderAlert} email={email} size={12} />
           <LinkAlertIcon level={email._linkAlert} size={12} alerts={getCachedAlerts(email.uid)} />
           <span className={`truncate text-sm leading-snug ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
             {email.subject}
@@ -420,6 +423,7 @@ const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectTh
       </div>
 
       <div className="flex-1 min-w-0 flex items-center gap-2">
+        {(() => { const sa = getSenderAlertLevel(thread.emails); return sa ? <SenderAlertIcon level={sa.level} email={sa.email} /> : null; })()}
         <LinkAlertIcon level={getLinkAlertLevel(thread.emails)} alerts={getAlertsForEmails(thread.emails)} />
         <span className={`truncate ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
           {thread.subject}
@@ -588,6 +592,7 @@ const CompactThreadRow = React.memo(function CompactThreadRow({ thread, isSelect
           </span>
         </div>
         <div className="flex items-center gap-1.5">
+          {(() => { const sa = getSenderAlertLevel(thread.emails); return sa ? <SenderAlertIcon level={sa.level} email={sa.email} size={12} /> : null; })()}
           <LinkAlertIcon level={getLinkAlertLevel(thread.emails)} size={12} alerts={getAlertsForEmails(thread.emails)} />
           <span className={`truncate text-sm leading-snug ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
             {thread.subject}
@@ -1317,6 +1322,7 @@ function EmailListComponent() {
                           >
                             <div className="flex-1 min-w-0">
                               <div className={`text-sm truncate flex items-center gap-1 ${topic.unreadCount > 0 ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
+                                {(() => { const sa = getSenderAlertLevel(topic.emails); return sa ? <SenderAlertIcon level={sa.level} email={sa.email} size={13} /> : null; })()}
                                 <LinkAlertIcon level={getLinkAlertLevel(topic.emails)} size={13} alerts={getAlertsForEmails(topic.emails)} />
                                 {topic.originalSubject || '(No subject)'}
                               </div>

@@ -27,6 +27,7 @@ import { AttachmentItem, DownloadAllButton } from './email/AttachmentBar';
 import { scanEmailLinks, checkLinkAlert } from '../utils/linkSafety';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { LinkAlertIcon } from './LinkAlertIcon';
+import { SenderAlertIcon } from './SenderAlertIcon';
 import { getCachedAlerts } from '../utils/linkSafety';
 import { useSettingsStore } from '../stores/settingsStore';
 
@@ -502,6 +503,7 @@ function EmailViewerComponent() {
       {/* Subject */}
       <div className="px-3 py-2.5 border-b border-mail-border flex items-start gap-2">
         <h1 className="text-lg font-semibold text-mail-text flex-1 min-w-0 flex items-center gap-1.5">
+          <SenderAlertIcon level={selectedEmail._senderAlert} email={selectedEmail} size={18} />
           <LinkAlertIcon level={selectedEmail._linkAlert} size={18} alerts={getCachedAlerts(selectedEmail.uid)} />
           {selectedEmail.subject}
         </h1>
