@@ -73,7 +73,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
   const activateAccount = useMailStore(s => s.activateAccount);
   const setViewMode = useMailStore(s => s.setViewMode);
   const retryKeychainAccess = useMailStore(s => s.retryKeychainAccess);
-  const unreadPerAccount = useMailStore(s => s.unreadPerAccount);
+  const unreadPerAccount = useSettingsStore(s => s.unreadPerAccount);
 
   const { theme, toggleTheme } = useThemeStore();
   const { getOrderedAccounts, getDisplayName, accountColors, hiddenAccounts, sidebarCollapsed, toggleSidebarCollapsed } = useSettingsStore();
