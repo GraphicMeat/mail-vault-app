@@ -97,9 +97,9 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
       html = modifiedHtml;
       if (maxAlertLevel && !email._linkAlert) {
         email._linkAlert = maxAlertLevel;
-        // Update store so list views show the alert icon
         useMailStore.setState(state => ({
           emails: state.emails.map(e => e.uid === email.uid ? { ...e, _linkAlert: maxAlertLevel } : e),
+          sortedEmails: state.sortedEmails.map(e => e.uid === email.uid ? { ...e, _linkAlert: maxAlertLevel } : e),
         }));
       }
     }

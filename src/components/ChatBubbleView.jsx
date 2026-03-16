@@ -461,6 +461,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
         email._linkAlert = maxAlertLevel;
         useMailStore.setState(state => ({
           emails: state.emails.map(e => e.uid === email.uid ? { ...e, _linkAlert: maxAlertLevel } : e),
+          sortedEmails: state.sortedEmails.map(e => e.uid === email.uid ? { ...e, _linkAlert: maxAlertLevel } : e),
         }));
       }
     }
