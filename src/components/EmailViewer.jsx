@@ -199,10 +199,11 @@ function EmailViewerComponent() {
       const { modifiedHtml, maxAlertLevel } = scanEmailLinks(html, selectedEmail.uid);
       html = modifiedHtml;
       if (maxAlertLevel && !selectedEmail._linkAlert) {
-        // Update both selectedEmail and the emails array so list views show the icon
+        // Update selectedEmail, emails, and sortedEmails so all views show the icon
         useMailStore.setState(state => ({
           selectedEmail: { ...state.selectedEmail, _linkAlert: maxAlertLevel },
           emails: state.emails.map(e => e.uid === selectedEmail.uid ? { ...e, _linkAlert: maxAlertLevel } : e),
+          sortedEmails: state.sortedEmails.map(e => e.uid === selectedEmail.uid ? { ...e, _linkAlert: maxAlertLevel } : e),
         }));
       }
     }
