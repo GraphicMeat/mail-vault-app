@@ -239,8 +239,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                   {initial}
                 </div>
                 {(unreadPerAccount[account.id] || 0) > 0 && (
-                  <div className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-mail-accent flex items-center justify-center">
-                    <span className="text-[10px] font-bold text-white leading-none">
+                  <div className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 border-2 border-mail-surface flex items-center justify-center">
+                    <span className="text-[9px] font-bold text-white leading-none">
                       {unreadPerAccount[account.id] > 99 ? '99+' : unreadPerAccount[account.id]}
                     </span>
                   </div>
@@ -450,13 +450,20 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                   activateAccount(account.id, lastMailbox || 'INBOX');
                 }}
               >
-                <div className="relative">
+                <div className="relative flex-shrink-0">
                   <div
                     className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold select-none"
                     style={{ backgroundColor: color }}
                   >
                     {initial}
                   </div>
+                  {(unreadPerAccount[account.id] || 0) > 0 && (
+                    <div className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 border-2 border-mail-surface flex items-center justify-center">
+                      <span className="text-[10px] font-bold text-white leading-none">
+                        {unreadPerAccount[account.id] > 99 ? '99+' : unreadPerAccount[account.id]}
+                      </span>
+                    </div>
+                  )}
                   {account.id === activeAccountId && !unifiedInbox && (
                     <div
                       className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-mail-surface
@@ -483,11 +490,6 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                     </div>
                   )}
                 </div>
-                {(unreadPerAccount[account.id] || 0) > 0 && (
-                  <span className="px-1.5 py-0.5 text-xs font-medium bg-mail-accent/15 text-mail-accent rounded-full flex-shrink-0">
-                    {unreadPerAccount[account.id] > 99 ? '99+' : unreadPerAccount[account.id]}
-                  </span>
-                )}
               </div>
             );
           })}
