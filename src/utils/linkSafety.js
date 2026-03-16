@@ -180,6 +180,27 @@ export function checkLinkAlert(linkElement) {
  * Get the highest link alert level from an array of emails.
  * RED > YELLOW > null. Used by topic/thread rows to show aggregate alert.
  */
+/**
+ * Get cached scan alerts for an email UID. Returns alerts array or null.
+ */
+export function getCachedAlerts(uid) {
+  if (!uid || !_scanCache.has(uid)) return null;
+  return _scanCache.get(uid).alerts;
+}
+
+/**
+ * Collect all cached alerts from an array of emails.
+ */
+export function getAlertsForEmails(emails) {
+  if (!emails) return null;
+  const all = [];
+  for (const e of emails) {
+    const cached = getCachedAlerts(e.uid);
+    if (cached) all.push(...cached);
+  }
+  return all.length > 0 ? all : null;
+}
+
 export function getLinkAlertLevel(emails) {
   if (!emails || emails.length === 0) return null;
   let max = null;

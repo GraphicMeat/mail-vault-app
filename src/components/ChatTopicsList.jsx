@@ -7,7 +7,7 @@ import {
 } from '../utils/emailParser';
 import { ChevronLeft, MessageCircle, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
-import { getLinkAlertLevel } from '../utils/linkSafety';
+import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
 import { LinkAlertIcon } from './LinkAlertIcon';
 
 export function ChatTopicsList({ correspondent, topics, onBack, onSelectTopic }) {
@@ -99,7 +99,7 @@ const TopicRow = memo(function TopicRow({ topic, onClick, index }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <h3 className={`truncate flex items-center gap-1 ${unreadCount > 0 ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
-            <LinkAlertIcon level={getLinkAlertLevel(topic.emails)} size={14} />
+            <LinkAlertIcon level={getLinkAlertLevel(topic.emails)} size={14} alerts={getAlertsForEmails(topic.emails)} />
             {topic.subject}
           </h3>
 
