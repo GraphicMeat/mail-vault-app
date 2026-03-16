@@ -27,6 +27,9 @@ import { getRealAttachments, replaceCidUrls } from '../../services/attachmentUti
 import { SenderInsightsPanel } from '../SenderInsightsPanel';
 import { SenderVerificationBadge } from './EmailHeaderComponent';
 import { AttachmentItem } from './AttachmentBar';
+import { scanEmailLinks, checkLinkAlert } from '../../utils/linkSafety';
+import { LinkSafetyModal } from '../LinkSafetyModal';
+import { LinkAlertIcon } from '../LinkAlertIcon';
 
 // ── Thread Email Item Content ────────────────────────────────────────────────
 
@@ -34,6 +37,9 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
   const iframeRef = useRef(null);
   const [quotesExpanded, setQuotesExpanded] = useState(false);
   const [sigExpanded, setSigExpanded] = useState(false);
+  const [linkSafetyAlert, setLinkSafetyAlert] = useState(null);
+  const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
+  const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
 
   const { newContent, quotedContent } = useMemo(
     () => splitQuotedContent(loadedEmail?.text || loadedEmail?.textBody || ''),
@@ -55,7 +61,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
     const htmlWithCid = replaceCidUrls(loadedEmail.html, loadedEmail.attachments);
     const bodyMatch = htmlWithCid.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
     const bodyHtml = bodyMatch ? bodyMatch[1] : htmlWithCid;
-    return `
+    let html = `
     <!DOCTYPE html>
     <html>
       <head>
@@ -85,9 +91,14 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
         </style>
       </head>
       <body>${bodyHtml}${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}</body>
-    </html>
-  `;
-  }, [loadedEmail?.html, signatureDisplay]);
+    </html>`;
+    if (linkSafetyEnabled) {
+      const { modifiedHtml, maxAlertLevel } = scanEmailLinks(html, email.uid);
+      html = modifiedHtml;
+      if (maxAlertLevel && !email._linkAlert) email._linkAlert = maxAlertLevel;
+    }
+    return html;
+  }, [loadedEmail?.html, signatureDisplay, linkSafetyEnabled]);
 
   // Auto-resize iframe and intercept links
   useEffect(() => {
@@ -115,15 +126,19 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
 
     const handleClick = (e) => {
       const link = e.target.closest('a');
-      if (link && link.href && !link.href.startsWith('cid:')) {
-        e.preventDefault();
-        e.stopPropagation();
-        import('@tauri-apps/plugin-shell').then(({ open }) => {
-          open(link.href);
-        }).catch(() => {
-          window.open(link.href, '_blank');
-        });
+      if (!link || !link.href) return;
+      if (link.href.startsWith('cid:') || link.href.startsWith('mailto:') || link.href.startsWith('tel:') || link.href.startsWith('#')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (linkSafetyEnabled && linkSafetyClickConfirm) {
+        const alert = checkLinkAlert(link);
+        if (alert) { setLinkSafetyAlert(alert); return; }
       }
+      import('@tauri-apps/plugin-shell').then(({ open }) => {
+        open(link.href);
+      }).catch(() => {
+        window.open(link.href, '_blank');
+      });
     };
 
     const onLoad = () => {
@@ -225,6 +240,15 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
           )}
         </div>
       )}
+      <LinkSafetyModal
+        alert={linkSafetyAlert}
+        onCancel={() => setLinkSafetyAlert(null)}
+        onOpenAnyway={() => {
+          const url = linkSafetyAlert.actualUrl;
+          setLinkSafetyAlert(null);
+          import('@tauri-apps/plugin-shell').then(({ open }) => open(url)).catch(() => window.open(url, '_blank'));
+        }}
+      />
     </>
   );
 }
