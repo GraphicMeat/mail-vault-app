@@ -56,8 +56,8 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
   const showSigInline = signatureDisplay === 'always-show'
     || (signatureDisplay === 'smart' && shouldShowSignature);
 
-  const iframeContent = useMemo(() => {
-    if (!loadedEmail?.html) return '';
+  const { iframeContent, scanAlertLevel: threadScanAlert } = useMemo(() => {
+    if (!loadedEmail?.html) return { iframeContent: '', scanAlertLevel: null };
     const htmlWithCid = replaceCidUrls(loadedEmail.html, loadedEmail.attachments);
     const bodyMatch = htmlWithCid.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
     const bodyHtml = bodyMatch ? bodyMatch[1] : htmlWithCid;
@@ -92,20 +92,26 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
       </head>
       <body>${bodyHtml}${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}</body>
     </html>`;
+    let alertLevel = null;
     if (linkSafetyEnabled) {
       const { modifiedHtml, maxAlertLevel } = scanEmailLinks(html, email.uid);
       html = modifiedHtml;
-      if (maxAlertLevel && !email._linkAlert) {
-        email._linkAlert = maxAlertLevel;
-        useMailStore.setState(state => ({
-          emails: state.emails.map(e => e.uid === email.uid ? { ...e, _linkAlert: maxAlertLevel } : e),
-          sortedEmails: state.sortedEmails.map(e => e.uid === email.uid ? { ...e, _linkAlert: maxAlertLevel } : e),
-        }));
-        useSettingsStore.getState().setLinkAlert(email.uid, maxAlertLevel);
-      }
+      alertLevel = maxAlertLevel;
     }
-    return html;
+    return { iframeContent: html, scanAlertLevel: alertLevel };
   }, [loadedEmail?.html, signatureDisplay, linkSafetyEnabled]);
+
+  // Persist link alert outside render
+  useEffect(() => {
+    if (threadScanAlert && !email._linkAlert) {
+      email._linkAlert = threadScanAlert;
+      useMailStore.setState(state => ({
+        emails: state.emails.map(e => e.uid === email.uid ? { ...e, _linkAlert: threadScanAlert } : e),
+        sortedEmails: state.sortedEmails.map(e => e.uid === email.uid ? { ...e, _linkAlert: threadScanAlert } : e),
+      }));
+      useSettingsStore.getState().setLinkAlert(email.uid, threadScanAlert);
+    }
+  }, [threadScanAlert, email.uid]);
 
   // Auto-resize iframe and intercept links
   useEffect(() => {
