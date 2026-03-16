@@ -1,4 +1,4 @@
-import React, { memo, useState, useEffect, useRef } from 'react';
+import React, { memo, useState, useEffect, useRef, useMemo } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ComposeModal } from './ComposeModal';
