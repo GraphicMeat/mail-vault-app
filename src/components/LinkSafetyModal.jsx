@@ -40,16 +40,14 @@ export function LinkSafetyModal({ alert, onOpenAnyway, onCancel }) {
 
         <p className="text-sm text-mail-text-muted mb-4">{alert.reason}</p>
 
-        {textDomain && (
-          <div className="mb-3 p-3 rounded-lg bg-mail-surface border border-mail-border">
-            <div className="text-xs text-mail-text-muted mb-1">Link text shows:</div>
-            <div className="text-sm font-mono text-mail-text truncate">{alert.textContent}</div>
-            <div className="text-xs text-green-500 mt-0.5">{textDomain}</div>
-          </div>
-        )}
+        <div className="mb-3 p-3 rounded-lg bg-mail-surface border border-mail-border">
+          <div className="text-xs text-mail-text-muted mb-1">Link text says:</div>
+          <div className="text-sm font-mono text-mail-text break-all">{alert.textContent || '(no text)'}</div>
+          {textDomain && <div className="text-xs text-green-500 mt-0.5">{textDomain}</div>}
+        </div>
 
         <div className="mb-5 p-3 rounded-lg bg-mail-surface border border-mail-border">
-          <div className="text-xs text-mail-text-muted mb-1">Actually goes to:</div>
+          <div className="text-xs text-mail-text-muted mb-1">Actually redirects to:</div>
           <div className="text-sm font-mono text-mail-text break-all">{alert.actualUrl}</div>
           {actualDomain && <div className={`text-xs ${isRed ? 'text-red-500' : 'text-amber-500'} mt-0.5`}>{actualDomain}</div>}
         </div>
