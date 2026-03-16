@@ -73,6 +73,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
   const activateAccount = useMailStore(s => s.activateAccount);
   const setViewMode = useMailStore(s => s.setViewMode);
   const retryKeychainAccess = useMailStore(s => s.retryKeychainAccess);
+  const unreadPerAccount = useMailStore(s => s.unreadPerAccount);
 
   const { theme, toggleTheme } = useThemeStore();
   const { getOrderedAccounts, getDisplayName, accountColors, hiddenAccounts, sidebarCollapsed, toggleSidebarCollapsed } = useSettingsStore();
@@ -237,6 +238,13 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                 >
                   {initial}
                 </div>
+                {(unreadPerAccount[account.id] || 0) > 0 && (
+                  <div className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-mail-accent flex items-center justify-center">
+                    <span className="text-[10px] font-bold text-white leading-none">
+                      {unreadPerAccount[account.id] > 99 ? '99+' : unreadPerAccount[account.id]}
+                    </span>
+                  </div>
+                )}
                 {account.id === activeAccountId && !unifiedInbox && (
                   <div
                     className={`absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border-2 border-mail-surface
@@ -475,6 +483,11 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                     </div>
                   )}
                 </div>
+                {(unreadPerAccount[account.id] || 0) > 0 && (
+                  <span className="px-1.5 py-0.5 text-xs font-medium bg-mail-accent/15 text-mail-accent rounded-full flex-shrink-0">
+                    {unreadPerAccount[account.id] > 99 ? '99+' : unreadPerAccount[account.id]}
+                  </span>
+                )}
               </div>
             );
           })}

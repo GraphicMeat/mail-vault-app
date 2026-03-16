@@ -453,6 +453,7 @@ export const useMailStore = create((set, get) => ({
 
   // Unread counts across all accounts
   totalUnreadCount: 0,
+  unreadPerAccount: {},
 
 
   // Clear email cache (call when switching accounts/mailboxes)
@@ -899,8 +900,9 @@ export const useMailStore = create((set, get) => ({
     _clearGraphIdMap(accountId);
 
     const newAccounts = get().accounts.filter(a => a.id !== accountId);
+    const { [accountId]: _, ...remainingUnread } = get().unreadPerAccount;
 
-    set({ accounts: newAccounts });
+    set({ accounts: newAccounts, unreadPerAccount: remainingUnread });
     
     if (get().activeAccountId === accountId) {
       const { hiddenAccounts } = useSettingsStore.getState();
@@ -2362,6 +2364,12 @@ export const useMailStore = create((set, get) => ({
         hasMoreEmails,
       });
 
+      // Update per-account unread count for INBOX
+      if (activeMailbox === 'INBOX') {
+        const unread = get().emails.filter(e => !e.flags?.includes('\\Seen')).length;
+        set(s => ({ unreadPerAccount: { ...s.unreadPerAccount, [activeAccountId]: unread } }));
+      }
+
       // Save to account cache for instant restore on switch-back (skip in unified inbox mode)
       if (!get().unifiedInbox) {
         _saveToAccountCache(activeAccountId, get());
@@ -2527,6 +2535,12 @@ export const useMailStore = create((set, get) => ({
       });
 
       get().updateSortedEmails();
+
+      // Update per-account unread count for INBOX
+      if (activeMailbox === 'INBOX') {
+        const unread = get().emails.filter(e => !e.flags?.includes('\\Seen')).length;
+        set(s => ({ unreadPerAccount: { ...s.unreadPerAccount, [activeAccountId]: unread } }));
+      }
 
       // Save to account cache for instant restore on switch-back (skip in unified inbox mode)
       if (!get().unifiedInbox) {
@@ -3615,11 +3629,16 @@ export const useMailStore = create((set, get) => ({
         return { emails, selectedEmail: updatedSelectedEmail, _flagSeq: state._flagSeq + 1 };
       });
       get().updateSortedEmails();
+      // Update per-account unread count
+      if (mailbox === 'INBOX') {
+        const unread = get().emails.filter(e => !e.flags?.includes('\\Seen')).length;
+        set(s => ({ unreadPerAccount: { ...s.unreadPerAccount, [accountId]: unread } }));
+      }
     } catch (error) {
       set({ error: `Failed to update read status: ${error.message}` });
     }
   },
-  
+
   // Selection management
   toggleEmailSelection: (uid) => {
     set(state => {
@@ -3803,6 +3822,7 @@ export const useMailStore = create((set, get) => ({
     console.log('[mailStore] Refreshing all accounts...');
 
     let totalUnread = 0;
+    const updatedUnreadPerAccount = { ...get().unreadPerAccount };
     let previousEmailCount = get().emails.length;
     const perAccountResults = []; // Per-account new-email details for notification dispatch
 
@@ -3827,7 +3847,9 @@ export const useMailStore = create((set, get) => ({
           await get().loadEmails();
           // Count unread in current view
           const currentEmails = get().emails;
-          totalUnread += currentEmails.filter(e => !e.flags?.includes('\\Seen')).length;
+          const accountUnread = currentEmails.filter(e => !e.flags?.includes('\\Seen')).length;
+          totalUnread += accountUnread;
+          updatedUnreadPerAccount[account.id] = accountUnread;
           // Detect new emails for this account
           const afterEmails = get().emails;
           const newForAccount = afterEmails.filter(e => !beforeUids.has(e.uid));
@@ -3858,7 +3880,9 @@ export const useMailStore = create((set, get) => ({
                 await db.saveEmailHeaders(account.id, 'INBOX', headers, inbox.totalItemCount);
                 console.log(`[mailStore] Graph: cached ${headers.length} headers for ${account.email}`);
               }
-              totalUnread += headers.filter(e => !e.flags?.includes('\\Seen')).length;
+              const graphUnread = headers.filter(e => !e.flags?.includes('\\Seen')).length;
+              totalUnread += graphUnread;
+              updatedUnreadPerAccount[account.id] = graphUnread;
 
               // Detect new emails
               const newHeaders = headers.filter(e => !cachedUids.has(e.uid));
@@ -3903,7 +3927,9 @@ export const useMailStore = create((set, get) => ({
               console.log(`[mailStore] Cached ${allEmails.length} headers for ${account.email}`);
             }
 
-            totalUnread += allEmails.filter(e => !e.flags?.includes('\\Seen')).length;
+            const imapUnread = allEmails.filter(e => !e.flags?.includes('\\Seen')).length;
+            totalUnread += imapUnread;
+            updatedUnreadPerAccount[account.id] = imapUnread;
 
             // Detect new emails
             const newHeaders = allEmails.filter(e => !cachedUids.has(e.uid));
@@ -3928,7 +3954,7 @@ export const useMailStore = create((set, get) => ({
       }
     }
 
-    set({ totalUnreadCount: totalUnread });
+    set({ totalUnreadCount: totalUnread, unreadPerAccount: updatedUnreadPerAccount });
 
     const newEmailCount = get().emails.length;
     const newEmails = Math.max(0, newEmailCount - previousEmailCount);
