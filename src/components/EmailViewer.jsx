@@ -26,6 +26,7 @@ import { EmailHeader } from './email/EmailHeaderComponent';
 import { AttachmentItem, DownloadAllButton } from './email/AttachmentBar';
 import { scanEmailLinks, checkLinkAlert } from '../utils/linkSafety';
 import { LinkSafetyModal } from './LinkSafetyModal';
+import { LinkAlertIcon } from './LinkAlertIcon';
 import { useSettingsStore } from '../stores/settingsStore';
 
 // Re-export AttachmentItem for any external consumers
@@ -488,7 +489,8 @@ function EmailViewerComponent() {
 
       {/* Subject */}
       <div className="px-3 py-2.5 border-b border-mail-border flex items-start gap-2">
-        <h1 className="text-lg font-semibold text-mail-text flex-1 min-w-0">
+        <h1 className="text-lg font-semibold text-mail-text flex-1 min-w-0 flex items-center gap-1.5">
+          <LinkAlertIcon level={selectedEmail._linkAlert} size={18} />
           {selectedEmail.subject}
         </h1>
         <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium flex-shrink-0 mt-0.5

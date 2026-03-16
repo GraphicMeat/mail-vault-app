@@ -5,8 +5,8 @@ export function LinkSafetyModal({ alert, onOpenAnyway, onCancel }) {
   if (!alert) return null;
 
   const isRed = alert.level === 'red';
-  const bgColor = isRed ? 'bg-red-500/10' : 'bg-amber-500/10';
-  const borderColor = isRed ? 'border-red-500/30' : 'border-amber-500/30';
+  const bgColor = 'bg-mail-bg';
+  const borderColor = isRed ? 'border-red-500' : 'border-amber-500';
   const iconColor = isRed ? 'text-red-500' : 'text-amber-500';
   const title = isRed ? 'Dangerous Link Detected' : 'Suspicious Link Detected';
 

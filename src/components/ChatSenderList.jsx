@@ -9,6 +9,8 @@ import {
   formatRelativeTime
 } from '../utils/emailParser';
 import { MessageSquare, Search } from 'lucide-react';
+import { getLinkAlertLevel } from '../utils/linkSafety';
+import { LinkAlertIcon } from './LinkAlertIcon';
 
 const INITIAL_VISIBLE = 50;
 const LOAD_MORE_COUNT = 50;
@@ -176,7 +178,8 @@ const SenderRow = memo(function SenderRow({ correspondent, onClick, index }) {
         </div>
 
         <div className="flex items-center justify-between gap-2 mt-0.5">
-          <span className="text-sm text-mail-text-muted truncate">
+          <span className="text-sm text-mail-text-muted truncate flex items-center gap-1">
+            <LinkAlertIcon level={getLinkAlertLevel(correspondent.emails)} size={12} />
             {correspondent.lastMessage?.subject || 'No messages'}
           </span>
 
