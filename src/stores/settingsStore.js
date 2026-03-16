@@ -164,8 +164,10 @@ export const useSettingsStore = create(
       // Link safety (premium feature — enabled for all while isPaidUser is unwired)
       linkSafetyEnabled: true,
       linkSafetyClickConfirm: true,
+      linkAlerts: {}, // { [uid]: 'red'|'yellow' } — persisted link alert results
       setLinkSafetyEnabled: (v) => set({ linkSafetyEnabled: v }),
       setLinkSafetyClickConfirm: (v) => set({ linkSafetyClickConfirm: v }),
+      setLinkAlert: (uid, level) => set(s => ({ linkAlerts: { ...s.linkAlerts, [uid]: level } })),
 
       // Auto-cleanup rules
       // Each: { id, accountEmail: '*' | 'email@...', folder, olderThan: { value: number, unit: 'days'|'months' }, action: 'delete'|'archive-delete', enabled: boolean }

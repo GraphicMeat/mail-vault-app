@@ -101,6 +101,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
           emails: state.emails.map(e => e.uid === email.uid ? { ...e, _linkAlert: maxAlertLevel } : e),
           sortedEmails: state.sortedEmails.map(e => e.uid === email.uid ? { ...e, _linkAlert: maxAlertLevel } : e),
         }));
+        useSettingsStore.getState().setLinkAlert(email.uid, maxAlertLevel);
       }
     }
     return html;
