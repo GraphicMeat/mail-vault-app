@@ -825,6 +825,9 @@ function EmailListComponent() {
 
   const dateRange = useMemo(() => getDateRange(displayEmails), [displayEmails]);
 
+  // Count emails with alerts — used in fingerprints to invalidate caches when alerts change
+  const alertCount = useMemo(() => displayEmails.filter(e => e._linkAlert || e._senderAlert).length, [displayEmails]);
+
   // Deferred threading — buildThreads(17k+) is too slow for synchronous render.
   // Show flat list instantly, then compute threads in background and re-render.
   const threadCache = useRef({ fingerprint: '', threads: new Map() });
@@ -836,8 +839,8 @@ function EmailListComponent() {
     [searchActive, getChatEmails, sortedEmails, sentEmails]
   );
   const threadFingerprint = useMemo(
-    () => mergedEmails ? `${viewMode}-${mergedEmails.length}-${mergedEmails[0]?.uid || 0}-${mergedEmails[mergedEmails.length - 1]?.uid || 0}-${flagSeq}-${archivedSize}` : '',
-    [mergedEmails, flagSeq, viewMode, archivedSize]
+    () => mergedEmails ? `${viewMode}-${mergedEmails.length}-${mergedEmails[0]?.uid || 0}-${mergedEmails[mergedEmails.length - 1]?.uid || 0}-${flagSeq}-${archivedSize}-${alertCount}` : '',
+    [mergedEmails, flagSeq, viewMode, archivedSize, alertCount]
   );
 
   // Compute threads in a deferred callback to avoid blocking render
@@ -873,7 +876,7 @@ function EmailListComponent() {
 
     // Use merged INBOX + Sent emails when activeAccountEmail is available
     const emails = activeAccountEmail ? getChatEmails() : displayEmails;
-    const fp = `sender-${emails.length}-${emails[0]?.uid}-${emails[emails.length - 1]?.uid}-${archivedSize}-${activeAccountEmail}-${sentEmails.length}`;
+    const fp = `sender-${emails.length}-${emails[0]?.uid}-${emails[emails.length - 1]?.uid}-${archivedSize}-${activeAccountEmail}-${sentEmails.length}-${alertCount}`;
 
     if (senderGroupCacheRef.current.fingerprint === fp) {
       if (senderGroups !== senderGroupCacheRef.current.groups) {
@@ -889,7 +892,7 @@ function EmailListComponent() {
     }, 0);
 
     return () => clearTimeout(timer);
-  }, [displayEmails, sentEmails, emailListGrouping, archivedSize, activeAccountEmail]);
+  }, [displayEmails, sentEmails, emailListGrouping, archivedSize, activeAccountEmail, alertCount]);
 
   // Build display list: use threads if available, flat list as fallback
   const threadedDisplay = useMemo(() => {
