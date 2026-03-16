@@ -239,7 +239,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                   {initial}
                 </div>
                 {(unreadPerAccount[account.id] || 0) > 0 && (
-                  <div className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 border-2 border-mail-surface flex items-center justify-center">
+                  <div className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 flex items-center justify-center">
                     <span className="text-[9px] font-bold text-white leading-none">
                       {unreadPerAccount[account.id] > 99 ? '99+' : unreadPerAccount[account.id]}
                     </span>
@@ -458,7 +458,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                     {initial}
                   </div>
                   {(unreadPerAccount[account.id] || 0) > 0 && (
-                    <div className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 border-2 border-mail-surface flex items-center justify-center">
+                    <div className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 flex items-center justify-center">
                       <span className="text-[10px] font-bold text-white leading-none">
                         {unreadPerAccount[account.id] > 99 ? '99+' : unreadPerAccount[account.id]}
                       </span>
