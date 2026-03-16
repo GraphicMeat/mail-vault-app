@@ -64,6 +64,11 @@ export function scanEmailLinks(html, uid) {
       continue;
     }
 
+    // Set title on ALL links so hovering shows the actual destination
+    if (!link.getAttribute('title')) {
+      link.setAttribute('title', href);
+    }
+
     let level = null;
     let reason = '';
     const actualDomain = extractDomain(href);
