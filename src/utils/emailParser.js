@@ -11,9 +11,9 @@ export function getCorrespondent(email, userEmail) {
   const fromAddress = email.from?.address?.toLowerCase() || '';
   const userEmailLower = userEmail?.toLowerCase() || '';
 
-  // Helper: clean up display name — if it's an email address, use the local part instead
+  // Helper: clean up display name — if it's an email address, use the local part; if missing, show full address
   const cleanName = (name, address) => {
-    if (!name) return address ? address.split('@')[0] : 'Unknown';
+    if (!name) return address || 'Unknown';
     if (name.includes('@')) return (address || name).split('@')[0];
     return name;
   };
@@ -101,7 +101,7 @@ export function getSenderName(email) {
   const name = email?.from?.name || '';
   const address = email?.from?.address || '';
   if (!name && !address) return 'Unknown';
-  if (!name) return address.split('@')[0];
+  if (!name) return address;
   // If name looks like an email address (contains @), use the local part from the actual address instead
   if (name.includes('@')) return address.split('@')[0] || name;
   return name;
