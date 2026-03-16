@@ -453,7 +453,6 @@ export const useMailStore = create((set, get) => ({
 
   // Unread counts across all accounts
   totalUnreadCount: 0,
-  unreadPerAccount: {},
 
 
   // Clear email cache (call when switching accounts/mailboxes)
@@ -910,9 +909,10 @@ export const useMailStore = create((set, get) => ({
     _clearGraphIdMap(accountId);
 
     const newAccounts = get().accounts.filter(a => a.id !== accountId);
-    const { [accountId]: _, ...remainingUnread } = get().unreadPerAccount;
+    const { [accountId]: _removed, ...remainingUnread } = useSettingsStore.getState().unreadPerAccount;
+    useSettingsStore.getState().setUnreadPerAccount(remainingUnread);
 
-    set({ accounts: newAccounts, unreadPerAccount: remainingUnread });
+    set({ accounts: newAccounts });
     
     if (get().activeAccountId === accountId) {
       const { hiddenAccounts } = useSettingsStore.getState();
@@ -2377,7 +2377,7 @@ export const useMailStore = create((set, get) => ({
       // Update per-account unread count for INBOX
       if (activeMailbox === 'INBOX') {
         const unread = get().emails.filter(e => !e.flags?.includes('\\Seen')).length;
-        set(s => ({ unreadPerAccount: { ...s.unreadPerAccount, [activeAccountId]: unread } }));
+        useSettingsStore.getState().setUnreadForAccount(activeAccountId, unread);
       }
 
       // Save to account cache for instant restore on switch-back (skip in unified inbox mode)
@@ -2549,7 +2549,7 @@ export const useMailStore = create((set, get) => ({
       // Update per-account unread count for INBOX
       if (activeMailbox === 'INBOX') {
         const unread = get().emails.filter(e => !e.flags?.includes('\\Seen')).length;
-        set(s => ({ unreadPerAccount: { ...s.unreadPerAccount, [activeAccountId]: unread } }));
+        useSettingsStore.getState().setUnreadForAccount(activeAccountId, unread);
       }
 
       // Save to account cache for instant restore on switch-back (skip in unified inbox mode)
@@ -3639,10 +3639,10 @@ export const useMailStore = create((set, get) => ({
         return { emails, selectedEmail: updatedSelectedEmail, _flagSeq: state._flagSeq + 1 };
       });
       get().updateSortedEmails();
-      // Update per-account unread count
+      // Update per-account unread count (persisted in settingsStore)
       if (mailbox === 'INBOX') {
         const unread = get().emails.filter(e => !e.flags?.includes('\\Seen')).length;
-        set(s => ({ unreadPerAccount: { ...s.unreadPerAccount, [accountId]: unread } }));
+        useSettingsStore.getState().setUnreadForAccount(accountId, unread);
       }
     } catch (error) {
       set({ error: `Failed to update read status: ${error.message}` });
@@ -3832,7 +3832,7 @@ export const useMailStore = create((set, get) => ({
     console.log('[mailStore] Refreshing all accounts...');
 
     let totalUnread = 0;
-    const updatedUnreadPerAccount = { ...get().unreadPerAccount };
+    const updatedUnreadPerAccount = { ...useSettingsStore.getState().unreadPerAccount };
     let previousEmailCount = get().emails.length;
     const perAccountResults = []; // Per-account new-email details for notification dispatch
 
@@ -3964,7 +3964,8 @@ export const useMailStore = create((set, get) => ({
       }
     }
 
-    set({ totalUnreadCount: totalUnread, unreadPerAccount: updatedUnreadPerAccount });
+    set({ totalUnreadCount: totalUnread });
+    useSettingsStore.getState().setUnreadPerAccount(updatedUnreadPerAccount);
 
     const newEmailCount = get().emails.length;
     const newEmails = Math.max(0, newEmailCount - previousEmailCount);

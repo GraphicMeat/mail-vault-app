@@ -165,9 +165,12 @@ export const useSettingsStore = create(
       linkSafetyEnabled: true,
       linkSafetyClickConfirm: true,
       linkAlerts: {}, // { [uid]: 'red'|'yellow' } — persisted link alert results
+      unreadPerAccount: {}, // { [accountId]: number } — persisted unread counts
       setLinkSafetyEnabled: (v) => set({ linkSafetyEnabled: v }),
       setLinkSafetyClickConfirm: (v) => set({ linkSafetyClickConfirm: v }),
       setLinkAlert: (uid, level) => set(s => ({ linkAlerts: { ...s.linkAlerts, [uid]: level } })),
+      setUnreadPerAccount: (counts) => set({ unreadPerAccount: counts }),
+      setUnreadForAccount: (accountId, count) => set(s => ({ unreadPerAccount: { ...s.unreadPerAccount, [accountId]: count } })),
 
       // Auto-cleanup rules
       // Each: { id, accountEmail: '*' | 'email@...', folder, olderThan: { value: number, unit: 'days'|'months' }, action: 'delete'|'archive-delete', enabled: boolean }
