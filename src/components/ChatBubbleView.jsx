@@ -454,20 +454,30 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
         <body>${replaceCidUrls(mergedEmail.html, mergedEmail.attachments)}${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}</body>
       </html>
     `;
+    let chatAlertLevel = null;
     if (linkSafetyEnabled) {
       const { modifiedHtml, maxAlertLevel } = scanEmailLinks(builtHtml, email.uid);
       builtHtml = modifiedHtml;
-      if (maxAlertLevel && !email._linkAlert) {
-        email._linkAlert = maxAlertLevel;
-        useMailStore.setState(state => ({
-          emails: state.emails.map(e => e.uid === email.uid ? { ...e, _linkAlert: maxAlertLevel } : e),
-          sortedEmails: state.sortedEmails.map(e => e.uid === email.uid ? { ...e, _linkAlert: maxAlertLevel } : e),
-        }));
-        useSettingsStore.getState().setLinkAlert(email.uid, maxAlertLevel);
-      }
+      chatAlertLevel = maxAlertLevel;
     }
-    return builtHtml;
+    return { html: builtHtml, alertLevel: chatAlertLevel };
   }, [mergedEmail.html, fromUser, signatureDisplay, linkSafetyEnabled]);
+
+  // iframeContent useMemo now returns { html, alertLevel } — extract for srcDoc and alert
+  const iframeHtmlContent = iframeContent?.html || '';
+  const chatScanAlert = iframeContent?.alertLevel || null;
+
+  // Persist link alert outside render
+  useEffect(() => {
+    if (chatScanAlert && !email._linkAlert) {
+      email._linkAlert = chatScanAlert;
+      useMailStore.setState(state => ({
+        emails: state.emails.map(e => e.uid === email.uid ? { ...e, _linkAlert: chatScanAlert } : e),
+        sortedEmails: state.sortedEmails.map(e => e.uid === email.uid ? { ...e, _linkAlert: chatScanAlert } : e),
+      }));
+      useSettingsStore.getState().setLinkAlert(email.uid, chatScanAlert);
+    }
+  }, [chatScanAlert, email.uid]);
 
   // Auto-resize iframe
   useEffect(() => {
@@ -567,7 +577,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
               {mergedEmail.html ? (
                 <iframe
                   ref={iframeRef}
-                  srcDoc={iframeContent}
+                  srcDoc={iframeHtmlContent}
                   className="w-full border-0 rounded"
                   style={{ minHeight: '100px', maxHeight: '400px' }}
                   sandbox="allow-same-origin allow-popups allow-scripts"
@@ -583,7 +593,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
             <div className="overflow-hidden">
               <iframe
                 ref={iframeRef}
-                srcDoc={iframeContent}
+                srcDoc={iframeHtmlContent}
                 className="w-full border-0"
                 style={{ minHeight: '50px', maxHeight: '400px' }}
                 sandbox="allow-same-origin allow-popups allow-scripts"

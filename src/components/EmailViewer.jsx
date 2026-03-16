@@ -162,8 +162,8 @@ function EmailViewerComponent() {
 
   // Render email with its original styling on a light background (like Apple Mail)
   // Email HTML is designed for light backgrounds — forcing dark mode breaks formatting
-  const iframeContent = (() => {
-    if (!selectedEmail?.html) return '';
+  const { iframeContent, scanAlertLevel } = useMemo(() => {
+    if (!selectedEmail?.html) return { iframeContent: '', scanAlertLevel: null };
     let html = `
     <!DOCTYPE html>
     <html>
@@ -195,21 +195,26 @@ function EmailViewerComponent() {
       </head>
       <body>${getEmailBodyContent(replaceCidUrls(selectedEmail.html, selectedEmail.attachments))}</body>
     </html>`;
+    let alertLevel = null;
     if (linkSafetyEnabled) {
       const { modifiedHtml, maxAlertLevel } = scanEmailLinks(html, selectedEmail.uid);
       html = modifiedHtml;
-      if (maxAlertLevel && !selectedEmail._linkAlert) {
-        // Update all store arrays + persist to settings for cross-launch survival
-        useMailStore.setState(state => ({
-          selectedEmail: { ...state.selectedEmail, _linkAlert: maxAlertLevel },
-          emails: state.emails.map(e => e.uid === selectedEmail.uid ? { ...e, _linkAlert: maxAlertLevel } : e),
-          sortedEmails: state.sortedEmails.map(e => e.uid === selectedEmail.uid ? { ...e, _linkAlert: maxAlertLevel } : e),
-        }));
-        useSettingsStore.getState().setLinkAlert(selectedEmail.uid, maxAlertLevel);
-      }
+      alertLevel = maxAlertLevel;
     }
-    return html;
-  })();
+    return { iframeContent: html, scanAlertLevel: alertLevel };
+  }, [selectedEmail?.html, selectedEmail?.uid, linkSafetyEnabled]);
+
+  // Persist link alert to store + settings (outside render, in useEffect)
+  useEffect(() => {
+    if (scanAlertLevel && selectedEmail && !selectedEmail._linkAlert) {
+      useMailStore.setState(state => ({
+        selectedEmail: { ...state.selectedEmail, _linkAlert: scanAlertLevel },
+        emails: state.emails.map(e => e.uid === selectedEmail.uid ? { ...e, _linkAlert: scanAlertLevel } : e),
+        sortedEmails: state.sortedEmails.map(e => e.uid === selectedEmail.uid ? { ...e, _linkAlert: scanAlertLevel } : e),
+      }));
+      useSettingsStore.getState().setLinkAlert(selectedEmail.uid, scanAlertLevel);
+    }
+  }, [scanAlertLevel, selectedEmail?.uid]);
 
   // Auto-resize iframe and apply dark mode overrides
   useEffect(() => {
