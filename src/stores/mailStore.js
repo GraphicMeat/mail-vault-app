@@ -638,12 +638,20 @@ export const useMailStore = create((set, get) => ({
         const nameLower = name.toLowerCase();
         // Display name is an email that doesn't match actual sender
         if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(name) && nameLower !== addr) {
-          e._senderAlert = 'red';
+          // Check if domains are related (subdomain match)
+          const nameDomain = nameLower.split('@')[1] || '';
+          const addrDomain = addr.split('@')[1] || '';
+          if (nameDomain !== addrDomain && !addrDomain.endsWith('.' + nameDomain) && !nameDomain.endsWith('.' + addrDomain)) {
+            e._senderAlert = 'red';
+          }
         }
         // Display name is a domain that doesn't match sender domain
         else if (/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(nameLower)) {
           const senderDomain = addr.split('@')[1] || '';
-          if (nameLower !== senderDomain) e._senderAlert = 'yellow';
+          // Allow subdomain matches (e.g., name "snapcraft.io" from "forum.snapcraft.io")
+          if (nameLower !== senderDomain && !senderDomain.endsWith('.' + nameLower) && !nameLower.endsWith('.' + senderDomain)) {
+            e._senderAlert = 'yellow';
+          }
         }
       }
     }

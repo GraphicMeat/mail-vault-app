@@ -51,21 +51,30 @@ export function checkSenderVerification(email) {
     const nameIsEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fromName);
     if (nameIsEmail && fromNameLower !== fromAddress) {
       const nameDomain = getDomain(fromNameLower);
-      issues.push({
-        level: 'danger',
-        text: `Display name shows "${fromName}" but actual sender is ${email.from.address} — likely impersonation`,
-        details: { displayName: fromName, actualAddress: email.from.address, displayDomain: nameDomain, actualDomain: fromDomain },
-      });
+      // Allow subdomain matches (e.g., name "user@example.com" from "sub.example.com")
+      const domainsRelated = nameDomain === fromDomain ||
+        fromDomain.endsWith('.' + nameDomain) || nameDomain.endsWith('.' + fromDomain);
+      if (!domainsRelated) {
+        issues.push({
+          level: 'danger',
+          text: `Display name shows "${fromName}" but actual sender is ${email.from.address} — likely impersonation`,
+          details: { displayName: fromName, actualAddress: email.from.address, displayDomain: nameDomain, actualDomain: fromDomain },
+        });
+      }
     }
 
     // Check if display name looks like a domain (e.g., "ledger.com") that differs from sender domain
     const nameLooksDomain = /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(fromNameLower);
     if (!nameIsEmail && nameLooksDomain && fromNameLower !== fromDomain) {
-      issues.push({
-        level: 'warning',
-        text: `Sender name "${fromName}" impersonates domain that differs from actual sender (${fromDomain})`,
-        details: { displayName: fromName, actualDomain: fromDomain },
-      });
+      // Allow subdomain matches (e.g., name "snapcraft.io" from "forum.snapcraft.io")
+      const domainsRelated = fromDomain.endsWith('.' + fromNameLower) || fromNameLower.endsWith('.' + fromDomain);
+      if (!domainsRelated) {
+        issues.push({
+          level: 'warning',
+          text: `Sender name "${fromName}" impersonates domain that differs from actual sender (${fromDomain})`,
+          details: { displayName: fromName, actualDomain: fromDomain },
+        });
+      }
     }
   }
 
