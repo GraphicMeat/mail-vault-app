@@ -387,13 +387,15 @@ const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectTh
     const serverEmails = thread.emails.filter(em => em.source !== 'local-only');
     const activeMailbox = useMailStore.getState().activeMailbox;
     const sentPath = useMailStore.getState().getSentMailboxPath();
+    console.log(`[handleDeleteThread] Deleting ${serverEmails.length} emails, activeMailbox="${activeMailbox}", sentPath="${sentPath}"`);
+    console.log(`[handleDeleteThread] Thread emails:`, thread.emails.map(e => ({ uid: e.uid, source: e.source, _fromSentFolder: e._fromSentFolder, subject: e.subject?.substring(0, 40) })));
     for (const email of serverEmails) {
       // Use the correct mailbox — sent emails need the Sent folder path
       const mailbox = email._fromSentFolder && sentPath ? sentPath : activeMailbox;
       try {
         await deleteEmailFromServer(email.uid, { skipRefresh: true, mailboxOverride: mailbox });
       } catch (err) {
-        console.error(`Failed to delete email ${email.uid} from ${mailbox}:`, err);
+        console.error(`[handleDeleteThread] Failed to delete email ${email.uid} from ${mailbox}:`, err);
       }
     }
     // Single refresh after all deletions
