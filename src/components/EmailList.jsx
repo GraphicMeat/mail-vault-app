@@ -552,8 +552,15 @@ const CompactThreadRow = React.memo(function CompactThreadRow({ thread, isSelect
       return;
     }
     const serverEmails = thread.emails.filter(em => em.source !== 'local-only');
+    const activeMailbox = useMailStore.getState().activeMailbox;
+    const sentPath = useMailStore.getState().getSentMailboxPath();
     for (const email of serverEmails) {
-      await deleteEmailFromServer(email.uid, { skipRefresh: true });
+      const mailbox = email._fromSentFolder && sentPath ? sentPath : activeMailbox;
+      try {
+        await deleteEmailFromServer(email.uid, { skipRefresh: true, mailboxOverride: mailbox });
+      } catch (err) {
+        console.error(`Failed to delete email ${email.uid} from ${mailbox}:`, err);
+      }
     }
     if (serverEmails.length > 0) useMailStore.getState().loadEmails();
     setMenuOpen(false);
