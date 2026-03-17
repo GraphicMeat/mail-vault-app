@@ -1,18 +1,20 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMailStore } from '../stores/mailStore';
 import {
-  MailOpen, Mail, Trash2, Archive, X, AlertTriangle, FolderSymlink
+  MailOpen, Mail, Trash2, Archive, ArchiveRestore, X, AlertTriangle, FolderSymlink
 } from 'lucide-react';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 
 export function SelectionActionBar() {
   const selectedEmailIds = useMailStore(s => s.selectedEmailIds);
+  const archivedEmailIds = useMailStore(s => s.archivedEmailIds);
   const clearSelection = useMailStore(s => s.clearSelection);
   const saveSelectedLocally = useMailStore(s => s.saveSelectedLocally);
   const markSelectedAsRead = useMailStore(s => s.markSelectedAsRead);
   const markSelectedAsUnread = useMailStore(s => s.markSelectedAsUnread);
   const deleteSelectedFromServer = useMailStore(s => s.deleteSelectedFromServer);
+  const removeLocalEmail = useMailStore(s => s.removeLocalEmail);
   const getSelectionSummary = useMailStore(s => s.getSelectionSummary);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -20,14 +22,28 @@ export function SelectionActionBar() {
   const moveButtonRef = useRef(null);
 
   const hasSelection = selectedEmailIds.size > 0;
+
+  // Dismiss delete confirmation when selection changes
+  useEffect(() => {
+    setShowDeleteConfirm(false);
+  }, [selectedEmailIds]);
+
   const summary = useMemo(() => {
     if (!hasSelection) return { threads: 0, emails: 0 };
     return getSelectionSummary();
   }, [hasSelection, selectedEmailIds, getSelectionSummary]);
 
-  // Fire-and-forget: actions clear selection internally via the store.
-  // No actionInProgress gating — archive/mark ops are long-running and
-  // have their own progress indicators (BulkSaveProgress bar).
+  // Determine archive state of selected emails
+  const { hasArchived, hasUnarchived } = useMemo(() => {
+    let archived = 0;
+    let unarchived = 0;
+    for (const uid of selectedEmailIds) {
+      if (archivedEmailIds.has(uid)) archived++;
+      else unarchived++;
+    }
+    return { hasArchived: archived > 0, hasUnarchived: unarchived > 0 };
+  }, [selectedEmailIds, archivedEmailIds]);
+
   const handleAction = (action) => {
     action();
   };
@@ -39,6 +55,18 @@ export function SelectionActionBar() {
   const confirmDelete = () => {
     setShowDeleteConfirm(false);
     deleteSelectedFromServer();
+  };
+
+  const handleUnarchive = async () => {
+    const uids = Array.from(selectedEmailIds).filter(uid => archivedEmailIds.has(uid));
+    clearSelection();
+    for (const uid of uids) {
+      try {
+        await removeLocalEmail(uid);
+      } catch (e) {
+        console.error(`Failed to unarchive email ${uid}:`, e);
+      }
+    }
   };
 
   const selectionLabel = summary.threads === summary.emails
@@ -83,16 +111,32 @@ export function SelectionActionBar() {
 
             <div className="w-px h-6 bg-mail-border" />
 
-            <button
-              onClick={() => handleAction(saveSelectedLocally)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-mail-local"
-              onMouseEnter={e => e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--mail-local) 10%, transparent)'}
-              onMouseLeave={e => e.currentTarget.style.backgroundColor = ''}
-              title="Archive selected"
-            >
-              <Archive size={15} />
-              <span className="text-xs font-medium">Archive</span>
-            </button>
+            {/* Archive — show when any unarchived emails selected */}
+            {hasUnarchived && (
+              <button
+                onClick={() => handleAction(saveSelectedLocally)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-mail-local"
+                onMouseEnter={e => e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--mail-local) 10%, transparent)'}
+                onMouseLeave={e => e.currentTarget.style.backgroundColor = ''}
+                title="Archive selected"
+              >
+                <Archive size={15} />
+                <span className="text-xs font-medium">Archive</span>
+              </button>
+            )}
+            {/* Unarchive — show when any archived emails selected */}
+            {hasArchived && (
+              <button
+                onClick={handleUnarchive}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-mail-warning"
+                onMouseEnter={e => e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--mail-warning) 10%, transparent)'}
+                onMouseLeave={e => e.currentTarget.style.backgroundColor = ''}
+                title="Unarchive selected"
+              >
+                <ArchiveRestore size={15} />
+                <span className="text-xs font-medium">Unarchive</span>
+              </button>
+            )}
             <div className="relative">
               <button
                 ref={moveButtonRef}
