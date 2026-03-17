@@ -221,7 +221,12 @@ export async function updateEmailFlags(account, uid, flags, action = 'add', mail
   });
 }
 
-export async function deleteEmail(account, uid, mailbox = 'INBOX', permanent = false) {
+export async function deleteEmail(account, uid, mailbox = 'INBOX', permanent = null) {
+  // Default: permanent delete for non-INBOX folders (Sent, Spam, Trash, etc.)
+  // INBOX emails get moved to Trash first (non-permanent)
+  if (permanent === null) {
+    permanent = mailbox !== 'INBOX';
+  }
   if (IS_TAURI) {
     return tauriInvoke('imap_delete_email', { account, uid, mailbox, permanent });
   }
