@@ -848,10 +848,10 @@ function EmailListComponent() {
   const threadCache = useRef({ fingerprint: '', threads: new Map() });
   const [deferredThreads, setDeferredThreads] = useState(null); // null = not computed yet
 
-  // Fingerprint for thread computation
+  // Fingerprint for thread computation — only merge INBOX + Sent for INBOX view
   const mergedEmails = useMemo(
-    () => searchActive ? null : getChatEmails(),
-    [searchActive, getChatEmails, sortedEmails, sentEmails]
+    () => searchActive ? null : (activeMailbox === 'INBOX' ? getChatEmails() : sortedEmails),
+    [searchActive, getChatEmails, sortedEmails, sentEmails, activeMailbox]
   );
   const threadFingerprint = useMemo(
     () => mergedEmails ? `${viewMode}-${mergedEmails.length}-${mergedEmails[0]?.uid || 0}-${mergedEmails[mergedEmails.length - 1]?.uid || 0}-${flagSeq}-${archivedSize}-${alertCount}` : '',
