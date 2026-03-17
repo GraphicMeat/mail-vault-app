@@ -3524,11 +3524,13 @@ export const useMailStore = create((set, get) => ({
       await api.deleteEmail(account, uid, mailbox);
     }
 
-    // Immediately remove from emails array so displayEmails flags it as local-only
+    // Immediately remove from emails and sentEmails arrays
     const filteredEmails = get().emails.filter(e => e.uid !== uid);
+    const filteredSent = get().sentEmails.filter(e => e.uid !== uid);
     const newTotal = Math.max(0, (get().totalEmails || 0) - 1);
     const updates = {
       emails: filteredEmails,
+      sentEmails: filteredSent,
       totalEmails: newTotal,
     };
     if (selectedEmailId === uid) {
@@ -3835,8 +3837,10 @@ export const useMailStore = create((set, get) => ({
     // Immediately remove deleted emails from the list so UI updates
     const deletedSet = new Set(uids);
     const filteredEmails = get().emails.filter(e => !deletedSet.has(e.uid));
+    const filteredSent = get().sentEmails.filter(e => !deletedSet.has(e.uid));
     set({
       emails: filteredEmails,
+      sentEmails: filteredSent,
       totalEmails: Math.max(0, (get().totalEmails || 0) - uids.length),
       selectedEmailId: deletedSet.has(get().selectedEmailId) ? null : get().selectedEmailId,
       selectedEmail: deletedSet.has(get().selectedEmailId) ? null : get().selectedEmail,
