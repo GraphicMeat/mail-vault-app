@@ -2164,9 +2164,11 @@ export const useMailStore = create((set, get) => ({
           }));
         } else if (
           // CONDSTORE fast path: if highestModseq matches and uidNext matches, NOTHING changed
+          // Also verify exists count matches — if server has fewer emails, deletions happened
           newHighestModseq != null && cachedHighestModseq != null &&
           newHighestModseq === cachedHighestModseq &&
-          newUidNext === cachedUidNext
+          newUidNext === cachedUidNext &&
+          status.exists >= existingEmails.length * 0.5 // Guard: if >50% gone, need UID sync
         ) {
           _loadEmailsRetried = false;
           set({
@@ -2191,10 +2193,12 @@ export const useMailStore = create((set, get) => ({
           return;
         } else if (
           // CONDSTORE flag-only sync: uidNext same but modseq changed → only flags changed
-          // No serverTotal check needed — uidNext unchanged guarantees no new messages
+          // BUT: if server exists count differs significantly from cache, emails were deleted
+          // and we need a full UID sync, not just flag updates
           newHighestModseq != null && cachedHighestModseq != null &&
           newHighestModseq !== cachedHighestModseq &&
-          newUidNext === cachedUidNext
+          newUidNext === cachedUidNext &&
+          status.exists >= existingEmails.length * 0.5 // If more than 50% gone, skip to UID sync
         ) {
           console.log('[loadEmails] CONDSTORE: flag-only sync (modseq %s → %s)', cachedHighestModseq, newHighestModseq);
           try {
@@ -2241,9 +2245,9 @@ export const useMailStore = create((set, get) => ({
             // Fall through to UID search below
             mergedEmails = null;
           }
-        } else if (newUidNext === cachedUidNext && serverTotal <= (cachedHeaders?.totalCached ?? existingEmails.length)) {
+        } else if (newUidNext === cachedUidNext && serverTotal === (cachedHeaders?.totalCached ?? existingEmails.length)) {
           // Nothing changed (non-CONDSTORE path) — skip all IMAP fetching
-          // Compare against totalCached (not store length) since store may only have partial data from QuickLoad
+          // Exact match required — a decrease means deletions happened, needs UID sync
           set({
             connectionStatus: 'connected',
             connectionError: null,
@@ -3513,15 +3517,23 @@ export const useMailStore = create((set, get) => ({
     const mailbox = mailboxOverride || unified?.mailbox || state.activeMailbox;
     let account = unified?.account || state.accounts.find(a => a.id === accountId);
     const selectedEmailId = state.selectedEmailId;
-    if (!account) return;
+    if (!account) { console.error('[deleteEmail] No account found for', accountId); return; }
     account = await ensureFreshToken(account);
 
-    if (isGraphAccount(account)) {
-      const graphId = getGraphMessageId(accountId, mailbox, uid);
-      if (!graphId) throw new Error('Cannot delete: no Graph message ID found for this email.');
-      await api.graphDeleteMessage(account.oauth2AccessToken, graphId);
-    } else {
-      await api.deleteEmail(account, uid, mailbox);
+    console.log(`[deleteEmail] Deleting UID ${uid} from mailbox "${mailbox}" (account: ${account.email}, isGraph: ${isGraphAccount(account)}, override: ${mailboxOverride})`);
+
+    try {
+      if (isGraphAccount(account)) {
+        const graphId = getGraphMessageId(accountId, mailbox, uid);
+        if (!graphId) throw new Error('Cannot delete: no Graph message ID found for this email.');
+        await api.graphDeleteMessage(account.oauth2AccessToken, graphId);
+      } else {
+        await api.deleteEmail(account, uid, mailbox);
+      }
+      console.log(`[deleteEmail] Successfully deleted UID ${uid} from "${mailbox}"`);
+    } catch (err) {
+      console.error(`[deleteEmail] FAILED to delete UID ${uid} from "${mailbox}":`, err);
+      throw err;
     }
 
     // Immediately remove from emails and sentEmails arrays
