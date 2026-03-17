@@ -1057,6 +1057,16 @@ function EmailListComponent() {
 
     clearSelection();
 
+    // Handle unarchive separately — not a bulk operation manager action
+    if (action === 'unarchive') {
+      const removeLocalEmail = useMailStore.getState().removeLocalEmail;
+      for (const uid of uids) {
+        try { await removeLocalEmail(uid); } catch (e) { console.error(`Failed to unarchive ${uid}:`, e); }
+      }
+      useMailStore.getState().updateSortedEmails();
+      return;
+    }
+
     try {
       await bulkOperationManager.start({
         type: action,

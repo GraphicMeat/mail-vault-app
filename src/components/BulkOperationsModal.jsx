@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Archive, Trash2, ArrowRight, ArrowLeft, AlertTriangle, HardDrive, Calendar } from 'lucide-react';
+import { X, Archive, ArchiveRestore, Trash2, ArrowRight, ArrowLeft, AlertTriangle, HardDrive, Calendar } from 'lucide-react';
 import { useMailStore } from '../stores/mailStore';
 
 const ACTION_STYLES = {
@@ -19,6 +19,11 @@ const ACTION_STYLES = {
     iconColor: 'text-mail-local',
     confirmLabel: 'Archive & Delete',
   },
+  unarchive: {
+    color: 'var(--mail-warning)',
+    iconColor: 'text-mail-warning',
+    confirmLabel: 'Unarchive',
+  },
 };
 
 function actionBg(color, pct) {
@@ -35,6 +40,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
 
   const sortedEmails = useMailStore(s => s.sortedEmails);
   const totalEmails = useMailStore(s => s.totalEmails);
+  const archivedEmailIds = useMailStore(s => s.archivedEmailIds);
 
   // Compute available years from loaded emails
   const emailYears = useMemo(() => {
@@ -310,6 +316,16 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
           ) : (
             /* Step 2: Action Selection */
             <div className="p-5">
+              {/* Warning for locally-stored emails */}
+              {selectedEmails.some(e => archivedEmailIds.has(e.uid)) && (
+                <div className="flex items-start gap-2 p-3 mb-3 rounded-lg bg-mail-warning/10 border border-mail-warning/30">
+                  <AlertTriangle size={14} className="text-mail-warning flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-mail-text">
+                    Some selected emails are archived locally. Deleting from server is safe — your local copies remain.
+                    Unarchiving will remove local copies — if they're also deleted from server, they will be <strong>lost forever</strong>.
+                  </p>
+                </div>
+              )}
               <div className="space-y-3 mb-4">
                 {[
                   {
@@ -318,11 +334,17 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                     label: 'Archive',
                     description: 'Download emails to your computer',
                   },
+                  ...(selectedEmails.some(e => archivedEmailIds.has(e.uid)) ? [{
+                    id: 'unarchive',
+                    icon: ArchiveRestore,
+                    label: 'Unarchive',
+                    description: 'Remove local copies — emails only remain on server',
+                  }] : []),
                   {
                     id: 'delete',
                     icon: Trash2,
-                    label: 'Delete',
-                    description: 'Permanently remove from server',
+                    label: 'Delete from Server',
+                    description: 'Permanently remove from server (local archives kept)',
                   },
                   {
                     id: 'archive_and_delete',
