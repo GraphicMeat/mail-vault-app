@@ -44,7 +44,7 @@ export function checkSenderVerification(email) {
   const issues = [];
 
   // Layer 0: Display name impersonation detection
-  const fromName = (email.from.name || '').trim();
+  const fromName = (email.from.name || '').replace(/^["\\]+|["\\]+$/g, '').replace(/\\"/g, '"').trim();
   const fromNameLower = fromName.toLowerCase();
   if (fromName) {
     // Check if display name looks like an email address that differs from actual sender
