@@ -632,7 +632,7 @@ export const useMailStore = create((set, get) => ({
     if (linkSafetyEnabled) {
       for (const e of result) {
         if (e._senderAlert !== undefined) continue;
-        const name = (e.from?.name || '').trim();
+        const name = (e.from?.name || '').replace(/^["\\]+|["\\]+$/g, '').replace(/\\"/g, '"').trim();
         const addr = (e.from?.address || '').toLowerCase();
         if (!name || !addr) continue;
         const nameLower = name.toLowerCase();

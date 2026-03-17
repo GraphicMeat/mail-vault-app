@@ -11,11 +11,12 @@ export function getCorrespondent(email, userEmail) {
   const fromAddress = email.from?.address?.toLowerCase() || '';
   const userEmailLower = userEmail?.toLowerCase() || '';
 
-  // Helper: clean up display name — if it's an email address, use the local part; if missing, show full address
+  // Helper: clean up display name — strip quotes/escapes, if it's an email use local part
   const cleanName = (name, address) => {
-    if (!name) return address || 'Unknown';
-    if (name.includes('@')) return (address || name).split('@')[0];
-    return name;
+    const cleaned = name ? name.replace(/^["\\]+|["\\]+$/g, '').replace(/\\"/g, '"').trim() : '';
+    if (!cleaned) return address || 'Unknown';
+    if (cleaned.includes('@')) return (address || cleaned).split('@')[0];
+    return cleaned;
   };
 
   // If the email is from the user, the correspondent is the recipient
@@ -98,7 +99,7 @@ export function groupByCorrespondent(emails, userEmail) {
  * If the display name is just the email address, returns the local part (before @) instead.
  */
 export function getSenderName(email) {
-  const name = email?.from?.name || '';
+  let name = (email?.from?.name || '').replace(/^["\\]+|["\\]+$/g, '').replace(/\\"/g, '"').trim();
   const address = email?.from?.address || '';
   if (!name && !address) return 'Unknown';
   if (!name) return address;
