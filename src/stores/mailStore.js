@@ -3505,12 +3505,12 @@ export const useMailStore = create((set, get) => ({
   },
   
   // Delete email from server
-  deleteEmailFromServer: async (uid, { skipRefresh = false } = {}) => {
+  deleteEmailFromServer: async (uid, { skipRefresh = false, mailboxOverride = null } = {}) => {
     const state = get();
     const isUnified = state.activeMailbox === 'UNIFIED';
     const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
     const accountId = unified?.accountId || state.activeAccountId;
-    const mailbox = unified?.mailbox || state.activeMailbox;
+    const mailbox = mailboxOverride || unified?.mailbox || state.activeMailbox;
     let account = unified?.account || state.accounts.find(a => a.id === accountId);
     const selectedEmailId = state.selectedEmailId;
     if (!account) return;
@@ -3811,11 +3811,16 @@ export const useMailStore = create((set, get) => ({
     const uids = Array.from(selectedEmailIds);
     set({ selectedEmailIds: new Set() });
 
+    const sentPath = get().getSentMailboxPath();
+    const allEmails = [...state.emails, ...state.sentEmails];
+    const emailMap = new Map(allEmails.map(e => [e.uid, e]));
+
     for (const uid of uids) {
       try {
         const ctx = isUnified ? _resolveUnifiedContext(uid, state) : null;
         const accountId = ctx?.accountId || state.activeAccountId;
-        const mailbox = ctx?.mailbox || state.activeMailbox;
+        const emailObj = emailMap.get(uid);
+        const mailbox = ctx?.mailbox || (emailObj?._fromSentFolder && sentPath ? sentPath : state.activeMailbox);
         let account = ctx?.account || accounts.find(a => a.id === accountId);
         account = await ensureFreshToken(account);
 

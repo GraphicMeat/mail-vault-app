@@ -383,10 +383,18 @@ const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectTh
       setConfirmingDeleteThread(true);
       return;
     }
-    // Delete all server emails in the thread, skip per-delete refresh
+    // Delete all server emails in the thread, using correct mailbox per email
     const serverEmails = thread.emails.filter(em => em.source !== 'local-only');
+    const activeMailbox = useMailStore.getState().activeMailbox;
+    const sentPath = useMailStore.getState().getSentMailboxPath();
     for (const email of serverEmails) {
-      await deleteEmailFromServer(email.uid, { skipRefresh: true });
+      // Use the correct mailbox — sent emails need the Sent folder path
+      const mailbox = email._fromSentFolder && sentPath ? sentPath : activeMailbox;
+      try {
+        await deleteEmailFromServer(email.uid, { skipRefresh: true, mailboxOverride: mailbox });
+      } catch (err) {
+        console.error(`Failed to delete email ${email.uid} from ${mailbox}:`, err);
+      }
     }
     // Single refresh after all deletions
     if (serverEmails.length > 0) useMailStore.getState().loadEmails();
