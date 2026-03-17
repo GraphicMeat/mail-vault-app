@@ -3538,6 +3538,7 @@ export const useMailStore = create((set, get) => ({
       updates.selectedThread = null;
     }
     set(updates);
+    get().updateSortedEmails();
 
     // Update cached headers on disk so loadEmails doesn't restore the deleted email
     if (!isUnified) {
@@ -3831,7 +3832,19 @@ export const useMailStore = create((set, get) => ({
       }
     }
 
-    if (!isUnified) await get().loadEmails();
+    // Immediately remove deleted emails from the list so UI updates
+    const deletedSet = new Set(uids);
+    const filteredEmails = get().emails.filter(e => !deletedSet.has(e.uid));
+    set({
+      emails: filteredEmails,
+      totalEmails: Math.max(0, (get().totalEmails || 0) - uids.length),
+      selectedEmailId: deletedSet.has(get().selectedEmailId) ? null : get().selectedEmailId,
+      selectedEmail: deletedSet.has(get().selectedEmailId) ? null : get().selectedEmail,
+    });
+    get().updateSortedEmails();
+
+    // Background refresh to sync with server
+    if (!isUnified) get().loadEmails();
   },
 
   // Export email
