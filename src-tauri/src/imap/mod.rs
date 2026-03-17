@@ -1017,6 +1017,23 @@ pub async fn delete_email(
     Ok(())
 }
 
+/// Append a raw email (RFC 5322) to a mailbox via IMAP APPEND
+pub async fn append_email(
+    session: &mut ImapSession,
+    mailbox: &str,
+    raw_email: &[u8],
+    flags: &str,
+) -> Result<(), String> {
+    let flags_opt: Option<&str> = if flags.is_empty() { None } else { Some(flags) };
+
+    session
+        .append(mailbox, flags_opt, None, raw_email)
+        .await
+        .map_err(|e| format!("IMAP APPEND to '{}' failed: {}", mailbox, e))?;
+
+    Ok(())
+}
+
 /// Search emails using IMAP SEARCH
 pub async fn search_emails(
     session: &mut ImapSession,

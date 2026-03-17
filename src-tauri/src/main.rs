@@ -3395,6 +3395,8 @@ fn main() {
             commands::imap_get_email_light,
             commands::imap_set_flags,
             commands::imap_delete_email,
+            commands::imap_fetch_raw,
+            commands::imap_append_email,
             commands::smtp_send_email,
             commands::imap_search_emails,
             commands::imap_disconnect,
