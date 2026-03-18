@@ -19,6 +19,7 @@ import { UndoSendToast } from './components/UndoSendToast';
 import { MoveToFolderDropdown } from './components/MoveToFolderDropdown';
 import { useEmailScheduler } from './hooks/useEmailScheduler';
 import { usePipelineCoordinator } from './hooks/usePipelineCoordinator';
+import { useBackupScheduler } from './hooks/useBackupScheduler';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw } from 'lucide-react';
@@ -112,6 +113,9 @@ function App() {
 
   // Pipeline coordinator — manages background caching for all accounts
   usePipelineCoordinator();
+
+  // Backup scheduler — bridges backup singleton to React lifecycle
+  useBackupScheduler();
 
   // Keyboard shortcuts — wire all shortcut actions to app state/store methods
   useKeyboardShortcuts({
