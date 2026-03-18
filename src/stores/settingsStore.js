@@ -176,6 +176,48 @@ export const useSettingsStore = create(
       // Each: { id, accountEmail: '*' | 'email@...', folder, olderThan: { value: number, unit: 'days'|'months' }, action: 'delete'|'archive-delete', enabled: boolean }
       cleanupRules: [],
 
+      // Backup configuration
+      backupSchedules: {},
+      // Shape: { [accountId]: { enabled: bool, interval: 'hourly'|'daily'|'weekly', hourlyInterval: 2, timeOfDay: '03:00', dayOfWeek: 1 } }
+
+      // Backup runtime state (persisted for display across restarts)
+      backupState: {},
+      // Shape: { [accountId]: { lastBackupTime: number|null, lastStatus: 'success'|'failed'|null, lastError: string|null, emailsBackedUp: number, nextRunTime: number|null } }
+
+      // Backup history (max 5 entries per account)
+      backupHistory: {},
+      // Shape: { [accountId]: [{ timestamp: number, emailsBackedUp: number, durationSecs: number, success: bool, error: string|null }] }
+
+      // Backup notification preferences
+      backupNotifyOnSuccess: true,
+      backupNotifyOnFailure: true,
+
+      // Backup actions
+      setBackupSchedule: (accountId, config) => set(state => ({
+        backupSchedules: { ...state.backupSchedules, [accountId]: config }
+      })),
+
+      removeBackupSchedule: (accountId) => set(state => {
+        const { [accountId]: _, ...rest } = state.backupSchedules;
+        return { backupSchedules: rest };
+      }),
+
+      updateBackupState: (accountId, update) => set(state => ({
+        backupState: {
+          ...state.backupState,
+          [accountId]: { ...(state.backupState[accountId] || {}), ...update }
+        }
+      })),
+
+      addBackupHistoryEntry: (accountId, entry) => set(state => {
+        const existing = state.backupHistory[accountId] || [];
+        const updated = [entry, ...existing].slice(0, 5);
+        return { backupHistory: { ...state.backupHistory, [accountId]: updated } };
+      }),
+
+      setBackupNotifyOnSuccess: (val) => set({ backupNotifyOnSuccess: val }),
+      setBackupNotifyOnFailure: (val) => set({ backupNotifyOnFailure: val }),
+
       // Per-account mailbox memory
       getLastMailbox: (accountId) => get().lastMailboxPerAccount[accountId] || 'INBOX',
       setLastMailbox: (accountId, mailbox) => set({
