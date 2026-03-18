@@ -23,6 +23,8 @@ pub struct FolderMapping {
     pub migrated: u32,
     pub skipped: u32,
     pub failed: u32,
+    #[serde(default)]
+    pub failed_uids: Vec<u32>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -151,6 +153,7 @@ pub fn build_folder_mappings(
             migrated: 0,
             skipped: 0,
             failed: 0,
+            failed_uids: Vec::new(),
         });
     }
 
@@ -217,7 +220,7 @@ pub async fn ensure_dest_folder_graph(
 // ── Source Message-ID fetching (for dedup) ──────────────────────────────────
 
 /// Fetch all Message-IDs from an IMAP mailbox for deduplication.
-pub async fn fetch_source_message_ids_imap(
+pub async fn fetch_dest_message_ids_imap(
     session: &mut ImapSession,
     mailbox: &str,
 ) -> Result<HashSet<String>, String> {
@@ -258,7 +261,7 @@ pub async fn fetch_source_message_ids_imap(
 }
 
 /// Fetch all internet message IDs from a Graph folder for deduplication.
-pub async fn fetch_source_message_ids_graph(
+pub async fn fetch_dest_message_ids_graph(
     client: &GraphClient,
     folder_id: &str,
 ) -> Result<HashSet<String>, String> {
@@ -313,6 +316,54 @@ pub async fn fetch_source_message_ids_graph(
     }
 
     Ok(ids)
+}
+
+// ── Message-ID extraction from raw MIME ──────────────────────────────────────
+
+/// Extract the Message-ID from raw MIME bytes (searches first 8KB of headers).
+/// Returns the Message-ID value including angle brackets, e.g. `<abc@example.com>`.
+pub fn extract_message_id(mime_bytes: &[u8]) -> Option<String> {
+    // Only search the first 8KB — headers are always at the top
+    let search_len = mime_bytes.len().min(8192);
+    let header_str = String::from_utf8_lossy(&mime_bytes[..search_len]);
+
+    let mut in_message_id = false;
+    let mut value = String::new();
+
+    for line in header_str.lines() {
+        if in_message_id {
+            // Continuation line (starts with whitespace)
+            if line.starts_with(' ') || line.starts_with('\t') {
+                value.push_str(line.trim());
+                continue;
+            } else {
+                // End of Message-ID header
+                break;
+            }
+        }
+
+        let lower = line.to_lowercase();
+        if lower.starts_with("message-id:") {
+            in_message_id = true;
+            value = line["message-id:".len()..].trim().to_string();
+        }
+    }
+
+    if value.is_empty() {
+        return None;
+    }
+
+    // Extract the content between < and > if present
+    if let Some(start) = value.find('<') {
+        if let Some(end) = value.find('>') {
+            if end > start {
+                return Some(value[start..=end].to_string());
+            }
+        }
+    }
+
+    // Return raw value if no angle brackets
+    Some(value)
 }
 
 // ── Single-email migration helpers ──────────────────────────────────────────
@@ -510,27 +561,49 @@ pub async fn run_migration(
             break;
         }
 
-        // Pause loop
-        while pause.load(Ordering::Relaxed) {
-            if cancel.load(Ordering::Relaxed) {
-                break;
-            }
-            emit_progress(
-                "paused",
-                Some(folder_mappings[folder_idx].source_path.clone()),
-                None,
-                migrated_total,
-                skipped_total,
-                failed_total,
-                &folder_mappings,
-                &started_at,
-                start_instant.elapsed().as_secs(),
-                &source_email,
-                &dest_email,
+        // Pause loop — save state and wait
+        if pause.load(Ordering::Relaxed) {
+            let paused_state = MigrationState {
+                id: migration_id.clone(),
+                source_email: source_email.clone(),
+                dest_email: dest_email.clone(),
+                source_transport: source_transport.clone(),
+                dest_transport: dest_transport.clone(),
+                source_account_json: source_account_json.clone(),
+                dest_account_json: dest_account_json.clone(),
+                status: "paused".to_string(),
+                folder_mappings: folder_mappings.clone(),
                 total_emails,
-                &app_handle,
-            );
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                migrated_emails: migrated_total,
+                skipped_emails: skipped_total,
+                failed_emails: failed_total,
+                started_at: started_at.clone(),
+                updated_at: chrono::Utc::now().to_rfc3339(),
+            };
+            let _ = save_migration_state(&app_handle, &paused_state);
+            info!("[migration] Paused, state saved to disk");
+
+            while pause.load(Ordering::Relaxed) {
+                if cancel.load(Ordering::Relaxed) {
+                    break;
+                }
+                emit_progress(
+                    "paused",
+                    Some(folder_mappings[folder_idx].source_path.clone()),
+                    None,
+                    migrated_total,
+                    skipped_total,
+                    failed_total,
+                    &folder_mappings,
+                    &started_at,
+                    start_instant.elapsed().as_secs(),
+                    &source_email,
+                    &dest_email,
+                    total_emails,
+                    &app_handle,
+                );
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            }
         }
 
         if folder_mappings[folder_idx].status == "completed" {
@@ -592,8 +665,47 @@ pub async fn run_migration(
             }
         }
 
+        // Fetch destination Message-IDs for deduplication
+        let dest_message_ids: HashSet<String> = if dest_transport == "imap" {
+            let mut guard = pool.get_priority(&dest_config).await?;
+            let ids = match fetch_dest_message_ids_imap(&mut guard.session, &dst_path).await {
+                Ok(ids) => ids,
+                Err(e) => {
+                    warn!("[migration] Failed to fetch dest Message-IDs for {}: {}", dst_path, e);
+                    HashSet::new()
+                }
+            };
+            guard.last_selected = Some(dst_path.clone());
+            pool.return_priority(&dest_config, guard).await;
+            ids
+        } else if dest_transport == "graph" {
+            if let Some(ref dest_folder_id) = folder_mappings[folder_idx].dest_folder_id {
+                if let Some(ref token) = dest_config.access_token {
+                    let client = GraphClient::new(token);
+                    match fetch_dest_message_ids_graph(&client, dest_folder_id).await {
+                        Ok(ids) => ids,
+                        Err(e) => {
+                            warn!("[migration] Failed to fetch dest Graph Message-IDs for {}: {}", dst_path, e);
+                            HashSet::new()
+                        }
+                    }
+                } else {
+                    HashSet::new()
+                }
+            } else {
+                HashSet::new()
+            }
+        } else {
+            HashSet::new()
+        };
+
+        if !dest_message_ids.is_empty() {
+            info!("[migration] Found {} existing messages in dest '{}' for dedup", dest_message_ids.len(), dst_path);
+        }
+
         // Fetch source UIDs / message IDs
-        let source_items: Vec<(u32, Option<String>, bool)>; // (uid_or_index, graph_msg_id, is_read)
+        // Tuple: (uid_or_index, graph_msg_id, is_read, internet_message_id)
+        let source_items: Vec<(u32, Option<String>, bool, Option<String>)>;
 
         if source_transport == "imap" {
             let mut guard = pool.get_priority(&source_config).await?;
@@ -601,9 +713,9 @@ pub async fn run_migration(
             guard.last_selected = Some(src_path.clone());
             pool.return_priority(&source_config, guard).await;
 
-            source_items = uids.into_iter().map(|uid| (uid, None, false)).collect();
+            source_items = uids.into_iter().map(|uid| (uid, None, false, None)).collect();
         } else {
-            // Graph source
+            // Graph source — collect internetMessageId for dedup
             if let Some(ref token) = source_config.access_token {
                 let client = GraphClient::new(token);
                 let folders = client.list_folders().await?;
@@ -619,7 +731,8 @@ pub async fn run_migration(
                         client.list_messages(&folder.id, 100, skip).await?;
                     for (i, msg) in messages.iter().enumerate() {
                         let is_read = msg.is_read.unwrap_or(false);
-                        items.push(((skip + i as u32), Some(msg.id.clone()), is_read));
+                        let inet_msg_id = msg.internet_message_id.clone();
+                        items.push(((skip + i as u32), Some(msg.id.clone()), is_read, inet_msg_id));
                     }
                     if next_link.is_none() || messages.is_empty() {
                         break;
@@ -644,12 +757,12 @@ pub async fn run_migration(
                 break;
             }
 
-            for &(uid, ref graph_id, is_read) in batch {
+            for &(uid, ref graph_id, is_read, ref src_inet_msg_id) in batch {
                 if cancel.load(Ordering::Relaxed) {
                     break;
                 }
 
-                // Pause check
+                // Pause check — finish current email then stop
                 while pause.load(Ordering::Relaxed) {
                     if cancel.load(Ordering::Relaxed) {
                         break;
@@ -657,27 +770,105 @@ pub async fn run_migration(
                     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                 }
 
+                // Dedup check for Graph source (has internetMessageId already)
+                if let Some(ref inet_id) = src_inet_msg_id {
+                    if !dest_message_ids.is_empty() && dest_message_ids.contains(inet_id) {
+                        folder_skipped += 1;
+                        skipped_total += 1;
+                        continue;
+                    }
+                }
+
                 let _permit = sem.acquire().await.unwrap();
 
-                let result = match (source_transport.as_str(), dest_transport.as_str()) {
+                // For IMAP source: fetch MIME first to check dedup, then migrate
+                // For Graph source: dedup already checked above via internetMessageId
+                let migrate_result = match (source_transport.as_str(), dest_transport.as_str()) {
                     ("imap", "imap") => {
                         let mut src_guard = pool.get_priority(&source_config).await?;
                         let mut dst_guard = pool.get_priority(&dest_config).await?;
-                        let r = migrate_email_imap_to_imap(
-                            &mut src_guard.session,
-                            &mut dst_guard.session,
-                            &src_path,
-                            &dst_path,
-                            uid,
-                        )
-                        .await;
-                        src_guard.last_selected = Some(src_path.clone());
-                        dst_guard.last_selected = Some(dst_path.clone());
-                        pool.return_priority(&source_config, src_guard).await;
-                        pool.return_priority(&dest_config, dst_guard).await;
-                        r
+
+                        // Fetch MIME + flags for dedup check and migration
+                        let fetch_result = {
+                            use futures::StreamExt;
+                            let _mbox = imap::select_mailbox(&mut src_guard.session, &src_path).await?;
+                            let fetch_stream = src_guard.session
+                                .uid_fetch(uid.to_string(), "(UID FLAGS BODY.PEEK[])")
+                                .await
+                                .map_err(|e| format!("UID FETCH {} failed: {}", uid, e))?;
+                            let fetches: Vec<_> = fetch_stream
+                                .collect::<Vec<_>>()
+                                .await
+                                .into_iter()
+                                .filter_map(|r| r.ok())
+                                .collect();
+                            fetches.into_iter().next()
+                                .ok_or_else(|| format!("Email UID {} not found", uid))
+                        };
+
+                        match fetch_result {
+                            Ok(fetch) => {
+                                // Dedup check via Message-ID extraction from MIME
+                                if !dest_message_ids.is_empty() {
+                                    if let Some(body) = fetch.body() {
+                                        if let Some(msg_id) = extract_message_id(body) {
+                                            if dest_message_ids.contains(&msg_id) {
+                                                src_guard.last_selected = Some(src_path.clone());
+                                                pool.return_priority(&source_config, src_guard).await;
+                                                pool.return_priority(&dest_config, dst_guard).await;
+                                                folder_skipped += 1;
+                                                skipped_total += 1;
+                                                // Emit progress and continue to next email
+                                                emit_progress(
+                                                    "running", Some(src_path.clone()),
+                                                    Some(format!("{}/{}", folder_migrated + folder_skipped + folder_failed, folder_total)),
+                                                    migrated_total, skipped_total, failed_total,
+                                                    &folder_mappings, &started_at, start_instant.elapsed().as_secs(),
+                                                    &source_email, &dest_email, total_emails, &app_handle,
+                                                );
+                                                continue;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Not a duplicate — append to destination
+                                let r = if let Some(mime_bytes) = fetch.body() {
+                                    let flags: Vec<String> = fetch.flags()
+                                        .filter_map(|f| {
+                                            use async_imap::types::Flag;
+                                            match f {
+                                                Flag::Seen => Some("\\Seen".to_string()),
+                                                Flag::Answered => Some("\\Answered".to_string()),
+                                                Flag::Flagged => Some("\\Flagged".to_string()),
+                                                Flag::Deleted => Some("\\Deleted".to_string()),
+                                                Flag::Draft => Some("\\Draft".to_string()),
+                                                Flag::Recent => None,
+                                                _ => None,
+                                            }
+                                        })
+                                        .collect();
+                                    let flags_str = flags.join(" ");
+                                    imap::append_email(&mut dst_guard.session, &dst_path, mime_bytes, &flags_str).await
+                                } else {
+                                    Err(format!("No body for UID {}", uid))
+                                };
+                                src_guard.last_selected = Some(src_path.clone());
+                                dst_guard.last_selected = Some(dst_path.clone());
+                                pool.return_priority(&source_config, src_guard).await;
+                                pool.return_priority(&dest_config, dst_guard).await;
+                                r.map(|_| true)
+                            }
+                            Err(e) => {
+                                src_guard.last_selected = Some(src_path.clone());
+                                pool.return_priority(&source_config, src_guard).await;
+                                pool.return_priority(&dest_config, dst_guard).await;
+                                Err(e)
+                            }
+                        }
                     }
                     ("graph", "imap") => {
+                        // Dedup already checked above for Graph source
                         if let Some(ref gid) = graph_id {
                             let src_token = source_config
                                 .access_token
@@ -719,6 +910,24 @@ pub async fn run_migration(
 
                         match mime_result {
                             Ok(mime_bytes) => {
+                                // Dedup check for IMAP source -> Graph dest
+                                if !dest_message_ids.is_empty() {
+                                    if let Some(msg_id) = extract_message_id(&mime_bytes) {
+                                        if dest_message_ids.contains(&msg_id) {
+                                            folder_skipped += 1;
+                                            skipped_total += 1;
+                                            emit_progress(
+                                                "running", Some(src_path.clone()),
+                                                Some(format!("{}/{}", folder_migrated + folder_skipped + folder_failed, folder_total)),
+                                                migrated_total, skipped_total, failed_total,
+                                                &folder_mappings, &started_at, start_instant.elapsed().as_secs(),
+                                                &source_email, &dest_email, total_emails, &app_handle,
+                                            );
+                                            continue;
+                                        }
+                                    }
+                                }
+
                                 let mut retries = 0;
                                 loop {
                                     match migrate_email_to_graph(
@@ -744,6 +953,7 @@ pub async fn run_migration(
                         }
                     }
                     ("graph", "graph") => {
+                        // Dedup already checked above for Graph source
                         if let Some(ref gid) = graph_id {
                             let src_token = source_config
                                 .access_token
@@ -792,18 +1002,83 @@ pub async fn run_migration(
                     )),
                 };
 
-                match result {
+                // Handle result with retry-once logic for failures
+                match migrate_result {
                     Ok(_) => {
                         folder_migrated += 1;
                         migrated_total += 1;
                     }
-                    Err(e) => {
+                    Err(ref first_err) => {
+                        // Retry once after 2-second delay
                         warn!(
-                            "[migration] Failed to migrate UID {} from {} to {}: {}",
-                            uid, src_path, dst_path, e
+                            "[migration] Email UID {} failed (attempt 1): {}, retrying in 2s",
+                            uid, first_err
                         );
-                        folder_failed += 1;
-                        failed_total += 1;
+                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+                        // Simple retry — re-run the same migration
+                        let retry_result = match (source_transport.as_str(), dest_transport.as_str()) {
+                            ("imap", "imap") => {
+                                let mut sg = pool.get_priority(&source_config).await?;
+                                let mut dg = pool.get_priority(&dest_config).await?;
+                                let r = migrate_email_imap_to_imap(&mut sg.session, &mut dg.session, &src_path, &dst_path, uid).await;
+                                sg.last_selected = Some(src_path.clone());
+                                dg.last_selected = Some(dst_path.clone());
+                                pool.return_priority(&source_config, sg).await;
+                                pool.return_priority(&dest_config, dg).await;
+                                r
+                            }
+                            ("graph", "imap") => {
+                                if let Some(ref gid) = graph_id {
+                                    let t = source_config.access_token.as_deref().ok_or("No source access token")?;
+                                    let c = GraphClient::new(t);
+                                    let mut dg = pool.get_priority(&dest_config).await?;
+                                    let r = migrate_email_graph_to_imap(&c, &mut dg.session, gid, &dst_path, is_read).await;
+                                    dg.last_selected = Some(dst_path.clone());
+                                    pool.return_priority(&dest_config, dg).await;
+                                    r
+                                } else { Err("No Graph message ID".to_string()) }
+                            }
+                            ("imap", "graph") => {
+                                let dfid = folder_mappings[folder_idx].dest_folder_id.as_deref().ok_or("No destination Graph folder ID")?;
+                                let t = dest_config.access_token.as_deref().ok_or("No dest access token")?;
+                                let c = GraphClient::new(t);
+                                let mut sg = pool.get_priority(&source_config).await?;
+                                let mr = fetch_raw_mime(&mut sg.session, &src_path, uid).await;
+                                sg.last_selected = Some(src_path.clone());
+                                pool.return_priority(&source_config, sg).await;
+                                match mr {
+                                    Ok(mb) => migrate_email_to_graph(&mb, &c, dfid, is_read).await,
+                                    Err(e) => Err(e),
+                                }
+                            }
+                            ("graph", "graph") => {
+                                if let Some(ref gid) = graph_id {
+                                    let st = source_config.access_token.as_deref().ok_or("No source access token")?;
+                                    let sc = GraphClient::new(st);
+                                    let mb = sc.get_mime_content(gid).await?;
+                                    let dfid = folder_mappings[folder_idx].dest_folder_id.as_deref().ok_or("No destination Graph folder ID")?;
+                                    let dt = dest_config.access_token.as_deref().ok_or("No dest access token")?;
+                                    let dc = GraphClient::new(dt);
+                                    migrate_email_to_graph(&mb, &dc, dfid, is_read).await
+                                } else { Err("No Graph message ID".to_string()) }
+                            }
+                            _ => Err("Unsupported transport".to_string()),
+                        };
+
+                        match retry_result {
+                            Ok(_) => {
+                                folder_migrated += 1;
+                                migrated_total += 1;
+                                info!("[migration] Email UID {} succeeded on retry", uid);
+                            }
+                            Err(e) => {
+                                warn!("migration: email UID {} failed twice, skipping: {}", uid, e);
+                                folder_failed += 1;
+                                failed_total += 1;
+                                folder_mappings[folder_idx].failed_uids.push(uid);
+                            }
+                        }
                     }
                 }
 
@@ -837,8 +1112,8 @@ pub async fn run_migration(
             "completed".to_string()
         };
 
-        // Save state after each folder
-        let state = MigrationState {
+        // Save checkpoint after each folder
+        let checkpoint_state = MigrationState {
             id: migration_id.clone(),
             source_email: source_email.clone(),
             dest_email: dest_email.clone(),
@@ -855,7 +1130,8 @@ pub async fn run_migration(
             started_at: started_at.clone(),
             updated_at: chrono::Utc::now().to_rfc3339(),
         };
-        let _ = save_migration_state(&app_handle, &state);
+        let _ = save_migration_state(&app_handle, &checkpoint_state);
+        info!("migration: folder '{}' completed, saved checkpoint", src_path);
     }
 
     let final_status = if cancel.load(Ordering::Relaxed) {
@@ -884,7 +1160,13 @@ pub async fn run_migration(
         updated_at: chrono::Utc::now().to_rfc3339(),
     };
 
-    let _ = save_migration_state(&app_handle, &final_state);
+    // Cancel discards persistent state; completed/failed saves final state
+    if final_status == "cancelled" {
+        let _ = clear_migration_state(&app_handle);
+        info!("[migration] Cancelled — persistent state cleared");
+    } else {
+        let _ = save_migration_state(&app_handle, &final_state);
+    }
 
     emit_progress(
         final_status,
