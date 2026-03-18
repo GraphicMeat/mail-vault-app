@@ -22,7 +22,11 @@
     "test:watch": "vitest",
     "test:e2e": "cd src-tauri && cargo build --features webdriver && cd .. && wdio run wdio.conf.js",
     "test:e2e:ui": "wdio run wdio.conf.js --suite ui",
-    "test:e2e:connected": "wdio run wdio.conf.js --suite connected"
+    "test:e2e:connected": "wdio run wdio.conf.js --suite connected",
+    "test:e2e:backup": "wdio run wdio.conf.js --suite backup",
+    "test:e2e:migration": "wdio run wdio.conf.js --suite migration",
+    "test:e2e:visual": "wdio run wdio.conf.js --suite visual",
+    "test:e2e:all": "wdio run wdio.conf.js"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.13.18",
