@@ -642,6 +642,48 @@ fn delete_mailbox_cache(app_handle: tauri::AppHandle, account_id: String) -> Res
     Ok(())
 }
 
+// ── Graph ID map cache (UID → Graph message ID) ────────────────────────
+
+#[tauri::command]
+fn save_graph_id_map(app_handle: tauri::AppHandle, account_id: String, mailbox: String, data: String) -> Result<(), String> {
+    let base_name = cache_base_name(&account_id, &mailbox);
+    let dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("save_graph_id_map: could not get app data dir: {}", e))?
+        .join("email_cache")
+        .join(&base_name);
+
+    fs::create_dir_all(&dir)
+        .map_err(|e| format!("save_graph_id_map: failed to create dir: {}", e))?;
+
+    fs::write(dir.join("graph_id_map.json"), data.as_bytes())
+        .map_err(|e| format!("save_graph_id_map: failed to write: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn load_graph_id_map(app_handle: tauri::AppHandle, account_id: String, mailbox: String) -> Result<Option<String>, String> {
+    let base_name = cache_base_name(&account_id, &mailbox);
+    let file = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("load_graph_id_map: could not get app data dir: {}", e))?
+        .join("email_cache")
+        .join(&base_name)
+        .join("graph_id_map.json");
+
+    if !file.exists() {
+        return Ok(None);
+    }
+
+    let data = fs::read_to_string(&file)
+        .map_err(|e| format!("load_graph_id_map: failed to read: {}", e))?;
+
+    Ok(Some(data))
+}
+
 // ── Email header cache ───────────────────────────────────────────────────
 
 #[tauri::command]
@@ -3349,6 +3391,8 @@ fn main() {
             save_mailbox_cache,
             load_mailbox_cache,
             delete_mailbox_cache,
+            save_graph_id_map,
+            load_graph_id_map,
             save_attachment,
             save_attachment_to,
             show_in_folder,
