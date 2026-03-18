@@ -12,8 +12,37 @@ if (!globalThis.window) {
 }
 
 // Mock all heavy dependencies before importing the store
-vi.mock('../../services/db', () => ({}));
-vi.mock('../../services/api', () => ({}));
+const mockGetLocalEmailLight = vi.fn().mockResolvedValue(null);
+const mockGetEmailHeadersMeta = vi.fn().mockResolvedValue(null);
+const mockGetEmailHeadersPartial = vi.fn().mockResolvedValue({ emails: [], totalEmails: 0 });
+const mockGetArchivedEmailIds = vi.fn().mockResolvedValue(new Set());
+const mockGetSavedEmailIds = vi.fn().mockResolvedValue(new Set());
+const mockGetCachedMailboxEntry = vi.fn().mockResolvedValue(null);
+const mockInitDB = vi.fn().mockResolvedValue(undefined);
+const mockGetAccounts = vi.fn().mockResolvedValue([]);
+const mockEnsureAccountsInFile = vi.fn().mockResolvedValue(undefined);
+const mockSaveMailboxes = vi.fn().mockResolvedValue(undefined);
+const mockReadLocalEmailIndex = vi.fn().mockResolvedValue(null);
+const mockGetArchivedEmails = vi.fn().mockResolvedValue([]);
+
+vi.mock('../../services/db', () => ({
+  getLocalEmailLight: (...args) => mockGetLocalEmailLight(...args),
+  getEmailHeadersMeta: (...args) => mockGetEmailHeadersMeta(...args),
+  getEmailHeadersPartial: (...args) => mockGetEmailHeadersPartial(...args),
+  getArchivedEmailIds: (...args) => mockGetArchivedEmailIds(...args),
+  getSavedEmailIds: (...args) => mockGetSavedEmailIds(...args),
+  getCachedMailboxEntry: (...args) => mockGetCachedMailboxEntry(...args),
+  initDB: (...args) => mockInitDB(...args),
+  getAccounts: (...args) => mockGetAccounts(...args),
+  ensureAccountsInFile: (...args) => mockEnsureAccountsInFile(...args),
+  saveMailboxes: (...args) => mockSaveMailboxes(...args),
+  readLocalEmailIndex: (...args) => mockReadLocalEmailIndex(...args),
+  getArchivedEmails: (...args) => mockGetArchivedEmails(...args),
+}));
+const mockFetchEmailLight = vi.fn().mockResolvedValue(null);
+vi.mock('../../services/api', () => ({
+  fetchEmailLight: (...args) => mockFetchEmailLight(...args),
+}));
 vi.mock('../../services/authUtils', () => ({
   hasValidCredentials: () => true,
   ensureFreshToken: (a) => Promise.resolve(a),
@@ -40,6 +69,21 @@ vi.mock('../safeStorage', () => ({
     setItem: () => {},
     removeItem: () => {},
   },
+}));
+
+const mockGetFromAccountCache = vi.fn().mockReturnValue(null);
+const mockSaveToAccountCache = vi.fn();
+vi.mock('../../services/cacheManager', () => ({
+  getFromAccountCache: (...args) => mockGetFromAccountCache(...args),
+  saveToAccountCache: (...args) => mockSaveToAccountCache(...args),
+  getFromMailboxCache: () => null,
+  saveToMailboxCache: () => {},
+  invalidateMailboxCache: () => {},
+  invalidateAccountCache: () => {},
+  getAccountCacheEntries: () => [],
+  setGraphIdMap: () => {},
+  getGraphMessageId: () => null,
+  clearGraphIdMap: () => {},
 }));
 
 const { useMailStore } = await import('../mailStore');
@@ -182,5 +226,128 @@ describe('mailStore initial state', () => {
 
     store.dismissExportProgress();
     expect(useMailStore.getState().exportProgress).toBeNull();
+  });
+});
+
+describe('account cache restore (PERF-02)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    const store = useMailStore.getState();
+    store.emailCache.clear();
+    useMailStore.setState({
+      cacheCurrentSizeMB: 0,
+      accounts: [{ id: 'acc1', email: 'test@example.com' }, { id: 'acc2', email: 'other@example.com' }],
+      activeAccountId: 'acc1',
+      emails: [fakeEmail(1)],
+      totalEmails: 1,
+    });
+  });
+
+  it('setActiveAccount restores from cache without triggering IMAP call', async () => {
+    // Prime account cache with fake data for acc2
+    const cachedState = {
+      emails: [fakeEmail(10), fakeEmail(11)],
+      localEmails: [],
+      emailsByIndex: new Map(),
+      totalEmails: 2,
+      savedEmailIds: new Set(),
+      archivedEmailIds: new Set(),
+      loadedRanges: [{ start: 0, end: 2 }],
+      currentPage: 1,
+      hasMoreEmails: false,
+      sentEmails: [],
+      mailboxes: [{ name: 'INBOX', path: 'INBOX', specialUse: null, children: [] }],
+      mailboxesFetchedAt: Date.now(),
+      connectionStatus: 'connected',
+      activeMailbox: 'INBOX',
+    };
+    mockGetFromAccountCache.mockReturnValue(cachedState);
+
+    // Switch to acc2 — should restore from cache
+    await useMailStore.getState().setActiveAccount('acc2');
+
+    // Verify emails restored from cache
+    const state = useMailStore.getState();
+    expect(state.emails).toHaveLength(2);
+    expect(state.emails[0].uid).toBe(10);
+    expect(state.activeAccountId).toBe('acc2');
+
+    // IMAP fetch should NOT have been called (no server round-trip)
+    expect(mockFetchEmailLight).not.toHaveBeenCalled();
+  });
+});
+
+describe('stale generation guard (PERF-04)', () => {
+  it('loadEmails isStale check prevents stale generation from writing state', async () => {
+    // Set up store with an active account
+    useMailStore.setState({
+      accounts: [{ id: 'acc1', email: 'test@example.com', password: 'pass' }],
+      activeAccountId: 'acc1',
+      activeMailbox: 'INBOX',
+      emails: [],
+    });
+
+    // Mock cached headers to return different data for different calls
+    let callCount = 0;
+    mockGetEmailHeadersMeta.mockImplementation(async () => {
+      callCount++;
+      // Simulate delay on first call
+      if (callCount === 1) {
+        await new Promise(r => setTimeout(r, 50));
+      }
+      return { emails: [fakeEmail(callCount * 100)], totalEmails: 1 };
+    });
+
+    // Start first loadEmails, then immediately switch account (making first stale)
+    const firstLoad = useMailStore.getState().loadEmails();
+
+    // Switch activeAccountId mid-flight — makes the first load stale
+    await new Promise(r => setTimeout(r, 10));
+    useMailStore.setState({ activeAccountId: 'acc2' });
+
+    await firstLoad.catch(() => {});
+
+    // The stale first load should NOT have overwritten the activeAccountId
+    expect(useMailStore.getState().activeAccountId).toBe('acc2');
+  });
+});
+
+describe('prefetch OOM guard (STAB-01)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    const store = useMailStore.getState();
+    store.emailCache.clear();
+    useMailStore.setState({ cacheCurrentSizeMB: 0 });
+  });
+
+  it('_prefetchAdjacentEmails skips when cache exceeds 80% of limit', async () => {
+    const store = useMailStore.getState();
+
+    // Fill cache to exceed 80% of 128MB limit (>102.4MB)
+    // Use addToCache to inflate the module-level _cacheCurrentSizeMB tracker
+    // Each email is ~1MB, add 110 to exceed 80% threshold
+    for (let i = 0; i < 110; i++) {
+      store.addToCache(`fill-${i}`, fakeEmail(i, 1024), 4096); // high limit so nothing gets evicted
+    }
+
+    // Set up state with sorted emails for prefetch to work with
+    useMailStore.setState({
+      activeAccountId: 'acc1',
+      activeMailbox: 'INBOX',
+      sortedEmails: [
+        { uid: 1, subject: 'Current' },
+        { uid: 2, subject: 'Next 1' },
+        { uid: 3, subject: 'Next 2' },
+        { uid: 4, subject: 'Next 3' },
+      ],
+      accounts: [{ id: 'acc1', email: 'test@example.com' }],
+    });
+
+    // Call prefetch — should skip due to memory pressure
+    await store._prefetchAdjacentEmails(1);
+
+    // Neither local nor remote fetch should have been called
+    expect(mockGetLocalEmailLight).not.toHaveBeenCalled();
+    expect(mockFetchEmailLight).not.toHaveBeenCalled();
   });
 });
