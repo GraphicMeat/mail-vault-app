@@ -179,7 +179,7 @@ async fn store_credentials(credentials: std::collections::HashMap<String, String
 async fn get_credentials() -> Result<std::collections::HashMap<String, String>, String> {
     info!("=== GET CREDENTIALS START ===");
 
-    tokio::task::spawn_blocking(move || {
+    let keychain_future = tokio::task::spawn_blocking(move || {
         let entry = Entry::new(KEYRING_SERVICE, CREDENTIALS_KEY)
             .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
 
@@ -192,7 +192,16 @@ async fn get_credentials() -> Result<std::collections::HashMap<String, String>, 
         info!("Retrieved credentials for {} account(s)", credentials.len());
         info!("=== GET CREDENTIALS END ===");
         Ok(credentials)
-    }).await.map_err(|e| format!("Keychain task panicked: {}", e))?
+    });
+
+    // Timeout after 5 seconds — prevents slow keychain (D-Bus/Keychain) from blocking app startup
+    match tokio::time::timeout(std::time::Duration::from_secs(5), keychain_future).await {
+        Ok(join_result) => join_result.map_err(|e| format!("Keychain task panicked: {}", e))?,
+        Err(_) => {
+            warn!("get_credentials: keychain timeout after 5s — returning empty credentials");
+            Ok(std::collections::HashMap::new())
+        }
+    }
 }
 
 // Legacy function - store single password (kept for migration)
@@ -539,8 +548,10 @@ async fn save_email_cache(app_handle: tauri::AppHandle, account_id: String, mail
         "highestModseq": parsed.get("highestModseq"),
         "lastSynced": parsed.get("lastSynced")
     });
-    fs::write(sidecar_dir.join("_meta.json"), serde_json::to_string(&meta).unwrap())
-        .map_err(|e| format!("Failed to write _meta.json: {}", e))?;
+    let meta_json = serde_json::to_string(&meta)
+        .map_err(|e| format!("save_email_cache: failed to serialize _meta.json: {}", e))?;
+    fs::write(sidecar_dir.join("_meta.json"), meta_json)
+        .map_err(|e| format!("save_email_cache: failed to write _meta.json: {}", e))?;
 
     // Write individual email files (skip existing for performance)
     let mut valid_uids = std::collections::HashSet::new();
@@ -552,8 +563,10 @@ async fn save_email_cache(app_handle: tauri::AppHandle, account_id: String, mail
                 valid_uids.insert(uid_str.clone());
                 let file_path = sidecar_dir.join(format!("{}.json", uid_str));
                 if !file_path.exists() {
-                    fs::write(&file_path, serde_json::to_string(email).unwrap())
-                        .map_err(|e| format!("Failed to write email {}: {}", uid, e))?;
+                    let email_json = serde_json::to_string(email)
+                        .map_err(|e| format!("save_email_cache: failed to serialize email {}: {}", uid, e))?;
+                    fs::write(&file_path, email_json)
+                        .map_err(|e| format!("save_email_cache: failed to write email {}: {}", uid, e))?;
                     written += 1;
                 }
             }
@@ -1236,7 +1249,7 @@ async fn open_email_window(app: tauri::AppHandle, html: String, title: String) -
         WebviewUrl::External(
             format!("file://{}", html_file.to_string_lossy())
                 .parse()
-                .unwrap(),
+                .map_err(|e| format!("open_email_window: invalid URL: {}", e))?,
         ),
     )
     .title(&title)
@@ -1905,6 +1918,7 @@ async fn archive_emails(
 ) -> Result<archive::ArchiveProgress, String> {
     // Reset cancellation flag for this run
     let cancel = {
+        // Mutex::lock().unwrap() is safe — poison only occurs on panic in critical section
         let mut guard = state.0.lock().unwrap();
         let token = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         *guard = std::sync::Arc::clone(&token);
@@ -1923,6 +1937,7 @@ async fn archive_emails(
 
 #[tauri::command]
 fn cancel_archive(state: tauri::State<'_, archive::ArchiveCancelToken>) -> Result<(), String> {
+    // Mutex::lock().unwrap() is safe — poison only occurs on panic in critical section
     state.0.lock().unwrap().store(true, std::sync::atomic::Ordering::Relaxed);
     info!("cancel_archive: cancellation requested");
     Ok(())
@@ -1940,6 +1955,7 @@ async fn bulk_delete_emails(
     uids: Vec<u32>,
 ) -> Result<archive::ArchiveProgress, String> {
     let cancel = {
+        // Mutex::lock().unwrap() is safe — poison only occurs on panic in critical section
         let mut guard = state.0.lock().unwrap();
         let token = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         *guard = std::sync::Arc::clone(&token);
@@ -2503,7 +2519,14 @@ fn maildir_migrate_json_to_eml(
                 }
             };
 
-            let cur_dir = path.parent().unwrap();
+            let cur_dir = match path.parent() {
+                Some(d) => d,
+                None => {
+                    warn!("migrate_json_to_eml: path {:?} has no parent dir", path);
+                    errors += 1;
+                    continue;
+                }
+            };
             let eml_filename = build_maildir_filename(uid, &["archived".to_string(), "seen".to_string()]);
             let eml_path = cur_dir.join(&eml_filename);
 
@@ -3047,6 +3070,7 @@ type PendingUpdate = std::sync::Mutex<Option<tauri_plugin_updater::Update>>;
 #[tauri::command]
 async fn install_pending_update(handle: tauri::AppHandle) -> Result<(), String> {
     let state = handle.state::<PendingUpdate>();
+    // Mutex::lock().unwrap() is safe — poison only occurs on panic in critical section
     let update = state.lock().unwrap().take();
     match update {
         Some(u) => {
@@ -3133,6 +3157,7 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
 
             // Store the update object for later install
             let state = handle.state::<PendingUpdate>();
+            // Mutex::lock().unwrap() is safe — poison only occurs on panic in critical section
             *state.lock().unwrap() = Some(update);
         }
         Ok(None) => {
