@@ -32,6 +32,8 @@ pub struct ImapConfig {
     #[serde(rename = "smtpSecure")]
     pub smtp_secure: Option<bool>,
     pub name: Option<String>,
+    #[serde(rename = "oauth2Transport")]
+    pub oauth2_transport: Option<String>,
 }
 
 impl ImapConfig {

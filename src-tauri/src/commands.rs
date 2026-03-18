@@ -1,3 +1,5 @@
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use serde::Deserialize;
 use tracing::info;
 
@@ -5,6 +7,7 @@ use crate::imap::pool::PooledSessionGuard;
 use crate::imap::{self, ImapConfig, ImapPool, ImapSession};
 use crate::oauth2::OAuth2Manager;
 use crate::smtp;
+use crate::backup;
 
 // Helper: run an IMAP operation with a session from the pool.
 // On success, the session is returned to the pool with its last-selected mailbox.
@@ -730,4 +733,31 @@ pub async fn imap_move_emails(
 pub async fn resolve_email_settings(domain: String) -> Result<serde_json::Value, String> {
     let settings = crate::dns::resolve_email_settings(&domain).await?;
     serde_json::to_value(settings).map_err(|e| format!("Serialization error: {}", e))
+}
+
+// ── Backup: Run account backup ───────────────────────────────────────────
+
+#[tauri::command]
+pub async fn backup_run_account(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    account_json: String,
+    cancel_token: tauri::State<'_, backup::BackupCancelToken>,
+) -> Result<backup::BackupResult, String> {
+    let cancel = {
+        let mut guard = cancel_token.0.lock().unwrap();
+        let fresh = Arc::new(AtomicBool::new(false));
+        *guard = Arc::clone(&fresh);
+        fresh
+    };
+    backup::run_account_backup(app_handle, account_id, account_json, cancel).await
+}
+
+#[tauri::command]
+pub async fn backup_cancel(
+    cancel_token: tauri::State<'_, backup::BackupCancelToken>,
+) -> Result<(), String> {
+    let guard = cancel_token.0.lock().unwrap();
+    guard.store(true, Ordering::Relaxed);
+    Ok(())
 }
