@@ -160,6 +160,7 @@ export const useSettingsStore = create(
 
       // Paid user flag (placeholder — swap to real payment check later)
       isPaidUser: false,
+      setIsPaidUser: (val) => set({ isPaidUser: val }),
 
       // Link safety (premium feature — enabled for all while isPaidUser is unwired)
       linkSafetyEnabled: true,
