@@ -12,6 +12,7 @@ import {
   Star,
   Archive,
   AlertCircle,
+  CheckCircle2,
   Plus,
   ChevronDown,
   ChevronRight,
@@ -54,6 +55,21 @@ function getMailboxDisplayName(name) {
   const match = name.match(/^inbox\./i);
   if (match) return name.slice(match[0].length);
   return name;
+}
+
+function BackupStatusIcon({ accountId }) {
+  const backupState = useSettingsStore(s => s.backupState?.[accountId]);
+  const schedule = useSettingsStore(s => s.backupSchedules?.[accountId]);
+  if (!schedule?.enabled) return null;
+
+  const isOverdue = backupState?.lastBackupTime && backupState?.nextRunTime &&
+    Date.now() > backupState.nextRunTime + (backupState.nextRunTime - backupState.lastBackupTime);
+  const isFailed = backupState?.lastStatus === 'failed';
+
+  if (isFailed || isOverdue) {
+    return <AlertCircle size={12} className="text-amber-500 flex-shrink-0" aria-label="Backup needs attention" />;
+  }
+  return <CheckCircle2 size={12} className="text-emerald-500 flex-shrink-0" aria-label="Backup healthy" />;
 }
 
 export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
@@ -237,6 +253,9 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                   style={{ backgroundColor: color }}
                 >
                   {initial}
+                </div>
+                <div className="absolute -top-0.5 -right-0.5">
+                  <BackupStatusIcon accountId={account.id} />
                 </div>
                 {(unreadPerAccount[account.id] || 0) > 0 && (
                   <div className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 flex items-center justify-center">
@@ -495,6 +514,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                     </div>
                   )}
                 </div>
+                <BackupStatusIcon accountId={account.id} />
               </div>
             );
           })}
