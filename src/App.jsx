@@ -25,6 +25,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw } from 'lucide-react';
 import * as bulkApi from './services/api';
 import { bulkOperationManager } from './services/BulkOperationManager';
+import { migrationManager } from './services/migrationManager.js';
 import { version } from '../package.json';
 
 // Resizable divider component
@@ -116,6 +117,12 @@ function App() {
 
   // Backup scheduler — bridges backup singleton to React lifecycle
   useBackupScheduler();
+
+  // Migration manager — listens for migration progress events and checks for incomplete migrations
+  useEffect(() => {
+    migrationManager.init();
+    return () => migrationManager.destroy();
+  }, []);
 
   // Keyboard shortcuts — wire all shortcut actions to app state/store methods
   useKeyboardShortcuts({

@@ -11,6 +11,7 @@ import {
   ScrollText,
   Shield,
   Clock,
+  ArrowLeftRight,
 } from 'lucide-react';
 import { GeneralSettings } from './settings/GeneralSettings';
 import { AccountSettings } from './settings/AccountSettings';
@@ -20,6 +21,7 @@ import { SecuritySettings } from './settings/SecuritySettings';
 import { LogsSettings } from './settings/LogsSettings';
 import { HelpSettings } from './settings/HelpSettings';
 import BackupSettings from './settings/BackupSettings';
+import MigrationSettings from './settings/MigrationSettings.jsx';
 
 export function SettingsPage({ onClose, onAddAccount, onReportBug }) {
   const { accounts } = useMailStore();
@@ -41,6 +43,7 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug }) {
     { id: 'templates', label: 'Templates', icon: FileText },
     { id: 'storage', label: 'Storage', icon: HardDrive },
     { id: 'backup', label: 'Backup', icon: Clock },
+    { id: 'migration', label: 'Migration', icon: ArrowLeftRight },
     { id: 'security', label: 'Security', icon: Shield },
     { id: 'logs', label: 'Logs', icon: ScrollText },
     { id: 'help', label: 'Help & Support', icon: Mail },
@@ -122,6 +125,10 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug }) {
 
             {activeTab === 'backup' && (
               <BackupSettings />
+            )}
+
+            {activeTab === 'migration' && (
+              <MigrationSettings />
             )}
 
             {activeTab === 'security' && (
