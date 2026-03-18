@@ -189,6 +189,20 @@ export const useSettingsStore = create(
       backupHistory: {},
       // Shape: { [accountId]: [{ timestamp: number, emailsBackedUp: number, durationSecs: number, success: bool, error: string|null }] }
 
+      // Migration state
+      activeMigration: null,        // MigrationProgress object from Tauri events, or null
+      migrationHistory: [],         // Array of last 5 completed/failed/cancelled migrations
+      incompleteMigration: null,    // MigrationState loaded from disk on startup (for resume banner)
+
+      // Migration actions
+      setActiveMigration: (migration) => set({ activeMigration: migration }),
+      clearActiveMigration: () => set({ activeMigration: null }),
+      addMigrationHistory: (entry) => set(state => ({
+          migrationHistory: [entry, ...state.migrationHistory].slice(0, 5)
+      })),
+      setIncompleteMigration: (val) => set({ incompleteMigration: val }),
+      clearIncompleteMigration: () => set({ incompleteMigration: null }),
+
       // Backup notification preferences
       backupNotifyOnSuccess: true,
       backupNotifyOnFailure: true,
@@ -573,6 +587,9 @@ export const useSettingsStore = create(
           linkSafetyEnabled: true,
           linkSafetyClickConfirm: true,
           cleanupRules: [],
+          activeMigration: null,
+          migrationHistory: [],
+          incompleteMigration: null,
         });
       }
     }),
