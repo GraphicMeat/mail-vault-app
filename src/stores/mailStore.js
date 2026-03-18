@@ -8,7 +8,7 @@ import { hasRealAttachments } from '../services/attachmentUtils';
 import { buildThreads } from '../utils/emailParser';
 import { UidMap } from '../services/UidMap';
 import { isGraphAccount, GRAPH_FOLDER_NAME_MAP, APP_TO_GRAPH_FOLDER_MAP, normalizeGraphFolderName, graphFoldersToMailboxes, inferSpecialUse, graphMessageToEmail } from '../services/graphConfig';
-import { saveToMailboxCache as _saveToMailboxCache, getFromMailboxCache as _getFromMailboxCache, invalidateMailboxCache as _invalidateMailboxCache, saveToAccountCache as _saveToAccountCache, getFromAccountCache as _getFromAccountCache, invalidateAccountCache as _invalidateAccountCache, getAccountCacheEntries, setGraphIdMap as _setGraphIdMap, getGraphMessageId, clearGraphIdMap as _clearGraphIdMap } from '../services/cacheManager';
+import { saveToMailboxCache as _saveToMailboxCache, getFromMailboxCache as _getFromMailboxCache, invalidateMailboxCache as _invalidateMailboxCache, saveToAccountCache as _saveToAccountCache, getFromAccountCache as _getFromAccountCache, invalidateAccountCache as _invalidateAccountCache, getAccountCacheEntries, setGraphIdMap as _setGraphIdMap, getGraphMessageId, clearGraphIdMap as _clearGraphIdMap, restoreGraphIdMap as _restoreGraphIdMap } from '../services/cacheManager';
 export { graphMessageToEmail, getGraphMessageId };
 
 // ── Unified inbox helpers ───────────────────────────────────────────────────
@@ -56,6 +56,30 @@ let _loadAbortController = null;
 const _rangeRetryDelays = new Map();
 const MAILBOX_CACHE_FRESH_MS = 10 * 60 * 1000;
 const MAILBOX_PREFETCH_LIMIT = 2;
+
+// ── Network retry scheduler ────────────────────────────────────────
+// Retry sequence: immediate -> 3s -> 6s -> 12s -> 30s -> 60s -> wait for 'online'
+const _RETRY_DELAYS_MS = [0, 3000, 6000, 12000, 30000, 60000];
+let _networkRetryTimer = null;
+let _networkRetryStep = 0;
+
+function _scheduleNetworkRetry() {
+  if (_networkRetryTimer) clearTimeout(_networkRetryTimer);
+  const delay = _RETRY_DELAYS_MS[Math.min(_networkRetryStep, _RETRY_DELAYS_MS.length - 1)];
+  _networkRetryStep++;
+  console.log('[mailStore] Retry scheduled in %dms (step %d)', delay, _networkRetryStep);
+  _networkRetryTimer = setTimeout(() => {
+    _networkRetryTimer = null;
+    const { activeAccountId, activeMailbox, activateAccount } = useMailStore.getState();
+    if (activeAccountId) activateAccount(activeAccountId, activeMailbox || 'INBOX');
+  }, delay);
+}
+
+function _resetNetworkRetry() {
+  if (_networkRetryTimer) clearTimeout(_networkRetryTimer);
+  _networkRetryTimer = null;
+  _networkRetryStep = 0;
+}
 
 
 function isMailboxCacheFresh(fetchedAt) {
@@ -239,6 +263,10 @@ import { createPerfTrace } from '../utils/perfTrace';
  */
 async function _loadServerEmailsViaGraph(account, accountId, activeMailbox, uidMap, signal, trace) {
   const savedEmailIds = useMailStore.getState().savedEmailIds;
+
+  // Restore persisted Graph ID map from disk (no-op if already in memory)
+  await _restoreGraphIdMap(accountId, activeMailbox);
+  if (signal.aborted) return;
 
   // 1. Use mailboxes already set by loadMailboxes() — only force-refresh from
   //    Graph if the target folder is missing its _graphFolderId (edge case:
@@ -988,8 +1016,8 @@ export const useMailStore = create((set, get) => ({
     const activationTrace = createPerfTrace('activateAccount', { accountId, mailbox });
 
     // Cancel any previous activation and progressive loading
-    if (_activeController) _activeController.abort();
-    if (_loadAbortController) _loadAbortController.abort();
+    if (_activeController) _activeController.abort('account-switch');
+    if (_loadAbortController) _loadAbortController.abort('account-switch');
     _activeController = new AbortController();
     const { signal } = _activeController;
 
@@ -2498,6 +2526,10 @@ export const useMailStore = create((set, get) => ({
   // ── Graph API email loading ──────────────────────────────────────────────
   _loadEmailsViaGraph: async (account, activeAccountId, activeMailbox, generation) => {
     const isStale = () => get().activeAccountId !== activeAccountId || _loadEmailsGeneration !== generation;
+
+    // Restore persisted Graph ID map from disk (no-op if already in memory)
+    await _restoreGraphIdMap(activeAccountId, activeMailbox);
+    if (isStale()) return;
 
     // Load local state (saved/archived IDs)
     const [savedEmailIds, archivedEmailIds] = await Promise.all([

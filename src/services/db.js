@@ -962,6 +962,33 @@ export async function clearEmailHeadersCache(accountId) {
   }
 }
 
+// ── Graph ID map persistence (UID → Graph message ID) ───────────────────
+
+export async function saveGraphIdMap(accountId, mailbox, mapObj) {
+  if (invoke) {
+    try {
+      const data = JSON.stringify(mapObj);
+      await invoke('save_graph_id_map', { accountId, mailbox, data });
+    } catch (error) {
+      console.warn('[db.js] Failed to save graph ID map:', error);
+    }
+  }
+}
+
+export async function loadGraphIdMap(accountId, mailbox) {
+  if (invoke) {
+    try {
+      const data = await invoke('load_graph_id_map', { accountId, mailbox });
+      if (data) {
+        return JSON.parse(data);
+      }
+    } catch (error) {
+      console.warn('[db.js] Failed to load graph ID map:', error);
+    }
+  }
+  return null;
+}
+
 // --- Storage usage ---
 
 export async function getStorageUsage() {

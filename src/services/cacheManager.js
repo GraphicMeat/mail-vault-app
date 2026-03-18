@@ -109,6 +109,14 @@ const _graphIdMap = new Map();
 
 export function setGraphIdMap(accountId, mailbox, uidToGraphId) {
   _graphIdMap.set(`${accountId}:${mailbox}`, uidToGraphId);
+
+  // Fire-and-forget: persist to disk so map survives app restarts
+  // Lazy import avoids circular dependency (db.js → cacheManager.js)
+  import('./db.js').then(db => {
+    const obj = Object.fromEntries(uidToGraphId);
+    db.saveGraphIdMap(accountId, mailbox, obj)
+      .catch(e => console.warn('[graphIdMap] Failed to persist:', e));
+  }).catch(() => {});
 }
 
 export function getGraphMessageId(accountId, mailbox, uid) {
@@ -121,5 +129,29 @@ export function clearGraphIdMap(accountId) {
     if (key.startsWith(`${accountId}:`)) {
       _graphIdMap.delete(key);
     }
+  }
+}
+
+/**
+ * Restore a persisted Graph ID map from disk into the in-memory cache.
+ * Called during Graph account init before message fetching.
+ */
+export async function restoreGraphIdMap(accountId, mailbox) {
+  const key = `${accountId}:${mailbox}`;
+  if (_graphIdMap.has(key)) return; // Already in memory
+
+  try {
+    const db = await import('./db.js');
+    const saved = await db.loadGraphIdMap(accountId, mailbox);
+    if (saved && typeof saved === 'object') {
+      const map = new Map();
+      for (const [uid, graphId] of Object.entries(saved)) {
+        map.set(Number(uid), graphId);
+      }
+      _graphIdMap.set(key, map);
+      console.log('[graphIdMap] Restored %d entries for %s:%s', map.size, accountId, mailbox);
+    }
+  } catch (e) {
+    console.warn('[graphIdMap] Failed to restore from disk:', e);
   }
 }
