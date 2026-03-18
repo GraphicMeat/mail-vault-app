@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useMailStore } from '../../stores/mailStore';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { ComposeModal } from '../ComposeModal';
@@ -512,7 +513,6 @@ export function ThreadView({ thread }) {
   const threadSortOrder = useSettingsStore(s => s.threadSortOrder);
   const [saving, setSaving] = useState(false);
   const scrollContainerRef = useRef(null);
-  const lastEmailRef = useRef(null);
 
   // Sort emails by user preference (oldest-first or newest-first)
   const sortedEmails = useMemo(() =>
@@ -552,14 +552,21 @@ export function ThreadView({ thread }) {
     return result;
   }, [sortedEmails, signatureDisplay]);
 
+  const THREAD_ROW_HEIGHT = 72;
+  const virtualizer = useVirtualizer({
+    count: sortedEmails.length,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => THREAD_ROW_HEIGHT,
+    overscan: 8,
+    measureElement: (el) => el?.getBoundingClientRect().height ?? THREAD_ROW_HEIGHT,
+  });
+
   // Scroll to the newest (last) email on mount — scoped to the scroll container
   const threadId = thread.threadId;
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (lastEmailRef.current && scrollContainerRef.current) {
-        const container = scrollContainerRef.current;
-        const el = lastEmailRef.current;
-        container.scrollTop = el.offsetTop;
+      if (sortedEmails.length > 0) {
+        virtualizer.scrollToIndex(sortedEmails.length - 1, { align: 'end' });
       }
     }, 50);
     return () => clearTimeout(timer);
@@ -606,26 +613,40 @@ export function ThreadView({ thread }) {
         )}
       </div>
 
-      {/* Thread emails — w-0 min-w-full prevents children from expanding container beyond viewport */}
+      {/* Thread emails — virtualized */}
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 w-full" style={{ contain: 'inline-size' }}>
-        {sortedEmails.map((email, idx) => {
-          const isLast = idx === sortedEmails.length - 1;
-          return (
-            <div key={emailKey(email)} ref={isLast ? lastEmailRef : undefined} className="w-full overflow-hidden" style={{ contain: 'inline-size' }}>
-              <ThreadEmailItem
-                email={email}
-                bodiesMapRef={bodiesMapRef}
-                registerListener={registerListener}
-                isLast={isLast}
-                activeAccountId={activeAccountId}
-                activeMailbox={activeMailbox}
-                archivedEmailIds={archivedEmailIds}
-                signatureDisplay={signatureDisplay}
-                shouldShowSignature={sigVisMap[email.uid] !== false}
-              />
-            </div>
-          );
-        })}
+        <div style={{ height: virtualizer.getTotalSize() + 'px', position: 'relative', width: '100%' }}>
+          {virtualizer.getVirtualItems().map((vr) => {
+            const email = sortedEmails[vr.index];
+            if (!email) return null;
+            const isLast = vr.index === sortedEmails.length - 1;
+            return (
+              <div
+                key={vr.key}
+                data-index={vr.index}
+                ref={virtualizer.measureElement}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  width: '100%',
+                  transform: `translateY(${vr.start}px)`,
+                }}
+              >
+                <ThreadEmailItem
+                  email={email}
+                  bodiesMapRef={bodiesMapRef}
+                  registerListener={registerListener}
+                  isLast={isLast}
+                  activeAccountId={activeAccountId}
+                  activeMailbox={activeMailbox}
+                  archivedEmailIds={archivedEmailIds}
+                  signatureDisplay={signatureDisplay}
+                  shouldShowSignature={sigVisMap[email.uid] !== false}
+                />
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
