@@ -28,10 +28,10 @@ import {
 import { BulkOperationsModal } from './BulkOperationsModal';
 import { BulkOperationProgress } from './BulkOperationProgress';
 import { bulkOperationManager } from '../services/BulkOperationManager';
+import { useVirtualizer } from '@tanstack/react-virtual';
 
 const ROW_HEIGHT_DEFAULT = 56;
 const ROW_HEIGHT_COMPACT = 52;
-const BUFFER_SIZE = 10;
 
 
 const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onToggleSelection, isChecked, style }) {
@@ -824,9 +824,6 @@ function EmailListComponent() {
     setFocusedRow(null);
   }, [activeAccountId, activeMailbox]);
 
-  const [scrollTop, setScrollTop] = useState(0);
-  const [containerHeight, setContainerHeight] = useState(600);
-
   // Pull-to-refresh
   const [pullDistance, setPullDistance] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -943,8 +940,14 @@ function EmailListComponent() {
   const hasSelection = selectedEmailIds.size > 0;
   const allSelected = displayEmails.length > 0 && selectedEmailIds.size === displayEmails.length;
 
-  // Hand-rolled virtual scroll — proven to feel smoother than @tanstack/react-virtual
   const rowCount = threadedDisplay.length;
+
+  const virtualizer = useVirtualizer({
+    count: rowCount,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 5,
+  });
 
   // Diagnostic: trace loading spinner condition
   useEffect(() => {
@@ -954,66 +957,24 @@ function EmailListComponent() {
         loading, rowCount, state.emails.length, state.sortedEmails.length, state.viewMode, state.activeMailbox);
     }
   }, [loading, rowCount]);
-  const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - BUFFER_SIZE);
-  const visibleCount = Math.ceil(containerHeight / ROW_HEIGHT) + 2 * BUFFER_SIZE;
-  const endIndex = Math.min(rowCount, startIndex + visibleCount);
 
   // Reset scroll position when switching mailbox, account, or view mode
   useEffect(() => {
-    setScrollTop(0);
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = 0;
     }
   }, [activeMailbox, activeAccountId, viewMode]);
 
-  // Track container height
-  useEffect(() => {
-    if (!scrollContainerRef.current) return;
-    const updateHeight = () => {
-      if (scrollContainerRef.current) {
-        const height = scrollContainerRef.current.clientHeight;
-        if (height > 0) setContainerHeight(height);
-      }
-    };
-    updateHeight();
-    let rafId;
-    const observer = new ResizeObserver((entries) => {
-      if (rafId) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        const height = entries[0]?.contentRect?.height;
-        if (height) setContainerHeight(height);
-      });
-    });
-    observer.observe(scrollContainerRef.current);
-    return () => {
-      if (rafId) cancelAnimationFrame(rafId);
-      observer.disconnect();
-    };
-  }, []);
-
   // Auto-load more emails when approaching the end of the loaded list
   useEffect(() => {
     if (searchActive || loadingMore || !hasMoreEmails || viewMode === 'local') return;
-
-    const visibleEnd = Math.floor(scrollTop / ROW_HEIGHT) + Math.ceil(containerHeight / ROW_HEIGHT);
-    if (visibleEnd >= threadedDisplay.length - 20) {
-      const timer = setTimeout(() => {
-        loadMoreEmails();
-      }, 100);
+    const items = virtualizer.getVirtualItems();
+    const lastVisible = items[items.length - 1];
+    if (lastVisible && lastVisible.index >= threadedDisplay.length - 20) {
+      const timer = setTimeout(() => { loadMoreEmails(); }, 100);
       return () => clearTimeout(timer);
     }
-  }, [scrollTop, containerHeight, threadedDisplay.length, hasMoreEmails, loadingMore, searchActive, viewMode, loadMoreEmails]);
-
-  // Handle scroll — throttled via rAF to avoid 60fps re-renders
-  const rafRef = useRef(null);
-  const handleScroll = useCallback((e) => {
-    if (rafRef.current) return;
-    const target = e.currentTarget;
-    rafRef.current = requestAnimationFrame(() => {
-      setScrollTop(target.scrollTop);
-      rafRef.current = null;
-    });
-  }, []);
+  }, [virtualizer, threadedDisplay.length, hasMoreEmails, loadingMore, searchActive, viewMode, loadMoreEmails]);
 
   // Pull-to-refresh handlers
   const PULL_THRESHOLD = 80;
@@ -1052,20 +1013,6 @@ function EmailListComponent() {
       setPullDistance(0);
     }
   }, [pullDistance]);
-
-  // Generate visible rows
-  const visibleRows = useMemo(() => {
-    const rows = [];
-    for (let i = startIndex; i < endIndex; i++) {
-      const item = threadedDisplay[i];
-      if (item) {
-        rows.push({ index: i, item, top: i * ROW_HEIGHT });
-      }
-    }
-    return rows;
-  }, [startIndex, endIndex, threadedDisplay, ROW_HEIGHT]);
-
-  const totalHeight = rowCount * ROW_HEIGHT;
 
   const handleBulkConfirm = async ({ action, uids }) => {
     const { activeAccountId, accounts, activeMailbox } = useMailStore.getState();
@@ -1209,7 +1156,6 @@ function EmailListComponent() {
       {/* Email List */}
       <div
         ref={scrollContainerRef}
-        onScroll={handleScroll}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -1464,39 +1410,63 @@ function EmailListComponent() {
             </div>
           )
         ) : (
-          /* Original chronological virtual scroll rendering */
-          <div key={`${activeAccountId}-${viewMode}`} style={{ height: totalHeight, position: 'relative' }}>
-            {visibleRows.map(({ index, item, top }) => {
+          /* Virtualized chronological scroll rendering */
+          <div key={`${activeAccountId}-${viewMode}`} style={{ height: virtualizer.getTotalSize() + 'px', position: 'relative' }}>
+            {virtualizer.getVirtualItems().map((vr) => {
+              const item = threadedDisplay[vr.index];
               if (!item) return null;
-
-              const rowStyle = { top, height: ROW_HEIGHT };
 
               if (item.type === 'thread') {
                 const ThreadRowComponent = isCompact ? CompactThreadRow : ThreadRow;
                 const anyChecked = item.thread.emails.some(e => selectedEmailIds.has(e.uid));
                 return (
-                  <ThreadRowComponent
-                    key={`thread-${item.thread.threadId}`}
-                    thread={item.thread}
-                    isSelected={item.thread.emails.some(e => selectedEmailId === e.uid)}
-                    onSelectThread={selectThread}
-                    onToggleSelection={toggleEmailSelection}
-                    anyChecked={anyChecked}
-                    style={rowStyle}
-                  />
+                  <div
+                    key={vr.key}
+                    data-index={vr.index}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      width: '100%',
+                      height: vr.size + 'px',
+                      transform: `translateY(${vr.start}px)`,
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <ThreadRowComponent
+                      key={`thread-${item.thread.threadId}`}
+                      thread={item.thread}
+                      isSelected={item.thread.emails.some(e => selectedEmailId === e.uid)}
+                      onSelectThread={selectThread}
+                      onToggleSelection={toggleEmailSelection}
+                      anyChecked={anyChecked}
+                      style={{ height: ROW_HEIGHT }}
+                    />
+                  </div>
                 );
               }
 
               return (
-                <RowComponent
-                  key={item.email.uid}
-                  email={item.email}
-                  isSelected={selectedEmailId === item.email.uid}
-                  isChecked={selectedEmailIds.has(item.email.uid)}
-                  onSelect={selectEmail}
-                  onToggleSelection={toggleEmailSelection}
-                  style={rowStyle}
-                />
+                <div
+                  key={vr.key}
+                  data-index={vr.index}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    width: '100%',
+                    height: vr.size + 'px',
+                    transform: `translateY(${vr.start}px)`,
+                  }}
+                >
+                  <RowComponent
+                    key={item.email.uid}
+                    email={item.email}
+                    isSelected={selectedEmailId === item.email.uid}
+                    isChecked={selectedEmailIds.has(item.email.uid)}
+                    onSelect={selectEmail}
+                    onToggleSelection={toggleEmailSelection}
+                    style={{ height: ROW_HEIGHT }}
+                  />
+                </div>
               );
             })}
           </div>
