@@ -1,5 +1,6 @@
-import React, { memo, useMemo, useRef, useEffect, useState } from 'react';
+import React, { memo, useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import { useMailStore } from '../stores/mailStore';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   getAvatarColor,
@@ -76,16 +77,38 @@ export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail,
 
   const { bodiesMapRef, registerListener } = useChatBodyLoader(topic.emails);
 
-  // Scroll to bottom only on initial mount (threadId change = new thread opened)
+  // Build a flattened display list with date separators interleaved
+  const displayItems = useMemo(() => {
+    const items = [];
+    topic.emails.forEach((email, index) => {
+      const prevEmail = index > 0 ? topic.emails[index - 1] : null;
+      if (!prevEmail || isDifferentDay(prevEmail.date, email.date)) {
+        items.push({ type: 'date-separator', date: email.date, key: `sep-${email.date}` });
+      }
+      items.push({ type: 'message', email, key: emailKey(email) });
+    });
+    return items;
+  }, [topic.emails]);
+
+  const BUBBLE_ROW_HEIGHT = 96;
+  const virtualizer = useVirtualizer({
+    count: displayItems.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => BUBBLE_ROW_HEIGHT,
+    overscan: 5,
+    measureElement: (el) => el?.getBoundingClientRect().height ?? BUBBLE_ROW_HEIGHT,
+  });
+
+  // Scroll to bottom on initial mount (threadId change = new thread opened)
   const initialScrollDoneRef = useRef(false);
   useEffect(() => {
     initialScrollDoneRef.current = false;
     stickToBottomRef.current = true;
     requestAnimationFrame(() => {
-      if (scrollRef.current) {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-        initialScrollDoneRef.current = true;
+      if (displayItems.length > 0) {
+        virtualizer.scrollToIndex(displayItems.length - 1, { align: 'end' });
       }
+      initialScrollDoneRef.current = true;
     });
   }, [threadId]);
 
@@ -95,8 +118,6 @@ export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail,
     const el = scrollRef.current;
     if (!el) return;
 
-    // Detect only real user-initiated scrolls (wheel/touch), not browser
-    // scroll events fired due to content resizing
     const checkUserScroll = () => {
       requestAnimationFrame(() => {
         const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
@@ -105,35 +126,21 @@ export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail,
     };
 
     const observer = new ResizeObserver(() => {
-      if (stickToBottomRef.current) {
-        el.scrollTop = el.scrollHeight;
+      if (stickToBottomRef.current && displayItems.length > 0) {
+        virtualizer.scrollToIndex(displayItems.length - 1, { align: 'end' });
       }
     });
 
     el.addEventListener('wheel', checkUserScroll, { passive: true });
     el.addEventListener('touchmove', checkUserScroll, { passive: true });
     observer.observe(el);
-    for (const child of el.children) {
-      observer.observe(child);
-    }
-
-    // Watch for new children (bubbles added to DOM)
-    const mo = new MutationObserver((mutations) => {
-      for (const m of mutations) {
-        for (const node of m.addedNodes) {
-          if (node.nodeType === 1) observer.observe(node);
-        }
-      }
-    });
-    mo.observe(el, { childList: true });
 
     return () => {
       el.removeEventListener('wheel', checkUserScroll);
       el.removeEventListener('touchmove', checkUserScroll);
       observer.disconnect();
-      mo.disconnect();
     };
-  }, [threadId]);
+  }, [threadId, displayItems.length]);
 
   // Close context menu on click outside
   useEffect(() => {
@@ -187,48 +194,75 @@ export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail,
         </div>
       </div>
 
-      {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
-        {topic.emails.map((email, index) => {
-          const prevEmail = index > 0 ? topic.emails[index - 1] : null;
-          const showDateSeparator = !prevEmail || isDifferentDay(prevEmail.date, email.date);
-          const fromUser = isFromUser(email, userEmail);
+      {/* Messages — virtualized */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4">
+        <div style={{ height: virtualizer.getTotalSize() + 'px', position: 'relative', width: '100%' }}>
+          {virtualizer.getVirtualItems().map((vr) => {
+            const item = displayItems[vr.index];
+            if (!item) return null;
 
-          const eKey = emailKey(email);
-          return (
-            <React.Fragment key={eKey}>
-              {/* Date Separator */}
-              {showDateSeparator && (
-                <div className="flex items-center justify-center py-4">
-                  <span className="px-3 py-1 bg-mail-bg border border-mail-border rounded-full text-xs text-mail-text-muted">
-                    {formatDateSeparator(email.date)}
-                  </span>
+            if (item.type === 'date-separator') {
+              return (
+                <div
+                  key={vr.key}
+                  data-index={vr.index}
+                  ref={virtualizer.measureElement}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    width: '100%',
+                    transform: `translateY(${vr.start}px)`,
+                  }}
+                >
+                  <div className="flex items-center justify-center py-4">
+                    <span className="px-3 py-1 bg-mail-bg border border-mail-border rounded-full text-xs text-mail-text-muted">
+                      {formatDateSeparator(item.date)}
+                    </span>
+                  </div>
                 </div>
-              )}
+              );
+            }
 
-              {/* Message Bubble */}
-              <MessageBubble
-                email={email}
-                eKey={eKey}
-                fromUser={fromUser}
-                avatarColor={avatarColor}
-                initials={initials}
-                isOriginalVisible={showOriginal === eKey}
-                onToggleOriginal={() => setShowOriginal(
-                  showOriginal === eKey ? null : eKey
-                )}
-                onContextMenu={(e) => handleContextMenu(e, email)}
-                onReply={() => handleReplyToEmail(email)}
-                onOpenFullView={() => {
-                  const bodyEntry = bodiesMapRef.current?.get(eKey);
-                  setFullViewEmail(bodyEntry?.email ? { ...email, ...bodyEntry.email } : email);
+            const email = item.email;
+            const eKey = item.key;
+            const fromUser = isFromUser(email, userEmail);
+
+            return (
+              <div
+                key={vr.key}
+                data-index={vr.index}
+                ref={virtualizer.measureElement}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  width: '100%',
+                  transform: `translateY(${vr.start}px)`,
+                  paddingBottom: '12px',
                 }}
-                bodiesMapRef={bodiesMapRef}
-                registerListener={registerListener}
-              />
-            </React.Fragment>
-          );
-        })}
+              >
+                <MessageBubble
+                  email={email}
+                  eKey={eKey}
+                  fromUser={fromUser}
+                  avatarColor={avatarColor}
+                  initials={initials}
+                  isOriginalVisible={showOriginal === eKey}
+                  onToggleOriginal={() => setShowOriginal(
+                    showOriginal === eKey ? null : eKey
+                  )}
+                  onContextMenu={(e) => handleContextMenu(e, email)}
+                  onReply={() => handleReplyToEmail(email)}
+                  onOpenFullView={() => {
+                    const bodyEntry = bodiesMapRef.current?.get(eKey);
+                    setFullViewEmail(bodyEntry?.email ? { ...email, ...bodyEntry.email } : email);
+                  }}
+                  bodiesMapRef={bodiesMapRef}
+                  registerListener={registerListener}
+                />
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Reply Footer */}
