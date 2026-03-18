@@ -16,6 +16,7 @@ use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use walkdir::WalkDir;
 
 mod archive;
+mod backup;
 mod commands;
 mod dns;
 pub mod graph;
@@ -3381,6 +3382,7 @@ fn main() {
 
     let builder = builder
         .manage(archive::ArchiveCancelToken::default())
+        .manage(backup::BackupCancelToken::default())
         .manage(imap::ImapPool::new())
         .manage(oauth2::OAuth2Manager::new());
 
@@ -3481,7 +3483,9 @@ fn main() {
             commands::graph_delete_message,
             commands::graph_move_emails,
             commands::imap_move_emails,
-            commands::resolve_email_settings
+            commands::resolve_email_settings,
+            commands::backup_run_account,
+            commands::backup_cancel
         ])
         .setup(|app| {
             // Set up logging to app log directory
