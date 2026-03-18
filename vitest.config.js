@@ -5,5 +5,8 @@ export default defineConfig({
     testTimeout: 60000,
     hookTimeout: 60000,
     exclude: ['tests/e2e/**', 'node_modules/**'],
+    environmentMatchGlobs: [
+      ['src/components/**', 'jsdom'],
+    ],
   },
 });
