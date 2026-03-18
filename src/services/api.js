@@ -434,3 +434,45 @@ export async function backupCancel() {
 export async function sendNotification(title, body) {
   return tauriInvoke('send_notification', { title, body });
 }
+
+// ── Migration ────────────────────────────────────────────────────────────────
+
+export async function startMigration(sourceAccount, destAccount, sourceTransport, destTransport, folderMappings) {
+  return await tauriInvoke('start_migration', {
+    sourceAccount: JSON.stringify(sourceAccount),
+    destAccount: JSON.stringify(destAccount),
+    sourceTransport, destTransport, folderMappings
+  });
+}
+
+export async function cancelMigration() {
+  return await tauriInvoke('cancel_migration');
+}
+
+export async function pauseMigration() {
+  return await tauriInvoke('pause_migration');
+}
+
+export async function resumeMigration(sourceAccount, destAccount, sourceTransport, destTransport) {
+  return await tauriInvoke('resume_migration', {
+    sourceAccount: JSON.stringify(sourceAccount),
+    destAccount: JSON.stringify(destAccount),
+    sourceTransport, destTransport
+  });
+}
+
+export async function getMigrationState() {
+  return await tauriInvoke('get_migration_state');
+}
+
+export async function clearMigrationState() {
+  return await tauriInvoke('clear_migration_state_cmd');
+}
+
+export async function getFolderMappings(sourceAccount, destAccount, sourceTransport, destTransport) {
+  return await tauriInvoke('get_folder_mappings', {
+    sourceAccount: JSON.stringify(sourceAccount),
+    destAccount: JSON.stringify(destAccount),
+    sourceTransport, destTransport
+  });
+}

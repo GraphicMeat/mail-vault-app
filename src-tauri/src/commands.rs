@@ -8,6 +8,7 @@ use crate::imap::{self, ImapConfig, ImapPool, ImapSession};
 use crate::oauth2::OAuth2Manager;
 use crate::smtp;
 use crate::backup;
+use crate::migration;
 
 // Helper: run an IMAP operation with a session from the pool.
 // On success, the session is returned to the pool with its last-selected mailbox.
@@ -760,4 +761,242 @@ pub async fn backup_cancel(
     let guard = cancel_token.0.lock().unwrap();
     guard.store(true, Ordering::Relaxed);
     Ok(())
+}
+
+// ── Migration ────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn start_migration(
+    app_handle: tauri::AppHandle,
+    source_account: String,
+    dest_account: String,
+    source_transport: String,
+    dest_transport: String,
+    folder_mappings: Vec<migration::FolderMapping>,
+    cancel_token: tauri::State<'_, migration::MigrationCancelToken>,
+    pause_token: tauri::State<'_, migration::MigrationPauseToken>,
+) -> Result<(), String> {
+    let source_config: ImapConfig = serde_json::from_str(&source_account)
+        .map_err(|e| format!("Bad source account JSON: {}", e))?;
+    let dest_config: ImapConfig = serde_json::from_str(&dest_account)
+        .map_err(|e| format!("Bad dest account JSON: {}", e))?;
+
+    // Reset cancel and pause to false
+    let cancel = {
+        let mut guard = cancel_token.0.lock().unwrap();
+        let fresh = Arc::new(AtomicBool::new(false));
+        *guard = Arc::clone(&fresh);
+        fresh
+    };
+    let pause = {
+        let mut guard = pause_token.0.lock().unwrap();
+        let fresh = Arc::new(AtomicBool::new(false));
+        *guard = Arc::clone(&fresh);
+        fresh
+    };
+
+    let src_json = source_account.clone();
+    let dst_json = dest_account.clone();
+
+    tokio::spawn(async move {
+        let result = migration::run_migration(
+            app_handle,
+            source_config,
+            dest_config,
+            source_transport,
+            dest_transport,
+            src_json,
+            dst_json,
+            folder_mappings,
+            cancel,
+            pause,
+        )
+        .await;
+        if let Err(e) = result {
+            tracing::error!("[migration] run_migration failed: {}", e);
+        }
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn cancel_migration(
+    cancel_token: tauri::State<'_, migration::MigrationCancelToken>,
+) -> Result<(), String> {
+    let guard = cancel_token.0.lock().unwrap();
+    guard.store(true, Ordering::SeqCst);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn pause_migration(
+    pause_token: tauri::State<'_, migration::MigrationPauseToken>,
+) -> Result<(), String> {
+    let guard = pause_token.0.lock().unwrap();
+    guard.store(true, Ordering::SeqCst);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn resume_migration(
+    app_handle: tauri::AppHandle,
+    source_account: String,
+    dest_account: String,
+    source_transport: String,
+    dest_transport: String,
+    cancel_token: tauri::State<'_, migration::MigrationCancelToken>,
+    pause_token: tauri::State<'_, migration::MigrationPauseToken>,
+) -> Result<(), String> {
+    let state = migration::load_migration_state(&app_handle)?
+        .ok_or("No migration state found to resume")?;
+
+    let source_config: ImapConfig = serde_json::from_str(&source_account)
+        .map_err(|e| format!("Bad source account JSON: {}", e))?;
+    let dest_config: ImapConfig = serde_json::from_str(&dest_account)
+        .map_err(|e| format!("Bad dest account JSON: {}", e))?;
+
+    // Reset pause and cancel to false
+    let cancel = {
+        let mut guard = cancel_token.0.lock().unwrap();
+        let fresh = Arc::new(AtomicBool::new(false));
+        *guard = Arc::clone(&fresh);
+        fresh
+    };
+    let pause = {
+        let mut guard = pause_token.0.lock().unwrap();
+        let fresh = Arc::new(AtomicBool::new(false));
+        *guard = Arc::clone(&fresh);
+        fresh
+    };
+
+    // Filter out completed folders
+    let remaining: Vec<migration::FolderMapping> = state
+        .folder_mappings
+        .into_iter()
+        .filter(|f| f.status != "completed")
+        .collect();
+
+    let src_json = source_account.clone();
+    let dst_json = dest_account.clone();
+
+    tokio::spawn(async move {
+        let result = migration::run_migration(
+            app_handle,
+            source_config,
+            dest_config,
+            source_transport,
+            dest_transport,
+            src_json,
+            dst_json,
+            remaining,
+            cancel,
+            pause,
+        )
+        .await;
+        if let Err(e) = result {
+            tracing::error!("[migration] resume failed: {}", e);
+        }
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_migration_state(
+    app_handle: tauri::AppHandle,
+) -> Result<Option<migration::MigrationState>, String> {
+    migration::load_migration_state(&app_handle)
+}
+
+#[tauri::command]
+pub async fn clear_migration_state_cmd(
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    migration::clear_migration_state(&app_handle)
+}
+
+#[tauri::command]
+pub async fn get_folder_mappings(
+    pool: tauri::State<'_, ImapPool>,
+    source_account: String,
+    dest_account: String,
+    source_transport: String,
+    dest_transport: String,
+) -> Result<Vec<migration::FolderMapping>, String> {
+    let source_config: ImapConfig = serde_json::from_str(&source_account)
+        .map_err(|e| format!("Bad source account JSON: {}", e))?;
+    let dest_config: ImapConfig = serde_json::from_str(&dest_account)
+        .map_err(|e| format!("Bad dest account JSON: {}", e))?;
+
+    // Get source folders
+    let source_folders = if source_transport == "graph" {
+        if let Some(ref token) = source_config.access_token {
+            let client = crate::graph::GraphClient::new(token);
+            let graph_folders = client.list_folders().await?;
+            graph_folders
+                .into_iter()
+                .map(|f| crate::imap::MailboxInfo {
+                    name: f.display_name.clone(),
+                    path: f.display_name,
+                    special_use: None,
+                    flags: Vec::new(),
+                    delimiter: Some("/".to_string()),
+                    noselect: false,
+                    children: Vec::new(),
+                })
+                .collect()
+        } else {
+            return Err("No source access token for Graph".to_string());
+        }
+    } else {
+        with_background(&pool, &source_config, |mut session| async move {
+            let result = imap::list_mailboxes(&mut session).await?;
+            Ok((result, session, None))
+        })
+        .await?
+    };
+
+    // Get destination folders
+    let dest_folders = if dest_transport == "graph" {
+        if let Some(ref token) = dest_config.access_token {
+            let client = crate::graph::GraphClient::new(token);
+            let graph_folders = client.list_folders().await?;
+            graph_folders
+                .into_iter()
+                .map(|f| crate::imap::MailboxInfo {
+                    name: f.display_name.clone(),
+                    path: f.display_name,
+                    special_use: None,
+                    flags: Vec::new(),
+                    delimiter: Some("/".to_string()),
+                    noselect: false,
+                    children: Vec::new(),
+                })
+                .collect()
+        } else {
+            return Err("No dest access token for Graph".to_string());
+        }
+    } else {
+        with_background(&pool, &dest_config, |mut session| async move {
+            let result = imap::list_mailboxes(&mut session).await?;
+            Ok((result, session, None))
+        })
+        .await?
+    };
+
+    // Extract delimiters
+    let src_delim = source_folders
+        .first()
+        .and_then(|f| f.delimiter.as_deref())
+        .unwrap_or("/");
+    let dst_delim = dest_folders
+        .first()
+        .and_then(|f| f.delimiter.as_deref())
+        .unwrap_or("/");
+
+    let mappings =
+        migration::build_folder_mappings(&source_folders, &dest_folders, Some(src_delim), Some(dst_delim));
+
+    Ok(mappings)
 }

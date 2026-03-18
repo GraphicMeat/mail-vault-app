@@ -3384,6 +3384,8 @@ fn main() {
     let builder = builder
         .manage(archive::ArchiveCancelToken::default())
         .manage(backup::BackupCancelToken::default())
+        .manage(migration::MigrationCancelToken::default())
+        .manage(migration::MigrationPauseToken::default())
         .manage(imap::ImapPool::new())
         .manage(oauth2::OAuth2Manager::new());
 
@@ -3486,7 +3488,14 @@ fn main() {
             commands::imap_move_emails,
             commands::resolve_email_settings,
             commands::backup_run_account,
-            commands::backup_cancel
+            commands::backup_cancel,
+            commands::start_migration,
+            commands::cancel_migration,
+            commands::pause_migration,
+            commands::resume_migration,
+            commands::get_migration_state,
+            commands::clear_migration_state_cmd,
+            commands::get_folder_mappings
         ])
         .setup(|app| {
             // Set up logging to app log directory
