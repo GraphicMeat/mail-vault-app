@@ -1,4 +1,4 @@
-import { resolve } from 'path';
+import { resolve, join } from 'path';
 import { readFileSync } from 'fs';
 import { spawn } from 'child_process';
 
@@ -16,7 +16,7 @@ const env = Object.fromEntries(
 );
 
 // App binary path (debug build with webdriver feature)
-const appBinary = resolve(
+const appBinary = process.env.TAURI_APP_BINARY || resolve(
   import.meta.dirname,
   'src-tauri/target/debug/MailVault'
 );
@@ -31,6 +31,9 @@ export const config = {
     connected: ['./tests/e2e/connected-*.test.js'],
     perf: ['./tests/e2e/connected-performance.test.js'],
     coldstart: ['./tests/e2e/connected-cold-start.test.js'],
+    backup: ['./tests/e2e/backup-*.test.js'],
+    migration: ['./tests/e2e/migration-*.test.js'],
+    visual: ['./tests/e2e/visual-*.test.js'],
   },
   maxInstances: 1,
   capabilities: [{
@@ -39,12 +42,23 @@ export const config = {
       application: appBinary,
     },
   }],
+  services: [
+    ['visual', {
+      baselineFolder: join(import.meta.dirname, 'tests/visual/baselines'),
+      screenshotPath: join(import.meta.dirname, 'tests/visual/.tmp'),
+      formatImageName: '{tag}-{width}x{height}',
+      autoSaveBaseline: true,
+    }],
+  ],
   framework: 'mocha',
   reporters: ['spec'],
   mochaOpts: {
     ui: 'bdd',
     timeout: 120000,
   },
+  specFileRetries: process.env.CI ? 1 : 0,
+  specFileRetriesDelay: 5,
+  specFileRetriesDeferred: true,
 
   // Start tauri-wd before tests
   onPrepare: function () {

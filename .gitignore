@@ -50,3 +50,5 @@ website/api/data.db
 website/api/data.db-shm
 website/api/data.db-wal
 .superpowers/
+.planning/
+tests/visual/.tmp/

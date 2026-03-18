@@ -10,6 +10,7 @@ on:
       - 'package-lock.json'
       - 'vite.config.*'
       - 'vitest.config.*'
+      - '.github/workflows/ci.yml'
   pull_request:
     branches: [main]
     paths:
@@ -20,8 +21,9 @@ on:
       - 'package-lock.json'
       - 'vite.config.*'
       - 'vitest.config.*'
+      - '.github/workflows/ci.yml'
 jobs:
-  test:
+  unit-integration:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
