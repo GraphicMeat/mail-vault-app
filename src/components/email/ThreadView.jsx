@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useMailStore } from '../../stores/mailStore';
-import { useShallow } from 'zustand/react/shallow';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { ComposeModal } from '../ComposeModal';
@@ -504,9 +503,11 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isLast, active
 // ── Thread View (shows all emails in a thread) ──────────────────────────────
 
 export function ThreadView({ thread }) {
-  const { activeAccountId, activeMailbox, savedEmailIds, archivedEmailIds, saveEmailsLocally } = useMailStore(
-    useShallow(s => ({ activeAccountId: s.activeAccountId, activeMailbox: s.activeMailbox, savedEmailIds: s.savedEmailIds, archivedEmailIds: s.archivedEmailIds, saveEmailsLocally: s.saveEmailsLocally }))
-  );
+  const activeAccountId = useMailStore(s => s.activeAccountId);
+  const activeMailbox = useMailStore(s => s.activeMailbox);
+  const savedEmailIds = useMailStore(s => s.savedEmailIds);
+  const archivedEmailIds = useMailStore(s => s.archivedEmailIds);
+  const saveEmailsLocally = useMailStore(s => s.saveEmailsLocally);
   const signatureDisplay = useSettingsStore(s => s.signatureDisplay);
   const threadSortOrder = useSettingsStore(s => s.threadSortOrder);
   const [saving, setSaving] = useState(false);

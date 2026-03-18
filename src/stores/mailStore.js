@@ -1137,6 +1137,10 @@ export const useMailStore = create((set, get) => ({
     const { effectiveMailbox: resolvedMailbox, serverMailboxesPromise } = mbResult;
 
     // ── Stream 1: Local data (cache + disk) ──
+    // QUICK-LOAD: cached emails set before credential check — intentional, fixes startup blank list.
+    // This stream runs in parallel with loadServerEmails via Promise.all. Local cached headers
+    // are committed to the store immediately (first paint), while server stream handles
+    // ensureFreshToken and IMAP sync in parallel.
     const loadLocalEmails = async () => {
       if (signal.aborted) return;
       const localTrace = createPerfTrace('loadLocal', { accountId, mailbox: resolvedMailbox });
@@ -3019,6 +3023,16 @@ export const useMailStore = create((set, get) => ({
     const { sortedEmails, activeAccountId, activeMailbox, emailCache } = get();
     const isUnified = activeMailbox === 'UNIFIED';
     const cacheLimitMB = useSettingsStore.getState().cacheLimitMB;
+
+    // OOM guard: skip prefetch when cache is near its limit
+    // Uses _cacheCurrentSizeMB (module-level tracker) because performance.memory
+    // is Chromium-only and not available in WKWebView (macOS) or WebKitGTK (Linux).
+    if (_cacheCurrentSizeMB > cacheLimitMB * 0.8) {
+      console.warn('[prefetch] Skipping — memory pressure: %dMB used of %dMB limit',
+        Math.round(_cacheCurrentSizeMB), Math.round(cacheLimitMB));
+      return;
+    }
+
     const currentIndex = sortedEmails.findIndex(e => e.uid === currentUid);
     if (currentIndex < 0) return;
 
