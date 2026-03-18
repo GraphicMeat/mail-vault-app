@@ -1,3 +1,4 @@
+use base64::Engine;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
@@ -208,8 +209,8 @@ impl GraphMessage {
 const GRAPH_BASE: &str = "https://graph.microsoft.com/v1.0";
 
 pub struct GraphClient {
-    client: Client,
-    access_token: String,
+    pub(crate) client: Client,
+    pub(crate) access_token: String,
 }
 
 impl GraphClient {
@@ -435,6 +436,98 @@ impl GraphClient {
             .await
             .map(|b| b.to_vec())
             .map_err(|e| format!("Graph get_mime_content read error: {}", e))
+    }
+
+    // -----------------------------------------------------------------------
+    // Migration helpers: MIME upload + folder creation
+    // -----------------------------------------------------------------------
+
+    /// Upload a raw MIME message to the drafts folder, returning the new message ID.
+    /// Graph API requires the MIME content to be base64-encoded with Content-Type: text/plain.
+    pub async fn create_message_from_mime(&self, mime_bytes: &[u8]) -> Result<String, String> {
+        let encoded = base64::engine::general_purpose::STANDARD.encode(mime_bytes);
+        let url = format!("{}/me/messages", GRAPH_BASE);
+
+        let resp = self
+            .client
+            .post(&url)
+            .bearer_auth(&self.access_token)
+            .header("Content-Type", "text/plain")
+            .body(encoded)
+            .send()
+            .await
+            .map_err(|e| format!("Graph create_message_from_mime request failed: {}", e))?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!(
+                "Graph create_message_from_mime failed ({}) {}",
+                status.as_u16(),
+                body
+            ));
+        }
+
+        let msg: GraphMessage = resp
+            .json()
+            .await
+            .map_err(|e| format!("Graph create_message_from_mime parse error: {}", e))?;
+
+        Ok(msg.id)
+    }
+
+    /// Create a mail folder. If `parent_folder_id` is provided, creates a child folder.
+    /// Handles 409 Conflict (folder already exists) by listing folders and returning the match.
+    pub async fn create_folder(
+        &self,
+        display_name: &str,
+        parent_folder_id: Option<&str>,
+    ) -> Result<GraphMailFolder, String> {
+        let url = match parent_folder_id {
+            Some(parent_id) => format!(
+                "{}/me/mailFolders/{}/childFolders",
+                GRAPH_BASE, parent_id
+            ),
+            None => format!("{}/me/mailFolders", GRAPH_BASE),
+        };
+
+        let resp = self
+            .client
+            .post(&url)
+            .bearer_auth(&self.access_token)
+            .json(&serde_json::json!({ "displayName": display_name }))
+            .send()
+            .await
+            .map_err(|e| format!("Graph create_folder request failed: {}", e))?;
+
+        let status = resp.status();
+
+        // 409 Conflict = folder already exists — find and return it
+        if status.as_u16() == 409 {
+            let folders = self.list_folders().await?;
+            return folders
+                .into_iter()
+                .find(|f| f.display_name.eq_ignore_ascii_case(display_name))
+                .ok_or_else(|| {
+                    format!(
+                        "Graph create_folder: 409 Conflict but could not find folder '{}'",
+                        display_name
+                    )
+                });
+        }
+
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!(
+                "Graph create_folder failed ({}) {}",
+                status.as_u16(),
+                body
+            ));
+        }
+
+        resp.json()
+            .await
+            .map_err(|e| format!("Graph create_folder parse error: {}", e))
     }
 
     // -----------------------------------------------------------------------

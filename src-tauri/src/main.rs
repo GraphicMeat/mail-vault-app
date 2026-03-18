@@ -21,6 +21,7 @@ mod commands;
 mod dns;
 pub mod graph;
 mod imap;
+mod migration;
 mod move_emails;
 mod oauth2;
 mod smtp;
