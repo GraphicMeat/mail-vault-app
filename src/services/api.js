@@ -420,3 +420,17 @@ export async function removeFromLocalIndex(accountId, mailbox, uid) {
     return tauriInvoke('local_index_remove', { accountId, mailbox, uid });
   }
 }
+
+// ── Backup ────────────────────────────────────────────────────────────────────
+
+export async function backupRunAccount(accountId, accountJson) {
+  return tauriInvoke('backup_run_account', { accountId, accountJson });
+}
+
+export async function backupCancel() {
+  return tauriInvoke('backup_cancel', {});
+}
+
+export async function sendNotification(title, body) {
+  return tauriInvoke('send_notification', { title, body });
+}
