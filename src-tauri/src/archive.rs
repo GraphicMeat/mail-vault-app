@@ -197,17 +197,18 @@ async fn fetch_and_store(
     use base64::Engine;
     use std::fs;
 
-    // Get a priority session for the fetch
-    let (mut session, _last_sel) = pool.get_priority(account).await?;
+    // Get a priority session for the fetch (semaphore-guarded)
+    let mut guard = pool.get_priority(account).await?;
 
-    let email = imap::fetch_email_by_uid(&mut session, mailbox, uid)
+    let email = imap::fetch_email_by_uid(&mut guard.session, mailbox, uid)
         .await
         .map_err(|e| {
-            // Don't return session on error — it may be broken
+            // Don't return session on error — guard drops, semaphore permit released
             format!("IMAP fetch failed: {}", e)
         })?;
 
-    pool.return_priority(account, session, Some(mailbox.to_string())).await;
+    guard.last_selected = Some(mailbox.to_string());
+    pool.return_priority(account, guard).await;
 
     let email = email.ok_or_else(|| format!("Email UID {} not found", uid))?;
 
@@ -396,14 +397,17 @@ async fn delete_single_email(
     mailbox: &str,
     uid: u32,
 ) -> Result<(), String> {
-    let (mut session, _last_sel) = pool.get_priority(account).await?;
+    let mut guard = pool.get_priority(account).await?;
 
-    let result = imap::delete_email(&mut session, mailbox, uid, true).await;
-
-    if result.is_ok() {
-        pool.return_priority(account, session, Some(mailbox.to_string())).await;
+    match imap::delete_email(&mut guard.session, mailbox, uid, true).await {
+        Ok(()) => {
+            guard.last_selected = Some(mailbox.to_string());
+            pool.return_priority(account, guard).await;
+            Ok(())
+        }
+        Err(e) => {
+            // guard drops — semaphore permit released, session not returned to pool
+            Err(e)
+        }
     }
-    // On error, don't return session — it may be broken
-
-    result
 }

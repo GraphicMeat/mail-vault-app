@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore};
 use tokio::time::Instant;
 use tracing::{info, warn};
 
@@ -38,6 +38,27 @@ fn conn_key(config: &ImapConfig) -> String {
     format!("{}-{}", config.email, config.host)
 }
 
+/// A session checked out from the pool, guarded by a semaphore permit.
+/// The permit is released when this guard is dropped (after return_to_pool stores
+/// the session or the guard is dropped on error). This prevents connection
+/// proliferation: at most MAX_POOL_SIZE concurrent sessions per account per pool type.
+pub struct PooledSessionGuard {
+    pub session: ImapSession,
+    pub last_selected: Option<String>,
+    pub(crate) _permit: OwnedSemaphorePermit,
+}
+
+/// Get or create a semaphore for the given connection key.
+async fn get_or_create_sem(
+    sem_map: &Arc<Mutex<HashMap<String, Arc<Semaphore>>>>,
+    key: &str,
+) -> Arc<Semaphore> {
+    let mut map = sem_map.lock().await;
+    map.entry(key.to_string())
+        .or_insert_with(|| Arc::new(Semaphore::new(MAX_POOL_SIZE)))
+        .clone()
+}
+
 /// Logout sessions without holding any lock.
 /// Fire-and-forget: errors are silently ignored since we're just cleaning up.
 async fn logout_sessions(sessions: Vec<ImapSession>) {
@@ -63,6 +84,10 @@ pub struct ImapPool {
     priority: Arc<Mutex<HashMap<String, Vec<PooledSession>>>>,
     /// Cached server capabilities per connection key (e.g. CONDSTORE, ESEARCH)
     capabilities: Arc<Mutex<HashMap<String, Vec<String>>>>,
+    /// Per-account semaphores for background pool — prevents connection proliferation
+    background_sem: Arc<Mutex<HashMap<String, Arc<Semaphore>>>>,
+    /// Per-account semaphores for priority pool — separate from background to avoid blocking
+    priority_sem: Arc<Mutex<HashMap<String, Arc<Semaphore>>>>,
 }
 
 impl ImapPool {
@@ -71,29 +96,44 @@ impl ImapPool {
             background: Arc::new(Mutex::new(HashMap::new())),
             priority: Arc::new(Mutex::new(HashMap::new())),
             capabilities: Arc::new(Mutex::new(HashMap::new())),
+            background_sem: Arc::new(Mutex::new(HashMap::new())),
+            priority_sem: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
-    /// Get or create a background connection.
-    /// Returns (session, last_selected_mailbox) so callers can skip redundant SELECT.
-    pub async fn get_background(&self, config: &ImapConfig) -> Result<(ImapSession, Option<String>), String> {
-        self.get_from_pool(&self.background, config).await
+    /// Get or create a background connection, guarded by a per-account semaphore.
+    /// At most MAX_POOL_SIZE concurrent background sessions per account — excess callers queue.
+    pub async fn get_background(&self, config: &ImapConfig) -> Result<PooledSessionGuard, String> {
+        let key = conn_key(config);
+        let sem = get_or_create_sem(&self.background_sem, &key).await;
+        let permit = sem.acquire_owned().await
+            .map_err(|_| "IMAP background pool semaphore closed".to_string())?;
+        let (session, last_selected) = self.get_from_pool(&self.background, config).await?;
+        Ok(PooledSessionGuard { session, last_selected, _permit: permit })
     }
 
-    /// Get or create a priority connection.
-    /// Returns (session, last_selected_mailbox) so callers can skip redundant SELECT.
-    pub async fn get_priority(&self, config: &ImapConfig) -> Result<(ImapSession, Option<String>), String> {
-        self.get_from_pool(&self.priority, config).await
+    /// Get or create a priority connection, guarded by a per-account semaphore.
+    /// At most MAX_POOL_SIZE concurrent priority sessions per account — excess callers queue.
+    pub async fn get_priority(&self, config: &ImapConfig) -> Result<PooledSessionGuard, String> {
+        let key = conn_key(config);
+        let sem = get_or_create_sem(&self.priority_sem, &key).await;
+        let permit = sem.acquire_owned().await
+            .map_err(|_| "IMAP priority pool semaphore closed".to_string())?;
+        let (session, last_selected) = self.get_from_pool(&self.priority, config).await?;
+        Ok(PooledSessionGuard { session, last_selected, _permit: permit })
     }
 
-    /// Return a session to the background pool for reuse.
-    /// `last_selected` records which mailbox was last SELECTed on this session.
-    pub async fn return_background(&self, config: &ImapConfig, session: ImapSession, last_selected: Option<String>) {
+    /// Return a background session to the pool. The semaphore permit is released
+    /// after the session is stored (or discarded if pool is full).
+    pub async fn return_background(&self, config: &ImapConfig, guard: PooledSessionGuard) {
+        let PooledSessionGuard { session, last_selected, _permit } = guard;
         self.return_to_pool(&self.background, config, session, last_selected).await;
+        // _permit drops here — semaphore released AFTER session is pooled
     }
 
-    /// Return a session to the priority pool for reuse.
-    pub async fn return_priority(&self, config: &ImapConfig, session: ImapSession, last_selected: Option<String>) {
+    /// Return a priority session to the pool.
+    pub async fn return_priority(&self, config: &ImapConfig, guard: PooledSessionGuard) {
+        let PooledSessionGuard { session, last_selected, _permit } = guard;
         self.return_to_pool(&self.priority, config, session, last_selected).await;
     }
 
@@ -124,6 +164,8 @@ impl ImapPool {
             }
         }
         self.capabilities.lock().await.remove(&key);
+        self.background_sem.lock().await.remove(&key);
+        self.priority_sem.lock().await.remove(&key);
 
         // Logout outside any lock — network I/O can be slow
         logout_sessions(to_logout).await;
@@ -143,6 +185,8 @@ impl ImapPool {
             }
         }
         self.capabilities.lock().await.clear();
+        self.background_sem.lock().await.clear();
+        self.priority_sem.lock().await.clear();
 
         // Logout outside any lock
         logout_sessions(to_logout).await;

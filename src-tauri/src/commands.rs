@@ -1,13 +1,14 @@
 use serde::Deserialize;
 use tracing::info;
 
+use crate::imap::pool::PooledSessionGuard;
 use crate::imap::{self, ImapConfig, ImapPool, ImapSession};
 use crate::oauth2::OAuth2Manager;
 use crate::smtp;
 
 // Helper: run an IMAP operation with a session from the pool.
 // On success, the session is returned to the pool with its last-selected mailbox.
-// On error, the session is dropped (pool will create a new connection next time).
+// On error, the session guard is dropped (semaphore permit released, pool creates new next time).
 async fn with_background<F, Fut, T>(
     pool: &ImapPool,
     account: &ImapConfig,
@@ -17,13 +18,19 @@ where
     F: FnOnce(ImapSession) -> Fut,
     Fut: std::future::Future<Output = Result<(T, ImapSession, Option<String>), String>>,
 {
-    let (session, _last_sel) = pool.get_background(account).await?;
+    let PooledSessionGuard { session, last_selected: _, _permit } =
+        pool.get_background(account).await?;
     match f(session).await {
         Ok((result, session, selected_mailbox)) => {
-            pool.return_background(account, session, selected_mailbox).await;
+            let return_guard = PooledSessionGuard {
+                session,
+                last_selected: selected_mailbox,
+                _permit,
+            };
+            pool.return_background(account, return_guard).await;
             Ok(result)
         }
-        Err(e) => Err(e),
+        Err(e) => Err(e), // _permit dropped here — semaphore released
     }
 }
 
@@ -36,10 +43,16 @@ where
     F: FnOnce(ImapSession) -> Fut,
     Fut: std::future::Future<Output = Result<(T, ImapSession, Option<String>), String>>,
 {
-    let (session, _last_sel) = pool.get_priority(account).await?;
+    let PooledSessionGuard { session, last_selected: _, _permit } =
+        pool.get_priority(account).await?;
     match f(session).await {
         Ok((result, session, selected_mailbox)) => {
-            pool.return_priority(account, session, selected_mailbox).await;
+            let return_guard = PooledSessionGuard {
+                session,
+                last_selected: selected_mailbox,
+                _permit,
+            };
+            pool.return_priority(account, return_guard).await;
             Ok(result)
         }
         Err(e) => Err(e),
