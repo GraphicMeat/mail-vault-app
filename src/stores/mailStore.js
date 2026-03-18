@@ -1015,6 +1015,9 @@ export const useMailStore = create((set, get) => ({
   activateAccount: async (accountId, mailbox, options = {}) => {
     const activationTrace = createPerfTrace('activateAccount', { accountId, mailbox });
 
+    // Clear any pending network retry for the previous account
+    _resetNetworkRetry();
+
     // Cancel any previous activation and progressive loading
     if (_activeController) _activeController.abort('account-switch');
     if (_loadAbortController) _loadAbortController.abort('account-switch');
@@ -1590,15 +1593,10 @@ export const useMailStore = create((set, get) => ({
           });
           get().updateSortedEmails();
 
-          // Auto-retry once for transient errors
+          // Schedule progressive retry for transient network errors
           const noRetry = errorType === 'passwordMissing' || errorType === 'oauthExpired' || errorType === 'outlookOAuth';
-          if (!noRetry && !_loadEmailsRetried) {
-            _loadEmailsRetried = true;
-            setTimeout(() => {
-              if (get().activeAccountId === accountId) {
-                get().activateAccount(accountId, get().activeMailbox).catch(() => {});
-              }
-            }, 3000);
+          if (!noRetry) {
+            _scheduleNetworkRetry();
           }
         }
         serverTrace.end('error', { message: error.message });
@@ -1906,6 +1904,9 @@ export const useMailStore = create((set, get) => ({
     let account = accounts.find(a => a.id === activeAccountId);
     if (!account) return;
     const loadTrace = createPerfTrace('loadEmails', { accountId: activeAccountId, mailbox: activeMailbox });
+
+    // Clear any pending network retry timer
+    _resetNetworkRetry();
 
     // Abort any previous progressive loading
     if (_loadAbortController) _loadAbortController.abort();
@@ -2504,16 +2505,10 @@ export const useMailStore = create((set, get) => ({
         });
         get().updateSortedEmails();
 
-        // Auto-retry once for transient errors (not auth/credential issues)
+        // Schedule progressive retry for transient network errors
         const noRetry = errorType === 'passwordMissing' || errorType === 'oauthExpired' || errorType === 'outlookOAuth';
-        if (!noRetry && !_loadEmailsRetried) {
-          console.log('[loadEmails] Auto-retrying after transient error in 3s...');
-          _loadEmailsRetried = true;
-          setTimeout(() => {
-            if (get().activeAccountId === activeAccountId) {
-              get().loadEmails().catch(() => {});
-            }
-          }, 3000);
+        if (!noRetry) {
+          _scheduleNetworkRetry();
         }
       }
       loadTrace.end('error', { message: error.message });
@@ -4172,4 +4167,25 @@ window.addEventListener('online', () => {
 window.addEventListener('offline', () => {
   console.log('[mailStore] Went offline — header loading will pause');
   useMailStore.setState({ _loadMorePausedOffline: true });
+});
+
+// ── Network recovery listeners ────────────────────────────────────────
+// When online: if connection is in error state, trigger progressive retry
+window.addEventListener('online', () => {
+  const { connectionStatus } = useMailStore.getState();
+  console.log('[mailStore] online event — connectionStatus=%s', connectionStatus);
+  if (connectionStatus === 'error' || connectionStatus === 'disconnected') {
+    _resetNetworkRetry();
+    _scheduleNetworkRetry();
+  }
+});
+
+window.addEventListener('offline', () => {
+  console.log('[mailStore] offline event — marking disconnected');
+  _resetNetworkRetry();
+  useMailStore.setState({
+    connectionStatus: 'error',
+    connectionErrorType: 'offline',
+    connectionError: 'Network offline',
+  });
 });

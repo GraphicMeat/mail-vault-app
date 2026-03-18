@@ -250,6 +250,11 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                     className={`absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border-2 border-mail-surface
                                ${connectionStatus === 'connected' ? 'bg-mail-success' :
                                  connectionStatus === 'error' ? 'bg-mail-danger' : 'bg-mail-warning'}`}
+                    title={
+                      connectionStatus === 'connected' ? 'Connected' :
+                      connectionStatus === 'error' ? (connectionError || 'Connection error — retrying...') :
+                      'Reconnecting...'
+                    }
                   />
                 )}
               </button>
