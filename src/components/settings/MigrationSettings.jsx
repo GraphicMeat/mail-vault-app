@@ -203,10 +203,12 @@ export default function MigrationSettings() {
   }, [sourceAccount, destAccount, selectedMappings]);
 
   const handlePause = useCallback(async () => {
+    console.log('[migration] handlePause called, invoking api.pauseMigration()');
     try {
       await api.pauseMigration();
+      console.log('[migration] pauseMigration() succeeded');
     } catch (e) {
-      console.error('Pause failed:', e);
+      console.error('[migration] Pause failed:', e);
       setError('Failed to pause migration: ' + (e.message || e));
     }
   }, []);
@@ -215,10 +217,12 @@ export default function MigrationSettings() {
   const [cancelRemoveError, setCancelRemoveError] = useState(null);
 
   const handleCancel = useCallback(async (choice) => {
+    console.log('[migration] handleCancel called with choice:', choice);
     try {
       await api.cancelMigration();
+      console.log('[migration] cancelMigration() succeeded');
     } catch (e) {
-      console.error('Cancel failed:', e);
+      console.error('[migration] Cancel failed:', e);
       setError('Failed to cancel migration: ' + (e.message || e));
     }
     if (choice === 'remove') {

@@ -564,6 +564,10 @@ pub async fn run_migration(
     let migration_id = uuid::Uuid::new_v4().to_string();
 
     info!(
+        "[migration] run_migration tokens: cancel={:p}, pause={:p}, notify={:p}",
+        &*cancel, &*pause, &*notify
+    );
+    info!(
         "[migration] Starting {} -> {} ({} -> {}, {} folders)",
         source_email, dest_email, source_transport, dest_transport, folder_mappings.len()
     );
