@@ -68,7 +68,7 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug }) {
       >
         {/* Sidebar */}
         <div className="w-56 bg-mail-surface border-r border-mail-border flex flex-col">
-          <div className="p-4 border-b border-mail-border">
+          <div className="px-4 py-4 border-b border-mail-border flex items-center h-[57px]">
             <h2 className="text-lg font-semibold text-mail-text">Settings</h2>
           </div>
 
@@ -93,7 +93,7 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug }) {
         {/* Content */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-mail-border">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-mail-border h-[57px]">
             <h3 className="text-lg font-semibold text-mail-text">
               {tabs.find(t => t.id === activeTab)?.label}
             </h3>

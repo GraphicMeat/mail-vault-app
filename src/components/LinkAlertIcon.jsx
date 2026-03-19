@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, X } from 'lucide-react';
 
 export function LinkAlertIcon({ level, size = 14, alerts }) {
@@ -17,7 +18,7 @@ export function LinkAlertIcon({ level, size = 14, alerts }) {
       >
         <AlertTriangle size={size} />
       </button>
-      {showModal && (
+      {showModal && createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
           <div
@@ -60,7 +61,8 @@ export function LinkAlertIcon({ level, size = 14, alerts }) {
               </p>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

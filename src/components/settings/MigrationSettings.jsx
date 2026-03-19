@@ -203,7 +203,12 @@ export default function MigrationSettings() {
   }, [sourceAccount, destAccount, selectedMappings]);
 
   const handlePause = useCallback(async () => {
-    try { await api.pauseMigration(); } catch (e) { console.error('Pause failed:', e); }
+    try {
+      await api.pauseMigration();
+    } catch (e) {
+      console.error('Pause failed:', e);
+      setError('Failed to pause migration: ' + (e.message || e));
+    }
   }, []);
 
   const [cancelRemoving, setCancelRemoving] = useState(false);
@@ -212,7 +217,10 @@ export default function MigrationSettings() {
   const handleCancel = useCallback(async (choice) => {
     try {
       await api.cancelMigration();
-    } catch (e) { console.error('Cancel failed:', e); }
+    } catch (e) {
+      console.error('Cancel failed:', e);
+      setError('Failed to cancel migration: ' + (e.message || e));
+    }
     if (choice === 'remove') {
       setCancelRemoving(true);
       try {
@@ -695,10 +703,15 @@ function ProgressView({ migration, accounts, accountColors, onPause, onResume, o
   const srcAccount = accounts.find(a => a.email === migration.source_email);
   const dstAccount = accounts.find(a => a.email === migration.dest_email);
 
-  // Clear isPausing when status changes to paused
+  // Clear isPausing when status changes to paused, or after 5s timeout
   useEffect(() => {
     if (isPaused) setIsPausing(false);
   }, [isPaused]);
+  useEffect(() => {
+    if (!isPausing) return;
+    const t = setTimeout(() => setIsPausing(false), 5000);
+    return () => clearTimeout(t);
+  }, [isPausing]);
 
   const totalEmails = (migration.migrated_emails || 0) + (migration.skipped_emails || 0) + (migration.failed_emails || 0);
   const totalTarget = migration.total_emails || totalEmails || 1;

@@ -44,8 +44,12 @@ export function SelectionActionBar() {
     return { hasArchived: archived > 0, hasUnarchived: unarchived > 0 };
   }, [selectedEmailIds, archivedEmailIds]);
 
-  const handleAction = (action) => {
-    action();
+  const handleAction = async (action) => {
+    try {
+      await action();
+    } catch (e) {
+      console.error('Selection action failed:', e);
+    }
   };
 
   const handleDelete = () => {
