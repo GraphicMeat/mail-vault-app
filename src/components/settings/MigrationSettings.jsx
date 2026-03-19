@@ -274,13 +274,21 @@ export default function MigrationSettings() {
   }, []);
 
   const handleDone = useCallback(() => {
+    // Refresh destination account so migrated emails/folders appear
+    const destId = activeMigration?.dest_email;
+    const destAcc = accounts.find(a => a.email === destId);
+    if (destAcc) {
+      const { setActiveAccount } = useMailStore.getState();
+      // Trigger a full reload by re-activating the destination account
+      setActiveAccount(destAcc.id);
+    }
     useSettingsStore.getState().clearActiveMigration();
     setStep(1);
     setSourceAccount(null);
     setDestAccount(null);
     setFolderMappings([]);
     setSelectedFolders(new Set());
-  }, []);
+  }, [activeMigration, accounts]);
 
   const canGoNext = step === 1 ? !!sourceAccount
     : step === 2 ? !!destAccount
