@@ -4,10 +4,9 @@ import { CheckCircle2, Loader2, AlertTriangle } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore.js';
 import * as api from '../services/api.js';
 
-export function MigrationToast({ onOpenSettings }) {
+export function MigrationToast({ showSettings, onOpenSettings }) {
   const activeMigration = useSettingsStore(s => s.activeMigration);
   const incompleteMigration = useSettingsStore(s => s.incompleteMigration);
-  const showSettings = useSettingsStore(s => s.showSettings);
   const [dismissed, setDismissed] = useState(false);
   const [rateLimitCountdown, setRateLimitCountdown] = useState(null);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
