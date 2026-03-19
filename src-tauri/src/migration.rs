@@ -28,6 +28,14 @@ pub struct FolderMapping {
 }
 
 #[derive(Clone, Debug, Serialize)]
+pub struct MigrationLogEntry {
+    pub timestamp: String,
+    pub sender: String,
+    pub subject: String,
+    pub status: String, // "ok", "skipped", "failed"
+}
+
+#[derive(Clone, Debug, Serialize)]
 pub struct MigrationProgress {
     pub source_email: String,
     pub dest_email: String,
@@ -41,6 +49,8 @@ pub struct MigrationProgress {
     pub folders: Vec<FolderMapping>,
     pub started_at: String,
     pub elapsed_seconds: u64,
+    pub last_log_entry: Option<MigrationLogEntry>,
+    pub rate_limit_remaining: Option<u64>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -77,6 +87,14 @@ pub struct MigrationPauseToken(pub std::sync::Mutex<Arc<AtomicBool>>);
 impl Default for MigrationPauseToken {
     fn default() -> Self {
         MigrationPauseToken(std::sync::Mutex::new(Arc::new(AtomicBool::new(false))))
+    }
+}
+
+pub struct MigrationNotify(pub std::sync::Mutex<Arc<tokio::sync::Notify>>);
+
+impl Default for MigrationNotify {
+    fn default() -> Self {
+        MigrationNotify(std::sync::Mutex::new(Arc::new(tokio::sync::Notify::new())))
     }
 }
 
@@ -464,6 +482,64 @@ pub async fn migrate_email_to_graph(
     Ok(true)
 }
 
+// ── Interruptible sleep & helpers ─────────────────────────────────────────────
+
+/// Interruptible async sleep. Returns true if interrupted (cancel/pause signaled), false if sleep completed normally.
+async fn interruptible_sleep(
+    duration: std::time::Duration,
+    cancel: &AtomicBool,
+    notify: &tokio::sync::Notify,
+) -> bool {
+    let _ = cancel; // used by caller after wakeup
+    tokio::select! {
+        _ = tokio::time::sleep(duration) => false,
+        _ = notify.notified() => true,
+    }
+}
+
+/// Parse retry-after seconds from error string format "(429:retry_after=N)"
+fn parse_retry_after(err: &str) -> Option<u64> {
+    let marker = "(429:retry_after=";
+    let start = err.find(marker)? + marker.len();
+    let rest = &err[start..];
+    rest.split(')').next()?.parse().ok()
+}
+
+/// Extract sender email and subject from raw MIME bytes for log display.
+/// Returns (sender, subject) -- falls back to "unknown" if parsing fails.
+fn extract_sender_subject(mime_bytes: &[u8]) -> (String, String) {
+    let search_len = mime_bytes.len().min(8192);
+    let header_str = String::from_utf8_lossy(&mime_bytes[..search_len]);
+
+    let mut sender = String::from("unknown");
+    let mut subject = String::new();
+
+    for line in header_str.lines() {
+        let lower = line.to_lowercase();
+        if lower.starts_with("from:") {
+            let val = line["from:".len()..].trim();
+            // Extract email from "Name <email>" or bare email
+            if let Some(start) = val.find('<') {
+                if let Some(end) = val.find('>') {
+                    sender = val[start + 1..end].to_string();
+                }
+            } else if val.contains('@') {
+                sender = val.to_string();
+            } else {
+                sender = val.to_string();
+            }
+        } else if lower.starts_with("subject:") {
+            subject = line["subject:".len()..].trim().to_string();
+        }
+        // Stop after blank line (end of headers)
+        if line.is_empty() {
+            break;
+        }
+    }
+
+    (sender, subject)
+}
+
 // ── Main migration runner ───────────────────────────────────────────────────
 
 #[allow(clippy::too_many_arguments)]
@@ -511,7 +587,9 @@ pub async fn run_migration(
                          source_email: &str,
                          dest_email: &str,
                          total: u32,
-                         app: &tauri::AppHandle| {
+                         app: &tauri::AppHandle,
+                         last_log_entry: Option<MigrationLogEntry>,
+                         rate_limit_remaining: Option<u64>| {
         let _ = app.emit(
             "migration-progress",
             MigrationProgress {
@@ -527,6 +605,8 @@ pub async fn run_migration(
                 folders: folders.to_vec(),
                 started_at: started_at.to_string(),
                 elapsed_seconds: elapsed,
+                last_log_entry,
+                rate_limit_remaining,
             },
         );
     };
@@ -601,6 +681,8 @@ pub async fn run_migration(
                     &dest_email,
                     total_emails,
                     &app_handle,
+                    None,
+                    None,
                 );
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             }
@@ -630,6 +712,8 @@ pub async fn run_migration(
             &dest_email,
             total_emails,
             &app_handle,
+            None,
+            None,
         );
 
         // Ensure destination folder exists
@@ -825,6 +909,7 @@ pub async fn run_migration(
                                                     migrated_total, skipped_total, failed_total,
                                                     &folder_mappings, &started_at, start_instant.elapsed().as_secs(),
                                                     &source_email, &dest_email, total_emails, &app_handle,
+                                                    None, None,
                                                 );
                                                 continue;
                                             }
@@ -922,6 +1007,7 @@ pub async fn run_migration(
                                                 migrated_total, skipped_total, failed_total,
                                                 &folder_mappings, &started_at, start_instant.elapsed().as_secs(),
                                                 &source_email, &dest_email, total_emails, &app_handle,
+                                                None, None,
                                             );
                                             continue;
                                         }
@@ -1096,6 +1182,8 @@ pub async fn run_migration(
                     &dest_email,
                     total_emails,
                     &app_handle,
+                    None,
+                    None,
                 );
             }
         }
@@ -1182,6 +1270,8 @@ pub async fn run_migration(
         &dest_email,
         total_emails,
         &app_handle,
+        None,
+        None,
     );
 
     info!(
