@@ -3386,6 +3386,7 @@ fn main() {
         .manage(backup::BackupCancelToken::default())
         .manage(migration::MigrationCancelToken::default())
         .manage(migration::MigrationPauseToken::default())
+        .manage(migration::MigrationNotify::default())
         .manage(imap::ImapPool::new())
         .manage(oauth2::OAuth2Manager::new());
 
@@ -3495,6 +3496,7 @@ fn main() {
             commands::resume_migration,
             commands::get_migration_state,
             commands::clear_migration_state_cmd,
+            commands::count_migration_folders,
             commands::get_folder_mappings
         ])
         .setup(|app| {
