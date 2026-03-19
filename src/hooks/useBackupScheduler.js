@@ -5,29 +5,40 @@ import { backupScheduler } from '../services/backupScheduler';
 /**
  * React hook that bridges the backupScheduler singleton to component lifecycle.
  * Watches backupSchedules config and starts/stops schedules accordingly.
- * Follows the same pattern as usePipelineCoordinator.
+ * Supports global backup mode: when backupGlobalEnabled=true, all visible accounts
+ * use the global config. Per-account overrides still apply when global is off.
  */
 export function useBackupScheduler() {
   const accounts = useSettingsStore(s => s.accounts);
   const backupSchedules = useSettingsStore(s => s.backupSchedules);
+  const backupGlobalEnabled = useSettingsStore(s => s.backupGlobalEnabled);
+  const backupGlobalConfig = useSettingsStore(s => s.backupGlobalConfig);
   const hiddenAccounts = useSettingsStore(s => s.hiddenAccounts);
-  const prevSchedulesRef = useRef(null);
+  const prevRef = useRef(null);
 
   useEffect(() => {
-    const prev = prevSchedulesRef.current;
-    prevSchedulesRef.current = backupSchedules;
+    const prevKey = prevRef.current;
+    const currentKey = JSON.stringify({ backupSchedules, backupGlobalEnabled, backupGlobalConfig });
+    prevRef.current = currentKey;
 
     if (!accounts?.length) return;
 
-    // Start/stop schedules based on config changes
     for (const account of accounts) {
       if (hiddenAccounts?.[account.id]) continue;
-      const config = backupSchedules[account.id];
-      const prevConfig = prev?.[account.id];
 
-      if (config?.enabled && JSON.stringify(config) !== JSON.stringify(prevConfig)) {
+      let shouldRun = false;
+      if (backupGlobalEnabled) {
+        // Global mode: all visible accounts use global config
+        shouldRun = true;
+      } else {
+        // Per-account mode
+        const config = backupSchedules[account.id];
+        shouldRun = config?.enabled;
+      }
+
+      if (shouldRun && prevKey !== currentKey) {
         backupScheduler.startSchedule(account.id);
-      } else if (!config?.enabled && prevConfig?.enabled) {
+      } else if (!shouldRun) {
         backupScheduler.stopSchedule(account.id);
       }
     }
@@ -35,5 +46,5 @@ export function useBackupScheduler() {
     return () => {
       backupScheduler.stopAll();
     };
-  }, [accounts, backupSchedules, hiddenAccounts]);
+  }, [accounts, backupSchedules, backupGlobalEnabled, backupGlobalConfig, hiddenAccounts]);
 }

@@ -12,9 +12,17 @@ class BackupScheduler {
     this._retryCount = new Map();  // accountId -> number
   }
 
+  _getEffectiveConfig(accountId) {
+    const state = useSettingsStore.getState();
+    if (state.backupGlobalEnabled) {
+      return { ...state.backupGlobalConfig, enabled: true };
+    }
+    return state.backupSchedules[accountId];
+  }
+
   startSchedule(accountId) {
     this.stopSchedule(accountId);
-    const config = useSettingsStore.getState().backupSchedules[accountId];
+    const config = this._getEffectiveConfig(accountId);
     if (!config?.enabled) return;
 
     // Run immediately on first enable
@@ -42,7 +50,7 @@ class BackupScheduler {
   }
 
   _scheduleNext(accountId) {
-    const config = useSettingsStore.getState().backupSchedules[accountId];
+    const config = this._getEffectiveConfig(accountId);
     if (!config?.enabled) return;
 
     const delay = this._computeDelay(config);
