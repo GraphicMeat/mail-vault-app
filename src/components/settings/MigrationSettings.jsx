@@ -178,10 +178,11 @@ export default function MigrationSettings() {
   const selectedMappings = folderMappings.filter((_, i) => selectedFolders.has(i));
   // Use live folder counts from background counting events, fall back to mapping email_count
   const totalEmails = selectedMappings.reduce((sum, m) => {
-    const liveCount = folderCounts?.[m.source_path];
-    return sum + (liveCount != null ? liveCount : (m.email_count || 0));
+    const live = folderCounts?.[m.source_path];
+    const count = live ? (live.count || 0) : (m.email_count || 0);
+    return sum + count;
   }, 0);
-  const isCounting = Object.values(folderCounts || {}).some(v => v === -1);
+  const isCounting = Object.values(folderCounts || {}).some(v => v?.counting);
   const etaMinutes = Math.ceil(totalEmails * 1.5 / 60);
 
   const handleStartMigration = useCallback(async () => {
@@ -571,7 +572,7 @@ export default function MigrationSettings() {
             {step > 1 ? (
               <button
                 onClick={() => setStep(s => s - 1)}
-                className="text-sm text-mail-text-muted hover:text-mail-text"
+                className="text-sm font-medium text-mail-text border border-mail-border rounded-lg px-4 py-2 hover:bg-mail-surface-hover transition-colors"
               >
                 Back
               </button>
