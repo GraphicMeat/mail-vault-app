@@ -105,7 +105,7 @@ export function MigrationToast({ showSettings, onOpenSettings }) {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 20 }}
           transition={{ duration: 0.2 }}
-          className="fixed bottom-6 right-6 z-50 bg-mail-surface border border-mail-border rounded-xl shadow-lg p-2 w-72"
+          className="fixed bottom-6 right-6 z-[60] bg-mail-surface border border-mail-border rounded-xl shadow-lg p-2 w-72"
         >
           {showDiscardDialog ? (
             <div className="space-y-2">
@@ -146,7 +146,7 @@ export function MigrationToast({ showSettings, onOpenSettings }) {
 
   // Active migration toast
   const { migrated_emails, total_emails, current_folder, status } = activeMigration;
-  const percent = Math.round((migrated_emails / Math.max(total_emails, 1)) * 100);
+  const percent = Math.min(100, total_emails > 0 ? Math.round((migrated_emails / total_emails) * 100) : 0);
 
   return (
     <AnimatePresence>
@@ -155,7 +155,7 @@ export function MigrationToast({ showSettings, onOpenSettings }) {
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 20 }}
         transition={{ duration: 0.2 }}
-        className="fixed bottom-6 right-6 z-50 bg-mail-surface border border-mail-border rounded-xl shadow-lg p-2 w-72 cursor-pointer"
+        className="fixed bottom-6 right-6 z-[60] bg-mail-surface border border-mail-border rounded-xl shadow-lg p-2 w-72 cursor-pointer"
         onClick={onOpenSettings}
       >
         {status === 'completed' ? (
@@ -176,10 +176,12 @@ export function MigrationToast({ showSettings, onOpenSettings }) {
                 <Loader2 size={14} className="text-mail-accent animate-spin flex-shrink-0" />
               )}
               <span className="text-sm font-semibold text-mail-text truncate">
-                Migrating {current_folder || 'INBOX'} {percent}% ({migrated_emails}/{total_emails})
+                {total_emails > 0
+                  ? `Migrating ${current_folder || 'INBOX'} ${percent}% (${migrated_emails}/${total_emails})`
+                  : `Migrating ${current_folder || 'INBOX'}... (${migrated_emails} emails)`}
               </span>
             </div>
-            <div className="h-1.5 rounded-full bg-mail-border mt-2">
+            <div className="h-1.5 rounded-full bg-mail-border mt-2 overflow-hidden">
               <div className="h-1.5 rounded-full bg-mail-accent transition-all" style={{ width: `${percent}%` }} />
             </div>
             {rateLimitCountdown > 0 && (
