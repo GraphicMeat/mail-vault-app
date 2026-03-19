@@ -133,6 +133,7 @@ export const useSettingsStore = create(
       dateFormat: 'auto', // 'auto' | 'MM/dd/yyyy' | 'dd/MM/yyyy' | 'yyyy-MM-dd' | 'dd MMM yyyy' | 'custom'
       customDateFormat: '', // Only used when dateFormat === 'custom'
       signatureDisplay: 'smart', // 'smart' | 'always-show' | 'always-hide' | 'collapsed'
+      actionButtonDisplay: 'icon-only', // 'icon-only' | 'icon-label' | 'text-only'
       sidebarCollapsed: false, // Whether sidebar is in compact/collapsed mode
       listPaneSize: 350, // Width of email list in 3-column, or height in 2-column
       viewerPaneSize: 50, // Percentage of remaining space for viewer in 3-column
@@ -395,6 +396,7 @@ export const useSettingsStore = create(
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
       toggleSidebarCollapsed: () => set(state => ({ sidebarCollapsed: !state.sidebarCollapsed })),
       setSignatureDisplay: (mode) => set({ signatureDisplay: mode }),
+      setActionButtonDisplay: (mode) => set({ actionButtonDisplay: mode }),
       setListPaneSize: (size) => set({ listPaneSize: size }),
       setViewerPaneSize: (size) => set({ viewerPaneSize: size }),
 
@@ -569,6 +571,7 @@ export const useSettingsStore = create(
           dateFormat: 'auto',
           customDateFormat: '',
           signatureDisplay: 'smart',
+          actionButtonDisplay: 'icon-only',
           sidebarCollapsed: false,
           listPaneSize: 350,
           viewerPaneSize: 50,

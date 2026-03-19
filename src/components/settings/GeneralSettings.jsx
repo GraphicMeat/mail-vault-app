@@ -77,6 +77,8 @@ export function GeneralSettings({ accounts }) {
     setCustomDateFormat,
     signatureDisplay,
     setSignatureDisplay,
+    actionButtonDisplay,
+    setActionButtonDisplay,
     keyboardShortcuts,
     keyboardShortcutsEnabled,
     setKeyboardShortcut,
@@ -300,6 +302,23 @@ export function GeneralSettings({ accounts }) {
                 <span>Today: <span className="text-mail-text">{formatEmailDate(new Date().toISOString())}</span></span>
                 <span>Older: <span className="text-mail-text">{formatEmailDate('2023-06-15T10:00:00Z')}</span></span>
               </div>
+            </div>
+
+            {/* Action Button Style */}
+            <div className="pt-4 border-t border-mail-border">
+              <div className="font-medium text-mail-text mb-1">Action button style</div>
+              <div className="text-sm text-mail-text-muted mb-3">
+                Choose how email action buttons are displayed
+              </div>
+              <select
+                value={actionButtonDisplay}
+                onChange={(e) => setActionButtonDisplay(e.target.value)}
+                className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg text-mail-text focus:border-mail-accent transition-all cursor-pointer"
+              >
+                <option value="icon-only">Icons only</option>
+                <option value="icon-label">Icons and labels</option>
+                <option value="text-only">Labels only</option>
+              </select>
             </div>
           </div>
         </div>
