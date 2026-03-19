@@ -105,8 +105,10 @@ export default function MigrationSettings() {
   const activeMigration = useSettingsStore(s => s.activeMigration);
   const migrationHistory = useSettingsStore(s => s.migrationHistory);
   const incompleteMigration = useSettingsStore(s => s.incompleteMigration);
-  const accounts = useMailStore(s => s.accounts);
+  const rawAccounts = useMailStore(s => s.accounts);
   const accountColors = useSettingsStore(s => s.accountColors);
+  const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
+  const accounts = getOrderedAccounts(rawAccounts);
   const folderCounts = useSettingsStore(s => s.migrationFolderCounts);
   const clearFolderCounts = useSettingsStore(s => s.clearMigrationFolderCounts);
 
