@@ -426,6 +426,64 @@ function EmailViewerComponent() {
         archivedEmailIds={archivedEmailIds}
       />
 
+      {/* Action Bar — below sender info, above content */}
+      <div className="px-3 pb-2 relative">
+        <EmailActionBar
+            email={selectedEmail}
+            variant="single"
+            onReply={() => setComposeMode('reply')}
+            onReplyAll={() => setComposeMode('replyAll')}
+            onForward={() => setComposeMode('forward')}
+            onArchive={isArchived ? handleRemoveLocal : handleSave}
+            onDelete={isLocalOnly ? handleRemoveLocal : handleDelete}
+            onMove={() => setShowMoveDropdown(v => !v)}
+            onToggleRead={handleToggleReadStatus}
+            onOpenInWindow={() => {
+              const invoke = window.__TAURI__?.core?.invoke;
+              if (!invoke) return;
+              invoke('open_email_window', { html: iframeContent, title: selectedEmail.subject || 'Email' });
+            }}
+            onViewSource={async () => {
+              if (showRaw) { setShowRaw(false); return; }
+              if (!rawSource) {
+                setLoadingRaw(true);
+                try {
+                  const isTauri = !!window.__TAURI__;
+                  if (isTauri) {
+                    const { invoke } = window.__TAURI__.core;
+                    const b64 = await invoke('maildir_read_raw_source', {
+                      accountId: activeAccountId,
+                      mailbox: activeMailbox,
+                      uid: selectedEmail.uid,
+                    });
+                    setRawSource(b64);
+                  }
+                } catch (err) {
+                  console.error('[EmailViewer] Failed to load raw source:', err);
+                } finally {
+                  setLoadingRaw(false);
+                }
+              }
+              setShowRaw(true);
+            }}
+            isArchived={isArchived}
+            isRead={isRead}
+            isLocalOnly={isLocalOnly}
+            isSentEmail={false}
+            singleRecipient={(selectedEmail.to || []).length <= 1 && !(selectedEmail.cc?.length > 0)}
+            disabled={{ delete: deleting, toggleRead: togglingRead, archive: saving }}
+            moveDropdownOpen={showMoveDropdown}
+            moveButtonRef={moveButtonRef}
+          />
+          {showMoveDropdown && selectedEmail && (
+            <MoveToFolderDropdown
+              uids={[selectedEmail.uid]}
+              onClose={() => setShowMoveDropdown(false)}
+              anchorRect={moveButtonRef.current?.getBoundingClientRect()}
+            />
+          )}
+        </div>
+
       {/* Sender Insights */}
       <AnimatePresence>
         {showInsights && selectedEmail?.from?.address && (
@@ -481,64 +539,6 @@ function EmailViewerComponent() {
             </div>
           );
         })()}
-
-        {/* Action Bar */}
-        <div className="px-4 pb-4 relative">
-          <EmailActionBar
-            email={selectedEmail}
-            variant="single"
-            onReply={() => setComposeMode('reply')}
-            onReplyAll={() => setComposeMode('replyAll')}
-            onForward={() => setComposeMode('forward')}
-            onArchive={isArchived ? handleRemoveLocal : handleSave}
-            onDelete={isLocalOnly ? handleRemoveLocal : handleDelete}
-            onMove={() => setShowMoveDropdown(v => !v)}
-            onToggleRead={handleToggleReadStatus}
-            onOpenInWindow={() => {
-              const invoke = window.__TAURI__?.core?.invoke;
-              if (!invoke) return;
-              invoke('open_email_window', { html: iframeContent, title: selectedEmail.subject || 'Email' });
-            }}
-            onViewSource={async () => {
-              if (showRaw) { setShowRaw(false); return; }
-              if (!rawSource) {
-                setLoadingRaw(true);
-                try {
-                  const isTauri = !!window.__TAURI__;
-                  if (isTauri) {
-                    const { invoke } = window.__TAURI__.core;
-                    const b64 = await invoke('maildir_read_raw_source', {
-                      accountId: activeAccountId,
-                      mailbox: activeMailbox,
-                      uid: selectedEmail.uid,
-                    });
-                    setRawSource(b64);
-                  }
-                } catch (err) {
-                  console.error('[EmailViewer] Failed to load raw source:', err);
-                } finally {
-                  setLoadingRaw(false);
-                }
-              }
-              setShowRaw(true);
-            }}
-            isArchived={isArchived}
-            isRead={isRead}
-            isLocalOnly={isLocalOnly}
-            isSentEmail={false}
-            singleRecipient={(selectedEmail.to || []).length <= 1 && !(selectedEmail.cc?.length > 0)}
-            disabled={{ delete: deleting, toggleRead: togglingRead, archive: saving }}
-            moveDropdownOpen={showMoveDropdown}
-            moveButtonRef={moveButtonRef}
-          />
-          {showMoveDropdown && selectedEmail && (
-            <MoveToFolderDropdown
-              uids={[selectedEmail.uid]}
-              onClose={() => setShowMoveDropdown(false)}
-              anchorRect={moveButtonRef.current?.getBoundingClientRect()}
-            />
-          )}
-        </div>
       </div>
 
       {/* Compose Modal */}

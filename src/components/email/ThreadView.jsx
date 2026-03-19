@@ -326,50 +326,9 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, acti
         )}
       </div>
 
-      {/* Sender Insights (thread email) */}
-      <AnimatePresence>
-        {showInsights && email?.from?.address && (
-          <SenderInsightsPanel senderEmail={email.from.address} />
-        )}
-      </AnimatePresence>
-
-      {/* Expanded content */}
+      {/* Action bar — below sender info, above content */}
       {expanded && (
-        <div className="px-3 pb-3 overflow-hidden" style={{ contain: 'inline-size' }}>
-          {/* Body */}
-          <div className="pl-9 overflow-hidden" style={{ contain: 'inline-size' }}>
-            {showRaw && rawSource ? (
-              <pre className="text-xs font-mono text-mail-text bg-mail-surface rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-all">
-                {atob(rawSource)}
-              </pre>
-            ) : (
-              <ThreadEmailItemContent email={email} loadedEmail={loadedEmail} isLoading={isLoading} signatureDisplay={signatureDisplay} shouldShowSignature={shouldShowSignature} />
-            )}
-          </div>
-
-          {/* Attachments */}
-          {realAttachments.length > 0 && (
-            <div className="mt-3 pl-9">
-              <div className="flex items-center gap-2 text-xs text-mail-text-muted mb-2">
-                <Paperclip size={12} />
-                <span>{realAttachments.length} Attachment{realAttachments.length !== 1 ? 's' : ''}</span>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {realAttachments.map((attachment, index) => (
-                  <AttachmentItem
-                    key={index}
-                    attachment={attachment}
-                    attachmentIndex={attachment._originalIndex}
-                    emailUid={email.uid}
-                    account={activeAccountId}
-                    folder={activeMailbox}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Action bar */}
+        <div className="px-3 pb-1">
           <EmailActionBar
             email={email}
             variant="thread"
@@ -416,6 +375,51 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, acti
             isSentEmail={false}
             singleRecipient={(email.to || []).length <= 1 && !(email.cc?.length > 0)}
           />
+        </div>
+      )}
+
+      {/* Sender Insights (thread email) */}
+      <AnimatePresence>
+        {showInsights && email?.from?.address && (
+          <SenderInsightsPanel senderEmail={email.from.address} />
+        )}
+      </AnimatePresence>
+
+      {/* Expanded content */}
+      {expanded && (
+        <div className="px-3 pb-3 overflow-hidden" style={{ contain: 'inline-size' }}>
+          {/* Body */}
+          <div className="pl-9 overflow-hidden" style={{ contain: 'inline-size' }}>
+            {showRaw && rawSource ? (
+              <pre className="text-xs font-mono text-mail-text bg-mail-surface rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-all">
+                {atob(rawSource)}
+              </pre>
+            ) : (
+              <ThreadEmailItemContent email={email} loadedEmail={loadedEmail} isLoading={isLoading} signatureDisplay={signatureDisplay} shouldShowSignature={shouldShowSignature} />
+            )}
+          </div>
+
+          {/* Attachments */}
+          {realAttachments.length > 0 && (
+            <div className="mt-3 pl-9">
+              <div className="flex items-center gap-2 text-xs text-mail-text-muted mb-2">
+                <Paperclip size={12} />
+                <span>{realAttachments.length} Attachment{realAttachments.length !== 1 ? 's' : ''}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {realAttachments.map((attachment, index) => (
+                  <AttachmentItem
+                    key={index}
+                    attachment={attachment}
+                    attachmentIndex={attachment._originalIndex}
+                    emailUid={email.uid}
+                    account={activeAccountId}
+                    folder={activeMailbox}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
