@@ -23,7 +23,7 @@ export function SecuritySettings() {
               Detect suspicious links in emails that don't match their displayed text
             </div>
           </div>
-          <ToggleSwitch checked={linkSafetyEnabled} onChange={setLinkSafetyEnabled} />
+          <ToggleSwitch active={linkSafetyEnabled} onClick={() => setLinkSafetyEnabled(!linkSafetyEnabled)} />
         </div>
 
         <div className="flex items-center justify-between">
@@ -33,7 +33,7 @@ export function SecuritySettings() {
               Show a warning modal before opening suspicious links
             </div>
           </div>
-          <ToggleSwitch checked={linkSafetyClickConfirm} onChange={setLinkSafetyClickConfirm} />
+          <ToggleSwitch active={linkSafetyClickConfirm} onClick={() => setLinkSafetyClickConfirm(!linkSafetyClickConfirm)} />
         </div>
       </div>
 
@@ -42,6 +42,7 @@ export function SecuritySettings() {
         <div className="text-xs text-mail-text-muted space-y-1">
           <p><span className="text-red-500 font-medium">Red alerts</span> — Link text shows one URL but actually goes to a different domain (phishing indicator)</p>
           <p><span className="text-amber-500 font-medium">Yellow alerts</span> — Link passes through a tracking redirect to a different domain</p>
+          <p className="mt-2 text-mail-text-muted/70">All scanning is performed locally on your device — no email data is sent to any server.</p>
         </div>
       </div>
     </div>
