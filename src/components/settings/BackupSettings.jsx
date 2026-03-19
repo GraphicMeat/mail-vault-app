@@ -15,6 +15,7 @@ import {
   Download,
   Upload,
   HardDrive,
+  Wrench,
 } from 'lucide-react';
 
 function formatRelativeTime(timestamp) {
@@ -77,13 +78,19 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
   const [runningManual, setRunningManual] = useState(false);
   const [manualDone, setManualDone] = useState(false);
   const [storageSize, setStorageSize] = useState(null);
+  const [accountFolders, setAccountFolders] = useState([]);
+  const [showFolderPicker, setShowFolderPicker] = useState(false);
 
-  // Load storage stats on mount
+  // Load storage stats and folder list on mount
   useEffect(() => {
     const invoke = window.__TAURI__?.core?.invoke;
     if (!invoke) return;
     invoke('maildir_storage_stats', { accountId: account.id })
       .then(stats => setStorageSize(stats?.total_bytes ?? null))
+      .catch(() => {});
+    // Load folder list for folder picker
+    invoke('list_mailboxes', { accountJson: JSON.stringify(account) })
+      .then(folders => setAccountFolders((folders || []).filter(f => !f.noselect).map(f => f.name || f.path)))
       .catch(() => {});
   }, [account.id]);
 
@@ -205,6 +212,51 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
                   />
                 </div>
               )}
+            </div>
+
+              {/* Folder selection */}
+              <div className="pt-3 border-t border-mail-border">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs text-mail-text-muted">Folders to back up</label>
+                  <button
+                    onClick={() => setShowFolderPicker(!showFolderPicker)}
+                    className="text-xs text-mail-accent hover:text-mail-accent-hover"
+                  >
+                    {showFolderPicker ? 'Hide' : (config.folders ? `${config.folders.length} selected` : 'All folders')}
+                  </button>
+                </div>
+                {showFolderPicker && accountFolders.length > 0 && (
+                  <div className="space-y-1 max-h-32 overflow-y-auto bg-mail-bg rounded-lg p-2 border border-mail-border">
+                    <label className="flex items-center gap-2 text-xs text-mail-text py-0.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!config.folders}
+                        onChange={() => handleConfigChange('folders', config.folders ? null : accountFolders.slice())}
+                        className="accent-mail-accent"
+                      />
+                      <span className="font-medium">All folders</span>
+                    </label>
+                    {accountFolders.map(folder => (
+                      <label key={folder} className="flex items-center gap-2 text-xs text-mail-text py-0.5 cursor-pointer pl-4">
+                        <input
+                          type="checkbox"
+                          checked={!config.folders || config.folders.includes(folder)}
+                          disabled={!config.folders}
+                          onChange={() => {
+                            const current = config.folders || accountFolders.slice();
+                            const updated = current.includes(folder)
+                              ? current.filter(f => f !== folder)
+                              : [...current, folder];
+                            handleConfigChange('folders', updated.length === accountFolders.length ? null : updated);
+                          }}
+                          className="accent-mail-accent"
+                        />
+                        {folder}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </motion.div>
         )}
@@ -391,6 +443,7 @@ export default function BackupSettings() {
   const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
   const accountOrder = useSettingsStore(s => s.accountOrder);
   const isPaidUser = useSettingsStore(s => s.isPaidUser);
+  const setIsPaidUser = useSettingsStore(s => s.setIsPaidUser);
 
   const backupNotifyOnSuccess = useSettingsStore(s => s.backupNotifyOnSuccess);
   const backupNotifyOnFailure = useSettingsStore(s => s.backupNotifyOnFailure);
@@ -401,8 +454,29 @@ export default function BackupSettings() {
   const backupGlobalConfig = useSettingsStore(s => s.backupGlobalConfig);
   const setBackupGlobalEnabled = useSettingsStore(s => s.setBackupGlobalEnabled);
   const setBackupGlobalConfig = useSettingsStore(s => s.setBackupGlobalConfig);
+  const backupScope = useSettingsStore(s => s.backupScope);
+  const setBackupScope = useSettingsStore(s => s.setBackupScope);
+  const backupCustomPath = useSettingsStore(s => s.backupCustomPath);
+  const setBackupCustomPath = useSettingsStore(s => s.setBackupCustomPath);
 
   const [showExportChoice, setShowExportChoice] = useState(false);
+  const [defaultBackupPath, setDefaultBackupPath] = useState(null);
+
+  // Load default backup path on mount
+  useEffect(() => {
+    const inv = window.__TAURI__?.core?.invoke;
+    if (inv) inv('get_app_data_dir').then(p => setDefaultBackupPath(p)).catch(() => {});
+  }, []);
+
+  const handleChooseBackupDir = async () => {
+    try {
+      const { open } = await import('@tauri-apps/plugin-dialog');
+      const selected = await open({ directory: true, title: 'Choose backup directory' });
+      if (selected) setBackupCustomPath(selected);
+    } catch (e) {
+      console.error('Directory picker failed:', e);
+    }
+  };
 
   const invoke = window.__TAURI__?.core?.invoke;
 
@@ -593,6 +667,61 @@ export default function BackupSettings() {
         </div>
       </div>
 
+      {/* Backup Scope & Storage */}
+      <div className="bg-mail-surface border border-mail-border rounded-xl p-5 space-y-4">
+        <h4 className="font-semibold text-mail-text flex items-center gap-2">
+          <HardDrive size={18} className="text-mail-accent" />
+          Backup Scope & Storage
+        </h4>
+
+        {/* Explanation */}
+        <div className="bg-mail-bg rounded-lg p-3">
+          <p className="text-xs text-mail-text-muted">
+            {backupScope === 'archived'
+              ? 'Only emails you have explicitly archived (saved locally) will be backed up. To include all server emails, switch to "All emails" below.'
+              : 'All emails from selected folders on the mail server will be downloaded and backed up locally. This may use significant disk space.'}
+          </p>
+        </div>
+
+        {/* Scope selector */}
+        <div>
+          <label className="text-xs text-mail-text-muted mb-1 block">What to back up</label>
+          <select
+            value={backupScope}
+            onChange={(e) => setBackupScope(e.target.value)}
+            className={selectClass}
+          >
+            <option value="archived">Archived emails only (locally saved)</option>
+            <option value="all">All emails (download from server)</option>
+          </select>
+        </div>
+
+        {/* Storage directory */}
+        <div>
+          <label className="text-xs text-mail-text-muted mb-1 block">Backup location</label>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 text-xs text-mail-text font-mono bg-mail-bg rounded-lg px-3 py-2 truncate border border-mail-border">
+              {backupCustomPath || defaultBackupPath || 'Loading...'}
+            </div>
+            <button
+              onClick={handleChooseBackupDir}
+              className="text-xs font-medium px-3 py-2 rounded-lg border border-mail-border text-mail-text hover:bg-mail-surface-hover transition-colors whitespace-nowrap"
+            >
+              Change
+            </button>
+            {backupCustomPath && (
+              <button
+                onClick={() => setBackupCustomPath(null)}
+                className="text-xs text-mail-text-muted hover:text-mail-text px-2 py-2"
+                title="Reset to default"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Global Backup Schedule */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <div className="flex items-center justify-between mb-3">
@@ -712,6 +841,21 @@ export default function BackupSettings() {
           </p>
         </div>
       )}
+
+      {/* Developer: Premium toggle */}
+      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+        <h4 className="font-semibold text-mail-text mb-3 flex items-center gap-2">
+          <Wrench size={18} className="text-mail-text-muted" />
+          Developer
+        </h4>
+        <div className="flex items-center justify-between">
+          <div>
+            <span className="text-sm text-mail-text">Enable premium features</span>
+            <p className="text-xs text-mail-text-muted mt-0.5">Toggle to test premium-gated features like scheduled backups</p>
+          </div>
+          <ToggleSwitch active={isPaidUser} onClick={() => setIsPaidUser(!isPaidUser)} />
+        </div>
+      </div>
 
       {/* Export choice modal */}
       <AnimatePresence>

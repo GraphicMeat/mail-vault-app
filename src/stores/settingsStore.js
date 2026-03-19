@@ -181,10 +181,13 @@ export const useSettingsStore = create(
       // Global backup configuration
       backupGlobalEnabled: false,    // Master switch: true = all accounts use global schedule
       backupGlobalConfig: { interval: 'daily', hourlyInterval: 1, timeOfDay: '03:00', dayOfWeek: 1 },
+      backupScope: 'archived',       // 'archived' = only locally archived emails, 'all' = everything from server
+      backupCustomPath: null,        // null = default app data dir, string = user-chosen directory
 
       // Per-account backup configuration (used when backupGlobalEnabled=false, or as overrides)
       backupSchedules: {},
-      // Shape: { [accountId]: { enabled: bool, interval: 'hourly'|'daily'|'weekly', hourlyInterval: 2, timeOfDay: '03:00', dayOfWeek: 1 } }
+      // Shape: { [accountId]: { enabled: bool, interval: 'hourly'|'daily'|'weekly', hourlyInterval: 2, timeOfDay: '03:00', dayOfWeek: 1, folders: string[]|null } }
+      // folders: null = all folders, string[] = specific folder paths
 
       // Backup runtime state (persisted for display across restarts)
       backupState: {},
@@ -243,6 +246,8 @@ export const useSettingsStore = create(
       setBackupGlobalConfig: (config) => set(state => ({
         backupGlobalConfig: { ...state.backupGlobalConfig, ...config }
       })),
+      setBackupScope: (scope) => set({ backupScope: scope }),
+      setBackupCustomPath: (path) => set({ backupCustomPath: path }),
 
       // Per-account backup actions
       setBackupSchedule: (accountId, config) => set(state => ({
