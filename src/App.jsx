@@ -596,7 +596,7 @@ function App() {
 
       <SelectionActionBar />
       <BulkSaveProgress />
-      <MigrationToast onOpenSettings={() => setShowSettings(true)} />
+      <MigrationToast showSettings={showSettings} onOpenSettings={() => setShowSettings(true)} />
       <UndoSendToast onUndo={(composeState) => setComposeState(composeState)} />
 
       {/* Move to Folder dropdown (triggered by keyboard shortcut M) */}
