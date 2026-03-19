@@ -15,7 +15,6 @@ import {
   Download,
   Upload,
   HardDrive,
-  Wrench,
 } from 'lucide-react';
 
 function formatRelativeTime(timestamp) {
@@ -392,7 +391,7 @@ export default function BackupSettings() {
   const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
   const accountOrder = useSettingsStore(s => s.accountOrder);
   const isPaidUser = useSettingsStore(s => s.isPaidUser);
-  const setIsPaidUser = useSettingsStore(s => s.setIsPaidUser);
+
   const backupNotifyOnSuccess = useSettingsStore(s => s.backupNotifyOnSuccess);
   const backupNotifyOnFailure = useSettingsStore(s => s.backupNotifyOnFailure);
   const setBackupNotifyOnSuccess = useSettingsStore(s => s.setBackupNotifyOnSuccess);
@@ -713,21 +712,6 @@ export default function BackupSettings() {
           </p>
         </div>
       )}
-
-      {/* Developer: Premium toggle */}
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
-        <h4 className="font-semibold text-mail-text mb-3 flex items-center gap-2">
-          <Wrench size={18} className="text-mail-text-muted" />
-          Developer
-        </h4>
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="text-sm text-mail-text">Enable premium features</span>
-            <p className="text-xs text-mail-text-muted mt-0.5">Toggle to test premium-gated features like scheduled backups</p>
-          </div>
-          <ToggleSwitch active={isPaidUser} onClick={() => setIsPaidUser(!isPaidUser)} />
-        </div>
-      </div>
 
       {/* Export choice modal */}
       <AnimatePresence>
