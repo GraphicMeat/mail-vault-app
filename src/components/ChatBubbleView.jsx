@@ -18,53 +18,26 @@ import {
   Eye,
   X,
   Reply,
-  ReplyAll,
-  Forward,
   Download,
-  MoreVertical,
   ExternalLink,
   Loader,
-  ShieldCheck,
-  ShieldAlert,
-  AlertTriangle
 } from 'lucide-react';
+import { EmailSenderInfo } from './email/EmailSenderInfo';
+import { EmailActionBar } from './email/EmailActionBar';
+import { SenderInfoPopover } from './email/SenderInfoPopover';
 import { AttachmentItem } from './EmailViewer';
 import { getRealAttachments, replaceCidUrls } from '../services/attachmentUtils';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../utils/iframeQuoteFolding';
 import { splitQuotedContent } from '../utils/quoteFolding';
 import { splitSignature } from '../utils/signatureFolding';
 import { useSettingsStore } from '../stores/settingsStore';
-import { checkSenderVerification } from '../utils/senderCheck';
 import { scanEmailLinks, checkLinkAlert } from '../utils/linkSafety';
 import { LinkSafetyModal } from './LinkSafetyModal';
-
-function SenderBadge({ email, size = 10 }) {
-  const { status, tooltip } = useMemo(
-    () => checkSenderVerification(email),
-    [email?.from, email?.replyTo, email?.returnPath, email?.authenticationResults]
-  );
-
-  if (status === 'none') return null;
-
-  const config = {
-    verified: { Icon: ShieldCheck, color: 'text-green-500' },
-    warning: { Icon: AlertTriangle, color: 'text-orange-500' },
-    danger: { Icon: ShieldAlert, color: 'text-red-500' },
-  };
-
-  const { Icon, color } = config[status];
-  return (
-    <span className={`inline-flex items-center ${color}`} title={tooltip}>
-      <Icon size={size} />
-    </span>
-  );
-}
 
 export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail, onBack, onReply }) {
   const scrollRef = useRef(null);
   const stickToBottomRef = useRef(true);
   const [showOriginal, setShowOriginal] = useState(null); // email uid or null
-  const [contextMenu, setContextMenu] = useState(null); // { x, y, email } or null
   const [fullViewEmail, setFullViewEmail] = useState(null); // email to show in full view modal
 
   // Use pre-computed thread from parent (ChatViewWrapper) — no local buildThreads()
@@ -142,32 +115,13 @@ export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail,
     };
   }, [threadId, displayItems.length]);
 
-  // Close context menu on click outside
-  useEffect(() => {
-    const handleClick = () => setContextMenu(null);
-    if (contextMenu) {
-      document.addEventListener('click', handleClick);
-      return () => document.removeEventListener('click', handleClick);
-    }
-  }, [contextMenu]);
-
   const avatarColor = getAvatarColor(correspondent.email);
   const initials = getInitials(correspondent.name, correspondent.email);
 
   // Get the latest email for the default reply
   const latestEmail = topic.emails[topic.emails.length - 1];
 
-  const handleContextMenu = (e, email) => {
-    e.preventDefault();
-    setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
-      email
-    });
-  };
-
   const handleReplyToEmail = (email, mode = 'reply') => {
-    setContextMenu(null);
     if (onReply) {
       onReply(email, mode);
     }
@@ -250,8 +204,9 @@ export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail,
                   onToggleOriginal={() => setShowOriginal(
                     showOriginal === eKey ? null : eKey
                   )}
-                  onContextMenu={(e) => handleContextMenu(e, email)}
                   onReply={() => handleReplyToEmail(email)}
+                  onReplyAll={() => handleReplyToEmail(email, 'replyAll')}
+                  onForward={() => handleReplyToEmail(email, 'forward')}
                   onOpenFullView={() => {
                     const bodyEntry = bodiesMapRef.current?.get(eKey);
                     setFullViewEmail(bodyEntry?.email ? { ...email, ...bodyEntry.email } : email);
@@ -278,20 +233,6 @@ export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail,
         </button>
       </div>
 
-      {/* Context Menu */}
-      <AnimatePresence>
-        {contextMenu && (
-          <ContextMenu
-            x={contextMenu.x}
-            y={contextMenu.y}
-            onReply={() => handleReplyToEmail(contextMenu.email, 'reply')}
-            onReplyAll={() => handleReplyToEmail(contextMenu.email, 'replyAll')}
-            onForward={() => handleReplyToEmail(contextMenu.email, 'forward')}
-            onClose={() => setContextMenu(null)}
-          />
-        )}
-      </AnimatePresence>
-
       {/* Full View Email Modal */}
       <AnimatePresence>
         {fullViewEmail && (
@@ -305,64 +246,15 @@ export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail,
   );
 }
 
-function ContextMenu({ x, y, onReply, onReplyAll, onForward, onClose }) {
-  // Adjust position to keep menu in viewport
-  const menuRef = useRef(null);
-  const [position, setPosition] = useState({ x, y });
-
-  useEffect(() => {
-    if (menuRef.current) {
-      const rect = menuRef.current.getBoundingClientRect();
-      const newX = x + rect.width > window.innerWidth ? x - rect.width : x;
-      const newY = y + rect.height > window.innerHeight ? y - rect.height : y;
-      setPosition({ x: newX, y: newY });
-    }
-  }, [x, y]);
-
-  return (
-    <motion.div
-      ref={menuRef}
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      className="fixed z-50 bg-mail-surface border border-mail-border rounded-lg shadow-xl py-1 min-w-[160px]"
-      style={{ left: position.x, top: position.y }}
-      onClick={(e) => e.stopPropagation()}
-    >
-      <button
-        onClick={onReply}
-        className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover
-                  flex items-center gap-2 text-mail-text"
-      >
-        <Reply size={14} />
-        Reply
-      </button>
-      <button
-        onClick={onReplyAll}
-        className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover
-                  flex items-center gap-2 text-mail-text"
-      >
-        <ReplyAll size={14} />
-        Reply All
-      </button>
-      <button
-        onClick={onForward}
-        className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover
-                  flex items-center gap-2 text-mail-text"
-      >
-        <Forward size={14} />
-        Forward
-      </button>
-    </motion.div>
-  );
-}
-
-const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOriginalVisible, onToggleOriginal, onContextMenu, onReply, onOpenFullView, bodiesMapRef, registerListener }) {
+const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOriginalVisible, onToggleOriginal, onReply, onReplyAll, onForward, onOpenFullView, bodiesMapRef, registerListener }) {
   const iframeRef = useRef(null);
   const [quotesExpanded, setQuotesExpanded] = useState(false);
   const [sigExpanded, setSigExpanded] = useState(false);
   const [linkSafetyAlert, setLinkSafetyAlert] = useState(null);
+  const [hovered, setHovered] = useState(false);
+  const [senderPopover, setSenderPopover] = useState(null);
 
+  const archivedEmailIds = useMailStore(s => s.archivedEmailIds);
   const signatureDisplay = useSettingsStore(s => s.signatureDisplay);
   const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
   const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
@@ -578,13 +470,19 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className={`flex gap-2 ${fromUser ? 'flex-row-reverse' : 'flex-row'}`}
-      onContextMenu={onContextMenu}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
       {/* Avatar (only for other person) */}
       {!fromUser && (
         <div
-          className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0 mt-1"
+          className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0 mt-1 cursor-pointer"
           style={{ backgroundColor: avatarColor }}
+          onClick={(e) => {
+            e.stopPropagation();
+            const rect = e.currentTarget.getBoundingClientRect();
+            setSenderPopover({ rect, email });
+          }}
         >
           {initials}
         </div>
@@ -746,7 +644,6 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
           <span className="text-[10px] text-mail-text-muted">
             {formatMessageTime(email.date)}
           </span>
-          <SenderBadge email={email} />
 
           {/* View original toggle (for text messages or to see full HTML) */}
           {(wasStripped || hasHtml) && (
@@ -776,10 +673,44 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
             <Reply size={10} />
           </button>
         </div>
+
+        {/* Hover action toolbar */}
+        <AnimatePresence>
+          {hovered && (
+            <EmailActionBar
+              email={email}
+              variant="chat"
+              onReply={() => onReply?.()}
+              onReplyAll={() => onReplyAll?.()}
+              onForward={() => onForward?.()}
+              onArchive={null}
+              onDelete={null}
+              onMove={null}
+              onToggleRead={null}
+              onOpenInWindow={() => onOpenFullView?.()}
+              onViewSource={null}
+              isArchived={false}
+              isRead={true}
+              isLocalOnly={false}
+              isSentEmail={fromUser}
+              singleRecipient={false}
+            />
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Spacer for user messages (to align with avatar space) */}
       {fromUser && <div className="w-8 flex-shrink-0" />}
+
+      {/* Sender info popover */}
+      {senderPopover && (
+        <SenderInfoPopover
+          email={senderPopover.email}
+          anchorRect={senderPopover.rect}
+          onClose={() => setSenderPopover(null)}
+          archivedEmailIds={archivedEmailIds}
+        />
+      )}
 
       <LinkSafetyModal
         alert={linkSafetyAlert}
