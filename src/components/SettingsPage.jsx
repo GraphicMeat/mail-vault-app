@@ -23,7 +23,7 @@ import { HelpSettings } from './settings/HelpSettings';
 import BackupSettings from './settings/BackupSettings';
 import MigrationSettings from './settings/MigrationSettings.jsx';
 
-export function SettingsPage({ onClose, onAddAccount, onReportBug }) {
+export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab }) {
   const { accounts } = useMailStore();
 
   // Close on Escape key
@@ -35,7 +35,7 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  const [activeTab, setActiveTab] = useState('general');
+  const [activeTab, setActiveTab] = useState(initialTab || 'general');
 
   const tabs = [
     { id: 'general', label: 'General', icon: Palette },

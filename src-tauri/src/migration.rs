@@ -634,8 +634,9 @@ pub async fn run_migration(
     let sem = Arc::new(Semaphore::new(3));
 
     for folder_idx in 0..folder_mappings.len() {
+        info!("[migration] Folder loop iteration {}/{}, cancel={}, pause={}", folder_idx + 1, folder_mappings.len(), cancel.load(Ordering::Relaxed), pause.load(Ordering::Relaxed));
         if cancel.load(Ordering::Relaxed) {
-            info!("[migration] Cancelled");
+            info!("[migration] Cancelled at folder loop check");
             folder_mappings[folder_idx].status = "cancelled".to_string();
             break;
         }

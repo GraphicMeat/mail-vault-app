@@ -100,6 +100,7 @@ function App() {
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [composeState, setComposeState] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState(null);
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [pendingOperation, setPendingOperation] = useState(null);
@@ -573,7 +574,7 @@ function App() {
 
       <AnimatePresence>
         {showSettings && (
-          <SettingsPage onClose={() => setShowSettings(false)} onAddAccount={() => { setShowSettings(false); setShowAccountModal(true); }} onReportBug={handleReportBug} />
+          <SettingsPage onClose={() => { setShowSettings(false); setSettingsInitialTab(null); }} onAddAccount={() => { setShowSettings(false); setShowAccountModal(true); }} onReportBug={handleReportBug} initialTab={settingsInitialTab} />
         )}
       </AnimatePresence>
 
@@ -596,7 +597,7 @@ function App() {
 
       <SelectionActionBar />
       <BulkSaveProgress />
-      <MigrationToast showSettings={showSettings} onOpenSettings={() => setShowSettings(true)} />
+      <MigrationToast showSettings={showSettings} onOpenSettings={() => { setSettingsInitialTab('migration'); setShowSettings(true); }} />
       <UndoSendToast onUndo={(composeState) => setComposeState(composeState)} />
 
       {/* Move to Folder dropdown (triggered by keyboard shortcut M) */}
