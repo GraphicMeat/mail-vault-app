@@ -178,7 +178,11 @@ export const useSettingsStore = create(
       // Each: { id, accountEmail: '*' | 'email@...', folder, olderThan: { value: number, unit: 'days'|'months' }, action: 'delete'|'archive-delete', enabled: boolean }
       cleanupRules: [],
 
-      // Backup configuration
+      // Global backup configuration
+      backupGlobalEnabled: false,    // Master switch: true = all accounts use global schedule
+      backupGlobalConfig: { interval: 'daily', hourlyInterval: 1, timeOfDay: '03:00', dayOfWeek: 1 },
+
+      // Per-account backup configuration (used when backupGlobalEnabled=false, or as overrides)
       backupSchedules: {},
       // Shape: { [accountId]: { enabled: bool, interval: 'hourly'|'daily'|'weekly', hourlyInterval: 2, timeOfDay: '03:00', dayOfWeek: 1 } }
 
@@ -234,7 +238,13 @@ export const useSettingsStore = create(
       backupNotifyOnSuccess: true,
       backupNotifyOnFailure: true,
 
-      // Backup actions
+      // Global backup actions
+      setBackupGlobalEnabled: (val) => set({ backupGlobalEnabled: val }),
+      setBackupGlobalConfig: (config) => set(state => ({
+        backupGlobalConfig: { ...state.backupGlobalConfig, ...config }
+      })),
+
+      // Per-account backup actions
       setBackupSchedule: (accountId, config) => set(state => ({
         backupSchedules: { ...state.backupSchedules, [accountId]: config }
       })),

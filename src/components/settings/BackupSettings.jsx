@@ -64,7 +64,7 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
 
 const selectClass = 'w-full px-4 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent';
 
-function AccountCard({ account, isPaidUser }) {
+function AccountCard({ account, isPaidUser, globalEnabled }) {
   const backupSchedules = useSettingsStore(s => s.backupSchedules);
   const backupState = useSettingsStore(s => s.backupState);
   const backupHistory = useSettingsStore(s => s.backupHistory);
@@ -304,9 +304,14 @@ function AccountCard({ account, isPaidUser }) {
           >
             {avatarInitial}
           </div>
-          <span className="text-sm font-medium text-mail-text">{account.email}</span>
+          <div className="flex-1 min-w-0">
+            <span className="text-sm font-medium text-mail-text">{account.email}</span>
+            {globalEnabled && (
+              <span className="text-xs text-mail-accent ml-2">Using global schedule</span>
+            )}
+          </div>
         </div>
-        {isPaidUser ? (
+        {isPaidUser && !globalEnabled ? (
           <div aria-label={`Enable backup schedule for ${account.email}`}>
             <ToggleSwitch active={config.enabled} onClick={handleToggle} />
           </div>
@@ -340,6 +345,40 @@ function AccountCard({ account, isPaidUser }) {
             </div>
           </div>
         </div>
+      ) : globalEnabled ? (
+        // When global is enabled, show status/history but not per-account config
+        <div className="space-y-4">
+          {/* Status Row */}
+          <div className="grid grid-cols-4 gap-4 pt-3 border-t border-mail-border">
+            <div>
+              <div className="text-xs text-mail-text-muted">Last backup</div>
+              <div className="text-sm font-semibold text-mail-text">{formatRelativeTime(state.lastBackupTime)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-mail-text-muted">Next run</div>
+              <div className="text-sm font-semibold text-mail-text">{formatRelativeTime(state.nextRunTime)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-mail-text-muted">Backed up</div>
+              <div className="text-sm font-semibold text-mail-text">{state.emailsBackedUp || 0} emails</div>
+            </div>
+            <div>
+              <div className="text-xs text-mail-text-muted">Storage</div>
+              <div className="text-sm font-semibold text-mail-text">{formatSize(storageSize)}</div>
+            </div>
+          </div>
+          {/* Manual backup button */}
+          <div className="flex items-center gap-2 pt-2 border-t border-mail-border">
+            <button
+              onClick={handleManualBackup}
+              disabled={runningManual}
+              className="text-xs px-3 py-1.5 rounded-lg bg-mail-accent/10 text-mail-accent hover:bg-mail-accent/20 transition-colors flex items-center gap-1.5 font-medium"
+            >
+              {runningManual ? <Loader size={12} className="animate-spin" /> : manualDone ? <CheckCircle2 size={12} /> : <HardDrive size={12} />}
+              {runningManual ? 'Backing up...' : manualDone ? 'Done!' : 'Back up now'}
+            </button>
+          </div>
+        </div>
       ) : (
         scheduleContent
       )}
@@ -358,6 +397,11 @@ export default function BackupSettings() {
   const backupNotifyOnFailure = useSettingsStore(s => s.backupNotifyOnFailure);
   const setBackupNotifyOnSuccess = useSettingsStore(s => s.setBackupNotifyOnSuccess);
   const setBackupNotifyOnFailure = useSettingsStore(s => s.setBackupNotifyOnFailure);
+
+  const backupGlobalEnabled = useSettingsStore(s => s.backupGlobalEnabled);
+  const backupGlobalConfig = useSettingsStore(s => s.backupGlobalConfig);
+  const setBackupGlobalEnabled = useSettingsStore(s => s.setBackupGlobalEnabled);
+  const setBackupGlobalConfig = useSettingsStore(s => s.setBackupGlobalConfig);
 
   const [showExportChoice, setShowExportChoice] = useState(false);
 
@@ -550,16 +594,122 @@ export default function BackupSettings() {
         </div>
       </div>
 
+      {/* Global Backup Schedule */}
+      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h4 className="font-semibold text-mail-text flex items-center gap-2">
+              <Clock size={18} className="text-mail-accent" />
+              Backup Schedule
+            </h4>
+            <p className="text-xs text-mail-text-muted mt-0.5">
+              {backupGlobalEnabled ? 'All accounts use this schedule' : 'Enable to set a schedule for all accounts'}
+            </p>
+          </div>
+          <ToggleSwitch active={backupGlobalEnabled} onClick={() => setBackupGlobalEnabled(!backupGlobalEnabled)} />
+        </div>
+
+        <AnimatePresence>
+          {backupGlobalEnabled && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="space-y-3 pt-3 border-t border-mail-border">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-mail-text-muted mb-1 block">Interval</label>
+                    <select
+                      value={backupGlobalConfig.interval}
+                      onChange={(e) => setBackupGlobalConfig({ interval: e.target.value })}
+                      className={selectClass}
+                    >
+                      <option value="hourly">Hourly</option>
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                    </select>
+                  </div>
+
+                  {backupGlobalConfig.interval === 'hourly' && (
+                    <div>
+                      <label className="text-xs text-mail-text-muted mb-1 block">Every N hours</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={24}
+                        value={backupGlobalConfig.hourlyInterval || 1}
+                        onChange={(e) => setBackupGlobalConfig({ hourlyInterval: Math.max(1, Math.min(24, parseInt(e.target.value) || 1)) })}
+                        className={selectClass}
+                      />
+                    </div>
+                  )}
+                  {backupGlobalConfig.interval === 'daily' && (
+                    <div>
+                      <label className="text-xs text-mail-text-muted mb-1 block">At</label>
+                      <input
+                        type="time"
+                        value={backupGlobalConfig.timeOfDay || '03:00'}
+                        onChange={(e) => setBackupGlobalConfig({ timeOfDay: e.target.value })}
+                        className={selectClass}
+                      />
+                    </div>
+                  )}
+                  {backupGlobalConfig.interval === 'weekly' && (
+                    <>
+                      <div>
+                        <label className="text-xs text-mail-text-muted mb-1 block">Day</label>
+                        <select
+                          value={backupGlobalConfig.dayOfWeek ?? 1}
+                          onChange={(e) => setBackupGlobalConfig({ dayOfWeek: parseInt(e.target.value) })}
+                          className={selectClass}
+                        >
+                          {DAY_NAMES.map((name, i) => (
+                            <option key={i} value={i}>{name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {backupGlobalConfig.interval === 'weekly' && (
+                  <div className="max-w-[calc(50%-6px)]">
+                    <label className="text-xs text-mail-text-muted mb-1 block">At</label>
+                    <input
+                      type="time"
+                      value={backupGlobalConfig.timeOfDay || '03:00'}
+                      onChange={(e) => setBackupGlobalConfig({ timeOfDay: e.target.value })}
+                      className={selectClass}
+                    />
+                  </div>
+                )}
+
+                <p className="text-xs text-mail-text-muted pt-1">
+                  Turn off to configure each account individually below.
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
       {/* Per-Account Cards */}
+      {!backupGlobalEnabled && (
+        <div className="flex items-center gap-2 pt-2">
+          <h4 className="text-sm font-semibold text-mail-text-muted">Per-Account Settings</h4>
+        </div>
+      )}
       {visibleAccounts.length > 0 ? (
         visibleAccounts.map(account => (
-          <AccountCard key={account.id} account={account} isPaidUser={isPaidUser} />
+          <AccountCard key={account.id} account={account} isPaidUser={isPaidUser} globalEnabled={backupGlobalEnabled} />
         ))
       ) : (
         <div className="bg-mail-surface border border-mail-border rounded-xl p-5 text-center">
-          <h4 className="font-semibold text-mail-text mb-2">No backup schedules configured</h4>
+          <h4 className="font-semibold text-mail-text mb-2">No accounts configured</h4>
           <p className="text-sm text-mail-text-muted">
-            Enable automatic backup for an account to keep your emails safely archived. Backups run in the background, even when the app is minimized.
+            Add an email account first, then configure backup schedules.
           </p>
         </div>
       )}
