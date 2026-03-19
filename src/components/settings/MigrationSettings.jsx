@@ -207,6 +207,14 @@ export default function MigrationSettings() {
     try {
       await api.pauseMigration();
       console.log('[migration] pauseMigration() succeeded');
+      // If migration isn't actively running (no new events arrive to set status='paused'),
+      // update the store directly so UI reflects the pause
+      setTimeout(() => {
+        const current = useSettingsStore.getState().activeMigration;
+        if (current && current.status !== 'paused') {
+          useSettingsStore.getState().setActiveMigration({ ...current, status: 'paused' });
+        }
+      }, 3000);
     } catch (e) {
       console.error('[migration] Pause failed:', e);
       setError('Failed to pause migration: ' + (e.message || e));
@@ -237,6 +245,8 @@ export default function MigrationSettings() {
       setCancelRemoving(false);
     }
     await api.clearMigrationState();
+    useSettingsStore.getState().clearActiveMigration();
+    useSettingsStore.getState().clearIncompleteMigration();
     setShowCancelConfirm(false);
   }, [activeMigration]);
 
