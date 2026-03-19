@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useMailStore } from '../../stores/mailStore';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { motion, AnimatePresence } from 'framer-motion';
-import { format } from 'date-fns';
+import { AnimatePresence } from 'framer-motion';
 import { ComposeModal } from '../ComposeModal';
 import { useChatBodyLoader, emailKey } from '../../hooks/useChatBodyLoader';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../../utils/iframeQuoteFolding';
@@ -10,22 +9,13 @@ import { splitQuotedContent } from '../../utils/quoteFolding';
 import { splitSignature, hashSignature } from '../../utils/signatureFolding';
 import { useSettingsStore } from '../../stores/settingsStore';
 import {
-  Reply,
-  ReplyAll,
-  Forward,
   Paperclip,
   Archive,
-  HardDrive,
-  Cloud,
-  ChevronDown,
-  ChevronUp,
-  Code,
-  RefreshCw,
-  Info,
 } from 'lucide-react';
 import { getRealAttachments, replaceCidUrls } from '../../services/attachmentUtils';
 import { SenderInsightsPanel } from '../SenderInsightsPanel';
-import { SenderVerificationBadge } from './EmailHeaderComponent';
+import { EmailSenderInfo } from './EmailSenderInfo';
+import { EmailActionBar } from './EmailActionBar';
 import { AttachmentItem } from './AttachmentBar';
 import { scanEmailLinks, checkLinkAlert } from '../../utils/linkSafety';
 import { getSenderName } from '../../utils/emailParser';
@@ -294,57 +284,46 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, acti
   return (
     <div className={`border-b border-mail-border overflow-hidden ${expanded ? '' : 'hover:bg-mail-surface-hover'}`} style={{ contain: 'inline-size' }}>
       {/* Header — always visible */}
-      <div
-        className="flex items-start gap-2 px-3 py-2.5 cursor-pointer"
-        onClick={() => setExpanded(!expanded)}
-      >
-        {/* Avatar */}
-        <div className="w-7 h-7 bg-mail-accent rounded-full flex items-center justify-center flex-shrink-0">
-          <span className="text-white font-semibold text-[11px]">
-            {getSenderName(email)[0].toUpperCase()}
-          </span>
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 min-w-0 flex-1">
-              {email.source === 'local-only' ? (
-                <HardDrive size={12} className="text-mail-warning flex-shrink-0" title="Local only" />
-              ) : archivedEmailIds?.has(email.uid) ? (
-                <HardDrive size={12} className="text-mail-local flex-shrink-0" title="Archived" />
-              ) : (
-                <Cloud size={12} className="flex-shrink-0" style={{ color: 'rgba(59, 130, 246, 0.5)' }} title="Server" />
-              )}
-              <span className="font-semibold text-sm text-mail-text truncate">
-                {getSenderName(email)}
-              </span>
-              <SenderVerificationBadge email={email} />
-              {email.from?.name && (
-                <span className="text-xs text-mail-text-muted truncate">
-                  &lt;{email.from.address}&gt;
-                </span>
-              )}
-              <button
-                onClick={(e) => { e.stopPropagation(); setShowInsights(!showInsights); }}
-                className={`p-0.5 rounded transition-colors flex-shrink-0 ${showInsights ? 'text-mail-accent' : 'text-mail-text-muted hover:text-mail-text'}`}
-                title="Sender insights"
-              >
-                <Info size={12} />
-              </button>
-            </div>
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              <span className="text-[11px] text-mail-text-muted">
-                {format(new Date(email.date), 'MMM d, h:mm a')}
-              </span>
-              {expanded ? <ChevronUp size={14} className="text-mail-text-muted" /> : <ChevronDown size={14} className="text-mail-text-muted" />}
-            </div>
-          </div>
-          {!expanded && (
-            <p className="text-xs text-mail-text-muted truncate mt-0.5">
-              {loadedEmail?.text?.substring(0, 200) || email.subject || ''}
-            </p>
-          )}
-        </div>
+      <div onClick={() => setExpanded(!expanded)}>
+        <EmailSenderInfo
+          email={email}
+          variant="thread"
+          expanded={expanded}
+          onToggle={() => setExpanded(!expanded)}
+          showRaw={showRaw}
+          onToggleRaw={async () => {
+            if (showRaw) { setShowRaw(false); return; }
+            if (!rawSource) {
+              setLoadingRaw(true);
+              try {
+                const isTauri = !!window.__TAURI__;
+                if (isTauri) {
+                  const { invoke } = window.__TAURI__.core;
+                  const b64 = await invoke('maildir_read_raw_source', {
+                    accountId: activeAccountId,
+                    mailbox: activeMailbox,
+                    uid: email.uid,
+                  });
+                  setRawSource(b64);
+                }
+              } catch (err) {
+                console.error('[ThreadEmailItem] Failed to load raw source:', err);
+              } finally {
+                setLoadingRaw(false);
+              }
+            }
+            setShowRaw(true);
+          }}
+          loadingRaw={loadingRaw}
+          showInsights={showInsights}
+          onToggleInsights={() => setShowInsights(!showInsights)}
+          archivedEmailIds={archivedEmailIds}
+        />
+        {!expanded && (
+          <p className="text-xs text-mail-text-muted truncate mt-0.5 pl-12 pb-1">
+            {loadedEmail?.text?.substring(0, 200) || email.subject || ''}
+          </p>
+        )}
       </div>
 
       {/* Sender Insights (thread email) */}
@@ -357,73 +336,6 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, acti
       {/* Expanded content */}
       {expanded && (
         <div className="px-3 pb-3 overflow-hidden" style={{ contain: 'inline-size' }}>
-          {/* To/CC line */}
-          <div className="text-xs text-mail-text-muted mb-2 pl-9">
-            <div>
-              To: {(Array.isArray(email.to) ? email.to : []).map(t => t.name || t.address).join(', ') || 'Unknown'}
-              {email.cc?.length > 0 && (
-                <span className="ml-2">CC: {email.cc.map(c => c.name || c.address).join(', ')}</span>
-              )}
-              <button
-                onClick={(e) => { e.stopPropagation(); setHeaderExpanded(!headerExpanded); }}
-                className="ml-2 text-mail-accent hover:underline"
-              >
-                {headerExpanded ? 'Less' : 'More'}
-              </button>
-            </div>
-            <AnimatePresence>
-              {headerExpanded && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="mt-1 space-y-0.5 overflow-hidden"
-                >
-                  <div>Date: {format(new Date(email.date), 'PPpp')}</div>
-                  {email.messageId && <div className="break-all">Message-ID: {email.messageId}</div>}
-                  {email.replyTo?.length > 0 && (
-                    <div>Reply-To: {email.replyTo.map(r => r.address || r).join(', ')}</div>
-                  )}
-                  <button
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      if (showRaw) { setShowRaw(false); return; }
-                      if (!rawSource) {
-                        setLoadingRaw(true);
-                        try {
-                          const isTauri = !!window.__TAURI__;
-                          if (isTauri) {
-                            const { invoke } = window.__TAURI__.core;
-                            const b64 = await invoke('maildir_read_raw_source', {
-                              accountId: activeAccountId,
-                              mailbox: activeMailbox,
-                              uid: email.uid,
-                            });
-                            setRawSource(b64);
-                          }
-                        } catch (err) {
-                          console.error('[ThreadEmailItem] Failed to load raw source:', err);
-                        } finally {
-                          setLoadingRaw(false);
-                        }
-                      }
-                      setShowRaw(true);
-                    }}
-                    disabled={loadingRaw}
-                    className={`mt-1 flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors
-                               ${showRaw
-                                 ? 'bg-mail-accent text-white'
-                                 : 'bg-mail-surface hover:bg-mail-surface-hover text-mail-text-muted'}
-                               disabled:opacity-50`}
-                  >
-                    {loadingRaw ? <RefreshCw size={12} className="animate-spin" /> : <Code size={12} />}
-                    {loadingRaw ? 'Loading...' : showRaw ? 'Rendered' : 'View Source'}
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
           {/* Body */}
           <div className="pl-9 overflow-hidden" style={{ contain: 'inline-size' }}>
             {showRaw && rawSource ? (
@@ -457,33 +369,53 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, acti
             </div>
           )}
 
-          {/* Reply actions */}
-          <div className="flex items-center gap-2 mt-3 pl-9">
-            <button
-              onClick={(e) => { e.stopPropagation(); setComposeMode('reply'); }}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-mail-text-muted
-                        bg-mail-surface hover:bg-mail-surface-hover rounded-lg border border-mail-border transition-colors"
-            >
-              <Reply size={14} />
-              Reply
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); setComposeMode('replyAll'); }}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-mail-text-muted
-                        bg-mail-surface hover:bg-mail-surface-hover rounded-lg border border-mail-border transition-colors"
-            >
-              <ReplyAll size={14} />
-              Reply All
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); setComposeMode('forward'); }}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-mail-text-muted
-                        bg-mail-surface hover:bg-mail-surface-hover rounded-lg border border-mail-border transition-colors"
-            >
-              <Forward size={14} />
-              Forward
-            </button>
-          </div>
+          {/* Action bar */}
+          <EmailActionBar
+            email={email}
+            variant="thread"
+            onReply={() => setComposeMode('reply')}
+            onReplyAll={() => setComposeMode('replyAll')}
+            onForward={() => setComposeMode('forward')}
+            onArchive={null}
+            onDelete={null}
+            onMove={null}
+            onToggleRead={null}
+            onOpenInWindow={() => {
+              const invoke = window.__TAURI__?.core?.invoke;
+              if (!invoke) return;
+              const bodyEntry = bodiesMapRef.current.get(key);
+              const html = bodyEntry?.email?.html || '';
+              if (html) invoke('open_email_window', { html, title: email.subject || 'Email' });
+            }}
+            onViewSource={async () => {
+              if (showRaw) { setShowRaw(false); return; }
+              if (!rawSource) {
+                setLoadingRaw(true);
+                try {
+                  const isTauri = !!window.__TAURI__;
+                  if (isTauri) {
+                    const { invoke } = window.__TAURI__.core;
+                    const b64 = await invoke('maildir_read_raw_source', {
+                      accountId: activeAccountId,
+                      mailbox: activeMailbox,
+                      uid: email.uid,
+                    });
+                    setRawSource(b64);
+                  }
+                } catch (err) {
+                  console.error('[ThreadEmailItem] Failed to load raw source:', err);
+                } finally {
+                  setLoadingRaw(false);
+                }
+              }
+              setShowRaw(true);
+            }}
+            isArchived={archivedEmailIds?.has(email.uid)}
+            isRead={!email.flags?.includes('\\Unseen')}
+            isLocalOnly={email.source === 'local-only'}
+            isSentEmail={false}
+            singleRecipient={(email.to || []).length <= 1 && !(email.cc?.length > 0)}
+          />
         </div>
       )}
 
