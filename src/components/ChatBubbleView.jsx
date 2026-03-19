@@ -490,6 +490,30 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
 
       {/* Bubble */}
       <div className={`max-w-[80%] ${fromUser ? 'items-end' : 'items-start'}`}>
+        {/* Hover action toolbar — near top, below sender area */}
+        <AnimatePresence>
+          {hovered && (
+            <EmailActionBar
+              email={email}
+              variant="chat"
+              onReply={() => onReply?.()}
+              onReplyAll={() => onReplyAll?.()}
+              onForward={() => onForward?.()}
+              onArchive={null}
+              onDelete={null}
+              onMove={null}
+              onToggleRead={null}
+              onOpenInWindow={() => onOpenFullView?.()}
+              onViewSource={null}
+              isArchived={false}
+              isRead={true}
+              isLocalOnly={false}
+              isSentEmail={fromUser}
+              singleRecipient={false}
+            />
+          )}
+        </AnimatePresence>
+
         <div
           onDoubleClick={handleDoubleClick}
           className={`rounded-2xl overflow-hidden cursor-pointer ${
@@ -674,29 +698,6 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
           </button>
         </div>
 
-        {/* Hover action toolbar */}
-        <AnimatePresence>
-          {hovered && (
-            <EmailActionBar
-              email={email}
-              variant="chat"
-              onReply={() => onReply?.()}
-              onReplyAll={() => onReplyAll?.()}
-              onForward={() => onForward?.()}
-              onArchive={null}
-              onDelete={null}
-              onMove={null}
-              onToggleRead={null}
-              onOpenInWindow={() => onOpenFullView?.()}
-              onViewSource={null}
-              isArchived={false}
-              isRead={true}
-              isLocalOnly={false}
-              isSentEmail={fromUser}
-              singleRecipient={false}
-            />
-          )}
-        </AnimatePresence>
       </div>
 
       {/* Spacer for user messages (to align with avatar space) */}
