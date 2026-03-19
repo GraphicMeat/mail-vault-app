@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowRight, ArrowLeftRight, Check, CheckCircle2, Circle,
-  Loader, XCircle, AlertCircle, Folder, Lock
+  Loader, XCircle, AlertCircle, Folder, Lock,
+  ChevronDown, ChevronRight, X, Play, Pause, Loader2
 } from 'lucide-react';
 import { useSettingsStore, getAccountInitial, getAccountColor } from '../../stores/settingsStore.js';
 import { useMailStore } from '../../stores/mailStore.js';
@@ -106,6 +107,8 @@ export default function MigrationSettings() {
   const incompleteMigration = useSettingsStore(s => s.incompleteMigration);
   const accounts = useMailStore(s => s.accounts);
   const accountColors = useSettingsStore(s => s.accountColors);
+  const folderCounts = useSettingsStore(s => s.migrationFolderCounts);
+  const clearFolderCounts = useSettingsStore(s => s.clearMigrationFolderCounts);
 
   // Wizard state
   const [step, setStep] = useState(1);
@@ -139,6 +142,9 @@ export default function MigrationSettings() {
         if (cancelled) return;
         setFolderMappings(mappings || []);
         setSelectedFolders(new Set((mappings || []).map((_, i) => i)));
+        // Trigger background folder email counting
+        clearFolderCounts();
+        api.countMigrationFolders(sourceAccount, getTransport(sourceAccount), mappings || []).catch(() => {});
       })
       .catch((err) => {
         if (!cancelled) setError('Failed to load folders: ' + (err.message || err));
@@ -174,6 +180,7 @@ export default function MigrationSettings() {
     if (!sourceAccount || !destAccount || selectedMappings.length === 0) return;
     setStarting(true);
     setError(null);
+    useSettingsStore.getState().clearMigrationLogEntries();
     try {
       await ensureFreshToken(sourceAccount);
       await ensureFreshToken(destAccount);
@@ -199,12 +206,27 @@ export default function MigrationSettings() {
     try { await api.pauseMigration(); } catch (e) { console.error('Pause failed:', e); }
   }, []);
 
-  const handleCancel = useCallback(async () => {
+  const [cancelRemoving, setCancelRemoving] = useState(false);
+  const [cancelRemoveError, setCancelRemoveError] = useState(null);
+
+  const handleCancel = useCallback(async (choice) => {
     try {
       await api.cancelMigration();
-      setShowCancelConfirm(false);
     } catch (e) { console.error('Cancel failed:', e); }
-  }, []);
+    if (choice === 'remove') {
+      setCancelRemoving(true);
+      try {
+        await api.removeMigratedEmails(activeMigration);
+      } catch (err) {
+        setCancelRemoveError(err.message || 'Removal failed. Some emails may remain at the destination.');
+        setCancelRemoving(false);
+        return; // Keep dialog open so user sees the error
+      }
+      setCancelRemoving(false);
+    }
+    await api.clearMigrationState();
+    setShowCancelConfirm(false);
+  }, [activeMigration]);
 
   const handleResume = useCallback(async (srcAccount, dstAccount) => {
     setError(null);
@@ -314,10 +336,12 @@ export default function MigrationSettings() {
           accountColors={accountColors}
           onPause={handlePause}
           onResume={handleResume}
-          onCancel={() => setShowCancelConfirm(true)}
+          onCancel={() => { setShowCancelConfirm(true); setCancelRemoveError(null); }}
           showCancelConfirm={showCancelConfirm}
           onConfirmCancel={handleCancel}
           onCancelCancel={() => setShowCancelConfirm(false)}
+          cancelRemoving={cancelRemoving}
+          cancelRemoveError={cancelRemoveError}
         />
       ) : isCompleted ? (
         <CompletionView migration={activeMigration} onDone={handleDone} />
@@ -406,11 +430,18 @@ export default function MigrationSettings() {
                             />
                             <Folder size={16} className="flex-shrink-0" />
                             <span className="text-sm flex-1">{mapping.source_name || mapping.source_path}</span>
-                            {mapping.email_count != null && (
+                            {folderCounts[mapping.source_path] ? (
+                              <span className="text-xs text-mail-text-muted bg-mail-border px-1.5 py-0.5 rounded">
+                                {folderCounts[mapping.source_path].counting
+                                  ? `${folderCounts[mapping.source_path].count}+ (counting...)`
+                                  : `${folderCounts[mapping.source_path].count} emails`
+                                }
+                              </span>
+                            ) : mapping.email_count != null ? (
                               <span className="text-xs text-mail-text-muted bg-mail-border px-1.5 py-0.5 rounded">
                                 {mapping.email_count}
                               </span>
-                            )}
+                            ) : null}
                           </label>
                         );
                       })}
@@ -598,10 +629,76 @@ function StatusBadge({ status }) {
   );
 }
 
-function ProgressView({ migration, accounts, accountColors, onPause, onResume, onCancel, showCancelConfirm, onConfirmCancel, onCancelCancel }) {
+function LiveLogSection() {
+  const logEntries = useSettingsStore(s => s.migrationLogEntries);
+  const [expanded, setExpanded] = useState(true);
+  const containerRef = useRef(null);
+  const [autoScroll, setAutoScroll] = useState(true);
+
+  useEffect(() => {
+    if (autoScroll && containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+    }
+  }, [logEntries, autoScroll]);
+
+  const handleScroll = () => {
+    const el = containerRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 20;
+    setAutoScroll(atBottom);
+  };
+
+  return (
+    <div className="border border-mail-border rounded-lg">
+      <button onClick={() => setExpanded(!expanded)} className="w-full p-2 text-sm text-mail-text-muted flex items-center gap-1">
+        {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        Live Log
+      </button>
+      {expanded && (
+        <div ref={containerRef} onScroll={handleScroll} className="max-h-48 overflow-y-auto font-mono text-xs p-2 space-y-1">
+          {logEntries.length === 0 ? (
+            <p className="text-mail-text-muted italic">Log entries will appear here during migration.</p>
+          ) : (
+            logEntries.map((entry, i) => (
+              <div key={i} className="flex items-center gap-1 text-mail-text-muted whitespace-nowrap">
+                <span>{entry.timestamp}</span>
+                <span className="text-mail-text">{entry.sender}</span>
+                <span>--</span>
+                <span className="text-mail-text truncate">{entry.subject}</span>
+                {entry.status === 'ok' && <Check size={12} className="text-mail-success flex-shrink-0" />}
+                {entry.status === 'skipped' && <ArrowRight size={12} className="text-mail-text-muted flex-shrink-0" />}
+                {entry.status === 'failed' && <X size={12} className="text-mail-danger flex-shrink-0" />}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RateLimitCountdown({ initialSeconds }) {
+  const [seconds, setSeconds] = useState(initialSeconds);
+  useEffect(() => { setSeconds(initialSeconds); }, [initialSeconds]);
+  useEffect(() => {
+    if (seconds <= 0) return;
+    const timer = setTimeout(() => setSeconds(s => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [seconds]);
+  if (seconds <= 0) return null;
+  return <p className="text-xs text-mail-warning font-semibold">Rate limited -- retrying in {seconds}s</p>;
+}
+
+function ProgressView({ migration, accounts, accountColors, onPause, onResume, onCancel, showCancelConfirm, onConfirmCancel, onCancelCancel, cancelRemoving, cancelRemoveError }) {
   const isPaused = migration.status === 'paused';
+  const [isPausing, setIsPausing] = useState(false);
   const srcAccount = accounts.find(a => a.email === migration.source_email);
   const dstAccount = accounts.find(a => a.email === migration.dest_email);
+
+  // Clear isPausing when status changes to paused
+  useEffect(() => {
+    if (isPaused) setIsPausing(false);
+  }, [isPaused]);
 
   const totalEmails = (migration.migrated_emails || 0) + (migration.skipped_emails || 0) + (migration.failed_emails || 0);
   const totalTarget = migration.total_emails || totalEmails || 1;
@@ -661,12 +758,20 @@ function ProgressView({ migration, accounts, accountColors, onPause, onResume, o
         </div>
       </div>
 
+      {/* Rate limit countdown */}
+      {migration.status === 'rate_limited' && migration.rate_limit_remaining > 0 && (
+        <RateLimitCountdown initialSeconds={migration.rate_limit_remaining} />
+      )}
+
       {/* Current folder */}
       {migration.current_folder && (
         <div>
           <p className="text-sm text-mail-text">Current folder: {migration.current_folder}</p>
         </div>
       )}
+
+      {/* Live log */}
+      <LiveLogSection />
 
       {/* Folder checklist */}
       {migration.folders && migration.folders.length > 0 && (
@@ -705,23 +810,40 @@ function ProgressView({ migration, accounts, accountColors, onPause, onResume, o
             onClick={() => {
               if (srcAccount && dstAccount) onResume(srcAccount, dstAccount);
             }}
-            className="bg-mail-accent text-white rounded-lg px-4 py-2 text-sm font-semibold"
+            className="bg-mail-accent text-white rounded-lg px-4 py-2 text-sm font-semibold flex items-center gap-2"
           >
-            Resume Migration
+            <Play size={14} /> Resume
+          </button>
+        ) : isPausing ? (
+          <button disabled className="bg-mail-surface border border-mail-border rounded-lg px-4 py-2 text-sm font-semibold opacity-70 flex items-center gap-2">
+            <Loader2 size={14} className="animate-spin" /> Pausing...
           </button>
         ) : (
           <button
-            onClick={onPause}
-            className="bg-mail-warning/10 text-mail-warning rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-warning/20"
+            onClick={() => { setIsPausing(true); onPause(); }}
+            className="bg-mail-warning/10 text-mail-warning rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-warning/20 flex items-center gap-2"
           >
-            Pause
+            <Pause size={14} /> Pause
           </button>
         )}
         {showCancelConfirm ? (
-          <div className="flex items-center gap-2 bg-mail-surface rounded-lg p-3">
-            <p className="text-sm text-mail-text">Cancel migration? Emails already migrated will remain at the destination. Progress will be discarded.</p>
-            <button onClick={onConfirmCancel} className="text-sm text-mail-danger whitespace-nowrap">Yes, Cancel</button>
-            <button onClick={onCancelCancel} className="text-sm text-mail-text-muted whitespace-nowrap">Continue Migrating</button>
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40">
+            <div className="bg-mail-surface border border-mail-border rounded-xl shadow-xl p-4 w-80 space-y-3">
+              <h4 className="text-sm font-semibold text-mail-text">Cancel migration?</h4>
+              <p className="text-xs text-mail-text-muted">Migration will stop. Choose what to do with emails already copied to the destination.</p>
+              <p className="text-xs text-mail-text-muted italic">Removal is best-effort. If the connection drops, some emails may remain at the destination.</p>
+              {cancelRemoveError && (
+                <p className="text-xs text-mail-danger">{cancelRemoveError}</p>
+              )}
+              <div className="flex items-center gap-2">
+                <button onClick={() => onConfirmCancel('keep')} className="text-xs px-3 py-1.5 rounded bg-mail-surface border border-mail-border text-mail-text">Keep emails</button>
+                <button onClick={() => onConfirmCancel('remove')} disabled={cancelRemoving} className="text-xs px-3 py-1.5 rounded bg-mail-danger text-white flex items-center gap-1">
+                  {cancelRemoving && <Loader2 size={10} className="animate-spin" />}
+                  Remove emails
+                </button>
+                <button onClick={onCancelCancel} className="text-xs text-mail-text-muted ml-auto">Go back</button>
+              </div>
+            </div>
           </div>
         ) : (
           <button
