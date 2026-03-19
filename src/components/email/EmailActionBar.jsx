@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import React, { memo } from 'react';
 import { Reply, ReplyAll, Forward, Archive, Trash2, FolderInput, MailOpen, Mail, ExternalLink, Code } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useSettingsStore } from '../../stores/settingsStore';
