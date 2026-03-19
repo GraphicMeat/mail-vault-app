@@ -3,26 +3,18 @@ import { useMailStore } from '../stores/mailStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ComposeModal } from './ComposeModal';
 import {
-  Reply,
-  ReplyAll,
-  Forward,
-  Trash2,
   Paperclip,
   Download,
-  Archive,
   HardDrive,
   Cloud,
-  ExternalLink,
   FileText,
-  Mail,
-  MailOpen,
-  FolderSymlink,
 } from 'lucide-react';
 import { getRealAttachments, replaceCidUrls } from '../services/attachmentUtils';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { SenderInsightsPanel } from './SenderInsightsPanel';
 import { ThreadView } from './email/ThreadView';
-import { EmailHeader } from './email/EmailHeaderComponent';
+import { EmailSenderInfo } from './email/EmailSenderInfo';
+import { EmailActionBar } from './email/EmailActionBar';
 import { AttachmentItem, DownloadAllButton } from './email/AttachmentBar';
 import { scanEmailLinks, checkLinkAlert } from '../utils/linkSafety';
 import { LinkSafetyModal } from './LinkSafetyModal';
@@ -361,144 +353,8 @@ function EmailViewerComponent() {
 
   return (
     <div className="flex-1 flex flex-col bg-mail-bg overflow-hidden min-h-0 min-w-0 h-full relative">
-      {/* Toolbar */}
-      <div data-tauri-drag-region className="flex items-center justify-between px-3 py-2 border-b border-mail-border">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setComposeMode('reply')}
-            className="p-2 hover:bg-mail-surface rounded-lg transition-colors"
-            title="Reply"
-          >
-            <Reply size={18} className="text-mail-text-muted" />
-          </button>
-          <button
-            onClick={() => setComposeMode('replyAll')}
-            className="p-2 hover:bg-mail-surface rounded-lg transition-colors"
-            title="Reply All"
-          >
-            <ReplyAll size={18} className="text-mail-text-muted" />
-          </button>
-          <button
-            onClick={() => setComposeMode('forward')}
-            className="p-2 hover:bg-mail-surface rounded-lg transition-colors"
-            title="Forward"
-          >
-            <Forward size={18} className="text-mail-text-muted" />
-          </button>
-
-          {selectedEmail?.html && (
-            <>
-              <div className="w-px h-6 bg-mail-border mx-2" />
-              <button
-                onClick={() => {
-                  const invoke = window.__TAURI__?.core?.invoke;
-                  if (!invoke) return;
-                  invoke('open_email_window', {
-                    html: iframeContent,
-                    title: selectedEmail.subject || 'Email',
-                  });
-                }}
-                className="p-2 hover:bg-mail-surface rounded-lg transition-colors"
-                title="Open in New Window"
-              >
-                <ExternalLink size={18} className="text-mail-text-muted" />
-              </button>
-            </>
-          )}
-
-          {/* Server-only actions - hidden for local-only emails */}
-          {!isLocalOnly && (
-            <>
-              <div className="w-px h-6 bg-mail-border mx-2" />
-              <button
-                onClick={handleToggleReadStatus}
-                disabled={togglingRead}
-                className="p-2 hover:bg-mail-surface rounded-lg transition-colors disabled:opacity-50"
-                title={isRead ? "Mark as unread" : "Mark as read"}
-              >
-                {isRead ? (
-                  <Mail size={18} className="text-mail-text-muted" />
-                ) : (
-                  <MailOpen size={18} className="text-mail-text-muted" />
-                )}
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={deleting}
-                className="p-2 hover:bg-mail-surface rounded-lg transition-colors disabled:opacity-50"
-                title="Delete"
-              >
-                <Trash2 size={18} className="text-mail-text-muted" />
-              </button>
-              <div className="relative">
-                <button
-                  ref={moveButtonRef}
-                  data-testid="move-to-folder-btn"
-                  onClick={() => setShowMoveDropdown(v => !v)}
-                  className="p-2 hover:bg-mail-surface rounded-lg transition-colors"
-                  title="Move to folder"
-                >
-                  <FolderSymlink size={18} className="text-mail-text-muted" />
-                </button>
-                {showMoveDropdown && selectedEmail && (
-                  <MoveToFolderDropdown
-                    uids={[selectedEmail.uid]}
-                    onClose={() => setShowMoveDropdown(false)}
-                    anchorRect={moveButtonRef.current?.getBoundingClientRect()}
-                  />
-                )}
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="flex items-center gap-1">
-          {isLocalOnly ? (
-            <>
-              <button
-                onClick={handleRemoveLocal}
-                className="p-2 hover:bg-mail-surface rounded-lg transition-colors"
-                title="Delete local copy"
-              >
-                <Trash2 size={18} className="text-mail-danger" />
-              </button>
-              <button
-                onClick={handleExport}
-                className="p-2 hover:bg-mail-surface rounded-lg transition-colors"
-                title="Export .eml"
-              >
-                <Download size={18} className="text-mail-text-muted" />
-              </button>
-            </>
-          ) : isArchived ? (
-            <>
-              <button
-                onClick={handleRemoveLocal}
-                className="p-2 hover:bg-mail-surface rounded-lg transition-colors"
-                title="Unarchive"
-              >
-                <Archive size={18} className="text-mail-text-muted" />
-              </button>
-              <button
-                onClick={handleExport}
-                className="p-2 hover:bg-mail-surface rounded-lg transition-colors"
-                title="Export .eml"
-              >
-                <Download size={18} className="text-mail-text-muted" />
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="p-2 hover:bg-mail-surface rounded-lg transition-colors disabled:opacity-50"
-              title={saving ? 'Archiving...' : 'Archive'}
-            >
-              <Archive size={18} className="text-mail-local" />
-            </button>
-          )}
-        </div>
-      </div>
+      {/* Drag region */}
+      <div data-tauri-drag-region className="h-2 border-b border-mail-border" />
 
       {/* Subject */}
       <div className="px-3 py-2.5 border-b border-mail-border flex items-start gap-2">
@@ -532,20 +388,17 @@ function EmailViewerComponent() {
       </div>
 
       {/* Header */}
-      <EmailHeader
+      <EmailSenderInfo
         email={selectedEmail}
+        variant="single"
         expanded={headerExpanded}
         onToggle={() => setHeaderExpanded(!headerExpanded)}
         showRaw={showRaw}
-        loadingRaw={loadingRaw}
-        showInsights={showInsights}
-        onToggleInsights={() => setShowInsights(!showInsights)}
         onToggleRaw={async () => {
           if (showRaw) {
             setShowRaw(false);
             return;
           }
-          // Lazy-load rawSource on first "View Source" click
           if (!rawSource) {
             setLoadingRaw(true);
             try {
@@ -567,6 +420,10 @@ function EmailViewerComponent() {
           }
           setShowRaw(true);
         }}
+        loadingRaw={loadingRaw}
+        showInsights={showInsights}
+        onToggleInsights={() => setShowInsights(!showInsights)}
+        archivedEmailIds={archivedEmailIds}
       />
 
       {/* Sender Insights */}
@@ -624,6 +481,64 @@ function EmailViewerComponent() {
             </div>
           );
         })()}
+
+        {/* Action Bar */}
+        <div className="px-4 pb-4 relative">
+          <EmailActionBar
+            email={selectedEmail}
+            variant="single"
+            onReply={() => setComposeMode('reply')}
+            onReplyAll={() => setComposeMode('replyAll')}
+            onForward={() => setComposeMode('forward')}
+            onArchive={isArchived ? handleRemoveLocal : handleSave}
+            onDelete={isLocalOnly ? handleRemoveLocal : handleDelete}
+            onMove={() => setShowMoveDropdown(v => !v)}
+            onToggleRead={handleToggleReadStatus}
+            onOpenInWindow={() => {
+              const invoke = window.__TAURI__?.core?.invoke;
+              if (!invoke) return;
+              invoke('open_email_window', { html: iframeContent, title: selectedEmail.subject || 'Email' });
+            }}
+            onViewSource={async () => {
+              if (showRaw) { setShowRaw(false); return; }
+              if (!rawSource) {
+                setLoadingRaw(true);
+                try {
+                  const isTauri = !!window.__TAURI__;
+                  if (isTauri) {
+                    const { invoke } = window.__TAURI__.core;
+                    const b64 = await invoke('maildir_read_raw_source', {
+                      accountId: activeAccountId,
+                      mailbox: activeMailbox,
+                      uid: selectedEmail.uid,
+                    });
+                    setRawSource(b64);
+                  }
+                } catch (err) {
+                  console.error('[EmailViewer] Failed to load raw source:', err);
+                } finally {
+                  setLoadingRaw(false);
+                }
+              }
+              setShowRaw(true);
+            }}
+            isArchived={isArchived}
+            isRead={isRead}
+            isLocalOnly={isLocalOnly}
+            isSentEmail={false}
+            singleRecipient={(selectedEmail.to || []).length <= 1 && !(selectedEmail.cc?.length > 0)}
+            disabled={{ delete: deleting, toggleRead: togglingRead, archive: saving }}
+            moveDropdownOpen={showMoveDropdown}
+            moveButtonRef={moveButtonRef}
+          />
+          {showMoveDropdown && selectedEmail && (
+            <MoveToFolderDropdown
+              uids={[selectedEmail.uid]}
+              onClose={() => setShowMoveDropdown(false)}
+              anchorRect={moveButtonRef.current?.getBoundingClientRect()}
+            />
+          )}
+        </div>
       </div>
 
       {/* Compose Modal */}
