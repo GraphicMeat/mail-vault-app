@@ -782,6 +782,7 @@ pub async fn start_migration(
     let dest_config: ImapConfig = serde_json::from_str(&dest_account)
         .map_err(|e| format!("Bad dest account JSON: {}", e))?;
 
+    tracing::info!("[migration] start_migration command received");
     // Reset cancel and pause to false
     let cancel = {
         let mut guard = cancel_token.0.lock().unwrap();
@@ -801,6 +802,7 @@ pub async fn start_migration(
         *guard = Arc::clone(&fresh);
         fresh
     };
+    tracing::info!("[migration] tokens created: cancel={:p}, pause={:p}, notify={:p}", &*cancel, &*pause, &*notify);
 
     let src_json = source_account.clone();
     let dst_json = dest_account.clone();
@@ -834,9 +836,13 @@ pub async fn cancel_migration(
     notify_token: tauri::State<'_, migration::MigrationNotify>,
 ) -> Result<(), String> {
     let guard = cancel_token.0.lock().unwrap();
+    tracing::info!("[migration] cancel_migration command received, token={:p}", &*guard);
     guard.store(true, Ordering::SeqCst);
+    drop(guard);
+    tracing::info!("[migration] cancel flag set to true, notifying waiters");
     let notify = notify_token.0.lock().unwrap();
     notify.notify_waiters();
+    tracing::info!("[migration] cancel_migration: waiters notified");
     Ok(())
 }
 
@@ -846,9 +852,13 @@ pub async fn pause_migration(
     notify_token: tauri::State<'_, migration::MigrationNotify>,
 ) -> Result<(), String> {
     let guard = pause_token.0.lock().unwrap();
+    tracing::info!("[migration] pause_migration command received, token={:p}", &*guard);
     guard.store(true, Ordering::SeqCst);
+    drop(guard);
+    tracing::info!("[migration] pause flag set to true, notifying waiters");
     let notify = notify_token.0.lock().unwrap();
     notify.notify_waiters();
+    tracing::info!("[migration] pause_migration: waiters notified");
     Ok(())
 }
 
