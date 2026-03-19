@@ -13,7 +13,6 @@ export function SecuritySettings() {
     <div className="p-6 space-y-6">
       <div className="flex items-center gap-2 mb-2">
         <Shield size={18} className="text-mail-accent" />
-        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-mail-accent/15 text-mail-accent">Premium</span>
       </div>
 
       <div className="space-y-4">
@@ -27,7 +26,7 @@ export function SecuritySettings() {
           <ToggleSwitch checked={linkSafetyEnabled} onChange={setLinkSafetyEnabled} />
         </div>
 
-        <div className={`flex items-center justify-between ${!linkSafetyEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
+        <div className="flex items-center justify-between">
           <div>
             <div className="text-sm font-medium text-mail-text">Click Confirmation</div>
             <div className="text-xs text-mail-text-muted mt-0.5">
