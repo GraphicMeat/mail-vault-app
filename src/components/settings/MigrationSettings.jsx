@@ -804,16 +804,22 @@ function ProgressView({ migration, accounts, accountColors, onPause, onResume, o
       {migration.folders && migration.folders.length > 0 && (
         <div className="max-h-48 overflow-y-auto space-y-1">
           {migration.folders.map((folder, i) => {
+            const migrationPaused = migration.status === 'paused';
             let Icon = Circle;
             let iconClass = 'text-mail-border';
             if (folder.status === 'completed') { Icon = CheckCircle2; iconClass = 'text-mail-success'; }
-            else if (folder.status === 'in_progress') { Icon = Loader; iconClass = 'text-mail-accent animate-spin'; }
+            else if (folder.status === 'in_progress') {
+              if (migrationPaused) { Icon = Pause; iconClass = 'text-mail-warning'; }
+              else { Icon = Loader; iconClass = 'text-mail-accent animate-spin'; }
+            }
             else if (folder.status === 'failed') { Icon = XCircle; iconClass = 'text-mail-danger'; }
+
+            const folderName = folder.source_path || folder.name || folder.dest_path || 'Unknown';
 
             return (
               <div key={i} className="flex items-center gap-2 text-sm py-1">
                 <Icon size={16} className={iconClass} />
-                <span className="flex-1 text-mail-text">{folder.name}</span>
+                <span className="flex-1 text-mail-text truncate">{folderName}</span>
                 <span className="text-xs text-mail-text-muted">
                   {folder.status === 'in_progress'
                     ? `${folder.done || 0}/${folder.total || 0}`

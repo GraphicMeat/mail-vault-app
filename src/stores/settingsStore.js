@@ -211,9 +211,14 @@ export const useSettingsStore = create(
       migrationFolderCounts: {},
 
       // Migration log actions
-      addMigrationLogEntry: (entry) => set(state => ({
-          migrationLogEntries: [...state.migrationLogEntries, entry].slice(-10)
-      })),
+      addMigrationLogEntry: (entry) => set(state => {
+          // Deduplicate: skip if last entry has same timestamp+sender+subject
+          const last = state.migrationLogEntries[state.migrationLogEntries.length - 1];
+          if (last && last.timestamp === entry.timestamp && last.sender === entry.sender && last.subject === entry.subject) {
+              return state;
+          }
+          return { migrationLogEntries: [...state.migrationLogEntries, entry].slice(-10) };
+      }),
       clearMigrationLogEntries: () => set({ migrationLogEntries: [] }),
 
       // Folder count actions
