@@ -162,7 +162,7 @@ export const useSettingsStore = create(
       isPaidUser: false,
       setIsPaidUser: (val) => set({ isPaidUser: val }),
 
-      // Link safety (premium feature — enabled for all while isPaidUser is unwired)
+      // Link safety settings
       linkSafetyEnabled: true,
       linkSafetyClickConfirm: true,
       linkAlerts: {}, // { [uid]: 'red'|'yellow' } — persisted link alert results
