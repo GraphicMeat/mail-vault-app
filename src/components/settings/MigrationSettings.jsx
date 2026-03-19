@@ -120,6 +120,7 @@ export default function MigrationSettings() {
   const [selectedFolders, setSelectedFolders] = useState(new Set());
   const [loadingFolders, setLoadingFolders] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [includeLocalArchive, setIncludeLocalArchive] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [error, setError] = useState(null);
@@ -200,7 +201,8 @@ export default function MigrationSettings() {
       await api.startMigration(
         sourceAccount, destAccount,
         getTransport(sourceAccount), getTransport(destAccount),
-        selectedMappings
+        selectedMappings,
+        includeLocalArchive
       );
     } catch (err) {
       setError('Failed to start migration: ' + (err.message || err));
@@ -288,6 +290,7 @@ export default function MigrationSettings() {
     setDestAccount(null);
     setFolderMappings([]);
     setSelectedFolders(new Set());
+    setIncludeLocalArchive(false);
   }, [activeMigration, accounts]);
 
   const canGoNext = step === 1 ? !!sourceAccount
@@ -386,6 +389,15 @@ export default function MigrationSettings() {
         <>
           {/* Wizard */}
           <StepIndicator step={step} />
+
+          {/* Server-only explanation */}
+          {step === 1 && (
+            <div className="bg-mail-surface/50 border border-mail-border rounded-lg p-3 mb-2">
+              <p className="text-xs text-mail-text-muted">
+                Migration copies emails between mail servers (IMAP/Graph). Emails are transferred directly from one server to another — nothing is downloaded to your device during this process.
+              </p>
+            </div>
+          )}
 
           <AnimatePresence mode="wait">
             {step === 1 && (
@@ -510,6 +522,24 @@ export default function MigrationSettings() {
                     <span className="text-mail-text-muted">Estimated time</span>
                     <span className="text-mail-text">~{etaMinutes} min</span>
                   </div>
+                </div>
+
+                {/* Include local archive option */}
+                <div className="bg-mail-surface rounded-lg p-3 mb-4">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={includeLocalArchive}
+                      onChange={(e) => setIncludeLocalArchive(e.target.checked)}
+                      className="mt-0.5 accent-mail-accent"
+                    />
+                    <div>
+                      <span className="text-sm text-mail-text font-medium">Include locally archived emails</span>
+                      <p className="text-xs text-mail-text-muted mt-0.5">
+                        Also upload .eml files saved on your device to the destination server. Without this, only server-side emails are migrated.
+                      </p>
+                    </div>
+                  </label>
                 </div>
 
                 {/* Folder mapping table */}

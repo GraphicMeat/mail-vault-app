@@ -437,11 +437,11 @@ export async function sendNotification(title, body) {
 
 // ── Migration ────────────────────────────────────────────────────────────────
 
-export async function startMigration(sourceAccount, destAccount, sourceTransport, destTransport, folderMappings) {
+export async function startMigration(sourceAccount, destAccount, sourceTransport, destTransport, folderMappings, includeLocalArchive = false) {
   return await tauriInvoke('start_migration', {
     sourceAccount: JSON.stringify(sourceAccount),
     destAccount: JSON.stringify(destAccount),
-    sourceTransport, destTransport, folderMappings
+    sourceTransport, destTransport, folderMappings, includeLocalArchive
   });
 }
 
