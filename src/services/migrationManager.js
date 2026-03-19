@@ -19,6 +19,11 @@ class MigrationManager {
 
             store.setActiveMigration(progress);
 
+            // Extract log entry from extended progress event
+            if (progress.last_log_entry) {
+                store.addMigrationLogEntry(progress.last_log_entry);
+            }
+
             // When migration completes, fails, or is cancelled -- add to history
             if (['completed', 'failed', 'cancelled'].includes(progress.status)) {
                 store.addMigrationHistory({
@@ -35,6 +40,13 @@ class MigrationManager {
                     folderCount: progress.folders?.length || 0,
                 });
             }
+        });
+
+        // Listen to migration-folder-count events from Rust
+        this._unlistenFolderCount = await listen('migration-folder-count', (event) => {
+            const { folder_path, count, counting } = event.payload;
+            const store = useSettingsStore.getState();
+            store.setMigrationFolderCount(folder_path, count, counting);
         });
 
         // Check for incomplete migration on startup
@@ -65,6 +77,10 @@ class MigrationManager {
         if (this._unlisten) {
             this._unlisten();
             this._unlisten = null;
+        }
+        if (this._unlistenFolderCount) {
+            this._unlistenFolderCount();
+            this._unlistenFolderCount = null;
         }
         this._initialized = false;
     }

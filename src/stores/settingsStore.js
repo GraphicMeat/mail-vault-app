@@ -204,6 +204,27 @@ export const useSettingsStore = create(
       setIncompleteMigration: (val) => set({ incompleteMigration: val }),
       clearIncompleteMigration: () => set({ incompleteMigration: null }),
 
+      // Migration live log (10 entries max, displayed in MigrationSettings)
+      migrationLogEntries: [],
+
+      // Folder email counts from background counting (keyed by folder_path)
+      migrationFolderCounts: {},
+
+      // Migration log actions
+      addMigrationLogEntry: (entry) => set(state => ({
+          migrationLogEntries: [...state.migrationLogEntries, entry].slice(-10)
+      })),
+      clearMigrationLogEntries: () => set({ migrationLogEntries: [] }),
+
+      // Folder count actions
+      setMigrationFolderCount: (folderPath, count, counting) => set(state => ({
+          migrationFolderCounts: {
+              ...state.migrationFolderCounts,
+              [folderPath]: { count, counting }
+          }
+      })),
+      clearMigrationFolderCounts: () => set({ migrationFolderCounts: {} }),
+
       // Backup notification preferences
       backupNotifyOnSuccess: true,
       backupNotifyOnFailure: true,

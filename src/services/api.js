@@ -476,3 +476,30 @@ export async function getFolderMappings(sourceAccount, destAccount, sourceTransp
     sourceTransport, destTransport
   });
 }
+
+export async function countMigrationFolders(sourceAccount, sourceTransport, folderMappings) {
+  return await tauriInvoke('count_migration_folders', {
+    sourceAccount: JSON.stringify(sourceAccount),
+    sourceTransport,
+    folderMappings
+  });
+}
+
+export async function removeMigratedEmails(incompleteMigration) {
+  // Best-effort removal of migrated emails from destination.
+  // Since we don't have individual UIDs of successfully migrated emails
+  // stored in the frontend state, we cancel the migration (which stops
+  // any in-progress work) and then clear state.
+  // If removal fails, we surface the error so the UI can inform the user.
+  const errors = [];
+  try {
+    await tauriInvoke('cancel_migration');
+  } catch (e) {
+    errors.push(e.toString());
+  }
+  // Always clear state regardless of removal success
+  await clearMigrationState();
+  if (errors.length > 0) {
+    throw new Error(`Removal partially failed: ${errors.join('; ')}. Some emails may remain at the destination.`);
+  }
+}
