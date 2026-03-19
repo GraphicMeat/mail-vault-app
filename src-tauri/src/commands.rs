@@ -773,6 +773,7 @@ pub async fn start_migration(
     source_transport: String,
     dest_transport: String,
     folder_mappings: Vec<migration::FolderMapping>,
+    include_local_archive: Option<bool>,
     cancel_token: tauri::State<'_, migration::MigrationCancelToken>,
     pause_token: tauri::State<'_, migration::MigrationPauseToken>,
     notify_token: tauri::State<'_, migration::MigrationNotify>,
@@ -782,7 +783,8 @@ pub async fn start_migration(
     let dest_config: ImapConfig = serde_json::from_str(&dest_account)
         .map_err(|e| format!("Bad dest account JSON: {}", e))?;
 
-    tracing::info!("[migration] start_migration command received");
+    let _include_local = include_local_archive.unwrap_or(false);
+    tracing::info!("[migration] start_migration command received (include_local_archive={})", _include_local);
     // Reset cancel and pause to false
     let cancel = {
         let mut guard = cancel_token.0.lock().unwrap();
