@@ -350,6 +350,8 @@ function AccountCard({ account, isPaidUser }) {
 export default function BackupSettings() {
   const accounts = useMailStore(s => s.accounts);
   const hiddenAccounts = useSettingsStore(s => s.hiddenAccounts);
+  const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
+  const accountOrder = useSettingsStore(s => s.accountOrder);
   const isPaidUser = useSettingsStore(s => s.isPaidUser);
   const setIsPaidUser = useSettingsStore(s => s.setIsPaidUser);
   const backupNotifyOnSuccess = useSettingsStore(s => s.backupNotifyOnSuccess);
@@ -361,7 +363,7 @@ export default function BackupSettings() {
 
   const invoke = window.__TAURI__?.core?.invoke;
 
-  const visibleAccounts = (accounts || []).filter(a => !hiddenAccounts?.[a.id]);
+  const visibleAccounts = getOrderedAccounts(accounts || []).filter(a => !hiddenAccounts?.[a.id]);
 
   // Export backup as ZIP of .eml files via Rust
   const handleExportData = () => {
