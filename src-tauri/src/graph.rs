@@ -234,6 +234,15 @@ impl GraphClient {
 
         let status = resp.status();
         if !status.is_success() {
+            if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                let retry_after = resp.headers()
+                    .get("retry-after")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(30);
+                let body = resp.text().await.unwrap_or_default();
+                return Err(format!("Graph list_folders failed (429:retry_after={}) {}", retry_after, body));
+            }
             let body = resp.text().await.unwrap_or_default();
             return Err(format!(
                 "Graph list_folders failed ({}) {}",
@@ -273,6 +282,15 @@ impl GraphClient {
 
         let status = resp.status();
         if !status.is_success() {
+            if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                let retry_after = resp.headers()
+                    .get("retry-after")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(30);
+                let body = resp.text().await.unwrap_or_default();
+                return Err(format!("Graph list_messages failed (429:retry_after={}) {}", retry_after, body));
+            }
             let body = resp.text().await.unwrap_or_default();
             return Err(format!(
                 "Graph list_messages failed ({}) {}",
@@ -307,6 +325,15 @@ impl GraphClient {
 
         let status = resp.status();
         if !status.is_success() {
+            if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                let retry_after = resp.headers()
+                    .get("retry-after")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(30);
+                let body = resp.text().await.unwrap_or_default();
+                return Err(format!("Graph get_message failed (429:retry_after={}) {}", retry_after, body));
+            }
             let body = resp.text().await.unwrap_or_default();
             return Err(format!(
                 "Graph get_message failed ({}) {}",
@@ -339,6 +366,15 @@ impl GraphClient {
 
         let status = resp.status();
         if !status.is_success() {
+            if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                let retry_after = resp.headers()
+                    .get("retry-after")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(30);
+                let body = resp.text().await.unwrap_or_default();
+                return Err(format!("Graph set_read_status failed (429:retry_after={}) {}", retry_after, body));
+            }
             let body = resp.text().await.unwrap_or_default();
             return Err(format!(
                 "Graph set_read_status failed ({}) {}",
@@ -364,6 +400,15 @@ impl GraphClient {
 
         let status = resp.status();
         if !status.is_success() {
+            if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                let retry_after = resp.headers()
+                    .get("retry-after")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(30);
+                let body = resp.text().await.unwrap_or_default();
+                return Err(format!("Graph delete_message failed (429:retry_after={}) {}", retry_after, body));
+            }
             let body = resp.text().await.unwrap_or_default();
             return Err(format!(
                 "Graph delete_message failed ({}) {}",
@@ -394,6 +439,15 @@ impl GraphClient {
 
         let status = resp.status();
         if !status.is_success() {
+            if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                let retry_after = resp.headers()
+                    .get("retry-after")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(30);
+                let body = resp.text().await.unwrap_or_default();
+                return Err(format!("Graph move_message failed (429:retry_after={}) {}", retry_after, body));
+            }
             let body = resp.text().await.unwrap_or_default();
             return Err(format!(
                 "Graph move_message failed ({}) {}",
@@ -424,6 +478,15 @@ impl GraphClient {
 
         let status = resp.status();
         if !status.is_success() {
+            if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                let retry_after = resp.headers()
+                    .get("retry-after")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(30);
+                let body = resp.text().await.unwrap_or_default();
+                return Err(format!("Graph get_mime_content failed (429:retry_after={}) {}", retry_after, body));
+            }
             let body = resp.text().await.unwrap_or_default();
             return Err(format!(
                 "Graph get_mime_content failed ({}) {}",
@@ -460,6 +523,15 @@ impl GraphClient {
 
         let status = resp.status();
         if !status.is_success() {
+            if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                let retry_after = resp.headers()
+                    .get("retry-after")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(30);
+                let body = resp.text().await.unwrap_or_default();
+                return Err(format!("Graph create_message_from_mime failed (429:retry_after={}) {}", retry_after, body));
+            }
             let body = resp.text().await.unwrap_or_default();
             return Err(format!(
                 "Graph create_message_from_mime failed ({}) {}",
@@ -517,6 +589,15 @@ impl GraphClient {
         }
 
         if !status.is_success() {
+            if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                let retry_after = resp.headers()
+                    .get("retry-after")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(30);
+                let body = resp.text().await.unwrap_or_default();
+                return Err(format!("Graph create_folder failed (429:retry_after={}) {}", retry_after, body));
+            }
             let body = resp.text().await.unwrap_or_default();
             return Err(format!(
                 "Graph create_folder failed ({}) {}",
