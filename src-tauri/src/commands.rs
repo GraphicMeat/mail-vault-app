@@ -775,6 +775,7 @@ pub async fn start_migration(
     folder_mappings: Vec<migration::FolderMapping>,
     cancel_token: tauri::State<'_, migration::MigrationCancelToken>,
     pause_token: tauri::State<'_, migration::MigrationPauseToken>,
+    notify_token: tauri::State<'_, migration::MigrationNotify>,
 ) -> Result<(), String> {
     let source_config: ImapConfig = serde_json::from_str(&source_account)
         .map_err(|e| format!("Bad source account JSON: {}", e))?;
@@ -794,6 +795,12 @@ pub async fn start_migration(
         *guard = Arc::clone(&fresh);
         fresh
     };
+    let notify = {
+        let mut guard = notify_token.0.lock().unwrap();
+        let fresh = Arc::new(tokio::sync::Notify::new());
+        *guard = Arc::clone(&fresh);
+        fresh
+    };
 
     let src_json = source_account.clone();
     let dst_json = dest_account.clone();
@@ -810,6 +817,7 @@ pub async fn start_migration(
             folder_mappings,
             cancel,
             pause,
+            notify,
         )
         .await;
         if let Err(e) = result {
@@ -823,18 +831,24 @@ pub async fn start_migration(
 #[tauri::command]
 pub async fn cancel_migration(
     cancel_token: tauri::State<'_, migration::MigrationCancelToken>,
+    notify_token: tauri::State<'_, migration::MigrationNotify>,
 ) -> Result<(), String> {
     let guard = cancel_token.0.lock().unwrap();
     guard.store(true, Ordering::SeqCst);
+    let notify = notify_token.0.lock().unwrap();
+    notify.notify_waiters();
     Ok(())
 }
 
 #[tauri::command]
 pub async fn pause_migration(
     pause_token: tauri::State<'_, migration::MigrationPauseToken>,
+    notify_token: tauri::State<'_, migration::MigrationNotify>,
 ) -> Result<(), String> {
     let guard = pause_token.0.lock().unwrap();
     guard.store(true, Ordering::SeqCst);
+    let notify = notify_token.0.lock().unwrap();
+    notify.notify_waiters();
     Ok(())
 }
 
@@ -847,6 +861,7 @@ pub async fn resume_migration(
     dest_transport: String,
     cancel_token: tauri::State<'_, migration::MigrationCancelToken>,
     pause_token: tauri::State<'_, migration::MigrationPauseToken>,
+    notify_token: tauri::State<'_, migration::MigrationNotify>,
 ) -> Result<(), String> {
     let state = migration::load_migration_state(&app_handle)?
         .ok_or("No migration state found to resume")?;
@@ -866,6 +881,12 @@ pub async fn resume_migration(
     let pause = {
         let mut guard = pause_token.0.lock().unwrap();
         let fresh = Arc::new(AtomicBool::new(false));
+        *guard = Arc::clone(&fresh);
+        fresh
+    };
+    let notify = {
+        let mut guard = notify_token.0.lock().unwrap();
+        let fresh = Arc::new(tokio::sync::Notify::new());
         *guard = Arc::clone(&fresh);
         fresh
     };
@@ -892,6 +913,7 @@ pub async fn resume_migration(
             remaining,
             cancel,
             pause,
+            notify,
         )
         .await;
         if let Err(e) = result {
@@ -914,6 +936,27 @@ pub async fn clear_migration_state_cmd(
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
     migration::clear_migration_state(&app_handle)
+}
+
+#[tauri::command]
+pub async fn count_migration_folders(
+    app_handle: tauri::AppHandle,
+    source_account: String,
+    source_transport: String,
+    folder_mappings: Vec<migration::FolderMapping>,
+) -> Result<(), String> {
+    let source_config: ImapConfig = serde_json::from_str(&source_account)
+        .map_err(|e| format!("Bad source account JSON: {}", e))?;
+
+    tokio::spawn(async move {
+        if let Err(e) = migration::count_migration_folders(
+            app_handle, source_config, source_transport, folder_mappings,
+        ).await {
+            tracing::error!("[migration] count_migration_folders failed: {}", e);
+        }
+    });
+
+    Ok(())
 }
 
 #[tauri::command]
