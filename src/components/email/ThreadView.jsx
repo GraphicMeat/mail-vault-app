@@ -269,8 +269,8 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
 
 // ── Thread Email Item (one email in a thread conversation view) ──────────────
 
-function ThreadEmailItem({ email, bodiesMapRef, registerListener, isLast, activeAccountId, activeMailbox, archivedEmailIds, signatureDisplay, shouldShowSignature }) {
-  const [expanded, setExpanded] = useState(isLast);
+function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, activeAccountId, activeMailbox, archivedEmailIds, signatureDisplay, shouldShowSignature }) {
+  const [expanded, setExpanded] = useState(isNewest);
   const [, forceUpdate] = useState(0);
   const [composeMode, setComposeMode] = useState(null);
   const [headerExpanded, setHeaderExpanded] = useState(false);
@@ -524,6 +524,14 @@ export function ThreadView({ thread }) {
     [thread.emails, threadSortOrder]
   );
 
+  // Determine newest email by date (sort-order independent)
+  const newestUid = useMemo(() => {
+    if (!thread.emails.length) return null;
+    return thread.emails.reduce((newest, email) =>
+      new Date(email.date) > new Date(newest.date) ? email : newest
+    ).uid;
+  }, [thread.emails]);
+
   const { bodiesMapRef, registerListener } = useChatBodyLoader(sortedEmails);
 
   // Smart mode: track seen signatures per sender to show only first occurrence
@@ -619,7 +627,7 @@ export function ThreadView({ thread }) {
           {virtualizer.getVirtualItems().map((vr) => {
             const email = sortedEmails[vr.index];
             if (!email) return null;
-            const isLast = vr.index === sortedEmails.length - 1;
+            const isNewest = email.uid === newestUid;
             return (
               <div
                 key={vr.key}
@@ -636,7 +644,7 @@ export function ThreadView({ thread }) {
                   email={email}
                   bodiesMapRef={bodiesMapRef}
                   registerListener={registerListener}
-                  isLast={isLast}
+                  isNewest={isNewest}
                   activeAccountId={activeAccountId}
                   activeMailbox={activeMailbox}
                   archivedEmailIds={archivedEmailIds}
