@@ -1125,7 +1125,7 @@ export function GeneralSettings({ accounts }) {
                           <div
                             key={action}
                             className={`flex items-center justify-between px-3 py-2 ${
-                              idx > 0 ? 'border-t border-mail-border/50' : ''
+                              idx > 0 ? 'border-t border-mail-border' : ''
                             }`}
                           >
                             <span className="text-sm text-mail-text">
