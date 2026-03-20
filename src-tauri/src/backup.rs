@@ -151,14 +151,15 @@ pub async fn run_account_backup(
             .copied()
             .collect();
 
+        info!(
+            "backup: {} — server={} uids, local={} uids, missing={} to back up",
+            mailbox_path,
+            server_uids.len(),
+            local_uids.len(),
+            missing.len()
+        );
+
         if !missing.is_empty() {
-            info!(
-                "backup: {} has {} missing emails (server={}, local={})",
-                mailbox_path,
-                missing.len(),
-                server_uids.len(),
-                local_uids.len()
-            );
 
             // Use archive::run() to fetch and store missing emails
             let archive_result = crate::archive::run(
@@ -196,7 +197,7 @@ pub async fn run_account_backup(
 
     let duration = start.elapsed().as_secs_f64();
     info!(
-        "backup: completed for {} — {} emails backed up, {} errors, {:.1}s",
+        "backup: completed for {} — {} new emails backed up, {} errors, {:.1}s (all local .eml files are already up to date if 0 new)",
         account.email, total_backed_up, total_errors, duration
     );
 
