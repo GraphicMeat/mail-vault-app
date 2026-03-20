@@ -700,6 +700,9 @@ pub async fn search_all_uids(
             Ok(uids) => return Ok(uids),
             Err(e) => {
                 warn!("[IMAP] ESEARCH failed, falling back to UID SEARCH ALL: {}", e);
+                // Re-select mailbox to reset session state after ESEARCH parse failure
+                // (the response buffer may contain partial ESEARCH data)
+                let _ = select_mailbox(session, mailbox).await;
             }
         }
     }
