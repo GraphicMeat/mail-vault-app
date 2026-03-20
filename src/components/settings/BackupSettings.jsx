@@ -679,6 +679,9 @@ export default function BackupSettings() {
               ? 'Only emails you have explicitly archived (saved locally) will be backed up. To include all server emails, switch to "All emails" below.'
               : 'All emails from selected folders on the mail server will be downloaded and backed up locally. This may use significant disk space.'}
           </p>
+          <p className="text-xs text-mail-text-muted mt-1">
+            Backups are incremental — only new emails since the last backup are downloaded. Existing backups are never re-downloaded.
+          </p>
         </div>
 
         {/* Scope selector */}
@@ -717,6 +720,17 @@ export default function BackupSettings() {
               </button>
             )}
           </div>
+          {!backupCustomPath && (
+            <div className="mt-2 flex items-start gap-2 bg-mail-warning/10 border border-mail-warning/30 rounded-lg p-2">
+              <AlertCircle size={14} className="text-mail-warning flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-mail-warning">
+                The default location is inside the app's data folder. If you uninstall MailVault or clear app data, your backups will be deleted. Choose an external folder (e.g. Documents, an external drive, or a cloud-synced folder) to keep backups safe independently.
+              </p>
+            </div>
+          )}
+          {backupCustomPath && (
+            <p className="text-xs text-mail-success mt-1">Backups are stored outside the app — safe from app uninstalls.</p>
+          )}
         </div>
       </div>
 
