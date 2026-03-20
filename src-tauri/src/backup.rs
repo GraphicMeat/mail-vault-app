@@ -203,6 +203,21 @@ pub async fn run_account_backup(
             total_errors += archive_result.errors;
         }
 
+        // Mirror this folder to custom backup path immediately (during backup, not after)
+        // Uses email address as folder name for human-readable import
+        if let Some(ref custom_path) = backup_path {
+            let src_folder = crate::maildir_cur_path(&app_handle, &account_id, mailbox_path)?;
+            let dst_folder = std::path::PathBuf::from(custom_path)
+                .join(&account.email)
+                .join(mailbox_path)
+                .join("cur");
+            if src_folder.exists() {
+                if let Err(e) = mirror_directory_with_eml(&src_folder, &dst_folder) {
+                    warn!("backup: mirror folder {} failed: {}", mailbox_path, e);
+                }
+            }
+        }
+
         completed_folders += 1;
 
         // Emit progress AFTER folder completes
@@ -223,32 +238,11 @@ pub async fn run_account_backup(
         );
     }
 
-    // Mirror to custom backup path if configured
-    if let Some(ref custom_path) = backup_path {
-        let src_base = app_handle
-            .path()
-            .app_data_dir()
-            .map_err(|e| format!("Could not get app data directory: {}", e))?;
-        let src_maildir = src_base.join("Maildir").join(&account_id);
-        let dst_maildir = std::path::PathBuf::from(custom_path)
-            .join("Maildir")
-            .join(&account_id);
-
-        if src_maildir.exists() {
-            info!("backup: mirroring {} -> {}", src_maildir.display(), dst_maildir.display());
-            if let Err(e) = mirror_directory(&src_maildir, &dst_maildir) {
-                warn!("backup: mirror to custom path failed: {}", e);
-            } else {
-                info!("backup: mirror complete for {}", account.email);
-            }
-        }
-    }
-
     let duration = start.elapsed().as_secs_f64();
     info!(
         "backup: completed for {} — {} new emails backed up, {} errors, {:.1}s{}",
         account.email, total_backed_up, total_errors, duration,
-        if backup_path.is_some() { " (mirrored to custom path)" } else { "" }
+        if let Some(ref p) = backup_path { format!(" (copied to {})", p) } else { String::new() }
     );
 
     Ok(BackupResult {
@@ -260,20 +254,26 @@ pub async fn run_account_backup(
     })
 }
 
-/// Recursively copy src directory to dst, only copying files that are missing or newer.
-fn mirror_directory(src: &std::path::Path, dst: &std::path::Path) -> Result<(), String> {
+/// Copy files from src to dst, ensuring .eml extension for importability.
+/// Incremental — only copies files that don't already exist at destination.
+/// Structure: <backup-path>/<email@address>/<Folder>/cur/<uid>.eml
+fn mirror_directory_with_eml(src: &std::path::Path, dst: &std::path::Path) -> Result<(), String> {
     use std::fs;
     fs::create_dir_all(dst).map_err(|e| format!("mkdir {}: {}", dst.display(), e))?;
 
     for entry in fs::read_dir(src).map_err(|e| format!("readdir {}: {}", src.display(), e))? {
         let entry = entry.map_err(|e| format!("entry: {}", e))?;
         let src_path = entry.path();
-        let dst_path = dst.join(entry.file_name());
+        if src_path.is_dir() { continue; } // Only copy files, not subdirectories
 
-        if src_path.is_dir() {
-            mirror_directory(&src_path, &dst_path)?;
-        } else if !dst_path.exists() {
-            // Only copy files that don't exist at destination (incremental)
+        let name = entry.file_name().to_string_lossy().to_string();
+        // Extract UID from filename (format: "<uid>:2,<flags>" or "<uid>_<flags>.eml" or "<uid>.eml")
+        let uid_str = name.split(|c: char| c == ':' || c == '.' || c == '_').next().unwrap_or(&name);
+        // Create importable filename: <uid>.eml
+        let dst_name = format!("{}.eml", uid_str);
+        let dst_path = dst.join(&dst_name);
+
+        if !dst_path.exists() {
             fs::copy(&src_path, &dst_path)
                 .map_err(|e| format!("copy {} -> {}: {}", src_path.display(), dst_path.display(), e))?;
         }
