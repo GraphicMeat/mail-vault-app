@@ -60,6 +60,16 @@ async function loadKeychain() {
 
 async function saveKeychain(data) {
   if (!invoke) return;
+
+  // Safety: never overwrite keychain with fewer entries than currently cached.
+  // This prevents a timeout-induced empty read from wiping all passwords.
+  const newCount = Object.keys(data).length;
+  const cachedCount = Object.keys(keychainCache || {}).length;
+  if (newCount < cachedCount && cachedCount > 0) {
+    console.warn(`[db.js] BLOCKED saveKeychain: would reduce entries from ${cachedCount} to ${newCount} — likely stale read`);
+    return;
+  }
+
   try {
     await invoke('store_credentials', { credentials: data });
     keychainCache = data;
