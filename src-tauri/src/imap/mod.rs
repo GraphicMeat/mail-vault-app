@@ -704,13 +704,15 @@ pub async fn search_all_uids(
         }
     }
 
+    info!("[IMAP] Running UID SEARCH ALL for {}", mailbox);
     let uids = session
         .uid_search("ALL")
         .await
-        .map_err(|e| format!("UID SEARCH ALL failed: {}", e))?;
+        .map_err(|e| format!("UID SEARCH ALL failed for {}: {}", mailbox, e))?;
 
     let mut result: Vec<u32> = uids.into_iter().collect();
     result.sort();
+    info!("[IMAP] UID SEARCH ALL returned {} UIDs for {}", result.len(), mailbox);
     Ok(result)
 }
 
@@ -724,13 +726,15 @@ async fn search_all_uids_esearch(session: &mut ImapSession) -> Result<Vec<u32>, 
     let mut found = false;
 
     // Read responses until we get the tagged OK
+    // Note: read_response() can fail on very large ESEARCH results due to imap_proto parser limits.
+    // If parsing fails, return error to trigger the UID SEARCH ALL fallback.
     loop {
-        let resp_data = session.read_response().await
-            .map_err(|e| format!("ESEARCH read response failed: {}", e))?;
-
-        let resp_data = match resp_data {
-            Some(d) => d,
-            None => break,
+        let resp_data = match session.read_response().await {
+            Ok(Some(d)) => d,
+            Ok(None) => break,
+            Err(e) => {
+                return Err(format!("ESEARCH read response failed: {}", e));
+            }
         };
 
         // Check if this is the tagged completion
