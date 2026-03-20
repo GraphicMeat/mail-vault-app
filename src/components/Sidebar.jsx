@@ -473,8 +473,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             const color = getAccountColor(accountColors, account);
             const initial = getAccountInitial(account, getDisplayName(account.id));
             return (
+            <React.Fragment key={account.id}>
               <div
-                key={account.id}
                 className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all
                            ${account.id === activeAccountId && !unifiedInbox
                              ? 'bg-mail-accent/10 text-mail-accent'
@@ -526,100 +526,79 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                 </div>
                 <BackupStatusIcon accountId={account.id} onClick={onOpenBackup} />
               </div>
-            );
-          })}
 
-          {/* Connection error banner */}
-          {connectionStatus === 'error' && activeAccountId && (
-            <div className={`mt-2 p-2 rounded-lg border ${
-              connectionErrorType === 'passwordMissing'
-                ? 'bg-mail-warning/10 border-mail-warning/20'
-                : 'bg-mail-danger/10 border-mail-danger/20'
-            }`}>
-              {connectionErrorType === 'passwordMissing' ? (
-                <div className="text-xs text-mail-warning">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Key size={14} />
-                      <span>Password missing</span>
-                    </div>
-                    <div className="flex items-center gap-1">
+              {/* Inline error banner — shown directly below the account that has the error */}
+              {account.id === activeAccountId && connectionStatus === 'error' && (
+                <div className={`mt-1 mb-1 p-2 rounded-lg border ${
+                  connectionErrorType === 'passwordMissing'
+                    ? 'bg-mail-warning/10 border-mail-warning/20'
+                    : 'bg-mail-danger/10 border-mail-danger/20'
+                }`}>
+                  {connectionErrorType === 'passwordMissing' ? (
+                    <div className="text-xs text-mail-warning">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Key size={14} />
+                          <span>Password missing</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={retryKeychainAccess}
+                            className="p-1 hover:bg-mail-warning/20 rounded transition-colors"
+                            title="Retry"
+                          >
+                            <RefreshCw size={12} />
+                          </button>
+                        </div>
+                      </div>
                       <button
-                        onClick={() => setShowErrorModal(true)}
-                        className="p-1 hover:bg-mail-warning/20 rounded transition-colors"
-                        title="View error details"
+                        onClick={() => onOpenAccounts?.()}
+                        className="mt-1.5 w-full px-2 py-1 text-xs font-medium bg-mail-warning/20
+                                   hover:bg-mail-warning/30 rounded transition-colors text-center"
                       >
-                        <Info size={12} />
-                      </button>
-                      <button
-                        onClick={retryKeychainAccess}
-                        className="p-1 hover:bg-mail-warning/20 rounded transition-colors"
-                        title="Retry"
-                      >
-                        <RefreshCw size={12} />
+                        Re-enter Password in Settings
                       </button>
                     </div>
-                  </div>
-                  <button
-                    onClick={() => onOpenAccounts?.()}
-                    className="mt-1.5 w-full px-2 py-1 text-xs font-medium bg-mail-warning/20
-                               hover:bg-mail-warning/30 rounded transition-colors text-center"
-                  >
-                    Re-enter Password in Settings
-                  </button>
-                </div>
-              ) : (
-              <div className={`flex items-center justify-between text-xs ${
-                connectionErrorType === 'passwordMissing' ? 'text-mail-warning' : 'text-mail-danger'
-              }`}>
-                <div className="flex items-center gap-2">
-                  {connectionErrorType === 'offline' ? (
-                    <>
-                      <WifiOff size={14} />
-                      <span>No internet</span>
-                    </>
-                  ) : connectionErrorType === 'outlookOAuth' ? (
-                    <>
-                      <ServerOff size={14} />
-                      <span>Microsoft issue</span>
-                    </>
-                  ) : connectionErrorType === 'oauthExpired' ? (
-                    <>
-                      <Key size={14} />
-                      <span>OAuth2 expired</span>
-                    </>
-                  ) : connectionErrorType === 'timeout' ? (
-                    <>
-                      <RefreshCw size={14} />
-                      <span>Timed out</span>
-                    </>
                   ) : (
-                    <>
-                      <ServerOff size={14} />
-                      <span>Server error</span>
-                    </>
+                    <div className={`flex items-center justify-between text-xs ${
+                      connectionErrorType === 'passwordMissing' ? 'text-mail-warning' : 'text-mail-danger'
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        {connectionErrorType === 'offline' ? (
+                          <><WifiOff size={14} /><span>No internet</span></>
+                        ) : connectionErrorType === 'outlookOAuth' ? (
+                          <><ServerOff size={14} /><span>Microsoft issue</span></>
+                        ) : connectionErrorType === 'oauthExpired' ? (
+                          <><Key size={14} /><span>OAuth2 expired</span></>
+                        ) : connectionErrorType === 'timeout' ? (
+                          <><RefreshCw size={14} /><span>Timed out</span></>
+                        ) : (
+                          <><ServerOff size={14} /><span>Server error</span></>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setShowErrorModal(true)}
+                          className="p-1 hover:bg-mail-danger/20 rounded transition-colors"
+                          title="View error details"
+                        >
+                          <Info size={12} />
+                        </button>
+                        <button
+                          onClick={() => activateAccount(activeAccountId, activeMailbox)}
+                          className="p-1 hover:bg-mail-danger/20 rounded transition-colors"
+                          title="Retry connection"
+                        >
+                          <RefreshCw size={12} />
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setShowErrorModal(true)}
-                    className="p-1 hover:bg-mail-danger/20 rounded transition-colors"
-                    title="View error details"
-                  >
-                    <Info size={12} />
-                  </button>
-                    <button
-                      onClick={() => activateAccount(activeAccountId, activeMailbox)}
-                      className="p-1 hover:bg-mail-danger/20 rounded transition-colors"
-                      title="Retry connection"
-                    >
-                      <RefreshCw size={12} />
-                    </button>
-                </div>
-              </div>
               )}
-            </div>
-          )}
+            </React.Fragment>
+            );
+          })}
 
           {orderedAccounts.length === 0 && (
             <button
