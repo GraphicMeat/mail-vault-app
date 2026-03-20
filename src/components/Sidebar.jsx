@@ -82,7 +82,7 @@ function BackupStatusIcon({ accountId, onClick }) {
   );
 }
 
-export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup }) {
+export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup, onOpenAccounts }) {
   const accounts = useMailStore(s => s.accounts);
   const activeAccountId = useMailStore(s => s.activeAccountId);
   const mailboxes = useMailStore(s => s.mailboxes);
@@ -561,7 +561,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup 
                     </div>
                   </div>
                   <button
-                    onClick={onOpenSettings}
+                    onClick={() => onOpenAccounts?.()}
                     className="mt-1.5 w-full px-2 py-1 text-xs font-medium bg-mail-warning/20
                                hover:bg-mail-warning/30 rounded transition-colors text-center"
                   >

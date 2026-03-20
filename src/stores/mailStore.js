@@ -1913,6 +1913,19 @@ export const useMailStore = create((set, get) => ({
     const { activeAccountId, accounts, activeMailbox } = get();
     let account = accounts.find(a => a.id === activeAccountId);
     if (!account) return;
+
+    // Early bail if credentials are missing — don't even start loading
+    if (!hasValidCredentials(account)) {
+      set({
+        loading: false,
+        loadingMore: false,
+        connectionStatus: 'error',
+        connectionError: 'Password not found. Please re-enter your password in Settings.',
+        connectionErrorType: 'passwordMissing',
+      });
+      return;
+    }
+
     const loadTrace = createPerfTrace('loadEmails', { accountId: activeAccountId, mailbox: activeMailbox });
 
     // Clear any pending network retry timer
