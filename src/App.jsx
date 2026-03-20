@@ -516,6 +516,7 @@ function App() {
           onAddAccount={() => setShowAccountModal(true)}
           onCompose={() => setComposeState({})}
           onOpenSettings={() => setShowSettings(true)}
+          onOpenBackup={() => { setSettingsInitialTab('backup'); setShowSettings(true); }}
         />
       </div>
 
