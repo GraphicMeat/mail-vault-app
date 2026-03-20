@@ -212,8 +212,6 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
                   />
                 </div>
               )}
-            </div>
-
               {/* Folder selection */}
               <div className="pt-3 border-t border-mail-border">
                 <div className="flex items-center justify-between mb-2">
