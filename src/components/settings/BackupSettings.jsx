@@ -817,7 +817,7 @@ export default function BackupSettings() {
                 Structure: <code className="text-mail-text">{backupCustomPath}/email@address/INBOX/cur/1234.eml</code>
               </p>
               <p className="text-xs text-mail-text-muted">
-                To restore: use File &gt; Import in MailVault or any email client that supports .eml files.
+                To restore: use the Import Backup button above, or open .eml files in any email client that supports them.
               </p>
             </div>
           ) : (
