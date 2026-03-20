@@ -743,6 +743,7 @@ pub async fn backup_run_account(
     app_handle: tauri::AppHandle,
     account_id: String,
     account_json: String,
+    backup_path: Option<String>,
     cancel_token: tauri::State<'_, backup::BackupCancelToken>,
 ) -> Result<backup::BackupResult, String> {
     let cancel = {
@@ -751,7 +752,7 @@ pub async fn backup_run_account(
         *guard = Arc::clone(&fresh);
         fresh
     };
-    backup::run_account_backup(app_handle, account_id, account_json, cancel).await
+    backup::run_account_backup(app_handle, account_id, account_json, cancel, backup_path).await
 }
 
 #[tauri::command]

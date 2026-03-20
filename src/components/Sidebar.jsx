@@ -106,6 +106,16 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
 
   const [expandedFolders, setExpandedFolders] = useState(new Set(['INBOX']));
   const [showErrorModal, setShowErrorModal] = useState(false);
+  const [showError, setShowError] = useState(false);
+
+  // Delay showing connection errors by 3 seconds — transient errors on launch resolve quickly
+  useEffect(() => {
+    if (connectionStatus === 'error') {
+      const timer = setTimeout(() => setShowError(true), 3000);
+      return () => clearTimeout(timer);
+    }
+    setShowError(false);
+  }, [connectionStatus, activeAccountId]);
 
   const unifiedInbox = useMailStore(s => s.unifiedInbox);
   const setUnifiedInbox = useMailStore(s => s.setUnifiedInbox);
@@ -528,7 +538,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
               </div>
 
               {/* Inline error banner — shown directly below the account that has the error */}
-              {account.id === activeAccountId && connectionStatus === 'error' && (
+              {account.id === activeAccountId && showError && connectionStatus === 'error' && (
                 <div className={`mt-1 mb-1 p-2 rounded-lg border ${
                   connectionErrorType === 'passwordMissing'
                     ? 'bg-mail-warning/10 border-mail-warning/20'

@@ -113,7 +113,8 @@ class BackupScheduler {
       const freshAccount = await ensureFreshToken(account);
 
       const startTime = Date.now();
-      const result = await api.backupRunAccount(accountId, JSON.stringify(freshAccount));
+      const customPath = useSettingsStore.getState().backupCustomPath || null;
+      const result = await api.backupRunAccount(accountId, JSON.stringify(freshAccount), customPath);
 
       const entry = {
         timestamp: Date.now(),
