@@ -100,29 +100,32 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
   // Listen to backup-progress and archive-progress events
   useEffect(() => {
     let unlistenBackup, unlistenArchive;
+    let isBackupActive = false;
     (async () => {
       try {
         const { listen } = await import('@tauri-apps/api/event');
         unlistenBackup = await listen('backup-progress', (event) => {
           const p = event.payload;
           if (p.account_id === account.id) {
+            isBackupActive = p.active;
             setBackupProgress(p);
             if (!p.active) {
+              setArchiveProgress(null);
               setTimeout(() => setBackupProgress(null), 2000);
             }
           }
         });
         unlistenArchive = await listen('archive-progress', (event) => {
           const p = event.payload;
-          // Archive events don't carry account_id, so only update during active backup
-          if (runningManual || config.enabled || globalEnabled) {
+          // Only update archive progress when this account's backup is actively running
+          if (isBackupActive) {
             setArchiveProgress(p.active ? { total: p.total, completed: p.completed } : null);
           }
         });
       } catch {}
     })();
     return () => { unlistenBackup?.(); unlistenArchive?.(); };
-  }, [account.id, runningManual, config.enabled, globalEnabled]);
+  }, [account.id]);
 
   const handleToggle = useCallback(() => {
     const newConfig = { ...config, enabled: !config.enabled };
@@ -366,7 +369,7 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
 
       {/* Back up now button + live progress */}
       <div className="pt-3 border-t border-mail-border space-y-2">
-        {runningManual && backupProgress && (
+        {backupProgress && backupProgress.active && (
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs">
               <span className="text-mail-text font-medium">
@@ -374,6 +377,7 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
               </span>
               <span className="text-mail-text-muted">
                 {backupProgress.completed_emails} emails backed up
+                {backupProgress.missing_in_folder > 0 && ` · ${backupProgress.missing_in_folder} to download`}
               </span>
             </div>
             <div className="h-1.5 rounded-full bg-mail-border overflow-hidden">
@@ -383,9 +387,14 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
               />
             </div>
             {archiveProgress && archiveProgress.total > 0 && (
-              <div className="flex items-center justify-between text-xs text-mail-text-muted">
-                <span>Downloading: {archiveProgress.completed}/{archiveProgress.total} emails</span>
-                <span>{Math.round((archiveProgress.completed / archiveProgress.total) * 100)}%</span>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-xs text-mail-text-muted">
+                  <span>Downloading: {archiveProgress.completed}/{archiveProgress.total} emails</span>
+                  <span>{Math.round((archiveProgress.completed / archiveProgress.total) * 100)}%</span>
+                </div>
+                <div className="h-1 rounded-full bg-mail-border overflow-hidden">
+                  <div className="h-1 rounded-full bg-mail-success transition-all" style={{ width: `${Math.round((archiveProgress.completed / archiveProgress.total) * 100)}%` }} />
+                </div>
               </div>
             )}
           </div>
