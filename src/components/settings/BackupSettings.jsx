@@ -790,8 +790,10 @@ export default function BackupSettings() {
           <label className="text-xs text-mail-text-muted mb-1 block">Backup location</label>
           <div className="flex items-center gap-2">
             <div className="flex-1 text-xs text-mail-text font-mono bg-mail-bg rounded-lg px-3 py-2 truncate border border-mail-border">
-              {backupCustomPath || defaultBackupPath || 'Loading...'}
+              {backupCustomPath || (defaultBackupPath ? `${defaultBackupPath}/Maildir` : 'Loading...')}
             </div>
+            {/* Custom path selection — coming soon, backend wiring needed */}
+            {false && <>
             <button
               onClick={handleChooseBackupDir}
               className="text-xs font-medium px-3 py-2 rounded-lg border border-mail-border text-mail-text hover:bg-mail-surface-hover transition-colors whitespace-nowrap"
@@ -807,18 +809,14 @@ export default function BackupSettings() {
                 Reset
               </button>
             )}
+            </>}
           </div>
-          {!backupCustomPath && (
-            <div className="mt-2 flex items-start gap-2 bg-mail-warning/10 border border-mail-warning/30 rounded-lg p-2">
-              <AlertCircle size={14} className="text-mail-warning flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-mail-warning">
-                The default location is inside the app's data folder. If you uninstall MailVault or clear app data, your backups will be deleted. Choose an external folder (e.g. Documents, an external drive, or a cloud-synced folder) to keep backups safe independently.
-              </p>
-            </div>
-          )}
-          {backupCustomPath && (
-            <p className="text-xs text-mail-success mt-1">Backups are stored outside the app — safe from app uninstalls.</p>
-          )}
+          <div className="mt-2 flex items-start gap-2 bg-mail-surface rounded-lg p-2 border border-mail-border">
+            <AlertCircle size={14} className="text-mail-text-muted flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-mail-text-muted">
+              Backups are stored as .eml files inside the app's data folder. On macOS with App Sandbox, the actual path may be inside <code className="text-mail-text">~/Library/Containers/com.mailvault.app/</code>. These files are also used by the email caching system — if emails are already cached locally, the backup delta will be zero.
+            </p>
+          </div>
         </div>
       </div>
 
