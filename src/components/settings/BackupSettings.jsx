@@ -809,9 +809,17 @@ export default function BackupSettings() {
             )}
           </div>
           {backupCustomPath ? (
-            <p className="text-xs text-mail-success mt-2">
-              Backups are mirrored to this folder. A copy of your email data is kept safe outside the app — survives uninstalls and app data resets.
-            </p>
+            <div className="mt-2 space-y-1">
+              <p className="text-xs text-mail-success">
+                Emails are saved as .eml files during each backup, organized by account and folder. Safe from app uninstalls.
+              </p>
+              <p className="text-xs text-mail-text-muted">
+                Structure: <code className="text-mail-text">{backupCustomPath}/email@address/INBOX/cur/1234.eml</code>
+              </p>
+              <p className="text-xs text-mail-text-muted">
+                To restore: use File &gt; Import in MailVault or any email client that supports .eml files.
+              </p>
+            </div>
           ) : (
             <div className="mt-2 flex items-start gap-2 bg-mail-warning/10 border border-mail-warning/30 rounded-lg p-2">
               <AlertCircle size={14} className="text-mail-warning flex-shrink-0 mt-0.5" />
