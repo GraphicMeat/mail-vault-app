@@ -517,6 +517,7 @@ function App() {
           onCompose={() => setComposeState({})}
           onOpenSettings={() => setShowSettings(true)}
           onOpenBackup={() => { setSettingsInitialTab('backup'); setShowSettings(true); }}
+          onOpenAccounts={() => { setSettingsInitialTab('accounts'); setShowSettings(true); }}
         />
       </div>
 
