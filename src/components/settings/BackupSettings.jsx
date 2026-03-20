@@ -81,6 +81,8 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
   const [storageSize, setStorageSize] = useState(null);
   const [accountFolders, setAccountFolders] = useState([]);
   const [showFolderPicker, setShowFolderPicker] = useState(false);
+  const [backupProgress, setBackupProgress] = useState(null); // { folder, totalFolders, completedFolders, totalEmails, completedEmails }
+  const [archiveProgress, setArchiveProgress] = useState(null); // { total, completed }
 
   // Load storage stats and folder list on mount
   useEffect(() => {
@@ -94,6 +96,33 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
       .then(folders => setAccountFolders((folders || []).filter(f => !f.noselect).map(f => f.name || f.path)))
       .catch(() => {});
   }, [account.id]);
+
+  // Listen to backup-progress and archive-progress events
+  useEffect(() => {
+    let unlistenBackup, unlistenArchive;
+    (async () => {
+      try {
+        const { listen } = await import('@tauri-apps/api/event');
+        unlistenBackup = await listen('backup-progress', (event) => {
+          const p = event.payload;
+          if (p.account_id === account.id) {
+            setBackupProgress(p);
+            if (!p.active) {
+              setTimeout(() => setBackupProgress(null), 2000);
+            }
+          }
+        });
+        unlistenArchive = await listen('archive-progress', (event) => {
+          const p = event.payload;
+          // Archive events don't carry account_id, so only update during active backup
+          if (runningManual || config.enabled || globalEnabled) {
+            setArchiveProgress(p.active ? { total: p.total, completed: p.completed } : null);
+          }
+        });
+      } catch {}
+    })();
+    return () => { unlistenBackup?.(); unlistenArchive?.(); };
+  }, [account.id, runningManual, config.enabled, globalEnabled]);
 
   const handleToggle = useCallback(() => {
     const newConfig = { ...config, enabled: !config.enabled };
@@ -335,8 +364,32 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
         )}
       </div>
 
-      {/* Back up now button */}
-      <div className="pt-3 border-t border-mail-border">
+      {/* Back up now button + live progress */}
+      <div className="pt-3 border-t border-mail-border space-y-2">
+        {runningManual && backupProgress && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-mail-text font-medium">
+                {backupProgress.folder || 'Starting...'} ({backupProgress.completed_folders}/{backupProgress.total_folders} folders)
+              </span>
+              <span className="text-mail-text-muted">
+                {backupProgress.completed_emails} emails backed up
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full bg-mail-border overflow-hidden">
+              <div
+                className="h-1.5 rounded-full bg-mail-accent transition-all"
+                style={{ width: `${backupProgress.total_folders > 0 ? Math.round((backupProgress.completed_folders / backupProgress.total_folders) * 100) : 0}%` }}
+              />
+            </div>
+            {archiveProgress && archiveProgress.total > 0 && (
+              <div className="flex items-center justify-between text-xs text-mail-text-muted">
+                <span>Downloading: {archiveProgress.completed}/{archiveProgress.total} emails</span>
+                <span>{Math.round((archiveProgress.completed / archiveProgress.total) * 100)}%</span>
+              </div>
+            )}
+          </div>
+        )}
         <button
           onClick={handleManualBackup}
           disabled={runningManual}
@@ -345,7 +398,7 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
           {runningManual ? (
             <>
               <Loader size={14} className="animate-spin" />
-              Backing up...
+              {backupProgress ? `Backing up ${backupProgress.folder || ''}...` : 'Backing up...'}
             </>
           ) : manualDone ? (
             <span className="text-emerald-500">Done!</span>
@@ -431,15 +484,26 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
               <div className="text-sm font-semibold text-mail-text">{formatSize(storageSize)}</div>
             </div>
           </div>
-          {/* Manual backup button */}
-          <div className="flex items-center gap-2 pt-2 border-t border-mail-border">
+          {/* Manual backup button + progress */}
+          <div className="pt-2 border-t border-mail-border space-y-2">
+            {runningManual && backupProgress && (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-mail-text">{backupProgress.folder} ({backupProgress.completed_folders}/{backupProgress.total_folders})</span>
+                  <span className="text-mail-text-muted">{backupProgress.completed_emails} emails</span>
+                </div>
+                <div className="h-1 rounded-full bg-mail-border overflow-hidden">
+                  <div className="h-1 rounded-full bg-mail-accent transition-all" style={{ width: `${backupProgress.total_folders > 0 ? Math.round((backupProgress.completed_folders / backupProgress.total_folders) * 100) : 0}%` }} />
+                </div>
+              </div>
+            )}
             <button
               onClick={handleManualBackup}
               disabled={runningManual}
               className="text-xs px-3 py-1.5 rounded-lg bg-mail-accent/10 text-mail-accent hover:bg-mail-accent/20 transition-colors flex items-center gap-1.5 font-medium"
             >
               {runningManual ? <Loader size={12} className="animate-spin" /> : manualDone ? <CheckCircle2 size={12} /> : <HardDrive size={12} />}
-              {runningManual ? 'Backing up...' : manualDone ? 'Done!' : 'Back up now'}
+              {runningManual ? `Backing up ${backupProgress?.folder || ''}...` : manualDone ? 'Done!' : 'Back up now'}
             </button>
           </div>
         </div>
