@@ -21,6 +21,8 @@ pub struct BackupProgress {
     pub active: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_error: Option<String>,
+    #[serde(default)]
+    pub missing_in_folder: usize,
 }
 
 // ── Result ───────────────────────────────────────────────────────────────────
@@ -167,8 +169,24 @@ pub async fn run_account_backup(
             missing.len()
         );
 
-        if !missing.is_empty() {
+        // Emit progress BEFORE starting folder (so UI shows current folder immediately)
+        let _ = app_handle.emit(
+            "backup-progress",
+            BackupProgress {
+                account_id: account_id.clone(),
+                folder: mailbox_path.clone(),
+                total_folders,
+                completed_folders,
+                total_emails: total_backed_up + total_errors,
+                completed_emails: total_backed_up,
+                errors: total_errors,
+                active: true,
+                last_error: None,
+                missing_in_folder: missing.len(),
+            },
+        );
 
+        if !missing.is_empty() {
             // Use archive::run() to fetch and store missing emails
             let archive_result = crate::archive::run(
                 app_handle.clone(),
@@ -186,7 +204,7 @@ pub async fn run_account_backup(
 
         completed_folders += 1;
 
-        // Emit progress
+        // Emit progress AFTER folder completes
         let _ = app_handle.emit(
             "backup-progress",
             BackupProgress {
@@ -199,6 +217,7 @@ pub async fn run_account_backup(
                 errors: total_errors,
                 active: completed_folders < total_folders,
                 last_error: None,
+                missing_in_folder: 0,
             },
         );
     }
@@ -331,6 +350,7 @@ async fn run_graph_backup(
                 errors: total_errors,
                 active: completed_folders < total_folders,
                 last_error: None,
+                missing_in_folder: 0,
             },
         );
     }
