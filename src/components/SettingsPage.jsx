@@ -23,7 +23,7 @@ import { HelpSettings } from './settings/HelpSettings';
 import BackupSettings from './settings/BackupSettings';
 import MigrationSettings from './settings/MigrationSettings.jsx';
 
-export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab }) {
+export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, initialAccountId }) {
   const { accounts } = useMailStore();
 
   // Close on Escape key
@@ -112,7 +112,7 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab })
             )}
 
             {activeTab === 'accounts' && (
-              <AccountSettings accounts={accounts} onAddAccount={onAddAccount} />
+              <AccountSettings accounts={accounts} onAddAccount={onAddAccount} initialAccountId={initialAccountId} />
             )}
 
             {activeTab === 'templates' && (

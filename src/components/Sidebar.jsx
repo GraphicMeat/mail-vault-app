@@ -552,7 +552,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                         </div>
                       </div>
                       <button
-                        onClick={() => onOpenAccounts?.()}
+                        onClick={() => onOpenAccounts?.(account.id)}
                         className="mt-1.5 w-full px-2 py-1 text-xs font-medium bg-mail-warning/20
                                    hover:bg-mail-warning/30 rounded transition-colors text-center"
                       >

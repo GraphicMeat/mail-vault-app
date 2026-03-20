@@ -25,7 +25,7 @@ import {
   Save,
 } from 'lucide-react';
 
-export function AccountSettings({ accounts, onAddAccount }) {
+export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
   const { removeAccount } = useMailStore();
   const {
     signatures,
@@ -45,7 +45,7 @@ export function AccountSettings({ accounts, onAddAccount }) {
     isAccountHidden,
   } = useSettingsStore();
 
-  const [selectedAccountId, setSelectedAccountId] = useState(accounts[0]?.id || null);
+  const [selectedAccountId, setSelectedAccountId] = useState(initialAccountId || accounts[0]?.id || null);
   const [signatureText, setSignatureText] = useState('');
   const [accountDisplayName, setAccountDisplayName] = useState('');
   const [saved, setSaved] = useState(false);
