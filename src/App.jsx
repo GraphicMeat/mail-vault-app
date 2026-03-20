@@ -101,6 +101,7 @@ function App() {
   const [composeState, setComposeState] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState(null);
+  const [settingsInitialAccountId, setSettingsInitialAccountId] = useState(null);
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [pendingOperation, setPendingOperation] = useState(null);
@@ -517,7 +518,7 @@ function App() {
           onCompose={() => setComposeState({})}
           onOpenSettings={() => setShowSettings(true)}
           onOpenBackup={() => { setSettingsInitialTab('backup'); setShowSettings(true); }}
-          onOpenAccounts={() => { setSettingsInitialTab('accounts'); setShowSettings(true); }}
+          onOpenAccounts={(accountId) => { setSettingsInitialTab('accounts'); setSettingsInitialAccountId(accountId || null); setShowSettings(true); }}
         />
       </div>
 
@@ -576,7 +577,7 @@ function App() {
 
       <AnimatePresence>
         {showSettings && (
-          <SettingsPage onClose={() => { setShowSettings(false); setSettingsInitialTab(null); }} onAddAccount={() => { setShowSettings(false); setShowAccountModal(true); }} onReportBug={handleReportBug} initialTab={settingsInitialTab} />
+          <SettingsPage onClose={() => { setShowSettings(false); setSettingsInitialTab(null); setSettingsInitialAccountId(null); }} onAddAccount={() => { setShowSettings(false); setShowAccountModal(true); }} onReportBug={handleReportBug} initialTab={settingsInitialTab} initialAccountId={settingsInitialAccountId} />
         )}
       </AnimatePresence>
 
