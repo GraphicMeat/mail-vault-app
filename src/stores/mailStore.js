@@ -14,13 +14,23 @@ export { graphMessageToEmail, getGraphMessageId };
 // ── Unified inbox helpers ───────────────────────────────────────────────────
 
 // Resolve real account + mailbox for a UID in unified inbox mode.
-// Unified inbox emails carry _accountId/_accountEmail; the real mailbox is always INBOX.
+// Unified inbox emails carry _accountId/_accountEmail; resolve the real mailbox from email metadata.
 function _resolveUnifiedContext(uid, state) {
   const email = state.emails.find(e => e.uid === uid);
   if (!email?._accountId) return null;
   const account = state.accounts.find(a => a.id === email._accountId);
   if (!account) return null;
-  return { account, accountId: email._accountId, mailbox: 'INBOX' };
+  // Determine the actual mailbox: use _mailbox if tagged, detect sent emails, default to INBOX
+  let mailbox = email._mailbox || 'INBOX';
+  if (!email._mailbox && email._isSent) {
+    // Try to find the Sent folder name from the account's mailboxes
+    const sentFolder = state.mailboxes?.find(m =>
+      m.name?.toLowerCase() === 'sent' || m.name?.toLowerCase() === 'sent items' ||
+      m.special_use === '\\Sent'
+    );
+    mailbox = sentFolder?.name || 'Sent';
+  }
+  return { account, accountId: email._accountId, mailbox };
 }
 
 // Module-level cache for getChatEmails() — avoids calling set() during render
@@ -3112,7 +3122,9 @@ export const useMailStore = create((set, get) => ({
     const isUnified = state.activeMailbox === 'UNIFIED';
     const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
     const accountId = unified?.accountId || state.activeAccountId;
-    const mailbox = mailboxOverride || unified?.mailbox || state.activeMailbox;
+    // Never pass 'UNIFIED' to IMAP — it's a virtual client-side mailbox
+    const rawMailbox = mailboxOverride || unified?.mailbox || state.activeMailbox;
+    const mailbox = rawMailbox === 'UNIFIED' ? 'INBOX' : rawMailbox;
     let account = unified?.account || state.accounts.find(a => a.id === accountId);
     account = await ensureFreshToken(account);
     const cacheKey = `${accountId}-${mailbox}-${uid}`;
@@ -3311,7 +3323,7 @@ export const useMailStore = create((set, get) => ({
     const isUnified = state.activeMailbox === 'UNIFIED';
     const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
     const accountId = unified?.accountId || state.activeAccountId;
-    const mailbox = unified?.mailbox || state.activeMailbox;
+    const mailbox = (unified?.mailbox || state.activeMailbox) === 'UNIFIED' ? 'INBOX' : (unified?.mailbox || state.activeMailbox);
     const account = unified?.account || state.accounts.find(a => a.id === accountId);
     if (!account) return;
 
@@ -3523,7 +3535,7 @@ export const useMailStore = create((set, get) => ({
     const isUnified = state.activeMailbox === 'UNIFIED';
     const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
     const accountId = unified?.accountId || state.activeAccountId;
-    const mailbox = unified?.mailbox || state.activeMailbox;
+    const mailbox = (unified?.mailbox || state.activeMailbox) === 'UNIFIED' ? 'INBOX' : (unified?.mailbox || state.activeMailbox);
     const selectedEmailId = state.selectedEmailId;
     const localId = `${accountId}-${mailbox}-${uid}`;
 
@@ -3555,7 +3567,8 @@ export const useMailStore = create((set, get) => ({
     const isUnified = state.activeMailbox === 'UNIFIED';
     const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
     const accountId = unified?.accountId || state.activeAccountId;
-    const mailbox = mailboxOverride || unified?.mailbox || state.activeMailbox;
+    const rawMb = mailboxOverride || unified?.mailbox || state.activeMailbox;
+    const mailbox = rawMb === 'UNIFIED' ? 'INBOX' : rawMb;
     let account = unified?.account || state.accounts.find(a => a.id === accountId);
     const selectedEmailId = state.selectedEmailId;
     if (!account) { console.error('[deleteEmail] No account found for', accountId); return; }
@@ -3681,7 +3694,7 @@ export const useMailStore = create((set, get) => ({
     const isUnified = state.activeMailbox === 'UNIFIED';
     const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
     const accountId = unified?.accountId || state.activeAccountId;
-    const mailbox = unified?.mailbox || state.activeMailbox;
+    const mailbox = (unified?.mailbox || state.activeMailbox) === 'UNIFIED' ? 'INBOX' : (unified?.mailbox || state.activeMailbox);
     let account = unified?.account || state.accounts.find(a => a.id === accountId);
     if (!account) return;
     account = await ensureFreshToken(account);
@@ -3915,7 +3928,7 @@ export const useMailStore = create((set, get) => ({
     const isUnified = state.activeMailbox === 'UNIFIED';
     const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
     const accountId = unified?.accountId || state.activeAccountId;
-    const mailbox = unified?.mailbox || state.activeMailbox;
+    const mailbox = (unified?.mailbox || state.activeMailbox) === 'UNIFIED' ? 'INBOX' : (unified?.mailbox || state.activeMailbox);
     const localId = `${accountId}-${mailbox}-${uid}`;
     return db.exportEmail(localId);
   },
