@@ -331,12 +331,21 @@ export async function getAccounts() {
     // Filter to only valid accounts (must have email)
     const validAccounts = keychainAccounts.filter(a => a.email);
 
+    // Always read file accounts as a fallback — merge to ensure no accounts are lost
+    // when keychain times out and returns fewer accounts
+    const fileAccounts = await readAccountsFile();
+
     if (validAccounts.length > 0) {
-      return validAccounts;
+      // Merge: keychain is authoritative, but include file-only accounts (missing from keychain due to timeout)
+      const keychainIds = new Set(validAccounts.map(a => a.id));
+      const fileOnly = fileAccounts.filter(a => !keychainIds.has(a.id));
+      if (fileOnly.length > 0) {
+        console.log(`[db.js] ${fileOnly.length} account(s) from file not in keychain — adding without credentials`);
+      }
+      return [...validAccounts, ...fileOnly];
     }
 
-    // Legacy fallback: keychain only has passwords, combine with accounts.json
-    const fileAccounts = await readAccountsFile();
+    // Keychain empty (timeout or fresh install) — use file accounts with whatever passwords are available
     return fileAccounts.map(a => ({
       ...a,
       password: data[a.id] || undefined

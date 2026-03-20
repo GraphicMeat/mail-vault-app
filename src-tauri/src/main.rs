@@ -197,11 +197,28 @@ async fn get_credentials() -> Result<std::collections::HashMap<String, String>, 
     });
 
     // Timeout after 5 seconds — prevents slow keychain (D-Bus/Keychain) from blocking app startup
+    // On timeout, retry once with 10s timeout before giving up
     match tokio::time::timeout(std::time::Duration::from_secs(5), keychain_future).await {
         Ok(join_result) => join_result.map_err(|e| format!("Keychain task panicked: {}", e))?,
         Err(_) => {
-            warn!("get_credentials: keychain timeout after 5s — returning empty credentials");
-            Ok(std::collections::HashMap::new())
+            warn!("get_credentials: keychain timeout after 5s — retrying with 10s timeout");
+            let retry_future = tokio::task::spawn_blocking(move || {
+                let entry = Entry::new(KEYRING_SERVICE, CREDENTIALS_KEY)
+                    .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
+                let json = entry.get_password()
+                    .map_err(|e| format!("Failed to retrieve credentials: {}", e))?;
+                let credentials: std::collections::HashMap<String, String> = serde_json::from_str(&json)
+                    .map_err(|e| format!("Failed to parse credentials: {}", e))?;
+                info!("get_credentials: retry succeeded with {} account(s)", credentials.len());
+                Ok(credentials)
+            });
+            match tokio::time::timeout(std::time::Duration::from_secs(10), retry_future).await {
+                Ok(join_result) => join_result.map_err(|e| format!("Keychain retry panicked: {}", e))?,
+                Err(_) => {
+                    warn!("get_credentials: keychain retry also timed out — returning empty credentials");
+                    Ok(std::collections::HashMap::new())
+                }
+            }
         }
     }
 }
