@@ -57,22 +57,32 @@ function getMailboxDisplayName(name) {
   return name;
 }
 
-function BackupStatusIcon({ accountId }) {
+function BackupStatusIcon({ accountId, onClick }) {
   const backupState = useSettingsStore(s => s.backupState?.[accountId]);
+  const backupGlobalEnabled = useSettingsStore(s => s.backupGlobalEnabled);
   const schedule = useSettingsStore(s => s.backupSchedules?.[accountId]);
-  if (!schedule?.enabled) return null;
+  if (!schedule?.enabled && !backupGlobalEnabled) return null;
 
   const isOverdue = backupState?.lastBackupTime && backupState?.nextRunTime &&
     Date.now() > backupState.nextRunTime + (backupState.nextRunTime - backupState.lastBackupTime);
   const isFailed = backupState?.lastStatus === 'failed';
 
-  if (isFailed || isOverdue) {
-    return <AlertCircle size={12} className="text-amber-500 flex-shrink-0" aria-label="Backup needs attention" />;
-  }
-  return <CheckCircle2 size={12} className="text-emerald-500 flex-shrink-0" aria-label="Backup healthy" />;
+  const icon = (isFailed || isOverdue)
+    ? <AlertCircle size={12} className="text-amber-500 flex-shrink-0" />
+    : <CheckCircle2 size={12} className="text-emerald-500 flex-shrink-0" />;
+
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onClick?.(); }}
+      className="hover:opacity-70 transition-opacity"
+      title={isFailed ? 'Backup failed — click to view' : isOverdue ? 'Backup overdue — click to view' : 'Backup healthy — click to view'}
+    >
+      {icon}
+    </button>
+  );
 }
 
-export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
+export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup }) {
   const accounts = useMailStore(s => s.accounts);
   const activeAccountId = useMailStore(s => s.activeAccountId);
   const mailboxes = useMailStore(s => s.mailboxes);
@@ -255,7 +265,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                   {initial}
                 </div>
                 <div className="absolute -top-0.5 -right-0.5">
-                  <BackupStatusIcon accountId={account.id} />
+                  <BackupStatusIcon accountId={account.id} onClick={onOpenBackup} />
                 </div>
                 {(unreadPerAccount[account.id] || 0) > 0 && (
                   <div className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 flex items-center justify-center">
@@ -514,7 +524,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings }) {
                     </div>
                   )}
                 </div>
-                <BackupStatusIcon accountId={account.id} />
+                <BackupStatusIcon accountId={account.id} onClick={onOpenBackup} />
               </div>
             );
           })}
