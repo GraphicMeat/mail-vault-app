@@ -85,6 +85,7 @@ pub async fn run_account_backup(
     account_id: String,
     account_json: String,
     cancel: Arc<AtomicBool>,
+    backup_path: Option<String>,
 ) -> Result<BackupResult, String> {
     let start = std::time::Instant::now();
 
@@ -95,7 +96,7 @@ pub async fn run_account_backup(
     let is_graph = account.oauth2_transport.as_deref() == Some("graph");
 
     if is_graph {
-        return run_graph_backup(app_handle, account_id, account_json, cancel, start).await;
+        return run_graph_backup(app_handle, account_id, account_json, cancel, start, backup_path).await;
     }
 
     // ── IMAP path ────────────────────────────────────────────────────────────
@@ -222,10 +223,32 @@ pub async fn run_account_backup(
         );
     }
 
+    // Mirror to custom backup path if configured
+    if let Some(ref custom_path) = backup_path {
+        let src_base = app_handle
+            .path()
+            .app_data_dir()
+            .map_err(|e| format!("Could not get app data directory: {}", e))?;
+        let src_maildir = src_base.join("Maildir").join(&account_id);
+        let dst_maildir = std::path::PathBuf::from(custom_path)
+            .join("Maildir")
+            .join(&account_id);
+
+        if src_maildir.exists() {
+            info!("backup: mirroring {} -> {}", src_maildir.display(), dst_maildir.display());
+            if let Err(e) = mirror_directory(&src_maildir, &dst_maildir) {
+                warn!("backup: mirror to custom path failed: {}", e);
+            } else {
+                info!("backup: mirror complete for {}", account.email);
+            }
+        }
+    }
+
     let duration = start.elapsed().as_secs_f64();
     info!(
-        "backup: completed for {} — {} new emails backed up, {} errors, {:.1}s (all local .eml files are already up to date if 0 new)",
-        account.email, total_backed_up, total_errors, duration
+        "backup: completed for {} — {} new emails backed up, {} errors, {:.1}s{}",
+        account.email, total_backed_up, total_errors, duration,
+        if backup_path.is_some() { " (mirrored to custom path)" } else { "" }
     );
 
     Ok(BackupResult {
@@ -237,6 +260,27 @@ pub async fn run_account_backup(
     })
 }
 
+/// Recursively copy src directory to dst, only copying files that are missing or newer.
+fn mirror_directory(src: &std::path::Path, dst: &std::path::Path) -> Result<(), String> {
+    use std::fs;
+    fs::create_dir_all(dst).map_err(|e| format!("mkdir {}: {}", dst.display(), e))?;
+
+    for entry in fs::read_dir(src).map_err(|e| format!("readdir {}: {}", src.display(), e))? {
+        let entry = entry.map_err(|e| format!("entry: {}", e))?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+
+        if src_path.is_dir() {
+            mirror_directory(&src_path, &dst_path)?;
+        } else if !dst_path.exists() {
+            // Only copy files that don't exist at destination (incremental)
+            fs::copy(&src_path, &dst_path)
+                .map_err(|e| format!("copy {} -> {}: {}", src_path.display(), dst_path.display(), e))?;
+        }
+    }
+    Ok(())
+}
+
 // ── Graph API backup path ────────────────────────────────────────────────────
 
 async fn run_graph_backup(
@@ -245,6 +289,7 @@ async fn run_graph_backup(
     account_json: String,
     cancel: Arc<AtomicBool>,
     start: std::time::Instant,
+    _backup_path: Option<String>,
 ) -> Result<BackupResult, String> {
     // Parse just the access token from the JSON
     let json_val: serde_json::Value = serde_json::from_str(&account_json)
