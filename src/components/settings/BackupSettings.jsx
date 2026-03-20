@@ -70,6 +70,7 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
   const backupHistory = useSettingsStore(s => s.backupHistory);
   const accountColors = useSettingsStore(s => s.accountColors);
   const setBackupSchedule = useSettingsStore(s => s.setBackupSchedule);
+  const globalScope = useSettingsStore(s => s.backupScope);
 
   const config = backupSchedules[account.id] || { enabled: false, interval: 'daily', hourlyInterval: 1, timeOfDay: '03:00', dayOfWeek: 1 };
   const state = backupState[account.id] || {};
@@ -212,6 +213,20 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
                   />
                 </div>
               )}
+              {/* Per-account backup scope */}
+              <div className="pt-3 border-t border-mail-border">
+                <label className="text-xs text-mail-text-muted mb-1 block">What to back up</label>
+                <select
+                  value={config.scope || ''}
+                  onChange={(e) => handleConfigChange('scope', e.target.value || null)}
+                  className={selectClass}
+                >
+                  <option value="">Use global setting ({globalScope === 'all' ? 'All emails' : 'Archived only'})</option>
+                  <option value="archived">Archived emails only</option>
+                  <option value="all">All emails (download from server)</option>
+                </select>
+              </div>
+
               {/* Folder selection */}
               <div className="pt-3 border-t border-mail-border">
                 <div className="flex items-center justify-between mb-2">
