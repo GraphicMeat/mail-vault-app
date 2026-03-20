@@ -38,19 +38,35 @@ async function loadKeychain() {
   }
 
   // Create a shared promise so concurrent callers don't fire duplicate invokes
+  // Retries up to 3 times with backoff if keychain read fails or returns empty
   _keychainLoadPromise = (async () => {
-    try {
-      console.log('[db.js] Loading accounts from keychain...');
-      keychainCache = await invoke('get_credentials');
-      keychainLoaded = true;
-      console.log('[db.js] Keychain loaded for', Object.keys(keychainCache).length, 'account(s)');
-    } catch (error) {
-      console.log('[db.js] No keychain data found or error:', error);
-      if (isSnap()) {
-        console.error('[db.js] Snap keyring access failed — password-manager-service plug may be disconnected');
+    const maxRetries = 3;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[db.js] Loading accounts from keychain (attempt ${attempt}/${maxRetries})...`);
+        const result = await invoke('get_credentials');
+        const count = Object.keys(result || {}).length;
+        if (count > 0 || attempt === maxRetries) {
+          keychainCache = result || {};
+          keychainLoaded = true;
+          console.log('[db.js] Keychain loaded for', count, 'account(s)');
+          return;
+        }
+        // Empty result on non-final attempt — retry after backoff (keychain may be slow)
+        console.warn(`[db.js] Keychain returned 0 accounts on attempt ${attempt} — retrying in ${attempt}s`);
+        await new Promise(r => setTimeout(r, attempt * 1000));
+      } catch (error) {
+        console.warn(`[db.js] Keychain read failed (attempt ${attempt}/${maxRetries}):`, error);
+        if (attempt === maxRetries) {
+          if (isSnap()) {
+            console.error('[db.js] Snap keyring access failed — password-manager-service plug may be disconnected');
+          }
+          keychainCache = {};
+          keychainLoaded = true;
+        } else {
+          await new Promise(r => setTimeout(r, attempt * 1000));
+        }
       }
-      keychainCache = {};
-      keychainLoaded = true;
     }
   })();
 
@@ -58,35 +74,64 @@ async function loadKeychain() {
   return keychainCache || {};
 }
 
+let _keychainWriteQueue = [];
+let _keychainWriteRunning = false;
+
 async function saveKeychain(data) {
   if (!invoke) return;
 
-  // Safety: never overwrite keychain with fewer entries than currently cached.
-  // This prevents a timeout-induced empty read from wiping all passwords.
+  // Safety: if new data has fewer entries than cached, merge with cache to prevent data loss.
+  // This handles the case where loadKeychain() returned partial/empty data due to timeout.
   const newCount = Object.keys(data).length;
   const cachedCount = Object.keys(keychainCache || {}).length;
   if (newCount < cachedCount && cachedCount > 0) {
-    console.warn(`[db.js] BLOCKED saveKeychain: would reduce entries from ${cachedCount} to ${newCount} — likely stale read`);
-    return;
+    console.warn(`[db.js] saveKeychain: merging — new data has ${newCount} entries but cache has ${cachedCount}, preserving existing`);
+    data = { ...keychainCache, ...data };
   }
 
-  try {
-    await invoke('store_credentials', { credentials: data });
-    keychainCache = data;
-    console.log('[db.js] Keychain saved for', Object.keys(data).length, 'account(s)');
-  } catch (error) {
-    console.error('[db.js] Failed to save keychain:', error);
-    // Detect snap keyring permission issue
-    if (isSnap()) {
-      throw new Error(
-        'Cannot access system keyring. Run this command in a terminal to fix:\n\n' +
-        'sudo snap connect mailvault:password-manager-service\n\n' +
-        'Then restart MailVault.'
-      );
-    }
-    throw error;
-  }
+  // Queue writes to prevent concurrent overwrites
+  return new Promise((resolve, reject) => {
+    _keychainWriteQueue.push({ data, resolve, reject });
+    _processKeychainQueue();
+  });
 }
+
+async function _processKeychainQueue() {
+  if (_keychainWriteRunning || _keychainWriteQueue.length === 0) return;
+  _keychainWriteRunning = true;
+
+  while (_keychainWriteQueue.length > 0) {
+    // Take the latest write (skip stale intermediate writes)
+    const pending = _keychainWriteQueue.splice(0);
+    const latest = pending[pending.length - 1];
+    // Resolve all earlier pending writes silently
+    for (let i = 0; i < pending.length - 1; i++) pending[i].resolve();
+
+    let retries = 0;
+    const maxRetries = 3;
+    while (retries < maxRetries) {
+      try {
+        await invoke('store_credentials', { credentials: latest.data });
+        keychainCache = latest.data;
+        console.log('[db.js] Keychain saved for', Object.keys(latest.data).length, 'account(s)');
+        latest.resolve();
+        break;
+      } catch (error) {
+        retries++;
+        console.warn(`[db.js] Keychain write failed (attempt ${retries}/${maxRetries}):`, error);
+        if (retries < maxRetries) {
+          await new Promise(r => setTimeout(r, 1000 * retries)); // 1s, 2s, 3s backoff
+        } else {
+          console.error('[db.js] Keychain write failed after all retries:', error);
+          latest.reject(error);
+        }
+      }
+    }
+  }
+
+  _keychainWriteRunning = false;
+}
+
 
 // Detect snap confinement by checking if app data dir is under ~/snap/
 let _isSnap = null;
