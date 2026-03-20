@@ -43,6 +43,19 @@ pub async fn run(
     uids: Vec<u32>,
     cancel: Arc<AtomicBool>,
 ) -> Result<ArchiveProgress, String> {
+    run_with_backup(app_handle, account_id, account_json, mailbox, uids, cancel, None, None).await
+}
+
+pub async fn run_with_backup(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    account_json: String,
+    mailbox: String,
+    uids: Vec<u32>,
+    cancel: Arc<AtomicBool>,
+    backup_path: Option<String>,
+    account_email: Option<String>,
+) -> Result<ArchiveProgress, String> {
     let total = uids.len();
     info!("archive_emails: starting {} UIDs for account {}", total, account_id);
 
@@ -77,6 +90,8 @@ pub async fn run(
         let errors = Arc::clone(&errors);
         let cancel = Arc::clone(&cancel);
         let pool = pool.inner().clone();
+        let bp = backup_path.clone();
+        let ae = account_email.clone();
 
         set.spawn(async move {
             let _permit = sem.acquire().await.unwrap();
@@ -86,7 +101,7 @@ pub async fn run(
             }
 
             match fetch_and_store(
-                &pool, &app, &account_id, &account, &mailbox, uid,
+                &pool, &app, &account_id, &account, &mailbox, uid, bp.as_deref(), ae.as_deref(),
             ).await {
                 Ok(index_entry) => {
                     completed.fetch_add(1, Ordering::Relaxed);
@@ -193,6 +208,8 @@ async fn fetch_and_store(
     account: &ImapConfig,
     mailbox: &str,
     uid: u32,
+    backup_path: Option<&str>,
+    account_email: Option<&str>,
 ) -> Result<serde_json::Value, String> {
     use base64::Engine;
     use std::fs;
@@ -236,6 +253,21 @@ async fn fetch_and_store(
 
     fs::write(cur_dir.join(&filename), &raw_bytes)
         .map_err(|e| format!("write .eml: {}", e))?;
+
+    // Also write to backup location if configured
+    if let (Some(bp), Some(email)) = (backup_path, account_email) {
+        let backup_dir = std::path::PathBuf::from(bp)
+            .join(email)
+            .join(mailbox)
+            .join("cur");
+        if let Ok(()) = fs::create_dir_all(&backup_dir) {
+            let eml_name = format!("{}.eml", uid);
+            let dst = backup_dir.join(&eml_name);
+            if !dst.exists() {
+                let _ = fs::write(&dst, &raw_bytes); // Best-effort, don't fail backup on copy error
+            }
+        }
+    }
 
     info!("archive_emails: stored UID {} ({} bytes)", uid, raw_bytes.len());
 

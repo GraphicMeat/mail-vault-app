@@ -187,35 +187,35 @@ pub async fn run_account_backup(
             },
         );
 
+        // Pre-sync: copy files that exist in one location but not the other
+        if let Some(ref custom_path) = backup_path {
+            let app_dir = crate::maildir_cur_path(&app_handle, &account_id, mailbox_path)?;
+            let backup_dir = std::path::PathBuf::from(custom_path)
+                .join(&account.email)
+                .join(mailbox_path)
+                .join("cur");
+            let synced = sync_locations(&app_dir, &backup_dir);
+            if synced > 0 {
+                info!("backup: pre-synced {} files between app and backup for {}", synced, mailbox_path);
+            }
+        }
+
         if !missing.is_empty() {
-            // Use archive::run() to fetch and store missing emails
-            let archive_result = crate::archive::run(
+            // Fetch and store to BOTH app dir and backup dir simultaneously
+            let archive_result = crate::archive::run_with_backup(
                 app_handle.clone(),
                 account_id.clone(),
                 account_json.clone(),
                 mailbox_path.clone(),
                 missing,
                 Arc::clone(&cancel),
+                backup_path.clone(),
+                Some(account.email.clone()),
             )
             .await?;
 
             total_backed_up += archive_result.completed;
             total_errors += archive_result.errors;
-        }
-
-        // Mirror this folder to custom backup path immediately (during backup, not after)
-        // Uses email address as folder name for human-readable import
-        if let Some(ref custom_path) = backup_path {
-            let src_folder = crate::maildir_cur_path(&app_handle, &account_id, mailbox_path)?;
-            let dst_folder = std::path::PathBuf::from(custom_path)
-                .join(&account.email)
-                .join(mailbox_path)
-                .join("cur");
-            if src_folder.exists() {
-                if let Err(e) = mirror_directory_with_eml(&src_folder, &dst_folder) {
-                    warn!("backup: mirror folder {} failed: {}", mailbox_path, e);
-                }
-            }
         }
 
         completed_folders += 1;
@@ -254,31 +254,53 @@ pub async fn run_account_backup(
     })
 }
 
-/// Copy files from src to dst, ensuring .eml extension for importability.
-/// Incremental — only copies files that don't already exist at destination.
-/// Structure: <backup-path>/<email@address>/<Folder>/cur/<uid>.eml
-fn mirror_directory_with_eml(src: &std::path::Path, dst: &std::path::Path) -> Result<(), String> {
+/// Sync files between app Maildir and backup location (bidirectional).
+/// - App dir files missing from backup → copy to backup as <uid>.eml
+/// - Backup .eml files missing from app dir → copy to app dir
+/// Returns total files synced.
+fn sync_locations(app_dir: &std::path::Path, backup_dir: &std::path::Path) -> usize {
     use std::fs;
-    fs::create_dir_all(dst).map_err(|e| format!("mkdir {}: {}", dst.display(), e))?;
+    let mut synced = 0;
 
-    for entry in fs::read_dir(src).map_err(|e| format!("readdir {}: {}", src.display(), e))? {
-        let entry = entry.map_err(|e| format!("entry: {}", e))?;
-        let src_path = entry.path();
-        if src_path.is_dir() { continue; } // Only copy files, not subdirectories
+    // Ensure both dirs exist; if backup dir can't be created (disconnected drive), skip
+    let _ = fs::create_dir_all(app_dir);
+    if fs::create_dir_all(backup_dir).is_err() {
+        return 0; // Backup location not available — skip sync, backup to app dir only
+    }
 
-        let name = entry.file_name().to_string_lossy().to_string();
-        // Extract UID from filename (format: "<uid>:2,<flags>" or "<uid>_<flags>.eml" or "<uid>.eml")
-        let uid_str = name.split(|c: char| c == ':' || c == '.' || c == '_').next().unwrap_or(&name);
-        // Create importable filename: <uid>.eml
-        let dst_name = format!("{}.eml", uid_str);
-        let dst_path = dst.join(&dst_name);
-
-        if !dst_path.exists() {
-            fs::copy(&src_path, &dst_path)
-                .map_err(|e| format!("copy {} -> {}: {}", src_path.display(), dst_path.display(), e))?;
+    // App → Backup: copy app files that don't exist in backup
+    if let Ok(entries) = fs::read_dir(app_dir) {
+        for entry in entries.flatten() {
+            if entry.path().is_dir() { continue; }
+            let name = entry.file_name().to_string_lossy().to_string();
+            let uid_str = name.split(|c: char| c == ':' || c == '.' || c == '_').next().unwrap_or(&name);
+            if uid_str.parse::<u32>().is_err() { continue; }
+            let dst = backup_dir.join(format!("{}.eml", uid_str));
+            if !dst.exists() {
+                if fs::copy(entry.path(), &dst).is_ok() { synced += 1; }
+            }
         }
     }
-    Ok(())
+
+    // Backup → App: copy backup .eml files that don't exist in app dir
+    if let Ok(entries) = fs::read_dir(backup_dir) {
+        for entry in entries.flatten() {
+            if entry.path().is_dir() { continue; }
+            let name = entry.file_name().to_string_lossy().to_string();
+            if !name.ends_with(".eml") { continue; }
+            let uid_str = name.trim_end_matches(".eml");
+            if uid_str.parse::<u32>().is_err() { continue; }
+            // Check if app dir already has this UID (any filename starting with uid)
+            let uid: u32 = uid_str.parse().unwrap();
+            let exists_in_app = super::find_file_by_uid(app_dir, uid).is_some();
+            if !exists_in_app {
+                let dst = app_dir.join(format!("{}:2,", uid));
+                if fs::copy(entry.path(), &dst).is_ok() { synced += 1; }
+            }
+        }
+    }
+
+    synced
 }
 
 // ── Graph API backup path ────────────────────────────────────────────────────
