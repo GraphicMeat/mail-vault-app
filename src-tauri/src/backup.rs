@@ -109,7 +109,14 @@ pub async fn run_account_backup(
     };
 
     // Flatten and filter to selectable mailboxes
-    let selectable: Vec<_> = flatten_mailboxes(&mailboxes)
+    let all_flat = flatten_mailboxes(&mailboxes);
+    info!(
+        "backup: {} — {} total mailboxes from LIST, names: [{}]",
+        account.email,
+        all_flat.len(),
+        all_flat.iter().map(|m| format!("{}(noselect={})", m.path, m.noselect)).collect::<Vec<_>>().join(", ")
+    );
+    let selectable: Vec<_> = all_flat
         .into_iter()
         .filter(|m| !m.noselect)
         .collect();
