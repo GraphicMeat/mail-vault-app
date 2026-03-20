@@ -1,7 +1,7 @@
 import * as api from './api';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useMailStore } from '../stores/mailStore';
-import { ensureFreshToken } from './authUtils';
+import { ensureFreshToken, hasValidCredentials } from './authUtils';
 
 const RETRY_DELAYS = [30_000, 120_000, 300_000]; // 30s, 2min, 5min
 
@@ -94,6 +94,16 @@ class BackupScheduler {
     const accounts = useMailStore.getState().accounts || [];
     const account = accounts.find(a => a.id === accountId);
     if (!account) {
+      this._running.set(accountId, false);
+      return;
+    }
+
+    if (!hasValidCredentials(account)) {
+      console.warn(`[backup] Skipping ${account.email} — no valid credentials`);
+      useSettingsStore.getState().updateBackupState(accountId, {
+        lastStatus: 'failed',
+        lastError: 'Missing credentials — re-enter password in Settings > Accounts',
+      });
       this._running.set(accountId, false);
       return;
     }
