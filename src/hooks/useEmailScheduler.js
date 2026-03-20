@@ -108,11 +108,15 @@ export function useEmailScheduler() {
         dispatchNotifications(result.perAccountResults);
       }
 
-      // Update badge to reflect current mailbox view
+      // Update badge to reflect total unread across ALL accounts
       if (result) {
         if (badgeMode === 'unread') {
-          const count = useMailStore.getState().emails.filter(e => !e.flags?.includes('\\Seen')).length;
-          updateBadge(count);
+          const unreadPerAccount = useSettingsStore.getState().unreadPerAccount || {};
+          const hiddenAccounts = useSettingsStore.getState().hiddenAccounts || {};
+          const total = Object.entries(unreadPerAccount)
+            .filter(([id]) => !hiddenAccounts[id])
+            .reduce((sum, [, count]) => sum + (count || 0), 0);
+          updateBadge(total);
         } else {
           updateBadge(useMailStore.getState().emails.length);
         }
@@ -178,9 +182,13 @@ export function useEmailScheduler() {
     if (badgeTimerRef.current) clearTimeout(badgeTimerRef.current);
     badgeTimerRef.current = setTimeout(() => {
       if (badgeMode === 'unread') {
-        // Count unread in the current mailbox view — matches what the user sees.
-        const count = useMailStore.getState().emails.filter(e => !e.flags?.includes('\\Seen')).length;
-        updateBadge(count);
+        // Sum unread across ALL accounts (not just current view)
+        const unreadPerAccount = useSettingsStore.getState().unreadPerAccount || {};
+        const hiddenAccounts = useSettingsStore.getState().hiddenAccounts || {};
+        const total = Object.entries(unreadPerAccount)
+          .filter(([id]) => !hiddenAccounts[id])
+          .reduce((sum, [, count]) => sum + (count || 0), 0);
+        updateBadge(total);
       } else {
         updateBadge(useMailStore.getState().emails.length);
       }
