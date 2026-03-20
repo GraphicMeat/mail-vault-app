@@ -139,11 +139,12 @@ pub async fn run_account_backup(
 
         let mailbox_path = &mbox.path;
 
-        // Get server UIDs
-        let has_esearch = pool.has_capability(&account, "ESEARCH").await;
+        // Get server UIDs — always use plain UID SEARCH ALL for backup reliability.
+        // ESEARCH can corrupt the session buffer on large mailboxes (imap_proto parser limit),
+        // and the corrupted session makes all subsequent commands return 0 results.
         let server_uids = {
             let mut guard = pool.get_background(&account).await?;
-            let result = imap::search_all_uids(&mut guard.session, mailbox_path, has_esearch).await;
+            let result = imap::search_all_uids(&mut guard.session, mailbox_path, false).await;
             pool.return_background(&account, guard).await;
             result?
         };
