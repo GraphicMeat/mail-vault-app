@@ -137,6 +137,19 @@ impl ImapPool {
         self.return_to_pool(&self.priority, config, session, last_selected).await;
     }
 
+    /// Clear all background sessions for an account (force re-auth on next use).
+    /// Used during long backups to prevent OAuth2 token expiry.
+    pub async fn clear_background(&self, config: &ImapConfig) {
+        let key = conn_key(config);
+        let mut pool = self.background.lock().await;
+        if let Some(sessions) = pool.remove(&key) {
+            info!("[IMAP pool] Cleared {} background sessions for {}", sessions.len(), key);
+            for mut s in sessions {
+                let _ = s.session.logout().await;
+            }
+        }
+    }
+
     /// Check if the server supports a specific capability (case-insensitive).
     pub async fn has_capability(&self, config: &ImapConfig, cap: &str) -> bool {
         let key = conn_key(config);
