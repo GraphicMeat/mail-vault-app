@@ -49,6 +49,32 @@ class BackupScheduler {
     return this._running.get(accountId) || false;
   }
 
+  /**
+   * Check all accounts for overdue backups (e.g. after wake from sleep).
+   * JS setTimeout pauses during sleep — if nextRunTime has passed, run immediately.
+   */
+  checkOverdue() {
+    const state = useSettingsStore.getState();
+    const accounts = useMailStore.getState().accounts || [];
+    const { backupGlobalEnabled, backupSchedules, hiddenAccounts, backupState } = state;
+
+    for (const account of accounts) {
+      if (hiddenAccounts?.[account.id]) continue;
+
+      const config = this._getEffectiveConfig(account.id);
+      if (!config?.enabled) continue;
+
+      const accountState = backupState[account.id];
+      if (!accountState?.nextRunTime) continue;
+
+      if (Date.now() > accountState.nextRunTime && !this._running.get(account.id)) {
+        console.log(`[backup] Overdue backup detected for ${account.email} — running now`);
+        this._executeBackup(account.id);
+        this._scheduleNext(account.id);
+      }
+    }
+  }
+
   _scheduleNext(accountId) {
     const config = this._getEffectiveConfig(accountId);
     if (!config?.enabled) return;
