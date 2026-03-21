@@ -7,6 +7,9 @@ import { backupScheduler } from '../services/backupScheduler';
  * Watches backupSchedules config and starts/stops schedules accordingly.
  * Supports global backup mode: when backupGlobalEnabled=true, all visible accounts
  * use the global config. Per-account overrides still apply when global is off.
+ *
+ * Also detects wake from sleep via a heartbeat timer — if the timer fires late
+ * (gap > 30s), the machine was asleep. Runs overdue backups immediately.
  */
 export function useBackupScheduler() {
   const accounts = useSettingsStore(s => s.accounts);
@@ -16,6 +19,7 @@ export function useBackupScheduler() {
   const hiddenAccounts = useSettingsStore(s => s.hiddenAccounts);
   const prevRef = useRef(null);
 
+  // Schedule management — start/stop based on config changes
   useEffect(() => {
     const prevKey = prevRef.current;
     const currentKey = JSON.stringify({ backupSchedules, backupGlobalEnabled, backupGlobalConfig });
@@ -28,10 +32,8 @@ export function useBackupScheduler() {
 
       let shouldRun = false;
       if (backupGlobalEnabled) {
-        // Global mode: all visible accounts use global config
         shouldRun = true;
       } else {
-        // Per-account mode
         const config = backupSchedules[account.id];
         shouldRun = config?.enabled;
       }
@@ -47,4 +49,34 @@ export function useBackupScheduler() {
       backupScheduler.stopAll();
     };
   }, [accounts, backupSchedules, backupGlobalEnabled, backupGlobalConfig, hiddenAccounts]);
+
+  // Wake-from-sleep detector — heartbeat every 15s, if gap > 30s we were asleep
+  useEffect(() => {
+    let lastTick = Date.now();
+
+    const heartbeat = setInterval(() => {
+      const now = Date.now();
+      const gap = now - lastTick;
+      lastTick = now;
+
+      // If more than 30 seconds passed since last tick, machine was likely asleep
+      if (gap > 30_000) {
+        console.log(`[backup] Wake detected (${Math.round(gap / 1000)}s gap) — checking overdue backups`);
+        backupScheduler.checkOverdue();
+      }
+    }, 15_000);
+
+    // Also check on visibility change (user switches back to app)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        backupScheduler.checkOverdue();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(heartbeat);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, []);
 }
