@@ -10,6 +10,8 @@ class BackupScheduler {
     this._timers = new Map();      // accountId -> timeoutId
     this._running = new Map();     // accountId -> boolean
     this._retryCount = new Map();  // accountId -> number
+    this._queue = [];              // sequential backup queue
+    this._queueRunning = false;    // true when processing queue
   }
 
   _getEffectiveConfig(accountId) {
@@ -113,12 +115,34 @@ class BackupScheduler {
     return target.getTime() - now.getTime();
   }
 
+  // Queue a backup — accounts run one at a time to avoid overwhelming network/servers
   async _executeBackup(accountId) {
-    if (this._running.get(accountId)) return; // prevent concurrent runs
+    if (this._running.get(accountId)) return;
+    // Don't queue duplicates
+    if (this._queue.some(id => id === accountId)) return;
+
+    this._queue.push(accountId);
+    this._processQueue();
+  }
+
+  async _processQueue() {
+    if (this._queueRunning || this._queue.length === 0) return;
+    this._queueRunning = true;
+
+    while (this._queue.length > 0) {
+      const accountId = this._queue.shift();
+      if (this._running.get(accountId)) continue;
+      await this._runBackup(accountId);
+    }
+
+    this._queueRunning = false;
+  }
+
+  async _runBackup(accountId) {
     this._running.set(accountId, true);
 
     const accounts = useMailStore.getState().accounts || [];
-    const account = accounts.find(a => a.id === accountId);
+    let account = accounts.find(a => a.id === accountId);
     if (!account) {
       this._running.set(accountId, false);
       return;
@@ -135,7 +159,7 @@ class BackupScheduler {
     }
 
     try {
-      // Refresh OAuth2 token before backup
+      // Refresh OAuth2 token before backup (will be re-refreshed between folders by Rust)
       const freshAccount = await ensureFreshToken(account);
 
       const startTime = Date.now();
@@ -180,7 +204,7 @@ class BackupScheduler {
         this._retryCount.set(accountId, retries + 1);
         const delay = RETRY_DELAYS[retries];
         console.warn(`[BackupScheduler] Retry ${retries + 1}/3 for ${accountId} in ${delay / 1000}s`);
-        setTimeout(() => this._executeBackup(accountId), delay);
+        setTimeout(() => this._runBackup(accountId), delay);
       } else {
         // Give up until next scheduled run
         const storeNow = useSettingsStore.getState();

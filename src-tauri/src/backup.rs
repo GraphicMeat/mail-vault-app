@@ -134,13 +134,20 @@ pub async fn run_account_backup(
         account.email, total_folders
     );
 
-    for mbox in &selectable {
+    for (folder_idx, mbox) in selectable.iter().enumerate() {
         if cancel.load(Ordering::Relaxed) {
             warn!("backup: cancelled for {}", account.email);
             break;
         }
 
         let mailbox_path = &mbox.path;
+
+        // Every 5 folders, drop pooled sessions to force re-auth on next use.
+        // This prevents OAuth2 token expiry during long backups (tokens last ~1 hour).
+        if folder_idx > 0 && folder_idx % 5 == 0 {
+            pool.clear_background(&account).await;
+            info!("backup: cleared pool sessions at folder {} to refresh auth", folder_idx);
+        }
 
         // Get server UIDs — always use plain UID SEARCH ALL for backup reliability.
         // ESEARCH can corrupt the session buffer on large mailboxes (imap_proto parser limit),
