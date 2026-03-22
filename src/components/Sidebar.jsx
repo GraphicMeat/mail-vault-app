@@ -506,7 +506,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
       </div>
 
       {/* Account Selector */}
-      <div className="p-3 overflow-y-auto flex-shrink-0" style={{ flex: `0 0 ${sidebarAccountsRatio * 100}%`, minHeight: 60 }}>
+      <div className="p-3 overflow-y-auto flex-shrink-0" style={{ flex: `0 0 ${sidebarAccountsRatio * 100}%`, minHeight: 60, maxHeight: 'calc(100% - 340px)' }}>
         <div className="relative">
           {/* All Inboxes (expanded) */}
           {showUnifiedInbox && (
