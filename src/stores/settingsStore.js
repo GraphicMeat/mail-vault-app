@@ -135,6 +135,7 @@ export const useSettingsStore = create(
       signatureDisplay: 'smart', // 'smart' | 'always-show' | 'always-hide' | 'collapsed'
       actionButtonDisplay: 'icon-only', // 'icon-only' | 'icon-label' | 'text-only'
       sidebarCollapsed: false, // Whether sidebar is in compact/collapsed mode
+      sidebarAccountsRatio: 0.4, // Ratio of accounts section height vs total available (0.2 - 0.8)
       listPaneSize: 350, // Width of email list in 3-column, or height in 2-column
       viewerPaneSize: 50, // Percentage of remaining space for viewer in 3-column
 
@@ -441,6 +442,7 @@ export const useSettingsStore = create(
       setCustomDateFormat: (value) => set({ customDateFormat: value }),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
       toggleSidebarCollapsed: () => set(state => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+      setSidebarAccountsRatio: (ratio) => set({ sidebarAccountsRatio: Math.max(0.15, Math.min(0.85, ratio)) }),
       setSignatureDisplay: (mode) => set({ signatureDisplay: mode }),
       setActionButtonDisplay: (mode) => set({ actionButtonDisplay: mode }),
       setListPaneSize: (size) => set({ listPaneSize: size }),
