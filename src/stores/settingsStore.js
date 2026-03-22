@@ -442,7 +442,7 @@ export const useSettingsStore = create(
       setCustomDateFormat: (value) => set({ customDateFormat: value }),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
       toggleSidebarCollapsed: () => set(state => ({ sidebarCollapsed: !state.sidebarCollapsed })),
-      setSidebarAccountsRatio: (ratio) => set({ sidebarAccountsRatio: Math.max(0.15, Math.min(0.85, ratio)) }),
+      setSidebarAccountsRatio: (ratio) => set({ sidebarAccountsRatio: Math.max(0.15, Math.min(0.55, ratio)) }),
       setSignatureDisplay: (mode) => set({ signatureDisplay: mode }),
       setActionButtonDisplay: (mode) => set({ actionButtonDisplay: mode }),
       setListPaneSize: (size) => set({ listPaneSize: size }),
