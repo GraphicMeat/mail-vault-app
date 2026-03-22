@@ -25,6 +25,81 @@ pub struct BackupProgress {
     pub missing_in_folder: usize,
 }
 
+// ── Backup status comparison ─────────────────────────────────────────────────
+
+#[derive(Serialize, Clone)]
+pub struct FolderBackupStatus {
+    pub folder: String,
+    pub server_count: usize,
+    pub local_count: usize,
+}
+
+#[derive(Serialize)]
+pub struct AccountBackupStatus {
+    pub folders: Vec<FolderBackupStatus>,
+    pub total_server: usize,
+    pub total_local: usize,
+}
+
+/// Compare server email counts vs local backup counts for each folder.
+pub async fn get_backup_status(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    account_json: String,
+) -> Result<AccountBackupStatus, String> {
+    let account: ImapConfig = serde_json::from_str(&account_json)
+        .map_err(|e| format!("Bad account JSON: {}", e))?;
+
+    let is_graph = account.oauth2_transport.as_deref() == Some("graph");
+    if is_graph {
+        // Graph accounts: can't easily get server counts without pagination — return local-only
+        return Ok(AccountBackupStatus { folders: vec![], total_server: 0, total_local: 0 });
+    }
+
+    let pool = app_handle.state::<crate::imap::pool::ImapPool>();
+
+    let mailboxes = {
+        let mut guard = pool.get_background(&account).await?;
+        let result = crate::imap::list_mailboxes(&mut guard.session).await?;
+        pool.return_background(&account, guard).await;
+        result
+    };
+
+    let selectable: Vec<_> = flatten_mailboxes(&mailboxes)
+        .into_iter()
+        .filter(|m| !m.noselect)
+        .collect();
+
+    let mut folders = Vec::new();
+    let mut total_server = 0;
+    let mut total_local = 0;
+
+    for mbox in &selectable {
+        let server_uids = {
+            let mut guard = pool.get_background(&account).await?;
+            let result = crate::imap::search_all_uids(&mut guard.session, &mbox.path, false).await;
+            pool.return_background(&account, guard).await;
+            result.unwrap_or_default()
+        };
+        let local_uids = scan_local_uids(&app_handle, &account_id, &mbox.path).unwrap_or_default();
+
+        let sc = server_uids.len();
+        let lc = local_uids.len();
+        total_server += sc;
+        total_local += lc;
+
+        if sc > 0 || lc > 0 {
+            folders.push(FolderBackupStatus {
+                folder: mbox.path.clone(),
+                server_count: sc,
+                local_count: lc,
+            });
+        }
+    }
+
+    Ok(AccountBackupStatus { folders, total_server, total_local })
+}
+
 // ── Result ───────────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]

@@ -3506,6 +3506,7 @@ fn main() {
             commands::imap_move_emails,
             commands::resolve_email_settings,
             commands::backup_run_account,
+            commands::backup_status,
             commands::backup_cancel,
             commands::start_migration,
             commands::cancel_migration,

@@ -81,8 +81,10 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
   const [storageSize, setStorageSize] = useState(null);
   const [accountFolders, setAccountFolders] = useState([]);
   const [showFolderPicker, setShowFolderPicker] = useState(false);
-  const [backupProgress, setBackupProgress] = useState(null); // { folder, totalFolders, completedFolders, totalEmails, completedEmails }
-  const [archiveProgress, setArchiveProgress] = useState(null); // { total, completed }
+  const [backupProgress, setBackupProgress] = useState(null);
+  const [archiveProgress, setArchiveProgress] = useState(null);
+  const [backupStatusData, setBackupStatusData] = useState(null); // { folders, total_server, total_local }
+  const [loadingStatus, setLoadingStatus] = useState(false);
 
   // Load storage stats and folder list on mount
   useEffect(() => {
@@ -231,29 +233,83 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
       </AnimatePresence>
 
       {/* Status Row */}
-      <div className="grid grid-cols-4 gap-4 pt-3 border-t border-mail-border">
+      <div className="grid grid-cols-3 gap-4 pt-3 border-t border-mail-border">
         <div>
           <div className="text-xs text-mail-text-muted">Last backup</div>
           <div className="text-sm font-semibold text-mail-text">{formatRelativeTime(state.lastBackupTime)}</div>
         </div>
         <div>
-          <div className="text-xs text-mail-text-muted">Next run</div>
-          <div className="text-sm font-semibold text-mail-text">{formatRelativeTime(state.nextRunTime)}</div>
-        </div>
-        <div>
           <div className="text-xs text-mail-text-muted">Backed up</div>
-          <div className="text-sm font-semibold text-mail-accent">{backedUpPercent > 0 ? `${backedUpPercent}` : '0'} emails</div>
-          <div className="h-1 rounded-full bg-mail-surface-hover mt-1">
-            <div
-              className="h-1 rounded-full bg-mail-accent transition-all"
-              style={{ width: `${Math.min(100, backedUpPercent)}%` }}
-            />
-          </div>
+          <div className="text-sm font-semibold text-mail-text">{state.emailsBackedUp || 0} emails</div>
         </div>
         <div>
           <div className="text-xs text-mail-text-muted">Storage</div>
           <div className="text-sm font-semibold text-mail-text">{formatSize(storageSize)}</div>
         </div>
+      </div>
+
+      {/* Backup coverage */}
+      <div className="pt-3 border-t border-mail-border">
+        {backupStatusData ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-mail-text">Backup Coverage</span>
+              <span className={`font-semibold ${backupStatusData.total_local >= backupStatusData.total_server ? 'text-mail-success' : 'text-mail-warning'}`}>
+                {backupStatusData.total_local}/{backupStatusData.total_server} emails
+                {backupStatusData.total_server > 0 && ` (${Math.round((backupStatusData.total_local / backupStatusData.total_server) * 100)}%)`}
+              </span>
+            </div>
+            {backupStatusData.total_local >= backupStatusData.total_server && backupStatusData.total_server > 0 && (
+              <div className="flex items-center gap-1 text-xs text-mail-success">
+                <CheckCircle2 size={12} />
+                All emails backed up
+              </div>
+            )}
+            <div className="h-1.5 rounded-full bg-mail-border overflow-hidden">
+              <div
+                className={`h-1.5 rounded-full transition-all ${backupStatusData.total_local >= backupStatusData.total_server ? 'bg-mail-success' : 'bg-mail-warning'}`}
+                style={{ width: `${backupStatusData.total_server > 0 ? Math.min(100, Math.round((backupStatusData.total_local / backupStatusData.total_server) * 100)) : 0}%` }}
+              />
+            </div>
+            {backupStatusData.folders.length > 0 && (
+              <div className="max-h-28 overflow-y-auto space-y-0.5">
+                {backupStatusData.folders.map(f => (
+                  <div key={f.folder} className="flex items-center justify-between text-xs py-0.5">
+                    <span className="text-mail-text-muted truncate flex-1">{f.folder}</span>
+                    <span className={`ml-2 ${f.local_count >= f.server_count ? 'text-mail-success' : 'text-mail-warning'}`}>
+                      {f.local_count}/{f.server_count}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button
+              onClick={() => setBackupStatusData(null)}
+              className="text-xs text-mail-text-muted hover:text-mail-text"
+            >
+              Hide
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={async () => {
+              setLoadingStatus(true);
+              try {
+                const result = await api.backupStatus(account.id, JSON.stringify(account));
+                setBackupStatusData(result);
+              } catch (e) {
+                console.error('Backup status check failed:', e);
+              } finally {
+                setLoadingStatus(false);
+              }
+            }}
+            disabled={loadingStatus}
+            className="text-xs text-mail-accent hover:text-mail-accent-hover flex items-center gap-1"
+          >
+            {loadingStatus ? <Loader size={10} className="animate-spin" /> : <Shield size={10} />}
+            {loadingStatus ? 'Checking...' : 'Check backup coverage'}
+          </button>
+        )}
       </div>
 
       {/* Error display */}
