@@ -756,6 +756,15 @@ pub async fn backup_run_account(
 }
 
 #[tauri::command]
+pub async fn backup_status(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    account_json: String,
+) -> Result<backup::AccountBackupStatus, String> {
+    backup::get_backup_status(app_handle, account_id, account_json).await
+}
+
+#[tauri::command]
 pub async fn backup_cancel(
     cancel_token: tauri::State<'_, backup::BackupCancelToken>,
 ) -> Result<(), String> {
