@@ -130,19 +130,11 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
   const handleToggle = useCallback(() => {
     const newConfig = { ...config, enabled: !config.enabled };
     setBackupSchedule(account.id, newConfig);
-    if (newConfig.enabled) {
-      backupScheduler.startSchedule(account.id);
-    } else {
-      backupScheduler.stopSchedule(account.id);
-    }
   }, [account.id, config, setBackupSchedule]);
 
   const handleConfigChange = useCallback((key, value) => {
     const newConfig = { ...config, [key]: value };
     setBackupSchedule(account.id, newConfig);
-    if (newConfig.enabled) {
-      backupScheduler.startSchedule(account.id);
-    }
   }, [account.id, config, setBackupSchedule]);
 
   const handleManualBackup = useCallback(async () => {
@@ -166,9 +158,9 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
 
   const scheduleContent = (
     <div className="space-y-4">
-      {/* Schedule Config */}
+      {/* Per-account config (scope + folders) */}
       <AnimatePresence>
-        {config.enabled && (
+        {(config.enabled || globalEnabled) && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
@@ -176,75 +168,6 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
             className="overflow-hidden"
           >
             <div className="space-y-3 pt-3 border-t border-mail-border">
-              <div className="grid grid-cols-2 gap-3">
-                {/* Interval selector */}
-                <div>
-                  <label className="text-xs text-mail-text-muted mb-1 block">Interval</label>
-                  <select
-                    value={config.interval}
-                    onChange={(e) => handleConfigChange('interval', e.target.value)}
-                    className={selectClass}
-                  >
-                    <option value="hourly">Hourly</option>
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                  </select>
-                </div>
-
-                {/* Sub-controls */}
-                {config.interval === 'hourly' && (
-                  <div>
-                    <label className="text-xs text-mail-text-muted mb-1 block">Every N hours</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={24}
-                      value={config.hourlyInterval || 1}
-                      onChange={(e) => handleConfigChange('hourlyInterval', Math.max(1, Math.min(24, parseInt(e.target.value) || 1)))}
-                      className={selectClass}
-                    />
-                  </div>
-                )}
-                {config.interval === 'daily' && (
-                  <div>
-                    <label className="text-xs text-mail-text-muted mb-1 block">At</label>
-                    <input
-                      type="time"
-                      value={config.timeOfDay || '03:00'}
-                      onChange={(e) => handleConfigChange('timeOfDay', e.target.value)}
-                      className={selectClass}
-                    />
-                  </div>
-                )}
-                {config.interval === 'weekly' && (
-                  <>
-                    <div>
-                      <label className="text-xs text-mail-text-muted mb-1 block">Day</label>
-                      <select
-                        value={config.dayOfWeek ?? 1}
-                        onChange={(e) => handleConfigChange('dayOfWeek', parseInt(e.target.value))}
-                        className={selectClass}
-                      >
-                        {DAY_NAMES.map((name, i) => (
-                          <option key={i} value={i}>{name}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {config.interval === 'weekly' && (
-                <div className="max-w-[calc(50%-6px)]">
-                  <label className="text-xs text-mail-text-muted mb-1 block">At</label>
-                  <input
-                    type="time"
-                    value={config.timeOfDay || '03:00'}
-                    onChange={(e) => handleConfigChange('timeOfDay', e.target.value)}
-                    className={selectClass}
-                  />
-                </div>
-              )}
               {/* Per-account backup scope */}
               <div className="pt-3 border-t border-mail-border">
                 <label className="text-xs text-mail-text-muted mb-1 block">What to back up</label>
@@ -831,113 +754,45 @@ export default function BackupSettings() {
         </div>
       </div>
 
-      {/* Global Backup Schedule */}
+      {/* Automatic Backup */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <div className="flex items-center justify-between mb-3">
           <div>
             <h4 className="font-semibold text-mail-text flex items-center gap-2">
               <Clock size={18} className="text-mail-accent" />
-              Backup Schedule
+              Automatic Backup
             </h4>
             <p className="text-xs text-mail-text-muted mt-0.5">
-              {backupGlobalEnabled ? 'All accounts use this schedule' : 'Enable to set a schedule for all accounts'}
+              Backups run automatically when the app is idle
             </p>
           </div>
           <ToggleSwitch active={backupGlobalEnabled} onClick={() => setBackupGlobalEnabled(!backupGlobalEnabled)} />
         </div>
 
-        <AnimatePresence>
-          {backupGlobalEnabled && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="overflow-hidden"
-            >
-              <div className="space-y-3 pt-3 border-t border-mail-border">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs text-mail-text-muted mb-1 block">Interval</label>
-                    <select
-                      value={backupGlobalConfig.interval}
-                      onChange={(e) => setBackupGlobalConfig({ interval: e.target.value })}
-                      className={selectClass}
-                    >
-                      <option value="hourly">Hourly</option>
-                      <option value="daily">Daily</option>
-                      <option value="weekly">Weekly</option>
-                    </select>
-                  </div>
-
-                  {backupGlobalConfig.interval === 'hourly' && (
-                    <div>
-                      <label className="text-xs text-mail-text-muted mb-1 block">Every N hours</label>
-                      <input
-                        type="number"
-                        min={1}
-                        max={24}
-                        value={backupGlobalConfig.hourlyInterval || 1}
-                        onChange={(e) => setBackupGlobalConfig({ hourlyInterval: Math.max(1, Math.min(24, parseInt(e.target.value) || 1)) })}
-                        className={selectClass}
-                      />
-                    </div>
-                  )}
-                  {backupGlobalConfig.interval === 'daily' && (
-                    <div>
-                      <label className="text-xs text-mail-text-muted mb-1 block">At</label>
-                      <input
-                        type="time"
-                        value={backupGlobalConfig.timeOfDay || '03:00'}
-                        onChange={(e) => setBackupGlobalConfig({ timeOfDay: e.target.value })}
-                        className={selectClass}
-                      />
-                    </div>
-                  )}
-                  {backupGlobalConfig.interval === 'weekly' && (
-                    <>
-                      <div>
-                        <label className="text-xs text-mail-text-muted mb-1 block">Day</label>
-                        <select
-                          value={backupGlobalConfig.dayOfWeek ?? 1}
-                          onChange={(e) => setBackupGlobalConfig({ dayOfWeek: parseInt(e.target.value) })}
-                          className={selectClass}
-                        >
-                          {DAY_NAMES.map((name, i) => (
-                            <option key={i} value={i}>{name}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {backupGlobalConfig.interval === 'weekly' && (
-                  <div className="max-w-[calc(50%-6px)]">
-                    <label className="text-xs text-mail-text-muted mb-1 block">At</label>
-                    <input
-                      type="time"
-                      value={backupGlobalConfig.timeOfDay || '03:00'}
-                      onChange={(e) => setBackupGlobalConfig({ timeOfDay: e.target.value })}
-                      className={selectClass}
-                    />
-                  </div>
-                )}
-
-                <p className="text-xs text-mail-text-muted pt-1">
-                  Turn off to configure each account individually below.
-                </p>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {backupGlobalEnabled && (
+          <div className="space-y-3 pt-3 border-t border-mail-border">
+            <div className="bg-mail-bg rounded-lg p-3">
+              <p className="text-xs text-mail-text-muted">
+                When you stop using the app for a few minutes, MailVault checks if any accounts need a backup and runs them one at a time in the background. No interruptions, no schedules to configure.
+              </p>
+            </div>
+            <div>
+              <label className="text-xs text-mail-text-muted mb-1 block">Backup frequency</label>
+              <select
+                value={backupGlobalConfig.interval}
+                onChange={(e) => setBackupGlobalConfig({ interval: e.target.value })}
+                className={selectClass}
+              >
+                <option value="hourly">Every hour (when idle)</option>
+                <option value="daily">Once a day (when idle)</option>
+                <option value="weekly">Once a week (when idle)</option>
+              </select>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Per-Account Cards */}
-      {!backupGlobalEnabled && (
-        <div className="flex items-center gap-2 pt-2">
-          <h4 className="text-sm font-semibold text-mail-text-muted">Per-Account Settings</h4>
-        </div>
-      )}
       {visibleAccounts.length > 0 ? (
         visibleAccounts.map(account => (
           <AccountCard key={account.id} account={account} isPaidUser={isPaidUser} globalEnabled={backupGlobalEnabled} />
