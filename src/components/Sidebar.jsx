@@ -138,7 +138,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const activeBackup = useSettingsStore(s => s.activeBackup);
 
   const { theme, toggleTheme } = useThemeStore();
-  const { getOrderedAccounts, getDisplayName, accountColors, hiddenAccounts, sidebarCollapsed, toggleSidebarCollapsed, accountOrder } = useSettingsStore();
+  const { getOrderedAccounts, getDisplayName, accountColors, hiddenAccounts, sidebarCollapsed, toggleSidebarCollapsed, accountOrder, sidebarAccountsRatio, setSidebarAccountsRatio } = useSettingsStore();
 
   const [expandedFolders, setExpandedFolders] = useState(new Set(['INBOX']));
   const [showErrorModal, setShowErrorModal] = useState(false);
@@ -506,7 +506,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
       </div>
 
       {/* Account Selector */}
-      <div className="p-3 border-b border-mail-border max-h-[30%] overflow-y-auto">
+      <div className="p-3 overflow-y-auto flex-shrink-0" style={{ flex: `0 0 ${sidebarAccountsRatio * 100}%`, minHeight: 60 }}>
         <div className="relative">
           {/* All Inboxes (expanded) */}
           {showUnifiedInbox && (
@@ -673,8 +673,35 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         <BackupIndicator onOpenBackup={onOpenBackup} />
       </div>
 
+      {/* Drag divider between accounts and folders */}
+      <div
+        className="h-1 border-y border-mail-border cursor-row-resize hover:bg-mail-accent/20 active:bg-mail-accent/30 transition-colors flex-shrink-0"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          const sidebar = e.currentTarget.closest('.flex.flex-col');
+          if (!sidebar) return;
+          const sidebarRect = sidebar.getBoundingClientRect();
+          // Get fixed heights (logo + compose + view mode + footer)
+          const fixedHeight = 200; // approximate fixed sections height
+          const availableHeight = sidebarRect.height - fixedHeight;
+
+          const handleMouseMove = (moveEvent) => {
+            const relativeY = moveEvent.clientY - sidebarRect.top - 120; // offset for logo+compose
+            const ratio = relativeY / availableHeight;
+            setSidebarAccountsRatio(ratio);
+          };
+          const handleMouseUp = () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+          };
+          document.addEventListener('mousemove', handleMouseMove);
+          document.addEventListener('mouseup', handleMouseUp);
+        }}
+        title="Drag to resize"
+      />
+
       {/* View Mode Toggle */}
-      <div className="p-3 border-b border-mail-border">
+      <div className="p-3 border-b border-mail-border flex-shrink-0">
         <div className="text-xs text-mail-text-muted uppercase tracking-wide mb-2">
           View Mode
         </div>
@@ -702,7 +729,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
 
       {/* Mailboxes — hidden in unified inbox mode */}
       {unifiedInbox && <div className="flex-1" />}
-      {!unifiedInbox && <div className="flex-1 overflow-y-auto p-3">
+      {!unifiedInbox && <div className="overflow-y-auto p-3 flex-1" style={{ minHeight: 60 }}>
         <div className="text-xs text-mail-text-muted uppercase tracking-wide mb-2">
           Folders
         </div>
