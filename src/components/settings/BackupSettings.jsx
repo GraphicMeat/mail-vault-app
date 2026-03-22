@@ -790,6 +790,21 @@ export default function BackupSettings() {
             </div>
           </div>
         )}
+
+        {/* Back up all now button */}
+        <div className={`${backupGlobalEnabled ? 'pt-3 border-t border-mail-border mt-3' : 'pt-3'}`}>
+          <button
+            onClick={() => {
+              for (const account of visibleAccounts) {
+                backupScheduler.queueBackup(account.id);
+              }
+            }}
+            className="w-full bg-mail-accent/10 text-mail-accent rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-mail-accent/20 transition-colors flex items-center justify-center gap-2"
+          >
+            <HardDrive size={16} />
+            Back up all accounts now
+          </button>
+        </div>
       </div>
 
       {/* Per-Account Cards */}
