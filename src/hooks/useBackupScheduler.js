@@ -2,84 +2,104 @@ import { useEffect, useRef } from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { backupScheduler } from '../services/backupScheduler';
 
+const IDLE_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutes of no user activity
+const IDLE_CHECK_INTERVAL_MS = 30_000;    // Check every 30 seconds
+const MIN_BACKUP_INTERVAL_MS = 60 * 60 * 1000; // Don't re-backup within 1 hour
+
 /**
- * React hook that bridges the backupScheduler singleton to component lifecycle.
- * Watches backupSchedules config and starts/stops schedules accordingly.
- * Supports global backup mode: when backupGlobalEnabled=true, all visible accounts
- * use the global config. Per-account overrides still apply when global is off.
- *
- * Also detects wake from sleep via a heartbeat timer — if the timer fires late
- * (gap > 30s), the machine was asleep. Runs overdue backups immediately.
+ * Idle-based backup scheduler.
+ * Instead of fixed timers, backups trigger when the user is idle for 3+ minutes
+ * and a backup is due (last backup was more than the configured interval ago).
+ * Accounts back up sequentially, one at a time.
  */
 export function useBackupScheduler() {
-  const accounts = useSettingsStore(s => s.accounts);
-  const backupSchedules = useSettingsStore(s => s.backupSchedules);
-  const backupGlobalEnabled = useSettingsStore(s => s.backupGlobalEnabled);
-  const backupGlobalConfig = useSettingsStore(s => s.backupGlobalConfig);
-  const hiddenAccounts = useSettingsStore(s => s.hiddenAccounts);
-  const prevRef = useRef(null);
+  const lastActivityRef = useRef(Date.now());
+  const checkingRef = useRef(false);
 
-  // Schedule management — start/stop based on config changes
+  // Track user activity
   useEffect(() => {
-    const prevKey = prevRef.current;
-    const currentKey = JSON.stringify({ backupSchedules, backupGlobalEnabled, backupGlobalConfig });
-    prevRef.current = currentKey;
+    const markActive = () => { lastActivityRef.current = Date.now(); };
+    const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
+    events.forEach(e => document.addEventListener(e, markActive, { passive: true }));
 
-    if (!accounts?.length) return;
-
-    for (const account of accounts) {
-      if (hiddenAccounts?.[account.id]) continue;
-
-      let shouldRun = false;
-      if (backupGlobalEnabled) {
-        shouldRun = true;
-      } else {
-        const config = backupSchedules[account.id];
-        shouldRun = config?.enabled;
-      }
-
-      if (shouldRun && prevKey !== currentKey) {
-        backupScheduler.startSchedule(account.id);
-      } else if (!shouldRun) {
-        backupScheduler.stopSchedule(account.id);
-      }
-    }
-
-    return () => {
-      backupScheduler.stopAll();
-    };
-  }, [accounts, backupSchedules, backupGlobalEnabled, backupGlobalConfig, hiddenAccounts]);
-
-  // Wake-from-sleep detector — heartbeat every 15s, if gap > 30s we were asleep
-  useEffect(() => {
-    // Start listening to backup-progress events for toast
+    // Init progress event listener
     backupScheduler.initProgressListener();
 
-    let lastTick = Date.now();
+    // Periodic idle check
+    const interval = setInterval(() => {
+      const idleMs = Date.now() - lastActivityRef.current;
+      if (idleMs >= IDLE_THRESHOLD_MS && !checkingRef.current) {
+        checkingRef.current = true;
+        checkAndRunBackups();
+        checkingRef.current = false;
+      }
+    }, IDLE_CHECK_INTERVAL_MS);
 
+    // Also check after wake from sleep (heartbeat gap detection)
+    let lastTick = Date.now();
     const heartbeat = setInterval(() => {
       const now = Date.now();
       const gap = now - lastTick;
       lastTick = now;
-
-      // If more than 30 seconds passed since last tick, machine was likely asleep
       if (gap > 30_000) {
-        console.log(`[backup] Wake detected (${Math.round(gap / 1000)}s gap) — checking overdue backups`);
-        backupScheduler.checkOverdue();
+        console.log(`[backup] Wake detected (${Math.round(gap / 1000)}s gap) — will check on idle`);
+        // Don't run immediately on wake — wait for idle
       }
     }, 15_000);
 
-    // Also check on visibility change (user switches back to app)
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        backupScheduler.checkOverdue();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-
     return () => {
+      events.forEach(e => document.removeEventListener(e, markActive));
+      clearInterval(interval);
       clearInterval(heartbeat);
-      document.removeEventListener('visibilitychange', handleVisibility);
+      backupScheduler.stopAll();
     };
   }, []);
+}
+
+/**
+ * Check all enabled accounts and queue backups for those that are due.
+ * "Due" means: last backup was longer ago than the configured interval,
+ * or never backed up at all.
+ */
+function checkAndRunBackups() {
+  const state = useSettingsStore.getState();
+  const accounts = state.accounts || [];
+  const { backupGlobalEnabled, backupGlobalConfig, backupSchedules, hiddenAccounts, backupState } = state;
+
+  let queued = 0;
+
+  for (const account of accounts) {
+    if (hiddenAccounts?.[account.id]) continue;
+
+    // Check if backup is enabled for this account
+    let config;
+    if (backupGlobalEnabled) {
+      config = { ...backupGlobalConfig, enabled: true };
+    } else {
+      config = backupSchedules[account.id];
+    }
+    if (!config?.enabled) continue;
+
+    // Check if backup is due
+    const accountState = backupState[account.id];
+    const lastBackup = accountState?.lastBackupTime || 0;
+    const intervalMs = getIntervalMs(config);
+    const timeSinceLastBackup = Date.now() - lastBackup;
+
+    if (timeSinceLastBackup >= intervalMs && timeSinceLastBackup >= MIN_BACKUP_INTERVAL_MS) {
+      console.log(`[backup] ${account.email} is due (last: ${lastBackup ? new Date(lastBackup).toLocaleString() : 'never'}, interval: ${Math.round(intervalMs / 3600000)}h)`);
+      backupScheduler.queueBackup(account.id);
+      queued++;
+    }
+  }
+
+  if (queued > 0) {
+    console.log(`[backup] Queued ${queued} account(s) for idle backup`);
+  }
+}
+
+function getIntervalMs(config) {
+  if (config.interval === 'hourly') return (config.hourlyInterval || 1) * 3600_000;
+  if (config.interval === 'weekly') return 7 * 24 * 3600_000;
+  return 24 * 3600_000; // daily default
 }

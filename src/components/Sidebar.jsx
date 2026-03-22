@@ -30,7 +30,8 @@ import {
   Info,
   X,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Loader
 } from 'lucide-react';
 
 const MAILBOX_ICONS = {
@@ -78,6 +79,36 @@ function BackupStatusIcon({ accountId, onClick }) {
       title={isFailed ? 'Backup failed — click to view' : isOverdue ? 'Backup overdue — click to view' : 'Backup healthy — click to view'}
     >
       {icon}
+    </button>
+  );
+}
+
+function BackupIndicator({ onOpenBackup }) {
+  const activeBackup = useSettingsStore(s => s.activeBackup);
+  if (!activeBackup || !activeBackup.active) return null;
+
+  const percent = activeBackup.totalFolders > 0
+    ? Math.round((activeBackup.completedFolders / activeBackup.totalFolders) * 100)
+    : 0;
+
+  return (
+    <button
+      onClick={onOpenBackup}
+      className="w-full mt-1 flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs
+                 text-mail-accent hover:bg-mail-accent/10 transition-colors"
+    >
+      <Loader size={12} className="animate-spin flex-shrink-0" />
+      <div className="flex-1 min-w-0">
+        <div className="truncate">
+          Backing up {activeBackup.accountEmail}
+          {activeBackup.queueLength > 0 && <span className="text-mail-text-muted"> +{activeBackup.queueLength}</span>}
+        </div>
+        {activeBackup.totalFolders > 0 && (
+          <div className="h-0.5 rounded-full bg-mail-border mt-1 overflow-hidden">
+            <div className="h-0.5 rounded-full bg-mail-accent transition-all" style={{ width: `${percent}%` }} />
+          </div>
+        )}
+      </div>
     </button>
   );
 }
@@ -622,6 +653,9 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             </button>
           )}
         </div>
+
+        {/* Backup progress indicator */}
+        <BackupIndicator onOpenBackup={onOpenBackup} />
       </div>
 
       {/* View Mode Toggle */}
