@@ -468,6 +468,7 @@ export default function BackupSettings() {
   const backupCustomPath = useSettingsStore(s => s.backupCustomPath);
   const setBackupCustomPath = useSettingsStore(s => s.setBackupCustomPath);
 
+  const activeBackup = useSettingsStore(s => s.activeBackup);
   const [showExportChoice, setShowExportChoice] = useState(false);
   const [defaultBackupPath, setDefaultBackupPath] = useState(null);
 
@@ -791,18 +792,51 @@ export default function BackupSettings() {
           </div>
         )}
 
-        {/* Back up all now button */}
-        <div className={`${backupGlobalEnabled ? 'pt-3 border-t border-mail-border mt-3' : 'pt-3'}`}>
+        {/* Back up all now button + live progress */}
+        <div className={`${backupGlobalEnabled ? 'pt-3 border-t border-mail-border mt-3' : 'pt-3'} space-y-2`}>
+          {activeBackup && activeBackup.active && (
+            <div className="bg-mail-bg rounded-lg p-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <Loader size={14} className="text-mail-accent animate-spin flex-shrink-0" />
+                <span className="text-xs font-semibold text-mail-text truncate">
+                  Backing up {activeBackup.accountEmail}
+                </span>
+                {activeBackup.queueLength > 0 && (
+                  <span className="text-xs text-mail-text-muted">+{activeBackup.queueLength} queued</span>
+                )}
+              </div>
+              <div className="flex items-center justify-between text-xs text-mail-text-muted">
+                <span>{activeBackup.folder || 'Starting...'} {activeBackup.totalFolders > 0 && `(${activeBackup.completedFolders}/${activeBackup.totalFolders})`}</span>
+                <span>{activeBackup.completedEmails > 0 && `${activeBackup.completedEmails} emails`}</span>
+              </div>
+              {activeBackup.totalFolders > 0 && (
+                <div className="h-1.5 rounded-full bg-mail-border overflow-hidden">
+                  <div className="h-1.5 rounded-full bg-mail-accent transition-all" style={{ width: `${Math.round((activeBackup.completedFolders / activeBackup.totalFolders) * 100)}%` }} />
+                </div>
+              )}
+            </div>
+          )}
           <button
             onClick={() => {
+              console.log('[backup] Back up all clicked, queuing', visibleAccounts.length, 'accounts');
               for (const account of visibleAccounts) {
                 backupScheduler.queueBackup(account.id);
               }
             }}
-            className="w-full bg-mail-accent/10 text-mail-accent rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-mail-accent/20 transition-colors flex items-center justify-center gap-2"
+            disabled={activeBackup?.active}
+            className="w-full bg-mail-accent/10 text-mail-accent rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-mail-accent/20 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
           >
-            <HardDrive size={16} />
-            Back up all accounts now
+            {activeBackup?.active ? (
+              <>
+                <Loader size={16} className="animate-spin" />
+                Backup in progress...
+              </>
+            ) : (
+              <>
+                <HardDrive size={16} />
+                Back up all accounts now
+              </>
+            )}
           </button>
         </div>
       </div>
