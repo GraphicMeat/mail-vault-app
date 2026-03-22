@@ -52,6 +52,9 @@ export function useBackupScheduler() {
 
   // Wake-from-sleep detector — heartbeat every 15s, if gap > 30s we were asleep
   useEffect(() => {
+    // Start listening to backup-progress events for toast
+    backupScheduler.initProgressListener();
+
     let lastTick = Date.now();
 
     const heartbeat = setInterval(() => {

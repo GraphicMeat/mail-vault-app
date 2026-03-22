@@ -66,11 +66,14 @@ class BackupScheduler {
       const config = this._getEffectiveConfig(account.id);
       if (!config?.enabled) continue;
 
-      const accountState = backupState[account.id];
-      if (!accountState?.nextRunTime) continue;
+      if (this._running.get(account.id)) continue;
 
-      if (Date.now() > accountState.nextRunTime && !this._running.get(account.id)) {
-        console.log(`[backup] Overdue backup detected for ${account.email} — running now`);
+      const accountState = backupState[account.id];
+      const nextRun = accountState?.nextRunTime;
+
+      // Overdue: nextRunTime has passed, or no nextRunTime set (never scheduled / app restart)
+      if (!nextRun || Date.now() > nextRun) {
+        console.log(`[backup] Overdue backup detected for ${account.email} (next was ${nextRun ? new Date(nextRun).toLocaleTimeString() : 'unset'}) — queuing now`);
         this._executeBackup(account.id);
         this._scheduleNext(account.id);
       }
@@ -147,6 +150,18 @@ class BackupScheduler {
       this._running.set(accountId, false);
       return;
     }
+
+    // Show active backup in UI
+    useSettingsStore.getState().setActiveBackup({
+      accountId,
+      accountEmail: account.email,
+      folder: 'Starting...',
+      totalFolders: 0,
+      completedFolders: 0,
+      completedEmails: 0,
+      active: true,
+      queueLength: this._queue.length,
+    });
 
     if (!hasValidCredentials(account)) {
       console.warn(`[backup] Skipping ${account.email} — no valid credentials`);
@@ -230,12 +245,45 @@ class BackupScheduler {
       }
     } finally {
       this._running.set(accountId, false);
+      // Clear active backup or show next queued account
+      if (this._queue.length > 0) {
+        const nextId = this._queue[0];
+        const nextAcc = (useMailStore.getState().accounts || []).find(a => a.id === nextId);
+        useSettingsStore.getState().setActiveBackup({
+          accountId: nextId, accountEmail: nextAcc?.email || nextId,
+          folder: 'Queued...', totalFolders: 0, completedFolders: 0, completedEmails: 0,
+          active: true, queueLength: this._queue.length,
+        });
+      } else {
+        useSettingsStore.getState().clearActiveBackup();
+      }
     }
   }
 
   /** Trigger manual backup (for "Back up now" button) */
   async triggerManualBackup(accountId) {
     return this._executeBackup(accountId);
+  }
+
+  /** Start listening to backup-progress Tauri events for live toast updates */
+  async initProgressListener() {
+    try {
+      const { listen } = await import('@tauri-apps/api/event');
+      await listen('backup-progress', (event) => {
+        const p = event.payload;
+        const current = useSettingsStore.getState().activeBackup;
+        if (current && current.accountId === p.account_id) {
+          useSettingsStore.getState().setActiveBackup({
+            ...current,
+            folder: p.folder,
+            totalFolders: p.total_folders,
+            completedFolders: p.completed_folders,
+            completedEmails: p.completed_emails,
+            active: p.active,
+          });
+        }
+      });
+    } catch {}
   }
 }
 

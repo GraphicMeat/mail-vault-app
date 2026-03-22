@@ -18,6 +18,7 @@ import { ShortcutsModal } from './components/ShortcutsModal';
 import { UndoSendToast } from './components/UndoSendToast';
 import { MoveToFolderDropdown } from './components/MoveToFolderDropdown';
 import { MigrationToast } from './components/MigrationToast';
+import { BackupToast } from './components/BackupToast';
 import { useEmailScheduler } from './hooks/useEmailScheduler';
 import { usePipelineCoordinator } from './hooks/usePipelineCoordinator';
 import { useBackupScheduler } from './hooks/useBackupScheduler';
@@ -601,6 +602,7 @@ function App() {
       <SelectionActionBar />
       <BulkSaveProgress />
       <MigrationToast showSettings={showSettings} onOpenSettings={() => { setSettingsInitialTab('migration'); setShowSettings(true); }} />
+      <BackupToast showSettings={showSettings} onOpenBackup={() => { setSettingsInitialTab('backup'); setShowSettings(true); }} />
       <UndoSendToast onUndo={(composeState) => setComposeState(composeState)} />
 
       {/* Move to Folder dropdown (triggered by keyboard shortcut M) */}
