@@ -85,6 +85,10 @@ function BackupStatusIcon({ accountId, onClick }) {
 
 function BackupIndicator({ onOpenBackup }) {
   const activeBackup = useSettingsStore(s => s.activeBackup);
+  // Debug: log when activeBackup changes
+  useEffect(() => {
+    if (activeBackup) console.log('[sidebar] activeBackup:', activeBackup.accountEmail, activeBackup.active, activeBackup.folder);
+  }, [activeBackup]);
   if (!activeBackup || !activeBackup.active) return null;
 
   const percent = activeBackup.totalFolders > 0
@@ -131,6 +135,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const setViewMode = useMailStore(s => s.setViewMode);
   const retryKeychainAccess = useMailStore(s => s.retryKeychainAccess);
   const unreadPerAccount = useSettingsStore(s => s.unreadPerAccount);
+  const activeBackup = useSettingsStore(s => s.activeBackup);
 
   const { theme, toggleTheme } = useThemeStore();
   const { getOrderedAccounts, getDisplayName, accountColors, hiddenAccounts, sidebarCollapsed, toggleSidebarCollapsed, accountOrder } = useSettingsStore();
@@ -411,6 +416,16 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           >
             <RefreshCw size={16} className={`text-mail-text-muted ${loading || loadingMore ? 'animate-spin' : ''}`} />
           </button>
+          {/* Backup in progress indicator (collapsed) */}
+          {activeBackup?.active && (
+            <button
+              onClick={onOpenBackup}
+              className="p-2 hover:bg-mail-accent/10 rounded-lg transition-colors"
+              title={`Backing up ${activeBackup.accountEmail}...`}
+            >
+              <HardDrive size={16} className="text-mail-accent animate-pulse" />
+            </button>
+          )}
           <button
             onClick={onOpenSettings}
             className="p-2 hover:bg-mail-surface-hover rounded-lg transition-colors"
