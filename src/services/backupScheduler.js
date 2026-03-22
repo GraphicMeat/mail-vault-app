@@ -48,14 +48,17 @@ class BackupScheduler {
   }
 
   async _runBackup(accountId) {
+    console.log(`[backup] _runBackup started for ${accountId}`);
     this._running.set(accountId, true);
 
     const accounts = useMailStore.getState().accounts || [];
     let account = accounts.find(a => a.id === accountId);
     if (!account) {
+      console.warn(`[backup] Account ${accountId} not found — skipping`);
       this._running.set(accountId, false);
       return;
     }
+    console.log(`[backup] Running backup for ${account.email}`);
 
     // Show active backup in store (for sidebar indicator)
     useSettingsStore.getState().setActiveBackup({
