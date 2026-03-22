@@ -197,6 +197,11 @@ export const useSettingsStore = create(
       backupHistory: {},
       // Shape: { [accountId]: [{ timestamp: number, emailsBackedUp: number, durationSecs: number, success: bool, error: string|null }] }
 
+      // Active backup progress (for toast display on main view)
+      activeBackup: null,           // { accountId, accountEmail, folder, totalFolders, completedFolders, completedEmails, active }
+      setActiveBackup: (backup) => set({ activeBackup: backup }),
+      clearActiveBackup: () => set({ activeBackup: null }),
+
       // Migration state
       activeMigration: null,        // MigrationProgress object from Tauri events, or null
       migrationHistory: [],         // Array of last 5 completed/failed/cancelled migrations
