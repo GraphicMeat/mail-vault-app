@@ -646,7 +646,9 @@ export const useSettingsStore = create(
     }),
     {
       name: 'mailvault-settings',
+      version: 2,
       storage: createJSONStorage(() => safeStorage),
+      merge: (persisted, current) => ({ ...current, ...(persisted || {}) }),
       // Migrate existing users from old defaults (5GB or 512MB) down to 128MB
       onRehydrateStorage: () => (state) => {
         if (state && state.cacheLimitMB >= 512) {
