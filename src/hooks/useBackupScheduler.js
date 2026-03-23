@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useMailStore } from '../stores/mailStore';
 import { backupScheduler } from '../services/backupScheduler';
 
 const IDLE_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutes of no user activity
@@ -8,15 +9,13 @@ const MIN_BACKUP_INTERVAL_MS = 60 * 60 * 1000; // Don't re-backup within 1 hour
 
 /**
  * Idle-based backup scheduler.
- * Instead of fixed timers, backups trigger when the user is idle for 3+ minutes
- * and a backup is due (last backup was more than the configured interval ago).
- * Accounts back up sequentially, one at a time.
+ * Backups trigger when the user is idle for 3+ minutes and a backup is due.
+ * Also triggers after wake from sleep (with 10s delay for network recovery).
  */
 export function useBackupScheduler() {
   const lastActivityRef = useRef(Date.now());
   const checkingRef = useRef(false);
 
-  // Track user activity
   useEffect(() => {
     const markActive = () => { lastActivityRef.current = Date.now(); };
     const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
@@ -35,22 +34,35 @@ export function useBackupScheduler() {
       }
     }, IDLE_CHECK_INTERVAL_MS);
 
-    // Also check after wake from sleep (heartbeat gap detection)
+    // Wake-from-sleep detector — if heartbeat gap > 30s, machine was asleep
     let lastTick = Date.now();
     const heartbeat = setInterval(() => {
       const now = Date.now();
       const gap = now - lastTick;
       lastTick = now;
       if (gap > 30_000) {
-        console.log(`[backup] Wake detected (${Math.round(gap / 1000)}s gap) — will check on idle`);
-        // Don't run immediately on wake — wait for idle
+        console.log(`[backup] Wake detected (${Math.round(gap / 1000)}s gap) — checking backups in 10s`);
+        // Wait 10s for network to reconnect, then check for due backups
+        setTimeout(() => {
+          console.log('[backup] Post-wake backup check running');
+          checkAndRunBackups();
+        }, 10_000);
       }
     }, 15_000);
+
+    // Also check on visibility change (user switches back to app)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        setTimeout(() => checkAndRunBackups(), 5000);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       events.forEach(e => document.removeEventListener(e, markActive));
       clearInterval(interval);
       clearInterval(heartbeat);
+      document.removeEventListener('visibilitychange', handleVisibility);
       backupScheduler.stopAll();
     };
   }, []);
@@ -58,20 +70,22 @@ export function useBackupScheduler() {
 
 /**
  * Check all enabled accounts and queue backups for those that are due.
- * "Due" means: last backup was longer ago than the configured interval,
- * or never backed up at all.
  */
 function checkAndRunBackups() {
-  const state = useSettingsStore.getState();
-  const accounts = state.accounts || [];
-  const { backupGlobalEnabled, backupGlobalConfig, backupSchedules, hiddenAccounts, backupState } = state;
+  const settings = useSettingsStore.getState();
+  const accounts = useMailStore.getState().accounts || [];
+  const { backupGlobalEnabled, backupGlobalConfig, backupSchedules, hiddenAccounts, backupState } = settings;
+
+  if (accounts.length === 0) {
+    console.log('[backup] No accounts loaded yet — skipping check');
+    return;
+  }
 
   let queued = 0;
 
   for (const account of accounts) {
     if (hiddenAccounts?.[account.id]) continue;
 
-    // Check if backup is enabled for this account
     let config;
     if (backupGlobalEnabled) {
       config = { ...backupGlobalConfig, enabled: true };
@@ -80,7 +94,6 @@ function checkAndRunBackups() {
     }
     if (!config?.enabled) continue;
 
-    // Check if backup is due
     const accountState = backupState[account.id];
     const lastBackup = accountState?.lastBackupTime || 0;
     const intervalMs = getIntervalMs(config);
@@ -94,7 +107,7 @@ function checkAndRunBackups() {
   }
 
   if (queued > 0) {
-    console.log(`[backup] Queued ${queued} account(s) for idle backup`);
+    console.log(`[backup] Queued ${queued} account(s) for backup`);
   }
 }
 
