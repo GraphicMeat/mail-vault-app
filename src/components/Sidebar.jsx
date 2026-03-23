@@ -95,6 +95,16 @@ function BackupStatusIcon({ accountId, onClick }) {
   );
 }
 
+function CollapsedBackupIcon({ onOpenBackup }) {
+  const ab = useSettingsStore(s => s.activeBackup);
+  if (!ab?.active) return null;
+  return (
+    <button onClick={onOpenBackup} className="p-2 hover:bg-mail-accent/10 rounded-lg transition-colors" title={`Backing up ${ab.accountEmail}...`}>
+      <HardDrive size={16} className="text-mail-accent animate-pulse" />
+    </button>
+  );
+}
+
 function BackupIndicator({ onOpenBackup }) {
   const activeBackup = useSettingsStore(s => s.activeBackup);
   if (!activeBackup || !activeBackup.active) return null;
@@ -149,7 +159,6 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const setViewMode = useMailStore(s => s.setViewMode);
   const retryKeychainAccess = useMailStore(s => s.retryKeychainAccess);
   const unreadPerAccount = useSettingsStore(s => s.unreadPerAccount);
-  const activeBackup = useSettingsStore(s => s.activeBackup);
 
   const { theme, toggleTheme } = useThemeStore();
   const { getOrderedAccounts, getDisplayName, accountColors, hiddenAccounts, sidebarCollapsed, toggleSidebarCollapsed, accountOrder, sidebarAccountsRatio, setSidebarAccountsRatio } = useSettingsStore();
@@ -431,15 +440,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             <RefreshCw size={16} className={`text-mail-text-muted ${loading || loadingMore ? 'animate-spin' : ''}`} />
           </button>
           {/* Backup in progress indicator (collapsed) */}
-          {activeBackup?.active && (
-            <button
-              onClick={onOpenBackup}
-              className="p-2 hover:bg-mail-accent/10 rounded-lg transition-colors"
-              title={`Backing up ${activeBackup.accountEmail}...`}
-            >
-              <HardDrive size={16} className="text-mail-accent animate-pulse" />
-            </button>
-          )}
+          <CollapsedBackupIcon onOpenBackup={onOpenBackup} />
           <button
             onClick={onOpenSettings}
             className="p-2 hover:bg-mail-surface-hover rounded-lg transition-colors"
