@@ -85,12 +85,9 @@ function BackupStatusIcon({ accountId, onClick }) {
 
 function BackupIndicator({ onOpenBackup }) {
   const activeBackup = useSettingsStore(s => s.activeBackup);
-  // Debug: log when activeBackup changes
-  useEffect(() => {
-    if (activeBackup) console.log('[sidebar] activeBackup:', activeBackup.accountEmail, activeBackup.active, activeBackup.folder);
-  }, [activeBackup]);
   if (!activeBackup || !activeBackup.active) return null;
 
+  const isDone = activeBackup.done;
   const percent = activeBackup.totalFolders > 0
     ? Math.round((activeBackup.completedFolders / activeBackup.totalFolders) * 100)
     : 0;
@@ -98,16 +95,21 @@ function BackupIndicator({ onOpenBackup }) {
   return (
     <button
       onClick={onOpenBackup}
-      className="w-full mt-1 flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs
-                 text-mail-accent hover:bg-mail-accent/10 transition-colors"
+      className={`w-full mt-1 flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors ${
+        isDone ? 'text-mail-success hover:bg-mail-success/10' : 'text-mail-accent hover:bg-mail-accent/10'
+      }`}
     >
-      <Loader size={12} className="animate-spin flex-shrink-0" />
+      {isDone ? (
+        <CheckCircle2 size={12} className="flex-shrink-0" />
+      ) : (
+        <Loader size={12} className="animate-spin flex-shrink-0" />
+      )}
       <div className="flex-1 min-w-0">
         <div className="truncate">
-          Backing up {activeBackup.accountEmail}
-          {activeBackup.queueLength > 0 && <span className="text-mail-text-muted"> +{activeBackup.queueLength}</span>}
+          {isDone ? 'Backup complete' : `Backing up ${activeBackup.accountEmail}`}
+          {!isDone && activeBackup.queueLength > 0 && <span className="text-mail-text-muted"> +{activeBackup.queueLength}</span>}
         </div>
-        {activeBackup.totalFolders > 0 && (
+        {!isDone && activeBackup.totalFolders > 0 && (
           <div className="h-0.5 rounded-full bg-mail-border mt-1 overflow-hidden">
             <div className="h-0.5 rounded-full bg-mail-accent transition-all" style={{ width: `${percent}%` }} />
           </div>

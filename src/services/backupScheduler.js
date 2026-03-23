@@ -168,7 +168,22 @@ class BackupScheduler {
         active: true, queueLength: this._queue.length,
       });
     } else {
-      useSettingsStore.getState().clearActiveBackup();
+      // Show "Done" briefly before clearing
+      const current = useSettingsStore.getState().activeBackup;
+      if (current) {
+        useSettingsStore.getState().setActiveBackup({
+          ...current,
+          folder: 'Complete',
+          active: true,
+          done: true,
+          queueLength: 0,
+        });
+        setTimeout(() => {
+          useSettingsStore.getState().clearActiveBackup();
+        }, 3000);
+      } else {
+        useSettingsStore.getState().clearActiveBackup();
+      }
     }
   }
 
@@ -180,17 +195,22 @@ class BackupScheduler {
         const p = event.payload;
         const current = useSettingsStore.getState().activeBackup;
         if (current && current.accountId === p.account_id) {
+          // Don't let Rust's active:false clear the UI — _runBackup's finally block handles that
           useSettingsStore.getState().setActiveBackup({
             ...current,
             folder: p.folder,
             totalFolders: p.total_folders,
             completedFolders: p.completed_folders,
             completedEmails: p.completed_emails,
-            active: p.active,
+            // Keep active=true as long as _runBackup is running
+            active: true,
           });
         }
       });
-    } catch {}
+      console.log('[backup] Progress listener initialized');
+    } catch (e) {
+      console.warn('[backup] Failed to init progress listener:', e);
+    }
   }
 }
 
