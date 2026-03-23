@@ -191,18 +191,23 @@ class BackupScheduler {
   async initProgressListener() {
     try {
       const { listen } = await import('@tauri-apps/api/event');
+      let lastUpdate = 0;
+      let pendingPayload = null;
       await listen('backup-progress', (event) => {
-        const p = event.payload;
+        pendingPayload = event.payload;
+        const now = Date.now();
+        // Throttle store updates to once per 2 seconds to avoid flooding re-renders
+        if (now - lastUpdate < 2000) return;
+        lastUpdate = now;
+        const p = pendingPayload;
         const current = useSettingsStore.getState().activeBackup;
         if (current && current.accountId === p.account_id) {
-          // Don't let Rust's active:false clear the UI — _runBackup's finally block handles that
           useSettingsStore.getState().setActiveBackup({
             ...current,
             folder: p.folder,
             totalFolders: p.total_folders,
             completedFolders: p.completed_folders,
             completedEmails: p.completed_emails,
-            // Keep active=true as long as _runBackup is running
             active: true,
           });
         }
