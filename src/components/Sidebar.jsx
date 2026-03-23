@@ -1,8 +1,9 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, memo } from 'react';
 import { version } from '../../package.json';
 import { useMailStore } from '../stores/mailStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useSettingsStore, getAccountInitial, getAccountColor } from '../stores/settingsStore';
+import { useBackupStore } from '../stores/backupStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Inbox,
@@ -66,27 +67,33 @@ function BackupStatusIcon({ accountId, onClick }) {
   if (!schedule?.enabled && !backupGlobalEnabled) return null;
 
   const isFailed = backupState?.lastStatus === 'failed';
+  const isSuccess = backupState?.lastStatus === 'success';
   const lastBackup = backupState?.lastBackupTime || 0;
+  const neverBackedUp = lastBackup === 0;
 
   // Determine if overdue based on configured interval (idle backups don't use nextRunTime)
   const interval = backupGlobalEnabled ? backupGlobalConfig?.interval : schedule?.interval;
   const intervalMs = interval === 'hourly' ? 3600_000 : interval === 'weekly' ? 7 * 24 * 3600_000 : 24 * 3600_000;
   // Give 50% grace period before showing overdue (e.g. daily = 36 hours grace)
   const isOverdue = lastBackup > 0 && (Date.now() - lastBackup) > intervalMs * 1.5;
-  const neverBackedUp = lastBackup === 0;
 
-  const icon = (isFailed || isOverdue || neverBackedUp)
+  // Show green if last backup succeeded — even if slightly overdue, it means the backup
+  // ran fine and the scheduler just hasn't had a chance to run again yet.
+  // Show amber only for failures, never-backed-up, or overdue WITHOUT a success status.
+  const showWarning = isFailed || neverBackedUp || (isOverdue && !isSuccess);
+
+  const icon = showWarning
     ? <AlertCircle size={12} className="text-amber-500 flex-shrink-0" />
     : <CheckCircle2 size={12} className="text-emerald-500 flex-shrink-0" />;
 
   const title = isFailed ? 'Backup failed — click to view'
     : neverBackedUp ? 'Never backed up — click to configure'
-    : isOverdue ? 'Backup overdue — click to view'
+    : isOverdue && !isSuccess ? 'Backup overdue — click to view'
     : 'Backup up to date';
 
   return (
     <button
-      onClick={(e) => { e.stopPropagation(); onClick?.(); }}
+      onClick={(e) => { e.stopPropagation(); onClick?.(accountId); }}
       className="hover:opacity-70 transition-opacity"
       title={title}
     >
@@ -96,7 +103,7 @@ function BackupStatusIcon({ accountId, onClick }) {
 }
 
 function CollapsedBackupIcon({ onOpenBackup }) {
-  const ab = useSettingsStore(s => s.activeBackup);
+  const ab = useBackupStore(s => s.activeBackup);
   if (!ab?.active) return null;
   return (
     <button onClick={onOpenBackup} className="p-2 hover:bg-mail-accent/10 rounded-lg transition-colors" title={`Backing up ${ab.accountEmail}...`}>
@@ -106,7 +113,7 @@ function CollapsedBackupIcon({ onOpenBackup }) {
 }
 
 function BackupIndicator({ onOpenBackup }) {
-  const activeBackup = useSettingsStore(s => s.activeBackup);
+  const activeBackup = useBackupStore(s => s.activeBackup);
   if (!activeBackup || !activeBackup.active) return null;
 
   const isDone = activeBackup.done;
@@ -141,6 +148,111 @@ function BackupIndicator({ onOpenBackup }) {
   );
 }
 
+/** Collapsed sidebar: one button per account — memoized so backup badge changes only rerender this row */
+const CollapsedAccountButton = memo(function CollapsedAccountButton({
+  account, isActive, color, initial, unifiedInbox, connectionStatus, connectionError,
+  unreadCount, onActivate, onOpenBackup
+}) {
+  return (
+    <button
+      className={`relative p-1.5 rounded-lg transition-all
+                 ${isActive && !unifiedInbox
+                   ? 'ring-2 ring-offset-1 ring-offset-mail-surface'
+                   : 'hover:bg-mail-surface-hover'}`}
+      style={isActive && !unifiedInbox ? { '--tw-ring-color': color } : undefined}
+      onClick={onActivate}
+      title={account.name || account.email}
+    >
+      <div
+        className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold select-none"
+        style={{ backgroundColor: color }}
+      >
+        {initial}
+      </div>
+      <div className="absolute -top-0.5 -right-0.5">
+        <BackupStatusIcon accountId={account.id} onClick={onOpenBackup} />
+      </div>
+      {unreadCount > 0 && (
+        <div className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 flex items-center justify-center">
+          <span className="text-[9px] font-bold text-white leading-none">
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </span>
+        </div>
+      )}
+      {isActive && !unifiedInbox && (
+        <div
+          className={`absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border-2 border-mail-surface
+                     ${connectionStatus === 'connected' ? 'bg-mail-success' :
+                       connectionStatus === 'error' ? 'bg-mail-danger' : 'bg-mail-warning'}`}
+          title={
+            connectionStatus === 'connected' ? 'Connected' :
+            connectionStatus === 'error' ? (connectionError || 'Connection error — retrying...') :
+            'Reconnecting...'
+          }
+        />
+      )}
+    </button>
+  );
+});
+
+/** Expanded sidebar: one row per account — memoized so backup badge changes only rerender this row */
+const ExpandedAccountRow = memo(function ExpandedAccountRow({
+  account, isActive, color, initial, unifiedInbox, connectionStatus, connectionError,
+  unreadCount, onActivate, onOpenBackup
+}) {
+  return (
+    <div
+      className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all
+                 ${isActive && !unifiedInbox
+                   ? 'bg-mail-accent/10 text-mail-accent'
+                   : 'hover:bg-mail-surface-hover text-mail-text'}`}
+      onClick={onActivate}
+    >
+      <div className="relative flex-shrink-0">
+        <div
+          className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold select-none"
+          style={{ backgroundColor: color }}
+        >
+          {initial}
+        </div>
+        {unreadCount > 0 && (
+          <div className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 flex items-center justify-center">
+            <span className="text-[10px] font-bold text-white leading-none">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          </div>
+        )}
+        {isActive && !unifiedInbox && (
+          <div
+            className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-mail-surface
+                       ${connectionStatus === 'connected' ? 'bg-mail-success' :
+                         connectionStatus === 'error' ? 'bg-mail-danger' : 'bg-mail-warning'}`}
+            title={connectionStatus === 'connected' ? 'Connected' :
+                   connectionStatus === 'error' ? `Offline: ${connectionError}` : 'Connecting...'}
+          />
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        {account.name ? (
+          <>
+            <div className="text-sm font-medium truncate">
+              {account.name}
+            </div>
+            <div className="text-xs text-mail-text-muted truncate">
+              {account.email}
+            </div>
+          </>
+        ) : (
+          <div className="text-sm font-medium truncate">
+            {account.email}
+          </div>
+        )}
+      </div>
+      <BackupStatusIcon accountId={account.id} onClick={onOpenBackup} />
+    </div>
+  );
+});
+
 export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup, onOpenAccounts }) {
   const accounts = useMailStore(s => s.accounts);
   const activeAccountId = useMailStore(s => s.activeAccountId);
@@ -161,7 +273,15 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const unreadPerAccount = useSettingsStore(s => s.unreadPerAccount);
 
   const { theme, toggleTheme } = useThemeStore();
-  const { getOrderedAccounts, getDisplayName, accountColors, hiddenAccounts, sidebarCollapsed, toggleSidebarCollapsed, accountOrder, sidebarAccountsRatio, setSidebarAccountsRatio } = useSettingsStore();
+  const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
+  const getDisplayName = useSettingsStore(s => s.getDisplayName);
+  const accountColors = useSettingsStore(s => s.accountColors);
+  const hiddenAccounts = useSettingsStore(s => s.hiddenAccounts);
+  const sidebarCollapsed = useSettingsStore(s => s.sidebarCollapsed);
+  const toggleSidebarCollapsed = useSettingsStore(s => s.toggleSidebarCollapsed);
+  const accountOrder = useSettingsStore(s => s.accountOrder);
+  const sidebarAccountsRatio = useSettingsStore(s => s.sidebarAccountsRatio);
+  const setSidebarAccountsRatio = useSettingsStore(s => s.setSidebarAccountsRatio);
 
   const [expandedFolders, setExpandedFolders] = useState(new Set(['INBOX']));
   const [showErrorModal, setShowErrorModal] = useState(false);
@@ -310,54 +430,24 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
 
         {/* Account icons */}
         <div className="w-full py-2 border-b border-mail-border flex flex-col items-center gap-1">
-          {orderedAccounts.map(account => {
-            const color = getAccountColor(accountColors, account);
-            const initial = getAccountInitial(account, getDisplayName(account.id));
-            return (
-              <button
-                key={account.id}
-                className={`relative p-1.5 rounded-lg transition-all
-                           ${account.id === activeAccountId && !unifiedInbox
-                             ? 'ring-2 ring-offset-1 ring-offset-mail-surface'
-                             : 'hover:bg-mail-surface-hover'}`}
-                style={account.id === activeAccountId && !unifiedInbox ? { '--tw-ring-color': color } : undefined}
-                onClick={() => {
-                  const lastMailbox = useSettingsStore.getState().getLastMailbox(account.id);
-                  activateAccount(account.id, lastMailbox || 'INBOX');
-                }}
-                title={account.name || account.email}
-              >
-                <div
-                  className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold select-none"
-                  style={{ backgroundColor: color }}
-                >
-                  {initial}
-                </div>
-                <div className="absolute -top-0.5 -right-0.5">
-                  <BackupStatusIcon accountId={account.id} onClick={onOpenBackup} />
-                </div>
-                {(unreadPerAccount[account.id] || 0) > 0 && (
-                  <div className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 flex items-center justify-center">
-                    <span className="text-[9px] font-bold text-white leading-none">
-                      {unreadPerAccount[account.id] > 99 ? '99+' : unreadPerAccount[account.id]}
-                    </span>
-                  </div>
-                )}
-                {account.id === activeAccountId && !unifiedInbox && (
-                  <div
-                    className={`absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border-2 border-mail-surface
-                               ${connectionStatus === 'connected' ? 'bg-mail-success' :
-                                 connectionStatus === 'error' ? 'bg-mail-danger' : 'bg-mail-warning'}`}
-                    title={
-                      connectionStatus === 'connected' ? 'Connected' :
-                      connectionStatus === 'error' ? (connectionError || 'Connection error — retrying...') :
-                      'Reconnecting...'
-                    }
-                  />
-                )}
-              </button>
-            );
-          })}
+          {orderedAccounts.map(account => (
+            <CollapsedAccountButton
+              key={account.id}
+              account={account}
+              isActive={account.id === activeAccountId}
+              color={getAccountColor(accountColors, account)}
+              initial={getAccountInitial(account, getDisplayName(account.id))}
+              unifiedInbox={unifiedInbox}
+              connectionStatus={connectionStatus}
+              connectionError={connectionError}
+              unreadCount={unreadPerAccount[account.id] || 0}
+              onActivate={() => {
+                const lastMailbox = useSettingsStore.getState().getLastMailbox(account.id);
+                activateAccount(account.id, lastMailbox || 'INBOX');
+              }}
+              onOpenBackup={onOpenBackup}
+            />
+          ))}
           {orderedAccounts.length === 0 && (
             <button
               data-testid="add-account-btn"
@@ -545,58 +635,21 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             const initial = getAccountInitial(account, getDisplayName(account.id));
             return (
             <React.Fragment key={account.id}>
-              <div
-                className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all
-                           ${account.id === activeAccountId && !unifiedInbox
-                             ? 'bg-mail-accent/10 text-mail-accent'
-                             : 'hover:bg-mail-surface-hover text-mail-text'}`}
-                onClick={() => {
+              <ExpandedAccountRow
+                account={account}
+                isActive={account.id === activeAccountId}
+                color={color}
+                initial={initial}
+                unifiedInbox={unifiedInbox}
+                connectionStatus={connectionStatus}
+                connectionError={connectionError}
+                unreadCount={unreadPerAccount[account.id] || 0}
+                onActivate={() => {
                   const lastMailbox = useSettingsStore.getState().getLastMailbox(account.id);
                   activateAccount(account.id, lastMailbox || 'INBOX');
                 }}
-              >
-                <div className="relative flex-shrink-0">
-                  <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold select-none"
-                    style={{ backgroundColor: color }}
-                  >
-                    {initial}
-                  </div>
-                  {(unreadPerAccount[account.id] || 0) > 0 && (
-                    <div className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 flex items-center justify-center">
-                      <span className="text-[10px] font-bold text-white leading-none">
-                        {unreadPerAccount[account.id] > 99 ? '99+' : unreadPerAccount[account.id]}
-                      </span>
-                    </div>
-                  )}
-                  {account.id === activeAccountId && !unifiedInbox && (
-                    <div
-                      className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-mail-surface
-                                 ${connectionStatus === 'connected' ? 'bg-mail-success' :
-                                   connectionStatus === 'error' ? 'bg-mail-danger' : 'bg-mail-warning'}`}
-                      title={connectionStatus === 'connected' ? 'Connected' :
-                             connectionStatus === 'error' ? `Offline: ${connectionError}` : 'Connecting...'}
-                    />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  {account.name ? (
-                    <>
-                      <div className="text-sm font-medium truncate">
-                        {account.name}
-                      </div>
-                      <div className="text-xs text-mail-text-muted truncate">
-                        {account.email}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="text-sm font-medium truncate">
-                      {account.email}
-                    </div>
-                  )}
-                </div>
-                <BackupStatusIcon accountId={account.id} onClick={onOpenBackup} />
-              </div>
+                onOpenBackup={onOpenBackup}
+              />
 
               {/* Inline error banner — shown directly below the account that has the error */}
               {account.id === activeAccountId && showError && connectionStatus === 'error' && (

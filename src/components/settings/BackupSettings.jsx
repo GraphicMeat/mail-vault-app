@@ -1,7 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSettingsStore, getAccountInitial, getAccountColor } from '../../stores/settingsStore';
+import { useBackupStore } from '../../stores/backupStore';
 import { useMailStore } from '../../stores/mailStore';
 import { backupScheduler } from '../../services/backupScheduler';
+import * as api from '../../services/api';
+import { resolveServerAccount } from '../../services/authUtils';
 import { ToggleSwitch } from './ToggleSwitch';
 import { motion, AnimatePresence } from 'framer-motion';
 import { safeStorage } from '../../stores/safeStorage';
@@ -16,6 +19,8 @@ import {
   Upload,
   HardDrive,
   Wrench,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 
 function formatRelativeTime(timestamp) {
@@ -64,7 +69,133 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
 
 const selectClass = 'w-full px-4 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent';
 
-function AccountCard({ account, isPaidUser, globalEnabled }) {
+// ── Folder verification tree ──────────────────────────────────────────────────
+
+function CountCell({ count, serverCount }) {
+  if (serverCount === 0) return <span className="text-mail-text-muted">--</span>;
+  const complete = count >= serverCount;
+  return (
+    <span className={complete ? 'text-mail-success' : 'text-mail-warning'}>
+      {count}
+    </span>
+  );
+}
+
+function FolderRow({ folder, depth = 0, hasExternal, defaultExpanded = false }) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const hasChildren = folder.children?.length > 0;
+  const isContainer = folder.server_count === 0 && hasChildren; // noselect folder
+
+  return (
+    <>
+      <tr className="text-xs border-b border-mail-border hover:bg-mail-surface-hover/50">
+        <td className="py-1 pr-2">
+          <div className="flex items-center" style={{ paddingLeft: depth * 16 }}>
+            {hasChildren ? (
+              <button onClick={() => setExpanded(!expanded)} className="p-0.5 -ml-1 mr-0.5 text-mail-text-muted hover:text-mail-text">
+                {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+              </button>
+            ) : (
+              <span className="w-4" />
+            )}
+            <span className={`truncate ${isContainer ? 'text-mail-text-muted italic' : 'text-mail-text'}`}>
+              {folder.name || folder.path}
+            </span>
+          </div>
+        </td>
+        <td className="py-1 px-2 text-right tabular-nums">
+          {isContainer ? <span className="text-mail-text-muted">--</span> : <span className="text-mail-text">{folder.server_count}</span>}
+        </td>
+        <td className="py-1 px-2 text-right tabular-nums">
+          {isContainer ? <span className="text-mail-text-muted">--</span> : <CountCell count={folder.app_count} serverCount={folder.server_count} />}
+        </td>
+        {hasExternal && (
+          <td className="py-1 px-2 text-right tabular-nums">
+            {isContainer ? <span className="text-mail-text-muted">--</span> : <CountCell count={folder.external_count} serverCount={folder.server_count} />}
+          </td>
+        )}
+      </tr>
+      {expanded && hasChildren && folder.children.map(child => (
+        <FolderRow key={child.path} folder={child} depth={depth + 1} hasExternal={hasExternal} />
+      ))}
+    </>
+  );
+}
+
+function BackupVerificationTree({ data, onHide }) {
+  const { total_server, total_app, total_external, external_available, folders } = data;
+  const hasExternal = external_available || total_external > 0;
+  const appComplete = total_app >= total_server && total_server > 0;
+  const extComplete = hasExternal && total_external >= total_server && total_server > 0;
+  const appPct = total_server > 0 ? Math.round((total_app / total_server) * 100) : 0;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-mail-text">Backup Verification</span>
+        <button onClick={onHide} className="text-xs text-mail-text-muted hover:text-mail-text">Hide</button>
+      </div>
+
+      {/* Summary chips */}
+      <div className="flex flex-wrap gap-1.5">
+        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
+          appComplete ? 'bg-emerald-500/10 text-emerald-600' : 'bg-amber-500/10 text-amber-600'
+        }`}>
+          {appComplete ? <CheckCircle2 size={10} /> : <AlertCircle size={10} />}
+          App: {appPct}%
+        </span>
+        {hasExternal ? (
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
+            extComplete ? 'bg-emerald-500/10 text-emerald-600' : 'bg-amber-500/10 text-amber-600'
+          }`}>
+            {extComplete ? <CheckCircle2 size={10} /> : <AlertCircle size={10} />}
+            External: {total_server > 0 ? Math.round((total_external / total_server) * 100) : 0}%
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-mail-surface text-mail-text-muted">
+            External: not configured
+          </span>
+        )}
+      </div>
+
+      {/* Progress bar */}
+      <div className="h-1.5 rounded-full bg-mail-border overflow-hidden">
+        <div
+          className={`h-1.5 rounded-full transition-all ${appComplete ? 'bg-mail-success' : 'bg-mail-warning'}`}
+          style={{ width: `${Math.min(100, appPct)}%` }}
+        />
+      </div>
+
+      {/* Folder tree table */}
+      {folders.length > 0 && (
+        <div className="max-h-48 overflow-y-auto rounded-lg border border-mail-border bg-mail-bg">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 bg-mail-surface">
+              <tr className="border-b border-mail-border text-mail-text-muted">
+                <th className="py-1 pr-2 text-left font-medium">Folder</th>
+                <th className="py-1 px-2 text-right font-medium w-14">Server</th>
+                <th className="py-1 px-2 text-right font-medium w-14">App</th>
+                {hasExternal && <th className="py-1 px-2 text-right font-medium w-14">Ext.</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {folders.map(f => (
+                <FolderRow key={f.path} folder={f} hasExternal={hasExternal} defaultExpanded={folders.length <= 8} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Totals */}
+      <div className="flex items-center justify-between text-xs text-mail-text-muted pt-1">
+        <span>Total: {total_app}/{total_server} in app{hasExternal && `, ${total_external}/${total_server} external`}</span>
+      </div>
+    </div>
+  );
+}
+
+const AccountCard = React.forwardRef(function AccountCard({ account, isPaidUser, globalEnabled, highlighted }, ref) {
   const backupSchedules = useSettingsStore(s => s.backupSchedules);
   const backupState = useSettingsStore(s => s.backupState);
   const backupHistory = useSettingsStore(s => s.backupHistory);
@@ -77,7 +208,8 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
   const history = (backupHistory[account.id] || []).slice(0, 5);
 
   const [runningManual, setRunningManual] = useState(false);
-  const [manualDone, setManualDone] = useState(false);
+  const [manualStatus, setManualStatus] = useState('idle'); // idle | success | error
+  const [manualError, setManualError] = useState(null);
   const [storageSize, setStorageSize] = useState(null);
   const [accountFolders, setAccountFolders] = useState([]);
   const [showFolderPicker, setShowFolderPicker] = useState(false);
@@ -85,6 +217,7 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
   const [archiveProgress, setArchiveProgress] = useState(null);
   const [backupStatusData, setBackupStatusData] = useState(null); // { folders, total_server, total_local }
   const [loadingStatus, setLoadingStatus] = useState(false);
+  const [backupStatusError, setBackupStatusError] = useState(null);
 
   // Load storage stats and folder list on mount
   useEffect(() => {
@@ -142,13 +275,21 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
   const handleManualBackup = useCallback(async () => {
     if (runningManual) return;
     setRunningManual(true);
-    setManualDone(false);
+    setManualStatus('idle');
+    setManualError(null);
     try {
-      await backupScheduler.triggerManualBackup(account.id);
-      setManualDone(true);
-      setTimeout(() => setManualDone(false), 2000);
+      const result = await backupScheduler.triggerManualBackup(account.id);
+      if (result.status === 'success') {
+        setManualStatus('success');
+        setTimeout(() => setManualStatus('idle'), 2000);
+      } else {
+        setManualStatus('error');
+        setManualError(result.message || 'Backup failed');
+      }
     } catch (err) {
       console.error('Manual backup failed:', err);
+      setManualStatus('error');
+      setManualError(err.message || 'Backup failed');
     } finally {
       setRunningManual(false);
     }
@@ -157,6 +298,48 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
   const avatarColor = getAccountColor(accountColors, account);
   const avatarInitial = getAccountInitial(account);
   const backedUpPercent = state.emailsBackedUp ? Math.min(100, state.emailsBackedUp) : 0;
+
+  const verificationSection = (
+    <div className="pt-3 border-t border-mail-border">
+      {backupStatusData ? (
+        <BackupVerificationTree data={backupStatusData} onHide={() => setBackupStatusData(null)} />
+      ) : (
+        <div className="space-y-2">
+          <button
+            onClick={async () => {
+              setLoadingStatus(true);
+              setBackupStatusError(null);
+              try {
+                const customPath = useSettingsStore.getState().backupCustomPath || null;
+                const resolved = await resolveServerAccount(account.id, account);
+                if (!resolved.ok) throw new Error(resolved.message);
+                const result = await api.backupStatus(account.id, JSON.stringify(resolved.account), customPath);
+                setBackupStatusData(result);
+                if (!result?.folders?.length && !result?.total_server && !result?.total_app && !result?.total_external) {
+                  setBackupStatusError('No backup coverage data is available for this account yet.');
+                }
+              } catch (e) {
+                console.error('Backup status check failed:', e);
+                setBackupStatusError(e?.message || 'Could not verify backup coverage for this account.');
+              } finally {
+                setLoadingStatus(false);
+              }
+            }}
+            disabled={loadingStatus}
+            className="text-xs text-mail-accent hover:text-mail-accent-hover flex items-center gap-1"
+          >
+            {loadingStatus ? <Loader size={10} className="animate-spin" /> : <Shield size={10} />}
+            {loadingStatus ? 'Checking...' : 'Verify backup coverage'}
+          </button>
+          {backupStatusError && (
+            <div className="text-xs text-mail-warning">
+              {backupStatusError}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 
   const scheduleContent = (
     <div className="space-y-4">
@@ -248,69 +431,8 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
         </div>
       </div>
 
-      {/* Backup coverage */}
-      <div className="pt-3 border-t border-mail-border">
-        {backupStatusData ? (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-semibold text-mail-text">Backup Coverage</span>
-              <span className={`font-semibold ${backupStatusData.total_local >= backupStatusData.total_server ? 'text-mail-success' : 'text-mail-warning'}`}>
-                {backupStatusData.total_local}/{backupStatusData.total_server} emails
-                {backupStatusData.total_server > 0 && ` (${Math.round((backupStatusData.total_local / backupStatusData.total_server) * 100)}%)`}
-              </span>
-            </div>
-            {backupStatusData.total_local >= backupStatusData.total_server && backupStatusData.total_server > 0 && (
-              <div className="flex items-center gap-1 text-xs text-mail-success">
-                <CheckCircle2 size={12} />
-                All emails backed up
-              </div>
-            )}
-            <div className="h-1.5 rounded-full bg-mail-border overflow-hidden">
-              <div
-                className={`h-1.5 rounded-full transition-all ${backupStatusData.total_local >= backupStatusData.total_server ? 'bg-mail-success' : 'bg-mail-warning'}`}
-                style={{ width: `${backupStatusData.total_server > 0 ? Math.min(100, Math.round((backupStatusData.total_local / backupStatusData.total_server) * 100)) : 0}%` }}
-              />
-            </div>
-            {backupStatusData.folders.length > 0 && (
-              <div className="max-h-28 overflow-y-auto space-y-0.5">
-                {backupStatusData.folders.map(f => (
-                  <div key={f.folder} className="flex items-center justify-between text-xs py-0.5">
-                    <span className="text-mail-text-muted truncate flex-1">{f.folder}</span>
-                    <span className={`ml-2 ${f.local_count >= f.server_count ? 'text-mail-success' : 'text-mail-warning'}`}>
-                      {f.local_count}/{f.server_count}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-            <button
-              onClick={() => setBackupStatusData(null)}
-              className="text-xs text-mail-text-muted hover:text-mail-text"
-            >
-              Hide
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={async () => {
-              setLoadingStatus(true);
-              try {
-                const result = await api.backupStatus(account.id, JSON.stringify(account));
-                setBackupStatusData(result);
-              } catch (e) {
-                console.error('Backup status check failed:', e);
-              } finally {
-                setLoadingStatus(false);
-              }
-            }}
-            disabled={loadingStatus}
-            className="text-xs text-mail-accent hover:text-mail-accent-hover flex items-center gap-1"
-          >
-            {loadingStatus ? <Loader size={10} className="animate-spin" /> : <Shield size={10} />}
-            {loadingStatus ? 'Checking...' : 'Check backup coverage'}
-          </button>
-        )}
-      </div>
+      {/* Backup verification */}
+      {verificationSection}
 
       {/* Error display */}
       {state.lastStatus === 'failed' && state.lastError && (
@@ -388,18 +510,26 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
               <Loader size={14} className="animate-spin" />
               {backupProgress ? `Backing up ${backupProgress.folder || ''}...` : 'Backing up...'}
             </>
-          ) : manualDone ? (
+          ) : manualStatus === 'success' ? (
             <span className="text-emerald-500">Done!</span>
           ) : (
             'Back up now'
           )}
         </button>
+        {manualStatus === 'error' && manualError && (
+          <div className="text-xs text-mail-warning">{manualError}</div>
+        )}
       </div>
     </div>
   );
 
   return (
-    <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+    <div
+      ref={ref}
+      className={`bg-mail-surface border rounded-xl p-5 transition-all duration-500 ${
+        highlighted ? 'border-mail-accent ring-2 ring-mail-accent/30' : 'border-mail-border'
+      }`}
+    >
       {/* Account Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
@@ -472,6 +602,7 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
               <div className="text-sm font-semibold text-mail-text">{formatSize(storageSize)}</div>
             </div>
           </div>
+          {verificationSection}
           {/* Manual backup button + progress */}
           <div className="pt-2 border-t border-mail-border space-y-2">
             {runningManual && backupProgress && (
@@ -490,9 +621,12 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
               disabled={runningManual}
               className="text-xs px-3 py-1.5 rounded-lg bg-mail-accent/10 text-mail-accent hover:bg-mail-accent/20 transition-colors flex items-center gap-1.5 font-medium"
             >
-              {runningManual ? <Loader size={12} className="animate-spin" /> : manualDone ? <CheckCircle2 size={12} /> : <HardDrive size={12} />}
-              {runningManual ? `Backing up ${backupProgress?.folder || ''}...` : manualDone ? 'Done!' : 'Back up now'}
+              {runningManual ? <Loader size={12} className="animate-spin" /> : manualStatus === 'success' ? <CheckCircle2 size={12} /> : <HardDrive size={12} />}
+              {runningManual ? `Backing up ${backupProgress?.folder || ''}...` : manualStatus === 'success' ? 'Done!' : 'Back up now'}
             </button>
+            {manualStatus === 'error' && manualError && (
+              <div className="text-xs text-mail-warning">{manualError}</div>
+            )}
           </div>
         </div>
       ) : (
@@ -500,9 +634,27 @@ function AccountCard({ account, isPaidUser, globalEnabled }) {
       )}
     </div>
   );
-}
+});
 
-export default function BackupSettings() {
+export default function BackupSettings({ initialAccountId = null }) {
+  const cardRefs = useRef({});
+  const [highlightedId, setHighlightedId] = useState(null);
+
+  // Scroll to and highlight the target account card
+  useEffect(() => {
+    if (!initialAccountId) return;
+    // Small delay to let the cards render
+    const timer = setTimeout(() => {
+      const el = cardRefs.current[initialAccountId];
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setHighlightedId(initialAccountId);
+        // Clear highlight after animation
+        setTimeout(() => setHighlightedId(null), 2000);
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [initialAccountId]);
   const accounts = useMailStore(s => s.accounts);
   const hiddenAccounts = useSettingsStore(s => s.hiddenAccounts);
   const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
@@ -524,7 +676,7 @@ export default function BackupSettings() {
   const backupCustomPath = useSettingsStore(s => s.backupCustomPath);
   const setBackupCustomPath = useSettingsStore(s => s.setBackupCustomPath);
 
-  const activeBackup = useSettingsStore(s => s.activeBackup);
+  const activeBackup = useBackupStore(s => s.activeBackup);
   const [showExportChoice, setShowExportChoice] = useState(false);
   const [defaultBackupPath, setDefaultBackupPath] = useState(null);
 
@@ -876,7 +1028,7 @@ export default function BackupSettings() {
             onClick={() => {
               console.log('[backup] Back up all clicked, queuing', visibleAccounts.length, 'accounts');
               for (const account of visibleAccounts) {
-                backupScheduler.queueBackup(account.id);
+                backupScheduler.triggerManualBackup(account.id);
               }
             }}
             disabled={activeBackup?.active}
@@ -900,7 +1052,14 @@ export default function BackupSettings() {
       {/* Per-Account Cards */}
       {visibleAccounts.length > 0 ? (
         visibleAccounts.map(account => (
-          <AccountCard key={account.id} account={account} isPaidUser={isPaidUser} globalEnabled={backupGlobalEnabled} />
+          <AccountCard
+            key={account.id}
+            ref={el => { cardRefs.current[account.id] = el; }}
+            account={account}
+            isPaidUser={isPaidUser}
+            globalEnabled={backupGlobalEnabled}
+            highlighted={highlightedId === account.id}
+          />
         ))
       ) : (
         <div className="bg-mail-surface border border-mail-border rounded-xl p-5 text-center">

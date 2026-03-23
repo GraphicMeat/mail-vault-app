@@ -29,9 +29,17 @@ pub struct BackupProgress {
 
 #[derive(Serialize, Clone)]
 pub struct FolderBackupStatus {
-    pub folder: String,
+    pub path: String,
+    pub name: String,
     pub server_count: usize,
-    pub local_count: usize,
+    pub app_count: usize,
+    pub external_count: usize,
+    pub children: Vec<FolderBackupStatus>,
+    // Legacy aliases for frontend compat
+    #[serde(rename = "folder")]
+    pub folder_alias: String,
+    #[serde(rename = "local_count")]
+    pub local_count_alias: usize,
 }
 
 #[derive(Serialize)]
@@ -39,6 +47,63 @@ pub struct AccountBackupStatus {
     pub folders: Vec<FolderBackupStatus>,
     pub total_server: usize,
     pub total_local: usize,
+    pub total_app: usize,
+    pub total_external: usize,
+    pub external_available: bool,
+}
+
+/// Scan UIDs from an external backup directory.
+fn scan_external_uids(
+    backup_path: &str,
+    email: &str,
+    mailbox: &str,
+) -> HashSet<u32> {
+    let cur_dir = std::path::PathBuf::from(backup_path)
+        .join(email)
+        .join(mailbox)
+        .join("cur");
+    if !cur_dir.exists() {
+        return HashSet::new();
+    }
+    let mut uids = HashSet::new();
+    if let Ok(entries) = std::fs::read_dir(&cur_dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            let uid_str = name.split(|c: char| c == ':' || c == '.' || c == '_').next().unwrap_or("");
+            if let Ok(uid) = uid_str.parse::<u32>() {
+                uids.insert(uid);
+            }
+        }
+    }
+    uids
+}
+
+/// Build a FolderBackupStatus for one folder.
+fn build_folder_status(
+    path: &str,
+    name: &str,
+    server_count: usize,
+    app_handle: &tauri::AppHandle,
+    account_id: &str,
+    backup_path: Option<&str>,
+    email: &str,
+    children: Vec<FolderBackupStatus>,
+) -> FolderBackupStatus {
+    let app_count = scan_local_uids(app_handle, account_id, path).unwrap_or_default().len();
+    let external_count = match backup_path {
+        Some(bp) => scan_external_uids(bp, email, path).len(),
+        None => 0,
+    };
+    FolderBackupStatus {
+        path: path.to_string(),
+        name: name.to_string(),
+        server_count,
+        app_count,
+        external_count,
+        children,
+        folder_alias: path.to_string(),
+        local_count_alias: app_count,
+    }
 }
 
 /// Compare server email counts vs local backup counts for each folder.
@@ -46,58 +111,181 @@ pub async fn get_backup_status(
     app_handle: tauri::AppHandle,
     account_id: String,
     account_json: String,
+    backup_path: Option<String>,
 ) -> Result<AccountBackupStatus, String> {
     let account: ImapConfig = serde_json::from_str(&account_json)
         .map_err(|e| format!("Bad account JSON: {}", e))?;
 
     let is_graph = account.oauth2_transport.as_deref() == Some("graph");
     if is_graph {
-        // Graph accounts: can't easily get server counts without pagination — return local-only
-        return Ok(AccountBackupStatus { folders: vec![], total_server: 0, total_local: 0 });
+        return get_graph_backup_status(app_handle, account_id, account_json, backup_path).await;
     }
 
-    let pool = app_handle.state::<crate::imap::pool::ImapPool>();
+    get_imap_backup_status(app_handle, account_id, account, backup_path).await
+}
+
+/// IMAP backup status with folder hierarchy.
+async fn get_imap_backup_status(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    account: ImapConfig,
+    backup_path: Option<String>,
+) -> Result<AccountBackupStatus, String> {
+    let pool = app_handle.state::<ImapPool>();
 
     let mailboxes = {
         let mut guard = pool.get_background(&account).await?;
-        let result = crate::imap::list_mailboxes(&mut guard.session).await?;
+        let result = imap::list_mailboxes(&mut guard.session).await?;
         pool.return_background(&account, guard).await;
         result
     };
 
-    let selectable: Vec<_> = flatten_mailboxes(&mailboxes)
-        .into_iter()
-        .filter(|m| !m.noselect)
-        .collect();
+    let mut total_server = 0usize;
+    let mut total_app = 0usize;
+    let mut total_external = 0usize;
+
+    // Build tree recursively, getting server counts via IMAP
+    async fn build_tree(
+        pool: &ImapPool,
+        account: &ImapConfig,
+        app_handle: &tauri::AppHandle,
+        account_id: &str,
+        mailboxes: &[imap::MailboxInfo],
+        backup_path: Option<&str>,
+        total_server: &mut usize,
+        total_app: &mut usize,
+        total_external: &mut usize,
+    ) -> Vec<FolderBackupStatus> {
+        let mut result = Vec::new();
+        for mbox in mailboxes {
+            // Recurse into children first
+            let children = Box::pin(build_tree(
+                pool, account, app_handle, account_id,
+                &mbox.children, backup_path,
+                total_server, total_app, total_external,
+            )).await;
+
+            if mbox.noselect {
+                // Non-selectable folder: include only if it has children with data
+                if !children.is_empty() {
+                    result.push(FolderBackupStatus {
+                        path: mbox.path.clone(),
+                        name: mbox.name.clone(),
+                        server_count: 0,
+                        app_count: 0,
+                        external_count: 0,
+                        children,
+                        folder_alias: mbox.path.clone(),
+                        local_count_alias: 0,
+                    });
+                }
+                continue;
+            }
+
+            let server_uids = {
+                let mut guard = pool.get_background(account).await.unwrap_or_else(|_| panic!("pool"));
+                let r = imap::search_all_uids(&mut guard.session, &mbox.path, false).await;
+                pool.return_background(account, guard).await;
+                r.unwrap_or_default()
+            };
+            let sc = server_uids.len();
+
+            let status = build_folder_status(
+                &mbox.path, &mbox.name, sc,
+                app_handle, account_id, backup_path, &account.email,
+                children,
+            );
+
+            *total_server += sc;
+            *total_app += status.app_count;
+            *total_external += status.external_count;
+
+            if sc > 0 || status.app_count > 0 || status.external_count > 0 || !status.children.is_empty() {
+                result.push(status);
+            }
+        }
+        result
+    }
+
+    let folders = build_tree(
+        &pool, &account, &app_handle, &account_id,
+        &mailboxes, backup_path.as_deref(),
+        &mut total_server, &mut total_app, &mut total_external,
+    ).await;
+
+    // Check if external path exists and is accessible
+    let external_available = backup_path.as_ref().map_or(false, |p| std::path::Path::new(p).exists());
+
+    Ok(AccountBackupStatus {
+        folders,
+        total_server,
+        total_local: total_app, // legacy compat
+        total_app,
+        total_external,
+        external_available,
+    })
+}
+
+/// Graph/Outlook backup status — uses total_item_count from folder metadata.
+async fn get_graph_backup_status(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    account_json: String,
+    backup_path: Option<String>,
+) -> Result<AccountBackupStatus, String> {
+    let account: ImapConfig = serde_json::from_str(&account_json)
+        .map_err(|e| format!("Bad account JSON: {}", e))?;
+    let access_token = account
+        .access_token
+        .as_deref()
+        .ok_or_else(|| "Missing OAuth2 access token for Graph account".to_string())?;
+    let email = account.email.as_str();
+
+    let client = crate::graph::GraphClient::new(access_token);
+    let graph_folders = client.list_folders().await?;
 
     let mut folders = Vec::new();
-    let mut total_server = 0;
-    let mut total_local = 0;
+    let mut total_server = 0usize;
+    let mut total_app = 0usize;
+    let mut total_external = 0usize;
 
-    for mbox in &selectable {
-        let server_uids = {
-            let mut guard = pool.get_background(&account).await?;
-            let result = crate::imap::search_all_uids(&mut guard.session, &mbox.path, false).await;
-            pool.return_background(&account, guard).await;
-            result.unwrap_or_default()
+    for gf in &graph_folders {
+        let mailbox_path = normalize_graph_folder_name(&gf.display_name);
+        let sc = gf.total_item_count.max(0) as usize;
+        let app_count = scan_local_uids(&app_handle, &account_id, &mailbox_path).unwrap_or_default().len();
+        let ext_count = match backup_path.as_deref() {
+            Some(bp) => scan_external_uids(bp, email, &mailbox_path).len(),
+            None => 0,
         };
-        let local_uids = scan_local_uids(&app_handle, &account_id, &mbox.path).unwrap_or_default();
 
-        let sc = server_uids.len();
-        let lc = local_uids.len();
         total_server += sc;
-        total_local += lc;
+        total_app += app_count;
+        total_external += ext_count;
 
-        if sc > 0 || lc > 0 {
+        if sc > 0 || app_count > 0 || ext_count > 0 {
             folders.push(FolderBackupStatus {
-                folder: mbox.path.clone(),
+                path: mailbox_path.clone(),
+                name: gf.display_name.clone(),
                 server_count: sc,
-                local_count: lc,
+                app_count,
+                external_count: ext_count,
+                children: vec![],
+                folder_alias: mailbox_path,
+                local_count_alias: app_count,
             });
         }
     }
 
-    Ok(AccountBackupStatus { folders, total_server, total_local })
+    let external_available = backup_path.as_ref().map_or(false, |p| std::path::Path::new(p).exists());
+
+    Ok(AccountBackupStatus {
+        folders,
+        total_server,
+        total_local: total_app,
+        total_app,
+        total_external,
+        external_available,
+    })
 }
 
 // ── Result ───────────────────────────────────────────────────────────────────
@@ -110,6 +298,12 @@ pub struct BackupResult {
     pub success: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_message: Option<String>,
+    /// True if backup was cancelled mid-run (for resume support)
+    #[serde(default)]
+    pub cancelled: bool,
+    /// Number of folders completed before cancel/finish (resume checkpoint)
+    #[serde(default)]
+    pub completed_folders: usize,
 }
 
 // ── Cancellation token (shared app state) ────────────────────────────────────
@@ -161,6 +355,7 @@ pub async fn run_account_backup(
     account_json: String,
     cancel: Arc<AtomicBool>,
     backup_path: Option<String>,
+    skip_folders: usize,
 ) -> Result<BackupResult, String> {
     let start = std::time::Instant::now();
 
@@ -171,7 +366,7 @@ pub async fn run_account_backup(
     let is_graph = account.oauth2_transport.as_deref() == Some("graph");
 
     if is_graph {
-        return run_graph_backup(app_handle, account_id, account_json, cancel, start, backup_path).await;
+        return run_graph_backup(app_handle, account_id, account_json, cancel, start, backup_path, skip_folders).await;
     }
 
     // ── IMAP path ────────────────────────────────────────────────────────────
@@ -209,10 +404,19 @@ pub async fn run_account_backup(
         account.email, total_folders
     );
 
+    let mut cancelled = false;
+
     for (folder_idx, mbox) in selectable.iter().enumerate() {
         if cancel.load(Ordering::Relaxed) {
-            warn!("backup: cancelled for {}", account.email);
+            warn!("backup: cancelled for {} at folder {}/{}", account.email, completed_folders, total_folders);
+            cancelled = true;
             break;
+        }
+
+        // Skip folders already completed in a previous run (resume support)
+        if folder_idx < skip_folders {
+            completed_folders += 1;
+            continue;
         }
 
         let mailbox_path = &mbox.path;
@@ -308,12 +512,12 @@ pub async fn run_account_backup(
         completed_folders += 1;
     }
 
-    // Emit final completion event (single event per account)
+    // Emit final completion/cancelled event (single event per account)
     let _ = app_handle.emit(
         "backup-progress",
         BackupProgress {
             account_id: account_id.clone(),
-            folder: "Complete".to_string(),
+            folder: if cancelled { "Cancelled".to_string() } else { "Complete".to_string() },
             total_folders,
             completed_folders,
             total_emails: total_backed_up + total_errors,
@@ -327,17 +531,21 @@ pub async fn run_account_backup(
 
     let duration = start.elapsed().as_secs_f64();
     info!(
-        "backup: completed for {} — {} new emails backed up, {} errors, {:.1}s{}",
+        "backup: {} for {} — {} new emails backed up, {} errors, {:.1}s{} (folders: {}/{})",
+        if cancelled { "cancelled" } else { "completed" },
         account.email, total_backed_up, total_errors, duration,
-        if let Some(ref p) = backup_path { format!(" (copied to {})", p) } else { String::new() }
+        if let Some(ref p) = backup_path { format!(" (copied to {})", p) } else { String::new() },
+        completed_folders, total_folders
     );
 
     Ok(BackupResult {
         emails_backed_up: total_backed_up,
         errors: total_errors,
         duration_secs: duration,
-        success: total_errors == 0,
+        success: !cancelled && total_errors == 0,
         error_message: None,
+        cancelled,
+        completed_folders,
     })
 }
 
@@ -398,15 +606,15 @@ async fn run_graph_backup(
     account_json: String,
     cancel: Arc<AtomicBool>,
     start: std::time::Instant,
-    _backup_path: Option<String>,
+    backup_path: Option<String>,
+    skip_folders: usize,
 ) -> Result<BackupResult, String> {
-    // Parse just the access token from the JSON
-    let json_val: serde_json::Value = serde_json::from_str(&account_json)
+    let account: ImapConfig = serde_json::from_str(&account_json)
         .map_err(|e| format!("Bad account JSON: {}", e))?;
-    let access_token = json_val
-        .get("oauth2AccessToken")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| "Missing oauth2AccessToken for Graph account".to_string())?;
+    let access_token = account
+        .access_token
+        .as_deref()
+        .ok_or_else(|| "Missing OAuth2 access token for Graph account".to_string())?;
 
     let client = crate::graph::GraphClient::new(access_token);
 
@@ -418,14 +626,23 @@ async fn run_graph_backup(
     let mut total_errors = 0usize;
 
     info!(
-        "backup(graph): starting for account {} ({} folders)",
-        account_id, total_folders
+        "backup(graph): starting for account {} ({} folders, skipping first {})",
+        account_id, total_folders, skip_folders
     );
 
-    for folder in &folders {
+    let mut cancelled = false;
+
+    for (folder_idx, folder) in folders.iter().enumerate() {
         if cancel.load(Ordering::Relaxed) {
-            warn!("backup(graph): cancelled for account {}", account_id);
+            warn!("backup(graph): cancelled for account {} at folder {}/{}", account_id, completed_folders, total_folders);
+            cancelled = true;
             break;
+        }
+
+        // Skip folders already completed in a previous run (resume support)
+        if folder_idx < skip_folders {
+            completed_folders += 1;
+            continue;
         }
 
         let folder_name = &folder.display_name;
@@ -434,6 +651,19 @@ async fn run_graph_backup(
 
         // Get local UIDs
         let local_uids = scan_local_uids(&app_handle, &account_id, &mailbox_path)?;
+
+        // Pre-sync: copy files between app and external backup (bidirectional)
+        if let Some(ref custom_path) = backup_path {
+            let app_dir = crate::maildir_cur_path(&app_handle, &account_id, &mailbox_path)?;
+            let backup_dir = std::path::PathBuf::from(custom_path)
+                .join(&account.email)
+                .join(&mailbox_path)
+                .join("cur");
+            let synced = sync_locations(&app_dir, &backup_dir);
+            if synced > 0 {
+                info!("backup(graph): pre-synced {} files between app and backup for {}", synced, mailbox_path);
+            }
+        }
 
         // Paginate through all messages to find missing ones
         let mut skip = 0u32;
@@ -456,7 +686,7 @@ async fn run_graph_backup(
                     continue;
                 }
 
-                // Fetch MIME content and store
+                // Fetch MIME content and store to app dir + external backup dir
                 match client.get_mime_content(&msg.id).await {
                     Ok(raw_bytes) => {
                         let cur_dir =
@@ -471,6 +701,20 @@ async fn run_graph_backup(
                             );
                             std::fs::write(cur_dir.join(&filename), &raw_bytes)
                                 .map_err(|e| format!("write .eml: {}", e))?;
+
+                            // Also write to external backup if configured
+                            if let Some(ref custom_path) = backup_path {
+                                let backup_dir = std::path::PathBuf::from(custom_path)
+                                    .join(&account.email)
+                                    .join(&mailbox_path)
+                                    .join("cur");
+                                let _ = std::fs::create_dir_all(&backup_dir);
+                                let dst = backup_dir.join(format!("{}.eml", uid_counter));
+                                if !dst.exists() {
+                                    let _ = std::fs::write(&dst, &raw_bytes);
+                                }
+                            }
+
                             total_backed_up += 1;
                         }
                     }
@@ -511,16 +755,20 @@ async fn run_graph_backup(
 
     let duration = start.elapsed().as_secs_f64();
     info!(
-        "backup(graph): completed for {} — {} emails backed up, {} errors, {:.1}s",
-        account_id, total_backed_up, total_errors, duration
+        "backup(graph): {} for {} — {} emails backed up, {} errors, {:.1}s (folders: {}/{})",
+        if cancelled { "cancelled" } else { "completed" },
+        account_id, total_backed_up, total_errors, duration,
+        completed_folders, total_folders
     );
 
     Ok(BackupResult {
         emails_backed_up: total_backed_up,
         errors: total_errors,
         duration_secs: duration,
-        success: total_errors == 0,
+        success: !cancelled && total_errors == 0,
         error_message: None,
+        cancelled,
+        completed_folders,
     })
 }
 

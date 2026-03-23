@@ -1,135 +1,126 @@
 import { useEffect, useRef } from 'react';
-import { useSettingsStore } from '../stores/settingsStore';
-import { useMailStore } from '../stores/mailStore';
 import { backupScheduler } from '../services/backupScheduler';
 
 const IDLE_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutes of no user activity
 const IDLE_CHECK_INTERVAL_MS = 60_000;    // Check every 60 seconds
-const MIN_BACKUP_INTERVAL_MS = 60 * 60 * 1000; // Don't re-backup within 1 hour
+const WAKE_SETTLE_MS = 10_000;            // Wait 10s after wake for network recovery
+const VISIBILITY_SETTLE_MS = 15_000;      // Wait 15s after tab visible + verify still idle
 
 /**
- * Idle-based backup scheduler.
- * Backups trigger when the user is idle for 3+ minutes and a backup is due.
- * Also triggers after wake from sleep (with 10s delay for network recovery).
+ * React bridge for the backup coordinator.
+ *
+ * Tracks user activity, visibility, online/offline, and sleep/wake,
+ * then feeds lifecycle events to the coordinator which owns all
+ * scheduling decisions (gates, queue, pause/resume).
  */
 export function useBackupScheduler() {
   const lastActivityRef = useRef(Date.now());
-  const checkingRef = useRef(false);
+  const wasIdleRef = useRef(false);
 
   useEffect(() => {
-    // Throttled activity tracker — update at most once per second
+    // ── Activity tracking ──────────────────────────────────────────────
+
     let throttled = false;
     const markActive = () => {
       if (throttled) return;
       throttled = true;
       lastActivityRef.current = Date.now();
+
+      // If user becomes active during an automatic backup, notify coordinator
+      if (wasIdleRef.current) {
+        wasIdleRef.current = false;
+        backupScheduler.onUserActive();
+      }
+
       setTimeout(() => { throttled = false; }, 1000);
     };
     const events = ['keydown', 'click', 'scroll', 'touchstart'];
     events.forEach(e => document.addEventListener(e, markActive, { passive: true }));
-    // mousemove tracked separately with longer throttle to avoid per-pixel overhead
+
+    // mousemove tracked separately with longer throttle
     let mouseThrottled = false;
     const markMouseActive = () => {
       if (mouseThrottled) return;
       mouseThrottled = true;
       lastActivityRef.current = Date.now();
+      if (wasIdleRef.current) {
+        wasIdleRef.current = false;
+        backupScheduler.onUserActive();
+      }
       setTimeout(() => { mouseThrottled = false; }, 5000);
     };
     document.addEventListener('mousemove', markMouseActive, { passive: true });
 
-    // Init progress event listener
+    // ── Init progress event listener ───────────────────────────────────
+
     backupScheduler.initProgressListener();
 
-    // Periodic idle check
-    const interval = setInterval(() => {
+    // ── Periodic idle check ────────────────────────────────────────────
+
+    const idleInterval = setInterval(() => {
       const idleMs = Date.now() - lastActivityRef.current;
-      if (idleMs >= IDLE_THRESHOLD_MS && !checkingRef.current) {
-        checkingRef.current = true;
-        checkAndRunBackups();
-        checkingRef.current = false;
+      if (idleMs >= IDLE_THRESHOLD_MS) {
+        if (!wasIdleRef.current) {
+          wasIdleRef.current = true;
+          backupScheduler.onUserIdle();
+        }
+        // On each idle tick, also check if any backups are due
+        backupScheduler.checkAndQueueDue();
       }
     }, IDLE_CHECK_INTERVAL_MS);
 
-    // Wake-from-sleep detector — if heartbeat gap > 30s, machine was asleep
+    // ── Sleep/wake detection ───────────────────────────────────────────
+
     let lastTick = Date.now();
     const heartbeat = setInterval(() => {
       const now = Date.now();
       const gap = now - lastTick;
       lastTick = now;
       if (gap > 30_000) {
-        console.log(`[backup] Wake detected (${Math.round(gap / 1000)}s gap) — checking backups in 10s`);
-        // Wait 10s for network to reconnect, then check for due backups
+        console.log(`[backup] Wake detected (${Math.round(gap / 1000)}s gap)`);
+        backupScheduler.onSleep(); // mark as paused_sleep first
+        // Wait for network recovery, then resume
         setTimeout(() => {
-          console.log('[backup] Post-wake backup check running');
-          checkAndRunBackups();
-        }, 10_000);
+          console.log('[backup] Post-wake resume');
+          backupScheduler.onWake();
+        }, WAKE_SETTLE_MS);
       }
     }, 15_000);
 
-    // Also check on visibility change (user switches back to app)
+    // ── Visibility change ──────────────────────────────────────────────
+    // Only trigger backup check if user stays idle after returning to the app.
+    // This prevents starting backups at exactly the wrong moment (user just switched back).
+
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        setTimeout(() => checkAndRunBackups(), 5000);
+        setTimeout(() => {
+          const idleMs = Date.now() - lastActivityRef.current;
+          if (idleMs >= IDLE_THRESHOLD_MS) {
+            backupScheduler.checkAndQueueDue();
+          }
+        }, VISIBILITY_SETTLE_MS);
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
+    // ── Online/offline ─────────────────────────────────────────────────
+
+    const handleOnline = () => backupScheduler.onOnline();
+    const handleOffline = () => backupScheduler.onOffline();
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // ── Cleanup ────────────────────────────────────────────────────────
+
     return () => {
       events.forEach(e => document.removeEventListener(e, markActive));
       document.removeEventListener('mousemove', markMouseActive);
-      clearInterval(interval);
+      clearInterval(idleInterval);
       clearInterval(heartbeat);
       document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
       backupScheduler.stopAll();
     };
   }, []);
-}
-
-/**
- * Check all enabled accounts and queue backups for those that are due.
- */
-function checkAndRunBackups() {
-  const settings = useSettingsStore.getState();
-  const accounts = useMailStore.getState().accounts || [];
-  const { backupGlobalEnabled, backupGlobalConfig, backupSchedules, hiddenAccounts, backupState } = settings;
-
-  if (accounts.length === 0) {
-    console.log('[backup] No accounts loaded yet — skipping check');
-    return;
-  }
-
-  let queued = 0;
-
-  for (const account of accounts) {
-    if (hiddenAccounts?.[account.id]) continue;
-
-    let config;
-    if (backupGlobalEnabled) {
-      config = { ...backupGlobalConfig, enabled: true };
-    } else {
-      config = backupSchedules[account.id];
-    }
-    if (!config?.enabled) continue;
-
-    const accountState = backupState[account.id];
-    const lastBackup = accountState?.lastBackupTime || 0;
-    const intervalMs = getIntervalMs(config);
-    const timeSinceLastBackup = Date.now() - lastBackup;
-
-    if (timeSinceLastBackup >= intervalMs && timeSinceLastBackup >= MIN_BACKUP_INTERVAL_MS) {
-      console.log(`[backup] ${account.email} is due (last: ${lastBackup ? new Date(lastBackup).toLocaleString() : 'never'}, interval: ${Math.round(intervalMs / 3600000)}h)`);
-      backupScheduler.queueBackup(account.id);
-      queued++;
-    }
-  }
-
-  if (queued > 0) {
-    console.log(`[backup] Queued ${queued} account(s) for backup`);
-  }
-}
-
-function getIntervalMs(config) {
-  if (config.interval === 'hourly') return (config.hourlyInterval || 1) * 3600_000;
-  if (config.interval === 'weekly') return 7 * 24 * 3600_000;
-  return 24 * 3600_000; // daily default
 }

@@ -1,9 +1,9 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { HardDrive, Loader2 } from 'lucide-react';
-import { useSettingsStore } from '../stores/settingsStore.js';
+import { useBackupStore } from '../stores/backupStore.js';
 
 export function BackupToast({ showSettings, onOpenBackup }) {
-  const activeBackup = useSettingsStore(s => s.activeBackup);
+  const activeBackup = useBackupStore(s => s.activeBackup);
 
   if (!activeBackup || !activeBackup.active || showSettings) return null;
 

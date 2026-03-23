@@ -1,5 +1,6 @@
 import { readTextFile, writeTextFile, readDir, mkdir, remove, exists, BaseDirectory } from '@tauri-apps/plugin-fs';
 import { parseKeychainValue, getAccountsFromKeychain } from './keychainUtils.js';
+import * as keychainSession from './keychainSession.js';
 
 // Re-export for any consumers that import from db.js
 export { parseKeychainValue, getAccountsFromKeychain };
@@ -29,44 +30,55 @@ let keychainLoaded = false;
 
 async function loadKeychain() {
   if (keychainLoaded) return keychainCache || {};
-  if (!invoke) { keychainLoaded = true; return {}; }
+  if (!invoke) { keychainLoaded = true; keychainSession.recordOutcome('empty'); return {}; }
 
-  // If a keychain load is already in flight (from startKeychainLoad or a prior call), reuse it
+  // If a keychain load is already in flight, reuse the shared promise
   if (_keychainLoadPromise) {
     await _keychainLoadPromise;
     return keychainCache || {};
   }
 
-  // Create a shared promise so concurrent callers don't fire duplicate invokes
-  // Retries up to 3 times with backoff if keychain read fails or returns empty
+  // If the session is locked out (user denied/cancelled), don't re-prompt automatically
+  if (keychainSession.isLockedOut()) {
+    console.log('[db.js] Keychain session locked out — skipping automatic read');
+    keychainCache = keychainCache || {};
+    keychainLoaded = true;
+    return keychainCache;
+  }
+
+  // Single attempt — no retry loop. The Rust side has its own timeout+retry.
   _keychainLoadPromise = (async () => {
-    const maxRetries = 3;
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        console.log(`[db.js] Loading accounts from keychain (attempt ${attempt}/${maxRetries})...`);
-        const result = await invoke('get_credentials');
-        const count = Object.keys(result || {}).length;
-        if (count > 0 || attempt === maxRetries) {
-          keychainCache = result || {};
-          keychainLoaded = true;
-          console.log('[db.js] Keychain loaded for', count, 'account(s)');
-          return;
+    try {
+      console.log('[db.js] Loading accounts from keychain...');
+      keychainSession.recordOutcome('requesting');
+      const result = await invoke('get_credentials');
+
+      // Structured response: { status, credentials?, message? }
+      const status = result?.status || 'unavailable';
+      const credentials = result?.credentials || {};
+      const message = result?.message || null;
+      const count = Object.keys(credentials).length;
+
+      keychainSession.recordOutcome(status, message);
+
+      if (status === 'granted' || status === 'empty') {
+        keychainCache = credentials;
+        keychainLoaded = true;
+        console.log('[db.js] Keychain loaded:', status, `(${count} account(s))`);
+      } else {
+        // denied, cancelled, timed_out, unavailable
+        console.warn(`[db.js] Keychain access: ${status}${message ? ' — ' + message : ''}`);
+        if (isSnap() && status === 'unavailable') {
+          console.error('[db.js] Snap keyring access failed — password-manager-service plug may be disconnected');
         }
-        // Empty result on non-final attempt — retry after backoff (keychain may be slow)
-        console.warn(`[db.js] Keychain returned 0 accounts on attempt ${attempt} — retrying in ${attempt}s`);
-        await new Promise(r => setTimeout(r, attempt * 1000));
-      } catch (error) {
-        console.warn(`[db.js] Keychain read failed (attempt ${attempt}/${maxRetries}):`, error);
-        if (attempt === maxRetries) {
-          if (isSnap()) {
-            console.error('[db.js] Snap keyring access failed — password-manager-service plug may be disconnected');
-          }
-          keychainCache = {};
-          keychainLoaded = true;
-        } else {
-          await new Promise(r => setTimeout(r, attempt * 1000));
-        }
+        keychainCache = {};
+        keychainLoaded = true;
       }
+    } catch (error) {
+      console.warn('[db.js] Keychain read threw:', error);
+      keychainSession.recordOutcome('unavailable', String(error));
+      keychainCache = {};
+      keychainLoaded = true;
     }
   })();
 
@@ -144,6 +156,7 @@ export function clearCredentialsCache() {
   keychainLoaded = false;
   _keychainResolved = false;
   _keychainLoadPromise = null;
+  keychainSession.resetForRetry();
 }
 
 // Fire-and-forget keychain loading with callback notification
