@@ -252,22 +252,27 @@ pub async fn run_account_backup(
             missing.len()
         );
 
-        // Emit progress BEFORE starting folder (so UI shows current folder immediately)
-        let _ = app_handle.emit(
-            "backup-progress",
-            BackupProgress {
-                account_id: account_id.clone(),
-                folder: mailbox_path.clone(),
-                total_folders,
-                completed_folders,
-                total_emails: total_backed_up + total_errors,
-                completed_emails: total_backed_up,
-                errors: total_errors,
-                active: true,
-                last_error: None,
-                missing_in_folder: missing.len(),
-            },
-        );
+        // Only emit progress at 25%, 50%, 75% and completion — not every folder
+        // This prevents flooding the JS event loop with re-renders
+        let progress_pct = if total_folders > 0 { (folder_idx * 100) / total_folders } else { 0 };
+        let should_emit = folder_idx == 0 || progress_pct % 25 == 0 || missing.len() > 0;
+        if should_emit {
+            let _ = app_handle.emit(
+                "backup-progress",
+                BackupProgress {
+                    account_id: account_id.clone(),
+                    folder: mailbox_path.clone(),
+                    total_folders,
+                    completed_folders,
+                    total_emails: total_backed_up + total_errors,
+                    completed_emails: total_backed_up,
+                    errors: total_errors,
+                    active: true,
+                    last_error: None,
+                    missing_in_folder: missing.len(),
+                },
+            );
+        }
 
         // Pre-sync: copy files that exist in one location but not the other
         if let Some(ref custom_path) = backup_path {
@@ -301,24 +306,24 @@ pub async fn run_account_backup(
         }
 
         completed_folders += 1;
-
-        // Emit progress AFTER folder completes
-        let _ = app_handle.emit(
-            "backup-progress",
-            BackupProgress {
-                account_id: account_id.clone(),
-                folder: mailbox_path.clone(),
-                total_folders,
-                completed_folders,
-                total_emails: total_backed_up + total_errors,
-                completed_emails: total_backed_up,
-                errors: total_errors,
-                active: completed_folders < total_folders,
-                last_error: None,
-                missing_in_folder: 0,
-            },
-        );
     }
+
+    // Emit final completion event (single event per account)
+    let _ = app_handle.emit(
+        "backup-progress",
+        BackupProgress {
+            account_id: account_id.clone(),
+            folder: "Complete".to_string(),
+            total_folders,
+            completed_folders,
+            total_emails: total_backed_up + total_errors,
+            completed_emails: total_backed_up,
+            errors: total_errors,
+            active: false,
+            last_error: None,
+            missing_in_folder: 0,
+        },
+    );
 
     let duration = start.elapsed().as_secs_f64();
     info!(
