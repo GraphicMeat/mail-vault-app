@@ -4,7 +4,7 @@ import { useMailStore } from '../stores/mailStore';
 import { backupScheduler } from '../services/backupScheduler';
 
 const IDLE_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutes of no user activity
-const IDLE_CHECK_INTERVAL_MS = 30_000;    // Check every 30 seconds
+const IDLE_CHECK_INTERVAL_MS = 60_000;    // Check every 60 seconds
 const MIN_BACKUP_INTERVAL_MS = 60 * 60 * 1000; // Don't re-backup within 1 hour
 
 /**
@@ -17,9 +17,25 @@ export function useBackupScheduler() {
   const checkingRef = useRef(false);
 
   useEffect(() => {
-    const markActive = () => { lastActivityRef.current = Date.now(); };
-    const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
+    // Throttled activity tracker — update at most once per second
+    let throttled = false;
+    const markActive = () => {
+      if (throttled) return;
+      throttled = true;
+      lastActivityRef.current = Date.now();
+      setTimeout(() => { throttled = false; }, 1000);
+    };
+    const events = ['keydown', 'click', 'scroll', 'touchstart'];
     events.forEach(e => document.addEventListener(e, markActive, { passive: true }));
+    // mousemove tracked separately with longer throttle to avoid per-pixel overhead
+    let mouseThrottled = false;
+    const markMouseActive = () => {
+      if (mouseThrottled) return;
+      mouseThrottled = true;
+      lastActivityRef.current = Date.now();
+      setTimeout(() => { mouseThrottled = false; }, 5000);
+    };
+    document.addEventListener('mousemove', markMouseActive, { passive: true });
 
     // Init progress event listener
     backupScheduler.initProgressListener();
@@ -60,6 +76,7 @@ export function useBackupScheduler() {
 
     return () => {
       events.forEach(e => document.removeEventListener(e, markActive));
+      document.removeEventListener('mousemove', markMouseActive);
       clearInterval(interval);
       clearInterval(heartbeat);
       document.removeEventListener('visibilitychange', handleVisibility);
