@@ -46,6 +46,7 @@ vi.mock('../../services/api', () => ({
 vi.mock('../../services/authUtils', () => ({
   hasValidCredentials: () => true,
   ensureFreshToken: (a) => Promise.resolve(a),
+  resolveServerAccount: (id, account) => Promise.resolve({ ok: true, account }),
 }));
 vi.mock('../../services/attachmentUtils', () => ({
   hasRealAttachments: () => false,
