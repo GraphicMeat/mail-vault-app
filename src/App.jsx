@@ -18,6 +18,7 @@ import { ShortcutsModal } from './components/ShortcutsModal';
 import { UndoSendToast } from './components/UndoSendToast';
 import { MoveToFolderDropdown } from './components/MoveToFolderDropdown';
 import { MigrationToast } from './components/MigrationToast';
+import { KeychainToast } from './components/KeychainToast';
 // BackupToast removed — backup progress now shows in sidebar via BackupIndicator
 import { useEmailScheduler } from './hooks/useEmailScheduler';
 import { usePipelineCoordinator } from './hooks/usePipelineCoordinator';
@@ -89,15 +90,13 @@ function App() {
   const error = useMailStore(s => s.error);
   const clearError = useMailStore(s => s.clearError);
   const loading = useMailStore(s => s.loading);
-  const { initTheme } = useThemeStore();
-  const {
-    layoutMode,
-    viewStyle,
-    listPaneSize,
-    setListPaneSize,
-    sidebarCollapsed,
-    onboardingComplete
-  } = useSettingsStore();
+  const initTheme = useThemeStore(s => s.initTheme);
+  const layoutMode = useSettingsStore(s => s.layoutMode);
+  const viewStyle = useSettingsStore(s => s.viewStyle);
+  const listPaneSize = useSettingsStore(s => s.listPaneSize);
+  const setListPaneSize = useSettingsStore(s => s.setListPaneSize);
+  const sidebarCollapsed = useSettingsStore(s => s.sidebarCollapsed);
+  const onboardingComplete = useSettingsStore(s => s.onboardingComplete);
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [composeState, setComposeState] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -518,7 +517,7 @@ function App() {
           onAddAccount={() => setShowAccountModal(true)}
           onCompose={() => setComposeState({})}
           onOpenSettings={() => setShowSettings(true)}
-          onOpenBackup={() => { setSettingsInitialTab('backup'); setShowSettings(true); }}
+          onOpenBackup={(accountId) => { setSettingsInitialTab('backup'); setSettingsInitialAccountId(accountId || null); setShowSettings(true); }}
           onOpenAccounts={(accountId) => { setSettingsInitialTab('accounts'); setSettingsInitialAccountId(accountId || null); setShowSettings(true); }}
         />
       </div>
@@ -602,6 +601,10 @@ function App() {
       <SelectionActionBar />
       <BulkSaveProgress />
       <MigrationToast showSettings={showSettings} onOpenSettings={() => { setSettingsInitialTab('migration'); setShowSettings(true); }} />
+      <KeychainToast
+        onRetry={() => useMailStore.getState().retryKeychainAccess()}
+        onOpenAccounts={() => { setSettingsInitialTab('accounts'); setShowSettings(true); }}
+      />
       <UndoSendToast onUndo={(composeState) => setComposeState(composeState)} />
 
       {/* Move to Folder dropdown (triggered by keyboard shortcut M) */}

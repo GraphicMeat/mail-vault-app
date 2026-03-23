@@ -31,7 +31,11 @@ function AttachmentPreview({ attachment, onRemove }) {
 export function ComposeModal({ mode = 'new', replyTo = null, initialData = null, onClose }) {
   const rawAccounts = useMailStore(s => s.accounts);
   const activeAccountId = useMailStore(s => s.activeAccountId);
-  const { getSignature, getDisplayName, emailTemplates, addEmailTemplate, getOrderedAccounts } = useSettingsStore();
+  const getSignature = useSettingsStore(s => s.getSignature);
+  const getDisplayName = useSettingsStore(s => s.getDisplayName);
+  const emailTemplates = useSettingsStore(s => s.emailTemplates);
+  const addEmailTemplate = useSettingsStore(s => s.addEmailTemplate);
+  const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
   const accounts = getOrderedAccounts(rawAccounts);
   // In unified inbox, prefer the email's source account for replies
   const initialAccountId = replyTo?._accountId || activeAccountId;

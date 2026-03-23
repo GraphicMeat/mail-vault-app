@@ -24,7 +24,7 @@ import BackupSettings from './settings/BackupSettings';
 import MigrationSettings from './settings/MigrationSettings.jsx';
 
 export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, initialAccountId }) {
-  const { accounts } = useMailStore();
+  const accounts = useMailStore(s => s.accounts);
 
   // Close on Escape key
   useEffect(() => {
@@ -124,7 +124,7 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
             )}
 
             {activeTab === 'backup' && (
-              <BackupSettings />
+              <BackupSettings initialAccountId={initialAccountId} />
             )}
 
             {activeTab === 'migration' && (

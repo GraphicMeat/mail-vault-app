@@ -91,7 +91,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
     }
   };
 
-  // Reconnect OAuth2 account
+  // Reconnect OAuth2 account — preserves Graph transport, custom client/tenant
   const handleOAuth2Reconnect = async () => {
     if (!selectedAccountId) return;
     setOauthReconnecting(true);
@@ -99,7 +99,14 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
     try {
       const account = accounts.find(a => a.id === selectedAccountId);
       const provider = account?.oauth2Provider || 'microsoft';
-      const { authUrl, state } = await getOAuth2AuthUrl(account?.email, provider);
+      const useGraph = account?.oauth2Transport === 'graph';
+      const { authUrl, state } = await getOAuth2AuthUrl(
+        account?.email,
+        provider,
+        account?.oauth2CustomClientId,
+        account?.oauth2TenantId,
+        useGraph
+      );
 
       if (invoke) {
         const { open } = await import('@tauri-apps/plugin-shell');
@@ -112,6 +119,8 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
 
       const { saveAccount } = await import('../../services/db');
       if (account) {
+        // Spread all existing account fields to preserve oauth2Transport,
+        // oauth2Provider, oauth2CustomClientId, oauth2TenantId, etc.
         await saveAccount({
           ...account,
           oauth2AccessToken: tokenData.accessToken,

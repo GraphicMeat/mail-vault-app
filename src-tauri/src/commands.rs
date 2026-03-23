@@ -744,6 +744,7 @@ pub async fn backup_run_account(
     account_id: String,
     account_json: String,
     backup_path: Option<String>,
+    skip_folders: Option<usize>,
     cancel_token: tauri::State<'_, backup::BackupCancelToken>,
 ) -> Result<backup::BackupResult, String> {
     let cancel = {
@@ -752,7 +753,7 @@ pub async fn backup_run_account(
         *guard = Arc::clone(&fresh);
         fresh
     };
-    backup::run_account_backup(app_handle, account_id, account_json, cancel, backup_path).await
+    backup::run_account_backup(app_handle, account_id, account_json, cancel, backup_path, skip_folders.unwrap_or(0)).await
 }
 
 #[tauri::command]
@@ -760,8 +761,9 @@ pub async fn backup_status(
     app_handle: tauri::AppHandle,
     account_id: String,
     account_json: String,
+    backup_path: Option<String>,
 ) -> Result<backup::AccountBackupStatus, String> {
-    backup::get_backup_status(app_handle, account_id, account_json).await
+    backup::get_backup_status(app_handle, account_id, account_json, backup_path).await
 }
 
 #[tauri::command]

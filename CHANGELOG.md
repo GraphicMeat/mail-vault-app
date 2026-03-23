@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+### Added
+- **Backup verification view**: Folder-level tree table in Backup Settings showing Server / App / External counts per folder with expand/collapse, summary chips, and progress bar — works for both IMAP and Outlook/Graph accounts
+- **Backup icon opens focused account**: Clicking a sidebar backup status icon opens Settings on the Backup tab and scrolls to that account's card with a transient accent ring highlight
+
+### Improved
+- **Shared credential resolver**: Mail loading (`activateAccount`, `loadEmails`, `loadMoreEmails`) and backup now share a single `resolveServerAccount()` helper — eliminates three duplicate inline credential-check+keychain-fallback paths; Graph accounts get JWT validation and forced refresh everywhere, not just backup
+- **Keychain access**: Single-prompt model — at most one OS keychain prompt per session; if denied/cancelled/timed out, no background re-prompts; app stays usable with cached/local data; retry only on explicit user action. Bottom-right toast explains the situation with Retry and Open Accounts actions
+- **Backup scheduler**: Replaced ad-hoc idle-based scheduling with a lifecycle-aware coordinator — proper state machine (idle/running/paused_sleep/paused_offline/paused_user_active), time-of-day and day-of-week scheduling, gates that prevent backup during active use, and resumable folder-level checkpoints after sleep/offline interruptions
+- **Sidebar performance**: Isolated backup progress into ephemeral store (no longer triggers JSON persistence on every update), narrowed store subscriptions across Sidebar/App/ComposeModal/SettingsPage, memoized per-account rows so backup badge changes only rerender affected rows
+- **Backup status API**: Returns folder hierarchy (not just flat list), external backup counts when a custom backup path is configured, and real server counts for Outlook/Graph accounts via `total_item_count`
+
+### Fixed
+- **Graph/Outlook external backup**: `run_graph_backup` now writes emails to both app Maildir and external backup directory (previously ignored `backup_path` entirely); adds bidirectional pre-sync per folder; external backup verification now shows correct counts for Outlook accounts
+- **Outlook credential recovery**: `resolveServerAccount()` now accepts keychain accounts with a malformed access token as long as they have a refresh token (recoverable OAuth state), then force-refreshes before proceeding — previously the keychain account was discarded because it wasn't "valid", which prevented the refresh path from ever running
+- **Outlook OAuth reconnect**: Settings reconnect now passes `useGraph`, `customClientId`, and `tenantId` to `getOAuth2AuthUrl()` — previously Graph accounts got IMAP scopes on reconnect, breaking personal Outlook backup
+- **Graph/Outlook token handling**: Reverted `hasValidCredentials()` to presence-only check (any non-empty token passes) — Microsoft Graph can return opaque non-JWT tokens that are valid; JWT-shape check kept as a diagnostic signal for forced refresh in the resolver, not as a hard gate; `_forceRefreshToken()` and `ensureFreshToken()` no longer block persisting non-JWT tokens from Microsoft
+- **Manual backup false success**: "Back up now" button no longer shows Done! when backup was skipped due to missing credentials; `triggerManualBackup()` returns a typed result (`success`/`failed`/`cancelled`/`failed_credentials`) so the UI can react appropriately; manual backups fail immediately on error instead of silently retrying
+- **Keychain retry loops**: Removed JS-side 3-attempt retry loop in `loadKeychain()` and the automatic 3-second re-prompt on startup — Rust side already has timeout+retry; structured response now returns status (granted/denied/cancelled/timed_out/empty/unavailable) instead of raw HashMap
+- **Outlook sidebar badge**: Successful backup no longer shows amber warning when slightly overdue — badge stays green as long as last backup status is success
+- **Backup coverage check**: Fixed missing `api` import that caused runtime error when clicking "Check backup coverage"
+
 ## [2.2.1] - 2026-03-13
 
 ### Added

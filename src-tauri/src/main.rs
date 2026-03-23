@@ -175,31 +175,67 @@ async fn store_credentials(credentials: std::collections::HashMap<String, String
     }).await.map_err(|e| format!("Keychain task panicked: {}", e))?
 }
 
-// Get all credentials as a single JSON object from keychain
+// Get all credentials as a single JSON object from keychain.
+// Returns a structured result with status so the frontend can distinguish
+// granted/denied/cancelled/timed_out/empty/unavailable outcomes.
 // Async: runs on background thread so macOS keychain dialog can appear without blocking main thread
 #[tauri::command]
-async fn get_credentials() -> Result<std::collections::HashMap<String, String>, String> {
+async fn get_credentials() -> Result<serde_json::Value, String> {
     info!("=== GET CREDENTIALS START ===");
 
-    let keychain_future = tokio::task::spawn_blocking(move || {
+    let keychain_future = tokio::task::spawn_blocking(move || -> Result<(String, std::collections::HashMap<String, String>), String> {
         let entry = Entry::new(KEYRING_SERVICE, CREDENTIALS_KEY)
             .map_err(|e| format!("Failed to create keyring entry: {}", e))?;
 
-        let json = entry.get_password()
-            .map_err(|e| format!("Failed to retrieve credentials: {}", e))?;
+        match entry.get_password() {
+            Ok(json) => {
+                let credentials: std::collections::HashMap<String, String> = serde_json::from_str(&json)
+                    .map_err(|e| format!("Failed to parse credentials: {}", e))?;
+                info!("Retrieved credentials for {} account(s)", credentials.len());
+                if credentials.is_empty() {
+                    Ok(("empty".to_string(), credentials))
+                } else {
+                    Ok(("granted".to_string(), credentials))
+                }
+            }
+            Err(e) => {
+                let err_str = format!("{}", e);
+                let err_debug = format!("{:?}", e);
+                warn!("get_credentials: keychain error: {} — debug: {}", err_str, err_debug);
 
-        let credentials: std::collections::HashMap<String, String> = serde_json::from_str(&json)
-            .map_err(|e| format!("Failed to parse credentials: {}", e))?;
+                // Map platform errors to stable statuses
+                let status = if err_debug.contains("NoEntry") || err_str.contains("not found") || err_str.contains("No password found") {
+                    "empty" // No entry exists yet — first launch
+                } else if err_str.contains("denied") || err_str.contains("not allowed") || err_debug.contains("Denied") {
+                    "denied"
+                } else if err_str.contains("cancel") || err_debug.contains("Cancel") || err_str.contains("user canceled") {
+                    "cancelled"
+                } else {
+                    "unavailable" // Platform error (D-Bus down, keyring locked, etc.)
+                };
 
-        info!("Retrieved credentials for {} account(s)", credentials.len());
-        info!("=== GET CREDENTIALS END ===");
-        Ok(credentials)
+                Err(format!("{}:{}", status, err_str))
+            }
+        }
     });
 
     // Timeout after 5 seconds — prevents slow keychain (D-Bus/Keychain) from blocking app startup
     // On timeout, retry once with 10s timeout before giving up
     match tokio::time::timeout(std::time::Duration::from_secs(5), keychain_future).await {
-        Ok(join_result) => join_result.map_err(|e| format!("Keychain task panicked: {}", e))?,
+        Ok(join_result) => {
+            match join_result.map_err(|e| format!("Keychain task panicked: {}", e))? {
+                Ok((status, credentials)) => {
+                    info!("=== GET CREDENTIALS END (status: {}) ===", status);
+                    Ok(serde_json::json!({ "status": status, "credentials": credentials }))
+                }
+                Err(err) => {
+                    // Parse "status:message" format from the spawn_blocking error
+                    let (status, message) = err.split_once(':').unwrap_or(("unavailable", &err));
+                    info!("=== GET CREDENTIALS END (status: {}) ===", status);
+                    Ok(serde_json::json!({ "status": status, "message": message }))
+                }
+            }
+        }
         Err(_) => {
             warn!("get_credentials: keychain timeout after 5s — retrying with 10s timeout");
             let retry_future = tokio::task::spawn_blocking(move || {
@@ -210,13 +246,26 @@ async fn get_credentials() -> Result<std::collections::HashMap<String, String>, 
                 let credentials: std::collections::HashMap<String, String> = serde_json::from_str(&json)
                     .map_err(|e| format!("Failed to parse credentials: {}", e))?;
                 info!("get_credentials: retry succeeded with {} account(s)", credentials.len());
-                Ok(credentials)
+                Ok::<_, String>(credentials)
             });
             match tokio::time::timeout(std::time::Duration::from_secs(10), retry_future).await {
-                Ok(join_result) => join_result.map_err(|e| format!("Keychain retry panicked: {}", e))?,
+                Ok(join_result) => {
+                    match join_result.map_err(|e| format!("Keychain retry panicked: {}", e))? {
+                        Ok(credentials) => {
+                            let status = if credentials.is_empty() { "empty" } else { "granted" };
+                            info!("=== GET CREDENTIALS END (retry, status: {}) ===", status);
+                            Ok(serde_json::json!({ "status": status, "credentials": credentials }))
+                        }
+                        Err(err) => {
+                            info!("=== GET CREDENTIALS END (retry failed) ===");
+                            Ok(serde_json::json!({ "status": "unavailable", "message": err }))
+                        }
+                    }
+                }
                 Err(_) => {
-                    warn!("get_credentials: keychain retry also timed out — returning empty credentials");
-                    Ok(std::collections::HashMap::new())
+                    warn!("get_credentials: keychain retry also timed out — returning timed_out");
+                    info!("=== GET CREDENTIALS END (timed_out) ===");
+                    Ok(serde_json::json!({ "status": "timed_out", "message": "Keychain access timed out after 15 seconds" }))
                 }
             }
         }

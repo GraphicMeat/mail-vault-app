@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import * as db from '../services/db';
 import * as api from '../services/api';
 import { useSettingsStore } from './settingsStore';
-import { hasValidCredentials, ensureFreshToken } from '../services/authUtils';
+import { hasValidCredentials, ensureFreshToken, resolveServerAccount } from '../services/authUtils';
 import { hasRealAttachments } from '../services/attachmentUtils';
 import { buildThreads } from '../utils/emailParser';
 import { UidMap } from '../services/UidMap';
@@ -745,22 +745,18 @@ export const useMailStore = create((set, get) => ({
         const hasCredentials = firstVisible.password || (firstVisible.authType === 'oauth2' && firstVisible.oauth2AccessToken);
 
         if (!hasCredentials) {
-          // No credentials yet — show cached data quietly, retry in background
-          console.log('[init] Credentials not yet available for', firstVisible.email, '— will retry');
-          set({ loading: false });
+          // No credentials — show cached data, set error for sidebar UI
+          console.log('[init] Credentials not available for', firstVisible.email);
+          set({
+            loading: false,
+            connectionError: 'Password not found. Click Retry or re-enter in Settings.',
+            connectionErrorType: 'passwordMissing'
+          });
           const cachedMailboxEntry = await db.getCachedMailboxEntry(firstVisible.id);
           if (cachedMailboxEntry?.mailboxes) {
             set({ mailboxes: cachedMailboxEntry.mailboxes, mailboxesFetchedAt: cachedMailboxEntry.fetchedAt });
           }
-
-          // Auto-retry: wait for keychain to resolve, then re-init
-          setTimeout(async () => {
-            const { connectionErrorType: currentErrorType } = get();
-            if (currentErrorType === 'passwordMissing' || !get().accounts.find(a => a.id === firstVisible.id)?.password) {
-              console.log('[init] Auto-retrying keychain access...');
-              await get().retryKeychainAccess();
-            }
-          }, 3000);
+          // No auto-retry — user must explicitly click Retry or re-enter password.
         } else if (currentActiveId === firstVisible.id) {
           // Quick-load already started activateAccount — just ensure it's running.
           // activateAccount handles cached data display + server sync in parallel.
@@ -1261,41 +1257,25 @@ export const useMailStore = create((set, get) => ({
       const serverTrace = createPerfTrace('loadServer', { accountId, mailbox });
 
       try {
-        // Ensure fresh OAuth2 token
-        account = await ensureFreshToken(account);
+        // Resolve credentialed account (store → keychain → token refresh)
+        const resolved = await resolveServerAccount(accountId, account);
         if (signal.aborted) return;
         serverTrace.mark('token-ready');
 
-        // Check credentials
-        const hasCredentials = account.password || (account.authType === 'oauth2' && account.oauth2AccessToken);
-        if (!hasCredentials) {
-          // Try keychain
-          try {
-            const freshAccount = await db.getAccount(accountId);
-            if (freshAccount && (freshAccount.password || (freshAccount.authType === 'oauth2' && freshAccount.oauth2AccessToken))) {
-              account = freshAccount;
-              const updatedAccounts = get().accounts.map(a => a.id === accountId ? { ...a, ...freshAccount } : a);
-              set({ accounts: updatedAccounts });
-            }
-          } catch (e) {
-            console.warn('[activateAccount] Keychain fetch failed:', e);
+        if (!resolved.ok) {
+          if (!signal.aborted) {
+            set({
+              connectionStatus: 'error',
+              connectionError: 'Password not found. Please re-enter your password in Settings.',
+              connectionErrorType: 'passwordMissing',
+              loading: false,
+              loadingMore: false,
+            });
           }
-
-          const hasCredsNow = account.password || (account.authType === 'oauth2' && account.oauth2AccessToken);
-          if (!hasCredsNow) {
-            if (!signal.aborted) {
-              set({
-                connectionStatus: 'error',
-                connectionError: 'Password not found. Please re-enter your password in Settings.',
-                connectionErrorType: 'passwordMissing',
-                loading: false,
-                loadingMore: false,
-              });
-            }
-            serverTrace.end('missing-credentials');
-            return;
-          }
+          serverTrace.end('missing-credentials');
+          return;
         }
+        account = resolved.account;
 
         // Check network connectivity
         const invoke = window.__TAURI__?.core?.invoke;
@@ -2101,23 +2081,9 @@ export const useMailStore = create((set, get) => ({
     // Keep previous/cached emails for degraded modes (password missing, offline)
     const previousEmails = get().emails;
 
-    // Check if credentials are missing — try keychain before showing error
-    let hasCredentials = account.password || (account.authType === 'oauth2' && account.oauth2AccessToken);
-    if (!hasCredentials) {
-      console.log('[loadEmails] Credentials not in store, trying keychain for', account.email);
-      try {
-        const freshAccount = await db.getAccount(activeAccountId);
-        if (freshAccount && (freshAccount.password || (freshAccount.authType === 'oauth2' && freshAccount.oauth2AccessToken))) {
-          account = freshAccount;
-          hasCredentials = true;
-          const updatedAccounts = get().accounts.map(a => a.id === activeAccountId ? { ...a, ...freshAccount } : a);
-          set({ accounts: updatedAccounts });
-        }
-      } catch (e) {
-        console.warn('[loadEmails] Keychain fetch failed:', e);
-      }
-    }
-    if (!hasCredentials) {
+    // Resolve credentialed account (store → keychain → token refresh)
+    const resolved = await resolveServerAccount(activeAccountId, account);
+    if (!resolved.ok) {
       console.error('[loadEmails] Credentials missing for account:', account.email);
       if (!isStale()) set({
         emails: previousEmails,
@@ -2130,6 +2096,7 @@ export const useMailStore = create((set, get) => ({
       loadTrace.end('missing-credentials');
       return;
     }
+    account = resolved.account;
 
     // Check network connectivity (if Tauri available)
 
@@ -2695,11 +2662,10 @@ export const useMailStore = create((set, get) => ({
     // Don't load if already loading, no more emails, or no account
     if (!account || loadingMore || !hasMoreEmails) return;
 
-    account = await ensureFreshToken(account);
-
-    // Don't load more if credentials are missing (support both password and OAuth2)
-    const hasCredentials = account.password || (account.authType === 'oauth2' && account.oauth2AccessToken);
-    if (!hasCredentials) return;
+    // Resolve credentialed account — silent fail if missing (pagination is non-critical)
+    const resolved = await resolveServerAccount(account.id, account);
+    if (!resolved.ok) return;
+    account = resolved.account;
 
     // Don't load if offline — will resume via online event
     if (!navigator.onLine) {

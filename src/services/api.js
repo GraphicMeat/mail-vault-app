@@ -423,12 +423,12 @@ export async function removeFromLocalIndex(accountId, mailbox, uid) {
 
 // ── Backup ────────────────────────────────────────────────────────────────────
 
-export async function backupRunAccount(accountId, accountJson, backupPath = null) {
-  return tauriInvoke('backup_run_account', { accountId, accountJson, backupPath });
+export async function backupRunAccount(accountId, accountJson, backupPath = null, skipFolders = 0) {
+  return tauriInvoke('backup_run_account', { accountId, accountJson, backupPath, skipFolders: skipFolders || null });
 }
 
-export async function backupStatus(accountId, accountJson) {
-  return tauriInvoke('backup_status', { accountId, accountJson });
+export async function backupStatus(accountId, accountJson, backupPath = null) {
+  return tauriInvoke('backup_status', { accountId, accountJson, backupPath });
 }
 
 export async function backupCancel() {
