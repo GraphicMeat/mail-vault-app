@@ -61,22 +61,34 @@ function getMailboxDisplayName(name) {
 function BackupStatusIcon({ accountId, onClick }) {
   const backupState = useSettingsStore(s => s.backupState?.[accountId]);
   const backupGlobalEnabled = useSettingsStore(s => s.backupGlobalEnabled);
+  const backupGlobalConfig = useSettingsStore(s => s.backupGlobalConfig);
   const schedule = useSettingsStore(s => s.backupSchedules?.[accountId]);
   if (!schedule?.enabled && !backupGlobalEnabled) return null;
 
-  const isOverdue = backupState?.lastBackupTime && backupState?.nextRunTime &&
-    Date.now() > backupState.nextRunTime + (backupState.nextRunTime - backupState.lastBackupTime);
   const isFailed = backupState?.lastStatus === 'failed';
+  const lastBackup = backupState?.lastBackupTime || 0;
 
-  const icon = (isFailed || isOverdue)
+  // Determine if overdue based on configured interval (idle backups don't use nextRunTime)
+  const interval = backupGlobalEnabled ? backupGlobalConfig?.interval : schedule?.interval;
+  const intervalMs = interval === 'hourly' ? 3600_000 : interval === 'weekly' ? 7 * 24 * 3600_000 : 24 * 3600_000;
+  // Give 50% grace period before showing overdue (e.g. daily = 36 hours grace)
+  const isOverdue = lastBackup > 0 && (Date.now() - lastBackup) > intervalMs * 1.5;
+  const neverBackedUp = lastBackup === 0;
+
+  const icon = (isFailed || isOverdue || neverBackedUp)
     ? <AlertCircle size={12} className="text-amber-500 flex-shrink-0" />
     : <CheckCircle2 size={12} className="text-emerald-500 flex-shrink-0" />;
+
+  const title = isFailed ? 'Backup failed — click to view'
+    : neverBackedUp ? 'Never backed up — click to configure'
+    : isOverdue ? 'Backup overdue — click to view'
+    : 'Backup up to date';
 
   return (
     <button
       onClick={(e) => { e.stopPropagation(); onClick?.(); }}
       className="hover:opacity-70 transition-opacity"
-      title={isFailed ? 'Backup failed — click to view' : isOverdue ? 'Backup overdue — click to view' : 'Backup healthy — click to view'}
+      title={title}
     >
       {icon}
     </button>
