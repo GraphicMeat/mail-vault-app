@@ -63,11 +63,19 @@ export function getBillingRateLimitedUntil() { return _rateLimitedUntil; }
 export function isBillingRateLimited() { return Date.now() < _rateLimitedUntil; }
 export { BillingRateLimitError };
 
+/** Fetch available pricing plans for the user's detected currency. */
+export async function fetchPricing({ currency, country } = {}) {
+  const params = new URLSearchParams();
+  if (currency) params.set('currency', currency);
+  if (country) params.set('country', country);
+  return billingFetch(`/api/billing/pricing?${params.toString()}`);
+}
+
 /** Create a Stripe Checkout Session and return the URL to open in browser. */
-export async function createCheckoutSession(email, priceType) {
+export async function createCheckoutSession(email, priceType, { planId, currency } = {}) {
   return billingFetch('/api/billing/checkout-session', {
     method: 'POST',
-    body: JSON.stringify({ email, priceType }),
+    body: JSON.stringify({ email, priceType, planId, currency }),
   });
 }
 

@@ -413,15 +413,135 @@ function computePremiumAccess(status, cancelAtPeriodEnd, currentPeriodEnd) {
   return false;
 }
 
+// ── Multi-currency pricing ──────────────────────────────────────────────────
+// Each supported currency has a monthly + yearly Stripe price ID pair.
+// Env vars: STRIPE_PRICES_<CURRENCY>_MONTHLY / _YEARLY (fallback to single STRIPE_PRICE_MONTHLY/YEARLY for USD)
+function loadPricingTable() {
+  const table = {};
+  const currencies = (process.env.STRIPE_SUPPORTED_CURRENCIES || 'usd,eur,gbp').split(',').map(c => c.trim().toLowerCase());
+  for (const cur of currencies) {
+    const upper = cur.toUpperCase();
+    const monthly = process.env[`STRIPE_PRICES_${upper}_MONTHLY`] || (cur === 'usd' ? process.env.STRIPE_PRICE_MONTHLY : null);
+    const yearly = process.env[`STRIPE_PRICES_${upper}_YEARLY`] || (cur === 'usd' ? process.env.STRIPE_PRICE_YEARLY : null);
+    const monthlyAmount = parseInt(process.env[`STRIPE_PRICES_${upper}_MONTHLY_AMOUNT`] || (cur === 'usd' ? '300' : '0'), 10);
+    const yearlyAmount = parseInt(process.env[`STRIPE_PRICES_${upper}_YEARLY_AMOUNT`] || (cur === 'usd' ? '2500' : '0'), 10);
+    if (monthly && yearly) {
+      table[cur] = { monthly: { priceId: monthly, amount: monthlyAmount }, yearly: { priceId: yearly, amount: yearlyAmount } };
+    }
+  }
+  // Ensure USD is always present as fallback
+  if (!table.usd && process.env.STRIPE_PRICE_MONTHLY && process.env.STRIPE_PRICE_YEARLY) {
+    table.usd = { monthly: { priceId: process.env.STRIPE_PRICE_MONTHLY, amount: 300 }, yearly: { priceId: process.env.STRIPE_PRICE_YEARLY, amount: 2500 } };
+  }
+  return table;
+}
+const PRICING_TABLE = loadPricingTable();
+const DEFAULT_CURRENCY = 'usd';
+
+// Map country code to likely currency
+const COUNTRY_CURRENCY = {
+  US: 'usd', GB: 'gbp', UK: 'gbp',
+  AT: 'eur', BE: 'eur', CY: 'eur', DE: 'eur', EE: 'eur', ES: 'eur', FI: 'eur', FR: 'eur',
+  GR: 'eur', IE: 'eur', IT: 'eur', LT: 'eur', LU: 'eur', LV: 'eur', MT: 'eur', NL: 'eur',
+  PT: 'eur', SI: 'eur', SK: 'eur', HR: 'eur',
+};
+
+function resolveCurrency(requestedCurrency, countryHint, acceptLanguage) {
+  // 1. Explicit request
+  if (requestedCurrency) {
+    const c = requestedCurrency.toLowerCase();
+    if (PRICING_TABLE[c]) return { currency: c, source: 'requested' };
+  }
+  // 2. Country hint (from query param or CF/IP header)
+  if (countryHint) {
+    const mapped = COUNTRY_CURRENCY[countryHint.toUpperCase()];
+    if (mapped && PRICING_TABLE[mapped]) return { currency: mapped, source: 'country' };
+  }
+  // 3. Accept-Language header heuristic
+  if (acceptLanguage) {
+    const match = acceptLanguage.match(/[a-z]{2}-([A-Z]{2})/);
+    if (match) {
+      const mapped = COUNTRY_CURRENCY[match[1]];
+      if (mapped && PRICING_TABLE[mapped]) return { currency: mapped, source: 'locale' };
+    }
+  }
+  // 4. Fallback to USD
+  return { currency: DEFAULT_CURRENCY, source: 'default' };
+}
+
+function formatAmount(amount, currency) {
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: currency.toUpperCase(), minimumFractionDigits: 0, maximumFractionDigits: 2 })
+      .format(amount / 100);
+  } catch { return `${(amount / 100).toFixed(2)} ${currency.toUpperCase()}`; }
+}
+
+// GET /api/billing/pricing — returns available plans for detected currency
+app.get('/api/billing/pricing', statusLimiter, (req, res) => {
+  const { currency: reqCurrency, country } = req.query;
+  const cfCountry = req.headers['cf-ipcountry']; // Cloudflare geo header
+  const { currency, source } = resolveCurrency(reqCurrency, country || cfCountry, req.headers['accept-language']);
+  const plans = PRICING_TABLE[currency];
+
+  if (!plans) {
+    return res.status(503).json({ error: 'pricing_unavailable', message: 'No pricing available.' });
+  }
+
+  const monthlyFormatted = formatAmount(plans.monthly.amount, currency);
+  const yearlyFormatted = formatAmount(plans.yearly.amount, currency);
+  const monthlyEquiv = formatAmount(Math.round(plans.yearly.amount / 12), currency);
+  const savingsPercent = plans.monthly.amount > 0
+    ? Math.round((1 - (plans.yearly.amount / 12) / plans.monthly.amount) * 100)
+    : 0;
+
+  res.json({
+    currency,
+    currencySource: source,
+    supportedCurrencies: Object.keys(PRICING_TABLE),
+    plans: [
+      {
+        planId: `${currency}_monthly`,
+        interval: 'month',
+        currency,
+        amount: plans.monthly.amount,
+        formattedAmount: monthlyFormatted,
+        priceId: plans.monthly.priceId,
+      },
+      {
+        planId: `${currency}_yearly`,
+        interval: 'year',
+        currency,
+        amount: plans.yearly.amount,
+        formattedAmount: yearlyFormatted,
+        priceId: plans.yearly.priceId,
+        monthlyEquivalent: monthlyEquiv,
+        savingsPercent,
+      },
+    ],
+  });
+});
+
 // POST /api/billing/checkout-session
 app.post('/api/billing/checkout-session', checkoutLimiter, requireBilling, async (req, res) => {
   try {
-    const { email, priceType } = req.body;
+    const { email, priceType, planId, currency: reqCurrency } = req.body;
     if (!email || !isValidEmail(email)) return res.status(400).json({ error: 'Valid email required.' });
-    if (!['monthly', 'yearly'].includes(priceType)) return res.status(400).json({ error: 'priceType must be monthly or yearly.' });
 
-    const priceId = priceType === 'monthly' ? process.env.STRIPE_PRICE_MONTHLY : process.env.STRIPE_PRICE_YEARLY;
-    if (!priceId) return res.status(503).json({ error: 'billing_unavailable', message: 'Price not configured.' });
+    // Resolve the price ID: prefer planId, fall back to priceType + currency resolution
+    let priceId;
+    if (planId) {
+      // planId format: "eur_monthly" or "gbp_yearly"
+      const [cur, interval] = planId.split('_');
+      const plans = PRICING_TABLE[cur];
+      priceId = plans?.[interval]?.priceId;
+    }
+    if (!priceId && priceType) {
+      if (!['monthly', 'yearly'].includes(priceType)) return res.status(400).json({ error: 'priceType must be monthly or yearly.' });
+      const { currency } = resolveCurrency(reqCurrency, req.headers['cf-ipcountry'], req.headers['accept-language']);
+      const plans = PRICING_TABLE[currency];
+      priceId = plans?.[priceType]?.priceId;
+    }
+    if (!priceId) return res.status(400).json({ error: 'billing_unavailable', message: 'Could not resolve price. Please try again.' });
 
     const db = getPool();
 
