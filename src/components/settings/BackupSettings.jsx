@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useSettingsStore, getAccountInitial, getAccountColor } from '../../stores/settingsStore';
+import { useSettingsStore, getAccountInitial, getAccountColor, hasPremiumAccess } from '../../stores/settingsStore';
 import { useBackupStore } from '../../stores/backupStore';
 import { useMailStore } from '../../stores/mailStore';
 import { backupScheduler } from '../../services/backupScheduler';
@@ -195,7 +195,7 @@ function BackupVerificationTree({ data, onHide }) {
   );
 }
 
-const AccountCard = React.forwardRef(function AccountCard({ account, isPaidUser, globalEnabled, highlighted }, ref) {
+const AccountCard = React.forwardRef(function AccountCard({ account, isPaidUser, globalEnabled, highlighted, onUpgrade }, ref) {
   const backupSchedules = useSettingsStore(s => s.backupSchedules);
   const backupState = useSettingsStore(s => s.backupState);
   const backupHistory = useSettingsStore(s => s.backupHistory);
@@ -568,15 +568,17 @@ const AccountCard = React.forwardRef(function AccountCard({ account, isPaidUser,
                 <Clock size={20} className="text-blue-500" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-mail-text mb-1">Coming Soon</p>
+                <p className="text-sm font-semibold text-mail-text mb-1">Premium Feature</p>
                 <p className="text-xs text-mail-text-muted max-w-[280px]">
                   Schedule automatic backups to keep your emails safe. Set per-account schedules, track backup health, and never worry about losing important emails.
                 </p>
+                <p className="text-xs text-mail-text-muted mt-1">$3/month or $25/year</p>
               </div>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full">
-                <Clock size={10} />
-                Coming Soon
-              </span>
+              {onUpgrade && (
+                <button onClick={onUpgrade} className="px-4 py-1.5 text-xs font-semibold bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full hover:opacity-90 transition-opacity">
+                  Upgrade
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -636,7 +638,7 @@ const AccountCard = React.forwardRef(function AccountCard({ account, isPaidUser,
   );
 });
 
-export default function BackupSettings({ initialAccountId = null }) {
+export default function BackupSettings({ initialAccountId = null, onUpgrade }) {
   const cardRefs = useRef({});
   const [highlightedId, setHighlightedId] = useState(null);
 
@@ -659,8 +661,8 @@ export default function BackupSettings({ initialAccountId = null }) {
   const hiddenAccounts = useSettingsStore(s => s.hiddenAccounts);
   const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
   const accountOrder = useSettingsStore(s => s.accountOrder);
-  const isPaidUser = useSettingsStore(s => s.isPaidUser);
-  const setIsPaidUser = useSettingsStore(s => s.setIsPaidUser);
+  const billingProfile = useSettingsStore(s => s.billingProfile);
+  const isPaidUser = hasPremiumAccess(billingProfile);
 
   const backupNotifyOnSuccess = useSettingsStore(s => s.backupNotifyOnSuccess);
   const backupNotifyOnFailure = useSettingsStore(s => s.backupNotifyOnFailure);
@@ -1059,6 +1061,7 @@ export default function BackupSettings({ initialAccountId = null }) {
             isPaidUser={isPaidUser}
             globalEnabled={backupGlobalEnabled}
             highlighted={highlightedId === account.id}
+            onUpgrade={onUpgrade}
           />
         ))
       ) : (
@@ -1069,21 +1072,6 @@ export default function BackupSettings({ initialAccountId = null }) {
           </p>
         </div>
       )}
-
-      {/* Developer: Premium toggle */}
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
-        <h4 className="font-semibold text-mail-text mb-3 flex items-center gap-2">
-          <Wrench size={18} className="text-mail-text-muted" />
-          Developer
-        </h4>
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="text-sm text-mail-text">Enable premium features</span>
-            <p className="text-xs text-mail-text-muted mt-0.5">Toggle to test premium-gated features like scheduled backups</p>
-          </div>
-          <ToggleSwitch active={isPaidUser} onClick={() => setIsPaidUser(!isPaidUser)} />
-        </div>
-      </div>
 
       {/* Export choice modal */}
       <AnimatePresence>

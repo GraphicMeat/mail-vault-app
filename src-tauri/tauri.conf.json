@@ -47,7 +47,7 @@
     "macOS": {
       "entitlements": "entitlements.plist",
       "exceptionDomain": "",
-      "frameworks": [],
+      "frameworks": ["Sparkle.framework"],
       "providerShortName": null,
       "signingIdentity": null,
       "minimumSystemVersion": "11.0",

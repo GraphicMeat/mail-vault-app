@@ -28,6 +28,8 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 let nodemailer;
 try { nodemailer = require('nodemailer'); } catch { nodemailer = null; }
+let stripe;
+try { stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null; } catch { stripe = null; }
 const path = require('path');
 const { getPool, initDatabase } = require('./database');
 
@@ -63,8 +65,14 @@ app.use(cors({
   allowedHeaders: ['Content-Type']
 }));
 
-// Parse JSON bodies
-app.use(express.json());
+// Parse JSON bodies — skip for Stripe webhook (needs raw body for signature verification)
+app.use((req, res, next) => {
+  if (req.originalUrl === '/api/billing/webhook') {
+    next();
+  } else {
+    express.json()(req, res, next);
+  }
+});
 
 // Trust proxy (for rate limiting behind reverse proxy)
 app.set('trust proxy', 1);
@@ -346,6 +354,275 @@ app.post('/api/contact', contactLimiter, async (req, res) => {
     res.status(500).json({ error: 'Failed to send message' });
   }
 });
+
+// ===========================================
+// Billing Routes (Stripe)
+// ===========================================
+
+const billingLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: { error: 'Too many billing requests, please try again later.' }
+});
+
+function requireBilling(req, res, next) {
+  if (!stripe) return res.status(503).json({ error: 'billing_unavailable', message: 'Billing service is not configured.' });
+  if (dbError) return res.status(503).json({ error: 'database_unavailable', message: 'Database is not available. Please try again later.' });
+  next();
+}
+
+// Compute whether a Stripe status grants premium access
+function computePremiumAccess(status, cancelAtPeriodEnd, currentPeriodEnd) {
+  if (['trialing', 'active', 'past_due'].includes(status)) return true;
+  if (status === 'canceled' && currentPeriodEnd && new Date(currentPeriodEnd) > new Date()) return true;
+  return false;
+}
+
+// POST /api/billing/checkout-session
+app.post('/api/billing/checkout-session', billingLimiter, requireBilling, async (req, res) => {
+  try {
+    const { email, priceType } = req.body;
+    if (!email || !isValidEmail(email)) return res.status(400).json({ error: 'Valid email required.' });
+    if (!['monthly', 'yearly'].includes(priceType)) return res.status(400).json({ error: 'priceType must be monthly or yearly.' });
+
+    const priceId = priceType === 'monthly' ? process.env.STRIPE_PRICE_MONTHLY : process.env.STRIPE_PRICE_YEARLY;
+    if (!priceId) return res.status(503).json({ error: 'billing_unavailable', message: 'Price not configured.' });
+
+    const db = getPool();
+
+    // Find or create Stripe customer
+    let customerId;
+    const [existing] = await db.execute('SELECT stripe_customer_id FROM billing_customers WHERE email = ?', [email.toLowerCase()]);
+    if (existing.length > 0) {
+      customerId = existing[0].stripe_customer_id;
+    } else {
+      const customer = await stripe.customers.create({ email: email.toLowerCase() });
+      customerId = customer.id;
+      await db.execute('INSERT INTO billing_customers (email, stripe_customer_id) VALUES (?, ?)', [email.toLowerCase(), customerId]);
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      mode: 'subscription',
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: process.env.BILLING_SUCCESS_URL || 'https://mailvaultapp.com/billing-success.html',
+      cancel_url: process.env.BILLING_CANCEL_URL || 'https://mailvaultapp.com/billing-cancel.html',
+      allow_promotion_codes: true,
+    });
+
+    res.json({ url: session.url, customerId });
+  } catch (error) {
+    console.error('[billing/checkout-session]', error.message);
+    res.status(500).json({ error: 'checkout_failed', message: 'Could not create checkout session. Please try again.' });
+  }
+});
+
+// POST /api/billing/portal-session
+app.post('/api/billing/portal-session', billingLimiter, requireBilling, async (req, res) => {
+  try {
+    const { customerId, email } = req.body;
+    let stripeCustomerId = customerId;
+
+    // Fallback: look up by email if customerId not provided
+    if (!stripeCustomerId && email) {
+      const db = getPool();
+      const [rows] = await db.execute('SELECT stripe_customer_id FROM billing_customers WHERE email = ?', [email.toLowerCase()]);
+      if (rows.length > 0) stripeCustomerId = rows[0].stripe_customer_id;
+    }
+
+    if (!stripeCustomerId) return res.status(404).json({ error: 'No billing customer found.' });
+
+    const session = await stripe.billingPortal.sessions.create({
+      customer: stripeCustomerId,
+      return_url: process.env.BILLING_SUCCESS_URL || 'https://mailvaultapp.com/',
+    });
+
+    res.json({ url: session.url });
+  } catch (error) {
+    console.error('[billing/portal-session]', error.message);
+    res.status(500).json({ error: 'portal_failed', message: 'Could not open billing portal. Please try again.' });
+  }
+});
+
+// GET /api/billing/subscription-status
+app.get('/api/billing/subscription-status', billingLimiter, async (req, res) => {
+  try {
+    const { customerId, email } = req.query;
+    if (!customerId && !email) return res.status(400).json({ error: 'customerId or email required.' });
+
+    const db = getPool();
+    let customerRow;
+
+    if (customerId) {
+      const [rows] = await db.execute('SELECT * FROM billing_customers WHERE stripe_customer_id = ?', [customerId]);
+      customerRow = rows[0];
+    }
+    if (!customerRow && email) {
+      const [rows] = await db.execute('SELECT * FROM billing_customers WHERE email = ?', [email.toLowerCase()]);
+      customerRow = rows[0];
+    }
+
+    if (!customerRow) {
+      return res.json({
+        customerId: null, customerEmail: email || null,
+        hasSubscription: false, status: null, priceId: null, interval: null,
+        currentPeriodEnd: null, cancelAtPeriodEnd: false, premiumAccess: false,
+      });
+    }
+
+    // Get most recent subscription
+    const [subs] = await db.execute(
+      `SELECT * FROM billing_subscriptions WHERE billing_customer_id = ? ORDER BY current_period_end DESC LIMIT 1`,
+      [customerRow.id]
+    );
+
+    if (subs.length === 0) {
+      return res.json({
+        customerId: customerRow.stripe_customer_id, customerEmail: customerRow.email,
+        hasSubscription: false, status: null, priceId: null, interval: null,
+        currentPeriodEnd: null, cancelAtPeriodEnd: false, premiumAccess: false,
+      });
+    }
+
+    const sub = subs[0];
+    res.json({
+      customerId: customerRow.stripe_customer_id,
+      customerEmail: customerRow.email,
+      hasSubscription: true,
+      status: sub.status,
+      priceId: sub.stripe_price_id,
+      interval: sub.price_interval || null,
+      currentPeriodEnd: sub.current_period_end,
+      cancelAtPeriodEnd: !!sub.cancel_at_period_end,
+      premiumAccess: computePremiumAccess(sub.status, sub.cancel_at_period_end, sub.current_period_end),
+    });
+  } catch (error) {
+    console.error('[billing/subscription-status]', error.message);
+    res.status(500).json({ error: 'status_failed', message: 'Could not check subscription status. Please try again.' });
+  }
+});
+
+// POST /api/billing/webhook (Stripe webhook — raw body)
+app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  if (!stripe || !process.env.STRIPE_WEBHOOK_SECRET) {
+    return res.status(503).json({ error: 'Webhook not configured.' });
+  }
+
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], process.env.STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    console.error('Webhook signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  const db = getPool();
+
+  try {
+    // Idempotency: skip already-processed events
+    const [existing] = await db.execute('SELECT event_id FROM processed_stripe_events WHERE event_id = ?', [event.id]);
+    if (existing.length > 0) {
+      return res.json({ received: true, duplicate: true });
+    }
+
+    switch (event.type) {
+      case 'checkout.session.completed': {
+        const session = event.data.object;
+        if (session.mode !== 'subscription' || !session.subscription) break;
+        const email = (session.customer_email || session.customer_details?.email || '').toLowerCase();
+        const customerId = session.customer;
+        // Upsert customer
+        await db.execute(
+          `INSERT INTO billing_customers (email, stripe_customer_id) VALUES (?, ?)
+           ON DUPLICATE KEY UPDATE stripe_customer_id = VALUES(stripe_customer_id), updated_at = NOW()`,
+          [email, customerId]
+        );
+        // Fetch subscription from Stripe for full details
+        const sub = await stripe.subscriptions.retrieve(session.subscription);
+        await upsertSubscription(db, customerId, sub);
+        break;
+      }
+
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated': {
+        const sub = event.data.object;
+        await upsertSubscription(db, sub.customer, sub);
+        break;
+      }
+
+      case 'customer.subscription.deleted': {
+        // Use upsertSubscription so premium_access is computed from period end, not forced FALSE
+        const sub = event.data.object;
+        await upsertSubscription(db, sub.customer, sub);
+        break;
+      }
+
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object;
+        if (invoice.subscription) {
+          await db.execute(
+            `UPDATE billing_subscriptions SET latest_invoice_status = 'failed', updated_at = NOW()
+             WHERE stripe_subscription_id = ?`,
+            [invoice.subscription]
+          );
+        }
+        break;
+      }
+
+      case 'invoice.paid': {
+        const invoice = event.data.object;
+        if (invoice.subscription) {
+          await db.execute(
+            `UPDATE billing_subscriptions SET latest_invoice_status = 'paid', updated_at = NOW()
+             WHERE stripe_subscription_id = ?`,
+            [invoice.subscription]
+          );
+        }
+        break;
+      }
+    }
+
+    // Record event as processed
+    await db.execute(
+      'INSERT IGNORE INTO processed_stripe_events (event_id, event_type) VALUES (?, ?)',
+      [event.id, event.type]
+    );
+
+    res.json({ received: true });
+  } catch (err) {
+    console.error(`Webhook processing error [${event.id} ${event.type}]:`, err.message);
+    // Return 500 so Stripe retries — billing state was not durably written
+    res.status(500).json({ error: 'Webhook processing failed.' });
+  }
+});
+
+// Upsert subscription from Stripe object into DB
+async function upsertSubscription(db, stripeCustomerId, sub) {
+  const [custRows] = await db.execute('SELECT id FROM billing_customers WHERE stripe_customer_id = ?', [stripeCustomerId]);
+  if (custRows.length === 0) return;
+
+  const billingCustomerId = custRows[0].id;
+  const priceItem = sub.items?.data?.[0];
+  const priceId = priceItem?.price?.id || null;
+  const interval = priceItem?.price?.recurring?.interval || null;
+  const periodStart = sub.current_period_start ? new Date(sub.current_period_start * 1000) : null;
+  const periodEnd = sub.current_period_end ? new Date(sub.current_period_end * 1000) : null;
+  const canceledAt = sub.canceled_at ? new Date(sub.canceled_at * 1000) : null;
+  const premiumAccess = computePremiumAccess(sub.status, sub.cancel_at_period_end, periodEnd);
+
+  await db.execute(
+    `INSERT INTO billing_subscriptions
+       (billing_customer_id, stripe_subscription_id, stripe_price_id, price_interval, status, premium_access,
+        current_period_start, current_period_end, cancel_at_period_end, canceled_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       stripe_price_id = VALUES(stripe_price_id), price_interval = VALUES(price_interval),
+       status = VALUES(status), premium_access = VALUES(premium_access),
+       current_period_start = VALUES(current_period_start), current_period_end = VALUES(current_period_end),
+       cancel_at_period_end = VALUES(cancel_at_period_end), canceled_at = VALUES(canceled_at), updated_at = NOW()`,
+    [billingCustomerId, sub.id, priceId, interval, sub.status, premiumAccess, periodStart, periodEnd, !!sub.cancel_at_period_end, canceledAt]
+  );
+}
 
 // ===========================================
 // Admin Routes (protected)

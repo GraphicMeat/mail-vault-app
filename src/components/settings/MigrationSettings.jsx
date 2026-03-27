@@ -5,7 +5,7 @@ import {
   Loader, XCircle, AlertCircle, Folder, Lock,
   ChevronDown, ChevronRight, X, Play, Pause, Loader2
 } from 'lucide-react';
-import { useSettingsStore, getAccountInitial, getAccountColor } from '../../stores/settingsStore.js';
+import { useSettingsStore, getAccountInitial, getAccountColor, hasPremiumAccess } from '../../stores/settingsStore.js';
 import { useMailStore } from '../../stores/mailStore.js';
 import * as api from '../../services/api.js';
 import { ensureFreshToken } from '../../services/authUtils.js';
@@ -100,8 +100,9 @@ function AccountRow({ account, selected, disabled, disabledLabel, accountColors,
   );
 }
 
-export default function MigrationSettings() {
-  const isPaidUser = useSettingsStore(s => s.isPaidUser);
+export default function MigrationSettings({ onUpgrade }) {
+  const billingProfile = useSettingsStore(s => s.billingProfile);
+  const isPaidUser = hasPremiumAccess(billingProfile);
   const activeMigration = useSettingsStore(s => s.activeMigration);
   const migrationHistory = useSettingsStore(s => s.migrationHistory);
   const incompleteMigration = useSettingsStore(s => s.incompleteMigration);
@@ -646,15 +647,17 @@ export default function MigrationSettings() {
                 <ArrowLeftRight size={20} className="text-blue-500" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-mail-text mb-1">Coming Soon</p>
+                <p className="text-sm font-semibold text-mail-text mb-1">Premium Feature</p>
                 <p className="text-xs text-mail-text-muted text-center max-w-[280px]">
-                  Mailbox migration lets you move emails between any two providers. Available in a future update.
+                  Mailbox migration lets you move emails between any two providers.
                 </p>
+                <p className="text-xs text-mail-text-muted mt-1">$3/month or $25/year</p>
               </div>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full">
-                <ArrowLeftRight size={10} />
-                Coming Soon
-              </span>
+              {onUpgrade && (
+                <button onClick={onUpgrade} className="px-4 py-1.5 text-xs font-semibold bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full hover:opacity-90 transition-opacity">
+                  Upgrade
+                </button>
+              )}
             </div>
           </div>
         </div>

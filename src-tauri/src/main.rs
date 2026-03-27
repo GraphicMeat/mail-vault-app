@@ -3252,113 +3252,65 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
 #[cfg(target_os = "macos")]
 async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
     use tauri_plugin_dialog::DialogExt;
+    use tauri_plugin_sparkle_updater::SparkleUpdaterExt;
 
-    let feed_url = "https://github.com/GraphicMeat/mail-vault-app/releases/latest/download/appcast.xml";
-    info!("Checking for updates via appcast (manual={})", show_no_update);
+    info!("Checking for updates via Sparkle (manual={})", show_no_update);
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .build()
-        .unwrap_or_default();
-
-    let xml = match client.get(feed_url).send().await {
-        Ok(resp) => match resp.text().await {
-            Ok(text) => text,
-            Err(e) => {
-                error!("Failed to read appcast: {}", e);
-                if show_no_update {
-                    handle.dialog()
-                        .message("Could not check for updates. Please try again later.")
-                        .title("Update Error")
-                        .show(|_| {});
-                }
-                return;
-            }
-        },
-        Err(e) => {
-            error!("Failed to fetch appcast: {}", e);
+    let sparkle = match handle.sparkle_updater() {
+        Some(s) => s,
+        None => {
+            warn!("Sparkle updater not available (dev mode?)");
             if show_no_update {
                 handle.dialog()
-                    .message("Could not check for updates. Please try again later.")
-                    .title("Update Error")
+                    .message("Auto-update is not available in development mode.")
+                    .title("Updates")
                     .show(|_| {});
             }
             return;
         }
     };
 
-    // Parse appcast XML (simple string extraction — our appcast format is fixed)
-    let new_version = appcast_extract_tag(&xml, "sparkle:shortVersionString");
-    let download_url = appcast_extract_enclosure_url(&xml);
-
-    let (new_version, download_url) = match (new_version, download_url) {
-        (Some(v), Some(u)) => (v, u),
-        _ => {
-            error!("Failed to parse appcast XML");
-            if show_no_update {
-                handle.dialog()
-                    .message("Could not parse update information.")
-                    .title("Update Error")
-                    .show(|_| {});
-            }
-            return;
-        }
-    };
-
-    let current = env!("CARGO_PKG_VERSION");
-    if !is_newer_version(&new_version, current) {
-        info!("No updates available (current: {}, remote: {})", current, new_version);
+    // Trigger a probe-only check — fires Sparkle events without showing native UI.
+    // The frontend JS side listens for sparkle://did-find-valid-update directly.
+    // Here we also poll last_found_update() to bridge into the existing update-available event.
+    if let Err(e) = sparkle.check_for_update_information() {
+        error!("Failed to initiate Sparkle update check: {}", e);
         if show_no_update {
             handle.dialog()
-                .message(format!("You're running the latest version (v{}).", current))
-                .title("No Updates Available")
+                .message("Could not check for updates. Please try again later.")
+                .title("Update Error")
                 .show(|_| {});
         }
         return;
     }
 
-    info!("Update available: {} -> {}", current, new_version);
-    let _ = handle.emit("update-available", serde_json::json!({
-        "version": new_version,
-        "notes": "",
-        "currentVersion": current,
-        "isManualCheck": show_no_update,
-        "downloadUrl": download_url
-    }));
-}
+    // Give Sparkle time to fetch and parse the appcast
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
 
-/// Extract text content of an XML tag from appcast
-fn appcast_extract_tag(xml: &str, tag: &str) -> Option<String> {
-    let open = format!("<{}>", tag);
-    let close = format!("</{}>", tag);
-    let s = xml.find(&open)? + open.len();
-    let e = xml[s..].find(&close)?;
-    Some(xml[s..s + e].trim().to_string())
-}
+    // Check if Sparkle found an update
+    match sparkle.last_found_update() {
+        Ok(Some(update_info)) => {
+            let version = update_info.version.clone();
+            let notes = update_info.release_notes.clone().unwrap_or_default();
 
-/// Extract the url attribute from the <enclosure> element
-fn appcast_extract_enclosure_url(xml: &str) -> Option<String> {
-    let enc_pos = xml.find("<enclosure")?;
-    let enc = &xml[enc_pos..];
-    let url_pos = enc.find("url=\"")? + 5;
-    let end = enc[url_pos..].find('"')?;
-    Some(enc[url_pos..url_pos + end].trim().to_string())
-}
-
-/// Compare two semver strings, returns true if `new` is strictly newer than `current`
-fn is_newer_version(new: &str, current: &str) -> bool {
-    let parse = |v: &str| -> Vec<u32> {
-        v.split('.').filter_map(|p| p.parse().ok()).collect()
-    };
-    let new_parts = parse(new);
-    let cur_parts = parse(current);
-    for i in 0..new_parts.len().max(cur_parts.len()) {
-        let n = new_parts.get(i).copied().unwrap_or(0);
-        let c = cur_parts.get(i).copied().unwrap_or(0);
-        if n > c { return true; }
-        if n < c { return false; }
+            info!("Update available: {} -> {}", env!("CARGO_PKG_VERSION"), version);
+            let _ = handle.emit("update-available", serde_json::json!({
+                "version": version,
+                "notes": notes,
+                "currentVersion": env!("CARGO_PKG_VERSION"),
+                "isManualCheck": show_no_update
+            }));
+        }
+        _ => {
+            info!("No updates available");
+            if show_no_update {
+                handle.dialog()
+                    .message(format!("You're running the latest version (v{}).", env!("CARGO_PKG_VERSION")))
+                    .title("No Updates Available")
+                    .show(|_| {});
+            }
+        }
     }
-    false
 }
 
 fn main() {
@@ -3443,7 +3395,9 @@ fn main() {
     #[cfg(feature = "webdriver")]
     let builder = builder.plugin(tauri_plugin_webdriver_automation::init());
 
-    // Updater plugins — custom appcast on macOS, tauri-plugin-updater on Linux
+    // Updater plugins — Sparkle on macOS, tauri-plugin-updater on Linux
+    #[cfg(target_os = "macos")]
+    let builder = builder.plugin(tauri_plugin_sparkle_updater::init());
     #[cfg(target_os = "linux")]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
 

@@ -102,6 +102,12 @@ pub async fn imap_get_mailboxes(
         Ok((result, session, None))
     }).await?;
 
+    info!(
+        "[CMD] imap_get_mailboxes: {} mailboxes returned for {}",
+        mailboxes.len(),
+        account.email
+    );
+
     Ok(serde_json::json!({
         "success": true,
         "mailboxes": mailboxes

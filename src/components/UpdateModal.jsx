@@ -71,9 +71,7 @@ export function UpdateModal({ updateInfo, onClose }) {
 
   const newVersion = updateInfo?.version || 'unknown';
   const notes = updateInfo?.notes || '';
-  const downloadUrl = updateInfo?.downloadUrl || null;
-
-  // Listen for download progress events from Rust
+  // Listen for download progress events from Rust (Linux only)
   useEffect(() => {
     if (state !== 'downloading') return;
     let unlisten;
@@ -104,13 +102,17 @@ export function UpdateModal({ updateInfo, onClose }) {
   };
 
   const handleUpdateNow = async () => {
-    // macOS: open DMG download URL in browser (Sparkle XPC installer is unreliable)
-    if (downloadUrl) {
+    // macOS: trigger Sparkle native install/relaunch flow
+    const isMacOS = navigator.platform?.startsWith('Mac') || navigator.userAgent?.includes('Mac');
+    if (isMacOS) {
       try {
-        const { open } = await import('@tauri-apps/plugin-shell');
-        await open(downloadUrl);
-      } catch {
-        window.open(downloadUrl, '_blank');
+        const { checkForUpdates } = await import('tauri-plugin-sparkle-updater-api');
+        await checkForUpdates();
+      } catch (err) {
+        // Sparkle handles the UI from here — if it fails, show error
+        setState('error');
+        setErrorMsg(typeof err === 'string' ? err : err?.message || 'Sparkle update failed');
+        return;
       }
       onClose();
       return;
@@ -208,7 +210,7 @@ export function UpdateModal({ updateInfo, onClose }) {
                              bg-mail-accent hover:bg-mail-accent-hover rounded-lg transition-colors"
                 >
                   <Download size={14} />
-                  {downloadUrl ? 'Download Update' : 'Update Now'}
+                  Update Now
                 </button>
               </div>
             </>

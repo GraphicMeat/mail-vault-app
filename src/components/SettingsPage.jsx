@@ -12,6 +12,7 @@ import {
   Shield,
   Clock,
   ArrowLeftRight,
+  CreditCard,
 } from 'lucide-react';
 import { GeneralSettings } from './settings/GeneralSettings';
 import { AccountSettings } from './settings/AccountSettings';
@@ -22,6 +23,7 @@ import { LogsSettings } from './settings/LogsSettings';
 import { HelpSettings } from './settings/HelpSettings';
 import BackupSettings from './settings/BackupSettings';
 import MigrationSettings from './settings/MigrationSettings.jsx';
+import { BillingSettings } from './settings/BillingSettings';
 
 export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, initialAccountId }) {
   const accounts = useMailStore(s => s.accounts);
@@ -44,6 +46,7 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
     { id: 'storage', label: 'Storage', icon: HardDrive },
     { id: 'backup', label: 'Backup', icon: Clock },
     { id: 'migration', label: 'Migration', icon: ArrowLeftRight },
+    { id: 'billing', label: 'Billing', icon: CreditCard },
     { id: 'security', label: 'Security', icon: Shield },
     { id: 'logs', label: 'Logs', icon: ScrollText },
     { id: 'help', label: 'Help & Support', icon: Mail },
@@ -120,15 +123,19 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
             )}
 
             {activeTab === 'storage' && (
-              <StorageSettings accounts={accounts} />
+              <StorageSettings accounts={accounts} onUpgrade={() => setActiveTab('billing')} />
             )}
 
             {activeTab === 'backup' && (
-              <BackupSettings initialAccountId={initialAccountId} />
+              <BackupSettings initialAccountId={initialAccountId} onUpgrade={() => setActiveTab('billing')} />
             )}
 
             {activeTab === 'migration' && (
-              <MigrationSettings />
+              <MigrationSettings onUpgrade={() => setActiveTab('billing')} />
+            )}
+
+            {activeTab === 'billing' && (
+              <BillingSettings />
             )}
 
             {activeTab === 'security' && (

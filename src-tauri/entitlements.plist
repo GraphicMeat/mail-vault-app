@@ -37,5 +37,12 @@
     <array>
         <string>$(AppIdentifierPrefix)com.mailvault.app</string>
     </array>
+
+    <!-- Sparkle auto-updater XPC services (mach-lookup names = bundle-id + suffix) -->
+    <key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
+    <array>
+        <string>com.mailvault.app-spks</string>
+        <string>com.mailvault.app-spki</string>
+    </array>
 </dict>
 </plist>

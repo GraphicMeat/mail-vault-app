@@ -409,6 +409,8 @@ pub async fn list_mailboxes(session: &mut ImapSession) -> Result<Vec<MailboxInfo
         .filter_map(|r| r.ok())
         .collect();
 
+    info!("[IMAP] LIST returned {} raw mailbox names", names.len());
+
     let mut all: Vec<MailboxInfo> = Vec::new();
     for name in &names {
         let path = name.name().to_string();
@@ -477,6 +479,7 @@ pub async fn list_mailboxes(session: &mut ImapSession) -> Result<Vec<MailboxInfo
         }
     }
 
+    info!("[IMAP] list_mailboxes returning {} top-level mailboxes", result.len());
     Ok(result)
 }
 
@@ -695,11 +698,14 @@ pub async fn search_all_uids(
 ) -> Result<Vec<u32>, String> {
     let _mbox = select_mailbox(session, mailbox).await?;
 
+    let mut esearch_failed = false;
+
     if has_esearch {
         match search_all_uids_esearch(session).await {
             Ok(uids) => return Ok(uids),
             Err(e) => {
                 warn!("[IMAP] ESEARCH failed, falling back to UID SEARCH ALL: {}", e);
+                esearch_failed = true;
                 // Re-select mailbox to reset session state after ESEARCH parse failure
                 // (the response buffer may contain partial ESEARCH data)
                 let _ = select_mailbox(session, mailbox).await;
@@ -716,6 +722,40 @@ pub async fn search_all_uids(
     let mut result: Vec<u32> = uids.into_iter().collect();
     result.sort();
     info!("[IMAP] UID SEARCH ALL returned {} UIDs for {}", result.len(), mailbox);
+
+    // Verification pass: if ESEARCH failed and fallback returned 0 UIDs,
+    // re-select the mailbox and check EXISTS count before trusting the empty result.
+    // This prevents a single bad parse from blanking an account's email list.
+    if esearch_failed && result.is_empty() {
+        warn!("[IMAP] ESEARCH failed AND UID SEARCH ALL returned 0 for {} — running verification pass", mailbox);
+        let verify_mbox = select_mailbox(session, mailbox).await?;
+        info!(
+            "[IMAP] Verification: mailbox={} exists={} uid_validity={:?} uid_next={:?}",
+            mailbox, verify_mbox.exists, verify_mbox.uid_validity, verify_mbox.uid_next
+        );
+
+        if verify_mbox.exists > 0 {
+            // Server says mailbox has messages but UID SEARCH returned 0 — retry once
+            warn!(
+                "[IMAP] Verification mismatch: EXISTS={} but UID SEARCH returned 0 for {} — retrying UID SEARCH ALL",
+                verify_mbox.exists, mailbox
+            );
+            let retry_uids = session
+                .uid_search("ALL")
+                .await
+                .map_err(|e| format!("UID SEARCH ALL retry failed for {}: {}", mailbox, e))?;
+            let mut retry_result: Vec<u32> = retry_uids.into_iter().collect();
+            retry_result.sort();
+            info!(
+                "[IMAP] UID SEARCH ALL retry returned {} UIDs for {} (EXISTS={})",
+                retry_result.len(), mailbox, verify_mbox.exists
+            );
+            return Ok(retry_result);
+        }
+        // EXISTS is also 0 — genuinely empty mailbox
+        info!("[IMAP] Verification confirmed: mailbox {} is genuinely empty (EXISTS=0)", mailbox);
+    }
+
     Ok(result)
 }
 

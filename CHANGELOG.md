@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- **Stripe billing**: Premium subscription via Stripe Checkout ($3/month or $25/year) with hosted billing API, webhook processing, and Customer Portal; new Billing tab in Settings with plan cards, feature comparison, and subscription management
 - **Backup verification view**: Folder-level tree table in Backup Settings showing Server / App / External counts per folder with expand/collapse, summary chips, and progress bar — works for both IMAP and Outlook/Graph accounts
 - **Backup icon opens focused account**: Clicking a sidebar backup status icon opens Settings on the Backup tab and scrolls to that account's card with a transient accent ring highlight
 

@@ -144,6 +144,15 @@ class EmailPipelineManager {
             } else {
               mailboxes = await apiMod.fetchMailboxes(freshAccount);
             }
+            // Guard: refuse to persist empty mailbox list if prior cache was non-empty
+            if (mailboxes && mailboxes.length === 0) {
+              const cachedEntry = await db.getCachedMailboxEntry(account.id).catch(() => null);
+              const priorMailboxes = cachedEntry?.lastKnownGoodMailboxes || cachedEntry?.mailboxes;
+              if (priorMailboxes && priorMailboxes.length > 0) {
+                console.warn(`[PipelineManager] Server returned [] mailboxes for ${account.email} — skipping persist (prior cache had data)`);
+                return; // Skip saving, keep prior cache
+              }
+            }
             await db.saveMailboxes(account.id, mailboxes);
           } catch (e) {
             // Non-fatal: cached mailboxes from last connection will be used
