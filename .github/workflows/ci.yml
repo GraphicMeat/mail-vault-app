@@ -119,7 +119,7 @@ jobs:
 
       - name: Run E2E tests
         env:
-          TAURI_APP_BINARY: ${{ github.workspace }}/src-tauri/target/debug/mail-vault
+          TAURI_APP_BINARY: ${{ github.workspace }}/src-tauri/target/debug/mailvault
         run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npx wdio run wdio.conf.js
 
       - name: Upload visual diff artifacts on failure
