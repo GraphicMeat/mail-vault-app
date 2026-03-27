@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useMailStore } from '../../stores/mailStore';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { runCleanupRules } from '../../services/cleanupEngine';
 import { ToggleSwitch } from './ToggleSwitch';
@@ -18,20 +18,21 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 
-export function StorageSettings({ accounts }) {
+export function StorageSettings({ accounts, onUpgrade }) {
   const {
     localStoragePath,
     setLocalStoragePath,
     localCacheDurationMonths,
     setLocalCacheDurationMonths,
     hiddenAccounts,
-    isPaidUser,
+    billingProfile,
     cleanupRules,
     addCleanupRule,
     updateCleanupRule,
     removeCleanupRule,
     toggleCleanupRule,
   } = useSettingsStore();
+  const isPaidUser = hasPremiumAccess(billingProfile);
 
   const [movingStorage, setMovingStorage] = useState(false);
   const [supportsFileSystem, setSupportsFileSystem] = useState(false);
@@ -297,8 +298,7 @@ export function StorageSettings({ accounts }) {
           Auto-Cleanup
           {!isPaidUser && (
             <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full">
-              <Clock size={10} />
-              Coming Soon
+              Premium
             </span>
           )}
         </h4>
@@ -339,11 +339,17 @@ export function StorageSettings({ accounts }) {
                   <Clock size={20} className="text-blue-500" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-mail-text mb-1">Coming Soon</p>
+                  <p className="text-sm font-semibold text-mail-text mb-1">Premium Feature</p>
                   <p className="text-xs text-mail-text-muted max-w-[280px]">
                     Automatically clean up old emails with custom rules. Set per-folder age thresholds, choose to archive or delete, and keep your mailbox tidy.
                   </p>
+                  <p className="text-xs text-mail-text-muted mt-1">$3/month or $25/year</p>
                 </div>
+                {onUpgrade && (
+                  <button onClick={onUpgrade} className="px-4 py-1.5 text-xs font-semibold bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full hover:opacity-90 transition-opacity">
+                    Upgrade
+                  </button>
+                )}
               </div>
             </div>
           </div>

@@ -160,9 +160,13 @@ export const useSettingsStore = create(
       keyboardShortcuts: { ...DEFAULT_SHORTCUTS },
       keyboardShortcutsEnabled: true,
 
-      // Paid user flag (placeholder — swap to real payment check later)
-      isPaidUser: false,
-      setIsPaidUser: (val) => set({ isPaidUser: val }),
+      // Billing
+      billingEmail: '',
+      billingProfile: null,   // cached { customerId, hasSubscription, status, priceId, interval, currentPeriodEnd, cancelAtPeriodEnd, premiumAccess }
+      billingLastChecked: null,
+      setBillingEmail: (email) => set({ billingEmail: email }),
+      setBillingProfile: (profile) => set({ billingProfile: profile, billingLastChecked: Date.now() }),
+      clearBillingProfile: () => set({ billingProfile: null, billingLastChecked: null, billingEmail: '' }),
 
       // Link safety settings
       linkSafetyEnabled: true,
@@ -546,14 +550,14 @@ export const useSettingsStore = create(
 
       // Auto-cleanup rule methods
       addCleanupRule: (rule) => {
-        if (!get().isPaidUser) return;
+        if (!hasPremiumAccess(get().billingProfile)) return;
         set((state) => ({
           cleanupRules: [...state.cleanupRules, { ...rule, id: crypto.randomUUID() }],
         }));
       },
 
       updateCleanupRule: (id, updates) => {
-        if (!get().isPaidUser) return;
+        if (!hasPremiumAccess(get().billingProfile)) return;
         set((state) => ({
           cleanupRules: state.cleanupRules.map(r => r.id === id ? { ...r, ...updates } : r),
         }));
@@ -564,7 +568,7 @@ export const useSettingsStore = create(
       })),
 
       toggleCleanupRule: (id) => {
-        if (!get().isPaidUser) return;
+        if (!hasPremiumAccess(get().billingProfile)) return;
         set((state) => ({
           cleanupRules: state.cleanupRules.map(r =>
             r.id === id ? { ...r, enabled: !r.enabled } : r
@@ -631,7 +635,9 @@ export const useSettingsStore = create(
           emailTemplates: [],
           keyboardShortcuts: { ...DEFAULT_SHORTCUTS },
           keyboardShortcutsEnabled: true,
-          isPaidUser: false,
+          billingEmail: '',
+          billingProfile: null,
+          billingLastChecked: null,
           linkSafetyEnabled: true,
           linkSafetyClickConfirm: true,
           cleanupRules: [],
@@ -643,7 +649,7 @@ export const useSettingsStore = create(
     }),
     {
       name: 'mailvault-settings',
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() => safeStorage),
       merge: (persisted, current) => ({ ...current, ...(persisted || {}) }),
       // Migrate existing users from old defaults (5GB or 512MB) down to 128MB
@@ -663,3 +669,24 @@ export const useSettingsStore = create(
     }
   )
 );
+
+/**
+ * Derive premium access from a billing profile.
+ * - trialing, active, past_due → access
+ * - canceled → access only until currentPeriodEnd
+ * - incomplete, unpaid → no access
+ */
+export function hasPremiumAccess(billingProfile) {
+  // Non-production override for dev/E2E testing
+  if (typeof window !== 'undefined' && window.__MAILVAULT_FORCE_PREMIUM__ === true) return true;
+  if (typeof window !== 'undefined' && window.__MAILVAULT_FORCE_PREMIUM__ === false) return false;
+
+  if (!billingProfile?.hasSubscription) return false;
+  const { status, currentPeriodEnd, premiumAccess } = billingProfile;
+  // Server already computes premiumAccess — trust it if present
+  if (typeof premiumAccess === 'boolean') return premiumAccess;
+  // Client-side fallback
+  if (['trialing', 'active', 'past_due'].includes(status)) return true;
+  if (status === 'canceled' && currentPeriodEnd) return new Date(currentPeriodEnd).getTime() > Date.now();
+  return false;
+}

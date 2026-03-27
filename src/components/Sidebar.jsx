@@ -13,6 +13,7 @@ import {
   Star,
   Archive,
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   Plus,
   ChevronDown,
@@ -262,6 +263,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const connectionStatus = useMailStore(s => s.connectionStatus);
   const connectionError = useMailStore(s => s.connectionError);
   const connectionErrorType = useMailStore(s => s.connectionErrorType);
+  const suspectEmptyServerData = useMailStore(s => s.suspectEmptyServerData);
   const emails = useMailStore(s => s.emails);
   const totalEmails = useMailStore(s => s.totalEmails);
   const loading = useMailStore(s => s.loading);
@@ -650,6 +652,28 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                 }}
                 onOpenBackup={onOpenBackup}
               />
+
+              {/* Suspect empty data warning — server returned empty but cache had data */}
+              {account.id === activeAccountId && suspectEmptyServerData?.accountId === account.id && (
+                <div className="mt-1 mb-1 p-2 rounded-lg border bg-mail-warning/10 border-mail-warning/20">
+                  <div className="flex items-center justify-between text-xs text-mail-warning">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle size={14} />
+                      <span>Showing cached data</span>
+                    </div>
+                    <button
+                      onClick={() => activateAccount(activeAccountId, activeMailbox)}
+                      className="p-1 hover:bg-mail-warning/20 rounded transition-colors"
+                      title="Retry connection"
+                    >
+                      <RefreshCw size={12} />
+                    </button>
+                  </div>
+                  <p className="mt-1 text-[10px] text-mail-text-muted leading-tight">
+                    {suspectEmptyServerData.message}
+                  </p>
+                </div>
+              )}
 
               {/* Inline error banner — shown directly below the account that has the error */}
               {account.id === activeAccountId && showError && connectionStatus === 'error' && (

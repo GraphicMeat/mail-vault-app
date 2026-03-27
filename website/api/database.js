@@ -79,6 +79,46 @@ async function initDatabase() {
     )
   `);
 
+  // Billing tables
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS billing_customers (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      email VARCHAR(255) NOT NULL UNIQUE,
+      stripe_customer_id VARCHAR(255) NOT NULL UNIQUE,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS billing_subscriptions (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      billing_customer_id INT NOT NULL,
+      stripe_subscription_id VARCHAR(255) NOT NULL UNIQUE,
+      stripe_price_id VARCHAR(255),
+      price_interval VARCHAR(20),
+      status VARCHAR(50) NOT NULL,
+      premium_access BOOLEAN DEFAULT FALSE,
+      current_period_start DATETIME,
+      current_period_end DATETIME,
+      cancel_at_period_end BOOLEAN DEFAULT FALSE,
+      canceled_at DATETIME NULL,
+      latest_invoice_status VARCHAR(50),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_customer (billing_customer_id),
+      INDEX idx_status (status)
+    )
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS processed_stripe_events (
+      event_id VARCHAR(255) PRIMARY KEY,
+      event_type VARCHAR(100) NOT NULL,
+      processed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // Seed default features if table is empty
   const [rows] = await db.execute('SELECT COUNT(*) as count FROM features');
   if (rows[0].count === 0) {

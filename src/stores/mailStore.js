@@ -148,9 +148,16 @@ async function loadMailboxes(accountId, account, requestedMailbox, signal, { isB
   const cachedEntry = await db.getCachedMailboxEntry(accountId).catch(() => null);
   if (signal.aborted) return null;
 
-  const localMailboxes = cachedEntry?.mailboxes || [
-    { name: 'INBOX', path: 'INBOX', specialUse: null, children: [] }
-  ];
+  // Prefer current cache, fall back to last-known-good if current is empty (corruption recovery)
+  let localMailboxes = cachedEntry?.mailboxes;
+  if (!localMailboxes || localMailboxes.length === 0) {
+    if (cachedEntry?.lastKnownGoodMailboxes?.length > 0) {
+      console.warn('[loadMailboxes] Current mailbox cache empty, using last-known-good for', accountId);
+      localMailboxes = cachedEntry.lastKnownGoodMailboxes;
+    } else {
+      localMailboxes = [{ name: 'INBOX', path: 'INBOX', specialUse: null, children: [] }];
+    }
+  }
 
   // Set cached mailboxes immediately (first paint)
   if (!isBackgroundRefresh) {
@@ -189,6 +196,32 @@ async function loadMailboxes(accountId, account, requestedMailbox, signal, { isB
         .then(freshMailboxes => {
           if (signal.aborted) return null;
           if (useMailStore.getState().activeAccountId !== accountId) return null;
+
+          // ── Suspicious empty guard ──────────────────────────────────
+          // Refuse to overwrite a previously complete mailbox tree with []
+          if (isSuspiciousEmptyMailboxResult(freshMailboxes, cachedEntry)) {
+            console.warn(
+              '[loadMailboxes] Server returned [] mailboxes for %s but prior cache had %d — rejecting as suspicious',
+              account.email,
+              countMailboxes(cachedEntry.lastKnownGoodMailboxes || cachedEntry.mailboxes)
+            );
+            useMailStore.setState({
+              suspectEmptyServerData: {
+                accountId,
+                type: 'mailboxes',
+                message: 'Server returned empty folder list unexpectedly. Showing cached folders while verifying.',
+                timestamp: Date.now(),
+              },
+            });
+            // Keep existing cached data, do NOT persist empty result
+            return null;
+          }
+
+          // Clear any previous suspect state for this account if server returned real data
+          const currentSuspect = useMailStore.getState().suspectEmptyServerData;
+          if (currentSuspect?.accountId === accountId && currentSuspect?.type === 'mailboxes') {
+            useMailStore.setState({ suspectEmptyServerData: null });
+          }
 
           // Only update if actually different (avoid unnecessary re-renders)
           const currentMailboxes = useMailStore.getState().mailboxes;
@@ -263,6 +296,33 @@ function _mailboxesChanged(current, fresh) {
     if (freshMap.get(path) !== count) return true;
   }
   return false;
+}
+
+// ── Suspicious empty result detection ─────────────────────────────────────
+// Safety policy: never replace known-good non-empty data with unverified empty server results.
+
+/**
+ * Returns true if a server-returned mailbox list looks suspicious given prior cached data.
+ * An empty result is suspicious when prior cache had a complete, non-empty mailbox tree.
+ */
+function isSuspiciousEmptyMailboxResult(freshMailboxes, cachedEntry) {
+  if (!freshMailboxes || freshMailboxes.length > 0) return false; // Not empty → not suspicious
+  if (!cachedEntry) return false; // No prior cache → new account, empty is fine
+  // Check if prior cache had a real mailbox tree (not just stub INBOX)
+  const priorMailboxes = cachedEntry.lastKnownGoodMailboxes || cachedEntry.mailboxes;
+  return isMailboxTreeComplete(priorMailboxes);
+}
+
+/**
+ * Returns true if a server returning 0 emails looks suspicious given prior evidence.
+ * Evidence sources: cached header count, Maildir file count (savedEmailIds).
+ */
+function isSuspiciousEmptyEmailResult(serverTotal, cachedHeaders, savedEmailIds) {
+  if (serverTotal > 0) return false; // Not empty → not suspicious
+  // Check prior evidence of non-empty mailbox
+  const cachedTotal = cachedHeaders?.totalEmails || cachedHeaders?.lastKnownGoodTotalEmails || 0;
+  const savedCount = savedEmailIds?.size || 0;
+  return cachedTotal > 0 || savedCount > 0;
 }
 
 import { createPerfTrace } from '../utils/perfTrace';
@@ -491,6 +551,10 @@ export const useMailStore = create((set, get) => ({
 
   // Unread counts across all accounts
   totalUnreadCount: 0,
+
+  // Suspicious empty server result — server returned empty data for an account
+  // that previously had non-empty cached data. Prevents cache corruption.
+  suspectEmptyServerData: null, // null | { accountId, type: 'mailboxes'|'emails', message, timestamp }
 
 
   // Clear email cache (call when switching accounts/mailboxes)
@@ -819,6 +883,13 @@ export const useMailStore = create((set, get) => ({
       try {
         if (shouldUseFreshMailboxCache(entry)) return;
         const mailboxes = await fetchAccountMailboxes(account);
+
+        // Guard: refuse to persist empty mailbox list if prior cache was non-empty
+        if (isSuspiciousEmptyMailboxResult(mailboxes, entry)) {
+          console.warn(`[prefetch] Server returned [] mailboxes for ${account.email} — skipping persist (prior cache had data)`);
+          return;
+        }
+
         await db.saveMailboxes(account.id, mailboxes);
         // Update in-memory account cache if entry exists
         const cached = _getFromAccountCache(account.id);
@@ -1231,6 +1302,21 @@ export const useMailStore = create((set, get) => ({
             const unread = cachedHeaders.emails.filter(e => !e.flags?.includes('\\Seen')).length;
             useSettingsStore.getState().setUnreadForAccount(accountId, unread);
           }
+        } else if (savedEmailIds.size > 0 && !isBackgroundRefresh) {
+          // ── Repair path: cache is empty but Maildir has data (corrupted cache) ──
+          console.warn(
+            '[activateAccount] Cache empty but Maildir has %d saved emails for %s/%s — treating as corrupted cache, showing local recovery data',
+            savedEmailIds.size, accountId, effectiveMailbox
+          );
+          set({
+            loading: true,
+            suspectEmptyServerData: {
+              accountId,
+              type: 'emails',
+              message: 'Email cache was empty but local data exists. Rebuilding from local copies while syncing with server.',
+              timestamp: Date.now(),
+            },
+          });
         } else if (!isBackgroundRefresh) {
           set({ loading: true });
         }
@@ -2393,6 +2479,44 @@ export const useMailStore = create((set, get) => ({
             isLocal: savedEmailIds.has(email.uid),
             source: 'server'
           }));
+        }
+      }
+
+      // ── Suspicious empty guard ──────────────────────────────────────
+      // If server returned 0 emails but prior cache/Maildir had data, reject the result
+      if (isSuspiciousEmptyEmailResult(serverTotal, cachedHeaders, savedEmailIds) && (!mergedEmails || mergedEmails.length === 0)) {
+        console.warn(
+          '[loadEmails] Server returned 0 emails for %s/%s but prior cache had %d, Maildir has %d — rejecting as suspicious',
+          account.email, activeMailbox,
+          cachedHeaders?.totalEmails || cachedHeaders?.lastKnownGoodTotalEmails || 0,
+          savedEmailIds?.size || 0
+        );
+        set({
+          suspectEmptyServerData: {
+            accountId: activeAccountId,
+            type: 'emails',
+            message: 'Server returned empty inbox unexpectedly. Showing cached data while verifying.',
+            timestamp: Date.now(),
+          },
+          connectionStatus: 'connected',
+          connectionError: null,
+          connectionErrorType: null,
+          loading: false,
+          loadingMore: false,
+        });
+        loadTrace.end('suspicious-empty-rejected', {
+          serverTotal,
+          cachedTotal: cachedHeaders?.totalEmails || 0,
+          savedCount: savedEmailIds?.size || 0,
+        });
+        return;
+      }
+
+      // Clear suspect state if server returned real data
+      if (mergedEmails?.length > 0) {
+        const currentSuspect = get().suspectEmptyServerData;
+        if (currentSuspect?.accountId === activeAccountId && currentSuspect?.type === 'emails') {
+          set({ suspectEmptyServerData: null });
         }
       }
 

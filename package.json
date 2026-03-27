@@ -42,6 +42,7 @@
     "mysql2": "^3.11.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "tauri-plugin-sparkle-updater-api": "^0.2.2",
     "uuid": "^9.0.1",
     "zustand": "^4.4.7"
   },

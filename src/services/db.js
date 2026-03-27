@@ -894,7 +894,21 @@ export async function exportEmail(localId) {
 export async function saveMailboxes(accountId, mailboxes) {
   if (invoke) {
     try {
-      const data = JSON.stringify({ mailboxes, fetchedAt: Date.now() });
+      // If we're saving a non-empty mailbox tree, also snapshot it as last-known-good
+      const now = Date.now();
+      const entry = { mailboxes, fetchedAt: now };
+      if (mailboxes && mailboxes.length > 0) {
+        entry.lastKnownGoodMailboxes = mailboxes;
+        entry.lastKnownGoodAt = now;
+      } else {
+        // Preserve existing last-known-good when saving empty
+        const existing = await getCachedMailboxEntry(accountId);
+        if (existing?.lastKnownGoodMailboxes) {
+          entry.lastKnownGoodMailboxes = existing.lastKnownGoodMailboxes;
+          entry.lastKnownGoodAt = existing.lastKnownGoodAt;
+        }
+      }
+      const data = JSON.stringify(entry);
       await invoke('save_mailbox_cache', { accountId, data });
     } catch (error) {
       console.warn('[db.js] Failed to save mailbox cache:', error);
@@ -909,11 +923,13 @@ export async function getCachedMailboxEntry(accountId) {
       if (data) {
         const entry = JSON.parse(data);
         if (Array.isArray(entry)) {
-          return { mailboxes: entry, fetchedAt: null };
+          return { mailboxes: entry, fetchedAt: null, lastKnownGoodMailboxes: null, lastKnownGoodAt: null };
         }
         return {
           mailboxes: entry.mailboxes || null,
           fetchedAt: entry.fetchedAt ?? entry.lastSynced ?? null,
+          lastKnownGoodMailboxes: entry.lastKnownGoodMailboxes || null,
+          lastKnownGoodAt: entry.lastKnownGoodAt || null,
         };
       }
     } catch (error) {
@@ -942,6 +958,22 @@ export async function saveEmailHeaders(accountId, mailbox, emails, totalEmails, 
     serverUids: serverUids ? Array.from(serverUids) : undefined,
     lastSynced: Date.now()
   };
+
+  // Track last-known-good email count for corruption detection
+  if (emails && emails.length > 0) {
+    cacheEntry.lastKnownGoodTotalEmails = totalEmails;
+    cacheEntry.lastKnownGoodCount = emails.length;
+    cacheEntry.lastKnownGoodAt = Date.now();
+  } else {
+    // Preserve existing last-known-good when saving empty headers
+    try {
+      const existingMeta = await getEmailHeadersMeta(accountId, mailbox);
+      if (existingMeta?.lastKnownGoodTotalEmails) {
+        cacheEntry.lastKnownGoodTotalEmails = existingMeta.lastKnownGoodTotalEmails;
+        cacheEntry.lastKnownGoodCount = existingMeta.lastKnownGoodCount;
+      }
+    } catch { /* ignore — best effort */ }
+  }
 
   if (invoke) {
     try {
@@ -994,7 +1026,9 @@ export async function getEmailHeadersMeta(accountId, mailbox) {
           uidValidity: entry.uidValidity ?? null,
           uidNext: entry.uidNext ?? null,
           highestModseq: entry.highestModseq ?? null,
-          lastSynced: entry.lastSynced
+          lastSynced: entry.lastSynced,
+          lastKnownGoodTotalEmails: entry.lastKnownGoodTotalEmails ?? null,
+          lastKnownGoodCount: entry.lastKnownGoodCount ?? null,
         };
       }
     } catch (error) {

@@ -2,7 +2,7 @@
 // Runs once per 24h (or manually via "Run All Now"), processes enabled rules,
 // and deletes or archives+deletes emails older than the configured threshold.
 
-import { useSettingsStore } from '../stores/settingsStore';
+import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { useMailStore } from '../stores/mailStore';
 import { ensureFreshToken } from './authUtils';
 import * as api from './api';
@@ -156,11 +156,11 @@ async function executeRule(rule, { dryRun = false } = {}) {
  * Returns { archived: number, deleted: number } totals.
  */
 export async function runCleanupRules() {
-  const { isPaidUser, cleanupRules } = useSettingsStore.getState();
+  const { billingProfile, cleanupRules } = useSettingsStore.getState();
 
-  // Only paid users can run cleanup
-  if (!isPaidUser) {
-    console.log('[CleanupEngine] Skipping — not a paid user');
+  // Only premium users can run cleanup
+  if (!hasPremiumAccess(billingProfile)) {
+    console.log('[CleanupEngine] Skipping — no premium access');
     return { archived: 0, deleted: 0 };
   }
 
