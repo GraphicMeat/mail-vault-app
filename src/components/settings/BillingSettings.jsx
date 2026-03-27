@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import {
-  createCheckoutSession, createPortalSession, fetchSubscriptionStatus,
+  createCheckoutSession, createPortalSession, fetchSubscriptionStatus, fetchPricing,
   unregisterBillingClient, getClientInfo, openInBrowser,
   isBillingRateLimited, getBillingRateLimitedUntil, BillingRateLimitError,
 } from '../../services/billingApi';
@@ -60,6 +60,8 @@ export function BillingSettings() {
   const [replacedNotice, setReplacedNotice] = useState(null);
   const [removingClientId, setRemovingClientId] = useState(null);
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
+  const [pricing, setPricing] = useState(null); // { currency, currencySource, plans: [...] }
+  const [pricingLoading, setPricingLoading] = useState(false);
 
   const inflightRef = useRef(false);
   const refreshPromiseRef = useRef(null);
@@ -76,6 +78,14 @@ export function BillingSettings() {
 
   // Load client info once
   useEffect(() => { getClientInfo().then(info => { clientInfoRef.current = info; }); }, []);
+
+  // Fetch pricing on mount (only when not premium — plan cards are hidden for premium users)
+  useEffect(() => {
+    if (!isPremium && !pricing && !pricingLoading) {
+      setPricingLoading(true);
+      fetchPricing().then(setPricing).catch(() => {}).finally(() => setPricingLoading(false));
+    }
+  }, [isPremium]);
 
   // Cooldown ticker — count down when rate-limited or in manual cooldown
   useEffect(() => {
@@ -198,15 +208,19 @@ export function BillingSettings() {
     refreshStatus(email, { manual: true });
   };
 
-  const handleCheckout = async (priceType) => {
+  const handleCheckout = async (plan) => {
     setCheckoutError(null); setEmailError(null);
     const email = emailInput.trim().toLowerCase();
     if (!email) { setEmailError('Enter your email address to upgrade.'); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setEmailError('Please enter a valid email address.'); return; }
-    setCheckoutLoading(priceType);
+    const interval = plan?.interval === 'year' ? 'yearly' : 'monthly';
+    setCheckoutLoading(interval);
     try {
       setBillingEmail(email);
-      const { url, customerId: newCustomerId } = await createCheckoutSession(email, priceType);
+      const { url, customerId: newCustomerId } = await createCheckoutSession(email, interval, {
+        planId: plan?.planId,
+        currency: plan?.currency,
+      });
       if (newCustomerId) setBillingProfile({ ...billingProfile, customerId: newCustomerId, customerEmail: email });
       try { await openInBrowser(url); } catch (browserErr) { setCheckoutError(browserErr.message); }
     } catch (e) {
@@ -296,30 +310,53 @@ export function BillingSettings() {
         {billingLastChecked && <p className="text-xs text-mail-text-muted mt-1">Last checked: {new Date(billingLastChecked).toLocaleTimeString()}</p>}
       </div>
 
-      {/* Plan Cards */}
-      {!isPremium && (
-        <div className="grid grid-cols-2 gap-4">
-          <div className="bg-mail-surface border border-mail-border rounded-xl p-5 flex flex-col">
-            <h4 className="text-sm font-semibold text-mail-text mb-1">Monthly</h4>
-            <div className="text-2xl font-bold text-mail-text mb-1">$3<span className="text-sm font-normal text-mail-text-muted">/mo</span></div>
-            <p className="text-xs text-mail-text-muted mb-4 flex-1">Cancel anytime</p>
-            <button onClick={() => handleCheckout('monthly')} disabled={checkoutLoading || !emailInput.trim()}
-              className="w-full py-2 text-sm font-semibold bg-mail-accent text-white rounded-lg hover:bg-mail-accent-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
-              {checkoutLoading === 'monthly' ? <Loader size={14} className="animate-spin" /> : <ExternalLink size={14} />}
-              Upgrade
-            </button>
-          </div>
-          <div className="bg-mail-surface border-2 border-mail-accent rounded-xl p-5 flex flex-col relative">
-            <span className="absolute -top-2.5 right-4 px-2 py-0.5 text-[10px] font-bold uppercase bg-mail-accent text-white rounded-full">Save 30%</span>
-            <h4 className="text-sm font-semibold text-mail-text mb-1">Yearly</h4>
-            <div className="text-2xl font-bold text-mail-text mb-1">$25<span className="text-sm font-normal text-mail-text-muted">/yr</span></div>
-            <p className="text-xs text-mail-text-muted mb-4 flex-1">~$2.08/month</p>
-            <button onClick={() => handleCheckout('yearly')} disabled={checkoutLoading || !emailInput.trim()}
-              className="w-full py-2 text-sm font-semibold bg-mail-accent text-white rounded-lg hover:bg-mail-accent-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
-              {checkoutLoading === 'yearly' ? <Loader size={14} className="animate-spin" /> : <ExternalLink size={14} />}
-              Upgrade
-            </button>
-          </div>
+      {/* Plan Cards — data-driven from /api/billing/pricing */}
+      {!isPremium && pricing?.plans && (() => {
+        const monthlyPlan = pricing.plans.find(p => p.interval === 'month');
+        const yearlyPlan = pricing.plans.find(p => p.interval === 'year');
+        const isFallback = pricing.currencySource === 'default' && pricing.currency === 'usd';
+        return (
+          <>
+            {isFallback && pricing.currency !== 'usd' && (
+              <p className="text-xs text-mail-text-muted">Prices shown in USD. Your local currency is not yet supported.</p>
+            )}
+            <div className="grid grid-cols-2 gap-4">
+              {monthlyPlan && (
+                <div className="bg-mail-surface border border-mail-border rounded-xl p-5 flex flex-col">
+                  <h4 className="text-sm font-semibold text-mail-text mb-1">Monthly</h4>
+                  <div className="text-2xl font-bold text-mail-text mb-1">{monthlyPlan.formattedAmount}<span className="text-sm font-normal text-mail-text-muted">/mo</span></div>
+                  <p className="text-xs text-mail-text-muted mb-4 flex-1">Cancel anytime</p>
+                  <button onClick={() => handleCheckout(monthlyPlan)} disabled={checkoutLoading || !emailInput.trim()}
+                    className="w-full py-2 text-sm font-semibold bg-mail-accent text-white rounded-lg hover:bg-mail-accent-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
+                    {checkoutLoading === 'monthly' ? <Loader size={14} className="animate-spin" /> : <ExternalLink size={14} />}
+                    Upgrade
+                  </button>
+                </div>
+              )}
+              {yearlyPlan && (
+                <div className="bg-mail-surface border-2 border-mail-accent rounded-xl p-5 flex flex-col relative">
+                  {yearlyPlan.savingsPercent > 0 && (
+                    <span className="absolute -top-2.5 right-4 px-2 py-0.5 text-[10px] font-bold uppercase bg-mail-accent text-white rounded-full">
+                      Save {yearlyPlan.savingsPercent}%
+                    </span>
+                  )}
+                  <h4 className="text-sm font-semibold text-mail-text mb-1">Yearly</h4>
+                  <div className="text-2xl font-bold text-mail-text mb-1">{yearlyPlan.formattedAmount}<span className="text-sm font-normal text-mail-text-muted">/yr</span></div>
+                  <p className="text-xs text-mail-text-muted mb-4 flex-1">~{yearlyPlan.monthlyEquivalent}/month</p>
+                  <button onClick={() => handleCheckout(yearlyPlan)} disabled={checkoutLoading || !emailInput.trim()}
+                    className="w-full py-2 text-sm font-semibold bg-mail-accent text-white rounded-lg hover:bg-mail-accent-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
+                    {checkoutLoading === 'yearly' ? <Loader size={14} className="animate-spin" /> : <ExternalLink size={14} />}
+                    Upgrade
+                  </button>
+                </div>
+              )}
+            </div>
+          </>
+        );
+      })()}
+      {!isPremium && !pricing && pricingLoading && (
+        <div className="flex items-center justify-center py-8 text-mail-text-muted text-xs gap-2">
+          <Loader size={14} className="animate-spin" /> Loading plans...
         </div>
       )}
 
