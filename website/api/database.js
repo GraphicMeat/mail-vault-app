@@ -119,6 +119,26 @@ async function initDatabase() {
     )
   `);
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS billing_clients (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      billing_customer_id INT NOT NULL,
+      client_id VARCHAR(255) NOT NULL,
+      client_name VARCHAR(255),
+      platform VARCHAR(50),
+      app_version VARCHAR(50),
+      os_version VARCHAR(100),
+      first_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      revoked_at DATETIME NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY unique_customer_client (billing_customer_id, client_id),
+      INDEX idx_customer (billing_customer_id),
+      INDEX idx_last_seen (last_seen_at)
+    )
+  `);
+
   // Seed default features if table is empty
   const [rows] = await db.execute('SELECT COUNT(*) as count FROM features');
   if (rows[0].count === 0) {

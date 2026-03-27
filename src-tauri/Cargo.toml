@@ -29,6 +29,7 @@ mailparse = "0.15"
 walkdir = "2"
 zip = "2"
 uuid = { version = "1", features = ["v4"] }
+hostname = "0.4"
 tauri-plugin-http = "2.5.7"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 tokio = { version = "1", features = ["sync", "net", "io-util", "time", "rt", "macros"] }

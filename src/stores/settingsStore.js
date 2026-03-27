@@ -162,7 +162,7 @@ export const useSettingsStore = create(
 
       // Billing
       billingEmail: '',
-      billingProfile: null,   // cached { customerId, hasSubscription, status, priceId, interval, currentPeriodEnd, cancelAtPeriodEnd, premiumAccess }
+      billingProfile: null,   // cached { customerId, hasSubscription, status, priceId, interval, currentPeriodEnd, cancelAtPeriodEnd, premiumAccess, clientLimit, activeClientCount, activeClients, currentClientId, clientAccessGranted }
       billingLastChecked: null,
       setBillingEmail: (email) => set({ billingEmail: email }),
       setBillingProfile: (profile) => set({ billingProfile: profile, billingLastChecked: Date.now() }),
@@ -682,7 +682,12 @@ export function hasPremiumAccess(billingProfile) {
   if (typeof window !== 'undefined' && window.__MAILVAULT_FORCE_PREMIUM__ === false) return false;
 
   if (!billingProfile?.hasSubscription) return false;
-  const { status, currentPeriodEnd, premiumAccess } = billingProfile;
+  const { status, currentPeriodEnd, premiumAccess, clientAccessGranted } = billingProfile;
+
+  // When client registration is active, server returns clientAccessGranted
+  // which means: subscription is premium AND this device is registered
+  if (typeof clientAccessGranted === 'boolean') return clientAccessGranted;
+
   // Server already computes premiumAccess — trust it if present
   if (typeof premiumAccess === 'boolean') return premiumAccess;
   // Client-side fallback

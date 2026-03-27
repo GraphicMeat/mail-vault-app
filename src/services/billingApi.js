@@ -52,11 +52,45 @@ export async function createPortalSession(customerId, email) {
 }
 
 /** Fetch the current subscription status for a customer/email. */
-export async function fetchSubscriptionStatus({ customerId, email }) {
+export async function fetchSubscriptionStatus({ customerId, email, clientId }) {
   const params = new URLSearchParams();
   if (customerId) params.set('customerId', customerId);
   else if (email) params.set('email', email);
+  if (clientId) params.set('clientId', clientId);
   return billingFetch(`/api/billing/subscription-status?${params.toString()}`);
+}
+
+/** Register this app installation as an active billing client. */
+export async function registerBillingClient({ customerId, email, clientId, clientName, platform, appVersion, osVersion }) {
+  return billingFetch('/api/billing/register-client', {
+    method: 'POST',
+    body: JSON.stringify({ customerId, email, clientId, clientName, platform, appVersion, osVersion }),
+  });
+}
+
+/** Unregister/disconnect a billing client. */
+export async function unregisterBillingClient({ customerId, email, clientId }) {
+  return billingFetch('/api/billing/unregister-client', {
+    method: 'POST',
+    body: JSON.stringify({ customerId, email, clientId }),
+  });
+}
+
+/** Get the persistent client identity from the desktop app (Tauri IPC). */
+let _cachedClientInfo = null;
+export async function getClientInfo() {
+  if (_cachedClientInfo) return _cachedClientInfo;
+  try {
+    const invoke = window.__TAURI__?.core?.invoke;
+    if (invoke) {
+      _cachedClientInfo = await invoke('get_client_info');
+      return _cachedClientInfo;
+    }
+  } catch (e) {
+    console.warn('[billingApi] get_client_info failed:', e);
+  }
+  // Web fallback — generate ephemeral ID
+  return { clientId: 'web-' + Math.random().toString(36).slice(2, 10), appVersion: '0.0.0', platform: 'web', osVersion: '', clientName: 'Browser' };
 }
 
 /** Open a URL in the external browser (Tauri) or a new tab (web). */
