@@ -13,7 +13,11 @@ export function getCorrespondent(email, userEmail) {
 
   // Helper: clean up display name — strip quotes/escapes, if it's an email use local part
   const cleanName = (name, address) => {
-    const cleaned = name ? name.replace(/^["\\]+|["\\]+$/g, '').replace(/\\"/g, '"').trim() : '';
+    if (!name) return address || 'Unknown';
+    // Strip paired surrounding quotes (e.g. "John Doe" → John Doe), then unescape inner quotes
+    let cleaned = name;
+    if (/^".*"$/.test(cleaned)) cleaned = cleaned.slice(1, -1);
+    cleaned = cleaned.replace(/\\"/g, '"').trim();
     if (!cleaned) return address || 'Unknown';
     if (cleaned.includes('@')) return (address || cleaned).split('@')[0];
     return cleaned;
@@ -61,9 +65,13 @@ export function groupByCorrespondent(emails, userEmail) {
     const group = groups.get(key);
     group.emails.push(email);
 
-    // Update name if we have a better one (non-email name)
-    if (correspondent.name && !correspondent.name.includes('@') && group.name.includes('@')) {
-      group.name = correspondent.name;
+    // Update name if we have a better one (prefer real display names over email-derived names)
+    if (correspondent.name && !correspondent.name.includes('@')) {
+      const currentIsWeak = group.name.includes('@') || !group.name.includes(' ');
+      const newIsStrong = correspondent.name.includes(' ');
+      if (currentIsWeak && newIsStrong) {
+        group.name = correspondent.name;
+      }
     }
 
     // Count unread
@@ -99,7 +107,9 @@ export function groupByCorrespondent(emails, userEmail) {
  * If the display name is just the email address, returns the local part (before @) instead.
  */
 export function getSenderName(email) {
-  let name = (email?.from?.name || '').replace(/^["\\]+|["\\]+$/g, '').replace(/\\"/g, '"').trim();
+  let rawName = email?.from?.name || '';
+  let name = /^".*"$/.test(rawName) ? rawName.slice(1, -1) : rawName;
+  name = name.replace(/\\"/g, '"').trim();
   const address = email?.from?.address || '';
   if (!name && !address) return 'Unknown';
   if (!name) return address;
