@@ -51,8 +51,9 @@ export function BillingSettings() {
 
   const [emailInput, setEmailInput] = useState(billingEmail || '');
   const [syncing, setSyncing] = useState(false);
-  const [syncError, setSyncError] = useState(null);
-  const [rateLimitMsg, setRateLimitMsg] = useState(null);
+  const [syncError, setSyncError] = useState(null);      // transient: cleared on next successful refresh
+  const [rateLimitMsg, setRateLimitMsg] = useState(null); // transient: cleared on next successful refresh or cooldown expiry
+  const [showingCached, setShowingCached] = useState(false); // transient: true only while last request failed AND cached data exists
   const [checkoutLoading, setCheckoutLoading] = useState(null);
   const [checkoutError, setCheckoutError] = useState(null);
   const [emailError, setEmailError] = useState(null);
@@ -126,6 +127,11 @@ export function BillingSettings() {
         setBillingProfile(result);
         lastRefreshRef.current = Date.now();
 
+        // Success: clear ALL transient warnings immediately
+        setSyncError(null);
+        setRateLimitMsg(null);
+        setShowingCached(false);
+
         if (result.customerEmail && result.customerEmail !== email) {
           setBillingEmail(result.customerEmail);
           setEmailInput(result.customerEmail);
@@ -137,8 +143,15 @@ export function BillingSettings() {
       } catch (e) {
         if (e instanceof BillingRateLimitError) {
           setRateLimitMsg(e.message);
+          setSyncError(null); // don't show both
         } else {
           setSyncError(e.message || 'Could not check billing status.');
+          setRateLimitMsg(null);
+        }
+        // If we have cached billing data, indicate we're showing it as fallback
+        const currentProfile = useSettingsStore.getState().billingProfile;
+        if (currentProfile?.hasSubscription != null) {
+          setShowingCached(true);
         }
       } finally {
         setSyncing(false);
@@ -231,10 +244,16 @@ export function BillingSettings() {
 
   return (
     <div ref={rootRef} className="p-6 space-y-6 max-w-2xl">
-      {/* Rate limit banner */}
+      {/* Transient warning banners — cleared immediately on next successful refresh */}
       {rateLimitMsg && (
         <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-500">
           {rateLimitMsg}
+          {showingCached && <span className="block mt-1 text-mail-text-muted">Showing last known billing data.</span>}
+        </div>
+      )}
+      {!rateLimitMsg && showingCached && (
+        <div className="p-3 rounded-lg bg-mail-surface border border-mail-border text-xs text-mail-text-muted">
+          Showing cached billing data. Will refresh automatically.
         </div>
       )}
 
