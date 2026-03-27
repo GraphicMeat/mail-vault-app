@@ -444,10 +444,24 @@ app.post('/api/billing/portal-session', billingLimiter, requireBilling, async (r
   }
 });
 
+// Helper: get active clients for a billing customer (non-revoked, seen within 30 days)
+async function getActiveClients(db, billingCustomerId) {
+  const [rows] = await db.execute(
+    `SELECT id, client_id, client_name, platform, app_version, os_version, first_seen_at, last_seen_at
+     FROM billing_clients
+     WHERE billing_customer_id = ? AND revoked_at IS NULL AND last_seen_at >= NOW() - INTERVAL 30 DAY
+     ORDER BY last_seen_at DESC`,
+    [billingCustomerId]
+  );
+  return rows;
+}
+
+const CLIENT_LIMIT = 5;
+
 // GET /api/billing/subscription-status
 app.get('/api/billing/subscription-status', billingLimiter, async (req, res) => {
   try {
-    const { customerId, email } = req.query;
+    const { customerId, email, clientId } = req.query;
     if (!customerId && !email) return res.status(400).json({ error: 'customerId or email required.' });
 
     const db = getPool();
@@ -462,13 +476,16 @@ app.get('/api/billing/subscription-status', billingLimiter, async (req, res) => 
       customerRow = rows[0];
     }
 
-    if (!customerRow) {
-      return res.json({
-        customerId: null, customerEmail: email || null,
-        hasSubscription: false, status: null, priceId: null, interval: null,
-        currentPeriodEnd: null, cancelAtPeriodEnd: false, premiumAccess: false,
-      });
-    }
+    const noSubBase = {
+      customerId: customerRow?.stripe_customer_id || null,
+      customerEmail: customerRow?.email || email || null,
+      hasSubscription: false, status: null, priceId: null, interval: null,
+      currentPeriodEnd: null, cancelAtPeriodEnd: false, premiumAccess: false,
+      clientLimit: CLIENT_LIMIT, activeClientCount: 0, activeClients: [],
+      currentClientId: clientId || null, clientAccessGranted: false,
+    };
+
+    if (!customerRow) return res.json(noSubBase);
 
     // Get most recent subscription
     const [subs] = await db.execute(
@@ -476,15 +493,23 @@ app.get('/api/billing/subscription-status', billingLimiter, async (req, res) => 
       [customerRow.id]
     );
 
-    if (subs.length === 0) {
-      return res.json({
-        customerId: customerRow.stripe_customer_id, customerEmail: customerRow.email,
-        hasSubscription: false, status: null, priceId: null, interval: null,
-        currentPeriodEnd: null, cancelAtPeriodEnd: false, premiumAccess: false,
-      });
-    }
+    if (subs.length === 0) return res.json(noSubBase);
 
     const sub = subs[0];
+    const premiumAccess = computePremiumAccess(sub.status, sub.cancel_at_period_end, sub.current_period_end);
+
+    // If clientId provided, update its last_seen_at
+    if (clientId) {
+      await db.execute(
+        `UPDATE billing_clients SET last_seen_at = NOW() WHERE billing_customer_id = ? AND client_id = ? AND revoked_at IS NULL`,
+        [customerRow.id, clientId]
+      );
+    }
+
+    // Get active clients
+    const activeClients = await getActiveClients(db, customerRow.id);
+    const clientInList = clientId ? activeClients.some(c => c.client_id === clientId) : false;
+
     res.json({
       customerId: customerRow.stripe_customer_id,
       customerEmail: customerRow.email,
@@ -494,11 +519,170 @@ app.get('/api/billing/subscription-status', billingLimiter, async (req, res) => 
       interval: sub.price_interval || null,
       currentPeriodEnd: sub.current_period_end,
       cancelAtPeriodEnd: !!sub.cancel_at_period_end,
-      premiumAccess: computePremiumAccess(sub.status, sub.cancel_at_period_end, sub.current_period_end),
+      premiumAccess,
+      clientLimit: CLIENT_LIMIT,
+      activeClientCount: activeClients.length,
+      activeClients: activeClients.map(c => ({
+        clientId: c.client_id, clientName: c.client_name, platform: c.platform,
+        appVersion: c.app_version, osVersion: c.os_version,
+        firstSeenAt: c.first_seen_at, lastSeenAt: c.last_seen_at,
+      })),
+      currentClientId: clientId || null,
+      clientAccessGranted: premiumAccess && clientInList,
     });
   } catch (error) {
     console.error('[billing/subscription-status]', error.message);
     res.status(500).json({ error: 'status_failed', message: 'Could not check subscription status. Please try again.' });
+  }
+});
+
+// POST /api/billing/register-client
+app.post('/api/billing/register-client', billingLimiter, requireBilling, async (req, res) => {
+  try {
+    const { customerId, email, clientId, clientName, platform, appVersion, osVersion } = req.body;
+    if (!clientId) return res.status(400).json({ error: 'clientId is required.' });
+    if (!customerId && !email) return res.status(400).json({ error: 'customerId or email required.' });
+
+    const db = getPool();
+    let customerRow;
+
+    if (customerId) {
+      const [rows] = await db.execute('SELECT * FROM billing_customers WHERE stripe_customer_id = ?', [customerId]);
+      customerRow = rows[0];
+    }
+    if (!customerRow && email) {
+      const [rows] = await db.execute('SELECT * FROM billing_customers WHERE email = ?', [email.toLowerCase()]);
+      customerRow = rows[0];
+    }
+
+    if (!customerRow) return res.status(404).json({ error: 'customer_not_found', message: 'No billing customer found.' });
+
+    // Check for active premium subscription
+    const [subs] = await db.execute(
+      `SELECT * FROM billing_subscriptions WHERE billing_customer_id = ? ORDER BY current_period_end DESC LIMIT 1`,
+      [customerRow.id]
+    );
+
+    if (subs.length === 0 || !computePremiumAccess(subs[0].status, subs[0].cancel_at_period_end, subs[0].current_period_end)) {
+      return res.status(403).json({ error: 'no_premium', message: 'An active premium subscription is required to register a client.' });
+    }
+
+    const sub = subs[0];
+    const billingCustomerId = customerRow.id;
+
+    // Check if this client is already registered (even if revoked)
+    const [existingClient] = await db.execute(
+      `SELECT * FROM billing_clients WHERE billing_customer_id = ? AND client_id = ?`,
+      [billingCustomerId, clientId]
+    );
+
+    let replacedClient = null;
+
+    if (existingClient.length > 0) {
+      // Client already registered — update it (reactivate if revoked)
+      await db.execute(
+        `UPDATE billing_clients SET client_name = ?, platform = ?, app_version = ?, os_version = ?, last_seen_at = NOW(), revoked_at = NULL
+         WHERE billing_customer_id = ? AND client_id = ?`,
+        [clientName || existingClient[0].client_name, platform || existingClient[0].platform,
+         appVersion || existingClient[0].app_version, osVersion || existingClient[0].os_version,
+         billingCustomerId, clientId]
+      );
+    } else {
+      // New client — check active client count
+      const activeClients = await getActiveClients(db, billingCustomerId);
+
+      if (activeClients.length >= CLIENT_LIMIT) {
+        // Revoke the oldest active client (by last_seen_at) to make room
+        const oldest = activeClients[activeClients.length - 1]; // sorted DESC, so last is oldest
+        await db.execute(
+          `UPDATE billing_clients SET revoked_at = NOW() WHERE billing_customer_id = ? AND client_id = ?`,
+          [billingCustomerId, oldest.client_id]
+        );
+        replacedClient = {
+          clientId: oldest.client_id, clientName: oldest.client_name, platform: oldest.platform,
+          lastSeenAt: oldest.last_seen_at,
+        };
+      }
+
+      // Insert the new client
+      await db.execute(
+        `INSERT INTO billing_clients (billing_customer_id, client_id, client_name, platform, app_version, os_version)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [billingCustomerId, clientId, clientName || null, platform || null, appVersion || null, osVersion || null]
+      );
+    }
+
+    // Return full billing status + client info
+    const activeClients = await getActiveClients(db, billingCustomerId);
+    const premiumAccess = computePremiumAccess(sub.status, sub.cancel_at_period_end, sub.current_period_end);
+
+    res.json({
+      customerId: customerRow.stripe_customer_id,
+      customerEmail: customerRow.email,
+      hasSubscription: true,
+      status: sub.status,
+      premiumAccess,
+      clientLimit: CLIENT_LIMIT,
+      activeClientCount: activeClients.length,
+      activeClients: activeClients.map(c => ({
+        clientId: c.client_id, clientName: c.client_name, platform: c.platform,
+        appVersion: c.app_version, osVersion: c.os_version,
+        firstSeenAt: c.first_seen_at, lastSeenAt: c.last_seen_at,
+      })),
+      currentClientId: clientId,
+      clientAccessGranted: true,
+      replacedClient,
+    });
+  } catch (error) {
+    console.error('[billing/register-client]', error.message);
+    res.status(500).json({ error: 'register_failed', message: 'Could not register client. Please try again.' });
+  }
+});
+
+// POST /api/billing/unregister-client
+app.post('/api/billing/unregister-client', billingLimiter, requireBilling, async (req, res) => {
+  try {
+    const { customerId, email, clientId } = req.body;
+    if (!clientId) return res.status(400).json({ error: 'clientId is required.' });
+    if (!customerId && !email) return res.status(400).json({ error: 'customerId or email required.' });
+
+    const db = getPool();
+    let customerRow;
+
+    if (customerId) {
+      const [rows] = await db.execute('SELECT * FROM billing_customers WHERE stripe_customer_id = ?', [customerId]);
+      customerRow = rows[0];
+    }
+    if (!customerRow && email) {
+      const [rows] = await db.execute('SELECT * FROM billing_customers WHERE email = ?', [email.toLowerCase()]);
+      customerRow = rows[0];
+    }
+
+    if (!customerRow) return res.status(404).json({ error: 'customer_not_found', message: 'No billing customer found.' });
+
+    // Revoke the client
+    await db.execute(
+      `UPDATE billing_clients SET revoked_at = NOW() WHERE billing_customer_id = ? AND client_id = ? AND revoked_at IS NULL`,
+      [customerRow.id, clientId]
+    );
+
+    // Return updated client list
+    const activeClients = await getActiveClients(db, customerRow.id);
+
+    res.json({
+      customerId: customerRow.stripe_customer_id,
+      customerEmail: customerRow.email,
+      clientLimit: CLIENT_LIMIT,
+      activeClientCount: activeClients.length,
+      activeClients: activeClients.map(c => ({
+        clientId: c.client_id, clientName: c.client_name, platform: c.platform,
+        appVersion: c.app_version, osVersion: c.os_version,
+        firstSeenAt: c.first_seen_at, lastSeenAt: c.last_seen_at,
+      })),
+    });
+  } catch (error) {
+    console.error('[billing/unregister-client]', error.message);
+    res.status(500).json({ error: 'unregister_failed', message: 'Could not unregister client. Please try again.' });
   }
 });
 
