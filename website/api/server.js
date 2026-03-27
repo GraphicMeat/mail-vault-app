@@ -359,11 +359,46 @@ app.post('/api/contact', contactLimiter, async (req, res) => {
 // Billing Routes (Stripe)
 // ===========================================
 
-const billingLimiter = rateLimit({
+// Route-specific rate limiters so status polling cannot block checkout/portal
+const statusLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'rate_limited', message: 'Too many status checks. Please try again shortly.' },
+});
+const mutationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'rate_limited', message: 'Too many billing requests. Please try again later.' },
+});
+const checkoutLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 30,
-  message: { error: 'Too many billing requests, please try again later.' }
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'rate_limited', message: 'Too many checkout requests. Please try again later.' },
 });
+
+// In-memory billing status cache (key: customerId or email, TTL: 15s)
+const _billingCache = new Map();
+const BILLING_CACHE_TTL = 15_000;
+function getCachedBilling(key) {
+  const entry = _billingCache.get(key);
+  if (entry && Date.now() - entry.ts < BILLING_CACHE_TTL) return entry.data;
+  _billingCache.delete(key);
+  return null;
+}
+function setCachedBilling(key, data) {
+  _billingCache.set(key, { data, ts: Date.now() });
+  // Evict old entries periodically
+  if (_billingCache.size > 500) {
+    const now = Date.now();
+    for (const [k, v] of _billingCache) { if (now - v.ts > BILLING_CACHE_TTL) _billingCache.delete(k); }
+  }
+}
 
 function requireBilling(req, res, next) {
   if (!stripe) return res.status(503).json({ error: 'billing_unavailable', message: 'Billing service is not configured.' });
@@ -379,7 +414,7 @@ function computePremiumAccess(status, cancelAtPeriodEnd, currentPeriodEnd) {
 }
 
 // POST /api/billing/checkout-session
-app.post('/api/billing/checkout-session', billingLimiter, requireBilling, async (req, res) => {
+app.post('/api/billing/checkout-session', checkoutLimiter, requireBilling, async (req, res) => {
   try {
     const { email, priceType } = req.body;
     if (!email || !isValidEmail(email)) return res.status(400).json({ error: 'Valid email required.' });
@@ -418,7 +453,7 @@ app.post('/api/billing/checkout-session', billingLimiter, requireBilling, async 
 });
 
 // POST /api/billing/portal-session
-app.post('/api/billing/portal-session', billingLimiter, requireBilling, async (req, res) => {
+app.post('/api/billing/portal-session', checkoutLimiter, requireBilling, async (req, res) => {
   try {
     const { customerId, email } = req.body;
     let stripeCustomerId = customerId;
@@ -459,10 +494,19 @@ async function getActiveClients(db, billingCustomerId) {
 const CLIENT_LIMIT = 5;
 
 // GET /api/billing/subscription-status
-app.get('/api/billing/subscription-status', billingLimiter, async (req, res) => {
+// Supports ?register=1&clientName=...&platform=...&appVersion=...&osVersion=... to combine
+// status check + client registration in one round trip.
+app.get('/api/billing/subscription-status', statusLimiter, async (req, res) => {
   try {
-    const { customerId, email, clientId } = req.query;
+    const { customerId, email, clientId, register, clientName, platform, appVersion, osVersion } = req.query;
     if (!customerId && !email) return res.status(400).json({ error: 'customerId or email required.' });
+
+    // Check in-memory cache (same customer+client pair within TTL → return cached)
+    const cacheKey = `${customerId || ''}:${(email || '').toLowerCase()}:${clientId || ''}`;
+    if (!register) {
+      const cached = getCachedBilling(cacheKey);
+      if (cached) return res.json(cached);
+    }
 
     const db = getPool();
     let customerRow;
@@ -485,32 +529,66 @@ app.get('/api/billing/subscription-status', billingLimiter, async (req, res) => 
       currentClientId: clientId || null, clientAccessGranted: false,
     };
 
-    if (!customerRow) return res.json(noSubBase);
+    if (!customerRow) { setCachedBilling(cacheKey, noSubBase); return res.json(noSubBase); }
 
-    // Get most recent subscription
     const [subs] = await db.execute(
       `SELECT * FROM billing_subscriptions WHERE billing_customer_id = ? ORDER BY current_period_end DESC LIMIT 1`,
       [customerRow.id]
     );
 
-    if (subs.length === 0) return res.json(noSubBase);
+    if (subs.length === 0) { setCachedBilling(cacheKey, noSubBase); return res.json(noSubBase); }
 
     const sub = subs[0];
     const premiumAccess = computePremiumAccess(sub.status, sub.cancel_at_period_end, sub.current_period_end);
+    let replacedClient = null;
 
-    // If clientId provided, update its last_seen_at
     if (clientId) {
+      // Update last_seen_at for existing active client
       await db.execute(
         `UPDATE billing_clients SET last_seen_at = NOW() WHERE billing_customer_id = ? AND client_id = ? AND revoked_at IS NULL`,
         [customerRow.id, clientId]
       );
+
+      // Unified register: if register=1 and premium, auto-register this client
+      if (register === '1' && premiumAccess) {
+        const [existingClient] = await db.execute(
+          `SELECT * FROM billing_clients WHERE billing_customer_id = ? AND client_id = ?`,
+          [customerRow.id, clientId]
+        );
+
+        if (existingClient.length > 0) {
+          // Reactivate if revoked, update metadata
+          await db.execute(
+            `UPDATE billing_clients SET client_name = COALESCE(?, client_name), platform = COALESCE(?, platform),
+             app_version = COALESCE(?, app_version), os_version = COALESCE(?, os_version),
+             last_seen_at = NOW(), revoked_at = NULL
+             WHERE billing_customer_id = ? AND client_id = ?`,
+            [clientName || null, platform || null, appVersion || null, osVersion || null, customerRow.id, clientId]
+          );
+        } else {
+          // New client — check limit and insert
+          const currentActive = await getActiveClients(db, customerRow.id);
+          if (currentActive.length >= CLIENT_LIMIT) {
+            const oldest = currentActive[currentActive.length - 1];
+            await db.execute(
+              `UPDATE billing_clients SET revoked_at = NOW() WHERE billing_customer_id = ? AND client_id = ?`,
+              [customerRow.id, oldest.client_id]
+            );
+            replacedClient = { clientId: oldest.client_id, clientName: oldest.client_name, platform: oldest.platform, lastSeenAt: oldest.last_seen_at };
+          }
+          await db.execute(
+            `INSERT INTO billing_clients (billing_customer_id, client_id, client_name, platform, app_version, os_version)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [customerRow.id, clientId, clientName || null, platform || null, appVersion || null, osVersion || null]
+          );
+        }
+      }
     }
 
-    // Get active clients
     const activeClients = await getActiveClients(db, customerRow.id);
     const clientInList = clientId ? activeClients.some(c => c.client_id === clientId) : false;
 
-    res.json({
+    const result = {
       customerId: customerRow.stripe_customer_id,
       customerEmail: customerRow.email,
       hasSubscription: true,
@@ -529,7 +607,11 @@ app.get('/api/billing/subscription-status', billingLimiter, async (req, res) => 
       })),
       currentClientId: clientId || null,
       clientAccessGranted: premiumAccess && clientInList,
-    });
+      ...(replacedClient ? { replacedClient } : {}),
+    };
+
+    setCachedBilling(cacheKey, result);
+    res.json(result);
   } catch (error) {
     console.error('[billing/subscription-status]', error.message);
     res.status(500).json({ error: 'status_failed', message: 'Could not check subscription status. Please try again.' });
@@ -537,7 +619,7 @@ app.get('/api/billing/subscription-status', billingLimiter, async (req, res) => 
 });
 
 // POST /api/billing/register-client
-app.post('/api/billing/register-client', billingLimiter, requireBilling, async (req, res) => {
+app.post('/api/billing/register-client', mutationLimiter, requireBilling, async (req, res) => {
   try {
     const { customerId, email, clientId, clientName, platform, appVersion, osVersion } = req.body;
     if (!clientId) return res.status(400).json({ error: 'clientId is required.' });
@@ -640,7 +722,7 @@ app.post('/api/billing/register-client', billingLimiter, requireBilling, async (
 });
 
 // POST /api/billing/unregister-client
-app.post('/api/billing/unregister-client', billingLimiter, requireBilling, async (req, res) => {
+app.post('/api/billing/unregister-client', mutationLimiter, requireBilling, async (req, res) => {
   try {
     const { customerId, email, clientId } = req.body;
     if (!clientId) return res.status(400).json({ error: 'clientId is required.' });
