@@ -24,6 +24,10 @@
     <key>com.apple.security.files.user-selected.read-write</key>
     <true/>
 
+    <!-- Security-scoped bookmarks for persistent external backup folder access -->
+    <key>com.apple.security.files.bookmarks.app-scope</key>
+    <true/>
+
     <!-- Downloads folder access -->
     <key>com.apple.security.files.downloads.read-write</key>
     <true/>

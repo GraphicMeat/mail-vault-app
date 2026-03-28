@@ -431,6 +431,30 @@ export async function backupStatus(accountId, accountJson, backupPath = null) {
   return tauriInvoke('backup_status', { accountId, accountJson, backupPath });
 }
 
+export async function backupSaveExternalLocation(path) {
+  return tauriInvoke('backup_save_external_location', { path });
+}
+
+export async function backupGetExternalLocation() {
+  return tauriInvoke('backup_get_external_location', {});
+}
+
+export async function backupValidateExternalLocation() {
+  return tauriInvoke('backup_validate_external_location', {});
+}
+
+export async function backupClearExternalLocation() {
+  return tauriInvoke('backup_clear_external_location', {});
+}
+
+export async function backupResolveExternalLocation() {
+  return tauriInvoke('backup_resolve_external_location', {});
+}
+
+export async function backupMigrateLegacyPath(legacyPath) {
+  return tauriInvoke('backup_migrate_legacy_path', { legacyPath });
+}
+
 export async function backupCancel() {
   return tauriInvoke('backup_cancel', {});
 }

@@ -677,25 +677,69 @@ export default function BackupSettings({ initialAccountId = null, onUpgrade }) {
   const setBackupScope = useSettingsStore(s => s.setBackupScope);
   const backupCustomPath = useSettingsStore(s => s.backupCustomPath);
   const setBackupCustomPath = useSettingsStore(s => s.setBackupCustomPath);
+  const externalBackupLocation = useSettingsStore(s => s.externalBackupLocation);
+  const setExternalBackupLocation = useSettingsStore(s => s.setExternalBackupLocation);
 
   const activeBackup = useBackupStore(s => s.activeBackup);
   const [showExportChoice, setShowExportChoice] = useState(false);
   const [defaultBackupPath, setDefaultBackupPath] = useState(null);
+  const [validatingExternal, setValidatingExternal] = useState(false);
 
-  // Load default backup path on mount
+  // Load default backup path and external location on mount
   useEffect(() => {
     const inv = window.__TAURI__?.core?.invoke;
-    if (inv) inv('get_app_data_dir').then(p => setDefaultBackupPath(p)).catch(() => {});
+    if (!inv) return;
+    inv('get_app_data_dir').then(p => setDefaultBackupPath(p)).catch(() => {});
+    // Load stored external location
+    inv('backup_get_external_location').then(loc => {
+      if (loc?.status !== 'not_configured') setExternalBackupLocation(loc);
+    }).catch(() => {});
+    // Migrate legacy backupCustomPath if no external location exists
+    const legacy = useSettingsStore.getState().backupCustomPath;
+    if (legacy) {
+      inv('backup_migrate_legacy_path', { legacyPath: legacy }).then(loc => {
+        setExternalBackupLocation(loc);
+        // Clear legacy after migration
+        if (loc.status === 'ready') setBackupCustomPath(null);
+      }).catch(() => {});
+    }
   }, []);
 
   const handleChooseBackupDir = async () => {
     try {
       const { open } = await import('@tauri-apps/plugin-dialog');
-      const selected = await open({ directory: true, title: 'Choose backup directory' });
-      if (selected) setBackupCustomPath(selected);
+      const selected = await open({ directory: true, title: 'Choose external backup directory' });
+      if (!selected) return;
+      const inv = window.__TAURI__?.core?.invoke;
+      if (inv) {
+        const loc = await inv('backup_save_external_location', { path: selected });
+        setExternalBackupLocation(loc);
+        setBackupCustomPath(null); // clear legacy
+      }
     } catch (e) {
       console.error('Directory picker failed:', e);
     }
+  };
+
+  const handleValidateExternal = async () => {
+    setValidatingExternal(true);
+    try {
+      const inv = window.__TAURI__?.core?.invoke;
+      if (inv) {
+        const loc = await inv('backup_validate_external_location');
+        setExternalBackupLocation(loc);
+      }
+    } catch { /* handled by loc.lastError */ }
+    setValidatingExternal(false);
+  };
+
+  const handleClearExternal = async () => {
+    try {
+      const inv = window.__TAURI__?.core?.invoke;
+      if (inv) await inv('backup_clear_external_location');
+      setExternalBackupLocation(null);
+      setBackupCustomPath(null);
+    } catch { /* ignore */ }
   };
 
   const invoke = window.__TAURI__?.core?.invoke;
@@ -919,49 +963,76 @@ export default function BackupSettings({ initialAccountId = null, onUpgrade }) {
           </select>
         </div>
 
-        {/* Storage directory */}
+        {/* External backup location */}
         <div>
-          <label className="text-xs text-mail-text-muted mb-1 block">Backup location</label>
+          <label className="text-xs text-mail-text-muted mb-1 block">External backup location</label>
           <div className="flex items-center gap-2">
             <div className="flex-1 text-xs text-mail-text font-mono bg-mail-bg rounded-lg px-3 py-2 truncate border border-mail-border">
-              {backupCustomPath || (defaultBackupPath ? `${defaultBackupPath}/Maildir` : 'Loading...')}
+              {externalBackupLocation?.displayPath || (defaultBackupPath ? `${defaultBackupPath}/Maildir (app only)` : 'Loading...')}
             </div>
             <button
               onClick={handleChooseBackupDir}
               className="text-xs font-medium px-3 py-2 rounded-lg border border-mail-border text-mail-text hover:bg-mail-surface-hover transition-colors whitespace-nowrap"
             >
-              Change
+              {externalBackupLocation ? 'Change' : 'Choose Folder'}
             </button>
-            {backupCustomPath && (
+            {externalBackupLocation && (
               <button
-                onClick={() => setBackupCustomPath(null)}
+                onClick={handleClearExternal}
                 className="text-xs text-mail-text-muted hover:text-mail-text px-2 py-2"
-                title="Reset to default"
+                title="Remove external backup location"
               >
                 Reset
               </button>
             )}
           </div>
-          {backupCustomPath ? (
+
+          {/* Status badge + validation */}
+          {externalBackupLocation && (
+            <div className="mt-2 flex items-center gap-2">
+              <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${
+                externalBackupLocation.status === 'ready' ? 'bg-emerald-500/10 text-emerald-500'
+                : externalBackupLocation.status === 'needs_reauth' ? 'bg-amber-500/10 text-amber-500'
+                : 'bg-red-500/10 text-red-500'
+              }`}>
+                {externalBackupLocation.status === 'ready' ? 'Ready'
+                  : externalBackupLocation.status === 'needs_reauth' ? 'Needs reauthorization'
+                  : externalBackupLocation.status === 'unavailable' ? 'Unavailable'
+                  : externalBackupLocation.status === 'invalid' ? 'Access denied'
+                  : externalBackupLocation.status}
+              </span>
+              <button
+                onClick={externalBackupLocation.status === 'needs_reauth' ? handleChooseBackupDir : handleValidateExternal}
+                disabled={validatingExternal}
+                className="text-xs text-mail-accent hover:text-mail-accent-hover"
+              >
+                {validatingExternal ? 'Checking...' : externalBackupLocation.status === 'needs_reauth' ? 'Reauthorize' : 'Test access'}
+              </button>
+            </div>
+          )}
+
+          {/* Error detail */}
+          {externalBackupLocation?.lastError && externalBackupLocation.status !== 'ready' && (
+            <p className="mt-1 text-xs text-mail-danger">{externalBackupLocation.lastError}</p>
+          )}
+
+          {externalBackupLocation?.status === 'ready' ? (
             <div className="mt-2 space-y-1">
               <p className="text-xs text-mail-success">
                 Emails are saved as .eml files during each backup, organized by account and folder. Safe from app uninstalls.
               </p>
               <p className="text-xs text-mail-text-muted">
-                Structure: <code className="text-mail-text">{backupCustomPath}/email@address/INBOX/cur/1234.eml</code>
-              </p>
-              <p className="text-xs text-mail-text-muted">
-                To restore: use the Import Backup button above, or open .eml files in any email client that supports them.
+                Structure: <code className="text-mail-text">{externalBackupLocation.displayPath}/email@address/INBOX/cur/1234.eml</code>
               </p>
             </div>
-          ) : (
+          ) : !externalBackupLocation ? (
             <div className="mt-2 flex items-start gap-2 bg-mail-warning/10 border border-mail-warning/30 rounded-lg p-2">
               <AlertCircle size={14} className="text-mail-warning flex-shrink-0 mt-0.5" />
               <p className="text-xs text-mail-warning">
                 Backups are only stored inside the app's data folder. If you uninstall MailVault or clear app data, your backups will be lost. Choose an external folder to keep a safe copy.
               </p>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
 

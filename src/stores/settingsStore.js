@@ -187,7 +187,10 @@ export const useSettingsStore = create(
       backupGlobalEnabled: false,    // Master switch: true = all accounts use global schedule
       backupGlobalConfig: { interval: 'daily', hourlyInterval: 1, timeOfDay: '03:00', dayOfWeek: 1 },
       backupScope: 'archived',       // 'archived' = only locally archived emails, 'all' = everything from server
-      backupCustomPath: null,        // null = default app data dir, string = user-chosen directory
+      backupCustomPath: null,        // LEGACY — kept for migration only. Use externalBackupLocation instead.
+      // Native-backed external backup location (resolved via Rust bookmark/path commands)
+      // Shape: { displayPath, status, platform, lastValidatedAt, lastError } | null
+      externalBackupLocation: null,
 
       // Per-account backup configuration (used when backupGlobalEnabled=false, or as overrides)
       backupSchedules: {},
@@ -255,6 +258,7 @@ export const useSettingsStore = create(
       })),
       setBackupScope: (scope) => set({ backupScope: scope }),
       setBackupCustomPath: (path) => set({ backupCustomPath: path }),
+      setExternalBackupLocation: (loc) => set({ externalBackupLocation: loc }),
 
       // Per-account backup actions
       setBackupSchedule: (accountId, config) => set(state => ({

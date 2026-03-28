@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use serde::Deserialize;
+use tauri::Manager;
 use tracing::info;
 
 use crate::imap::pool::PooledSessionGuard;
@@ -779,6 +780,64 @@ pub async fn backup_cancel(
     let guard = cancel_token.0.lock().unwrap();
     guard.store(true, Ordering::Relaxed);
     Ok(())
+}
+
+// ── External backup location ─────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn backup_save_external_location(
+    app_handle: tauri::AppHandle,
+    path: String,
+) -> Result<crate::external_location::ExternalLocation, String> {
+    let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    crate::external_location::save_external_location(&data_dir, &path)
+}
+
+#[tauri::command]
+pub async fn backup_get_external_location(
+    app_handle: tauri::AppHandle,
+) -> Result<crate::external_location::ExternalLocation, String> {
+    let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    Ok(crate::external_location::get_external_location(&data_dir))
+}
+
+#[tauri::command]
+pub async fn backup_validate_external_location(
+    app_handle: tauri::AppHandle,
+) -> Result<crate::external_location::ExternalLocation, String> {
+    let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    crate::external_location::validate_external_location(&data_dir)
+}
+
+#[tauri::command]
+pub async fn backup_clear_external_location(
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    crate::external_location::clear_external_location(&data_dir)
+}
+
+#[tauri::command]
+pub async fn backup_resolve_external_location(
+    app_handle: tauri::AppHandle,
+) -> Result<serde_json::Value, String> {
+    let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    match crate::external_location::resolve_external_location(&data_dir) {
+        Ok((resolved_path, loc)) => Ok(serde_json::json!({
+            "resolvedPath": resolved_path,
+            "location": loc,
+        })),
+        Err(e) => Err(e),
+    }
+}
+
+#[tauri::command]
+pub async fn backup_migrate_legacy_path(
+    app_handle: tauri::AppHandle,
+    legacy_path: String,
+) -> Result<crate::external_location::ExternalLocation, String> {
+    let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    crate::external_location::migrate_legacy_path(&data_dir, &legacy_path)
 }
 
 // ── Migration ────────────────────────────────────────────────────────────

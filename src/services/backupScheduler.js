@@ -281,12 +281,12 @@ class BackupCoordinator {
       const freshAccount = resolved.account;
 
       const startTime = Date.now();
-      const customPath = useSettingsStore.getState().backupCustomPath || null;
+      // External backup path resolved in Rust via bookmark/native access — pass null to use stored location
       const skipFolders = this._checkpoints.get(accountId) || 0;
       if (skipFolders > 0) {
         console.log(`[backup] Resuming ${account.email} from folder ${skipFolders}`);
       }
-      const result = await api.backupRunAccount(accountId, JSON.stringify(freshAccount), customPath, skipFolders);
+      const result = await api.backupRunAccount(accountId, JSON.stringify(freshAccount), null, skipFolders);
 
       // Track checkpoint for potential resume
       if (result.cancelled) {
