@@ -208,7 +208,7 @@ const AccountCard = React.forwardRef(function AccountCard({ account, isPaidUser,
   const history = (backupHistory[account.id] || []).slice(0, 5);
 
   const [runningManual, setRunningManual] = useState(false);
-  const [manualStatus, setManualStatus] = useState('idle'); // idle | success | error
+  const [manualStatus, setManualStatus] = useState('idle'); // idle | success | degraded | error
   const [manualError, setManualError] = useState(null);
   const [storageSize, setStorageSize] = useState(null);
   const [accountFolders, setAccountFolders] = useState([]);
@@ -282,6 +282,10 @@ const AccountCard = React.forwardRef(function AccountCard({ account, isPaidUser,
       if (result.status === 'success') {
         setManualStatus('success');
         setTimeout(() => setManualStatus('idle'), 2000);
+      } else if (result.status === 'degraded') {
+        setManualStatus('degraded');
+        setManualError(result.message || 'Backed up locally, but external backup failed for some emails.');
+        setTimeout(() => setManualStatus('idle'), 5000);
       } else {
         setManualStatus('error');
         setManualError(result.message || 'Backup failed');
@@ -434,10 +438,14 @@ const AccountCard = React.forwardRef(function AccountCard({ account, isPaidUser,
       {/* Backup verification */}
       {verificationSection}
 
-      {/* Error display */}
+      {/* Error / degraded display */}
       {state.lastStatus === 'failed' && state.lastError && (
-        <div className="text-mail-danger text-xs">
-          {state.lastError}
+        <div className="text-mail-danger text-xs">{state.lastError}</div>
+      )}
+      {state.lastStatus === 'degraded' && (
+        <div className="flex items-start gap-2 text-xs text-amber-500 bg-amber-500/10 border border-amber-500/20 rounded-lg p-2">
+          <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
+          <span>{state.lastError || 'Backed up locally, but external backup failed for some emails.'}</span>
         </div>
       )}
 
@@ -451,9 +459,13 @@ const AccountCard = React.forwardRef(function AccountCard({ account, isPaidUser,
                 <span className="text-mail-text-muted w-36">{formatTimestamp(entry.timestamp)}</span>
                 <span className="text-mail-text w-24">{entry.emailsBackedUp} emails</span>
                 <span className="text-mail-text-muted w-20">{formatDuration(entry.durationSecs)}</span>
-                {entry.success ? (
+                {entry.success && entry.externalCopyOk !== false ? (
                   <span className="text-emerald-500 flex items-center gap-1">
                     <CheckCircle2 size={12} /> Success
+                  </span>
+                ) : entry.success && entry.externalCopyOk === false ? (
+                  <span className="text-amber-500 flex items-center gap-1" title={entry.externalCopyError || 'External copy failed'}>
+                    <AlertCircle size={12} /> Partial
                   </span>
                 ) : (
                   <span className="text-mail-danger flex items-center gap-1" title={entry.error || ''}>
@@ -512,10 +524,15 @@ const AccountCard = React.forwardRef(function AccountCard({ account, isPaidUser,
             </>
           ) : manualStatus === 'success' ? (
             <span className="text-emerald-500">Done!</span>
+          ) : manualStatus === 'degraded' ? (
+            <span className="text-amber-500">Partial</span>
           ) : (
             'Back up now'
           )}
         </button>
+        {manualStatus === 'degraded' && manualError && (
+          <div className="text-xs text-amber-500">{manualError}</div>
+        )}
         {manualStatus === 'error' && manualError && (
           <div className="text-xs text-mail-warning">{manualError}</div>
         )}
