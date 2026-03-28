@@ -208,19 +208,15 @@ export function BillingSettings() {
     refreshStatus(email, { manual: true });
   };
 
-  const handleCheckout = async (plan) => {
+  const handleCheckout = async (planId) => {
     setCheckoutError(null); setEmailError(null);
     const email = emailInput.trim().toLowerCase();
     if (!email) { setEmailError('Enter your email address to upgrade.'); return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setEmailError('Please enter a valid email address.'); return; }
-    const interval = plan?.interval === 'year' ? 'yearly' : 'monthly';
-    setCheckoutLoading(interval);
+    setCheckoutLoading(planId);
     try {
       setBillingEmail(email);
-      const { url, customerId: newCustomerId } = await createCheckoutSession(email, interval, {
-        planId: plan?.planId,
-        currency: plan?.currency,
-      });
+      const { url, customerId: newCustomerId } = await createCheckoutSession(email, { planId });
       if (newCustomerId) setBillingProfile({ ...billingProfile, customerId: newCustomerId, customerEmail: email });
       try { await openInBrowser(url); } catch (browserErr) { setCheckoutError(browserErr.message); }
     } catch (e) {
@@ -314,11 +310,17 @@ export function BillingSettings() {
       {!isPremium && pricing?.plans && (() => {
         const monthlyPlan = pricing.plans.find(p => p.interval === 'month');
         const yearlyPlan = pricing.plans.find(p => p.interval === 'year');
-        const isFallback = pricing.currencySource === 'default' && pricing.currency === 'usd';
+        const mode = pricing.pricingMode;
+        const showCurrencyHint = mode === 'fallback' || mode === 'adaptive';
+        const hintText = mode === 'adaptive'
+          ? `Prices shown in ${pricing.currency.toUpperCase()}. Checkout will convert to your local currency.`
+          : mode === 'fallback'
+          ? `Charged in ${pricing.currency.toUpperCase()}`
+          : null;
         return (
           <>
-            {isFallback && pricing.currency !== 'usd' && (
-              <p className="text-xs text-mail-text-muted">Prices shown in USD. Your local currency is not yet supported.</p>
+            {showCurrencyHint && hintText && (
+              <p className="text-xs text-mail-text-muted">{hintText}</p>
             )}
             <div className="grid grid-cols-2 gap-4">
               {monthlyPlan && (
@@ -326,7 +328,7 @@ export function BillingSettings() {
                   <h4 className="text-sm font-semibold text-mail-text mb-1">Monthly</h4>
                   <div className="text-2xl font-bold text-mail-text mb-1">{monthlyPlan.formattedAmount}<span className="text-sm font-normal text-mail-text-muted">/mo</span></div>
                   <p className="text-xs text-mail-text-muted mb-4 flex-1">Cancel anytime</p>
-                  <button onClick={() => handleCheckout(monthlyPlan)} disabled={checkoutLoading || !emailInput.trim()}
+                  <button onClick={() => handleCheckout(monthlyPlan.planId)} disabled={checkoutLoading || !emailInput.trim()}
                     className="w-full py-2 text-sm font-semibold bg-mail-accent text-white rounded-lg hover:bg-mail-accent-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
                     {checkoutLoading === 'monthly' ? <Loader size={14} className="animate-spin" /> : <ExternalLink size={14} />}
                     Upgrade
@@ -343,7 +345,7 @@ export function BillingSettings() {
                   <h4 className="text-sm font-semibold text-mail-text mb-1">Yearly</h4>
                   <div className="text-2xl font-bold text-mail-text mb-1">{yearlyPlan.formattedAmount}<span className="text-sm font-normal text-mail-text-muted">/yr</span></div>
                   <p className="text-xs text-mail-text-muted mb-4 flex-1">~{yearlyPlan.monthlyEquivalent}/month</p>
-                  <button onClick={() => handleCheckout(yearlyPlan)} disabled={checkoutLoading || !emailInput.trim()}
+                  <button onClick={() => handleCheckout(yearlyPlan.planId)} disabled={checkoutLoading || !emailInput.trim()}
                     className="w-full py-2 text-sm font-semibold bg-mail-accent text-white rounded-lg hover:bg-mail-accent-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
                     {checkoutLoading === 'yearly' ? <Loader size={14} className="animate-spin" /> : <ExternalLink size={14} />}
                     Upgrade

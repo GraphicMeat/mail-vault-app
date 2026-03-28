@@ -72,10 +72,10 @@ export async function fetchPricing({ currency, country } = {}) {
 }
 
 /** Create a Stripe Checkout Session and return the URL to open in browser. */
-export async function createCheckoutSession(email, priceType, { planId, currency } = {}) {
+export async function createCheckoutSession(email, { planId } = {}) {
   return billingFetch('/api/billing/checkout-session', {
     method: 'POST',
-    body: JSON.stringify({ email, priceType, planId, currency }),
+    body: JSON.stringify({ email, planId }),
   });
 }
 

@@ -413,60 +413,76 @@ function computePremiumAccess(status, cancelAtPeriodEnd, currentPeriodEnd) {
   return false;
 }
 
-// ── Multi-currency pricing ──────────────────────────────────────────────────
-// Each supported currency has a monthly + yearly Stripe price ID pair.
-// Env vars: STRIPE_PRICES_<CURRENCY>_MONTHLY / _YEARLY (fallback to single STRIPE_PRICE_MONTHLY/YEARLY for USD)
-function loadPricingTable() {
-  const table = {};
-  const currencies = (process.env.STRIPE_SUPPORTED_CURRENCIES || 'usd,eur,gbp').split(',').map(c => c.trim().toLowerCase());
-  for (const cur of currencies) {
-    const upper = cur.toUpperCase();
-    const monthly = process.env[`STRIPE_PRICES_${upper}_MONTHLY`] || (cur === 'usd' ? process.env.STRIPE_PRICE_MONTHLY : null);
-    const yearly = process.env[`STRIPE_PRICES_${upper}_YEARLY`] || (cur === 'usd' ? process.env.STRIPE_PRICE_YEARLY : null);
-    const monthlyAmount = parseInt(process.env[`STRIPE_PRICES_${upper}_MONTHLY_AMOUNT`] || (cur === 'usd' ? '300' : '0'), 10);
-    const yearlyAmount = parseInt(process.env[`STRIPE_PRICES_${upper}_YEARLY_AMOUNT`] || (cur === 'usd' ? '2500' : '0'), 10);
-    if (monthly && yearly) {
-      table[cur] = { monthly: { priceId: monthly, amount: monthlyAmount }, yearly: { priceId: yearly, amount: yearlyAmount } };
-    }
-  }
-  // Ensure USD is always present as fallback
-  if (!table.usd && process.env.STRIPE_PRICE_MONTHLY && process.env.STRIPE_PRICE_YEARLY) {
-    table.usd = { monthly: { priceId: process.env.STRIPE_PRICE_MONTHLY, amount: 300 }, yearly: { priceId: process.env.STRIPE_PRICE_YEARLY, amount: 2500 } };
-  }
-  return table;
-}
-const PRICING_TABLE = loadPricingTable();
-const DEFAULT_CURRENCY = 'usd';
+// ── Hybrid pricing: EUR base, manual USD/GBP, Adaptive for others ───────────
+// Two EUR-based Stripe prices with currency_options for USD and GBP.
+// Stripe Adaptive Pricing handles other eligible currencies from the EUR base.
+const BASE_CURRENCY = 'eur';
+const PRICE_MONTHLY = process.env.STRIPE_PRICE_MONTHLY_EUR || process.env.STRIPE_PRICE_MONTHLY;
+const PRICE_YEARLY = process.env.STRIPE_PRICE_YEARLY_EUR || process.env.STRIPE_PRICE_YEARLY;
 
-// Map country code to likely currency
+// Manual currency_options amounts (in minor units). These match what's set on the Stripe price.
+const MANUAL_AMOUNTS = {
+  eur: { monthly: 300, yearly: 2500 },
+  usd: { monthly: 300, yearly: 2500 },
+  gbp: { monthly: 250, yearly: 2100 },
+};
+const MANUAL_CURRENCIES = new Set(Object.keys(MANUAL_AMOUNTS));
+
+// Currencies where Stripe Adaptive Pricing is commonly available
+const ADAPTIVE_CURRENCIES = new Set([
+  'aud', 'brl', 'cad', 'chf', 'czk', 'dkk', 'hkd', 'huf', 'inr', 'jpy',
+  'krw', 'mxn', 'nok', 'nzd', 'pln', 'ron', 'sek', 'sgd', 'thb', 'try', 'twd', 'zar',
+]);
+
+// Map country code → currency
 const COUNTRY_CURRENCY = {
   US: 'usd', GB: 'gbp', UK: 'gbp',
   AT: 'eur', BE: 'eur', CY: 'eur', DE: 'eur', EE: 'eur', ES: 'eur', FI: 'eur', FR: 'eur',
   GR: 'eur', IE: 'eur', IT: 'eur', LT: 'eur', LU: 'eur', LV: 'eur', MT: 'eur', NL: 'eur',
   PT: 'eur', SI: 'eur', SK: 'eur', HR: 'eur',
+  AU: 'aud', BR: 'brl', CA: 'cad', CH: 'chf', CZ: 'czk', DK: 'dkk', HK: 'hkd',
+  HU: 'huf', IN: 'inr', JP: 'jpy', KR: 'krw', MX: 'mxn', NO: 'nok', NZ: 'nzd',
+  PL: 'pln', RO: 'ron', SE: 'sek', SG: 'sgd', TH: 'thb', TR: 'try', TW: 'twd', ZA: 'zar',
 };
 
-function resolveCurrency(requestedCurrency, countryHint, acceptLanguage) {
-  // 1. Explicit request
-  if (requestedCurrency) {
-    const c = requestedCurrency.toLowerCase();
-    if (PRICING_TABLE[c]) return { currency: c, source: 'requested' };
-  }
-  // 2. Country hint (from query param or CF/IP header)
-  if (countryHint) {
-    const mapped = COUNTRY_CURRENCY[countryHint.toUpperCase()];
-    if (mapped && PRICING_TABLE[mapped]) return { currency: mapped, source: 'country' };
-  }
-  // 3. Accept-Language header heuristic
+function resolveCountry(reqCountry, cfCountry, acceptLanguage) {
+  if (reqCountry) return reqCountry.toUpperCase();
+  if (cfCountry) return cfCountry.toUpperCase();
   if (acceptLanguage) {
     const match = acceptLanguage.match(/[a-z]{2}-([A-Z]{2})/);
-    if (match) {
-      const mapped = COUNTRY_CURRENCY[match[1]];
-      if (mapped && PRICING_TABLE[mapped]) return { currency: mapped, source: 'locale' };
-    }
+    if (match) return match[1];
   }
-  // 4. Fallback to USD
-  return { currency: DEFAULT_CURRENCY, source: 'default' };
+  return null;
+}
+
+/**
+ * Resolve pricing for a customer.
+ * Returns: { currency, pricingMode, monthly: {amount, formatted}, yearly: {amount, formatted} }
+ * pricingMode: 'manual' | 'adaptive' | 'fallback'
+ */
+function resolvePricing(reqCurrency, country, acceptLanguage) {
+  // 1. Determine target currency
+  let currency = reqCurrency?.toLowerCase();
+  if (!currency) {
+    const cc = resolveCountry(country, null, acceptLanguage);
+    currency = cc ? (COUNTRY_CURRENCY[cc] || null) : null;
+  }
+
+  // 2. Manual currency → exact known amounts
+  if (currency && MANUAL_CURRENCIES.has(currency)) {
+    const amounts = MANUAL_AMOUNTS[currency];
+    return { currency, pricingMode: 'manual', monthly: amounts.monthly, yearly: amounts.yearly };
+  }
+
+  // 3. Adaptive currency → Stripe will convert at checkout; show base EUR amounts as estimate
+  if (currency && ADAPTIVE_CURRENCIES.has(currency)) {
+    const base = MANUAL_AMOUNTS[BASE_CURRENCY];
+    return { currency: BASE_CURRENCY, presentmentCurrency: currency, pricingMode: 'adaptive', monthly: base.monthly, yearly: base.yearly };
+  }
+
+  // 4. Fallback → EUR
+  const base = MANUAL_AMOUNTS[BASE_CURRENCY];
+  return { currency: BASE_CURRENCY, pricingMode: currency ? 'fallback' : 'default', monthly: base.monthly, yearly: base.yearly };
 }
 
 function formatAmount(amount, currency) {
@@ -476,44 +492,45 @@ function formatAmount(amount, currency) {
   } catch { return `${(amount / 100).toFixed(2)} ${currency.toUpperCase()}`; }
 }
 
-// GET /api/billing/pricing — returns available plans for detected currency
+// GET /api/billing/pricing — returns plans for the customer's resolved currency
 app.get('/api/billing/pricing', statusLimiter, (req, res) => {
+  if (!PRICE_MONTHLY || !PRICE_YEARLY) return res.status(503).json({ error: 'pricing_unavailable' });
+
   const { currency: reqCurrency, country } = req.query;
-  const cfCountry = req.headers['cf-ipcountry']; // Cloudflare geo header
-  const { currency, source } = resolveCurrency(reqCurrency, country || cfCountry, req.headers['accept-language']);
-  const plans = PRICING_TABLE[currency];
+  const cfCountry = req.headers['cf-ipcountry'];
+  const resolved = resolvePricing(
+    reqCurrency,
+    country || cfCountry,
+    req.headers['accept-language']
+  );
 
-  if (!plans) {
-    return res.status(503).json({ error: 'pricing_unavailable', message: 'No pricing available.' });
-  }
-
-  const monthlyFormatted = formatAmount(plans.monthly.amount, currency);
-  const yearlyFormatted = formatAmount(plans.yearly.amount, currency);
-  const monthlyEquiv = formatAmount(Math.round(plans.yearly.amount / 12), currency);
-  const savingsPercent = plans.monthly.amount > 0
-    ? Math.round((1 - (plans.yearly.amount / 12) / plans.monthly.amount) * 100)
+  const displayCur = resolved.currency;
+  const monthlyFormatted = formatAmount(resolved.monthly, displayCur);
+  const yearlyFormatted = formatAmount(resolved.yearly, displayCur);
+  const monthlyEquiv = formatAmount(Math.round(resolved.yearly / 12), displayCur);
+  const savingsPercent = resolved.monthly > 0
+    ? Math.round((1 - (resolved.yearly / 12) / resolved.monthly) * 100)
     : 0;
 
   res.json({
-    currency,
-    currencySource: source,
-    supportedCurrencies: Object.keys(PRICING_TABLE),
+    currency: displayCur,
+    baseCurrency: BASE_CURRENCY,
+    pricingMode: resolved.pricingMode,
+    ...(resolved.presentmentCurrency ? { presentmentCurrency: resolved.presentmentCurrency } : {}),
     plans: [
       {
-        planId: `${currency}_monthly`,
+        planId: 'monthly',
         interval: 'month',
-        currency,
-        amount: plans.monthly.amount,
+        currency: displayCur,
+        amount: resolved.monthly,
         formattedAmount: monthlyFormatted,
-        priceId: plans.monthly.priceId,
       },
       {
-        planId: `${currency}_yearly`,
+        planId: 'yearly',
         interval: 'year',
-        currency,
-        amount: plans.yearly.amount,
+        currency: displayCur,
+        amount: resolved.yearly,
         formattedAmount: yearlyFormatted,
-        priceId: plans.yearly.priceId,
         monthlyEquivalent: monthlyEquiv,
         savingsPercent,
       },
@@ -524,24 +541,13 @@ app.get('/api/billing/pricing', statusLimiter, (req, res) => {
 // POST /api/billing/checkout-session
 app.post('/api/billing/checkout-session', checkoutLimiter, requireBilling, async (req, res) => {
   try {
-    const { email, priceType, planId, currency: reqCurrency } = req.body;
+    const { email, priceType, planId } = req.body;
     if (!email || !isValidEmail(email)) return res.status(400).json({ error: 'Valid email required.' });
 
-    // Resolve the price ID: prefer planId, fall back to priceType + currency resolution
-    let priceId;
-    if (planId) {
-      // planId format: "eur_monthly" or "gbp_yearly"
-      const [cur, interval] = planId.split('_');
-      const plans = PRICING_TABLE[cur];
-      priceId = plans?.[interval]?.priceId;
-    }
-    if (!priceId && priceType) {
-      if (!['monthly', 'yearly'].includes(priceType)) return res.status(400).json({ error: 'priceType must be monthly or yearly.' });
-      const { currency } = resolveCurrency(reqCurrency, req.headers['cf-ipcountry'], req.headers['accept-language']);
-      const plans = PRICING_TABLE[currency];
-      priceId = plans?.[priceType]?.priceId;
-    }
-    if (!priceId) return res.status(400).json({ error: 'billing_unavailable', message: 'Could not resolve price. Please try again.' });
+    // Always use the EUR-based prices — Stripe handles currency via currency_options + adaptive
+    const interval = planId === 'yearly' || priceType === 'yearly' ? 'yearly' : 'monthly';
+    const priceId = interval === 'yearly' ? PRICE_YEARLY : PRICE_MONTHLY;
+    if (!priceId) return res.status(503).json({ error: 'billing_unavailable', message: 'Price not configured.' });
 
     const db = getPool();
 
