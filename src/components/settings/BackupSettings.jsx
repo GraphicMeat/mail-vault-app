@@ -310,10 +310,10 @@ const AccountCard = React.forwardRef(function AccountCard({ account, isPaidUser,
               setLoadingStatus(true);
               setBackupStatusError(null);
               try {
-                const customPath = useSettingsStore.getState().backupCustomPath || null;
+                // External path resolved natively in Rust via bookmark — pass null
                 const resolved = await resolveServerAccount(account.id, account);
                 if (!resolved.ok) throw new Error(resolved.message);
-                const result = await api.backupStatus(account.id, JSON.stringify(resolved.account), customPath);
+                const result = await api.backupStatus(account.id, JSON.stringify(resolved.account), null);
                 setBackupStatusData(result);
                 if (!result?.folders?.length && !result?.total_server && !result?.total_app && !result?.total_external) {
                   setBackupStatusError('No backup coverage data is available for this account yet.');

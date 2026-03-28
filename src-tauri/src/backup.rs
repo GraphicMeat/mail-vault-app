@@ -51,27 +51,34 @@ pub struct AccountBackupStatus {
     pub total_app: usize,
     pub total_external: usize,
     pub external_available: bool,
+    /// Status of the external location: "ready", "needs_reauth", "unavailable", "invalid", "not_configured"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub external_status: Option<String>,
+    /// Error detail for external location
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub external_error: Option<String>,
 }
 
 /// Resolve the effective external backup path.
-/// Prefers the caller-supplied path, falls back to bookmark-resolved path.
-/// On macOS, starts security-scoped access for the resolved path.
+/// Always prefers the native bookmark/stored location. Caller-supplied raw paths
+/// are only accepted on Linux as a temporary override; on macOS they are ignored
+/// (raw paths lose sandbox access after restart).
 /// Returns (resolved_path, needs_release) — caller must call release_backup_path if needs_release is true.
 fn resolve_backup_path(
     app_handle: &tauri::AppHandle,
     caller_path: Option<String>,
 ) -> (Option<String>, bool) {
-    // If caller provided a path, use it directly (legacy/Linux behavior)
-    if let Some(ref p) = caller_path {
-        if !p.is_empty() {
-            return (caller_path, false);
-        }
-    }
-
-    // Try bookmark-based resolution
+    // Try bookmark-based resolution first (authoritative source)
     let data_dir = match app_handle.path().app_data_dir() {
         Ok(d) => d,
-        Err(_) => return (None, false),
+        Err(_) => {
+            // Fallback: use caller path on Linux only
+            #[cfg(not(target_os = "macos"))]
+            if let Some(ref p) = caller_path {
+                if !p.is_empty() { return (caller_path, false); }
+            }
+            return (None, false);
+        }
     };
 
     match external_location::resolve_external_location(&data_dir) {
@@ -79,7 +86,18 @@ fn resolve_backup_path(
             info!("backup: resolved external location via bookmark: {}", resolved);
             (Some(resolved), true) // needs_release on macOS
         }
-        Err(_) => (None, false),
+        Err(_) => {
+            // No valid bookmark — on Linux, accept caller path as fallback
+            #[cfg(not(target_os = "macos"))]
+            if let Some(ref p) = caller_path {
+                if !p.is_empty() {
+                    info!("backup: using caller-supplied path (Linux): {}", p);
+                    return (caller_path, false);
+                }
+            }
+            // On macOS, never fall back to raw paths — they lose access after restart
+            (None, false)
+        }
     }
 }
 
@@ -155,11 +173,39 @@ pub async fn get_backup_status(
     // Resolve external path via bookmark if needed
     let (resolved_path, needs_release) = resolve_backup_path(&app_handle, backup_path);
 
-    let result = if account.oauth2_transport.as_deref() == Some("graph") {
+    // Capture external location status for the response
+    let (ext_status, ext_error) = if resolved_path.is_some() {
+        ("ready".to_string(), None)
+    } else {
+        // Check if there's a configured but unresolvable external location
+        let data_dir = app_handle.path().app_data_dir().ok();
+        if let Some(ref dd) = data_dir {
+            let loc = external_location::get_external_location(dd);
+            if loc.status == "not_configured" {
+                ("not_configured".to_string(), None)
+            } else {
+                // There IS a configured location but it failed to resolve
+                let err = external_location::validate_external_location(dd)
+                    .map(|l| l.last_error)
+                    .unwrap_or(None);
+                ("needs_reauth".to_string(), err)
+            }
+        } else {
+            ("not_configured".to_string(), None)
+        }
+    };
+
+    let mut result = if account.oauth2_transport.as_deref() == Some("graph") {
         get_graph_backup_status(app_handle.clone(), account_id, account_json, resolved_path.clone()).await
     } else {
         get_imap_backup_status(app_handle.clone(), account_id, account, resolved_path.clone()).await
     };
+
+    // Enrich with external location status
+    if let Ok(ref mut status) = result {
+        status.external_status = Some(ext_status);
+        status.external_error = ext_error;
+    }
 
     // Release bookmark access
     if needs_release {
@@ -258,16 +304,17 @@ async fn get_imap_backup_status(
         &mut total_server, &mut total_app, &mut total_external,
     ).await;
 
-    // Check if external path exists and is accessible
-    let external_available = backup_path.as_ref().map_or(false, |p| std::path::Path::new(p).exists());
+    let external_available = backup_path.is_some();
 
     Ok(AccountBackupStatus {
         folders,
         total_server,
-        total_local: total_app, // legacy compat
+        total_local: total_app,
         total_app,
         total_external,
         external_available,
+        external_status: None, // set by caller from resolve result
+        external_error: None,
     })
 }
 
@@ -321,7 +368,7 @@ async fn get_graph_backup_status(
         }
     }
 
-    let external_available = backup_path.as_ref().map_or(false, |p| std::path::Path::new(p).exists());
+    let external_available = backup_path.is_some();
 
     Ok(AccountBackupStatus {
         folders,
@@ -330,6 +377,8 @@ async fn get_graph_backup_status(
         total_app,
         total_external,
         external_available,
+        external_status: None,
+        external_error: None,
     })
 }
 
@@ -349,7 +398,18 @@ pub struct BackupResult {
     /// Number of folders completed before cancel/finish (resume checkpoint)
     #[serde(default)]
     pub completed_folders: usize,
+    /// External copy outcome — true if all external writes succeeded (or no external location configured)
+    #[serde(default = "default_true")]
+    pub external_copy_ok: bool,
+    /// Error message when external copy partially or fully failed
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub external_copy_error: Option<String>,
+    /// Number of emails that failed to copy to the external location
+    #[serde(default)]
+    pub external_copy_failed_count: usize,
 }
+
+fn default_true() -> bool { true }
 
 // ── Cancellation token (shared app state) ────────────────────────────────────
 
@@ -618,6 +678,9 @@ async fn run_imap_backup_inner(
         error_message: None,
         cancelled,
         completed_folders,
+        external_copy_ok: true,
+        external_copy_error: None,
+        external_copy_failed_count: 0,
     })
 }
 
@@ -841,6 +904,9 @@ async fn run_graph_backup(
         error_message: None,
         cancelled,
         completed_folders,
+        external_copy_ok: true, // TODO: track per-email external failures in Graph backup loop
+        external_copy_error: None,
+        external_copy_failed_count: 0,
     })
 }
 
