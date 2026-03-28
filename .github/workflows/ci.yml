@@ -32,6 +32,8 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci --ignore-scripts
+      - name: Check version consistency
+        run: bash scripts/check-version-consistency.sh
       - name: Write .env.test from secrets
         env:
           TEST_EMAIL: ${{ secrets.TEST_EMAIL }}

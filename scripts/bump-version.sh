@@ -15,7 +15,7 @@ if [[ "$BUMP_TYPE" != "patch" && "$BUMP_TYPE" != "minor" && "$BUMP_TYPE" != "maj
   exit 1
 fi
 
-# Read current version from package.json
+# ── Read canonical version from package.json ──
 CURRENT=$(grep -m1 '"version"' "$ROOT/package.json" | sed 's/.*"version": *"\([^"]*\)".*/\1/')
 if [[ -z "$CURRENT" ]]; then
   echo "Error: could not read current version from package.json"
@@ -35,22 +35,26 @@ TODAY=$(date +%Y-%m-%d)
 
 echo "Bumping version: $CURRENT → $NEW"
 
-# package.json
-sed -i '' "s/\"version\": \"$CURRENT\"/\"version\": \"$NEW\"/" "$ROOT/package.json"
+# ── Deterministic version replacement ──
+# Uses pattern-based sed that matches any semver, not just $CURRENT.
+# This ensures drifted files are corrected.
 
-# src-tauri/Cargo.toml
-sed -i '' "s/^version = \"$CURRENT\"/version = \"$NEW\"/" "$ROOT/src-tauri/Cargo.toml"
+# package.json: "version": "X.Y.Z"
+sed -i '' 's/"version": *"[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*"/"version": "'"$NEW"'"/' "$ROOT/package.json"
 
-# src-tauri/tauri.conf.json
-sed -i '' "s/\"version\": \"$CURRENT\"/\"version\": \"$NEW\"/" "$ROOT/src-tauri/tauri.conf.json"
+# src-tauri/Cargo.toml: version = "X.Y.Z" (first occurrence only)
+sed -i '' '0,/^version = "[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*"/s//version = "'"$NEW"'"/' "$ROOT/src-tauri/Cargo.toml"
 
-# snap/snapcraft.yaml
-sed -i '' "s/^version: '$CURRENT'/version: '$NEW'/" "$ROOT/snap/snapcraft.yaml"
+# src-tauri/tauri.conf.json: "version": "X.Y.Z"
+sed -i '' 's/"version": *"[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*"/"version": "'"$NEW"'"/' "$ROOT/src-tauri/tauri.conf.json"
 
-# Update Cargo.lock by running cargo check
+# snap/snapcraft.yaml: version: 'X.Y.Z'
+sed -i '' "s/^version: '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*'/version: '$NEW'/" "$ROOT/snap/snapcraft.yaml"
+
+# Update Cargo.lock
 (cd "$ROOT/src-tauri" && cargo update -p mailvault 2>/dev/null || true)
 
-# CHANGELOG.md: move [Unreleased] content to new version section
+# ── CHANGELOG.md ──
 CHANGELOG="$ROOT/CHANGELOG.md"
 if grep -q '## \[Unreleased\]' "$CHANGELOG"; then
   sed -i '' "s/## \[Unreleased\]/## [Unreleased]\n\n## [$NEW] - $TODAY/" "$CHANGELOG"
@@ -61,6 +65,27 @@ fi
 if [[ -f "$ROOT/scripts/generate-changelog.cjs" ]]; then
   node "$ROOT/scripts/generate-changelog.cjs"
   echo "  website/changelog.html  → regenerated"
+fi
+
+# ── Verify all files are consistent ──
+ERRORS=0
+verify_version() {
+  local file="$1" pattern="$2" label="$3"
+  if ! grep -q "$pattern" "$file"; then
+    echo "  ERROR: $label does not contain version $NEW"
+    ERRORS=$((ERRORS + 1))
+  fi
+}
+
+verify_version "$ROOT/package.json" "\"version\": \"$NEW\"" "package.json"
+verify_version "$ROOT/src-tauri/Cargo.toml" "version = \"$NEW\"" "Cargo.toml"
+verify_version "$ROOT/src-tauri/tauri.conf.json" "\"version\": \"$NEW\"" "tauri.conf.json"
+verify_version "$ROOT/snap/snapcraft.yaml" "version: '$NEW'" "snapcraft.yaml"
+
+if [[ $ERRORS -gt 0 ]]; then
+  echo ""
+  echo "ERROR: $ERRORS file(s) have version mismatches after bump!"
+  exit 1
 fi
 
 echo ""
