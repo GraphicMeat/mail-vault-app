@@ -300,28 +300,37 @@ class BackupCoordinator {
       // Completed — clear checkpoint
       this._checkpoints.delete(accountId);
 
+      const externalDegraded = result.external_copy_ok === false;
       const entry = {
         timestamp: Date.now(),
         emailsBackedUp: result.emails_backed_up || 0,
         durationSecs: result.duration_secs || ((Date.now() - startTime) / 1000),
         success: result.success !== false,
-        error: result.error_message || null
+        error: result.error_message || null,
+        externalCopyOk: result.external_copy_ok !== false,
+        externalCopyError: result.external_copy_error || null,
+        externalCopyFailedCount: result.external_copy_failed_count || 0,
       };
 
       const storeNow = useSettingsStore.getState();
       storeNow.addBackupHistoryEntry(accountId, entry);
       storeNow.updateBackupState(accountId, {
         lastBackupTime: Date.now(),
-        lastStatus: entry.success ? 'success' : 'failed',
-        lastError: entry.error,
+        lastStatus: entry.success ? (externalDegraded ? 'degraded' : 'success') : 'failed',
+        lastError: entry.error || (externalDegraded ? result.external_copy_error : null),
         emailsBackedUp: (storeNow.backupState[accountId]?.emailsBackedUp || 0) + entry.emailsBackedUp
       });
 
       // Send notification
-      if (entry.success && storeNow.backupNotifyOnSuccess) {
+      if (entry.success && !externalDegraded && storeNow.backupNotifyOnSuccess) {
         api.sendNotification(
           `Backup complete - ${account.email}`,
           `${entry.emailsBackedUp} new emails backed up.`
+        ).catch(() => {});
+      } else if (entry.success && externalDegraded && storeNow.backupNotifyOnFailure) {
+        api.sendNotification(
+          `Backup partially complete - ${account.email}`,
+          `${entry.emailsBackedUp} emails backed up locally, but ${result.external_copy_failed_count || 'some'} failed to copy to external backup.`
         ).catch(() => {});
       } else if (!entry.success && storeNow.backupNotifyOnFailure) {
         api.sendNotification(
@@ -332,7 +341,7 @@ class BackupCoordinator {
 
       this._retryCount.delete(accountId);
       this._resolveManual(accountId, {
-        status: entry.success ? 'success' : 'failed',
+        status: entry.success ? (externalDegraded ? 'degraded' : 'success') : 'failed',
         message: entry.error,
       });
     } catch (err) {
