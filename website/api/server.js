@@ -1052,31 +1052,6 @@ app.get('/api/admin/contacts', async (req, res) => {
   }
 });
 
-// DELETE /api/admin/billing-test-data — remove all sandbox/test billing entries
-app.delete('/api/admin/billing-test-data', async (req, res) => {
-  const adminKey = req.headers['x-admin-key'];
-  if (adminKey !== process.env.ADMIN_KEY) return res.status(401).json({ error: 'Unauthorized' });
-
-  try {
-    const db = getPool();
-    // Delete in dependency order: clients → subscriptions → events → customers
-    const [clients] = await db.execute('DELETE FROM billing_clients');
-    const [subs] = await db.execute('DELETE FROM billing_subscriptions');
-    const [events] = await db.execute('DELETE FROM processed_stripe_events');
-    const [customers] = await db.execute('DELETE FROM billing_customers');
-    res.json({
-      deleted: {
-        clients: clients.affectedRows,
-        subscriptions: subs.affectedRows,
-        events: events.affectedRows,
-        customers: customers.affectedRows,
-      }
-    });
-  } catch (error) {
-    console.error('[admin/billing-test-data]', error.message);
-    res.status(500).json({ error: 'Failed to clean billing data' });
-  }
-});
 
 // ===========================================
 // Utilities
