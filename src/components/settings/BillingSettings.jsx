@@ -80,10 +80,12 @@ export function BillingSettings() {
   useEffect(() => { getClientInfo().then(info => { clientInfoRef.current = info; }); }, []);
 
   // Fetch pricing on mount (only when not premium — plan cards are hidden for premium users)
+  // Pass email/customerId so server can check trial eligibility
   useEffect(() => {
     if (!isPremium && !pricing && !pricingLoading) {
       setPricingLoading(true);
-      fetchPricing().then(setPricing).catch(() => {}).finally(() => setPricingLoading(false));
+      fetchPricing({ email: billingEmail, customerId })
+        .then(setPricing).catch(() => {}).finally(() => setPricingLoading(false));
     }
   }, [isPremium]);
 
@@ -275,7 +277,12 @@ export function BillingSettings() {
           </div>
           <div>
             <h3 className="text-sm font-semibold text-mail-text">{statusLabel}</h3>
-            {isPremium && billingProfile?.currentPeriodEnd && (
+            {billingProfile?.status === 'trialing' && billingProfile?.currentPeriodEnd && (
+              <p className="text-xs text-emerald-500">
+                Free trial ends {formatDate(billingProfile.currentPeriodEnd)} — yearly billing begins after.
+              </p>
+            )}
+            {isPremium && billingProfile?.status !== 'trialing' && billingProfile?.currentPeriodEnd && (
               <p className="text-xs text-mail-text-muted">
                 {billingProfile.cancelAtPeriodEnd
                   ? `Access until ${formatDate(billingProfile.currentPeriodEnd)}`
@@ -337,18 +344,26 @@ export function BillingSettings() {
               )}
               {yearlyPlan && (
                 <div className="bg-mail-surface border-2 border-mail-accent rounded-xl p-5 flex flex-col relative">
-                  {yearlyPlan.savingsPercent > 0 && (
+                  {yearlyPlan.trialEligible && yearlyPlan.trialDays ? (
+                    <span className="absolute -top-2.5 right-4 px-2 py-0.5 text-[10px] font-bold uppercase bg-emerald-500 text-white rounded-full">
+                      {yearlyPlan.trialDays}-day free trial
+                    </span>
+                  ) : yearlyPlan.savingsPercent > 0 ? (
                     <span className="absolute -top-2.5 right-4 px-2 py-0.5 text-[10px] font-bold uppercase bg-mail-accent text-white rounded-full">
                       Save {yearlyPlan.savingsPercent}%
                     </span>
-                  )}
+                  ) : null}
                   <h4 className="text-sm font-semibold text-mail-text mb-1">Yearly</h4>
                   <div className="text-2xl font-bold text-mail-text mb-1">{yearlyPlan.formattedAmount}<span className="text-sm font-normal text-mail-text-muted">/yr</span></div>
-                  <p className="text-xs text-mail-text-muted mb-4 flex-1">~{yearlyPlan.monthlyEquivalent}/month</p>
+                  <p className="text-xs text-mail-text-muted mb-4 flex-1">
+                    {yearlyPlan.trialEligible && yearlyPlan.trialDays
+                      ? `${yearlyPlan.trialDays} days free, then ~${yearlyPlan.monthlyEquivalent}/month`
+                      : `~${yearlyPlan.monthlyEquivalent}/month`}
+                  </p>
                   <button onClick={() => handleCheckout(yearlyPlan.planId)} disabled={checkoutLoading || !emailInput.trim()}
                     className="w-full py-2 text-sm font-semibold bg-mail-accent text-white rounded-lg hover:bg-mail-accent-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
                     {checkoutLoading === 'yearly' ? <Loader size={14} className="animate-spin" /> : <ExternalLink size={14} />}
-                    Upgrade
+                    {yearlyPlan.trialEligible && yearlyPlan.trialDays ? 'Start Free Trial' : 'Upgrade'}
                   </button>
                 </div>
               )}

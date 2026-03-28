@@ -492,17 +492,50 @@ function formatAmount(amount, currency) {
   } catch { return `${(amount / 100).toFixed(2)} ${currency.toUpperCase()}`; }
 }
 
+const YEARLY_TRIAL_DAYS = 14;
+
+// Check if a customer has ever had a subscription (used trial or paid)
+async function hasCustomerEverSubscribed(db, billingCustomerId) {
+  if (!billingCustomerId) return false;
+  const [rows] = await db.execute(
+    'SELECT id FROM billing_subscriptions WHERE billing_customer_id = ? LIMIT 1',
+    [billingCustomerId]
+  );
+  return rows.length > 0;
+}
+
 // GET /api/billing/pricing — returns plans for the customer's resolved currency
-app.get('/api/billing/pricing', statusLimiter, (req, res) => {
+// Optional: ?email=...&customerId=... to check trial eligibility
+app.get('/api/billing/pricing', statusLimiter, async (req, res) => {
   if (!PRICE_MONTHLY || !PRICE_YEARLY) return res.status(503).json({ error: 'pricing_unavailable' });
 
-  const { currency: reqCurrency, country } = req.query;
+  const { currency: reqCurrency, country, email, customerId } = req.query;
   const cfCountry = req.headers['cf-ipcountry'];
   const resolved = resolvePricing(
     reqCurrency,
     country || cfCountry,
     req.headers['accept-language']
   );
+
+  // Determine trial eligibility: one free yearly trial per customer, never used before
+  let trialEligible = true; // default for unknown/new users
+  try {
+    if ((email || customerId) && getPool) {
+      const db = getPool();
+      let custId = null;
+      if (customerId) {
+        const [rows] = await db.execute('SELECT id FROM billing_customers WHERE stripe_customer_id = ?', [customerId]);
+        custId = rows[0]?.id;
+      }
+      if (!custId && email) {
+        const [rows] = await db.execute('SELECT id FROM billing_customers WHERE email = ?', [email.toLowerCase()]);
+        custId = rows[0]?.id;
+      }
+      if (custId) {
+        trialEligible = !(await hasCustomerEverSubscribed(db, custId));
+      }
+    }
+  } catch { /* non-fatal — default to eligible */ }
 
   const displayCur = resolved.currency;
   const monthlyFormatted = formatAmount(resolved.monthly, displayCur);
@@ -533,6 +566,8 @@ app.get('/api/billing/pricing', statusLimiter, (req, res) => {
         formattedAmount: yearlyFormatted,
         monthlyEquivalent: monthlyEquiv,
         savingsPercent,
+        trialDays: YEARLY_TRIAL_DAYS,
+        trialEligible,
       },
     ],
   });
@@ -562,16 +597,35 @@ app.post('/api/billing/checkout-session', checkoutLimiter, requireBilling, async
       await db.execute('INSERT INTO billing_customers (email, stripe_customer_id) VALUES (?, ?)', [email.toLowerCase(), customerId]);
     }
 
-    const session = await stripe.checkout.sessions.create({
+    // Determine trial eligibility for yearly plans
+    let applyTrial = false;
+    if (interval === 'yearly') {
+      try {
+        const [custRows] = await db.execute('SELECT id FROM billing_customers WHERE stripe_customer_id = ?', [customerId]);
+        const custId = custRows[0]?.id;
+        if (custId) {
+          applyTrial = !(await hasCustomerEverSubscribed(db, custId));
+        } else {
+          applyTrial = true; // brand new customer
+        }
+      } catch { applyTrial = false; }
+    }
+
+    const sessionParams = {
       customer: customerId,
       mode: 'subscription',
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: process.env.BILLING_SUCCESS_URL || 'https://mailvaultapp.com/billing-success.html',
       cancel_url: process.env.BILLING_CANCEL_URL || 'https://mailvaultapp.com/billing-cancel.html',
       allow_promotion_codes: true,
-    });
+    };
+    if (applyTrial) {
+      sessionParams.subscription_data = { trial_period_days: YEARLY_TRIAL_DAYS };
+    }
 
-    res.json({ url: session.url, customerId });
+    const session = await stripe.checkout.sessions.create(sessionParams);
+
+    res.json({ url: session.url, customerId, trialApplied: applyTrial });
   } catch (error) {
     console.error('[billing/checkout-session]', error.message);
     res.status(500).json({ error: 'checkout_failed', message: 'Could not create checkout session. Please try again.' });

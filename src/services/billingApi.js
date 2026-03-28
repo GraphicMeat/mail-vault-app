@@ -64,10 +64,12 @@ export function isBillingRateLimited() { return Date.now() < _rateLimitedUntil; 
 export { BillingRateLimitError };
 
 /** Fetch available pricing plans for the user's detected currency. */
-export async function fetchPricing({ currency, country } = {}) {
+export async function fetchPricing({ currency, country, email, customerId } = {}) {
   const params = new URLSearchParams();
   if (currency) params.set('currency', currency);
   if (country) params.set('country', country);
+  if (email) params.set('email', email);
+  if (customerId) params.set('customerId', customerId);
   return billingFetch(`/api/billing/pricing?${params.toString()}`);
 }
 
