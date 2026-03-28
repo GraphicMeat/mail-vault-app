@@ -19,6 +19,7 @@ mod archive;
 mod backup;
 mod commands;
 mod dns;
+mod external_location;
 pub mod graph;
 mod imap;
 mod migration;
@@ -3642,6 +3643,12 @@ fn main() {
             commands::backup_run_account,
             commands::backup_status,
             commands::backup_cancel,
+            commands::backup_save_external_location,
+            commands::backup_get_external_location,
+            commands::backup_validate_external_location,
+            commands::backup_clear_external_location,
+            commands::backup_resolve_external_location,
+            commands::backup_migrate_legacy_path,
             commands::start_migration,
             commands::cancel_migration,
             commands::pause_migration,

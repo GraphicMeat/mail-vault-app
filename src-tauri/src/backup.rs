@@ -5,6 +5,7 @@ use serde::Serialize;
 use tauri::{Emitter, Manager};
 use tracing::{info, warn};
 
+use crate::external_location;
 use crate::imap::{self, ImapConfig, ImapPool};
 
 // ── Event payload ────────────────────────────────────────────────────────────
@@ -50,6 +51,41 @@ pub struct AccountBackupStatus {
     pub total_app: usize,
     pub total_external: usize,
     pub external_available: bool,
+}
+
+/// Resolve the effective external backup path.
+/// Prefers the caller-supplied path, falls back to bookmark-resolved path.
+/// On macOS, starts security-scoped access for the resolved path.
+/// Returns (resolved_path, needs_release) — caller must call release_backup_path if needs_release is true.
+fn resolve_backup_path(
+    app_handle: &tauri::AppHandle,
+    caller_path: Option<String>,
+) -> (Option<String>, bool) {
+    // If caller provided a path, use it directly (legacy/Linux behavior)
+    if let Some(ref p) = caller_path {
+        if !p.is_empty() {
+            return (caller_path, false);
+        }
+    }
+
+    // Try bookmark-based resolution
+    let data_dir = match app_handle.path().app_data_dir() {
+        Ok(d) => d,
+        Err(_) => return (None, false),
+    };
+
+    match external_location::resolve_external_location(&data_dir) {
+        Ok((resolved, _loc)) => {
+            info!("backup: resolved external location via bookmark: {}", resolved);
+            (Some(resolved), true) // needs_release on macOS
+        }
+        Err(_) => (None, false),
+    }
+}
+
+/// Release bookmark-based access if it was started.
+fn release_backup_path(path: &str) {
+    external_location::release_external_access(path);
 }
 
 /// Scan UIDs from an external backup directory.
@@ -116,12 +152,21 @@ pub async fn get_backup_status(
     let account: ImapConfig = serde_json::from_str(&account_json)
         .map_err(|e| format!("Bad account JSON: {}", e))?;
 
-    let is_graph = account.oauth2_transport.as_deref() == Some("graph");
-    if is_graph {
-        return get_graph_backup_status(app_handle, account_id, account_json, backup_path).await;
+    // Resolve external path via bookmark if needed
+    let (resolved_path, needs_release) = resolve_backup_path(&app_handle, backup_path);
+
+    let result = if account.oauth2_transport.as_deref() == Some("graph") {
+        get_graph_backup_status(app_handle.clone(), account_id, account_json, resolved_path.clone()).await
+    } else {
+        get_imap_backup_status(app_handle.clone(), account_id, account, resolved_path.clone()).await
+    };
+
+    // Release bookmark access
+    if needs_release {
+        if let Some(ref p) = resolved_path { release_backup_path(p); }
     }
 
-    get_imap_backup_status(app_handle, account_id, account, backup_path).await
+    result
 }
 
 /// IMAP backup status with folder hierarchy.
@@ -362,12 +407,39 @@ pub async fn run_account_backup(
     let account: ImapConfig = serde_json::from_str(&account_json)
         .map_err(|e| format!("Bad account JSON: {}", e))?;
 
+    // Resolve external path via bookmark if needed
+    let (resolved_path, needs_release) = resolve_backup_path(&app_handle, backup_path);
+    if resolved_path.is_some() {
+        info!("backup: using external path: {:?}", resolved_path);
+    }
+
     // Check if this is a Graph account
     let is_graph = account.oauth2_transport.as_deref() == Some("graph");
 
-    if is_graph {
-        return run_graph_backup(app_handle, account_id, account_json, cancel, start, backup_path, skip_folders).await;
+    let result = if is_graph {
+        run_graph_backup(app_handle, account_id, account_json, cancel, start, resolved_path.clone(), skip_folders).await
+    } else {
+        run_imap_backup_inner(app_handle, account_id, account_json, account, cancel, start, resolved_path.clone(), skip_folders).await
+    };
+
+    // Release bookmark access after backup completes
+    if needs_release {
+        if let Some(ref p) = resolved_path { release_backup_path(p); }
     }
+
+    result
+}
+
+async fn run_imap_backup_inner(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    account_json: String,
+    account: ImapConfig,
+    cancel: Arc<AtomicBool>,
+    start: std::time::Instant,
+    backup_path: Option<String>,
+    skip_folders: usize,
+) -> Result<BackupResult, String> {
 
     // ── IMAP path ────────────────────────────────────────────────────────────
 
