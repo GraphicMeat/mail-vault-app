@@ -21,6 +21,9 @@ pub struct ArchiveProgress {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "lastUid")]
     pub last_uid: Option<u32>,
+    /// Number of emails where local write succeeded but external copy failed
+    #[serde(default)]
+    pub external_copy_failures: usize,
 }
 
 // ── Cancellation token (shared app state) ─────────────────────────────────────
@@ -64,12 +67,13 @@ pub async fn run_with_backup(
         .map_err(|e| format!("Bad account JSON: {}", e))?;
 
     let _ = app_handle.emit("archive-progress", ArchiveProgress {
-        total, completed: 0, errors: 0, active: true, last_error: None, last_uid: None,
+        total, completed: 0, errors: 0, active: true, last_error: None, last_uid: None, external_copy_failures: 0,
     });
 
     let sem = Arc::new(Semaphore::new(5));
     let completed = Arc::new(AtomicUsize::new(0));
     let errors = Arc::new(AtomicUsize::new(0));
+    let ext_failures = Arc::new(AtomicUsize::new(0));
     let mut set: JoinSet<Option<serde_json::Value>> = JoinSet::new();
 
     // Get the IMAP pool from managed state
@@ -92,6 +96,7 @@ pub async fn run_with_backup(
         let pool = pool.inner().clone();
         let bp = backup_path.clone();
         let ae = account_email.clone();
+        let ext_failures = Arc::clone(&ext_failures);
 
         set.spawn(async move {
             let _permit = sem.acquire().await.unwrap();
@@ -104,6 +109,10 @@ pub async fn run_with_backup(
                 &pool, &app, &account_id, &account, &mailbox, uid, bp.as_deref(), ae.as_deref(),
             ).await {
                 Ok(index_entry) => {
+                    // Track external copy failures
+                    if index_entry.get("_external_copy_failed").and_then(|v| v.as_bool()).unwrap_or(false) {
+                        ext_failures.fetch_add(1, Ordering::Relaxed);
+                    }
                     completed.fetch_add(1, Ordering::Relaxed);
                     let c = completed.load(Ordering::Relaxed);
                     let e = errors.load(Ordering::Relaxed);
@@ -115,6 +124,7 @@ pub async fn run_with_backup(
                         active: !is_cancelled && (c + e) < total,
                         last_error: None,
                         last_uid: Some(uid),
+                        external_copy_failures: ext_failures.load(Ordering::Relaxed),
                     });
                     Some(index_entry)
                 }
@@ -131,6 +141,7 @@ pub async fn run_with_backup(
                         active: !is_cancelled && (c + e) < total,
                         last_error: Some(last_error),
                         last_uid: None,
+                        external_copy_failures: ext_failures.load(Ordering::Relaxed),
                     });
                     None
                 }
@@ -180,10 +191,11 @@ pub async fn run_with_backup(
 
     let final_completed = completed.load(Ordering::Relaxed);
     let final_errors = errors.load(Ordering::Relaxed);
+    let final_ext_failures = ext_failures.load(Ordering::Relaxed);
 
     info!(
-        "archive_emails: done — {}/{} completed, {} errors",
-        final_completed, total, final_errors
+        "archive_emails: done — {}/{} completed, {} errors, {} external copy failures",
+        final_completed, total, final_errors, final_ext_failures
     );
 
     let result = ArchiveProgress {
@@ -193,6 +205,7 @@ pub async fn run_with_backup(
         active: false,
         last_error: None,
         last_uid: None,
+        external_copy_failures: final_ext_failures,
     };
 
     let _ = app_handle.emit("archive-progress", result.clone());
@@ -255,21 +268,32 @@ async fn fetch_and_store(
         .map_err(|e| format!("write .eml: {}", e))?;
 
     // Also write to backup location if configured
-    if let (Some(bp), Some(email)) = (backup_path, account_email) {
+    let mut external_copy_failed = false;
+    if let (Some(bp), Some(email_addr)) = (backup_path, account_email) {
         let backup_dir = std::path::PathBuf::from(bp)
-            .join(email)
+            .join(email_addr)
             .join(mailbox)
             .join("cur");
-        if let Ok(()) = fs::create_dir_all(&backup_dir) {
-            let eml_name = format!("{}.eml", uid);
-            let dst = backup_dir.join(&eml_name);
-            if !dst.exists() {
-                let _ = fs::write(&dst, &raw_bytes); // Best-effort, don't fail backup on copy error
+        match fs::create_dir_all(&backup_dir) {
+            Ok(()) => {
+                let eml_name = format!("{}.eml", uid);
+                let dst = backup_dir.join(&eml_name);
+                if !dst.exists() {
+                    if let Err(e) = fs::write(&dst, &raw_bytes) {
+                        warn!("archive_emails: external copy failed for UID {}: {}", uid, e);
+                        external_copy_failed = true;
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("archive_emails: external mkdir failed for UID {}: {}", uid, e);
+                external_copy_failed = true;
             }
         }
     }
 
-    info!("archive_emails: stored UID {} ({} bytes)", uid, raw_bytes.len());
+    info!("archive_emails: stored UID {} ({} bytes{})", uid, raw_bytes.len(),
+        if external_copy_failed { ", external copy FAILED" } else { "" });
 
     // Build local-index entry
     let index_entry = serde_json::json!({
@@ -285,6 +309,7 @@ async fn fetch_and_store(
         "references": references,
         "snippet": snippet,
         "source": "local",
+        "_external_copy_failed": external_copy_failed,
     });
 
     Ok(index_entry)
@@ -420,6 +445,7 @@ pub async fn bulk_delete(
         active: false,
         last_error: None,
         last_uid: None,
+        external_copy_failures: 0,
     })
 }
 

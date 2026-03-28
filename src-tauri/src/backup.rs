@@ -530,6 +530,7 @@ async fn run_imap_backup_inner(
     let mut completed_folders = 0usize;
     let mut total_backed_up = 0usize;
     let mut total_errors = 0usize;
+    let mut total_ext_failures = 0usize;
 
     info!(
         "backup: starting for {} ({} selectable folders)",
@@ -639,6 +640,7 @@ async fn run_imap_backup_inner(
 
             total_backed_up += archive_result.completed;
             total_errors += archive_result.errors;
+            total_ext_failures += archive_result.external_copy_failures;
         }
 
         completed_folders += 1;
@@ -669,6 +671,9 @@ async fn run_imap_backup_inner(
         if let Some(ref p) = backup_path { format!(" (copied to {})", p) } else { String::new() },
         completed_folders, total_folders
     );
+    if total_ext_failures > 0 {
+        warn!("backup: {} external copy failures for {}", total_ext_failures, account.email);
+    }
 
     Ok(BackupResult {
         emails_backed_up: total_backed_up,
@@ -678,9 +683,11 @@ async fn run_imap_backup_inner(
         error_message: None,
         cancelled,
         completed_folders,
-        external_copy_ok: true,
-        external_copy_error: None,
-        external_copy_failed_count: 0,
+        external_copy_ok: total_ext_failures == 0,
+        external_copy_error: if total_ext_failures > 0 {
+            Some(format!("{} emails failed to copy to external backup", total_ext_failures))
+        } else { None },
+        external_copy_failed_count: total_ext_failures,
     })
 }
 
@@ -759,6 +766,7 @@ async fn run_graph_backup(
     let mut completed_folders = 0usize;
     let mut total_backed_up = 0usize;
     let mut total_errors = 0usize;
+    let mut total_ext_failures = 0usize;
 
     info!(
         "backup(graph): starting for account {} ({} folders, skipping first {})",
@@ -843,10 +851,20 @@ async fn run_graph_backup(
                                     .join(&account.email)
                                     .join(&mailbox_path)
                                     .join("cur");
-                                let _ = std::fs::create_dir_all(&backup_dir);
-                                let dst = backup_dir.join(format!("{}.eml", uid_counter));
-                                if !dst.exists() {
-                                    let _ = std::fs::write(&dst, &raw_bytes);
+                                match std::fs::create_dir_all(&backup_dir) {
+                                    Ok(()) => {
+                                        let dst = backup_dir.join(format!("{}.eml", uid_counter));
+                                        if !dst.exists() {
+                                            if let Err(e) = std::fs::write(&dst, &raw_bytes) {
+                                                warn!("backup(graph): external write failed: {}", e);
+                                                total_ext_failures += 1;
+                                            }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        warn!("backup(graph): external mkdir failed: {}", e);
+                                        total_ext_failures += 1;
+                                    }
                                 }
                             }
 
@@ -904,9 +922,11 @@ async fn run_graph_backup(
         error_message: None,
         cancelled,
         completed_folders,
-        external_copy_ok: true, // TODO: track per-email external failures in Graph backup loop
-        external_copy_error: None,
-        external_copy_failed_count: 0,
+        external_copy_ok: total_ext_failures == 0,
+        external_copy_error: if total_ext_failures > 0 {
+            Some(format!("{} emails failed to copy to external backup", total_ext_failures))
+        } else { None },
+        external_copy_failed_count: total_ext_failures,
     })
 }
 
