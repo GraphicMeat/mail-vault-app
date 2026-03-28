@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [2.3.1] - 2026-03-29
+
+### Added
+- **External backup failure reporting**: IMAP and Graph backup runs now track external-copy failures separately — local backup succeeds independently while external failures are captured with per-email counts
+- **Degraded backup status in UI**: Backup Settings shows amber "Partial" state for runs where local backup succeeded but external copy failed, distinct from full success and total failure
+- **Version consistency check**: New `check-version-consistency.sh` script runs in CI to catch version drift across package.json, Cargo.toml, tauri.conf.json, and snapcraft.yaml
+
+### Fixed
+- **macOS sandbox external backup**: External backup folder access now uses security-scoped bookmarks that persist across app restarts; legacy raw paths are detected and prompt reauthorization
+- **Linux Snap external backup**: External backup validates actual write access under Snap confinement instead of assuming paths are writable
+- **Backup verification bypass**: "Check backup coverage" no longer reads the legacy `backupCustomPath` — uses native bookmark-resolved path like the rest of the backup system
+- **Silent external write failures**: External `fs::write` and `create_dir_all` failures in IMAP archive and Graph backup are now captured and reported instead of silently ignored
+- **Stale Snap version**: snapcraft.yaml fixed from 2.1.3 → 2.3.1; bump script rewritten with pattern-based replacement so drifted files are corrected instead of silently skipped
+- **Display name quoting**: Fixed quote stripping for names with mixed Unicode/ASCII quotes; name upgrade logic replaces email-derived local parts with proper display names
+- **CI e2e build**: Added stub binary for Linux, fixed binary name mismatch, increased timeout
+
 ## [2.3.0] - 2026-03-28
 
 ### Added

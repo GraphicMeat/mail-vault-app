@@ -42,8 +42,9 @@ echo "Bumping version: $CURRENT → $NEW"
 # package.json: "version": "X.Y.Z"
 sed -i '' 's/"version": *"[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*"/"version": "'"$NEW"'"/' "$ROOT/package.json"
 
-# src-tauri/Cargo.toml: version = "X.Y.Z" (first occurrence only)
-sed -i '' '0,/^version = "[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*"/s//version = "'"$NEW"'"/' "$ROOT/src-tauri/Cargo.toml"
+# src-tauri/Cargo.toml: version = "X.Y.Z" under [package] (first occurrence)
+# macOS sed doesn't support 0, address — use awk for first-match-only replacement
+awk -v new="$NEW" '!done && /^version = "[0-9]+\.[0-9]+\.[0-9]+"/ { sub(/version = "[0-9]+\.[0-9]+\.[0-9]+"/, "version = \"" new "\""); done=1 } 1' "$ROOT/src-tauri/Cargo.toml" > "$ROOT/src-tauri/Cargo.toml.tmp" && mv "$ROOT/src-tauri/Cargo.toml.tmp" "$ROOT/src-tauri/Cargo.toml"
 
 # src-tauri/tauri.conf.json: "version": "X.Y.Z"
 sed -i '' 's/"version": *"[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*"/"version": "'"$NEW"'"/' "$ROOT/src-tauri/tauri.conf.json"
