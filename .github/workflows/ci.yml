@@ -124,10 +124,10 @@ jobs:
             "$TEST_EMAIL" "$TEST_PASSWORD" "$IMAP_HOST" "$IMAP_PORT" "$SMTP_HOST" "$SMTP_PORT" "$TEST_EMAIL2" "$TEST_PASSWORD2" \
             > .env.test
 
-      - name: Run E2E tests
+      - name: Run E2E tests (UI suite only — connected tests need live IMAP)
         env:
           TAURI_APP_BINARY: ${{ github.workspace }}/src-tauri/target/debug/mailvault
-        run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npx wdio run wdio.conf.js
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npx wdio run wdio.conf.js --suite ui
 
       - name: Upload visual diff artifacts on failure
         if: failure()
