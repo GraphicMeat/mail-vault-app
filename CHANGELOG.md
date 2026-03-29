@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [2.3.2] - 2026-03-29
+
+### Fixed
+- **macOS external backup crash**: Fixed wrong Objective-C selector (`relativeToBookmarkURL` → `relativeToURL`) in security-scoped bookmark resolution that caused SIGABRT when selecting or validating an external backup folder on macOS
+- **Bookmark lifecycle hardening**: All macOS Objective-C bookmark calls wrapped in catch_unwind so malformed bookmarks degrade to "needs reauthorization" instead of crashing the app
+
 ## [2.3.1] - 2026-03-29
 
 ### Added

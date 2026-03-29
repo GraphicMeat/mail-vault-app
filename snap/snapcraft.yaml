@@ -1,5 +1,5 @@
 name: mailvault
-version: '2.3.1'
+version: '2.3.2'
 summary: Privacy-first desktop email client with local Maildir storage
 description: |
   MailVault is a desktop email client that stores your emails locally in
