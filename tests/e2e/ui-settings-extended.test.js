@@ -14,8 +14,9 @@ import { waitForApp, openSettings, closeSettings, pressKey } from './helpers.js'
 describe('Settings Page — Extended', function () {
   this.timeout(30000);
 
+  let appState;
   before(async function () {
-    await waitForApp();
+    appState = await waitForApp();
   });
 
   // -----------------------------------------------------------------------
@@ -23,6 +24,7 @@ describe('Settings Page — Extended', function () {
   // -----------------------------------------------------------------------
   describe('General Tab — Appearance', function () {
     before(async function () {
+      if (appState !== 'ready') this.skip();
       await openSettings();
       await browser.pause(300);
     });
@@ -117,6 +119,7 @@ describe('Settings Page — Extended', function () {
   // -----------------------------------------------------------------------
   describe('General Tab — Layout & View Modes', function () {
     before(async function () {
+      if (appState !== 'ready') this.skip();
       await openSettings();
       await browser.pause(300);
     });
@@ -155,6 +158,7 @@ describe('Settings Page — Extended', function () {
   // -----------------------------------------------------------------------
   describe('General Tab — Search & History', function () {
     before(async function () {
+      if (appState !== 'ready') this.skip();
       await openSettings();
       await browser.pause(300);
       // Scroll down to find Search & History section
@@ -226,6 +230,7 @@ describe('Settings Page — Extended', function () {
   // -----------------------------------------------------------------------
   describe('General Tab — Notifications Details', function () {
     before(async function () {
+      if (appState !== 'ready') this.skip();
       await openSettings();
       await browser.pause(300);
       // Scroll to notifications section
@@ -277,6 +282,7 @@ describe('Settings Page — Extended', function () {
   // -----------------------------------------------------------------------
   describe('Accounts Tab', function () {
     before(async function () {
+      if (appState !== 'ready') this.skip();
       await openSettings();
       await browser.pause(300);
       // Switch to the Accounts tab

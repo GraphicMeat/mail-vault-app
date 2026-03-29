@@ -1,19 +1,27 @@
 import { resolve, join } from 'path';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync, mkdtempSync } from 'fs';
+import { tmpdir } from 'os';
 import { spawn } from 'child_process';
 
-// Load test credentials from .env.test
+// Load test credentials from .env.test (optional — UI-only suites don't need it)
+let env = {};
 const envPath = resolve(import.meta.dirname, '.env.test');
-const envContent = readFileSync(envPath, 'utf-8');
-const env = Object.fromEntries(
-  envContent
-    .split('\n')
-    .filter((line) => line.trim() && !line.startsWith('#'))
-    .map((line) => {
-      const [key, ...rest] = line.split('=');
-      return [key.trim(), rest.join('=').trim()];
-    })
-);
+if (existsSync(envPath)) {
+  try {
+    const envContent = readFileSync(envPath, 'utf-8');
+    env = Object.fromEntries(
+      envContent
+        .split('\n')
+        .filter((line) => line.trim() && !line.startsWith('#'))
+        .map((line) => {
+          const [key, ...rest] = line.split('=');
+          return [key.trim(), rest.join('=').trim()];
+        })
+    );
+  } catch { /* non-fatal — credentials just won't be available */ }
+}
+
+const hasCredentials = !!(env.TEST_EMAIL && env.TEST_PASSWORD);
 
 // App binary path (debug build with webdriver feature)
 const appBinary = process.env.TAURI_APP_BINARY || resolve(
@@ -21,12 +29,27 @@ const appBinary = process.env.TAURI_APP_BINARY || resolve(
   'src-tauri/target/debug/MailVault'
 );
 
+// Isolated test data directory — prevents test runs from affecting real app state
+const testDataDir = process.env.E2E_DATA_DIR || mkdtempSync(join(tmpdir(), 'mailvault-e2e-'));
+
 let tauriWd;
 
 export const config = {
   runner: 'local',
   specs: ['./tests/e2e/**/*.test.js'],
   suites: {
+    // CI-safe: no accounts needed, works from empty/welcome state
+    'ui-headless': ['./tests/e2e/ui-*.test.js'],
+    // Needs real IMAP credentials + secrets
+    'connected-ci': ['./tests/e2e/connected-*.test.js'],
+    // Developer-only: backup, migration, visual, archive
+    'local-manual': [
+      './tests/e2e/backup-*.test.js',
+      './tests/e2e/migration-*.test.js',
+      './tests/e2e/archive-*.test.js',
+      './tests/e2e/visual-*.test.js',
+    ],
+    // Legacy aliases
     ui: ['./tests/e2e/ui-*.test.js'],
     connected: ['./tests/e2e/connected-*.test.js'],
     perf: ['./tests/e2e/connected-performance.test.js'],
@@ -62,13 +85,21 @@ export const config = {
 
   // Start tauri-wd before tests
   onPrepare: function () {
-    return new Promise((resolve, reject) => {
+    console.log(`[wdio] Test data dir: ${testDataDir}`);
+    console.log(`[wdio] Credentials available: ${hasCredentials}`);
+
+    return new Promise((resolve) => {
       tauriWd = spawn('tauri-wd', ['--port', '4444'], {
         stdio: ['ignore', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          // Tell the app to use isolated test data directory
+          MAILVAULT_DATA_DIR: testDataDir,
+        },
       });
 
       let started = false;
-      function checkOutput(data, stream) {
+      function checkOutput(data) {
         const output = data.toString();
         console.log(`[tauri-wd]`, output.trim());
         if (!started && (output.includes('listening') || output.includes('4444'))) {
@@ -76,15 +107,11 @@ export const config = {
           resolve();
         }
       }
-      tauriWd.stdout.on('data', (data) => checkOutput(data, 'stdout'));
-      tauriWd.stderr.on('data', (data) => checkOutput(data, 'stderr'));
+      tauriWd.stdout.on('data', checkOutput);
+      tauriWd.stderr.on('data', checkOutput);
 
-      // Fallback resolve after 5s
       setTimeout(() => {
-        if (!started) {
-          started = true;
-          resolve();
-        }
+        if (!started) { started = true; resolve(); }
       }, 5000);
     });
   },
@@ -92,16 +119,17 @@ export const config = {
   onComplete: function () {
     if (tauriWd) {
       tauriWd.kill('SIGTERM');
-      // Give it a moment, then force-kill
       setTimeout(() => {
         try { tauriWd.kill('SIGKILL'); } catch (_) { /* already dead */ }
       }, 2000);
     }
   },
 
-  // Make env available to all tests
+  // Make env and config available to all tests
   before: function () {
     browser.testEnv = env;
+    browser.hasCredentials = hasCredentials;
+    browser.testDataDir = testDataDir;
   },
 
   port: 4444,

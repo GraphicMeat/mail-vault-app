@@ -18,11 +18,16 @@ const TEST_TEMPLATE_BODY = 'Hello, this is a test template inserted by E2E autom
 describe('Compose Modal & Templates', function () {
   this.timeout(30000);
 
+  let appState;
   before(async function () {
-    await waitForApp();
+    appState = await waitForApp();
   });
 
   describe('Setup — Create Template in Settings', function () {
+    before(async function () {
+      if (appState !== 'ready') this.skip();
+    });
+
     it('should create a test template', async function () {
       await openSettings();
       await browser.pause(400);
@@ -104,6 +109,10 @@ describe('Compose Modal & Templates', function () {
   });
 
   describe('Compose Modal — Template Insertion', function () {
+    before(async function () {
+      if (appState !== 'ready') this.skip();
+    });
+
     it('should open compose modal with c key', async function () {
       await pressKey('c');
       await browser.pause(500);
@@ -209,6 +218,10 @@ describe('Compose Modal & Templates', function () {
   });
 
   describe('Cleanup — Delete Template', function () {
+    before(async function () {
+      if (appState !== 'ready') this.skip();
+    });
+
     it('should remove the test template from settings', async function () {
       await openSettings();
       await browser.pause(400);

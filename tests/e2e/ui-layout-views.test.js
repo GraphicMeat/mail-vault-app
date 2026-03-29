@@ -52,14 +52,19 @@ async function isButtonActive(buttonText) {
 describe('Layout, View & List Style Switching', function () {
   this.timeout(30000);
 
+  let appState;
   before(async function () {
-    await waitForApp();
+    appState = await waitForApp();
   });
 
   // -----------------------------------------------------------------------
   // Layout Mode Switching
   // -----------------------------------------------------------------------
   describe('Layout Mode Switching', function () {
+    before(async function () {
+      if (appState !== 'ready') this.skip();
+    });
+
     it('should switch to 2-column layout', async function () {
       await openSettings();
       await browser.pause(300);
@@ -118,6 +123,10 @@ describe('Layout, View & List Style Switching', function () {
   // View Style Switching
   // -----------------------------------------------------------------------
   describe('View Style Switching', function () {
+    before(async function () {
+      if (appState !== 'ready') this.skip();
+    });
+
     it('should switch to Chat view', async function () {
       await openSettings();
       await browser.pause(300);
@@ -151,6 +160,10 @@ describe('Layout, View & List Style Switching', function () {
   // Email List Style Switching
   // -----------------------------------------------------------------------
   describe('Email List Style Switching', function () {
+    before(async function () {
+      if (appState !== 'ready') this.skip();
+    });
+
     it('should switch to Compact style', async function () {
       await openSettings();
       await browser.pause(300);

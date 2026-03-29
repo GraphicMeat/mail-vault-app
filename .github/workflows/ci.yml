@@ -55,8 +55,54 @@ jobs:
             > .env.test
       - run: npm test
 
-  # E2E tests disabled — requires persisted app state and working WebDriver window
-  # lifecycle that CI headless Linux doesn't provide. UI tests fail because the app
-  # starts with no accounts and the WebDriver can't find window handles reliably.
-  # Re-enable when tests are refactored with CI-compatible fixtures.
-  # See: tests/e2e/ for local-only test suites (npm run test:e2e:ui)
+  e2e:
+    runs-on: ubuntu-22.04
+    needs: unit-integration
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cache Rust artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            src-tauri/target
+          key: rust-e2e-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: rust-e2e-
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev \
+            libssl-dev libglib2.0-dev libdbus-1-dev \
+            libsecret-1-dev patchelf xvfb
+      - run: npm ci
+      - name: Build Vite frontend
+        run: npx vite build
+      - name: Create stub external binary for Linux build
+        run: |
+          mkdir -p src-tauri/binaries
+          touch src-tauri/binaries/mailvault-server-x86_64-unknown-linux-gnu
+          chmod +x src-tauri/binaries/mailvault-server-x86_64-unknown-linux-gnu
+      - name: Build Tauri debug binary with WebDriver feature
+        run: cd src-tauri && cargo build --features webdriver
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ""
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+      - name: Install tauri-wd
+        run: cargo install tauri-webdriver-automation --locked
+      - name: Create empty .env.test for UI-only suite
+        run: touch .env.test
+      - name: Run E2E tests (ui-headless suite)
+        env:
+          TAURI_APP_BINARY: ${{ github.workspace }}/src-tauri/target/debug/mailvault
+          CI: "true"
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npx wdio run wdio.conf.js --suite ui-headless
