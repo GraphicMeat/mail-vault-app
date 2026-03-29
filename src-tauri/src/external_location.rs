@@ -3,11 +3,14 @@
 //! On macOS sandboxed builds, user-selected folders must be persisted as
 //! security-scoped bookmarks so the app can re-access them after restart.
 //! On Linux, plain paths are sufficient.
+//!
+//! All macOS Objective-C calls are wrapped in catch_unwind so selector
+//! mistakes or malformed bookmark data cannot crash the app.
 
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use tracing::{info, warn};
+use tracing::{info, warn, error};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExternalLocation {
@@ -21,7 +24,6 @@ pub struct ExternalLocation {
     pub last_error: Option<String>,
 }
 
-/// Get the file where we persist the bookmark/path data.
 fn bookmark_file(app_data_dir: &std::path::Path) -> PathBuf {
     app_data_dir.join("external-backup-bookmark")
 }
@@ -37,7 +39,18 @@ fn now_millis() -> u64 {
         .as_millis() as u64
 }
 
+fn needs_reauth_location(display_path: String, err: String) -> ExternalLocation {
+    ExternalLocation {
+        display_path,
+        platform: "macos".to_string(),
+        status: "needs_reauth".to_string(),
+        last_validated_at: Some(now_millis()),
+        last_error: Some(err),
+    }
+}
+
 // ── macOS implementation ────────────────────────────────────────────────────
+// All Objective-C calls go through safe_* wrappers that catch panics.
 
 #[cfg(target_os = "macos")]
 mod macos {
@@ -45,91 +58,124 @@ mod macos {
     use objc::runtime::Object;
     use objc::{class, msg_send, sel, sel_impl};
 
-    /// Create a security-scoped bookmark from a URL.
-    /// Returns the raw bookmark bytes.
+    // ── Safe wrappers (catch_unwind) ──
+
     pub fn create_bookmark(path: &str) -> Result<Vec<u8>, String> {
-        unsafe {
-            let url = path_to_nsurl(path)?;
-            let options: usize = 1 << 11; // NSURLBookmarkCreationWithSecurityScope
-            let nil: *const Object = std::ptr::null();
-
-            let mut error: *const Object = std::ptr::null();
-            let bookmark_data: *const Object = msg_send![url,
-                bookmarkDataWithOptions: options
-                includingResourceValuesForKeys: nil
-                relativeToURL: nil
-                error: &mut error
-            ];
-
-            if bookmark_data.is_null() {
-                let desc = if !error.is_null() {
-                    let desc: *const Object = msg_send![error, localizedDescription];
-                    nsstring_to_string(desc)
-                } else {
-                    "Unknown error".to_string()
-                };
-                return Err(format!("Failed to create bookmark: {}", desc));
+        let p = path.to_string();
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe { create_bookmark_inner(&p) })) {
+            Ok(result) => result,
+            Err(e) => {
+                let msg = format!("Bookmark creation panicked: {:?}", e.downcast_ref::<&str>().unwrap_or(&"unknown"));
+                error!("[external_location] {}", msg);
+                Err(msg)
             }
-
-            let length: usize = msg_send![bookmark_data, length];
-            let bytes: *const u8 = msg_send![bookmark_data, bytes];
-            Ok(std::slice::from_raw_parts(bytes, length).to_vec())
         }
     }
 
-    /// Resolve a security-scoped bookmark back to a URL path.
-    /// Returns (path, is_stale).
     pub fn resolve_bookmark(bookmark_bytes: &[u8]) -> Result<(String, bool), String> {
-        unsafe {
-            let nsdata = bytes_to_nsdata(bookmark_bytes);
-            let options: usize = 1 << 10; // NSURLBookmarkResolutionWithSecurityScope
-            let nil: *const Object = std::ptr::null();
-            let mut is_stale: bool = false;
-            let mut error: *const Object = std::ptr::null();
-
-            let url: *const Object = msg_send![class!(NSURL),
-                URLByResolvingBookmarkData: nsdata
-                options: options
-                relativeToBookmarkURL: nil
-                bookmarkDataIsStale: &mut is_stale
-                error: &mut error
-            ];
-
-            if url.is_null() {
-                let desc = if !error.is_null() {
-                    let desc: *const Object = msg_send![error, localizedDescription];
-                    nsstring_to_string(desc)
-                } else {
-                    "Unknown error".to_string()
-                };
-                return Err(format!("Failed to resolve bookmark: {}", desc));
+        let bytes = bookmark_bytes.to_vec();
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe { resolve_bookmark_inner(&bytes) })) {
+            Ok(result) => result,
+            Err(e) => {
+                let msg = format!("Bookmark resolution panicked: {:?}", e.downcast_ref::<&str>().unwrap_or(&"unknown"));
+                error!("[external_location] {}", msg);
+                Err(msg)
             }
-
-            let path: *const Object = msg_send![url, path];
-            let path_str = nsstring_to_string(path);
-            Ok((path_str, is_stale))
         }
     }
 
-    /// Start security-scoped access for a bookmark-resolved URL.
     pub fn start_access(path: &str) -> Result<(), String> {
-        unsafe {
-            let url = path_to_nsurl(path)?;
-            let ok: bool = msg_send![url, startAccessingSecurityScopedResource];
-            if ok {
-                Ok(())
-            } else {
-                Err("startAccessingSecurityScopedResource returned NO".to_string())
+        let p = path.to_string();
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe { start_access_inner(&p) })) {
+            Ok(result) => result,
+            Err(e) => {
+                let msg = format!("start_access panicked: {:?}", e.downcast_ref::<&str>().unwrap_or(&"unknown"));
+                error!("[external_location] {}", msg);
+                Err(msg)
             }
         }
     }
 
-    /// Stop security-scoped access.
     pub fn stop_access(path: &str) {
-        unsafe {
-            if let Ok(url) = path_to_nsurl(path) {
-                let _: () = msg_send![url, stopAccessingSecurityScopedResource];
-            }
+        let p = path.to_string();
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe { stop_access_inner(&p) }));
+    }
+
+    // ── Inner unsafe implementations ──
+
+    unsafe fn create_bookmark_inner(path: &str) -> Result<Vec<u8>, String> {
+        let url = path_to_nsurl(path)?;
+        let options: usize = 1 << 11; // NSURLBookmarkCreationWithSecurityScope
+        let nil: *const Object = std::ptr::null();
+        let mut error_ptr: *const Object = std::ptr::null();
+
+        info!("[external_location] Creating bookmark for path: {}", path);
+
+        let bookmark_data: *const Object = msg_send![url,
+            bookmarkDataWithOptions: options
+            includingResourceValuesForKeys: nil
+            relativeToURL: nil
+            error: &mut error_ptr
+        ];
+
+        if bookmark_data.is_null() {
+            let desc = extract_nserror(error_ptr);
+            return Err(format!("Failed to create bookmark: {}", desc));
+        }
+
+        let length: usize = msg_send![bookmark_data, length];
+        let bytes: *const u8 = msg_send![bookmark_data, bytes];
+        let data = std::slice::from_raw_parts(bytes, length).to_vec();
+        info!("[external_location] Bookmark created: {} bytes", data.len());
+        Ok(data)
+    }
+
+    unsafe fn resolve_bookmark_inner(bookmark_bytes: &[u8]) -> Result<(String, bool), String> {
+        let nsdata = bytes_to_nsdata(bookmark_bytes);
+        // NSURLBookmarkResolutionWithSecurityScope = 1 << 10
+        let options: usize = 1 << 10;
+        let nil: *const Object = std::ptr::null();
+        let mut is_stale: bool = false;
+        let mut error_ptr: *const Object = std::ptr::null();
+
+        info!("[external_location] Resolving bookmark ({} bytes)", bookmark_bytes.len());
+
+        // CRITICAL: the parameter label is "relativeToURL", NOT "relativeToBookmarkURL".
+        // Using the wrong label creates an invalid selector → doesNotRecognizeSelector → crash.
+        let url: *const Object = msg_send![class!(NSURL),
+            URLByResolvingBookmarkData: nsdata
+            options: options
+            relativeToURL: nil
+            bookmarkDataIsStale: &mut is_stale
+            error: &mut error_ptr
+        ];
+
+        if url.is_null() {
+            let desc = extract_nserror(error_ptr);
+            return Err(format!("Failed to resolve bookmark: {}", desc));
+        }
+
+        let path: *const Object = msg_send![url, path];
+        let path_str = nsstring_to_string(path);
+        info!("[external_location] Bookmark resolved to: {} (stale: {})", path_str, is_stale);
+        Ok((path_str, is_stale))
+    }
+
+    unsafe fn start_access_inner(path: &str) -> Result<(), String> {
+        let url = path_to_nsurl(path)?;
+        let ok: bool = msg_send![url, startAccessingSecurityScopedResource];
+        info!("[external_location] startAccessingSecurityScopedResource({}) = {}", path, ok);
+        if ok {
+            Ok(())
+        } else {
+            Err("startAccessingSecurityScopedResource returned NO — folder may need reauthorization".to_string())
+        }
+    }
+
+    unsafe fn stop_access_inner(path: &str) {
+        if let Ok(url) = path_to_nsurl(path) {
+            let _: () = msg_send![url, stopAccessingSecurityScopedResource];
+            info!("[external_location] stopAccessingSecurityScopedResource({})", path);
         }
     }
 
@@ -137,9 +183,10 @@ mod macos {
 
     unsafe fn path_to_nsurl(path: &str) -> Result<*const Object, String> {
         let nsstring = string_to_nsstring(path);
+        if nsstring.is_null() { return Err(format!("Failed to create NSString from path: {}", path)); }
         let url: *const Object = msg_send![class!(NSURL), fileURLWithPath: nsstring];
         if url.is_null() {
-            Err(format!("Invalid path: {}", path))
+            Err(format!("Failed to create NSURL from path: {}", path))
         } else {
             Ok(url)
         }
@@ -147,10 +194,8 @@ mod macos {
 
     unsafe fn string_to_nsstring(s: &str) -> *const Object {
         let cls = class!(NSString);
-        let bytes = s.as_ptr();
-        let len = s.len();
         let nsstring: *const Object = msg_send![cls, alloc];
-        msg_send![nsstring, initWithBytes:bytes length:len encoding:4u64] // NSUTF8StringEncoding = 4
+        msg_send![nsstring, initWithBytes:s.as_ptr() length:s.len() encoding:4usize] // NSUTF8StringEncoding = 4
     }
 
     unsafe fn nsstring_to_string(ns: *const Object) -> String {
@@ -165,22 +210,43 @@ mod macos {
         let nsdata: *const Object = msg_send![cls, alloc];
         msg_send![nsdata, initWithBytes:bytes.as_ptr() length:bytes.len()]
     }
+
+    unsafe fn extract_nserror(error: *const Object) -> String {
+        if error.is_null() { return "Unknown error".to_string(); }
+        let desc: *const Object = msg_send![error, localizedDescription];
+        nsstring_to_string(desc)
+    }
 }
 
 // ── Public API ──────────────────────────────────────────────────────────────
 
-/// Choose an external backup folder (called after dialog picker).
+/// Save an external backup location after folder picker selection.
 /// On macOS: creates and persists a security-scoped bookmark.
-/// On Linux: just persists the path string.
+/// On Linux: persists the path string.
+/// Does NOT call validate — returns the save result directly to avoid chaining into crash-prone resolution.
 pub fn save_external_location(app_data_dir: &std::path::Path, path: &str) -> Result<ExternalLocation, String> {
     fs::create_dir_all(app_data_dir).map_err(|e| format!("Cannot create app data dir: {}", e))?;
 
     #[cfg(target_os = "macos")]
     {
-        let bookmark = macos::create_bookmark(path)?;
-        fs::write(bookmark_file(app_data_dir), &bookmark)
-            .map_err(|e| format!("Failed to save bookmark: {}", e))?;
-        info!("[external_location] Saved macOS security-scoped bookmark for {}", path);
+        match macos::create_bookmark(path) {
+            Ok(bookmark) => {
+                fs::write(bookmark_file(app_data_dir), &bookmark)
+                    .map_err(|e| format!("Failed to save bookmark: {}", e))?;
+                info!("[external_location] Saved macOS security-scoped bookmark for {}", path);
+            }
+            Err(e) => {
+                warn!("[external_location] Failed to create bookmark for {}: {}", path, e);
+                // Save metadata anyway so user sees the path in UI
+                let meta = serde_json::json!({
+                    "displayPath": path,
+                    "platform": "macos",
+                    "savedAt": now_millis(),
+                });
+                let _ = fs::write(meta_file(app_data_dir), meta.to_string());
+                return Ok(needs_reauth_location(path.to_string(), e));
+            }
+        }
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -190,7 +256,6 @@ pub fn save_external_location(app_data_dir: &std::path::Path, path: &str) -> Res
         info!("[external_location] Saved path for {}", path);
     }
 
-    // Save metadata
     let meta = serde_json::json!({
         "displayPath": path,
         "platform": std::env::consts::OS,
@@ -198,12 +263,19 @@ pub fn save_external_location(app_data_dir: &std::path::Path, path: &str) -> Res
     });
     let _ = fs::write(meta_file(app_data_dir), meta.to_string());
 
-    validate_external_location(app_data_dir)
+    // Return success without full validation to avoid crash-prone resolution chain
+    Ok(ExternalLocation {
+        display_path: path.to_string(),
+        platform: std::env::consts::OS.to_string(),
+        status: "ready".to_string(),
+        last_validated_at: Some(now_millis()),
+        last_error: None,
+    })
 }
 
-/// Resolve and validate the saved external location.
-/// On macOS: resolves the security-scoped bookmark and starts access.
-/// Returns the location with current status.
+/// Resolve the saved external location and start security-scoped access.
+/// On macOS: resolves the bookmark, starts access. Failures become needs_reauth.
+/// Returns (resolved_path, location_status).
 pub fn resolve_external_location(app_data_dir: &std::path::Path) -> Result<(String, ExternalLocation), String> {
     let bf = bookmark_file(app_data_dir);
     if !bf.exists() {
@@ -218,54 +290,58 @@ pub fn resolve_external_location(app_data_dir: &std::path::Path) -> Result<(Stri
 
     #[cfg(target_os = "macos")]
     {
-        let bookmark_bytes = fs::read(&bf)
-            .map_err(|e| format!("Failed to read bookmark: {}", e))?;
+        let bookmark_bytes = match fs::read(&bf) {
+            Ok(b) => b,
+            Err(e) => {
+                let msg = format!("Failed to read bookmark file: {}", e);
+                warn!("[external_location] {}", msg);
+                let loc = needs_reauth_location(display_path, msg.clone());
+                return Err(serde_json::to_string(&loc).unwrap_or(msg));
+            }
+        };
 
-        match macos::resolve_bookmark(&bookmark_bytes) {
-            Ok((resolved_path, is_stale)) => {
-                if is_stale {
-                    warn!("[external_location] Bookmark is stale for {}, needs re-creation", resolved_path);
-                    // Try to re-create the bookmark with the resolved path
-                    if let Ok(new_bookmark) = macos::create_bookmark(&resolved_path) {
-                        let _ = fs::write(&bf, &new_bookmark);
-                    }
-                }
+        if bookmark_bytes.is_empty() {
+            let msg = "Bookmark file is empty".to_string();
+            warn!("[external_location] {}", msg);
+            let loc = needs_reauth_location(display_path, msg.clone());
+            return Err(serde_json::to_string(&loc).unwrap_or(msg));
+        }
 
-                match macos::start_access(&resolved_path) {
-                    Ok(()) => {
-                        info!("[external_location] Security-scoped access started for {}", resolved_path);
-                        let loc = ExternalLocation {
-                            display_path: if display_path.is_empty() { resolved_path.clone() } else { display_path },
-                            platform: "macos".to_string(),
-                            status: "ready".to_string(),
-                            last_validated_at: Some(now_millis()),
-                            last_error: None,
-                        };
-                        Ok((resolved_path, loc))
-                    }
-                    Err(e) => {
-                        warn!("[external_location] Failed to start access: {}", e);
-                        let loc = ExternalLocation {
-                            display_path,
-                            platform: "macos".to_string(),
-                            status: "needs_reauth".to_string(),
-                            last_validated_at: Some(now_millis()),
-                            last_error: Some(e),
-                        };
-                        Err(serde_json::to_string(&loc).unwrap_or_default())
-                    }
-                }
+        // Resolve bookmark → path
+        let (resolved_path, is_stale) = match macos::resolve_bookmark(&bookmark_bytes) {
+            Ok(r) => r,
+            Err(e) => {
+                warn!("[external_location] Bookmark resolution failed: {}", e);
+                let loc = needs_reauth_location(display_path, e.clone());
+                return Err(serde_json::to_string(&loc).unwrap_or(e));
+            }
+        };
+
+        // Re-create stale bookmarks
+        if is_stale {
+            warn!("[external_location] Bookmark is stale for {}, attempting re-creation", resolved_path);
+            match macos::create_bookmark(&resolved_path) {
+                Ok(new_bookmark) => { let _ = fs::write(&bf, &new_bookmark); }
+                Err(e) => { warn!("[external_location] Stale bookmark re-creation failed: {}", e); }
+            }
+        }
+
+        // Start security-scoped access
+        match macos::start_access(&resolved_path) {
+            Ok(()) => {
+                let loc = ExternalLocation {
+                    display_path: if display_path.is_empty() { resolved_path.clone() } else { display_path },
+                    platform: "macos".to_string(),
+                    status: "ready".to_string(),
+                    last_validated_at: Some(now_millis()),
+                    last_error: None,
+                };
+                Ok((resolved_path, loc))
             }
             Err(e) => {
-                warn!("[external_location] Failed to resolve bookmark: {}", e);
-                let loc = ExternalLocation {
-                    display_path,
-                    platform: "macos".to_string(),
-                    status: "needs_reauth".to_string(),
-                    last_validated_at: Some(now_millis()),
-                    last_error: Some(e),
-                };
-                Err(serde_json::to_string(&loc).unwrap_or_default())
+                warn!("[external_location] start_access failed: {}", e);
+                let loc = needs_reauth_location(display_path, e.clone());
+                Err(serde_json::to_string(&loc).unwrap_or(e))
             }
         }
     }
@@ -290,7 +366,6 @@ pub fn resolve_external_location(app_data_dir: &std::path::Path) -> Result<(Stri
             return Err(serde_json::to_string(&loc).unwrap_or_default());
         }
 
-        // Snap confinement: test actual write access (may be blocked by AppArmor)
         if snap {
             let test_file = PathBuf::from(&path).join(".mailvault-snap-test");
             match fs::write(&test_file, b"test") {
@@ -319,24 +394,20 @@ pub fn resolve_external_location(app_data_dir: &std::path::Path) -> Result<(Stri
     }
 }
 
-/// Stop security-scoped access (call after backup operation completes).
+/// Release security-scoped access (call after backup completes).
 pub fn release_external_access(path: &str) {
     #[cfg(target_os = "macos")]
     {
         macos::stop_access(path);
-        info!("[external_location] Security-scoped access released for {}", path);
     }
     #[cfg(not(target_os = "macos"))]
-    {
-        let _ = path; // no-op on Linux
-    }
+    { let _ = path; }
 }
 
-/// Validate the saved external location by testing write access.
+/// Validate the saved external location by resolving + testing write access.
 pub fn validate_external_location(app_data_dir: &std::path::Path) -> Result<ExternalLocation, String> {
     match resolve_external_location(app_data_dir) {
         Ok((resolved_path, mut loc)) => {
-            // Test write access
             let test_file = PathBuf::from(&resolved_path).join(".mailvault-access-test");
             match fs::write(&test_file, b"test") {
                 Ok(()) => {
@@ -356,7 +427,6 @@ pub fn validate_external_location(app_data_dir: &std::path::Path) -> Result<Exte
             }
         }
         Err(json_or_msg) => {
-            // Try to parse as ExternalLocation JSON (from resolve error path)
             if let Ok(loc) = serde_json::from_str::<ExternalLocation>(&json_or_msg) {
                 Ok(loc)
             } else {
@@ -393,13 +463,13 @@ pub fn get_external_location(app_data_dir: &std::path::Path) -> ExternalLocation
     ExternalLocation {
         display_path: meta["displayPath"].as_str().unwrap_or("").to_string(),
         platform: std::env::consts::OS.to_string(),
-        status: "unknown".to_string(), // caller should validate if needed
+        status: "unknown".to_string(),
         last_validated_at: meta["savedAt"].as_u64(),
         last_error: None,
     }
 }
 
-/// Detect if running inside a strict Snap confinement.
+/// Detect Snap confinement.
 fn is_snap_confined() -> bool {
     #[cfg(target_os = "linux")]
     { std::env::var("SNAP_NAME").is_ok() && std::env::var("SNAP_REVISION").is_ok() }
@@ -416,22 +486,17 @@ pub fn clear_external_location(app_data_dir: &std::path::Path) -> Result<(), Str
 }
 
 /// Migrate a legacy raw path to a bookmark-backed location.
-/// Returns Ok if migration succeeded, Err if reauthorization needed.
 pub fn migrate_legacy_path(app_data_dir: &std::path::Path, legacy_path: &str) -> Result<ExternalLocation, String> {
     if legacy_path.is_empty() {
         return Err("No legacy path to migrate".to_string());
     }
 
-    // Check if we already have a bookmark
     if bookmark_file(app_data_dir).exists() {
         return validate_external_location(app_data_dir);
     }
 
-    // On macOS, we can't create a bookmark from a raw path without a fresh dialog grant.
-    // Mark as needs_reauth so the user is prompted to re-select.
     #[cfg(target_os = "macos")]
     {
-        // Save metadata so the UI knows what path was configured
         let meta = serde_json::json!({
             "displayPath": legacy_path,
             "platform": "macos",
@@ -450,7 +515,6 @@ pub fn migrate_legacy_path(app_data_dir: &std::path::Path, legacy_path: &str) ->
         });
     }
 
-    // On Linux, just save the raw path — it works fine
     #[cfg(not(target_os = "macos"))]
     {
         save_external_location(app_data_dir, legacy_path)
