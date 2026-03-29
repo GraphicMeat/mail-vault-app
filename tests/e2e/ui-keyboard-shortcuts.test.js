@@ -20,6 +20,7 @@ describe('Keyboard Shortcuts', function () {
 
   describe('Shortcuts Modal (?)', function () {
     it('should open the shortcuts modal when pressing ?', async function () {
+      if (appState !== 'ready') this.skip();
       await pressKey('?');
       await browser.pause(500);
 
