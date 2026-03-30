@@ -223,11 +223,19 @@
       refreshIcon.classList.add('animate-spin');
 
       try {
-        const res = await fetch('https://api.github.com/repos/GraphicMeat/mail-vault-app/releases', {
-          headers: { 'Accept': 'application/vnd.github.v3+json' }
-        });
-        if (!res.ok) throw new Error(`GitHub API returned ${res.status}: ${res.statusText}`);
-        const releases = await res.json();
+        let releases = [];
+        let page = 1;
+        while (true) {
+          const res = await fetch(`https://api.github.com/repos/GraphicMeat/mail-vault-app/releases?per_page=100&page=${page}`, {
+            headers: { 'Accept': 'application/vnd.github.v3+json' }
+          });
+          if (!res.ok) throw new Error(`GitHub API returned ${res.status}: ${res.statusText}`);
+          const batch = await res.json();
+          if (batch.length === 0) break;
+          releases = releases.concat(batch);
+          if (batch.length < 100) break;
+          page++;
+        }
 
         renderStats(releases);
 
