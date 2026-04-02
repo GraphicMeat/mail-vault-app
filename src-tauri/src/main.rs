@@ -8,6 +8,7 @@ use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn, error, Level};
@@ -3262,6 +3263,441 @@ async fn import_backup(
     })
 }
 
+// ── MBOX Export / Import ────────────────────────────────────────────────────
+
+/// Escape "From " at the start of lines in an email body for mbox format.
+fn mbox_escape_from(raw: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(raw.len() + 256);
+    for line in raw.split(|&b| b == b'\n') {
+        if line.starts_with(b"From ") {
+            out.push(b'>');
+        }
+        out.extend_from_slice(line);
+        out.push(b'\n');
+    }
+    // Remove trailing extra newline added by split
+    if raw.last() != Some(&b'\n') && out.last() == Some(&b'\n') {
+        out.pop();
+    }
+    out
+}
+
+/// Unescape ">From " at start of lines back to "From " when importing mbox.
+fn mbox_unescape_from(raw: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(raw.len());
+    for line in raw.split(|&b| b == b'\n') {
+        if line.starts_with(b">From ") {
+            out.extend_from_slice(&line[1..]);
+        } else {
+            out.extend_from_slice(line);
+        }
+        out.push(b'\n');
+    }
+    if raw.last() != Some(&b'\n') && out.last() == Some(&b'\n') {
+        out.pop();
+    }
+    out
+}
+
+/// Extract a usable "From " envelope line from raw .eml bytes.
+/// Falls back to "unknown" sender and current time if headers can't be parsed.
+fn mbox_from_line(raw: &[u8]) -> String {
+    let sender = mailparse::parse_mail(raw)
+        .ok()
+        .and_then(|parsed| {
+            parsed.headers.iter()
+                .find(|h| h.get_key().eq_ignore_ascii_case("from"))
+                .and_then(|h| {
+                    let val = h.get_value();
+                    // Extract bare email from "Name <email>" or plain "email"
+                    if let Some(start) = val.find('<') {
+                        val[start + 1..].split('>').next().map(|s| s.to_string())
+                    } else {
+                        Some(val.trim().to_string())
+                    }
+                })
+        })
+        .unwrap_or_else(|| "unknown@unknown".to_string());
+
+    let date = mailparse::parse_mail(raw)
+        .ok()
+        .and_then(|parsed| {
+            parsed.headers.iter()
+                .find(|h| h.get_key().eq_ignore_ascii_case("date"))
+                .and_then(|h| mailparse::dateparse(&h.get_value()).ok())
+        })
+        .map(|ts| {
+            chrono::DateTime::from_timestamp(ts, 0)
+                .unwrap_or_else(|| chrono::Utc::now())
+                .format("%a %b %e %H:%M:%S %Y")
+                .to_string()
+        })
+        .unwrap_or_else(|| chrono::Utc::now().format("%a %b %e %H:%M:%S %Y").to_string());
+
+    format!("From {} {}", sender, date)
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct MboxExportResult {
+    #[serde(rename = "emailCount")]
+    email_count: u32,
+    #[serde(rename = "accountCount")]
+    account_count: u32,
+    #[serde(rename = "filePath")]
+    file_path: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct MboxImportResult {
+    #[serde(rename = "emailCount")]
+    email_count: u32,
+    #[serde(rename = "accountId")]
+    account_id: String,
+    #[serde(rename = "mailbox")]
+    mailbox: String,
+}
+
+#[tauri::command]
+async fn export_mbox(
+    app_handle: tauri::AppHandle,
+    dest_path: String,
+    account_id: String,
+    mailbox: String,
+    archived_only: bool,
+) -> Result<MboxExportResult, String> {
+    use std::io::Write;
+
+    info!("export_mbox called: dest={}, account={}, mailbox={}, archived_only={}",
+        dest_path, account_id, mailbox, archived_only);
+
+    let base = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not get app data directory: {}", e))?;
+
+    let safe_mailbox = sanitize_mailbox_name(&mailbox);
+    let cur_dir = base.join("Maildir").join(&account_id).join(&safe_mailbox).join("cur");
+
+    if !cur_dir.exists() {
+        return Err(format!("No emails found for mailbox '{}'", mailbox));
+    }
+
+    let mut file = fs::File::create(&dest_path)
+        .map_err(|e| format!("Failed to create mbox file: {}", e))?;
+
+    let mut email_count: u32 = 0;
+
+    // Count total for progress
+    let entries: Vec<_> = fs::read_dir(&cur_dir)
+        .map_err(|e| format!("Failed to read directory: {}", e))?
+        .flatten()
+        .filter(|e| {
+            let fname = e.file_name().to_string_lossy().to_string();
+            if !fname.contains(":2,") { return false; }
+            if archived_only {
+                fname.split(":2,").nth(1).map(|f| f.contains('A')).unwrap_or(false)
+            } else {
+                true
+            }
+        })
+        .collect();
+
+    let total = entries.len() as u32;
+    let _ = app_handle.emit("mbox-export-progress", serde_json::json!({
+        "total": total, "completed": 0, "active": true
+    }));
+
+    for entry in &entries {
+        let raw = match fs::read(entry.path()) {
+            Ok(c) => c,
+            Err(e) => {
+                warn!("Failed to read {}: {}", entry.path().display(), e);
+                continue;
+            }
+        };
+
+        // Write mbox "From " envelope line
+        let from_line = mbox_from_line(&raw);
+        writeln!(file, "{}", from_line)
+            .map_err(|e| format!("Failed to write mbox: {}", e))?;
+
+        // Write escaped email content
+        let escaped = mbox_escape_from(&raw);
+        file.write_all(&escaped)
+            .map_err(|e| format!("Failed to write mbox: {}", e))?;
+
+        // Ensure blank line between messages
+        writeln!(file).map_err(|e| format!("Failed to write mbox: {}", e))?;
+
+        email_count += 1;
+        let _ = app_handle.emit("mbox-export-progress", serde_json::json!({
+            "total": total, "completed": email_count, "active": true
+        }));
+    }
+
+    let _ = app_handle.emit("mbox-export-progress", serde_json::json!({
+        "total": total, "completed": email_count, "active": false
+    }));
+
+    info!("MBOX exported: {} emails to {}", email_count, dest_path);
+
+    Ok(MboxExportResult {
+        email_count,
+        account_count: 1,
+        file_path: dest_path,
+    })
+}
+
+#[tauri::command]
+async fn export_mbox_all(
+    app_handle: tauri::AppHandle,
+    dest_path: String,
+    archived_only: bool,
+) -> Result<MboxExportResult, String> {
+    use std::io::Write;
+
+    info!("export_mbox_all called: dest={}, archived_only={}", dest_path, archived_only);
+
+    let base = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not get app data directory: {}", e))?;
+    let maildir_base = base.join("Maildir");
+
+    if !maildir_base.exists() {
+        return Err("No email data found".to_string());
+    }
+
+    let mut file = fs::File::create(&dest_path)
+        .map_err(|e| format!("Failed to create mbox file: {}", e))?;
+
+    let mut email_count: u32 = 0;
+    let mut account_count: u32 = 0;
+
+    let _ = app_handle.emit("mbox-export-progress", serde_json::json!({
+        "total": 0, "completed": 0, "active": true
+    }));
+
+    if let Ok(account_dirs) = fs::read_dir(&maildir_base) {
+        for account_dir in account_dirs.flatten() {
+            if !account_dir.file_type().map(|ft| ft.is_dir()).unwrap_or(false) { continue; }
+            let mut account_has_emails = false;
+
+            if let Ok(mailbox_dirs) = fs::read_dir(account_dir.path()) {
+                for mailbox_dir in mailbox_dirs.flatten() {
+                    if !mailbox_dir.file_type().map(|ft| ft.is_dir()).unwrap_or(false) { continue; }
+                    let cur_dir = mailbox_dir.path().join("cur");
+                    if !cur_dir.exists() { continue; }
+
+                    if let Ok(files) = fs::read_dir(&cur_dir) {
+                        for file_entry in files.flatten() {
+                            let fname = file_entry.file_name().to_string_lossy().to_string();
+                            if !fname.contains(":2,") { continue; }
+                            if archived_only {
+                                if !fname.split(":2,").nth(1).map(|f| f.contains('A')).unwrap_or(false) {
+                                    continue;
+                                }
+                            }
+
+                            let raw = match fs::read(file_entry.path()) {
+                                Ok(c) => c,
+                                Err(e) => {
+                                    warn!("Failed to read {}: {}", file_entry.path().display(), e);
+                                    continue;
+                                }
+                            };
+
+                            let from_line = mbox_from_line(&raw);
+                            writeln!(file, "{}", from_line)
+                                .map_err(|e| format!("Failed to write mbox: {}", e))?;
+
+                            let escaped = mbox_escape_from(&raw);
+                            file.write_all(&escaped)
+                                .map_err(|e| format!("Failed to write mbox: {}", e))?;
+
+                            writeln!(file).map_err(|e| format!("Failed to write mbox: {}", e))?;
+
+                            email_count += 1;
+                            account_has_emails = true;
+
+                            if email_count % 100 == 0 {
+                                let _ = app_handle.emit("mbox-export-progress", serde_json::json!({
+                                    "total": 0, "completed": email_count, "active": true
+                                }));
+                            }
+                        }
+                    }
+                }
+            }
+
+            if account_has_emails { account_count += 1; }
+        }
+    }
+
+    let _ = app_handle.emit("mbox-export-progress", serde_json::json!({
+        "total": email_count, "completed": email_count, "active": false
+    }));
+
+    info!("MBOX exported: {} emails from {} accounts to {}", email_count, account_count, dest_path);
+
+    Ok(MboxExportResult {
+        email_count,
+        account_count,
+        file_path: dest_path,
+    })
+}
+
+#[tauri::command]
+async fn import_mbox(
+    app_handle: tauri::AppHandle,
+    source_path: String,
+    account_id: String,
+    mailbox: String,
+) -> Result<MboxImportResult, String> {
+    info!("import_mbox called: source={}, account={}, mailbox={}", source_path, account_id, mailbox);
+
+    let data = fs::read(&source_path)
+        .map_err(|e| format!("Failed to read mbox file: {}", e))?;
+
+    let base = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not get app data directory: {}", e))?;
+
+    let safe_mailbox = sanitize_mailbox_name(&mailbox);
+    let cur_dir = base.join("Maildir").join(&account_id).join(&safe_mailbox).join("cur");
+    fs::create_dir_all(&cur_dir)
+        .map_err(|e| format!("Failed to create maildir: {}", e))?;
+
+    // Find the highest existing UID in this mailbox to continue from
+    let mut max_uid: u32 = 0;
+    if let Ok(files) = fs::read_dir(&cur_dir) {
+        for f in files.flatten() {
+            let fname = f.file_name().to_string_lossy().to_string();
+            if let Some(uid_str) = fname.split(':').next() {
+                if let Ok(uid) = uid_str.parse::<u32>() {
+                    if uid > max_uid { max_uid = uid; }
+                }
+            }
+        }
+    }
+
+    // Split mbox into individual messages
+    // Mbox messages start with "From " at the beginning of a line (after a blank line)
+    let messages = split_mbox(&data);
+
+    let total = messages.len() as u32;
+    let _ = app_handle.emit("mbox-import-progress", serde_json::json!({
+        "total": total, "completed": 0, "active": true
+    }));
+
+    let mut email_count: u32 = 0;
+
+    for msg_raw in &messages {
+        let unescaped = mbox_unescape_from(msg_raw);
+
+        max_uid += 1;
+        let filename = format!("{}:2,", max_uid);
+        let dest = cur_dir.join(&filename);
+
+        if dest.exists() {
+            max_uid += 1;
+            let filename2 = format!("{}:2,", max_uid);
+            let dest2 = cur_dir.join(&filename2);
+            fs::write(&dest2, &unescaped)
+                .map_err(|e| format!("Failed to write .eml: {}", e))?;
+        } else {
+            fs::write(&dest, &unescaped)
+                .map_err(|e| format!("Failed to write .eml: {}", e))?;
+        }
+
+        email_count += 1;
+
+        if email_count % 50 == 0 || email_count == total {
+            let _ = app_handle.emit("mbox-import-progress", serde_json::json!({
+                "total": total, "completed": email_count, "active": true
+            }));
+        }
+    }
+
+    let _ = app_handle.emit("mbox-import-progress", serde_json::json!({
+        "total": total, "completed": email_count, "active": false
+    }));
+
+    info!("MBOX imported: {} emails into {}/{}", email_count, account_id, mailbox);
+
+    Ok(MboxImportResult {
+        email_count,
+        account_id,
+        mailbox,
+    })
+}
+
+/// Split raw mbox data into individual email messages.
+/// Each message starts with a line matching "From " after a blank line (or at file start).
+fn split_mbox(data: &[u8]) -> Vec<&[u8]> {
+    let mut messages: Vec<&[u8]> = Vec::new();
+    let mut start: Option<usize> = None;
+
+    let mut i = 0;
+    let len = data.len();
+
+    while i < len {
+        // Check for "From " at this position
+        let is_from_line = if i + 5 <= len && &data[i..i + 5] == b"From " {
+            // Valid if at file start or preceded by \n\n or \r\n\r\n
+            i == 0
+                || (i >= 1 && data[i - 1] == b'\n'
+                    && (i >= 2 && data[i - 2] == b'\n'
+                        || (i >= 3 && data[i - 2] == b'\r' && data[i - 3] == b'\n')))
+        } else {
+            false
+        };
+
+        if is_from_line {
+            // Save previous message
+            if let Some(msg_start) = start {
+                let mut end = i;
+                // Trim trailing blank lines between messages
+                while end > msg_start && (data[end - 1] == b'\n' || data[end - 1] == b'\r') {
+                    end -= 1;
+                }
+                if end > msg_start {
+                    messages.push(&data[msg_start..end]);
+                }
+            }
+
+            // Skip the "From " envelope line to get to the actual email content
+            let line_end = data[i..].iter().position(|&b| b == b'\n')
+                .map(|p| i + p + 1)
+                .unwrap_or(len);
+            start = Some(line_end);
+            i = line_end;
+        } else {
+            i += 1;
+        }
+    }
+
+    // Don't forget the last message
+    if let Some(msg_start) = start {
+        let mut end = len;
+        while end > msg_start && (data[end - 1] == b'\n' || data[end - 1] == b'\r') {
+            end -= 1;
+        }
+        if end > msg_start {
+            messages.push(&data[msg_start..end]);
+        }
+    }
+
+    messages
+}
+
+/// Process-wide guard preventing overlapping update checks.
+struct UpdateCheckGuard(AtomicBool);
+impl Default for UpdateCheckGuard {
+    fn default() -> Self { Self(AtomicBool::new(false)) }
+}
+
 #[cfg(target_os = "linux")]
 type PendingUpdate = std::sync::Mutex<Option<tauri_plugin_updater::Update>>;
 
@@ -3308,6 +3744,21 @@ async fn install_pending_update(_handle: tauri::AppHandle) -> Result<(), String>
 async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
     use tauri_plugin_updater::UpdaterExt;
     use tauri_plugin_dialog::DialogExt;
+
+    // Single-flight guard: reject overlapping checks
+    let guard = handle.state::<UpdateCheckGuard>();
+    if guard.0.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        if show_no_update {
+            info!("Manual update check ignored — another check is already in progress");
+        }
+        return;
+    }
+    // Ensure the flag is cleared on every exit path
+    struct ClearGuard<'a>(&'a AtomicBool);
+    impl Drop for ClearGuard<'_> {
+        fn drop(&mut self) { self.0.store(false, Ordering::SeqCst); }
+    }
+    let _clear = ClearGuard(&guard.0);
 
     // Snap packages update via the Snap Store — skip Tauri updater
     if std::env::var("SNAP").is_ok() {
@@ -3384,6 +3835,20 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
 async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
     use tauri_plugin_dialog::DialogExt;
     use tauri_plugin_sparkle_updater::SparkleUpdaterExt;
+
+    // Single-flight guard: reject overlapping checks
+    let guard = handle.state::<UpdateCheckGuard>();
+    if guard.0.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        if show_no_update {
+            info!("Manual update check ignored — another check is already in progress");
+        }
+        return;
+    }
+    struct ClearGuard<'a>(&'a AtomicBool);
+    impl Drop for ClearGuard<'_> {
+        fn drop(&mut self) { self.0.store(false, Ordering::SeqCst); }
+    }
+    let _clear = ClearGuard(&guard.0);
 
     info!("Checking for updates via Sparkle (manual={})", show_no_update);
 
@@ -3539,7 +4004,8 @@ fn main() {
         .manage(migration::MigrationPauseToken::default())
         .manage(migration::MigrationNotify::default())
         .manage(imap::ImapPool::new())
-        .manage(oauth2::OAuth2Manager::new());
+        .manage(oauth2::OAuth2Manager::new())
+        .manage(UpdateCheckGuard::default());
 
     #[cfg(target_os = "linux")]
     let builder = builder.manage(PendingUpdate::default());
@@ -3600,6 +4066,9 @@ fn main() {
             maildir_migrate_email_dirs,
             export_backup,
             import_backup,
+            export_mbox,
+            export_mbox_all,
+            import_mbox,
             local_index_read,
             local_index_append,
             local_index_remove,

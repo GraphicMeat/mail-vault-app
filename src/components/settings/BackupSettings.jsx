@@ -763,6 +763,105 @@ export default function BackupSettings({ initialAccountId = null, onUpgrade }) {
 
   const visibleAccounts = getOrderedAccounts(accounts || []).filter(a => !hiddenAccounts?.[a.id]);
 
+  // ── MBOX Export / Import ──────────────────────────────────────────────────
+
+  const handleExportMbox = async () => {
+    if (!invoke) {
+      alert('MBOX export is only available in the desktop app.');
+      return;
+    }
+    try {
+      const { save } = await import('@tauri-apps/plugin-dialog');
+      const destPath = await save({
+        defaultPath: `mailvault-export-${new Date().toISOString().split('T')[0]}.mbox`,
+        filters: [{ name: 'MBOX Files', extensions: ['mbox'] }],
+      });
+      if (!destPath) return;
+
+      const store = useMailStore.getState();
+      store.setExportProgress({ total: 0, completed: 0, active: true, mode: 'export' });
+
+      const { listen } = await import('@tauri-apps/api/event');
+      const unlisten = await listen('mbox-export-progress', (event) => {
+        const p = event.payload;
+        useMailStore.getState().setExportProgress({
+          total: p.total, completed: p.completed, active: p.active, mode: 'export'
+        });
+      });
+
+      let result;
+      try {
+        result = await invoke('export_mbox_all', { destPath, archivedOnly: false });
+      } finally {
+        unlisten();
+      }
+
+      setTimeout(() => {
+        useMailStore.getState().dismissExportProgress();
+        alert(`MBOX exported successfully!\n\n${result.emailCount} email(s) from ${result.accountCount} account(s).`);
+      }, 1500);
+    } catch (error) {
+      console.error('MBOX export error:', error);
+      useMailStore.getState().dismissExportProgress();
+      alert('Failed to export MBOX: ' + (error.message || error));
+    }
+  };
+
+  const handleImportMbox = async () => {
+    if (!invoke) {
+      alert('MBOX import is only available in the desktop app.');
+      return;
+    }
+    if (!visibleAccounts.length) {
+      alert('Add an email account first before importing an MBOX file.');
+      return;
+    }
+    try {
+      const { open: openDialog } = await import('@tauri-apps/plugin-dialog');
+      const sourcePath = await openDialog({
+        filters: [{ name: 'MBOX Files', extensions: ['mbox'] }],
+        multiple: false,
+      });
+      if (!sourcePath) return;
+
+      // Use first account's INBOX as default target
+      const targetAccount = visibleAccounts[0];
+      const targetMailbox = 'INBOX';
+
+      const store = useMailStore.getState();
+      store.setExportProgress({ total: 0, completed: 0, active: true, mode: 'import' });
+
+      const { listen } = await import('@tauri-apps/api/event');
+      const unlisten = await listen('mbox-import-progress', (event) => {
+        const p = event.payload;
+        useMailStore.getState().setExportProgress({
+          total: p.total, completed: p.completed, active: p.active, mode: 'import'
+        });
+      });
+
+      let result;
+      try {
+        result = await invoke('import_mbox', {
+          sourcePath,
+          accountId: targetAccount.id,
+          mailbox: targetMailbox,
+        });
+      } finally {
+        unlisten();
+      }
+
+      setTimeout(() => {
+        useMailStore.getState().dismissExportProgress();
+        alert(`MBOX imported successfully!\n\n${result.emailCount} email(s) imported into ${targetAccount.email || 'your account'} / ${targetMailbox}.\n\nThe page will reload.`);
+        window.location.reload();
+      }, 1500);
+    } catch (error) {
+      console.error('MBOX import error:', error);
+      useMailStore.getState().dismissExportProgress();
+      alert('Failed to import MBOX: ' + (error.message || error));
+    }
+  };
+
   // Export backup as ZIP of .eml files via Rust
   const handleExportData = () => {
     if (!invoke) {
@@ -926,6 +1025,40 @@ export default function BackupSettings({ initialAccountId = null, onUpgrade }) {
           >
             <Upload size={18} />
             Import Backup
+          </button>
+        </div>
+      </div>
+
+      {/* MBOX Import / Export */}
+      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+        <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
+          <HardDrive size={18} className="text-mail-accent" />
+          MBOX Import / Export
+        </h4>
+
+        <p className="text-sm text-mail-text-muted mb-4">
+          Export all emails as a standard MBOX file compatible with Thunderbird, Apple Mail, and other email clients. You can also import an MBOX file to restore emails.
+        </p>
+
+        <div className="flex gap-3">
+          <button
+            onClick={handleExportMbox}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-3
+                      bg-mail-accent/10 hover:bg-mail-accent/20 text-mail-accent
+                      rounded-lg transition-colors"
+          >
+            <Download size={18} />
+            Export MBOX
+          </button>
+
+          <button
+            onClick={handleImportMbox}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-3
+                      bg-mail-surface-hover hover:bg-mail-border text-mail-text
+                      rounded-lg transition-colors"
+          >
+            <Upload size={18} />
+            Import MBOX
           </button>
         </div>
       </div>

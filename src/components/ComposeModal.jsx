@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import { motion } from 'framer-motion';
-import { X, Send, Paperclip, Loader, Minimize2, Maximize2, FileText, Trash2, ChevronDown, BookTemplate } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X, Send, Paperclip, Loader, Minimize2, FileText, Trash2, ChevronDown, BookTemplate, ChevronRight } from 'lucide-react';
 import * as api from '../services/api';
 import { ensureFreshToken } from '../services/authUtils';
+import { RichTextEditor, textToHtml, htmlToText } from './RichTextEditor';
 
 function AttachmentPreview({ attachment, onRemove }) {
   const formatSize = (bytes) => {
@@ -28,7 +29,7 @@ function AttachmentPreview({ attachment, onRemove }) {
   );
 }
 
-export function ComposeModal({ mode = 'new', replyTo = null, initialData = null, onClose }) {
+export function ComposeModal({ mode = 'new', replyTo = null, initialData = null, onClose, onMinimize, onSaveState }) {
   const rawAccounts = useMailStore(s => s.accounts);
   const activeAccountId = useMailStore(s => s.activeAccountId);
   const getSignature = useSettingsStore(s => s.getSignature);
@@ -44,53 +45,60 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
 
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
-  const [minimized, setMinimized] = useState(false);
   const [attachments, setAttachments] = useState([]);
   const [showTemplates, setShowTemplates] = useState(false);
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [templateName, setTemplateName] = useState('');
+  const [quotedExpanded, setQuotedExpanded] = useState(false);
+  const [quotedHtml, setQuotedHtml] = useState('');
   const fileInputRef = useRef(null);
-  const bodyRef = useRef(null);
+  const editorRef = useRef(null);
   const templatesRef = useRef(null);
-  
+  const plainTextRef = useRef('');
+
   const [formData, setFormData] = useState({
     to: '',
     cc: '',
     bcc: '',
     subject: '',
-    body: '',
+    body: '',      // HTML content from the editor
     inReplyTo: '',
     references: ''
   });
   
   // Initialize form based on mode and replyTo email
   useEffect(() => {
-    let initialBody = '';
+    let signatureHtml = '';
 
     // Add signature if enabled
     const signature = getSignature(selectedAccountId);
     if (signature.enabled && signature.text) {
-      initialBody = `\n\n--\n${signature.text}`;
+      signatureHtml = '<p></p><p>--</p>' + textToHtml(signature.text);
     }
 
     if (!replyTo) {
       if (initialData) {
+        // Restore from undo-send or minimize: body is already HTML
+        const bodyHtml = initialData.body || '';
         setFormData(prev => ({
           ...prev,
           to: initialData.to || '',
           cc: initialData.cc || '',
           bcc: initialData.bcc || '',
           subject: initialData.subject || '',
-          body: (initialData.body || '') + initialBody,
+          body: bodyHtml || signatureHtml,
           inReplyTo: initialData.inReplyTo || '',
           references: initialData.references || '',
         }));
-        // Restore attachments if provided (e.g. from undo send)
         if (initialData.attachments?.length) {
           setAttachments(initialData.attachments);
         }
+        // Restore quoted content from minimized state
+        if (initialData._quotedHtml) {
+          setQuotedHtml(initialData._quotedHtml);
+        }
       } else {
-        setFormData(prev => ({ ...prev, body: initialBody }));
+        setFormData(prev => ({ ...prev, body: signatureHtml }));
       }
       return;
     }
@@ -101,9 +109,15 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     const originalDate = replyTo.date ? new Date(replyTo.date).toLocaleString() : '';
     const originalTo = replyTo.to?.map(t => t.address).join(', ') || '';
 
-    // Build quoted content
-    const quotedHeader = `\n\n-------- Original Message --------\nFrom: ${fromName} <${fromAddress}>\nDate: ${originalDate}\nSubject: ${originalSubject}\nTo: ${originalTo}\n\n`;
-    const quotedBody = replyTo.text || '';
+    // Build quoted content as HTML — stored separately for collapsible display
+    const quotedHeaderHtml = `<p><strong>Original Message</strong><br>From: ${fromName} &lt;${fromAddress}&gt;<br>Date: ${originalDate}<br>Subject: ${originalSubject}<br>To: ${originalTo}</p>`;
+    const quotedBodyHtml = replyTo.html
+      ? replyTo.html
+      : textToHtml(replyTo.text || '');
+
+    setQuotedHtml(quotedHeaderHtml + quotedBodyHtml);
+
+    const replyBody = signatureHtml;
 
     if (mode === 'reply') {
       setFormData({
@@ -111,12 +125,11 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         cc: '',
         bcc: '',
         subject: originalSubject.startsWith('Re:') ? originalSubject : `Re: ${originalSubject}`,
-        body: initialBody + quotedHeader + quotedBody,
+        body: replyBody,
         inReplyTo: replyTo.messageId || '',
         references: replyTo.messageId || ''
       });
     } else if (mode === 'replyAll') {
-      // Reply to sender + all recipients except self
       const allRecipients = [
         replyTo.replyTo?.[0]?.address || fromAddress,
         ...(replyTo.to?.map(t => t.address) || []),
@@ -130,7 +143,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         cc: ccRecipients.join(', '),
         bcc: '',
         subject: originalSubject.startsWith('Re:') ? originalSubject : `Re: ${originalSubject}`,
-        body: initialBody + quotedHeader + quotedBody,
+        body: replyBody,
         inReplyTo: replyTo.messageId || '',
         references: replyTo.messageId || ''
       });
@@ -140,18 +153,17 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         cc: '',
         bcc: '',
         subject: originalSubject.startsWith('Fwd:') ? originalSubject : `Fwd: ${originalSubject}`,
-        body: initialBody + quotedHeader + quotedBody,
+        body: signatureHtml + quotedHeaderHtml + quotedBodyHtml,
         inReplyTo: '',
         references: ''
       });
 
-      // Include original attachments for forwarding
       if (replyTo.attachments?.length > 0) {
         setAttachments(replyTo.attachments.map(att => ({
           filename: att.filename,
           contentType: att.contentType,
           size: att.size,
-          content: att.content, // base64 content
+          content: att.content,
           isFromOriginal: true
         })));
       }
@@ -217,22 +229,14 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   }, [showTemplates]);
 
   const insertTemplate = (template) => {
-    const textarea = bodyRef.current;
-    if (!textarea) {
-      // Fallback: append to end
-      setFormData(prev => ({ ...prev, body: prev.body + template.body }));
+    const editor = editorRef.current;
+    if (editor) {
+      // Insert template content as HTML at cursor position
+      const templateHtml = textToHtml(template.body);
+      editor.chain().focus().insertContent(templateHtml).run();
     } else {
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const currentBody = formData.body;
-      const newBody = currentBody.slice(0, start) + template.body + currentBody.slice(end);
-      setFormData(prev => ({ ...prev, body: newBody }));
-      // Restore cursor position after the inserted text
-      requestAnimationFrame(() => {
-        const newPos = start + template.body.length;
-        textarea.setSelectionRange(newPos, newPos);
-        textarea.focus();
-      });
+      // Fallback: append to body
+      setFormData(prev => ({ ...prev, body: prev.body + textToHtml(template.body) }));
     }
     setShowTemplates(false);
   };
@@ -240,7 +244,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const handleSaveTemplate = () => {
     const name = templateName.trim();
     if (!name) return;
-    addEmailTemplate(name, formData.body);
+    addEmailTemplate(name, plainTextRef.current || htmlToText(formData.body));
     setTemplateName('');
     setSavingTemplate(false);
     setShowTemplates(false);
@@ -295,6 +299,14 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           contentType: att.contentType
         }));
 
+        // Combine compose body with quoted content for the sent email
+        const fullHtml = quotedHtml
+          ? formData.body + '<hr><blockquote>' + quotedHtml + '</blockquote>'
+          : formData.body;
+        const fullText = quotedHtml
+          ? (plainTextRef.current || htmlToText(formData.body)) + '\n\n-------- Original Message --------\n' + htmlToText(quotedHtml)
+          : (plainTextRef.current || htmlToText(formData.body));
+
         await api.sendEmail(
           { ...freshAccount, name: displayName },
           {
@@ -302,8 +314,8 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             cc: formData.cc || undefined,
             bcc: formData.bcc || undefined,
             subject: formData.subject,
-            text: formData.body,
-            html: formData.body.replace(/\n/g, '<br>'),
+            text: fullText,
+            html: fullHtml,
             inReplyTo: formData.inReplyTo || undefined,
             references: formData.references || undefined,
             attachments: emailAttachments.length > 0 ? emailAttachments : undefined
@@ -338,15 +350,27 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const hasUserContent = initialSnapshot.current
     ? (formData.to !== initialSnapshot.current.to ||
        formData.subject !== initialSnapshot.current.subject ||
-       formData.body !== initialSnapshot.current.body ||
+       htmlToText(formData.body).trim() !== htmlToText(initialSnapshot.current.body).trim() ||
        attachments.some(a => !a.isFromOriginal))
     : false;
 
+  const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+
   const confirmClose = () => {
     if (hasUserContent) {
-      if (!window.confirm('You have unsaved changes. Discard this message?')) return;
+      setShowDiscardDialog(true);
+      return;
     }
     onClose();
+  };
+
+  // Backdrop click: minimize if has content, close if empty
+  const handleBackdropClick = () => {
+    if (hasUserContent && onMinimize) {
+      handleMinimize();
+    } else {
+      onClose();
+    }
   };
 
   const getTitle = () => {
@@ -357,49 +381,32 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       default: return 'New Message';
     }
   };
-  
-  if (minimized) {
-    return (
-      <motion.div
-        initial={{ y: 100, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        className="fixed bottom-0 right-4 bg-mail-surface border border-mail-border 
-                   rounded-t-lg shadow-lg z-50 w-72"
-      >
-        <div 
-          className="flex items-center justify-between px-4 py-3 cursor-pointer
-                     hover:bg-mail-surface-hover transition-colors"
-          onClick={() => setMinimized(false)}
-        >
-          <span className="font-medium text-mail-text truncate">
-            {formData.subject || getTitle()}
-          </span>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={(e) => { e.stopPropagation(); setMinimized(false); }}
-              className="p-1 hover:bg-mail-border rounded"
-            >
-              <Maximize2 size={14} className="text-mail-text-muted" />
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); confirmClose(); }}
-              className="p-1 hover:bg-mail-border rounded"
-            >
-              <X size={14} className="text-mail-text-muted" />
-            </button>
-          </div>
-        </div>
-      </motion.div>
-    );
-  }
-  
+
+  // Save editor state before minimizing so it persists across unmount/remount
+  const handleMinimize = () => {
+    if (onSaveState) {
+      onSaveState({
+        to: formData.to,
+        cc: formData.cc,
+        bcc: formData.bcc,
+        subject: formData.subject,
+        body: formData.body,
+        inReplyTo: formData.inReplyTo,
+        references: formData.references,
+        attachments: [...attachments],
+        _quotedHtml: quotedHtml,
+      });
+    }
+    if (onMinimize) onMinimize();
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-      onClick={confirmClose}
+      onClick={handleBackdropClick}
     >
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
@@ -407,20 +414,22 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         exit={{ scale: 0.95, opacity: 0 }}
         data-testid="compose-modal"
         className="bg-mail-surface border border-mail-border rounded-xl shadow-2xl
-                   w-full max-w-4xl max-h-[90vh] h-[80vh] flex flex-col overflow-hidden"
+                   w-full max-w-4xl max-h-[90vh] h-[min(80vh,700px)] min-h-[320px] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-mail-border">
           <h2 className="font-semibold text-mail-text">{getTitle()}</h2>
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => setMinimized(true)}
-              title="Minimize"
-              className="p-1.5 hover:bg-mail-border rounded transition-colors"
-            >
-              <Minimize2 size={16} className="text-mail-text-muted" />
-            </button>
+            {onMinimize && (
+              <button
+                onClick={handleMinimize}
+                title="Minimize"
+                className="p-1.5 hover:bg-mail-border rounded transition-colors"
+              >
+                <Minimize2 size={16} className="text-mail-text-muted" />
+              </button>
+            )}
             <button
               onClick={confirmClose}
               className="p-1.5 hover:bg-mail-border rounded transition-colors"
@@ -534,21 +543,47 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             </div>
           )}
           
-          {/* Body */}
-          <div className="flex-1 overflow-hidden">
-            <textarea
-              ref={bodyRef}
-              name="body"
-              data-testid="compose-body"
-              value={formData.body}
-              onChange={handleChange}
+          {/* Body — Rich Text Editor */}
+          <div className="flex-1 overflow-hidden flex flex-col" data-testid="compose-body">
+            <RichTextEditor
+              content={formData.body}
+              editorRef={editorRef}
+              onUpdate={(html, text) => {
+                setFormData(prev => ({ ...prev, body: html }));
+                plainTextRef.current = text;
+                setError(null);
+              }}
               placeholder="Write your message..."
-              className="w-full h-full p-4 bg-transparent text-mail-text
-                        placeholder-mail-text-muted outline-none resize-none
-                        text-sm leading-relaxed min-h-[300px]"
             />
           </div>
           
+          {/* Collapsible quoted original message */}
+          {quotedHtml && (
+            <div className="border-t border-mail-border">
+              <button
+                type="button"
+                onClick={() => setQuotedExpanded(prev => !prev)}
+                className="w-full flex items-center gap-2 px-4 py-2 text-xs text-mail-text-muted
+                          hover:bg-mail-surface-hover transition-colors"
+              >
+                <ChevronRight
+                  size={14}
+                  className={`transition-transform ${quotedExpanded ? 'rotate-90' : ''}`}
+                />
+                <span>{quotedExpanded ? 'Hide' : 'Show'} original message</span>
+              </button>
+              {quotedExpanded && (
+                <div className="px-4 pb-3 max-h-[300px] overflow-y-auto">
+                  <div
+                    className="text-xs text-mail-text-muted border-l-2 border-mail-border pl-3
+                              [&_p]:my-1 [&_a]:text-mail-accent [&_img]:max-w-full"
+                    dangerouslySetInnerHTML={{ __html: quotedHtml }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Error */}
           {error && (
             <div className="px-4 py-2 bg-mail-danger/10 border-t border-mail-danger/20 
@@ -680,6 +715,48 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           </div>
         </form>
       </motion.div>
+
+      {/* Styled discard confirmation dialog */}
+      <AnimatePresence>
+        {showDiscardDialog && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]"
+            onClick={() => setShowDiscardDialog(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-mail-surface border border-mail-border rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-base font-semibold text-mail-text mb-2">Discard message?</h3>
+              <p className="text-sm text-mail-text-muted mb-5">
+                You have unsaved changes. This message will be permanently discarded.
+              </p>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setShowDiscardDialog(false)}
+                  className="px-4 py-2 text-sm text-mail-text hover:bg-mail-surface-hover
+                            rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => { setShowDiscardDialog(false); onClose(); }}
+                  className="px-4 py-2 text-sm bg-red-500/90 hover:bg-red-500 text-white
+                            rounded-lg transition-colors font-medium"
+                >
+                  Discard
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

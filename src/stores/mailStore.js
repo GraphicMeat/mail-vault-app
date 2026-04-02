@@ -2512,12 +2512,11 @@ export const useMailStore = create((set, get) => ({
         return;
       }
 
-      // Clear suspect state if server returned real data
-      if (mergedEmails?.length > 0) {
-        const currentSuspect = get().suspectEmptyServerData;
-        if (currentSuspect?.accountId === activeAccountId && currentSuspect?.type === 'emails') {
-          set({ suspectEmptyServerData: null });
-        }
+      // Clear suspect state — we passed the suspicious-empty guard above,
+      // so the server result is legitimate (even if legitimately empty).
+      const currentSuspect = get().suspectEmptyServerData;
+      if (currentSuspect?.accountId === activeAccountId && currentSuspect?.type === 'emails') {
+        set({ suspectEmptyServerData: null });
       }
 
       // Build sparse index

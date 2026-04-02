@@ -310,7 +310,7 @@
           <div class="float">
             <!-- App Screenshot -->
             <div class="relative rounded-2xl overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-700">
-              <img id="app-screenshot" src="screenshots/thread-view.png" alt="MailVault email archiving app showing inbox with threaded conversations ready for local backup" class="w-full h-auto" width="1440" height="900">
+              <img id="app-screenshot" src="screenshots/thread-view.png" alt="MailVault email archiving app showing inbox with threaded conversations ready for local backup" class="w-full h-auto" data-expandable-image width="1440" height="900">
             </div>
           </div>
 
@@ -606,7 +606,7 @@
                 Topics
               </div>
               <div class="rounded-xl border-2 border-slate-200 dark:border-slate-600 overflow-hidden shadow-lg">
-                <img src="screenshots/chat-view.png" alt="MailVault chat view showing conversation topics grouped by contact" class="w-full h-auto" loading="lazy">
+                <img src="screenshots/chat-view.png" alt="MailVault chat view showing conversation topics grouped by contact" class="w-full h-auto" data-expandable-image loading="lazy">
               </div>
             </div>
 
@@ -616,7 +616,7 @@
                 Chat View
               </div>
               <div class="rounded-xl border-2 border-primary-500 overflow-hidden ring-4 ring-primary-500/20 shadow-lg">
-                <img src="screenshots/chat-view-chat.png" alt="MailVault chat bubble view showing email conversation as messaging bubbles" class="w-full h-auto" loading="lazy">
+                <img src="screenshots/chat-view-chat.png" alt="MailVault chat bubble view showing email conversation as messaging bubbles" class="w-full h-auto" data-expandable-image loading="lazy">
               </div>
             </div>
           </div>
@@ -650,7 +650,7 @@
         <!-- Compose Email -->
         <div class="group">
           <div class="rounded-2xl overflow-hidden shadow-lg border border-slate-200 dark:border-slate-700 transition-all duration-300 group-hover:shadow-xl group-hover:-translate-y-1">
-            <img src="screenshots/compose-email.png" alt="MailVault compose and reply modal with rich text editing" class="w-full h-auto" loading="lazy">
+            <img src="screenshots/compose-email.png" alt="MailVault compose and reply modal with rich text editing" class="w-full h-auto" data-expandable-image loading="lazy">
           </div>
           <div class="mt-4 px-1">
             <h3 class="text-lg font-semibold text-slate-900 dark:text-white">Compose & Reply</h3>
@@ -661,7 +661,7 @@
         <!-- Thread View -->
         <div class="group">
           <div class="rounded-2xl overflow-hidden shadow-lg border border-slate-200 dark:border-slate-700 transition-all duration-300 group-hover:shadow-xl group-hover:-translate-y-1">
-            <img src="screenshots/chat-view-thread.png" alt="MailVault thread conversation view showing email chain" class="w-full h-auto" loading="lazy">
+            <img src="screenshots/chat-view-thread.png" alt="MailVault thread conversation view showing email chain" class="w-full h-auto" data-expandable-image loading="lazy">
           </div>
           <div class="mt-4 px-1">
             <h3 class="text-lg font-semibold text-slate-900 dark:text-white">Threaded Conversations</h3>
@@ -672,7 +672,7 @@
         <!-- Bulk Selection -->
         <div class="group">
           <div class="rounded-2xl overflow-hidden shadow-lg border border-slate-200 dark:border-slate-700 transition-all duration-300 group-hover:shadow-xl group-hover:-translate-y-1">
-            <img src="screenshots/selection-dialog.png" alt="MailVault bulk selection dialog with date range picker for batch operations" class="w-full h-auto" loading="lazy">
+            <img src="screenshots/selection-dialog.png" alt="MailVault bulk selection dialog with date range picker for batch operations" class="w-full h-auto" data-expandable-image loading="lazy">
           </div>
           <div class="mt-4 px-1">
             <h3 class="text-lg font-semibold text-slate-900 dark:text-white">Bulk Operations</h3>
@@ -683,7 +683,7 @@
         <!-- Archive Progress -->
         <div class="group">
           <div class="rounded-2xl overflow-hidden shadow-lg border border-slate-200 dark:border-slate-700 transition-all duration-300 group-hover:shadow-xl group-hover:-translate-y-1">
-            <img src="screenshots/archive-progress.png" alt="MailVault archive progress bar showing bulk email backup in progress" class="w-full h-auto" loading="lazy">
+            <img src="screenshots/archive-progress.png" alt="MailVault archive progress bar showing bulk email backup in progress" class="w-full h-auto" data-expandable-image loading="lazy">
           </div>
           <div class="mt-4 px-1">
             <h3 class="text-lg font-semibold text-slate-900 dark:text-white">Archive with Progress</h3>
@@ -1500,6 +1500,65 @@
         }
       });
     });
+
+  </script>
+
+  <!-- Lightbox Modal -->
+  <div id="lightbox-modal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true" aria-label="Screenshot preview">
+    <div id="lightbox-backdrop" class="absolute inset-0 bg-black/80 backdrop-blur-sm"></div>
+    <div class="absolute inset-0 flex flex-col items-center justify-center p-4 sm:p-8 pointer-events-none">
+      <button id="lightbox-close" class="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors pointer-events-auto" aria-label="Close preview">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+      <img id="lightbox-img" src="" alt="" class="max-w-full max-h-[85vh] rounded-xl shadow-2xl object-contain pointer-events-auto">
+      <p id="lightbox-caption" class="mt-3 text-sm text-white/80 text-center max-w-2xl pointer-events-none"></p>
+    </div>
+  </div>
+
+  <!-- Screenshot Lightbox Script -->
+  <script>
+    (function() {
+      const modal = document.getElementById('lightbox-modal');
+      const backdrop = document.getElementById('lightbox-backdrop');
+      const img = document.getElementById('lightbox-img');
+      const caption = document.getElementById('lightbox-caption');
+      const closeBtn = document.getElementById('lightbox-close');
+
+      function open(src, alt) {
+        img.src = src;
+        img.alt = alt;
+        caption.textContent = alt;
+        caption.classList.toggle('hidden', !alt);
+        modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+        closeBtn.focus();
+      }
+
+      function close() {
+        modal.classList.add('hidden');
+        document.body.style.overflow = '';
+        img.src = '';
+      }
+
+      document.querySelectorAll('[data-expandable-image]').forEach(function(el) {
+        el.style.cursor = 'zoom-in';
+        el.setAttribute('tabindex', '0');
+        el.setAttribute('role', 'button');
+        el.setAttribute('aria-label', 'Expand screenshot: ' + (el.alt || ''));
+        el.addEventListener('click', function() { open(el.src, el.alt); });
+        el.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(el.src, el.alt); }
+        });
+      });
+
+      closeBtn.addEventListener('click', close);
+      backdrop.addEventListener('click', close);
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && !modal.classList.contains('hidden')) close();
+      });
+    })();
   </script>
 </body>
 </html>

@@ -25,7 +25,7 @@ import { usePipelineCoordinator } from './hooks/usePipelineCoordinator';
 import { useBackupScheduler } from './hooks/useBackupScheduler';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, X } from 'lucide-react';
 import * as bulkApi from './services/api';
 import { bulkOperationManager } from './services/BulkOperationManager';
 import { migrationManager } from './services/migrationManager.js';
@@ -91,14 +91,89 @@ function App() {
   const clearError = useMailStore(s => s.clearError);
   const loading = useMailStore(s => s.loading);
   const initTheme = useThemeStore(s => s.initTheme);
-  const layoutMode = useSettingsStore(s => s.layoutMode);
+  const userLayoutMode = useSettingsStore(s => s.layoutMode);
+  const setLayoutMode = useSettingsStore(s => s.setLayoutMode);
   const viewStyle = useSettingsStore(s => s.viewStyle);
   const listPaneSize = useSettingsStore(s => s.listPaneSize);
   const setListPaneSize = useSettingsStore(s => s.setListPaneSize);
   const sidebarCollapsed = useSettingsStore(s => s.sidebarCollapsed);
+  const setSidebarCollapsed = useSettingsStore(s => s.setSidebarCollapsed);
   const onboardingComplete = useSettingsStore(s => s.onboardingComplete);
   const [showAccountModal, setShowAccountModal] = useState(false);
-  const [composeState, setComposeState] = useState(null);
+
+  // ── Responsive layout adaptation ─────────────────────────────────────────
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
+  const autoCollapsedRef = useRef(false); // true = sidebar was collapsed by responsive, not by user
+
+  useEffect(() => {
+    const onResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // If user manually expands sidebar while auto-collapsed, clear the flag
+  // (so window resize won't re-expand what user explicitly collapsed later)
+  const prevCollapsedRef = useRef(sidebarCollapsed);
+  useEffect(() => {
+    const prev = prevCollapsedRef.current;
+    prevCollapsedRef.current = sidebarCollapsed;
+    // User manually expanded while we auto-collapsed → clear flag
+    if (prev && !sidebarCollapsed && autoCollapsedRef.current) {
+      autoCollapsedRef.current = false;
+    }
+    // User manually collapsed while window is wide → ensure we don't auto-expand
+    if (!prev && sidebarCollapsed && windowWidth >= 900) {
+      autoCollapsedRef.current = false;
+    }
+  }, [sidebarCollapsed]);
+
+  // Auto-collapse sidebar on narrow windows
+  useEffect(() => {
+    if (windowWidth < 900 && !sidebarCollapsed) {
+      autoCollapsedRef.current = true;
+      setSidebarCollapsed(true);
+    } else if (windowWidth >= 900 && sidebarCollapsed && autoCollapsedRef.current) {
+      autoCollapsedRef.current = false;
+      setSidebarCollapsed(false);
+    }
+  }, [windowWidth]);
+
+  // Auto-switch to two-column on very narrow windows
+  const layoutMode = windowWidth < 768 ? 'two-column' : userLayoutMode;
+  const [composeWindows, setComposeWindows] = useState([]);
+  const composeIdRef = useRef(0);
+
+  const openCompose = useCallback((state = {}) => {
+    composeIdRef.current += 1;
+    setComposeWindows(prev => [...prev, { id: composeIdRef.current, minimized: false, ...state }]);
+  }, []);
+
+  const closeCompose = useCallback((id) => {
+    setComposeWindows(prev => prev.filter(w => w.id !== id));
+  }, []);
+
+  const minimizeCompose = useCallback((id) => {
+    setComposeWindows(prev => prev.map(w => w.id === id ? { ...w, minimized: true } : w));
+  }, []);
+
+  const saveComposeState = useCallback((id, savedData) => {
+    setComposeWindows(prev => prev.map(w => w.id === id ? { ...w, initialData: savedData } : w));
+  }, []);
+
+  const restoreCompose = useCallback((id) => {
+    setComposeWindows(prev => prev.map(w => w.id === id ? { ...w, minimized: false } : w));
+  }, []);
+
+  // Backwards-compatible helpers
+  const composeState = composeWindows.find(w => !w.minimized) || null;
+  const setComposeState = useCallback((val) => {
+    if (val === null) {
+      // Close the active (non-minimized) window
+      setComposeWindows(prev => prev.filter(w => w.minimized));
+    } else {
+      openCompose(val);
+    }
+  }, [openCompose]);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState(null);
   const [settingsInitialAccountId, setSettingsInitialAccountId] = useState(null);
@@ -108,8 +183,14 @@ function App() {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [showMoveDropdown, setShowMoveDropdown] = useState(false);
   const mainContainerRef = useRef(null);
+  // Clamp list pane width so the viewer always has at least 300px
+  const sidebarWidth = sidebarCollapsed ? 56 : 256;
+  const availableWidth = windowWidth - sidebarWidth;
+  const maxListWidth = Math.min(600, Math.max(240, availableWidth - 300));
+  const clampedListWidth = Math.max(240, Math.min(maxListWidth, listPaneSize));
+
   const listPaneStyle = layoutMode === 'three-column'
-    ? { width: listPaneSize, minWidth: 240, maxWidth: 600 }
+    ? { width: clampedListWidth, minWidth: 240, maxWidth: maxListWidth }
     : { height: listPaneSize, minHeight: 100 };
 
   // Initialize email scheduler
@@ -204,9 +285,10 @@ function App() {
     const containerRect = mainContainerRef.current.getBoundingClientRect();
 
     if (layoutMode === 'three-column') {
-      // In 3-column mode, position is X coordinate
-      const sidebarWidth = sidebarCollapsed ? 56 : 256;
-      const newSize = Math.max(240, Math.min(600, position - sidebarWidth));
+      // In 3-column mode, position is X coordinate — clamp to keep viewer usable
+      const sw = sidebarCollapsed ? 56 : 256;
+      const maxW = Math.min(600, containerRect.width - 300);
+      const newSize = Math.max(240, Math.min(maxW, position - sw));
       setListPaneSize(newSize);
     } else {
       // In 2-column mode, position is Y coordinate
@@ -352,7 +434,11 @@ function App() {
           }
         }
 
-        setUpdateInfo(event.payload);
+        // Deduplicate: ignore if modal is already showing for the same version
+        setUpdateInfo(prev => {
+          if (prev && prev.version === newVersion) return prev;
+          return event.payload;
+        });
       }).then(fn => {
         if (!active) fn();
         else unlisten = fn;
@@ -550,7 +636,7 @@ function App() {
             {/* Email Viewer */}
             <div
               className="flex-1 min-h-0 min-w-0 flex flex-col"
-              style={layoutMode === 'two-column' ? { minHeight: 100 } : undefined}
+              style={layoutMode === 'three-column' ? { minWidth: 300 } : { minHeight: 100 }}
             >
               <EmailViewer />
             </div>
@@ -564,16 +650,63 @@ function App() {
         )}
       </AnimatePresence>
 
+      {/* Active (non-minimized) compose windows */}
       <AnimatePresence>
-        {composeState && (
+        {composeWindows.filter(w => !w.minimized).map(w => (
           <ComposeModal
-            mode={composeState.mode || 'new'}
-            replyTo={composeState.replyTo || null}
-            initialData={composeState.initialData}
-            onClose={() => setComposeState(null)}
+            key={w.id}
+            mode={w.initialData ? 'new' : (w.mode || 'new')}
+            replyTo={w.initialData ? null : (w.replyTo || null)}
+            initialData={w.initialData}
+            onClose={() => closeCompose(w.id)}
+            onMinimize={() => minimizeCompose(w.id)}
+            onSaveState={(data) => saveComposeState(w.id, data)}
           />
-        )}
+        ))}
       </AnimatePresence>
+
+      {/* Minimized compose bubbles — stacked top-right */}
+      {composeWindows.filter(w => w.minimized).length > 0 && (
+        <div className="fixed top-16 right-4 z-40 flex flex-col gap-2">
+          {composeWindows.filter(w => w.minimized).map(w => {
+            const subject = w.initialData?.subject || w.replyTo?.subject || '';
+            const displaySubject = w.mode === 'reply' || w.mode === 'replyAll'
+              ? (subject.startsWith('Re:') ? subject : `Re: ${subject}`)
+              : w.mode === 'forward'
+              ? (subject.startsWith('Fwd:') ? subject : `Fwd: ${subject}`)
+              : subject || 'New Message';
+            const recipient = w.initialData?.to || w.replyTo?.from?.address || '';
+            return (
+              <motion.div
+                key={w.id}
+                initial={{ x: 100, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: 100, opacity: 0 }}
+                className="flex items-center gap-2 bg-mail-surface border border-mail-border
+                           rounded-lg shadow-lg px-3 py-2 cursor-pointer hover:bg-mail-surface-hover
+                           transition-colors max-w-[280px] group"
+                onClick={() => restoreCompose(w.id)}
+              >
+                <div className="w-7 h-7 rounded-full bg-mail-accent/20 flex items-center justify-center flex-shrink-0">
+                  <span className="text-xs font-semibold text-mail-accent">
+                    {(recipient || 'N')[0].toUpperCase()}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-mail-text truncate">{displaySubject}</p>
+                  {recipient && <p className="text-[10px] text-mail-text-muted truncate">{recipient}</p>}
+                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); closeCompose(w.id); }}
+                  className="p-0.5 hover:bg-mail-border rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X size={12} className="text-mail-text-muted" />
+                </button>
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
 
       <AnimatePresence>
         {showSettings && (
@@ -605,7 +738,7 @@ function App() {
         onRetry={() => useMailStore.getState().retryKeychainAccess()}
         onOpenAccounts={() => { setSettingsInitialTab('accounts'); setShowSettings(true); }}
       />
-      <UndoSendToast onUndo={(composeState) => setComposeState(composeState)} />
+      <UndoSendToast onUndo={(cs) => openCompose(cs)} />
 
       {/* Move to Folder dropdown (triggered by keyboard shortcut M) */}
       {showMoveDropdown && (() => {

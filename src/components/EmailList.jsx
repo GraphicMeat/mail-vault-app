@@ -921,6 +921,11 @@ function EmailListComponent() {
       return displayEmails.map(email => ({ type: 'email', email }));
     }
 
+    // Build lookup from displayEmails so thread items use fresh flag state
+    // (deferredThreads is computed async and may have stale isArchived/isLocal)
+    const freshByUid = new Map(displayEmails.map(e => [e.uid, e]));
+    const freshen = (e) => freshByUid.get(e.uid) || e;
+
     // Only show threads that contain at least one email from the current display set
     const displayUids = new Set(displayEmails.map(e => e.uid));
     const filtered = Array.from(threads.values())
@@ -931,9 +936,12 @@ function EmailListComponent() {
 
     return sorted.map(thread => {
       if (thread.messageCount === 1) {
-        return { type: 'email', email: thread.emails[0] };
+        return { type: 'email', email: freshen(thread.emails[0]) };
       }
-      return { type: 'thread', thread };
+      // Freshen all emails in the thread so flags are current
+      const freshEmails = thread.emails.map(freshen);
+      const freshLast = freshen(thread.lastEmail) || freshEmails[freshEmails.length - 1];
+      return { type: 'thread', thread: { ...thread, emails: freshEmails, lastEmail: freshLast } };
     });
   }, [displayEmails, searchActive, deferredThreads]);
 
