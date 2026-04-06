@@ -236,9 +236,7 @@ export class AccountPipeline {
           const state = useMailStore.getState();
           const target = state.emails.find(e => e.uid === uid);
           if (target) target.hasAttachments = true;
-          for (const [, e] of state.emailsByIndex) {
-            if (e.uid === uid) { e.hasAttachments = true; break; }
-          }
+          // emails[] is the canonical list — already updated by UID above
         }
 
         this._completed++;

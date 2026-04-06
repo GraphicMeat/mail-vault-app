@@ -515,25 +515,12 @@ function commitToStore(uidMap, signal, accountId, extras = {}) {
   if (store.activeAccountId !== accountId) return;
 
   const sortedEmails = uidMap.toSortedArray();
-  const emailsByIndex = new Map();
-  sortedEmails.forEach((email, idx) => {
-    emailsByIndex.set(idx, email);
-  });
-
-  // Merge with view mode filtering (server/local/all) via updateSortedEmails after set
-  const stateUpdate = {
+  useMailStore.setState({
     emails: sortedEmails,
-    emailsByIndex,
     totalEmails: extras.totalEmails ?? sortedEmails.length,
     loadedRanges: [{ start: 0, end: sortedEmails.length }],
     ...extras,
-  };
-
-  useMailStore.setState(stateUpdate);
-
-  // Track list header memory (~0.5KB per header)
-  mem.record('listHeaders', sortedEmails.length * 0.5 / 1024);
-  mem.record('loadedRanges', emailsByIndex.size * 0.5 / 1024);
+  });
 
   // Recompute sortedEmails (applies viewMode filtering + local email merging)
   useMailStore.getState().updateSortedEmails();
@@ -576,9 +563,6 @@ export const useMailStore = create((set, get) => ({
   selectedEmailSource: null, // 'server' | 'local' | 'local-only'
   selectedThread: null, // thread object from buildThreads, or null for single email
 
-  // Sparse email storage for virtualized scrolling
-  // Maps display index -> email header
-  emailsByIndex: new Map(),
   // Track which ranges have been loaded
   loadedRanges: [], // Array of {start, end} objects
   // Loading state for specific ranges
@@ -2377,17 +2361,8 @@ export const useMailStore = create((set, get) => ({
       if (isStale()) return;
 
       if (partialHeaders && partialHeaders.emails.length > 0) {
-        const emailsByIndex = new Map();
-        partialHeaders.emails.forEach((email, idx) => {
-          emailsByIndex.set(idx, {
-            ...email,
-            isLocal: savedEmailIds.has(email.uid),
-            source: email.source || 'server'
-          });
-        });
         set({
           emails: partialHeaders.emails,
-          emailsByIndex,
           loadedRanges: [{ start: 0, end: partialHeaders.emails.length }],
           loadingRanges: new Set(),
           totalEmails: cachedHeaders.totalEmails,
@@ -2413,7 +2388,6 @@ export const useMailStore = create((set, get) => ({
         currentPage: 1,
         hasMoreEmails: true,
         totalEmails: 0,
-        emailsByIndex: new Map(),
         loadedRanges: [],
         loadingRanges: new Set(),
         emails: []
@@ -2777,12 +2751,6 @@ export const useMailStore = create((set, get) => ({
         set({ suspectEmptyServerData: null });
       }
 
-      // Build sparse index
-      const emailsByIndex = new Map();
-      mergedEmails.forEach((email, idx) => {
-        emailsByIndex.set(idx, email);
-      });
-
       const currentPage = Math.ceil(mergedEmails.length / 200) || 1;
       const hasMoreEmails = mergedEmails.length < serverTotal;
 
@@ -2801,7 +2769,6 @@ export const useMailStore = create((set, get) => ({
       _loadEmailsRetried = false; // Reset retry flag on success
       set({
         emails: mergedEmails,
-        emailsByIndex,
         loadedRanges: [{ start: 0, end: mergedEmails.length }],
         connectionStatus: 'connected',
         connectionError: null,
@@ -2970,18 +2937,11 @@ export const useMailStore = create((set, get) => ({
         source: 'server',
       }));
 
-      // 6. Build sparse index
-      const emailsByIndex = new Map();
-      mergedEmails.forEach((email, idx) => {
-        emailsByIndex.set(idx, email);
-      });
-
       const serverTotal = mergedEmails.length; // Graph doesn't give a total independent of results
       const hasMoreEmails = !!result.nextLink;
 
       set({
         emails: mergedEmails,
-        emailsByIndex,
         loadedRanges: [{ start: 0, end: mergedEmails.length }],
         connectionStatus: 'connected',
         connectionError: null,
@@ -3149,7 +3109,7 @@ export const useMailStore = create((set, get) => ({
 
   // Load emails by index range (for virtualized scrolling)
   loadEmailRange: async (startIndex, endIndex) => {
-    const { activeAccountId, accounts, activeMailbox, emailsByIndex, loadedRanges, loadingRanges, savedEmailIds } = get();
+    const { activeAccountId, accounts, activeMailbox, loadedRanges, loadingRanges, savedEmailIds } = get();
     let account = accounts.find(a => a.id === activeAccountId);
     account = await ensureFreshToken(account);
 
@@ -3190,19 +3150,33 @@ export const useMailStore = create((set, get) => ({
       }
 
       if (result.emails && result.emails.length > 0) {
-        const newEmailsByIndex = new Map(get().emailsByIndex);
+        const currentEmails = get().emails;
+        const existingUids = new Set(currentEmails.map(e => e.uid));
 
+        // Merge new emails by UID (dedup)
+        const newEntries = [];
         for (const email of result.emails) {
-          newEmailsByIndex.set(email.displayIndex, {
-            ...email,
-            isLocal: savedEmailIds.has(email.uid),
-            source: 'server'
-          });
+          if (!existingUids.has(email.uid)) {
+            newEntries.push({ ...email, isLocal: savedEmailIds.has(email.uid), source: 'server' });
+          }
+        }
+
+        // Dense sorted subset — merge and re-sort by date descending
+        const merged = [...currentEmails, ...newEntries];
+        for (const e of merged) {
+          if (e._ts === undefined) e._ts = new Date(e.date || e.internalDate || 0).getTime();
+        }
+        merged.sort((a, b) => b._ts - a._ts);
+
+        // Evict far-offscreen entries if list grows too large
+        const MAX_LOADED_ENTRIES = 5000;
+        let finalEmails = merged;
+        if (merged.length > MAX_LOADED_ENTRIES) {
+          finalEmails = merged.slice(0, MAX_LOADED_ENTRIES);
         }
 
         // Merge loaded range with existing ranges
         const newLoadedRanges = [...get().loadedRanges, { start: startIndex, end: endIndex }];
-        // Sort and merge overlapping ranges
         newLoadedRanges.sort((a, b) => a.start - b.start);
         const mergedRanges = [];
         for (const range of newLoadedRanges) {
@@ -3220,64 +3194,21 @@ export const useMailStore = create((set, get) => ({
 
         const loadingRangesAfter = new Set(get().loadingRanges);
         loadingRangesAfter.delete(rangeKey);
-        // Expand serverUidSet with newly loaded range UIDs
         const rangeServerUidSet = new Set(get().serverUidSet);
         for (const e of result.emails) rangeServerUidSet.add(e.uid);
 
-        // Evict far-offscreen ranges if emailsByIndex grows too large.
-        // Threshold is pressure-aware: tighter under memory pressure.
-        const rangePressure = mem.getPressure();
-        const MAX_LOADED_ENTRIES = rangePressure === 'critical' ? 1000
-          : rangePressure === 'high' ? 2000
-          : rangePressure === 'elevated' ? 3500
-          : 5000;
-        if (newEmailsByIndex.size > MAX_LOADED_ENTRIES && mergedRanges.length > 1) {
-          const viewCenter = (startIndex + endIndex) / 2;
-          // Sort ranges by distance from current viewport, evict farthest first
-          const rangesByDistance = mergedRanges
-            .map((r, i) => ({ range: r, idx: i, dist: Math.abs((r.start + r.end) / 2 - viewCenter) }))
-            .sort((a, b) => b.dist - a.dist);
-
-          let entriesToEvict = newEmailsByIndex.size - MAX_LOADED_ENTRIES;
-          const rangesToKeep = new Set(mergedRanges);
-          for (const { range } of rangesByDistance) {
-            if (entriesToEvict <= 0) break;
-            // Don't evict the range we just loaded
-            if (range.start === startIndex && range.end === endIndex) continue;
-            for (let i = range.start; i < range.end; i++) {
-              if (newEmailsByIndex.has(i)) {
-                newEmailsByIndex.delete(i);
-                entriesToEvict--;
-              }
-            }
-            rangesToKeep.delete(range);
-          }
-          mergedRanges.length = 0;
-          mergedRanges.push(...rangesToKeep);
-        }
-
-        // Update emails array from sparse map for compatibility — O(loaded) not O(total)
-        const evictedEmailsArray = Array.from(newEmailsByIndex.entries())
-          .sort(([a], [b]) => a - b)
-          .map(([, v]) => v);
-
         set({
-          emailsByIndex: newEmailsByIndex,
           loadedRanges: mergedRanges,
           loadingRanges: loadingRangesAfter,
-          emails: evictedEmailsArray,
+          emails: finalEmails,
           totalEmails: result.total,
           serverUidSet: rangeServerUidSet
         });
 
         get().updateSortedEmails();
 
-        // Track loaded range memory
-        mem.record('loadedRanges', newEmailsByIndex.size * 0.5 / 1024);
-        mem.record('listHeaders', evictedEmailsArray.length * 0.5 / 1024);
-
         // Cache the updated emails
-        db.saveEmailHeaders(activeAccountId, activeMailbox, evictedEmailsArray, result.total)
+        db.saveEmailHeaders(activeAccountId, activeMailbox, finalEmails, result.total)
           .catch(e => console.warn('[loadEmailRange] Failed to cache headers:', e));
 
         // If server reported skipped UIDs, schedule a retry for this range
@@ -3318,10 +3249,10 @@ export const useMailStore = create((set, get) => ({
     return false;
   },
 
-  // Get email at specific index (returns null if not loaded)
+  // Get email at specific index (returns null if out of bounds)
   getEmailAtIndex: (index) => {
-    const { emailsByIndex } = get();
-    return emailsByIndex.get(index) || null;
+    const { emails } = get();
+    return emails[index] || null;
   },
 
   // Get combined emails based on view mode (returns pre-sorted for performance)
@@ -3683,21 +3614,11 @@ export const useMailStore = create((set, get) => ({
 
       // Update hasAttachments on the list item based on real (non-inline) attachments
       const hasReal = hasRealAttachments(email);
-      set(state => {
-        const newEmailsByIndex = new Map(state.emailsByIndex);
-        for (const [idx, e] of newEmailsByIndex) {
-          if (e.uid === uid) {
-            newEmailsByIndex.set(idx, { ...e, hasAttachments: hasReal });
-            break;
-          }
-        }
-        return {
-          selectedEmail: email,
-          selectedEmailSource: actualSource,
-          emails: state.emails.map(e => e.uid === uid ? { ...e, hasAttachments: hasReal } : e),
-          emailsByIndex: newEmailsByIndex,
-        };
-      });
+      set(state => ({
+        selectedEmail: email,
+        selectedEmailSource: actualSource,
+        emails: state.emails.map(e => e.uid === uid ? { ...e, hasAttachments: hasReal } : e),
+      }));
     } catch (error) {
       console.error('[selectEmail] Failed to load email:', error);
       console.error('[selectEmail] Error details:', { name: error.name, message: error.message, status: error.status, stack: error.stack });

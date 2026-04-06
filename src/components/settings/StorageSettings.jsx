@@ -247,7 +247,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
 
                       // Clear in-memory cache and reset emails array so coordinator hook re-triggers
                       useMailStore.getState().clearEmailCache();
-                      useMailStore.setState({ emails: [], sortedEmails: [], localEmails: [], emailsByIndex: {}, totalEmails: 0, loadedRanges: [], currentPage: 0, hasMoreEmails: true, sentEmails: [] });
+                      useMailStore.setState({ emails: [], sortedEmails: [], localEmails: [], totalEmails: 0, loadedRanges: [], currentPage: 0, hasMoreEmails: true, sentEmails: [] });
 
                       setClearCacheResult(result);
 
