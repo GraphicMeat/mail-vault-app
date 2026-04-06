@@ -81,6 +81,7 @@ export const createAccountSlice = (set, get) => ({
   setTotalUnreadCount: (count) => set({ totalUnreadCount: count }),
 
   calculateUnreadCount: () => {
+    // Cross-store read via the facade: emails belong to the messageList domain
     const { emails } = get();
     const unreadCount = emails.filter(e => !e.flags?.includes('\\Seen')).length;
     set({ totalUnreadCount: unreadCount });

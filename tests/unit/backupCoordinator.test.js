@@ -32,6 +32,7 @@ const mockSettingsState = {
 };
 vi.mock('../../src/stores/settingsStore', () => ({
   useSettingsStore: { getState: () => mockSettingsState },
+  hasPremiumAccess: () => false,
 }));
 
 // Mock backupStore
@@ -54,7 +55,14 @@ const mockAccounts = [
 vi.mock('../../src/stores/mailStore', () => ({
   useMailStore: {
     getState: () => ({ accounts: mockAccounts, loading: false }),
+    setState: vi.fn(),
+    subscribe: () => () => {},
   },
+}));
+
+// Mock snapshotService (imported by backupScheduler for post-backup snapshots)
+vi.mock('../../src/services/snapshotService', () => ({
+  createSnapshotFromMaildir: vi.fn().mockResolvedValue({}),
 }));
 
 // ── Import after mocks ────────────────────────────────────────────────────

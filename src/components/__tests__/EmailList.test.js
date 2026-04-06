@@ -89,40 +89,42 @@ function makeEmails(count) {
 // Mock stores
 const mockEmails = makeEmails(500);
 
-vi.mock('../../stores/mailStore', () => ({
-  useMailStore: vi.fn((selector) => {
-    const state = {
-      loading: false,
-      loadingMore: false,
-      activeMailbox: 'INBOX',
-      activeAccountId: 'acc1',
-      viewMode: 'all',
-      totalEmails: 500,
-      selectedEmailId: null,
-      selectedEmailIds: new Set(),
-      sortedEmails: mockEmails,
-      sentEmails: [],
-      hasMoreEmails: false,
-      _flagSeq: 0,
-      archivedEmailIds: new Set(),
-      accounts: [{ id: 'acc1', email: 'me@test.com' }],
-      loadEmails: vi.fn(),
-      loadMoreEmails: vi.fn(),
-      selectEmail: vi.fn(),
-      selectThread: vi.fn(),
-      toggleEmailSelection: vi.fn(),
-      selectAllEmails: vi.fn(),
-      clearSelection: vi.fn(),
-      getChatEmails: vi.fn(() => []),
-      getSentMailboxPath: vi.fn(() => 'Sent'),
-      saveEmailLocally: vi.fn(),
-      removeLocalEmail: vi.fn(),
-      deleteEmailFromServer: vi.fn(),
-      unifiedInbox: false,
-    };
-    return selector(state);
-  }),
-}));
+vi.mock('../../stores/mailStore', () => {
+  const state = {
+    loading: false,
+    loadingMore: false,
+    activeMailbox: 'INBOX',
+    activeAccountId: 'acc1',
+    viewMode: 'all',
+    totalEmails: 500,
+    selectedEmailId: null,
+    selectedEmailIds: new Set(),
+    sortedEmails: mockEmails,
+    sentEmails: [],
+    hasMoreEmails: false,
+    _flagSeq: 0,
+    archivedEmailIds: new Set(),
+    accounts: [{ id: 'acc1', email: 'me@test.com' }],
+    loadEmails: vi.fn(),
+    loadMoreEmails: vi.fn(),
+    selectEmail: vi.fn(),
+    selectThread: vi.fn(),
+    toggleEmailSelection: vi.fn(),
+    selectAllEmails: vi.fn(),
+    clearSelection: vi.fn(),
+    getChatEmails: vi.fn(() => []),
+    getSentMailboxPath: vi.fn(() => 'Sent'),
+    saveEmailLocally: vi.fn(),
+    removeLocalEmail: vi.fn(),
+    deleteEmailFromServer: vi.fn(),
+    unifiedInbox: false,
+  };
+  const hook = vi.fn((selector) => selector(state));
+  hook.getState = () => state;
+  hook.setState = (update) => Object.assign(state, typeof update === 'function' ? update(state) : update);
+  hook.subscribe = () => () => {};
+  return { useMailStore: hook };
+});
 
 vi.mock('../../stores/searchStore', () => ({
   useSearchStore: vi.fn((selector) => {

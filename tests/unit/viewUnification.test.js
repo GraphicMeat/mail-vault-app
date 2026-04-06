@@ -19,12 +19,14 @@ vi.mock('../../src/stores/settingsStore', () => ({
   }),
 }));
 
-vi.mock('../../src/stores/mailStore', () => ({
-  useMailStore: vi.fn((selector) => {
-    const state = { activeAccountId: 'test', activeMailbox: 'INBOX', archivedEmailIds: new Set() };
-    return selector(state);
-  }),
-}));
+vi.mock('../../src/stores/mailStore', () => {
+  const state = { activeAccountId: 'test', activeMailbox: 'INBOX', archivedEmailIds: new Set() };
+  const hook = vi.fn((selector) => selector(state));
+  hook.getState = () => state;
+  hook.setState = (update) => Object.assign(state, typeof update === 'function' ? update(state) : update);
+  hook.subscribe = () => () => {};
+  return { useMailStore: hook };
+});
 
 vi.mock('../../src/utils/senderCheck', () => ({
   checkSenderVerification: () => ({ status: 'none', tooltip: '', issues: [] }),

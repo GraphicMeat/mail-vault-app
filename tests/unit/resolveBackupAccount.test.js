@@ -16,6 +16,7 @@ vi.mock('../../src/stores/mailStore', () => ({
   useMailStore: {
     getState: () => ({ accounts: [...mockAccounts] }),
     setState: vi.fn(),
+    subscribe: () => () => {},
   },
 }));
 

@@ -8,6 +8,8 @@ vi.mock('../../stores/mailStore', () => ({
       activeMailbox: 'INBOX',
       addToCache: vi.fn(),
     }),
+    setState: vi.fn(),
+    subscribe: () => () => {},
   },
 }));
 vi.mock('../../stores/settingsStore', () => ({
