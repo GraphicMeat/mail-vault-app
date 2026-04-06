@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { useMailStore } from '../stores/mailStore';
+import { useUiStore } from '../stores/uiStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HardDrive, Check, X, AlertCircle, Download, Upload } from 'lucide-react';
 
@@ -11,11 +11,11 @@ const selectExportProgress = (s) => s.exportProgress;
 const selectDismissExport = (s) => s.dismissExportProgress;
 
 export function BulkSaveProgress() {
-  const bulkSaveProgress = useMailStore(selectProgress);
-  const dismissBulkProgress = useMailStore(selectDismiss);
-  const cancelArchive = useMailStore(selectCancel);
-  const exportProgress = useMailStore(selectExportProgress);
-  const dismissExportProgress = useMailStore(selectDismissExport);
+  const bulkSaveProgress = useUiStore(selectProgress);
+  const dismissBulkProgress = useUiStore(selectDismiss);
+  const cancelArchive = useUiStore(selectCancel);
+  const exportProgress = useUiStore(selectExportProgress);
+  const dismissExportProgress = useUiStore(selectDismissExport);
 
   // Show archive progress or export/import progress (archive takes priority)
   const activeProgress = bulkSaveProgress || exportProgress;

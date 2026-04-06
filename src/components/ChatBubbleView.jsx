@@ -1,5 +1,8 @@
 import React, { memo, useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import { useMailStore } from '../stores/mailStore';
+import { useMessageListStore } from '../stores/messageListStore';
+import { useAccountStore } from '../stores/accountStore';
+import { useSelectionStore } from '../stores/selectionStore';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -11,6 +14,7 @@ import {
   isDifferentDay,
   isFromUser
 } from '../utils/emailParser';
+import { formatDateTime } from '../utils/dateFormat';
 import { useChatBodyLoader, emailKey } from '../hooks/useChatBodyLoader';
 import {
   ChevronLeft,
@@ -254,13 +258,13 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
   const [hovered, setHovered] = useState(false);
   const [senderPopover, setSenderPopover] = useState(null);
 
-  const archivedEmailIds = useMailStore(s => s.archivedEmailIds);
+  const archivedEmailIds = useMessageListStore(s => s.archivedEmailIds);
   const signatureDisplay = useSettingsStore(s => s.signatureDisplay);
   const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
   const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
-  const activeAccountId = useMailStore(s => s.activeAccountId);
-  const activeMailbox = useMailStore(s => s.activeMailbox);
-  const getSentMailboxPath = useMailStore(s => s.getSentMailboxPath);
+  const activeAccountId = useAccountStore(s => s.activeAccountId);
+  const activeMailbox = useAccountStore(s => s.activeMailbox);
+  const getSentMailboxPath = useAccountStore(s => s.getSentMailboxPath);
 
   // Subscribe to body load updates for this specific email
   const [, forceUpdate] = useState(0);
@@ -779,7 +783,7 @@ export function OriginalEmailModal({ email, onClose }) {
             <div className="flex gap-2">
               <span className="text-mail-text-muted w-16">Date:</span>
               <span className="text-mail-text">
-                {new Date(email.date).toLocaleString()}
+                {formatDateTime(email.date)}
               </span>
             </div>
           </div>
@@ -819,12 +823,12 @@ export function OriginalEmailModal({ email, onClose }) {
 
 // Full-screen modal for viewing complete email with HTML rendering
 function FullViewEmailModal({ email: initialEmail, onClose }) {
-  const selectEmail = useMailStore(s => s.selectEmail);
-  const selectedEmail = useMailStore(s => s.selectedEmail);
-  const loadingEmail = useMailStore(s => s.loadingEmail);
-  const activeAccountId = useMailStore(s => s.activeAccountId);
-  const activeMailbox = useMailStore(s => s.activeMailbox);
-  const getSentMailboxPath = useMailStore(s => s.getSentMailboxPath);
+  const selectEmail = useSelectionStore(s => s.selectEmail);
+  const selectedEmail = useSelectionStore(s => s.selectedEmail);
+  const loadingEmail = useSelectionStore(s => s.loadingEmail);
+  const activeAccountId = useAccountStore(s => s.activeAccountId);
+  const activeMailbox = useAccountStore(s => s.activeMailbox);
+  const getSentMailboxPath = useAccountStore(s => s.getSentMailboxPath);
   const iframeRef = useRef(null);
   const [fetchedEmail, setFetchedEmail] = useState(null);
   const [linkSafetyAlert, setLinkSafetyAlert] = useState(null);
@@ -1014,7 +1018,7 @@ function FullViewEmailModal({ email: initialEmail, onClose }) {
           <div className="flex gap-2">
             <span className="text-mail-text-muted w-14 flex-shrink-0">Date:</span>
             <span className="text-mail-text">
-              {email.date ? new Date(email.date).toLocaleString() : ''}
+              {email.date ? formatDateTime(email.date) : ''}
             </span>
           </div>
         </div>

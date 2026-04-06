@@ -1,5 +1,8 @@
 import React, { memo, useState, useEffect, useRef, useMemo } from 'react';
 import { useMailStore } from '../stores/mailStore';
+import { useSelectionStore } from '../stores/selectionStore';
+import { useMessageListStore } from '../stores/messageListStore';
+import { useAccountStore } from '../stores/accountStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ComposeModal } from './ComposeModal';
 import {
@@ -29,19 +32,19 @@ export { AttachmentItem } from './email/AttachmentBar';
 // ── Single Email Viewer ─────────────────────────────────────────────────────
 
 function EmailViewerComponent() {
-  const selectedEmail = useMailStore(s => s.selectedEmail);
-  const selectedEmailSource = useMailStore(s => s.selectedEmailSource);
-  const selectedThread = useMailStore(s => s.selectedThread);
-  const loadingEmail = useMailStore(s => s.loadingEmail);
-  const savedEmailIds = useMailStore(s => s.savedEmailIds);
-  const archivedEmailIds = useMailStore(s => s.archivedEmailIds);
-  const saveEmailLocally = useMailStore(s => s.saveEmailLocally);
-  const removeLocalEmail = useMailStore(s => s.removeLocalEmail);
-  const exportEmail = useMailStore(s => s.exportEmail);
-  const markEmailReadStatus = useMailStore(s => s.markEmailReadStatus);
-  const deleteEmailFromServer = useMailStore(s => s.deleteEmailFromServer);
-  const activeAccountId = useMailStore(s => s.activeAccountId);
-  const activeMailbox = useMailStore(s => s.activeMailbox);
+  const selectedEmail = useSelectionStore(s => s.selectedEmail);
+  const selectedEmailSource = useSelectionStore(s => s.selectedEmailSource);
+  const selectedThread = useSelectionStore(s => s.selectedThread);
+  const loadingEmail = useSelectionStore(s => s.loadingEmail);
+  const savedEmailIds = useMessageListStore(s => s.savedEmailIds);
+  const archivedEmailIds = useMessageListStore(s => s.archivedEmailIds);
+  const saveEmailLocally = useSelectionStore(s => s.saveEmailLocally);
+  const removeLocalEmail = useSelectionStore(s => s.removeLocalEmail);
+  const exportEmail = useSelectionStore(s => s.exportEmail);
+  const markEmailReadStatus = useSelectionStore(s => s.markEmailReadStatus);
+  const deleteEmailFromServer = useSelectionStore(s => s.deleteEmailFromServer);
+  const activeAccountId = useAccountStore(s => s.activeAccountId);
+  const activeMailbox = useAccountStore(s => s.activeMailbox);
 
   const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
   const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);

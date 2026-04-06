@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useMailStore } from '../../stores/mailStore';
+import { useAccountStore } from '../../stores/accountStore';
+import { useMessageListStore } from '../../stores/messageListStore';
+import { useSelectionStore } from '../../stores/selectionStore';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { AnimatePresence } from 'framer-motion';
 import { ComposeModal } from '../ComposeModal';
@@ -440,11 +443,11 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, acti
 // ── Thread View (shows all emails in a thread) ──────────────────────────────
 
 export function ThreadView({ thread }) {
-  const activeAccountId = useMailStore(s => s.activeAccountId);
-  const activeMailbox = useMailStore(s => s.activeMailbox);
-  const savedEmailIds = useMailStore(s => s.savedEmailIds);
-  const archivedEmailIds = useMailStore(s => s.archivedEmailIds);
-  const saveEmailsLocally = useMailStore(s => s.saveEmailsLocally);
+  const activeAccountId = useAccountStore(s => s.activeAccountId);
+  const activeMailbox = useAccountStore(s => s.activeMailbox);
+  const savedEmailIds = useMessageListStore(s => s.savedEmailIds);
+  const archivedEmailIds = useMessageListStore(s => s.archivedEmailIds);
+  const saveEmailsLocally = useSelectionStore(s => s.saveEmailsLocally);
   const signatureDisplay = useSettingsStore(s => s.signatureDisplay);
   const threadSortOrder = useSettingsStore(s => s.threadSortOrder);
   const [saving, setSaving] = useState(false);

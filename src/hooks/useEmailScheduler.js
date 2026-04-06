@@ -1,15 +1,17 @@
 import { useEffect, useRef } from 'react';
 import { useMailStore } from '../stores/mailStore';
+import { useAccountStore } from '../stores/accountStore';
+import { useMessageListStore } from '../stores/messageListStore';
 import { useSettingsStore } from '../stores/settingsStore';
 
 // Tauri invoke for notifications and badge
 const invoke = window.__TAURI__?.core?.invoke;
 
 export function useEmailScheduler() {
-  const refreshAllAccounts = useMailStore(s => s.refreshAllAccounts);
-  const accounts = useMailStore(s => s.accounts);
-  const emails = useMailStore(s => s.emails);
-  const totalUnreadCount = useMailStore(s => s.totalUnreadCount);
+  const refreshAllAccounts = useAccountStore(s => s.refreshAllAccounts);
+  const accounts = useAccountStore(s => s.accounts);
+  const emails = useMessageListStore(s => s.emails);
+  const totalUnreadCount = useAccountStore(s => s.totalUnreadCount);
   const {
     refreshInterval,
     refreshOnLaunch,

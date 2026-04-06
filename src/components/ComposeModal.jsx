@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useAccountStore } from '../stores/accountStore';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import { formatDateTime } from '../utils/dateFormat';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Send, Paperclip, Loader, Minimize2, FileText, Trash2, ChevronDown, BookTemplate, ChevronRight } from 'lucide-react';
 import * as api from '../services/api';
@@ -30,8 +32,8 @@ function AttachmentPreview({ attachment, onRemove }) {
 }
 
 export function ComposeModal({ mode = 'new', replyTo = null, initialData = null, onClose, onMinimize, onSaveState }) {
-  const rawAccounts = useMailStore(s => s.accounts);
-  const activeAccountId = useMailStore(s => s.activeAccountId);
+  const rawAccounts = useAccountStore(s => s.accounts);
+  const activeAccountId = useAccountStore(s => s.activeAccountId);
   const getSignature = useSettingsStore(s => s.getSignature);
   const getDisplayName = useSettingsStore(s => s.getDisplayName);
   const emailTemplates = useSettingsStore(s => s.emailTemplates);
@@ -106,7 +108,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     const fromAddress = replyTo.from?.address || '';
     const fromName = replyTo.from?.name || '';
     const originalSubject = replyTo.subject || '';
-    const originalDate = replyTo.date ? new Date(replyTo.date).toLocaleString() : '';
+    const originalDate = replyTo.date ? formatDateTime(replyTo.date) : '';
     const originalTo = replyTo.to?.map(t => t.address).join(', ') || '';
 
     // Build quoted content as HTML — stored separately for collapsible display

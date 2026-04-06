@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { useMailStore } from '../stores/mailStore';
+import { useAccountStore } from '../stores/accountStore';
+import { useMessageListStore } from '../stores/messageListStore';
+import { useSyncStore } from '../stores/syncStore';
 import { pipelineManager } from '../services/EmailPipelineManager';
 import { runCleanupRules, shouldRunCleanup } from '../services/cleanupEngine';
 
@@ -12,10 +14,10 @@ import { runCleanupRules, shouldRunCleanup } from '../services/cleanupEngine';
  *   - Cleans up on unmount
  */
 export function usePipelineCoordinator() {
-  const activeAccountId = useMailStore(s => s.activeAccountId);
-  const emails = useMailStore(s => s.emails);
-  const loading = useMailStore(s => s.loading);
-  const accounts = useMailStore(s => s.accounts);
+  const activeAccountId = useAccountStore(s => s.activeAccountId);
+  const emails = useMessageListStore(s => s.emails);
+  const loading = useSyncStore(s => s.loading);
+  const accounts = useAccountStore(s => s.accounts);
   const startedForRef = useRef(null); // tracks which account we started the pipeline for
   const prevAccountIdRef = useRef(null);
   const prevEmailCountRef = useRef(0);

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useSettingsStore, getAccountInitial, getAccountColor, hasPremiumAccess } from '../../stores/settingsStore.js';
 import { useMailStore } from '../../stores/mailStore.js';
+import { useAccountStore } from '../../stores/accountStore.js';
 import * as api from '../../services/api.js';
 import { ensureFreshToken } from '../../services/authUtils.js';
 import { migrationManager } from '../../services/migrationManager.js';
@@ -106,7 +107,7 @@ export default function MigrationSettings({ onUpgrade }) {
   const activeMigration = useSettingsStore(s => s.activeMigration);
   const migrationHistory = useSettingsStore(s => s.migrationHistory);
   const incompleteMigration = useSettingsStore(s => s.incompleteMigration);
-  const rawAccounts = useMailStore(s => s.accounts);
+  const rawAccounts = useAccountStore(s => s.accounts);
   const accountColors = useSettingsStore(s => s.accountColors);
   const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
   const accounts = getOrderedAccounts(rawAccounts);

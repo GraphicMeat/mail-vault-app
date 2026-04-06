@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useMailStore } from '../stores/mailStore';
+import { useComposeStore } from '../stores/composeStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Undo2, Check } from 'lucide-react';
 
 export function UndoSendToast({ onUndo }) {
-  const pendingSend = useMailStore(s => s.pendingSend);
-  const cancelPendingSend = useMailStore(s => s.cancelPendingSend);
+  const pendingSend = useComposeStore(s => s.pendingSend);
+  const cancelPendingSend = useComposeStore(s => s.cancelPendingSend);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [showSent, setShowSent] = useState(false);
 

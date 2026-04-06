@@ -1,10 +1,13 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
+import { useAccountStore } from '../../stores/accountStore';
 import {
   createCheckoutSession, createPortalSession, fetchSubscriptionStatus, fetchPricing,
   unregisterBillingClient, getClientInfo, openInBrowser,
   isBillingRateLimited, getBillingRateLimitedUntil, BillingRateLimitError,
 } from '../../services/billingApi';
+import { ConfirmDialog } from '../ConfirmDialog';
+import { Toast } from '../Toast';
 import {
   CreditCard,
   CheckCircle2,
@@ -19,6 +22,7 @@ import {
   Trash2,
   Monitor,
   X,
+  LogOut,
 } from 'lucide-react';
 
 // Cooldown constants
@@ -48,15 +52,43 @@ export function BillingSettings() {
   const billingLastChecked = useSettingsStore(s => s.billingLastChecked);
   const setBillingEmail = useSettingsStore(s => s.setBillingEmail);
   const setBillingProfile = useSettingsStore(s => s.setBillingProfile);
+  const accounts = useAccountStore(s => s.accounts);
 
-  const [emailInput, setEmailInput] = useState(billingEmail || '');
+  // Deduplicated list of account emails
+  const accountEmails = useMemo(() => {
+    const seen = new Set();
+    return accounts
+      .map(a => a.email)
+      .filter(Boolean)
+      .filter(e => { const lower = e.toLowerCase(); if (seen.has(lower)) return false; seen.add(lower); return true; });
+  }, [accounts]);
+
+  // Selected email: prefer billingEmail if it matches an account, else first account
+  const [selectedEmail, setSelectedEmail] = useState(() => {
+    if (billingEmail && accountEmails.some(e => e.toLowerCase() === billingEmail.toLowerCase())) {
+      return billingEmail;
+    }
+    return accountEmails[0] || '';
+  });
+
+  // Keep selected email in sync if accounts change
+  useEffect(() => {
+    if (selectedEmail && accountEmails.some(e => e.toLowerCase() === selectedEmail.toLowerCase())) return;
+    // Current selection is stale — reset to first account or billingEmail
+    if (billingEmail && accountEmails.some(e => e.toLowerCase() === billingEmail.toLowerCase())) {
+      setSelectedEmail(billingEmail);
+    } else if (accountEmails.length > 0) {
+      setSelectedEmail(accountEmails[0]);
+    }
+  }, [accountEmails]);
+
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState(null);      // transient: cleared on next successful refresh
   const [rateLimitMsg, setRateLimitMsg] = useState(null); // transient: cleared on next successful refresh or cooldown expiry
   const [showingCached, setShowingCached] = useState(false); // transient: true only while last request failed AND cached data exists
   const [checkoutLoading, setCheckoutLoading] = useState(null);
   const [checkoutError, setCheckoutError] = useState(null);
-  const [emailError, setEmailError] = useState(null);
+  // emailError removed — dropdown prevents invalid input
   const [replacedNotice, setReplacedNotice] = useState(null);
   const [removingClientId, setRemovingClientId] = useState(null);
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
@@ -75,6 +107,19 @@ export function BillingSettings() {
   const clientLimit = billingProfile?.clientLimit || 5;
   const activeClientCount = billingProfile?.activeClientCount || 0;
   const currentClientId = billingProfile?.currentClientId || clientInfoRef.current?.clientId;
+
+  // Derived sign-in state — must be declared before any effects that reference it
+  const isSignedIn = isPremium && !!billingEmail;
+  const signInDisabled = syncing || !selectedEmail || cooldownRemaining > 0;
+  const signInLabel = syncing ? 'Signing in...'
+    : cooldownRemaining > 0 ? `Wait ${cooldownRemaining}s`
+    : 'Sign In to Premium';
+  const statusLabel = !billingProfile?.hasSubscription ? 'Free'
+    : billingProfile.status === 'active' ? `Premium ${billingProfile.interval === 'year' ? 'Yearly' : 'Monthly'}`
+    : billingProfile.status === 'trialing' ? 'Premium (Trial)'
+    : billingProfile.status === 'past_due' ? 'Premium (Past Due)'
+    : billingProfile.status === 'canceled' ? 'Canceled'
+    : billingProfile.status || 'Unknown';
 
   // Load client info once
   useEffect(() => { getClientInfo().then(info => { clientInfoRef.current = info; }); }, []);
@@ -102,18 +147,15 @@ export function BillingSettings() {
     return () => clearInterval(id);
   }, [rateLimitMsg]);
 
-  // Unified refresh: single-flight, cooldown-aware, uses unified endpoint
-  const refreshStatus = useCallback(async (overrideEmail, { manual = false } = {}) => {
-    const email = overrideEmail || billingEmail;
-    const cid = billingProfile?.customerId;
-    if (!email && !cid) return;
+  // ── Billing API helpers ─────────────────────────────────────────────────────
 
-    // Cooldown check
+  // Shared request logic — used by both sign-in and refresh paths
+  const billingRequest = useCallback(async ({ email, customerId, manual = false }) => {
+    if (!email && !customerId) return;
+
     const cooldown = manual ? MANUAL_REFRESH_COOLDOWN : AUTO_REFRESH_COOLDOWN;
     if (Date.now() - lastRefreshRef.current < cooldown) return;
     if (isBillingRateLimited()) return;
-
-    // Single-flight
     if (inflightRef.current && refreshPromiseRef.current) return refreshPromiseRef.current;
 
     inflightRef.current = true;
@@ -125,9 +167,8 @@ export function BillingSettings() {
         const clientInfo = clientInfoRef.current || await getClientInfo();
         clientInfoRef.current = clientInfo;
 
-        // Single unified request: status + register if needed
         const result = await fetchSubscriptionStatus({
-          customerId: cid, email,
+          customerId, email,
           clientId: clientInfo.clientId,
           register: true,
           clientName: clientInfo.clientName,
@@ -136,35 +177,28 @@ export function BillingSettings() {
           osVersion: clientInfo.osVersion,
         });
 
-        setBillingProfile(result);
         lastRefreshRef.current = Date.now();
-
-        // Success: clear ALL transient warnings immediately
         setSyncError(null);
         setRateLimitMsg(null);
         setShowingCached(false);
 
-        if (result.customerEmail && result.customerEmail !== email) {
-          setBillingEmail(result.customerEmail);
-          setEmailInput(result.customerEmail);
-        }
         if (result.replacedClient) {
           setReplacedNotice(`Replaced device "${result.replacedClient.clientName || result.replacedClient.clientId}" to make room.`);
           setTimeout(() => setReplacedNotice(null), 8000);
         }
+
+        return result;
       } catch (e) {
         if (e instanceof BillingRateLimitError) {
           setRateLimitMsg(e.message);
-          setSyncError(null); // don't show both
+          setSyncError(null);
         } else {
-          setSyncError(e.message || 'Could not check billing status.');
+          setSyncError(e.message || 'Could not reach billing server.');
           setRateLimitMsg(null);
         }
-        // If we have cached billing data, indicate we're showing it as fallback
         const currentProfile = useSettingsStore.getState().billingProfile;
-        if (currentProfile?.hasSubscription != null) {
-          setShowingCached(true);
-        }
+        if (currentProfile?.hasSubscription != null) setShowingCached(true);
+        return null;
       } finally {
         setSyncing(false);
         inflightRef.current = false;
@@ -174,22 +208,55 @@ export function BillingSettings() {
 
     refreshPromiseRef.current = promise;
     return promise;
-  }, [billingEmail, billingProfile?.customerId, setBillingProfile, setBillingEmail]);
+  }, [setBillingProfile, setBillingEmail]);
 
-  // Focus refresh — only when Billing tab is visible and cooldown allows
+  // Sign in: email-only lookup, NO customerId — prevents stale identity reuse
+  const signInWithEmail = useCallback(async (email) => {
+    const result = await billingRequest({ email, customerId: undefined, manual: true });
+    if (!result) return;
+
+    setBillingProfile(result);
+
+    // If the API resolved to a different canonical email, use that
+    const resolvedEmail = result.customerEmail || email;
+    setBillingEmail(resolvedEmail);
+    setSelectedEmail(resolvedEmail);
+
+    // If no premium access, clear the persisted identity so we stay signed out
+    if (!hasPremiumAccess(result)) {
+      setBillingEmail('');
+    }
+  }, [billingRequest, setBillingProfile, setBillingEmail]);
+
+  // Refresh: uses stored billing identity (customerId + email) — only when signed in
+  const refreshSignedIn = useCallback(async ({ manual = false } = {}) => {
+    const cid = billingProfile?.customerId;
+    const email = billingEmail;
+    if (!cid && !email) return;
+
+    const result = await billingRequest({ email, customerId: cid, manual });
+    if (!result) return;
+
+    setBillingProfile(result);
+    if (result.customerEmail && result.customerEmail !== email) {
+      setBillingEmail(result.customerEmail);
+    }
+  }, [billingEmail, billingProfile?.customerId, billingRequest, setBillingProfile, setBillingEmail]);
+
+  // Focus refresh — only when signed in and Billing tab is visible
   useEffect(() => {
     const onFocus = () => {
       if (!visibleRef.current) return;
-      if (billingEmail || customerId) refreshStatus();
+      if (isSignedIn) refreshSignedIn();
     };
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, [billingEmail, customerId, refreshStatus]);
+  }, [isSignedIn, refreshSignedIn]);
 
-  // Mount refresh — only if data is stale
+  // Mount refresh — only when signed in and data is stale
   useEffect(() => {
-    if ((billingEmail || customerId) && (!billingLastChecked || Date.now() - billingLastChecked > STALE_THRESHOLD)) {
-      refreshStatus();
+    if (isSignedIn && (!billingLastChecked || Date.now() - billingLastChecked > STALE_THRESHOLD)) {
+      refreshSignedIn();
     }
   }, []);
 
@@ -203,18 +270,16 @@ export function BillingSettings() {
     return () => obs.disconnect();
   }, []);
 
-  const handleCheckStatus = () => {
-    if (!emailInput.trim()) return;
-    const email = emailInput.trim().toLowerCase();
-    setBillingEmail(email);
-    refreshStatus(email, { manual: true });
+  const handleSignIn = () => {
+    const email = (selectedEmail || '').trim().toLowerCase();
+    if (!email) return;
+    signInWithEmail(email);
   };
 
   const handleCheckout = async (planId) => {
-    setCheckoutError(null); setEmailError(null);
-    const email = emailInput.trim().toLowerCase();
-    if (!email) { setEmailError('Enter your email address to upgrade.'); return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setEmailError('Please enter a valid email address.'); return; }
+    setCheckoutError(null);
+    const email = selectedEmail.trim().toLowerCase();
+    if (!email) { setCheckoutError('Select an account email first.'); return; }
     setCheckoutLoading(planId);
     try {
       setBillingEmail(email);
@@ -233,6 +298,36 @@ export function BillingSettings() {
     } catch (e) { setSyncError(e.message || 'Could not open billing portal.'); }
   };
 
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [logoutLoading, setLogoutLoading] = useState(false);
+  const [logoutToast, setLogoutToast] = useState(null); // { message, type }
+
+  const handleBillingLogout = async () => {
+    setLogoutLoading(true);
+    let warning = null;
+    try {
+      const clientInfo = await getClientInfo();
+      if (customerId && billingEmail) {
+        await unregisterBillingClient({ customerId, email: billingEmail, clientId: clientInfo.clientId });
+      }
+    } catch (e) {
+      console.warn('[BillingSettings] Unregister failed during logout:', e.message);
+      warning = 'Could not release the device seat. This device may still count toward your device limit until the subscription syncs.';
+    }
+    // Always clear local state regardless of server call success
+    useSettingsStore.getState().clearBillingProfile();
+    setSelectedEmail(accountEmails[0] || '');
+    setSyncError(null);
+    setLogoutLoading(false);
+    setShowLogoutConfirm(false);
+
+    if (warning) {
+      setLogoutToast({ message: warning, type: 'warning' });
+    } else {
+      setLogoutToast({ message: 'Signed out of Premium on this device.', type: 'success' });
+    }
+  };
+
   const handleRemoveClient = async (clientId) => {
     setRemovingClientId(clientId);
     try {
@@ -242,20 +337,8 @@ export function BillingSettings() {
     finally { setRemovingClientId(null); }
   };
 
-  const buttonDisabled = syncing || !emailInput.trim() || cooldownRemaining > 0;
-  const buttonLabel = syncing ? 'Checking...'
-    : cooldownRemaining > 0 ? `Wait ${cooldownRemaining}s`
-    : 'Check Status';
-
-  const statusLabel = !billingProfile?.hasSubscription ? 'Free'
-    : billingProfile.status === 'active' ? `Premium ${billingProfile.interval === 'year' ? 'Yearly' : 'Monthly'}`
-    : billingProfile.status === 'trialing' ? 'Premium (Trial)'
-    : billingProfile.status === 'past_due' ? 'Premium (Past Due)'
-    : billingProfile.status === 'canceled' ? 'Canceled'
-    : billingProfile.status || 'Unknown';
-
   return (
-    <div ref={rootRef} className="p-6 space-y-6 max-w-2xl">
+    <div ref={rootRef} className="p-6 space-y-6">
       {/* Transient warning banners — cleared immediately on next successful refresh */}
       {rateLimitMsg && (
         <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-500">
@@ -295,23 +378,81 @@ export function BillingSettings() {
           </div>
         </div>
 
-        <div className="flex gap-2">
-          <input
-            type="email" value={emailInput}
-            onChange={e => setEmailInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleCheckStatus()}
-            placeholder="your@email.com"
-            className="flex-1 min-w-0 px-3 py-2 text-sm bg-mail-bg border border-mail-border rounded-lg text-mail-text placeholder-mail-text-muted focus:outline-none focus:ring-1 focus:ring-mail-accent"
-          />
-          <button onClick={handleCheckStatus} disabled={buttonDisabled}
-            className="min-w-[120px] px-4 py-2 text-sm font-medium bg-mail-accent/10 text-mail-accent rounded-lg hover:bg-mail-accent/20 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
-            {syncing ? <Loader size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-            <span>{buttonLabel}</span>
-          </button>
-        </div>
+        {isSignedIn ? (
+          /* Signed in: locked email + refresh + sign out */
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="flex-1 px-3 py-2 text-sm bg-mail-bg border border-mail-border rounded-lg text-mail-text">
+                {billingEmail}
+              </div>
+              <button onClick={() => refreshSignedIn({ manual: true })} disabled={syncing || cooldownRemaining > 0}
+                className="p-2 text-sm text-mail-text-muted hover:text-mail-accent rounded-lg hover:bg-mail-accent/10 transition-colors disabled:opacity-50"
+                title="Refresh subscription status">
+                {syncing ? <Loader size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              </button>
+            </div>
+            <button
+              onClick={() => setShowLogoutConfirm(true)}
+              disabled={logoutLoading}
+              className="flex items-center gap-1.5 text-xs font-medium text-red-500 hover:text-red-600 transition-colors disabled:opacity-50"
+            >
+              <LogOut size={12} />
+              Sign out of Premium on this device
+            </button>
+          </div>
+        ) : accountEmails.length === 0 ? (
+          <p className="text-xs text-mail-text-muted">
+            Add an email account first to sign in to Premium.
+          </p>
+        ) : (
+          /* Signed out: account dropdown + sign in */
+          <div className="flex gap-2">
+            <select
+              value={selectedEmail}
+              onChange={e => setSelectedEmail(e.target.value)}
+              className="flex-1 min-w-0 px-3 py-2 text-sm bg-mail-bg border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent"
+            >
+              {accountEmails.map(email => (
+                <option key={email} value={email}>{email}</option>
+              ))}
+            </select>
+            <button onClick={handleSignIn} disabled={signInDisabled}
+              className="min-w-[140px] px-4 py-2 text-sm font-medium bg-mail-accent text-white rounded-lg hover:bg-mail-accent/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
+              {syncing ? <Loader size={14} className="animate-spin" /> : <CreditCard size={14} />}
+              <span>{signInLabel}</span>
+            </button>
+          </div>
+        )}
         {syncError && <p className="text-xs text-mail-danger mt-2">{syncError}</p>}
-        {billingLastChecked && <p className="text-xs text-mail-text-muted mt-1">Last checked: {new Date(billingLastChecked).toLocaleTimeString()}</p>}
+        {billingLastChecked && isSignedIn && <p className="text-xs text-mail-text-muted mt-1">Last synced: {new Date(billingLastChecked).toLocaleTimeString()}</p>}
       </div>
+
+      {/* Early Bird Pricing */}
+      {!isPremium && (
+        <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 border border-amber-500/20 rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-lg">🐣</span>
+            <h4 className="text-sm font-semibold text-mail-text">Early Bird & Family Pricing</h4>
+          </div>
+          <p className="text-xs text-mail-text-muted mb-3">
+            MailVault is in early access. Lock in discounted pricing today — your rate stays the same as long as your subscription is active, even after prices increase.
+          </p>
+          <div className="flex flex-wrap gap-3 text-xs">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400">
+              <CheckCircle2 size={12} />
+              <span>Early bird rate locked for life</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400">
+              <Monitor size={12} />
+              <span>Up to 5 devices per subscription</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400">
+              <Shield size={12} />
+              <span>14-day free trial, cancel anytime</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Plan Cards — data-driven from /api/billing/pricing */}
       {!isPremium && pricing?.plans && (() => {
@@ -335,7 +476,7 @@ export function BillingSettings() {
                   <h4 className="text-sm font-semibold text-mail-text mb-1">Monthly</h4>
                   <div className="text-2xl font-bold text-mail-text mb-1">{monthlyPlan.formattedAmount}<span className="text-sm font-normal text-mail-text-muted">/mo</span></div>
                   <p className="text-xs text-mail-text-muted mb-4 flex-1">Cancel anytime</p>
-                  <button onClick={() => handleCheckout(monthlyPlan.planId)} disabled={checkoutLoading || !emailInput.trim()}
+                  <button onClick={() => handleCheckout(monthlyPlan.planId)} disabled={checkoutLoading || !selectedEmail}
                     className="w-full py-2 text-sm font-semibold bg-mail-accent text-white rounded-lg hover:bg-mail-accent-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
                     {checkoutLoading === 'monthly' ? <Loader size={14} className="animate-spin" /> : <ExternalLink size={14} />}
                     Upgrade
@@ -360,7 +501,7 @@ export function BillingSettings() {
                       ? `${yearlyPlan.trialDays} days free, then ~${yearlyPlan.monthlyEquivalent}/month`
                       : `~${yearlyPlan.monthlyEquivalent}/month`}
                   </p>
-                  <button onClick={() => handleCheckout(yearlyPlan.planId)} disabled={checkoutLoading || !emailInput.trim()}
+                  <button onClick={() => handleCheckout(yearlyPlan.planId)} disabled={checkoutLoading || !selectedEmail}
                     className="w-full py-2 text-sm font-semibold bg-mail-accent text-white rounded-lg hover:bg-mail-accent-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
                     {checkoutLoading === 'yearly' ? <Loader size={14} className="animate-spin" /> : <ExternalLink size={14} />}
                     {yearlyPlan.trialEligible && yearlyPlan.trialDays ? 'Start Free Trial' : 'Upgrade'}
@@ -378,7 +519,7 @@ export function BillingSettings() {
       )}
 
       {checkoutError && <p className="text-xs text-mail-danger">{checkoutError}</p>}
-      {emailError && <p className="text-xs text-mail-warning">{emailError}</p>}
+      {/* emailError removed — dropdown prevents invalid input */}
 
       {/* Manage Billing */}
       {billingProfile?.hasSubscription && customerId && (
@@ -467,6 +608,27 @@ export function BillingSettings() {
           </div>
         </div>
       </div>
+
+      {/* Premium sign-out confirmation */}
+      <ConfirmDialog
+        isOpen={showLogoutConfirm}
+        onClose={() => !logoutLoading && setShowLogoutConfirm(false)}
+        onConfirm={handleBillingLogout}
+        title="Sign out of Premium?"
+        description="This will release the device seat and lock premium features on this device until you sign in again. Your subscription itself is not affected."
+        confirmLabel="Sign Out"
+        destructive
+        loading={logoutLoading}
+      />
+
+      {/* Post-logout feedback */}
+      {logoutToast && (
+        <Toast
+          message={logoutToast.message}
+          type={logoutToast.type}
+          onClose={() => setLogoutToast(null)}
+        />
+      )}
     </div>
   );
 }

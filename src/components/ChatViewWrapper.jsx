@@ -1,5 +1,7 @@
 import React, { memo, useState, useMemo, useEffect, useRef } from 'react';
-import { useMailStore } from '../stores/mailStore';
+import { useAccountStore } from '../stores/accountStore';
+import { useMessageListStore } from '../stores/messageListStore';
+import { useUiStore } from '../stores/uiStore';
 import { useShallow } from 'zustand/react/shallow';
 import { groupByCorrespondent, buildThreads } from '../utils/emailParser';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -9,9 +11,13 @@ import { ChatBubbleView } from './ChatBubbleView';
 import { ComposeModal } from './ComposeModal';
 
 function ChatViewWrapperComponent() {
-  const { accounts, activeAccountId, getChatEmails, emails, localEmails, sentEmails, viewMode } = useMailStore(
-    useShallow(s => ({ accounts: s.accounts, activeAccountId: s.activeAccountId, getChatEmails: s.getChatEmails, emails: s.emails, localEmails: s.localEmails, sentEmails: s.sentEmails, viewMode: s.viewMode }))
+  const { accounts, activeAccountId, getChatEmails } = useAccountStore(
+    useShallow(s => ({ accounts: s.accounts, activeAccountId: s.activeAccountId, getChatEmails: s.getChatEmails }))
   );
+  const { emails, localEmails, sentEmails } = useMessageListStore(
+    useShallow(s => ({ emails: s.emails, localEmails: s.localEmails, sentEmails: s.sentEmails }))
+  );
+  const viewMode = useUiStore(s => s.viewMode);
 
   // Per-account navigation state: only store identifiers, not full objects
   // { accountId: { correspondentEmail: string, threadId: string } }

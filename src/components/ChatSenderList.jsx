@@ -1,5 +1,5 @@
 import React, { memo, useMemo, useState, useCallback, useRef } from 'react';
-import { useMailStore } from '../stores/mailStore';
+import { useAccountStore } from '../stores/accountStore';
 import { useShallow } from 'zustand/react/shallow';
 import { motion } from 'framer-motion';
 import {
@@ -22,7 +22,7 @@ export function ChatSenderList({ onSelectSender }) {
     getChatEmails,
     accounts,
     activeAccountId
-  } = useMailStore(
+  } = useAccountStore(
     useShallow(s => ({ getChatEmails: s.getChatEmails, accounts: s.accounts, activeAccountId: s.activeAccountId }))
   );
   const [searchQuery, setSearchQuery] = React.useState('');

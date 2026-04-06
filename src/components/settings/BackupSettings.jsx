@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSettingsStore, getAccountInitial, getAccountColor, hasPremiumAccess } from '../../stores/settingsStore';
 import { useBackupStore } from '../../stores/backupStore';
 import { useMailStore } from '../../stores/mailStore';
+import { useAccountStore } from '../../stores/accountStore';
 import { backupScheduler } from '../../services/backupScheduler';
 import * as api from '../../services/api';
 import { resolveServerAccount } from '../../services/authUtils';
@@ -674,7 +675,7 @@ export default function BackupSettings({ initialAccountId = null, onUpgrade }) {
     }, 100);
     return () => clearTimeout(timer);
   }, [initialAccountId]);
-  const accounts = useMailStore(s => s.accounts);
+  const accounts = useAccountStore(s => s.accounts);
   const hiddenAccounts = useSettingsStore(s => s.hiddenAccounts);
   const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
   const accountOrder = useSettingsStore(s => s.accountOrder);

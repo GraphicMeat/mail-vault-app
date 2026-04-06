@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useMailStore } from '../stores/mailStore';
+import { useAccountStore } from '../stores/accountStore';
 import { motion } from 'framer-motion';
 import {
   X,
@@ -13,6 +13,8 @@ import {
   Clock,
   ArrowLeftRight,
   CreditCard,
+  Sparkles,
+  Server,
 } from 'lucide-react';
 import { GeneralSettings } from './settings/GeneralSettings';
 import { AccountSettings } from './settings/AccountSettings';
@@ -24,9 +26,12 @@ import { HelpSettings } from './settings/HelpSettings';
 import BackupSettings from './settings/BackupSettings';
 import MigrationSettings from './settings/MigrationSettings.jsx';
 import { BillingSettings } from './settings/BillingSettings';
+import { AISettings } from './settings/AISettings';
+import { DaemonSettings } from './settings/DaemonSettings';
+import { TimeCapsuleSettings } from './settings/TimeCapsuleSettings';
 
 export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, initialAccountId }) {
-  const accounts = useMailStore(s => s.accounts);
+  const accounts = useAccountStore(s => s.accounts);
 
   // Close on Escape key
   useEffect(() => {
@@ -46,6 +51,9 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
     { id: 'storage', label: 'Storage', icon: HardDrive },
     { id: 'backup', label: 'Backup', icon: Clock },
     { id: 'migration', label: 'Migration', icon: ArrowLeftRight },
+    { id: 'time-capsule', label: 'Time Capsule', icon: Clock },
+    { id: 'ai', label: 'AI & Cleanup', icon: Sparkles },
+    { id: 'daemon', label: 'Background Daemon', icon: Server },
     { id: 'billing', label: 'Billing', icon: CreditCard },
     { id: 'security', label: 'Security', icon: Shield },
     { id: 'logs', label: 'Logs', icon: ScrollText },
@@ -132,6 +140,18 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
 
             {activeTab === 'migration' && (
               <MigrationSettings onUpgrade={() => setActiveTab('billing')} />
+            )}
+
+            {activeTab === 'time-capsule' && (
+              <TimeCapsuleSettings />
+            )}
+
+            {activeTab === 'ai' && (
+              <AISettings />
+            )}
+
+            {activeTab === 'daemon' && (
+              <DaemonSettings />
             )}
 
             {activeTab === 'billing' && (

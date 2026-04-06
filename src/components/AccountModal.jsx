@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useMailStore } from '../stores/mailStore';
+import { useAccountStore } from '../stores/accountStore';
 import { getOAuth2AuthUrl, exchangeOAuth2Code, testConnection, resolveEmailSettings } from '../services/api';
+import { isPersonalMicrosoftEmail } from '../services/graphConfig';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Mail, Lock, Server, Eye, EyeOff, Check, AlertCircle, Loader, Wand2, Shield, ChevronRight } from 'lucide-react';
 
@@ -122,7 +123,7 @@ function guessServerSettings(email) {
 }
 
 export function AccountModal({ onClose }) {
-  const { addAccount } = useMailStore();
+  const { addAccount } = useAccountStore();
 
   const [step, setStep] = useState(1);
   const [provider, setProvider] = useState(null);
@@ -368,11 +369,7 @@ export function AccountModal({ onClose }) {
     const currentProvider = providerConfig?.oauth2Provider || 'microsoft';
 
     // Detect personal Microsoft accounts — these need Graph API scopes (IMAP OAuth broken)
-    const personalMsDomains = ['outlook.com', 'hotmail.com', 'live.com', 'msn.com',
-      'outlook.co.uk', 'hotmail.co.uk', 'live.co.uk', 'outlook.fr', 'hotmail.fr',
-      'live.fr', 'outlook.de', 'hotmail.de', 'live.de', 'outlook.jp', 'hotmail.co.jp', 'live.jp'];
-    const emailDomain = (userEnteredEmail || '').toLowerCase().split('@')[1] || '';
-    const isPersonalMs = currentProvider === 'microsoft' && personalMsDomains.includes(emailDomain);
+    const isPersonalMs = currentProvider === 'microsoft' && isPersonalMicrosoftEmail(userEnteredEmail);
 
     try {
       // Step 1: Get the auth URL from the server (pass email as login_hint + provider)

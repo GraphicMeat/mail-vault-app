@@ -1,21 +1,22 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useMailStore } from '../stores/mailStore';
+import { useSelectionStore } from '../stores/selectionStore';
+import { useMessageListStore } from '../stores/messageListStore';
 import {
   MailOpen, Mail, Trash2, Archive, ArchiveRestore, X, AlertTriangle, FolderSymlink
 } from 'lucide-react';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 
 export function SelectionActionBar() {
-  const selectedEmailIds = useMailStore(s => s.selectedEmailIds);
-  const archivedEmailIds = useMailStore(s => s.archivedEmailIds);
-  const clearSelection = useMailStore(s => s.clearSelection);
-  const saveSelectedLocally = useMailStore(s => s.saveSelectedLocally);
-  const markSelectedAsRead = useMailStore(s => s.markSelectedAsRead);
-  const markSelectedAsUnread = useMailStore(s => s.markSelectedAsUnread);
-  const deleteSelectedFromServer = useMailStore(s => s.deleteSelectedFromServer);
-  const removeLocalEmail = useMailStore(s => s.removeLocalEmail);
-  const getSelectionSummary = useMailStore(s => s.getSelectionSummary);
+  const selectedEmailIds = useSelectionStore(s => s.selectedEmailIds);
+  const archivedEmailIds = useMessageListStore(s => s.archivedEmailIds);
+  const clearSelection = useSelectionStore(s => s.clearSelection);
+  const saveSelectedLocally = useSelectionStore(s => s.saveSelectedLocally);
+  const markSelectedAsRead = useSelectionStore(s => s.markSelectedAsRead);
+  const markSelectedAsUnread = useSelectionStore(s => s.markSelectedAsUnread);
+  const deleteSelectedFromServer = useSelectionStore(s => s.deleteSelectedFromServer);
+  const removeLocalEmail = useSelectionStore(s => s.removeLocalEmail);
+  const getSelectionSummary = useSelectionStore(s => s.getSelectionSummary);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showMoveDropdown, setShowMoveDropdown] = useState(false);
@@ -33,12 +34,23 @@ export function SelectionActionBar() {
     return getSelectionSummary();
   }, [hasSelection, selectedEmailIds, getSelectionSummary]);
 
+  // Parse a selection key (may be "accountId:uid" in unified mode) to extract raw uid
+  const parseKey = (key) => {
+    const s = String(key);
+    const i = s.indexOf(':');
+    if (i > 0) {
+      const raw = s.slice(i + 1);
+      return /^\d+$/.test(raw) ? Number(raw) : raw;
+    }
+    return key;
+  };
+
   // Determine archive state of selected emails
   const { hasArchived, hasUnarchived } = useMemo(() => {
     let archived = 0;
     let unarchived = 0;
-    for (const uid of selectedEmailIds) {
-      if (archivedEmailIds.has(uid)) archived++;
+    for (const key of selectedEmailIds) {
+      if (archivedEmailIds.has(parseKey(key))) archived++;
       else unarchived++;
     }
     return { hasArchived: archived > 0, hasUnarchived: unarchived > 0 };
@@ -62,7 +74,9 @@ export function SelectionActionBar() {
   };
 
   const handleUnarchive = async () => {
-    const uids = Array.from(selectedEmailIds).filter(uid => archivedEmailIds.has(uid));
+    const uids = Array.from(selectedEmailIds)
+      .map(parseKey)
+      .filter(uid => archivedEmailIds.has(uid));
     clearSelection();
     for (const uid of uids) {
       try {

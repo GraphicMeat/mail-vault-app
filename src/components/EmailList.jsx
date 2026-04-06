@@ -1,4 +1,5 @@
 import React, { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useMailStore } from '../stores/mailStore';
 import { useAccountStore } from '../stores/accountStore';
 import { useMessageListStore } from '../stores/messageListStore';
 import { useSelectionStore } from '../stores/selectionStore';

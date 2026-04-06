@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Archive, ArchiveRestore, Trash2, ArrowRight, ArrowLeft, AlertTriangle, HardDrive, Calendar } from 'lucide-react';
-import { useMailStore } from '../stores/mailStore';
+import { useMessageListStore } from '../stores/messageListStore';
 
 const ACTION_STYLES = {
   archive: {
@@ -38,9 +38,9 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
 
-  const sortedEmails = useMailStore(s => s.sortedEmails);
-  const totalEmails = useMailStore(s => s.totalEmails);
-  const archivedEmailIds = useMailStore(s => s.archivedEmailIds);
+  const sortedEmails = useMessageListStore(s => s.sortedEmails);
+  const totalEmails = useMessageListStore(s => s.totalEmails);
+  const archivedEmailIds = useMessageListStore(s => s.archivedEmailIds);
 
   // Compute available years from loaded emails
   const emailYears = useMemo(() => {

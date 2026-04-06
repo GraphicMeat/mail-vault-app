@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { useMailStore } from '../stores/mailStore';
+import { useAccountStore } from '../stores/accountStore';
 import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -36,8 +36,8 @@ export function SearchBar() {
   const setSearchFilters = useSearchStore(s => s.setSearchFilters);
   const performSearch = useSearchStore(s => s.performSearch);
   const clearSearch = useSearchStore(s => s.clearSearch);
-  const mailboxes = useMailStore(s => s.mailboxes);
-  const activeMailbox = useMailStore(s => s.activeMailbox);
+  const mailboxes = useAccountStore(s => s.mailboxes);
+  const activeMailbox = useAccountStore(s => s.activeMailbox);
 
   const {
     searchHistory,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useMailStore } from '../../stores/mailStore';
+import { useAccountStore } from '../../stores/accountStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Download,
@@ -154,8 +154,8 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, account,
   const [contentBase64, setContentBase64] = useState(attachment.content || null);
   const isTauri = !!window.__TAURI__;
 
-  const activeAccountId = useMailStore(s => s.activeAccountId);
-  const activeMailbox = useMailStore(s => s.activeMailbox);
+  const activeAccountId = useAccountStore(s => s.activeAccountId);
+  const activeMailbox = useAccountStore(s => s.activeMailbox);
 
   const resolvedAccountId = accountIdProp || activeAccountId;
   const resolvedMailbox = mailboxProp || activeMailbox;
@@ -384,8 +384,8 @@ export function DownloadAllButton({ attachments, emailUid, account, folder }) {
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const isTauri = !!window.__TAURI__;
 
-  const activeAccountId = useMailStore(s => s.activeAccountId);
-  const activeMailbox = useMailStore(s => s.activeMailbox);
+  const activeAccountId = useAccountStore(s => s.activeAccountId);
+  const activeMailbox = useAccountStore(s => s.activeMailbox);
 
   const handleDownloadAll = async () => {
     if (attachments.length === 0) return;

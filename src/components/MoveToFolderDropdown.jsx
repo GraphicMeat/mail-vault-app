@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useMailStore } from '../stores/mailStore';
+import { useAccountStore } from '../stores/accountStore';
+import { useSelectionStore } from '../stores/selectionStore';
 import { FolderSymlink, Search, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -20,9 +21,9 @@ function flattenMailboxes(mailboxes, depth = 0) {
 }
 
 export function MoveToFolderDropdown({ uids, onClose, anchorRect }) {
-  const mailboxes = useMailStore(s => s.mailboxes);
-  const activeMailbox = useMailStore(s => s.activeMailbox);
-  const moveEmails = useMailStore(s => s.moveEmails);
+  const mailboxes = useAccountStore(s => s.mailboxes);
+  const activeMailbox = useAccountStore(s => s.activeMailbox);
+  const moveEmails = useSelectionStore(s => s.moveEmails);
 
   const [filter, setFilter] = useState('');
   const [moving, setMoving] = useState(false);

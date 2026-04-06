@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useMailStore } from '../../stores/mailStore';
-import { useSettingsStore, AVATAR_COLORS, getAccountInitial, getAccountColor } from '../../stores/settingsStore';
+import { useAccountStore } from '../../stores/accountStore';
+import { useSettingsStore, AVATAR_COLORS, getAccountInitial, getAccountColor, hasPremiumAccess } from '../../stores/settingsStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getOAuth2AuthUrl, exchangeOAuth2Code } from '../../services/api';
 import { ToggleSwitch } from './ToggleSwitch';
+import { Toast } from '../Toast';
 import {
   User,
   Mail,
@@ -26,7 +28,7 @@ import {
 } from 'lucide-react';
 
 export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
-  const { removeAccount } = useMailStore();
+  const { removeAccount } = useAccountStore();
   const {
     signatures,
     setSignature,
@@ -53,6 +55,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
   const [newPassword, setNewPassword] = useState('');
   const [oauthReconnecting, setOauthReconnecting] = useState(false);
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
+  const [billingWarning, setBillingWarning] = useState(null);
 
   const orderedAccounts = getOrderedAccounts(accounts);
   const selectedAccount = accounts.find(a => a.id === selectedAccountId);
@@ -637,23 +640,32 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                       <p className="text-sm text-mail-text mb-1 font-medium">
                         Are you sure you want to remove {selectedAccount.email}?
                       </p>
-                      <p className="text-sm text-mail-text-muted mb-4">
+                      <p className="text-sm text-mail-text-muted mb-2">
                         This will permanently delete all locally archived emails, attachments, and settings for this account. This action cannot be undone.
                       </p>
-                      <div className="flex items-center gap-2">
+                      {accounts.length === 1 && hasPremiumAccess(useSettingsStore.getState().billingProfile) && (
+                        <p className="text-sm text-amber-600 dark:text-amber-400 mb-2">
+                          This is your last account. Removing it will also sign this device out of Premium and release the device seat.
+                        </p>
+                      )}
+                      <div className="flex items-center gap-2 mt-3">
                         <button
-                          onClick={() => {
-                            removeAccount(selectedAccountId);
+                          onClick={async () => {
+                            const isLast = accounts.length === 1;
+                            const result = await removeAccount(selectedAccountId);
                             setShowRemoveConfirm(false);
-                            if (accounts.length > 1) {
+                            if (!isLast) {
                               const nextAccount = accounts.find(a => a.id !== selectedAccountId);
                               setSelectedAccountId(nextAccount?.id || null);
+                            }
+                            if (result?.billingLogoutWarning) {
+                              setBillingWarning(result.billingLogoutWarning);
                             }
                           }}
                           className="px-4 py-2 bg-mail-danger hover:bg-mail-danger/80
                                     text-white rounded-lg transition-colors text-sm font-medium"
                         >
-                          Remove
+                          {accounts.length === 1 && hasPremiumAccess(useSettingsStore.getState().billingProfile) ? 'Remove & Sign Out' : 'Remove'}
                         </button>
                         <button
                           onClick={() => setShowRemoveConfirm(false)}
@@ -678,6 +690,15 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
           </div>
         )}
       </div>
+
+      {billingWarning && (
+        <Toast
+          message={billingWarning}
+          type="warning"
+          duration={8000}
+          onClose={() => setBillingWarning(null)}
+        />
+      )}
     </div>
   );
 }
