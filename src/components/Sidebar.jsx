@@ -1,6 +1,10 @@
 import React, { useState, useMemo, useEffect, memo } from 'react';
 import { version } from '../../package.json';
 import { useMailStore } from '../stores/mailStore';
+import { useAccountStore } from '../stores/accountStore';
+import { useMessageListStore } from '../stores/messageListStore';
+import { useSyncStore } from '../stores/syncStore';
+import { useUiStore } from '../stores/uiStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useSettingsStore, getAccountInitial, getAccountColor } from '../stores/settingsStore';
 import { useBackupStore } from '../stores/backupStore';
@@ -33,7 +37,9 @@ import {
   X,
   PanelLeftClose,
   PanelLeftOpen,
-  Loader
+  Loader,
+  Clock,
+  Sparkles
 } from 'lucide-react';
 
 const MAILBOX_ICONS = {
@@ -69,8 +75,8 @@ const UNIFIED_FOLDERS = [
 ];
 
 function UnifiedFolderList() {
-  const unifiedFolder = useMailStore(s => s.unifiedFolder);
-  const switchUnifiedFolder = useMailStore(s => s.switchUnifiedFolder);
+  const unifiedFolder = useAccountStore(s => s.unifiedFolder);
+  const switchUnifiedFolder = useAccountStore(s => s.switchUnifiedFolder);
 
   return (
     <div className="overflow-y-auto p-3 flex-1" style={{ minHeight: 60 }}>
@@ -137,6 +143,10 @@ function BackupStatusIcon({ accountId, onClick }) {
       {icon}
     </button>
   );
+}
+
+function refreshCurrentView() {
+  return useMailStore.getState().refreshCurrentView();
 }
 
 function CollapsedBackupIcon({ onOpenBackup }) {
@@ -290,24 +300,24 @@ const ExpandedAccountRow = memo(function ExpandedAccountRow({
   );
 });
 
-export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup, onOpenAccounts }) {
-  const accounts = useMailStore(s => s.accounts);
-  const activeAccountId = useMailStore(s => s.activeAccountId);
-  const mailboxes = useMailStore(s => s.mailboxes);
-  const activeMailbox = useMailStore(s => s.activeMailbox);
-  const viewMode = useMailStore(s => s.viewMode);
-  const connectionStatus = useMailStore(s => s.connectionStatus);
-  const connectionError = useMailStore(s => s.connectionError);
-  const connectionErrorType = useMailStore(s => s.connectionErrorType);
-  const suspectEmptyServerData = useMailStore(s => s.suspectEmptyServerData);
-  const emails = useMailStore(s => s.emails);
-  const totalEmails = useMailStore(s => s.totalEmails);
-  const loading = useMailStore(s => s.loading);
-  const loadingMore = useMailStore(s => s.loadingMore);
-  const hasMoreEmails = useMailStore(s => s.hasMoreEmails);
-  const activateAccount = useMailStore(s => s.activateAccount);
-  const setViewMode = useMailStore(s => s.setViewMode);
-  const retryKeychainAccess = useMailStore(s => s.retryKeychainAccess);
+export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup, onOpenAccounts, onOpenTimeCapsule, onOpenCleanup }) {
+  const accounts = useAccountStore(s => s.accounts);
+  const activeAccountId = useAccountStore(s => s.activeAccountId);
+  const mailboxes = useAccountStore(s => s.mailboxes);
+  const activeMailbox = useAccountStore(s => s.activeMailbox);
+  const viewMode = useUiStore(s => s.viewMode);
+  const connectionStatus = useAccountStore(s => s.connectionStatus);
+  const connectionError = useAccountStore(s => s.connectionError);
+  const connectionErrorType = useAccountStore(s => s.connectionErrorType);
+  const suspectEmptyServerData = useSyncStore(s => s.suspectEmptyServerData);
+  const emails = useMessageListStore(s => s.emails);
+  const totalEmails = useMessageListStore(s => s.totalEmails);
+  const loading = useSyncStore(s => s.loading);
+  const loadingMore = useSyncStore(s => s.loadingMore);
+  const hasMoreEmails = useMessageListStore(s => s.hasMoreEmails);
+  const activateAccount = useAccountStore(s => s.activateAccount);
+  const setViewMode = useUiStore(s => s.setViewMode);
+  const retryKeychainAccess = useAccountStore(s => s.retryKeychainAccess);
   const unreadPerAccount = useSettingsStore(s => s.unreadPerAccount);
 
   const { theme, toggleTheme } = useThemeStore();
@@ -334,8 +344,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
     setShowError(false);
   }, [connectionStatus, activeAccountId]);
 
-  const unifiedInbox = useMailStore(s => s.unifiedInbox);
-  const setUnifiedInbox = useMailStore(s => s.setUnifiedInbox);
+  const unifiedInbox = useAccountStore(s => s.unifiedInbox);
+  const setUnifiedInbox = useAccountStore(s => s.setUnifiedInbox);
 
   const orderedAccounts = useMemo(
     () => getOrderedAccounts(accounts).filter(a => !hiddenAccounts[a.id]),
@@ -561,7 +571,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             )}
           </button>
           <button
-            onClick={() => { const s = useMailStore.getState(); s.activateAccount(s.activeAccountId, s.activeMailbox); }}
+            onClick={refreshCurrentView}
             className="p-2 hover:bg-mail-surface-hover rounded-lg transition-colors"
             title="Refresh emails"
           >
@@ -619,7 +629,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             )}
           </button>
           <button
-            onClick={() => { const s = useMailStore.getState(); s.activateAccount(s.activeAccountId, s.activeMailbox); }}
+            onClick={refreshCurrentView}
             className="p-2 hover:bg-mail-surface-hover rounded-lg transition-colors"
             title="Refresh emails"
           >
@@ -935,7 +945,27 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
       </div>}
 
       {/* Footer */}
-      <div className="p-3 border-t border-mail-border">
+      <div className="p-3 border-t border-mail-border space-y-0.5">
+        {onOpenTimeCapsule && (
+          <button
+            onClick={onOpenTimeCapsule}
+            className="w-full flex items-center gap-2 p-2 text-sm text-mail-text-muted
+                      hover:text-mail-text hover:bg-mail-surface-hover rounded-lg transition-all"
+          >
+            <Clock size={16} />
+            Time Capsule
+          </button>
+        )}
+        {onOpenCleanup && (
+          <button
+            onClick={onOpenCleanup}
+            className="w-full flex items-center gap-2 p-2 text-sm text-mail-text-muted
+                      hover:text-mail-text hover:bg-mail-surface-hover rounded-lg transition-all"
+          >
+            <Sparkles size={16} />
+            AI Cleanup
+          </button>
+        )}
         <button
           onClick={onOpenSettings}
           className="w-full flex items-center gap-2 p-2 text-sm text-mail-text-muted

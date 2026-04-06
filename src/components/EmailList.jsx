@@ -1,5 +1,9 @@
 import React, { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { useMailStore } from '../stores/mailStore';
+import { useAccountStore } from '../stores/accountStore';
+import { useMessageListStore } from '../stores/messageListStore';
+import { useSelectionStore } from '../stores/selectionStore';
+import { useSyncStore } from '../stores/syncStore';
+import { useUiStore } from '../stores/uiStore';
 import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore, getAccountColor, getAccountInitial, hashColor } from '../stores/settingsStore';
 import { shouldPrefetch } from '../services/cachePressure';
@@ -666,40 +670,40 @@ function getDateRange(emails) {
 
 function EmailListComponent() {
   // Individual selectors — component only re-renders when these specific fields change
-  const loading = useMailStore(s => s.loading);
-  const loadingMore = useMailStore(s => s.loadingMore);
-  const activeMailbox = useMailStore(s => s.activeMailbox);
-  const activeAccountId = useMailStore(s => s.activeAccountId);
-  const viewMode = useMailStore(s => s.viewMode);
-  const totalEmails = useMailStore(s => s.totalEmails);
-  const selectedEmailId = useMailStore(s => s.selectedEmailId);
-  const selectedEmailIds = useMailStore(s => s.selectedEmailIds);
-  const sortedEmails = useMailStore(s => s.sortedEmails);
-  const sentEmails = useMailStore(s => s.sentEmails);
-  const hasMoreEmails = useMailStore(s => s.hasMoreEmails);
+  const loading = useSyncStore(s => s.loading);
+  const loadingMore = useSyncStore(s => s.loadingMore);
+  const activeMailbox = useAccountStore(s => s.activeMailbox);
+  const activeAccountId = useAccountStore(s => s.activeAccountId);
+  const viewMode = useUiStore(s => s.viewMode);
+  const totalEmails = useMessageListStore(s => s.totalEmails);
+  const selectedEmailId = useSelectionStore(s => s.selectedEmailId);
+  const selectedEmailIds = useSelectionStore(s => s.selectedEmailIds);
+  const sortedEmails = useMessageListStore(s => s.sortedEmails);
+  const sentEmails = useMessageListStore(s => s.sentEmails);
+  const hasMoreEmails = useMessageListStore(s => s.hasMoreEmails);
   const searchActive = useSearchStore(s => s.searchActive);
   const searchResults = useSearchStore(s => s.searchResults);
-  const flagSeq = useMailStore(s => s._flagSeq);
-  const archivedSize = useMailStore(s => s.archivedEmailIds.size);
+  const flagSeq = useUiStore(s => s._flagSeq);
+  const archivedSize = useMessageListStore(s => s.archivedEmailIds.size);
   // Actions (stable references — never cause re-renders)
-  const loadEmails = useMailStore(s => s.loadEmails);
-  const loadMoreEmails = useMailStore(s => s.loadMoreEmails);
-  const selectEmail = useMailStore(s => s.selectEmail);
-  const selectThread = useMailStore(s => s.selectThread);
-  const toggleEmailSelection = useMailStore(s => s.toggleEmailSelection);
-  const selectAllEmails = useMailStore(s => s.selectAllEmails);
-  const clearSelection = useMailStore(s => s.clearSelection);
+  const loadEmails = useMessageListStore(s => s.loadEmails);
+  const loadMoreEmails = useMessageListStore(s => s.loadMoreEmails);
+  const selectEmail = useSelectionStore(s => s.selectEmail);
+  const selectThread = useSelectionStore(s => s.selectThread);
+  const toggleEmailSelection = useSelectionStore(s => s.toggleEmailSelection);
+  const selectAllEmails = useSelectionStore(s => s.selectAllEmails);
+  const clearSelection = useSelectionStore(s => s.clearSelection);
   const clearSearch = useSearchStore(s => s.clearSearch);
-  const getChatEmails = useMailStore(s => s.getChatEmails);
-  const getSentMailboxPath = useMailStore(s => s.getSentMailboxPath);
-  const activeAccountEmail = useMailStore(s => s.accounts.find(a => a.id === s.activeAccountId)?.email);
+  const getChatEmails = useMessageListStore(s => s.getChatEmails);
+  const getSentMailboxPath = useMessageListStore(s => s.getSentMailboxPath);
+  const activeAccountEmail = useAccountStore(s => s.accounts.find(a => a.id === s.activeAccountId)?.email);
 
   // Shared row props — subscribed once in parent, passed to all rows via props
-  const saveEmailLocally = useMailStore(s => s.saveEmailLocally);
-  const removeLocalEmail = useMailStore(s => s.removeLocalEmail);
-  const deleteEmailFromServer = useMailStore(s => s.deleteEmailFromServer);
-  const saveEmailsLocally = useMailStore(s => s.saveEmailsLocally);
-  const unifiedInbox = useMailStore(s => s.unifiedInbox);
+  const saveEmailLocally = useAccountStore(s => s.saveEmailLocally);
+  const removeLocalEmail = useAccountStore(s => s.removeLocalEmail);
+  const deleteEmailFromServer = useAccountStore(s => s.deleteEmailFromServer);
+  const saveEmailsLocally = useAccountStore(s => s.saveEmailsLocally);
+  const unifiedInbox = useAccountStore(s => s.unifiedInbox);
   const accountColors = useSettingsStore(s => s.accountColors);
   // Stable actions ref — object identity doesn't change unless actions change (they don't)
   const rowActions = useMemo(() => ({ saveEmailLocally, removeLocalEmail, deleteEmailFromServer, saveEmailsLocally }), [saveEmailLocally, removeLocalEmail, deleteEmailFromServer, saveEmailsLocally]);

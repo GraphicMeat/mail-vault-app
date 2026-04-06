@@ -1,5 +1,8 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useMailStore } from './stores/mailStore';
+import { useAccountStore } from './stores/accountStore';
+import { useSyncStore } from './stores/syncStore';
+import { useUiStore } from './stores/uiStore';
 import { useThemeStore } from './stores/themeStore';
 import { useSettingsStore } from './stores/settingsStore';
 import { Sidebar } from './components/Sidebar';
@@ -13,6 +16,8 @@ import { BulkSaveProgress } from './components/BulkSaveProgress';
 import { SelectionActionBar } from './components/SelectionActionBar';
 import { Onboarding } from './components/Onboarding';
 import { ChatViewWrapper } from './components/ChatViewWrapper';
+import { TimeCapsule } from './components/TimeCapsule';
+import { CleanupReport } from './components/CleanupReport';
 import { UpdateModal } from './components/UpdateModal';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { UndoSendToast } from './components/UndoSendToast';
@@ -84,12 +89,12 @@ const debugLog = (...args) => {
 };
 
 function App() {
-  const init = useMailStore(s => s.init);
-  const accounts = useMailStore(s => s.accounts);
-  const activeAccountId = useMailStore(s => s.activeAccountId);
-  const error = useMailStore(s => s.error);
-  const clearError = useMailStore(s => s.clearError);
-  const loading = useMailStore(s => s.loading);
+  const init = useAccountStore(s => s.init);
+  const accounts = useAccountStore(s => s.accounts);
+  const activeAccountId = useAccountStore(s => s.activeAccountId);
+  const error = useUiStore(s => s.error);
+  const clearError = useUiStore(s => s.clearError);
+  const loading = useSyncStore(s => s.loading);
   const initTheme = useThemeStore(s => s.initTheme);
   const userLayoutMode = useSettingsStore(s => s.layoutMode);
   const setLayoutMode = useSettingsStore(s => s.setLayoutMode);
@@ -178,6 +183,8 @@ function App() {
   const [settingsInitialTab, setSettingsInitialTab] = useState(null);
   const [settingsInitialAccountId, setSettingsInitialAccountId] = useState(null);
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
+  const [showTimeCapsule, setShowTimeCapsule] = useState(false);
+  const [showCleanupReport, setShowCleanupReport] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [pendingOperation, setPendingOperation] = useState(null);
   const [updateInfo, setUpdateInfo] = useState(null);
@@ -605,6 +612,8 @@ function App() {
           onOpenSettings={() => setShowSettings(true)}
           onOpenBackup={(accountId) => { setSettingsInitialTab('backup'); setSettingsInitialAccountId(accountId || null); setShowSettings(true); }}
           onOpenAccounts={(accountId) => { setSettingsInitialTab('accounts'); setSettingsInitialAccountId(accountId || null); setShowSettings(true); }}
+          onOpenTimeCapsule={() => setShowTimeCapsule(true)}
+          onOpenCleanup={() => setShowCleanupReport(true)}
         />
       </div>
 
@@ -713,6 +722,13 @@ function App() {
           <SettingsPage onClose={() => { setShowSettings(false); setSettingsInitialTab(null); setSettingsInitialAccountId(null); }} onAddAccount={() => { setShowSettings(false); setShowAccountModal(true); }} onReportBug={handleReportBug} initialTab={settingsInitialTab} initialAccountId={settingsInitialAccountId} />
         )}
       </AnimatePresence>
+
+      <TimeCapsule isOpen={showTimeCapsule} onClose={() => setShowTimeCapsule(false)} />
+      <CleanupReport
+        isOpen={showCleanupReport}
+        onClose={() => setShowCleanupReport(false)}
+        onOpenSettings={(tab) => { setShowCleanupReport(false); setSettingsInitialTab(tab); setShowSettings(true); }}
+      />
 
       <AnimatePresence>
         {error && (
