@@ -11,7 +11,7 @@ import { getDaemonHealth } from '../services/transport';
 import { syncNow, waitForSync } from '../services/syncService';
 import { isGraphAccount, GRAPH_FOLDER_NAME_MAP, APP_TO_GRAPH_FOLDER_MAP, normalizeGraphFolderName, graphFoldersToMailboxes, inferSpecialUse, graphMessageToEmail } from '../services/graphConfig';
 import { saveRestoreDescriptor as _saveRestore, getRestoreDescriptor as _getRestore, invalidateRestoreDescriptors as _invalidateRestore, getAccountCacheMailboxes as _getAccountMailboxes, setGraphIdMap as _setGraphIdMap, getGraphMessageId, clearGraphIdMap as _clearGraphIdMap, restoreGraphIdMap as _restoreGraphIdMap } from '../services/cacheManager';
-import * as mem from '../services/memoryManager';
+import { recordSize as _recordCacheSize, shouldPrefetch as _shouldPrefetch } from '../services/cachePressure';
 export { graphMessageToEmail, getGraphMessageId };
 
 // ── RestoreDescriptor builder ─────────────────────────────────────────────
@@ -631,11 +631,29 @@ export const useMailStore = create((set, get) => ({
   // Clear email cache (call when switching accounts/mailboxes)
   clearEmailCache: () => {
     _cacheCurrentSizeMB = 0;
-    mem.record('bodyCache', 0);
+    _recordCacheSize(0);
     // Invalidate account cache for current account
     const { activeAccountId } = get();
     if (activeAccountId) _invalidateRestore(activeAccountId);
     set({ emailCache: new Map(), cacheCurrentSizeMB: 0 });
+  },
+
+  // Evict prefetch-only body cache entries (never opened by user).
+  // Called by scroll-settle idle timer when cache pressure is over threshold.
+  evictPrefetchEntries: () => {
+    const { emailCache } = get();
+    let freedMB = 0;
+    for (const [key, entry] of emailCache) {
+      if (entry.prefetchOnly) {
+        freedMB += entry.size;
+        emailCache.delete(key);
+      }
+    }
+    if (freedMB > 0) {
+      _cacheCurrentSizeMB = Math.max(0, _cacheCurrentSizeMB - freedMB);
+      _recordCacheSize(_cacheCurrentSizeMB);
+      console.log('[cache] Evicted %.1fMB of prefetch-only entries', freedMB);
+    }
   },
   
   // Undo send — queue a send with a delay, or send immediately if disabled
@@ -728,7 +746,7 @@ export const useMailStore = create((set, get) => ({
     // Only emit set() when the size changes by ≥1MB to avoid 15+ re-renders/sec from pipeline.
     const newSize = currentSize + emailSize;
     _cacheCurrentSizeMB = newSize;
-    mem.record('bodyCache', newSize);
+    _recordCacheSize(newSize);
     if (Math.abs(newSize - get().cacheCurrentSizeMB) >= 1) {
       set({ cacheCurrentSizeMB: newSize });
     }
@@ -1885,9 +1903,7 @@ export const useMailStore = create((set, get) => ({
 
     activationTrace.end('done', { emailCount: get().emails.length });
 
-    // Clear viewer memory and check pressure after account/mailbox switch
-    mem.record('viewer', 0);
-    mem.checkAndTrim('mailbox-switch');
+    // Viewer state cleared in set() above — no separate tracking needed
   },
 
   // ── Unified Inbox ─────────────────────────────────────────────────────────
@@ -3063,9 +3079,6 @@ export const useMailStore = create((set, get) => ({
 
         get().updateSortedEmails();
 
-        // Track list header memory growth
-        mem.record('listHeaders', newEmails.length * 0.5 / 1024);
-
         // Update account cache with latest state (skip in unified inbox mode)
         if (!get().unifiedInbox) {
           _saveRestore(_buildRestoreDescriptor(get()));
@@ -3366,7 +3379,7 @@ export const useMailStore = create((set, get) => ({
     _chatEmailsCache = merged;
     _chatEmailsFingerprint = fp;
     // Track thread/chat cache memory (~0.5KB per entry for references)
-    mem.record('threadCache', merged.length * 0.5 / 1024);
+    // Thread cache memory tracked by fingerprint invalidation, no separate governor needed
     return merged;
   },
 
@@ -3402,25 +3415,15 @@ export const useMailStore = create((set, get) => ({
     const cacheLimitMB = useSettingsStore.getState().cacheLimitMB;
 
     // Pressure-aware prefetch: skip entirely outside normal, reduce depth at elevated
-    const pressure = mem.getPressure();
-    if (pressure === 'high' || pressure === 'critical') {
-      console.log('[prefetch] Skipping — memory pressure tier: %s', pressure);
-      return;
-    }
-
-    // OOM guard: skip prefetch when cache is near its limit
-    if (_cacheCurrentSizeMB > cacheLimitMB * 0.8) {
-      console.warn('[prefetch] Skipping — cache pressure: %dMB used of %dMB limit',
-        Math.round(_cacheCurrentSizeMB), Math.round(cacheLimitMB));
+    if (!_shouldPrefetch()) {
+      console.log('[prefetch] Skipping — cache pressure: %.0fMB', _cacheCurrentSizeMB);
       return;
     }
 
     const currentIndex = sortedEmails.findIndex(e => e.uid === currentUid);
     if (currentIndex < 0) return;
 
-    // Reduce prefetch depth under elevated pressure (3 → 1)
-    const prefetchDepth = pressure === 'elevated' ? 1 : 3;
-    for (let i = 1; i <= prefetchDepth; i++) {
+    for (let i = 1; i <= 3; i++) {
       const nextEmail = sortedEmails[currentIndex + i];
       if (!nextEmail) break;
 
@@ -3651,17 +3654,8 @@ export const useMailStore = create((set, get) => ({
     } finally {
       set({ loadingEmail: false });
 
-      // Track viewer memory — estimate size of selectedEmail
-      const selEmail = get().selectedEmail;
-      if (selEmail) {
-        mem.record('viewer', get().estimateEmailSizeMB(selEmail));
-      }
-
       // Pre-fetch adjacent email bodies in background for instant navigation
       get()._prefetchAdjacentEmails(uid);
-
-      // Check memory pressure after prefetch completes
-      mem.checkAndTrim('select-email');
     }
   },
 
@@ -4620,55 +4614,3 @@ window.addEventListener('offline', () => {
   });
 });
 
-// ── Memory manager trim callback ─────────────────────────────────────────
-// Registered once at module load. Sheds mailStore memory when pressure rises.
-mem.onTrim((reason, tier) => {
-  const state = useMailStore.getState();
-
-  if (tier === 'critical' || tier === 'high') {
-    // Evict prefetch-only body cache entries (never opened by user)
-    const { emailCache } = state;
-    let freedMB = 0;
-    for (const [key, entry] of emailCache) {
-      if (entry.prefetchOnly) {
-        freedMB += entry.size;
-        emailCache.delete(key);
-      }
-    }
-    if (freedMB > 0) {
-      _cacheCurrentSizeMB -= freedMB;
-      mem.record('bodyCache', Math.max(0, _cacheCurrentSizeMB));
-      console.log('[mailStore:trim] Evicted %.1fMB of prefetch-only cache entries', freedMB);
-    }
-
-    // Clear module-level thread/chat caches to free merged arrays
-    _chatEmailsCache = [];
-    _chatEmailsFingerprint = '';
-    _threadsCache = new Map();
-    _threadsFingerprint = '';
-    mem.record('threadCache', 0);
-  }
-
-  if (tier === 'critical') {
-    // Emergency: clear selected email body if present (viewer will re-fetch)
-    if (state.selectedEmail) {
-      useMailStore.setState({ selectedEmail: null });
-      mem.record('viewer', 0);
-    }
-
-    // Halve body cache by evicting oldest half
-    const { emailCache } = state;
-    const targetSize = Math.floor(emailCache.size / 2);
-    while (emailCache.size > targetSize) {
-      const oldestKey = emailCache.keys().next().value;
-      if (oldestKey === undefined) break;
-      const evicted = emailCache.get(oldestKey);
-      _cacheCurrentSizeMB -= evicted.size;
-      emailCache.delete(oldestKey);
-    }
-    mem.record('bodyCache', Math.max(0, _cacheCurrentSizeMB));
-
-    // Clear unified folder cache
-    _unifiedFolderCache.clear();
-  }
-});

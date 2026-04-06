@@ -2,6 +2,7 @@ import React, { memo, useState, useCallback, useRef, useEffect, useMemo } from '
 import { useMailStore } from '../stores/mailStore';
 import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore, getAccountColor, getAccountInitial, hashColor } from '../stores/settingsStore';
+import { shouldPrefetch } from '../services/cachePressure';
 import { buildThreads, groupBySender, getSenderName } from '../utils/emailParser';
 import { getLinkAlertLevel, getCachedAlerts, getAlertsForEmails } from '../utils/linkSafety';
 import { LinkAlertIcon } from './LinkAlertIcon';
@@ -34,12 +35,8 @@ const ROW_HEIGHT_DEFAULT = 56;
 const ROW_HEIGHT_COMPACT = 52;
 
 
-const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onToggleSelection, isChecked, style }) {
-  const saveEmailLocally = useMailStore(s => s.saveEmailLocally);
-  const removeLocalEmail = useMailStore(s => s.removeLocalEmail);
-  const deleteEmailFromServer = useMailStore(s => s.deleteEmailFromServer);
-  const unifiedInbox = useMailStore(s => s.unifiedInbox);
-  const accountColors = useSettingsStore(s => s.accountColors);
+const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors }) {
+  const { saveEmailLocally, removeLocalEmail, deleteEmailFromServer } = actions;
   const [menuOpen, setMenuOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -83,7 +80,7 @@ const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onT
                  ${isUnread ? 'bg-mail-surface' : ''}`}
       onClick={() => onSelect(email.uid, email.source)}
     >
-      <div onClick={(e) => { e.stopPropagation(); onToggleSelection(email.uid); }}>
+      <div onClick={(e) => { e.stopPropagation(); onToggleSelection(email.uid, email._accountId); }}>
         <input
           type="checkbox"
           checked={isChecked}
@@ -201,12 +198,8 @@ const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onT
   );
 });
 
-const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSelected, onSelect, onToggleSelection, isChecked, style }) {
-  const saveEmailLocally = useMailStore(s => s.saveEmailLocally);
-  const removeLocalEmail = useMailStore(s => s.removeLocalEmail);
-  const deleteEmailFromServer = useMailStore(s => s.deleteEmailFromServer);
-  const unifiedInbox = useMailStore(s => s.unifiedInbox);
-  const accountColors = useSettingsStore(s => s.accountColors);
+const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSelected, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors }) {
+  const { saveEmailLocally, removeLocalEmail, deleteEmailFromServer } = actions;
   const [menuOpen, setMenuOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -246,7 +239,7 @@ const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSelected,
                  ${isUnread ? 'bg-mail-surface' : ''}`}
       onClick={() => onSelect(email.uid, email.source)}
     >
-      <div onClick={(e) => { e.stopPropagation(); onToggleSelection(email.uid); }}>
+      <div onClick={(e) => { e.stopPropagation(); onToggleSelection(email.uid, email._accountId); }}>
         <input type="checkbox" checked={isChecked} onChange={() => {}} className="custom-checkbox" />
       </div>
 
@@ -339,9 +332,8 @@ const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSelected,
 });
 
 // Thread row for default layout — shows collapsed thread with participant names and count
-const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectThread, onToggleSelection, anyChecked, style }) {
-  const saveEmailsLocally = useMailStore(s => s.saveEmailsLocally);
-  const deleteEmailFromServer = useMailStore(s => s.deleteEmailFromServer);
+const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectThread, onToggleSelection, anyChecked, style, actions }) {
+  const { saveEmailsLocally, deleteEmailFromServer } = actions;
   const [menuOpen, setMenuOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmingDeleteThread, setConfirmingDeleteThread] = useState(false);
@@ -414,7 +406,7 @@ const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectTh
                  ${hasUnread ? 'bg-mail-surface' : ''}`}
       onClick={() => onSelectThread(thread)}
     >
-      <div onClick={(e) => { e.stopPropagation(); thread.emails.forEach(em => onToggleSelection(em.uid)); }}>
+      <div onClick={(e) => { e.stopPropagation(); thread.emails.forEach(em => onToggleSelection(em.uid, em._accountId)); }}>
         <input type="checkbox" checked={anyChecked} onChange={() => {}} className="custom-checkbox" />
       </div>
 
@@ -510,9 +502,8 @@ const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectTh
 });
 
 // Compact thread row for compact layout
-const CompactThreadRow = React.memo(function CompactThreadRow({ thread, isSelected, onSelectThread, onToggleSelection, anyChecked, style }) {
-  const saveEmailsLocally = useMailStore(s => s.saveEmailsLocally);
-  const deleteEmailFromServer = useMailStore(s => s.deleteEmailFromServer);
+const CompactThreadRow = React.memo(function CompactThreadRow({ thread, isSelected, onSelectThread, onToggleSelection, anyChecked, style, actions }) {
+  const { saveEmailsLocally, deleteEmailFromServer } = actions;
   const [menuOpen, setMenuOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmingDeleteThread, setConfirmingDeleteThread] = useState(false);
@@ -579,7 +570,7 @@ const CompactThreadRow = React.memo(function CompactThreadRow({ thread, isSelect
                  ${hasUnread ? 'bg-mail-surface' : ''}`}
       onClick={() => onSelectThread(thread)}
     >
-      <div onClick={(e) => { e.stopPropagation(); thread.emails.forEach(em => onToggleSelection(em.uid)); }}>
+      <div onClick={(e) => { e.stopPropagation(); thread.emails.forEach(em => onToggleSelection(em.uid, em._accountId)); }}>
         <input type="checkbox" checked={anyChecked} onChange={() => {}} className="custom-checkbox" />
       </div>
 
@@ -702,6 +693,16 @@ function EmailListComponent() {
   const getChatEmails = useMailStore(s => s.getChatEmails);
   const getSentMailboxPath = useMailStore(s => s.getSentMailboxPath);
   const activeAccountEmail = useMailStore(s => s.accounts.find(a => a.id === s.activeAccountId)?.email);
+
+  // Shared row props — subscribed once in parent, passed to all rows via props
+  const saveEmailLocally = useMailStore(s => s.saveEmailLocally);
+  const removeLocalEmail = useMailStore(s => s.removeLocalEmail);
+  const deleteEmailFromServer = useMailStore(s => s.deleteEmailFromServer);
+  const saveEmailsLocally = useMailStore(s => s.saveEmailsLocally);
+  const unifiedInbox = useMailStore(s => s.unifiedInbox);
+  const accountColors = useSettingsStore(s => s.accountColors);
+  // Stable actions ref — object identity doesn't change unless actions change (they don't)
+  const rowActions = useMemo(() => ({ saveEmailLocally, removeLocalEmail, deleteEmailFromServer, saveEmailsLocally }), [saveEmailLocally, removeLocalEmail, deleteEmailFromServer, saveEmailsLocally]);
 
   const emailListStyle = useSettingsStore(s => s.emailListStyle);
   const emailListGrouping = useSettingsStore(s => s.emailListGrouping);
@@ -940,12 +941,18 @@ function EmailListComponent() {
       if (thread.messageCount === 1) {
         return { type: 'email', email: freshen(thread.emails[0]) };
       }
-      // Freshen all emails in the thread so flags are current
+      // Freshen thread emails in-place — update references without cloning the thread object
       const freshEmails = thread.emails.map(freshen);
       const freshLast = freshen(thread.lastEmail) || freshEmails[freshEmails.length - 1];
-      return { type: 'thread', thread: { ...thread, emails: freshEmails, lastEmail: freshLast } };
+      thread.emails = freshEmails;
+      thread.lastEmail = freshLast;
+      return { type: 'thread', thread };
     });
   }, [displayEmails, searchActive, deferredThreads]);
+
+  const isUnified = activeMailbox === 'UNIFIED';
+  // In unified mode, selection keys are "accountId:uid" to avoid cross-account UID collisions
+  const selKey = (email) => isUnified && email._accountId ? `${email._accountId}:${email.uid}` : email.uid;
 
   const hasSelection = selectedEmailIds.size > 0;
   const allSelected = displayEmails.length > 0 && selectedEmailIds.size === displayEmails.length;
@@ -986,6 +993,27 @@ function EmailListComponent() {
     }
   }, [virtualizer, threadedDisplay.length, hasMoreEmails, loadingMore, searchActive, viewMode, loadMoreEmails]);
 
+  // Idle memory trim — after scrolling settles, check pressure and trim if needed
+  const scrollIdleTimerRef = useRef(null);
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const handleScroll = () => {
+      if (scrollIdleTimerRef.current) clearTimeout(scrollIdleTimerRef.current);
+      scrollIdleTimerRef.current = setTimeout(() => {
+        if (!shouldPrefetch()) {
+          const { evictPrefetchEntries } = useMailStore.getState();
+          if (evictPrefetchEntries) evictPrefetchEntries();
+        }
+      }, 1500);
+    };
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+      if (scrollIdleTimerRef.current) clearTimeout(scrollIdleTimerRef.current);
+    };
+  }, []);
+
   // Pull-to-refresh handlers
   const PULL_THRESHOLD = 80;
 
@@ -1014,7 +1042,7 @@ function EmailListComponent() {
       setIsRefreshing(true);
       setPullDistance(PULL_THRESHOLD * 0.6);
       try {
-        await useMailStore.getState().loadEmails();
+        await useMailStore.getState().refreshCurrentView();
       } finally {
         setIsRefreshing(false);
         setPullDistance(0);
@@ -1343,16 +1371,16 @@ function EmailListComponent() {
                                       const mailbox = email._fromSentFolder ? getSentMailboxPath() : null;
                                       selectEmail(email.uid, email.source, mailbox);
                                       if (layoutMode !== 'three-column') {
-                                        if (expandedEmail === email.uid) {
+                                        if (expandedEmail === selKey(email)) {
                                           setExpandedEmail(null);
                                         } else {
-                                          setExpandedEmail(email.uid);
+                                          setExpandedEmail(selKey(email));
                                         }
                                       }
                                     }}
                                     className={`w-full flex items-center gap-3 pl-16 pr-4 py-2 text-left hover:bg-mail-surface-hover transition-colors ${
-                                      expandedEmail === email.uid ? 'bg-mail-accent/10' : ''
-                                    } ${selectedEmailId === email.uid ? 'ring-1 ring-mail-accent/50' : ''} ${focusedRow?.type === 'email' && focusedRow?.emailUid === email.uid ? 'ring-2 ring-mail-accent ring-inset' : ''}`}
+                                      expandedEmail === selKey(email) ? 'bg-mail-accent/10' : ''
+                                    } ${selectedEmailId === selKey(email) ? 'ring-1 ring-mail-accent/50' : ''} ${focusedRow?.type === 'email' && focusedRow?.emailUid === email.uid ? 'ring-2 ring-mail-accent ring-inset' : ''}`}
                                   >
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center gap-2">
@@ -1396,7 +1424,7 @@ function EmailListComponent() {
                                   </button>
 
                                   {/* Inline expanded email body (plain text) */}
-                                  {expandedEmail === email.uid && layoutMode !== 'three-column' && (
+                                  {expandedEmail === selKey(email) && layoutMode !== 'three-column' && (
                                     <div className="pl-16 pr-4 py-3 border-t border-mail-border bg-mail-surface">
                                       <div className="text-xs text-mail-text-muted mb-2">
                                         From: {getSenderName(email)} · To: {email.to?.[0]?.address || ''}
@@ -1428,7 +1456,7 @@ function EmailListComponent() {
 
               if (item.type === 'thread') {
                 const ThreadRowComponent = isCompact ? CompactThreadRow : ThreadRow;
-                const anyChecked = item.thread.emails.some(e => selectedEmailIds.has(e.uid));
+                const anyChecked = item.thread.emails.some(e => selectedEmailIds.has(selKey(e)));
                 return (
                   <div
                     key={vr.key}
@@ -1445,11 +1473,12 @@ function EmailListComponent() {
                     <ThreadRowComponent
                       key={`thread-${item.thread.threadId}`}
                       thread={item.thread}
-                      isSelected={item.thread.emails.some(e => selectedEmailId === e.uid)}
+                      isSelected={item.thread.emails.some(e => selectedEmailId === selKey(e))}
                       onSelectThread={selectThread}
                       onToggleSelection={toggleEmailSelection}
                       anyChecked={anyChecked}
                       style={{ height: ROW_HEIGHT }}
+                      actions={rowActions}
                     />
                   </div>
                 );
@@ -1470,11 +1499,14 @@ function EmailListComponent() {
                   <RowComponent
                     key={item.email.uid}
                     email={item.email}
-                    isSelected={selectedEmailId === item.email.uid}
-                    isChecked={selectedEmailIds.has(item.email.uid)}
+                    isSelected={selectedEmailId === selKey(item.email)}
+                    isChecked={selectedEmailIds.has(selKey(item.email))}
                     onSelect={selectEmail}
                     onToggleSelection={toggleEmailSelection}
                     style={{ height: ROW_HEIGHT }}
+                    actions={rowActions}
+                    unifiedInbox={unifiedInbox}
+                    accountColors={accountColors}
                   />
                 </div>
               );
