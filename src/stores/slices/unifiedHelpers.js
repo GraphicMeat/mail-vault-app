@@ -3,7 +3,7 @@
 // ── RestoreDescriptor builder ─────────────────────────────────────────────
 // Captures a compact snapshot of the first ~50 visible headers for instant
 // restore on account/mailbox switch. Called on every switch-away.
-export function _buildRestoreDescriptor(state, mailbox) {
+export function _buildRestoreDescriptor(state, mailbox, { topVisibleIndex = 0 } = {}) {
   const effectiveMailbox = mailbox || state.activeMailbox || 'INBOX';
   const sorted = state.sortedEmails || state.emails || [];
   return {
@@ -11,7 +11,7 @@ export function _buildRestoreDescriptor(state, mailbox) {
     mailbox: effectiveMailbox,
     viewMode: state.viewMode || 'all',
     totalEmails: state.totalEmails || sorted.length,
-    topVisibleIndex: 0,
+    topVisibleIndex,
     selectedUid: state.selectedEmailId || null,
     mailboxes: state.mailboxes || [],
     mailboxesFetchedAt: state.mailboxesFetchedAt || null,

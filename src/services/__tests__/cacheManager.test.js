@@ -113,4 +113,21 @@ describe('cacheManager RestoreDescriptor', () => {
   it('getAccountCacheMailboxes returns null for unknown account', () => {
     expect(getAccountCacheMailboxes('unknown')).toBeNull();
   });
+
+  it('timestamp is not mutated on read (stale-age check stays reliable)', () => {
+    const beforeSave = Date.now();
+    saveRestoreDescriptor({
+      accountId: 'acc1', mailbox: 'INBOX', viewMode: 'all',
+      totalEmails: 10, topVisibleIndex: 0, selectedUid: null,
+      mailboxes: [], mailboxesFetchedAt: null,
+      firstWindow: [], firstWindowSavedUids: [], firstWindowArchivedUids: [],
+      timestamp: beforeSave,
+    });
+    const saved = getRestoreDescriptor('acc1', 'INBOX', 'all');
+    const originalTimestamp = saved.timestamp;
+
+    // Read again — timestamp should not change
+    const readAgain = getRestoreDescriptor('acc1', 'INBOX', 'all');
+    expect(readAgain.timestamp).toBe(originalTimestamp);
+  });
 });

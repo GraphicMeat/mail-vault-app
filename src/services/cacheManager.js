@@ -12,14 +12,17 @@ function _descriptorKey(accountId, mailbox, viewMode) {
 
 export function saveRestoreDescriptor(descriptor) {
   const key = _descriptorKey(descriptor.accountId, descriptor.mailbox, descriptor.viewMode);
-  _descriptorCache.set(key, { ...descriptor, timestamp: Date.now() });
+  const now = Date.now();
+  // timestamp = creation time (immutable, for stale-age checks)
+  // _lruTimestamp = last access time (mutable, for LRU eviction ordering)
+  _descriptorCache.set(key, { ...descriptor, timestamp: now, _lruTimestamp: now });
 
   // LRU eviction
   while (_descriptorCache.size > DESCRIPTOR_CACHE_MAX) {
     let oldestKey = null;
     let oldestTime = Infinity;
     for (const [k, v] of _descriptorCache) {
-      if (v.timestamp < oldestTime) { oldestTime = v.timestamp; oldestKey = k; }
+      if (v._lruTimestamp < oldestTime) { oldestTime = v._lruTimestamp; oldestKey = k; }
     }
     if (oldestKey) _descriptorCache.delete(oldestKey);
     else break;
@@ -29,7 +32,7 @@ export function saveRestoreDescriptor(descriptor) {
 export function getRestoreDescriptor(accountId, mailbox, viewMode) {
   const key = _descriptorKey(accountId, mailbox, viewMode);
   const cached = _descriptorCache.get(key);
-  if (cached) cached.timestamp = Date.now(); // LRU touch
+  if (cached) cached._lruTimestamp = Date.now(); // LRU touch — does not affect timestamp
   return cached || null;
 }
 

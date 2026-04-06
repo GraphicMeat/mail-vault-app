@@ -903,7 +903,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       }
       serverTrace.end('error', { message: error.message });
     } finally {
-      if (!signal.aborted) useMailStore.setState({ loading: false, loadingMore: false });
+      if (!signal.aborted) useMailStore.setState({ loading: false, loadingMore: false, restoring: false });
     }
   };
 
@@ -914,6 +914,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       useMailStore.setState({
         loading: false,
         loadingMore: false,
+        restoring: false,
         ...(!hasEmails ? {
           connectionStatus: 'error',
           connectionError: 'Loading timed out. Tap refresh to retry.',
@@ -935,6 +936,11 @@ export async function activateAccount(accountId, mailbox, options = {}) {
     }
   } finally {
     clearTimeout(loadingGuard);
+  }
+
+  // Clear restoring flag — disk hydration and/or server sync is complete
+  if (get().restoring) {
+    useMailStore.setState({ restoring: false });
   }
 
   activationTrace.end('done', { emailCount: get().emails.length });
