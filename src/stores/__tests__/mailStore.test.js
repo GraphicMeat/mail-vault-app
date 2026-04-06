@@ -72,16 +72,13 @@ vi.mock('../safeStorage', () => ({
   },
 }));
 
-const mockGetFromAccountCache = vi.fn().mockReturnValue(null);
-const mockSaveToAccountCache = vi.fn();
+const mockGetRestoreDescriptor = vi.fn().mockReturnValue(null);
+const mockSaveRestoreDescriptor = vi.fn();
 vi.mock('../../services/cacheManager', () => ({
-  getFromAccountCache: (...args) => mockGetFromAccountCache(...args),
-  saveToAccountCache: (...args) => mockSaveToAccountCache(...args),
-  getFromMailboxCache: () => null,
-  saveToMailboxCache: () => {},
-  invalidateMailboxCache: () => {},
-  invalidateAccountCache: () => {},
-  getAccountCacheEntries: () => [],
+  getRestoreDescriptor: (...args) => mockGetRestoreDescriptor(...args),
+  saveRestoreDescriptor: (...args) => mockSaveRestoreDescriptor(...args),
+  invalidateRestoreDescriptors: () => {},
+  getAccountCacheMailboxes: () => null,
   setGraphIdMap: () => {},
   getGraphMessageId: () => null,
   clearGraphIdMap: () => {},
@@ -244,36 +241,34 @@ describe('account cache restore (PERF-02)', () => {
     });
   });
 
-  it('setActiveAccount restores from cache without triggering IMAP call', async () => {
-    // Prime account cache with fake data for acc2
-    const cachedState = {
-      emails: [fakeEmail(10), fakeEmail(11)],
-      localEmails: [],
-      emailsByIndex: new Map(),
+  it('setActiveAccount restores from descriptor without triggering IMAP call', async () => {
+    // Prime restore descriptor with first-window data for acc2
+    const descriptor = {
+      accountId: 'acc2',
+      mailbox: 'INBOX',
+      viewMode: 'all',
       totalEmails: 2,
-      savedEmailIds: new Set(),
-      archivedEmailIds: new Set(),
-      loadedRanges: [{ start: 0, end: 2 }],
-      currentPage: 1,
-      hasMoreEmails: false,
-      sentEmails: [],
+      topVisibleIndex: 0,
+      selectedUid: null,
       mailboxes: [{ name: 'INBOX', path: 'INBOX', specialUse: null, children: [] }],
       mailboxesFetchedAt: Date.now(),
-      connectionStatus: 'connected',
-      activeMailbox: 'INBOX',
+      firstWindow: [fakeEmail(10), fakeEmail(11)],
+      firstWindowSavedUids: [],
+      firstWindowArchivedUids: [],
+      timestamp: Date.now(),
     };
-    mockGetFromAccountCache.mockReturnValue(cachedState);
+    mockGetRestoreDescriptor.mockReturnValue(descriptor);
 
-    // Switch to acc2 — should restore from cache
+    // Switch to acc2 — should restore from descriptor
     await useMailStore.getState().setActiveAccount('acc2');
 
-    // Verify emails restored from cache
+    // Verify first-window emails rendered instantly
     const state = useMailStore.getState();
     expect(state.emails).toHaveLength(2);
     expect(state.emails[0].uid).toBe(10);
     expect(state.activeAccountId).toBe('acc2');
 
-    // IMAP fetch should NOT have been called (no server round-trip)
+    // IMAP fetch should NOT have been called (first paint from descriptor)
     expect(mockFetchEmailLight).not.toHaveBeenCalled();
   });
 });
