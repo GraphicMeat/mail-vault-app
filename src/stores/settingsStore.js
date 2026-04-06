@@ -675,15 +675,29 @@ export const useSettingsStore = create(
 );
 
 /**
+ * Check whether the premium dev override should be honored.
+ * Returns true only when running inside the Tauri desktop app
+ * connected to the Vite dev server (npm run tauri:dev).
+ */
+export function isTauriDevPremiumOverrideEnabled() {
+  if (typeof window === 'undefined') return false;
+  if (!window.__TAURI__) return false;
+  if (!import.meta.env.DEV) return false;
+  if (window.location.origin !== 'http://localhost:5173') return false;
+  return typeof window.__MAILVAULT_FORCE_PREMIUM__ === 'boolean';
+}
+
+/**
  * Derive premium access from a billing profile.
  * - trialing, active, past_due → access
  * - canceled → access only until currentPeriodEnd
  * - incomplete, unpaid → no access
  */
 export function hasPremiumAccess(billingProfile) {
-  // Non-production override for dev/E2E testing
-  if (typeof window !== 'undefined' && window.__MAILVAULT_FORCE_PREMIUM__ === true) return true;
-  if (typeof window !== 'undefined' && window.__MAILVAULT_FORCE_PREMIUM__ === false) return false;
+  // Override honored only in Tauri dev mode (npm run tauri:dev)
+  if (isTauriDevPremiumOverrideEnabled()) {
+    return window.__MAILVAULT_FORCE_PREMIUM__;
+  }
 
   if (!billingProfile?.hasSubscription) return false;
   const { status, currentPeriodEnd, premiumAccess, clientAccessGranted } = billingProfile;

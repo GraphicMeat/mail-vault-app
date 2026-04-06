@@ -405,7 +405,7 @@ export function buildThreads(emails) {
   const rootCache = new Map(); // messageId → threadRoot (memoization to avoid O(N²) chain walks)
 
   const findRoot = (email, visited = new Set()) => {
-    const id = email.messageId || (email.uid ? `uid-${email.uid}` : null);
+    const id = email.messageId || (email.uid ? `uid-${email._accountId || ''}:${email.uid}` : null);
     if (id && rootCache.has(id)) return rootCache.get(id);
     if (id && visited.has(id)) return id;
     if (id) visited.add(id);
@@ -427,7 +427,7 @@ export function buildThreads(emails) {
       }
     } else {
       // No threading headers — this email is its own root
-      root = email.messageId || `uid-${email.uid}`;
+      root = email.messageId || `uid-${email._accountId || ''}:${email.uid}`;
     }
 
     if (id) rootCache.set(id, root);
@@ -451,15 +451,18 @@ export function buildThreads(emails) {
   }
 
   // Step 5: Subject-based fallback — merge single-email "threads" with matching subjects
-  const subjectToThreadId = new Map(); // normalizedSubject → threadId (of first multi-email thread or first occurrence)
-  const threadIdToSubject = new Map(); // threadId → normalizedSubject
+  // Scoped per account so emails from different accounts never merge by subject alone
+  const subjectToThreadId = new Map(); // "accountId\0subject" → threadId
+  const threadIdToSubjectKey = new Map(); // threadId → "accountId\0subject"
 
   for (const [threadId, threadEmails] of threadGroups) {
     const subject = normalizeSubject(threadEmails[0].subject);
-    threadIdToSubject.set(threadId, subject);
+    const acct = threadEmails[0]._accountId || '';
+    const key = `${acct}\0${subject}`;
+    threadIdToSubjectKey.set(threadId, key);
 
-    if (!subjectToThreadId.has(subject)) {
-      subjectToThreadId.set(subject, threadId);
+    if (!subjectToThreadId.has(key)) {
+      subjectToThreadId.set(key, threadId);
     }
   }
 
@@ -479,18 +482,17 @@ export function buildThreads(emails) {
     }
   }
 
-  // Second pass: merge orphans into canonical threads by subject
-  // Also check other orphans already promoted to mergedGroups
+  // Second pass: merge orphans into canonical threads by subject (within same account)
   for (const [threadId, threadEmails] of orphans) {
-    const subject = threadIdToSubject.get(threadId);
-    const canonicalThreadId = subjectToThreadId.get(subject);
+    const key = threadIdToSubjectKey.get(threadId);
+    const canonicalThreadId = subjectToThreadId.get(key);
 
     if (canonicalThreadId !== threadId && mergedGroups.has(canonicalThreadId)) {
       mergedGroups.get(canonicalThreadId).push(...threadEmails);
     } else {
       // First orphan with this subject becomes the canonical target for future orphans
       mergedGroups.set(threadId, [...threadEmails]);
-      subjectToThreadId.set(subject, threadId);
+      subjectToThreadId.set(key, threadId);
     }
   }
 
@@ -569,7 +571,7 @@ function findThreadRoot(email, byMessageId, visited = new Set()) {
     return email.inReplyTo;
   }
 
-  return email.messageId || `uid-${email.uid}`;
+  return email.messageId || `uid-${email._accountId || ''}:${email.uid}`;
 }
 
 /**
@@ -646,12 +648,14 @@ export function updateThreads(existingThreads, newEmails, removedUids, allEmails
 
   // Add new emails
   if (newEmails.length > 0) {
-    // Build subject-to-threadId index for orphan merging
-    const subjectToThreadId = new Map();
+    // Build subject-to-threadId index for orphan merging (scoped per account)
+    const subjectToThreadId = new Map(); // "accountId\0subject" → threadId
     for (const [threadId, thread] of threads) {
       const subj = normalizeSubject(thread.emails[0]?.subject);
-      if (!subjectToThreadId.has(subj) || thread.emails.length > 1) {
-        subjectToThreadId.set(subj, threadId);
+      const acct = thread.emails[0]?._accountId || '';
+      const key = `${acct}\0${subj}`;
+      if (!subjectToThreadId.has(key) || thread.emails.length > 1) {
+        subjectToThreadId.set(key, threadId);
       }
     }
 
@@ -662,10 +666,11 @@ export function updateThreads(existingThreads, newEmails, removedUids, allEmails
       // Try to find existing thread
       let targetThreadId = threadId;
       if (!threads.has(targetThreadId)) {
-        // Orphan: try subject-based merge if no RFC headers
+        // Orphan: try subject-based merge if no RFC headers (within same account)
         if (!hasRfcHeaders) {
           const subj = normalizeSubject(email.subject);
-          const canonical = subjectToThreadId.get(subj);
+          const key = `${email._accountId || ''}\0${subj}`;
+          const canonical = subjectToThreadId.get(key);
           if (canonical && threads.has(canonical)) {
             targetThreadId = canonical;
           }
@@ -674,8 +679,8 @@ export function updateThreads(existingThreads, newEmails, removedUids, allEmails
 
       if (threads.has(targetThreadId)) {
         const existing = threads.get(targetThreadId);
-        // Avoid duplicates
-        if (!existing.emails.some(e => e.uid === email.uid)) {
+        // Avoid duplicates (compound identity: account + uid)
+        if (!existing.emails.some(e => e.uid === email.uid && (e._accountId || '') === (email._accountId || ''))) {
           const updatedEmails = [...existing.emails, email];
           rebuildThreadMeta(targetThreadId, updatedEmails);
         }
@@ -684,8 +689,9 @@ export function updateThreads(existingThreads, newEmails, removedUids, allEmails
         rebuildThreadMeta(threadId, [email]);
         // Register subject for future orphan merging
         const subj = normalizeSubject(email.subject);
-        if (!subjectToThreadId.has(subj)) {
-          subjectToThreadId.set(subj, threadId);
+        const key = `${email._accountId || ''}\0${subj}`;
+        if (!subjectToThreadId.has(key)) {
+          subjectToThreadId.set(key, threadId);
         }
       }
     }

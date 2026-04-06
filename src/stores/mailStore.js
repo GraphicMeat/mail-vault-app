@@ -20,7 +20,7 @@ function _resolveUnifiedContext(uid, state) {
   if (!email?._accountId) return null;
   const account = state.accounts.find(a => a.id === email._accountId);
   if (!account) return null;
-  // Determine the actual mailbox: use _mailbox if tagged, detect sent emails, default to INBOX
+  // Determine the actual mailbox: use _mailbox if tagged, detect sent emails, fall back to INBOX
   let mailbox = email._mailbox || 'INBOX';
   if (!email._mailbox && email._isSent) {
     // Try to find the Sent folder name from the account's mailboxes
@@ -61,6 +61,9 @@ let _activeController = null;
 
 // ── AbortController for progressive loading — cancels background loading on switch ──
 let _loadAbortController = null;
+
+// ── Unified folder cache — stores merged emails per folder for instant switching ──
+const _unifiedFolderCache = new Map(); // folderId → { emails: [...], timestamp }
 
 // Module-level range retry state — avoids polluting Zustand store with dynamic keys
 const _rangeRetryDelays = new Map();
@@ -548,6 +551,7 @@ export const useMailStore = create((set, get) => ({
 
   // Unified inbox mode
   unifiedInbox: false,
+  unifiedFolder: 'INBOX', // Which folder is active in unified mode
 
   // Unread counts across all accounts
   totalUnreadCount: 0,
@@ -654,10 +658,10 @@ export const useMailStore = create((set, get) => ({
   
   // Update sorted emails (memoization for performance)
   updateSortedEmails: () => {
-    const { emails, localEmails, viewMode, savedEmailIds, archivedEmailIds, serverUidSet, unifiedInbox, _sortedEmailsFingerprint } = get();
+    const { emails, localEmails, viewMode, savedEmailIds, archivedEmailIds, serverUidSet, unifiedInbox, activeAccountId, activeMailbox, _sortedEmailsFingerprint } = get();
 
     // Fingerprint check: skip if the input set hasn't materially changed
-    const fp = `${viewMode}-${emails.length}-${emails[0]?.uid || 0}-${emails[emails.length - 1]?.uid || 0}-${localEmails.length}-${archivedEmailIds.size}-${savedEmailIds.size}-${serverUidSet.size}-${_flagChangeCounter}`;
+    const fp = `${activeAccountId}-${activeMailbox}-${viewMode}-${emails.length}-${emails[0]?.uid || 0}-${emails[emails.length - 1]?.uid || 0}-${localEmails.length}-${archivedEmailIds.size}-${savedEmailIds.size}-${serverUidSet.size}-${_flagChangeCounter}`;
     if (fp === _sortedEmailsFingerprint) return;
 
     // In unified inbox, UIDs collide across accounts — use compound key for dedup
@@ -924,7 +928,7 @@ export const useMailStore = create((set, get) => ({
       try {
         // Load headers, saved/archived IDs, and mailboxes in parallel
         const [cachedHeaders, archivedEmailIds, savedEmailIds, cachedMailboxEntry] = await Promise.all([
-          db.getEmailHeadersPartial(account.id, 'INBOX', 200),
+          db.getEmailHeadersPartial(account.id, 'INBOX', 500),
           db.getArchivedEmailIds(account.id, 'INBOX'),
           db.getSavedEmailIds(account.id, 'INBOX'),
           db.getCachedMailboxEntry(account.id).catch(() => null),
@@ -1167,7 +1171,7 @@ export const useMailStore = create((set, get) => ({
         // Fire-and-forget: silent email + folder refresh in background
         // loadMailboxes runs inside activateAccount, so this covers both
         get().activateAccount(accountId, cachedAccount.activeMailbox || mailbox, { _backgroundRefresh: true }).catch(() => {});
-        get().loadSentHeaders(accountId);
+        setTimeout(() => get().loadSentHeaders(accountId), 150);
 
         activationTrace.end('cache-hit-return');
         return;
@@ -1258,7 +1262,7 @@ export const useMailStore = create((set, get) => ({
 
         // Load partial cached headers (200 most recent) + saved/archived IDs in parallel
         const [cachedHeaders, archivedEmailIds, savedEmailIds] = await Promise.all([
-          db.getEmailHeadersPartial(accountId, effectiveMailbox, 200),
+          db.getEmailHeadersPartial(accountId, effectiveMailbox, 500),
           db.getArchivedEmailIds(accountId, effectiveMailbox),
           db.getSavedEmailIds(accountId, effectiveMailbox),
         ]);
@@ -1479,7 +1483,7 @@ export const useMailStore = create((set, get) => ({
             if (uidMap.size < serverTotal) {
               set({ hasMoreEmails: true, totalEmails: serverTotal });
               if (_loadMoreTimer) clearTimeout(_loadMoreTimer);
-              _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 200);
+              _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 500);
             }
 
             // Save to account cache
@@ -1502,7 +1506,7 @@ export const useMailStore = create((set, get) => ({
             if (uidMap.size < serverTotal) {
               set({ hasMoreEmails: true });
               if (_loadMoreTimer) clearTimeout(_loadMoreTimer);
-              _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 200);
+              _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 500);
             }
 
             if (!get().unifiedInbox) _saveToAccountCache(accountId, get());
@@ -1634,10 +1638,10 @@ export const useMailStore = create((set, get) => ({
           serverUids: get().serverUidSet,
         }).catch(e => console.warn('[activateAccount] Failed to cache headers:', e));
 
-        // Continue loading more if partial
+        // Continue loading more if partial — delay lets first render settle
         if (sorted.length < serverTotal) {
           if (_loadMoreTimer) clearTimeout(_loadMoreTimer);
-          _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 200);
+          _loadMoreTimer = setTimeout(() => { _loadMoreTimer = null; get().loadMoreEmails(); }, 500);
         }
 
         serverTrace.end('done');
@@ -1735,6 +1739,7 @@ export const useMailStore = create((set, get) => ({
 
       set({
         unifiedInbox: true,
+        unifiedFolder: 'INBOX',
         activeMailbox: 'UNIFIED',
         selectedEmailId: null,
         selectedEmail: null,
@@ -1742,16 +1747,59 @@ export const useMailStore = create((set, get) => ({
         selectedThread: null,
         selectedEmailIds: new Set(),
       });
-      get().loadUnifiedInbox(preUnifiedSnapshot);
+      get().loadUnifiedInbox(preUnifiedSnapshot, 'INBOX');
     } else {
       // Abort any in-progress unified inbox loading
       if (_loadAbortController) _loadAbortController.abort();
-      set({ unifiedInbox: false, loadingProgress: null });
+      _unifiedFolderCache.clear();
+      set({ unifiedInbox: false, unifiedFolder: 'INBOX', loadingProgress: null });
     }
   },
 
-  loadUnifiedInbox: async (preUnifiedSnapshot = null) => {
-    const { accounts } = get();
+  // Switch folder within unified inbox mode
+  switchUnifiedFolder: (mailbox) => {
+    const { unifiedInbox } = get();
+    if (!unifiedInbox) return;
+
+    // Check in-memory cache for instant display
+    const cached = _unifiedFolderCache.get(mailbox);
+    if (cached && (Date.now() - cached.timestamp < 5 * 60 * 1000)) {
+      // Instant restore from cache
+      const allServerUids = new Set(cached.emails.map(e => e.uid));
+      set({
+        unifiedFolder: mailbox,
+        emails: cached.emails,
+        serverUidSet: allServerUids,
+        totalEmails: cached.emails.length,
+        _sortedEmailsFingerprint: '',
+        selectedEmailId: null,
+        selectedEmail: null,
+        selectedEmailSource: null,
+        selectedThread: null,
+        selectedEmailIds: new Set(),
+        loading: false,
+      });
+      get().updateSortedEmails();
+      // Background refresh
+      get().loadUnifiedInbox(null, mailbox);
+      return;
+    }
+
+    set({
+      unifiedFolder: mailbox,
+      loading: true,
+      selectedEmailId: null,
+      selectedEmail: null,
+      selectedEmailSource: null,
+      selectedThread: null,
+      selectedEmailIds: new Set(),
+    });
+    get().loadUnifiedInbox(null, mailbox);
+  },
+
+  loadUnifiedInbox: async (preUnifiedSnapshot = null, mailbox = null) => {
+    const { accounts, unifiedFolder } = get();
+    const targetFolder = mailbox || unifiedFolder || 'INBOX';
     const { hiddenAccounts } = useSettingsStore.getState();
 
     // Abort any previous progressive loading
@@ -1761,7 +1809,38 @@ export const useMailStore = create((set, get) => ({
 
     const CHUNK_SIZE = 50;
 
-    // Collect cached INBOX emails from all visible accounts
+    // Resolve the unified folder ID to actual IMAP mailbox paths per account.
+    // Folder names vary by provider (e.g. "Sent" vs "Sent Mail" vs "[Gmail]/Sent Mail").
+    // We use specialUse flags and common name patterns to find the right folder.
+    const SPECIAL_USE_MAP = {
+      'Sent': '\\Sent',
+      'Drafts': '\\Drafts',
+      'Trash': '\\Trash',
+      'Archive': '\\Archive',
+    };
+
+    function resolveMailboxPath(accountMailboxes, folderId) {
+      if (folderId === 'INBOX') return 'INBOX';
+      const specialUse = SPECIAL_USE_MAP[folderId];
+      if (!accountMailboxes || !accountMailboxes.length) return folderId;
+
+      // Search recursively through mailbox tree
+      const findBox = (boxes) => {
+        for (const box of boxes) {
+          if (specialUse && (box.specialUse === specialUse || box.special_use === specialUse)) return box.path;
+          if (box.name?.toLowerCase() === folderId.toLowerCase()) return box.path;
+          if (box.path?.toLowerCase() === folderId.toLowerCase()) return box.path;
+          if (box.children?.length) {
+            const found = findBox(box.children);
+            if (found) return found;
+          }
+        }
+        return null;
+      };
+      return findBox(accountMailboxes) || folderId;
+    }
+
+    // Collect cached emails from the target folder across all visible accounts
     // Try in-memory cache first, fall back to disk-cached headers.json
     const allEmails = [];
     const diskFetchPromises = [];
@@ -1770,26 +1849,38 @@ export const useMailStore = create((set, get) => ({
       if (hiddenAccounts[account.id]) continue;
 
       const cached = _getFromAccountCache(account.id);
+      // Resolve the actual folder path for this account
+      const accountMailboxes = cached?.mailboxes || [];
+      const resolvedPath = resolveMailboxPath(accountMailboxes, targetFolder);
+
       if (cached && cached.emails) {
-        // Only include emails that were from INBOX
-        if (cached.activeMailbox && cached.activeMailbox !== 'INBOX') continue;
+        // Only include emails from the resolved folder
+        if (cached.activeMailbox && cached.activeMailbox !== resolvedPath) {
+          // Cache is for a different folder — try mailbox-level cache or disk
+          const mailboxCached = _getFromMailboxCache(account.id, resolvedPath);
+          if (mailboxCached && mailboxCached.emails) {
+            for (const email of mailboxCached.emails) {
+              allEmails.push({ ...email, _accountEmail: account.email, _accountId: account.id });
+            }
+          } else {
+            diskFetchPromises.push(
+              db.getEmailHeadersPartial(account.id, resolvedPath, 500).then(diskData => {
+                if (!diskData || !diskData.emails) return [];
+                return diskData.emails.map(email => ({ ...email, _accountEmail: account.email, _accountId: account.id }));
+              }).catch(() => [])
+            );
+          }
+          continue;
+        }
         for (const email of cached.emails) {
-          allEmails.push({
-            ...email,
-            _accountEmail: account.email,
-            _accountId: account.id,
-          });
+          allEmails.push({ ...email, _accountEmail: account.email, _accountId: account.id });
         }
       } else {
         // No in-memory cache — read from disk (headers.json)
         diskFetchPromises.push(
-          db.getEmailHeadersPartial(account.id, 'INBOX', 500).then(diskData => {
+          db.getEmailHeadersPartial(account.id, resolvedPath, 500).then(diskData => {
             if (!diskData || !diskData.emails) return [];
-            return diskData.emails.map(email => ({
-              ...email,
-              _accountEmail: account.email,
-              _accountId: account.id,
-            }));
+            return diskData.emails.map(email => ({ ...email, _accountEmail: account.email, _accountId: account.id }));
           }).catch(() => [])
         );
       }
@@ -1829,6 +1920,9 @@ export const useMailStore = create((set, get) => ({
       const dateB = b.date ? new Date(b.date).getTime() : 0;
       return dateB - dateA;
     });
+
+    // Cache the merged result for instant folder switching
+    _unifiedFolderCache.set(targetFolder, { emails: allEmails, timestamp: Date.now() });
 
     // Progressive rendering: commit first chunk immediately, then background chunks
     const total = allEmails.length;
@@ -2115,7 +2209,7 @@ export const useMailStore = create((set, get) => ({
     } else if (cachedHeaders && cachedHeaders.totalCached > 0) {
       // No emails in store but cache exists — load partial (200 most recent) for fast display
       console.log('[loadEmails] Store empty, loading 200 from cache (total cached: %d)', cachedHeaders.totalCached);
-      const partialHeaders = await db.getEmailHeadersPartial(activeAccountId, activeMailbox, 200);
+      const partialHeaders = await db.getEmailHeadersPartial(activeAccountId, activeMailbox, 500);
       if (isStale()) return;
 
       if (partialHeaders && partialHeaders.emails.length > 0) {
@@ -3098,7 +3192,8 @@ export const useMailStore = create((set, get) => ({
     const { sortedEmails, sentEmails, archivedEmailIds, viewMode } = get();
 
     // Fingerprint check: skip merge+sort if inputs haven't changed
-    const fp = `${viewMode}-${sortedEmails.length}-${sortedEmails[0]?.uid || 0}-${sortedEmails[sortedEmails.length - 1]?.uid || 0}-${sentEmails.length}-${sentEmails[0]?.uid || 0}-${_flagChangeCounter}-${archivedEmailIds.size}`;
+    const { activeAccountId, activeMailbox } = get();
+    const fp = `${activeAccountId}-${activeMailbox}-${viewMode}-${sortedEmails.length}-${sortedEmails[0]?.uid || 0}-${sortedEmails[sortedEmails.length - 1]?.uid || 0}-${sentEmails.length}-${sentEmails[0]?.uid || 0}-${_flagChangeCounter}-${archivedEmailIds.size}`;
     if (fp === _chatEmailsFingerprint && _chatEmailsCache.length > 0) return _chatEmailsCache;
 
     if (sentEmails.length === 0) {

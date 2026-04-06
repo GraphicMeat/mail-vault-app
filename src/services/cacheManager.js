@@ -1,107 +1,61 @@
-// ── LRU Caches & Graph ID Map ─────────────────────────────────────────────
-// Pure data structures — no store dependency.
-// Previously scattered as module-level state in mailStore.js.
+// ── Lightweight Restore Cache & Graph ID Map ──────────────────────────────
+// Stores compact RestoreDescriptors for instant first-window render on switch.
+// No heavyweight state blobs — store is the sole owner of list data.
 
-// ── Mailbox LRU cache (max 2 entries) — instant mailbox switching ────
-const _mailboxCache = new Map();
-const MAILBOX_CACHE_MAX = 2;
+// ── Restore descriptor cache (max 8 entries) ──────────────────────────────
+const _descriptorCache = new Map();
+const DESCRIPTOR_CACHE_MAX = 8;
 
-export function saveToMailboxCache(accountId, mailbox, state) {
-  const key = `${accountId}:${mailbox}`;
-  _mailboxCache.set(key, {
-    emails: state.emails,
-    localEmails: state.localEmails,
-    emailsByIndex: state.emailsByIndex,
-    totalEmails: state.totalEmails,
-    savedEmailIds: state.savedEmailIds,
-    archivedEmailIds: state.archivedEmailIds,
-    loadedRanges: state.loadedRanges,
-    currentPage: state.currentPage,
-    hasMoreEmails: state.hasMoreEmails,
-    timestamp: Date.now(),
-  });
+function _descriptorKey(accountId, mailbox, viewMode) {
+  return `${accountId}:${mailbox}:${viewMode}`;
+}
+
+export function saveRestoreDescriptor(descriptor) {
+  const key = _descriptorKey(descriptor.accountId, descriptor.mailbox, descriptor.viewMode);
+  _descriptorCache.set(key, { ...descriptor, timestamp: Date.now() });
 
   // LRU eviction
-  if (_mailboxCache.size > MAILBOX_CACHE_MAX) {
+  while (_descriptorCache.size > DESCRIPTOR_CACHE_MAX) {
     let oldestKey = null;
     let oldestTime = Infinity;
-    for (const [k, v] of _mailboxCache) {
-      if (v.timestamp < oldestTime) {
-        oldestTime = v.timestamp;
-        oldestKey = k;
-      }
+    for (const [k, v] of _descriptorCache) {
+      if (v.timestamp < oldestTime) { oldestTime = v.timestamp; oldestKey = k; }
     }
-    if (oldestKey) _mailboxCache.delete(oldestKey);
+    if (oldestKey) _descriptorCache.delete(oldestKey);
+    else break;
   }
 }
 
-export function getFromMailboxCache(accountId, mailbox) {
-  const key = `${accountId}:${mailbox}`;
-  const cached = _mailboxCache.get(key);
-  if (cached) {
-    cached.timestamp = Date.now(); // Touch for LRU
-  }
+export function getRestoreDescriptor(accountId, mailbox, viewMode) {
+  const key = _descriptorKey(accountId, mailbox, viewMode);
+  const cached = _descriptorCache.get(key);
+  if (cached) cached.timestamp = Date.now(); // LRU touch
   return cached || null;
 }
 
-export function invalidateMailboxCache(accountId) {
-  for (const key of _mailboxCache.keys()) {
+export function invalidateRestoreDescriptors(accountId) {
+  for (const key of _descriptorCache.keys()) {
     if (key.startsWith(`${accountId}:`)) {
-      _mailboxCache.delete(key);
+      _descriptorCache.delete(key);
     }
   }
 }
 
-// ── Account LRU cache (max 8 entries) — instant account switching ────
-const _accountCache = new Map();
-const ACCOUNT_CACHE_MAX = 8;
-
-export function saveToAccountCache(accountId, state) {
-  _accountCache.set(accountId, {
-    emails: state.emails,
-    localEmails: state.localEmails,
-    emailsByIndex: state.emailsByIndex,
-    totalEmails: state.totalEmails,
-    savedEmailIds: state.savedEmailIds,
-    archivedEmailIds: state.archivedEmailIds,
-    loadedRanges: state.loadedRanges,
-    currentPage: state.currentPage,
-    hasMoreEmails: state.hasMoreEmails,
-    sentEmails: state.sentEmails,
-    mailboxes: state.mailboxes,
-    mailboxesFetchedAt: state.mailboxesFetchedAt ?? null,
-    connectionStatus: state.connectionStatus,
-    activeMailbox: state.activeMailbox,
-    lastSyncTimestamp: Date.now(),
-    timestamp: Date.now(),
-  });
-
-  // LRU eviction
-  if (_accountCache.size > ACCOUNT_CACHE_MAX) {
-    let oldestKey = null;
-    let oldestTime = Infinity;
-    for (const [k, v] of _accountCache) {
-      if (v.timestamp < oldestTime) {
-        oldestTime = v.timestamp;
-        oldestKey = k;
-      }
+/**
+ * Returns the mailbox tree from the most recent descriptor for an account.
+ * Used by sidebar and unified inbox to access cached mailbox metadata
+ * without storing a separate heavyweight account snapshot.
+ */
+export function getAccountCacheMailboxes(accountId) {
+  let newest = null;
+  let newestTime = 0;
+  for (const [key, desc] of _descriptorCache) {
+    if (key.startsWith(`${accountId}:`) && desc.timestamp > newestTime) {
+      newest = desc;
+      newestTime = desc.timestamp;
     }
-    if (oldestKey) _accountCache.delete(oldestKey);
   }
-}
-
-export function getFromAccountCache(accountId) {
-  const cached = _accountCache.get(accountId);
-  if (cached) cached.timestamp = Date.now();
-  return cached || null;
-}
-
-export function invalidateAccountCache(accountId) {
-  _accountCache.delete(accountId);
-}
-
-export function getAccountCacheEntries() {
-  return _accountCache;
+  return newest?.mailboxes || null;
 }
 
 // ── Graph ID map (UID → Graph message ID) ────
@@ -109,9 +63,6 @@ const _graphIdMap = new Map();
 
 export function setGraphIdMap(accountId, mailbox, uidToGraphId) {
   _graphIdMap.set(`${accountId}:${mailbox}`, uidToGraphId);
-
-  // Fire-and-forget: persist to disk so map survives app restarts
-  // Lazy import avoids circular dependency (db.js → cacheManager.js)
   import('./db.js').then(db => {
     const obj = Object.fromEntries(uidToGraphId);
     db.saveGraphIdMap(accountId, mailbox, obj)
@@ -138,8 +89,7 @@ export function clearGraphIdMap(accountId) {
  */
 export async function restoreGraphIdMap(accountId, mailbox) {
   const key = `${accountId}:${mailbox}`;
-  if (_graphIdMap.has(key)) return; // Already in memory
-
+  if (_graphIdMap.has(key)) return;
   try {
     const db = await import('./db.js');
     const saved = await db.loadGraphIdMap(accountId, mailbox);

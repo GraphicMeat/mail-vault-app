@@ -12,7 +12,9 @@ import {
   getAvatarColor,
   getInitials,
   isDifferentDay,
-  isFromUser
+  isFromUser,
+  buildThreads,
+  updateThreads
 } from '../../src/utils/emailParser.js';
 
 // ── getCorrespondent ─────────────────────────────────────────────────
@@ -600,5 +602,104 @@ describe('groupByTopic', () => {
   it('handles empty input', () => {
     const topics = groupByTopic([]);
     expect(topics.size).toBe(0);
+  });
+});
+
+// ── buildThreads — cross-account isolation ──────────────────────────
+
+describe('buildThreads — cross-account isolation', () => {
+  it('does not collapse same UID from different accounts into one thread', () => {
+    const emails = [
+      { uid: 100, _accountId: 'acct-a', subject: 'Hello A', date: '2024-01-01T10:00:00Z', from: { address: 'a@a.com' } },
+      { uid: 100, _accountId: 'acct-b', subject: 'Hello B', date: '2024-01-01T11:00:00Z', from: { address: 'b@b.com' } },
+    ];
+    const threads = buildThreads(emails);
+    expect(threads.size).toBe(2);
+
+    const allEmails = Array.from(threads.values()).flatMap(t => t.emails);
+    expect(allEmails).toHaveLength(2);
+    const accountIds = allEmails.map(e => e._accountId);
+    expect(accountIds).toContain('acct-a');
+    expect(accountIds).toContain('acct-b');
+  });
+
+  it('does not merge orphans by subject across accounts', () => {
+    const emails = [
+      { uid: 1, _accountId: 'acct-a', subject: 'Project Update', date: '2024-01-01T10:00:00Z', from: { address: 'a@a.com' } },
+      { uid: 2, _accountId: 'acct-b', subject: 'Project Update', date: '2024-01-01T11:00:00Z', from: { address: 'b@b.com' } },
+    ];
+    const threads = buildThreads(emails);
+    // Each account's email should be in a separate thread
+    expect(threads.size).toBe(2);
+  });
+
+  it('still merges orphans by subject within the same account', () => {
+    const emails = [
+      { uid: 1, _accountId: 'acct-a', subject: 'Project Update', date: '2024-01-01T10:00:00Z', from: { address: 'a@a.com' } },
+      { uid: 2, _accountId: 'acct-a', subject: 'Re: Project Update', date: '2024-01-01T11:00:00Z', from: { address: 'a2@a.com' } },
+    ];
+    const threads = buildThreads(emails);
+    // Both should merge into one thread (same account, same normalized subject)
+    expect(threads.size).toBe(1);
+    const thread = Array.from(threads.values())[0];
+    expect(thread.emails).toHaveLength(2);
+  });
+
+  it('threads by RFC headers across accounts when messageId/references match', () => {
+    // Real cross-account threading via RFC headers should still work
+    const emails = [
+      { uid: 1, _accountId: 'acct-a', messageId: '<msg-1@a.com>', subject: 'Hello', date: '2024-01-01T10:00:00Z', from: { address: 'a@a.com' } },
+      { uid: 1, _accountId: 'acct-b', messageId: '<reply-1@b.com>', inReplyTo: '<msg-1@a.com>', references: ['<msg-1@a.com>'], subject: 'Re: Hello', date: '2024-01-01T11:00:00Z', from: { address: 'b@b.com' } },
+    ];
+    const threads = buildThreads(emails);
+    // RFC headers link them regardless of account — this is correct behavior
+    expect(threads.size).toBe(1);
+    expect(Array.from(threads.values())[0].emails).toHaveLength(2);
+  });
+
+  it('single-account threading still works normally', () => {
+    const emails = [
+      { uid: 1, messageId: '<msg1@x.com>', subject: 'Topic', date: '2024-01-01T10:00:00Z', from: { address: 'x@x.com' } },
+      { uid: 2, messageId: '<msg2@x.com>', inReplyTo: '<msg1@x.com>', references: ['<msg1@x.com>'], subject: 'Re: Topic', date: '2024-01-01T11:00:00Z', from: { address: 'y@x.com' } },
+      { uid: 3, messageId: '<msg3@x.com>', subject: 'Other', date: '2024-01-01T12:00:00Z', from: { address: 'z@x.com' } },
+    ];
+    const threads = buildThreads(emails);
+    expect(threads.size).toBe(2);
+    const sizes = Array.from(threads.values()).map(t => t.emails.length).sort();
+    expect(sizes).toEqual([1, 2]);
+  });
+});
+
+// ── updateThreads — cross-account duplicate detection ───────────────
+
+describe('updateThreads — cross-account duplicate detection', () => {
+  it('does not treat same UID from different accounts as duplicate', () => {
+    const initial = [
+      { uid: 50, _accountId: 'acct-a', messageId: '<a50@a.com>', subject: 'Test', date: '2024-01-01T10:00:00Z', from: { address: 'a@a.com' } },
+    ];
+    const threads = buildThreads(initial);
+    expect(threads.size).toBe(1);
+
+    const newEmail = { uid: 50, _accountId: 'acct-b', messageId: '<a50@a.com>', inReplyTo: '<a50@a.com>', references: ['<a50@a.com>'], subject: 'Re: Test', date: '2024-01-01T11:00:00Z', from: { address: 'b@b.com' } };
+    const allEmails = [...initial, newEmail];
+    const updated = updateThreads(threads, [newEmail], new Set(), allEmails);
+
+    // Both emails should be present (not deduplicated)
+    const allThreadEmails = Array.from(updated.values()).flatMap(t => t.emails);
+    expect(allThreadEmails).toHaveLength(2);
+  });
+
+  it('subject-based orphan merge in updateThreads respects account scope', () => {
+    const initial = [
+      { uid: 1, _accountId: 'acct-a', subject: 'Status', date: '2024-01-01T10:00:00Z', from: { address: 'a@a.com' } },
+    ];
+    const threads = buildThreads(initial);
+
+    const newEmail = { uid: 1, _accountId: 'acct-b', subject: 'Status', date: '2024-01-02T10:00:00Z', from: { address: 'b@b.com' } };
+    const allEmails = [...initial, newEmail];
+    const updated = updateThreads(threads, [newEmail], new Set(), allEmails);
+
+    // Should be two separate threads, not merged by subject across accounts
+    expect(updated.size).toBe(2);
   });
 });

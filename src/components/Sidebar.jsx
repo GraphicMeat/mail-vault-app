@@ -60,6 +60,42 @@ function getMailboxDisplayName(name) {
   return name;
 }
 
+const UNIFIED_FOLDERS = [
+  { id: 'INBOX', name: 'Inbox', icon: Inbox },
+  { id: 'Sent', name: 'Sent', icon: Send, specialUse: '\\Sent' },
+  { id: 'Drafts', name: 'Drafts', icon: File, specialUse: '\\Drafts' },
+  { id: 'Trash', name: 'Trash', icon: Trash2, specialUse: '\\Trash' },
+  { id: 'Archive', name: 'Archive', icon: Archive, specialUse: '\\Archive' },
+];
+
+function UnifiedFolderList() {
+  const unifiedFolder = useMailStore(s => s.unifiedFolder);
+  const switchUnifiedFolder = useMailStore(s => s.switchUnifiedFolder);
+
+  return (
+    <div className="overflow-y-auto p-3 flex-1" style={{ minHeight: 60 }}>
+      <div className="text-xs text-mail-text-muted uppercase tracking-wide mb-2">
+        All Accounts
+      </div>
+      {UNIFIED_FOLDERS.map(folder => {
+        const isActive = unifiedFolder === folder.id;
+        const Icon = folder.icon;
+        return (
+          <div
+            key={folder.id}
+            className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors
+                       ${isActive ? 'bg-mail-accent/10 text-mail-accent' : 'text-mail-text hover:bg-mail-surface-hover'}`}
+            onClick={() => switchUnifiedFolder(folder.id)}
+          >
+            <Icon size={16} />
+            <span className="text-sm truncate">{folder.name}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function BackupStatusIcon({ accountId, onClick }) {
   const backupState = useSettingsStore(s => s.backupState?.[accountId]);
   const backupGlobalEnabled = useSettingsStore(s => s.backupGlobalEnabled);
@@ -819,8 +855,10 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         </div>
       </div>
 
-      {/* Mailboxes — hidden in unified inbox mode */}
-      {unifiedInbox && <div className="flex-1" />}
+      {/* Mailboxes — show common folders in unified mode, full tree otherwise */}
+      {unifiedInbox && (
+        <UnifiedFolderList />
+      )}
       {!unifiedInbox && <div className="overflow-y-auto p-3 flex-1" style={{ minHeight: 60 }}>
         <div className="text-xs text-mail-text-muted uppercase tracking-wide mb-2">
           Folders

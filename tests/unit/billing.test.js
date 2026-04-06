@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
+// @vitest-environment jsdom
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock safeStorage (required by settingsStore's persist middleware)
 vi.mock('../../src/stores/safeStorage', () => {
@@ -12,9 +13,110 @@ vi.mock('../../src/stores/safeStorage', () => {
   };
 });
 
-const { hasPremiumAccess } = await import('../../src/stores/settingsStore');
+const { hasPremiumAccess, isTauriDevPremiumOverrideEnabled } = await import('../../src/stores/settingsStore');
 
-describe('hasPremiumAccess', () => {
+/** Set up globals to simulate a Tauri dev environment. */
+function setupTauriDev(overrideValue) {
+  window.__TAURI__ = {};
+  window.__MAILVAULT_FORCE_PREMIUM__ = overrideValue;
+  // import.meta.env.DEV is true in vitest, so we only need location
+  Object.defineProperty(window, 'location', {
+    value: { origin: 'http://localhost:5173' },
+    writable: true,
+    configurable: true,
+  });
+}
+
+function cleanupGlobals() {
+  delete window.__TAURI__;
+  delete window.__MAILVAULT_FORCE_PREMIUM__;
+}
+
+describe('isTauriDevPremiumOverrideEnabled', () => {
+  afterEach(cleanupGlobals);
+
+  it('returns true when Tauri + DEV + localhost:5173 + boolean override', () => {
+    setupTauriDev(true);
+    expect(isTauriDevPremiumOverrideEnabled()).toBe(true);
+  });
+
+  it('returns true when override is false (boolean)', () => {
+    setupTauriDev(false);
+    expect(isTauriDevPremiumOverrideEnabled()).toBe(true);
+  });
+
+  it('returns false when __TAURI__ is absent (plain browser dev)', () => {
+    window.__MAILVAULT_FORCE_PREMIUM__ = true;
+    Object.defineProperty(window, 'location', {
+      value: { origin: 'http://localhost:5173' },
+      writable: true, configurable: true,
+    });
+    expect(isTauriDevPremiumOverrideEnabled()).toBe(false);
+  });
+
+  it('returns false when origin is not the dev server (packaged/debug build)', () => {
+    window.__TAURI__ = {};
+    window.__MAILVAULT_FORCE_PREMIUM__ = true;
+    Object.defineProperty(window, 'location', {
+      value: { origin: 'tauri://localhost' },
+      writable: true, configurable: true,
+    });
+    expect(isTauriDevPremiumOverrideEnabled()).toBe(false);
+  });
+
+  it('returns false when override is a non-boolean value', () => {
+    setupTauriDev('yes');
+    expect(isTauriDevPremiumOverrideEnabled()).toBe(false);
+  });
+});
+
+describe('hasPremiumAccess — dev override gate', () => {
+  afterEach(cleanupGlobals);
+
+  it('override true grants premium in tauri dev', () => {
+    setupTauriDev(true);
+    expect(hasPremiumAccess(null)).toBe(true);
+  });
+
+  it('override false denies premium in tauri dev', () => {
+    setupTauriDev(false);
+    expect(hasPremiumAccess({ hasSubscription: true, status: 'active', premiumAccess: true })).toBe(false);
+  });
+
+  it('override is ignored in plain browser dev (no __TAURI__)', () => {
+    window.__MAILVAULT_FORCE_PREMIUM__ = true;
+    Object.defineProperty(window, 'location', {
+      value: { origin: 'http://localhost:5173' },
+      writable: true, configurable: true,
+    });
+    // Falls through to billing logic — null profile → false
+    expect(hasPremiumAccess(null)).toBe(false);
+  });
+
+  it('override is ignored in packaged build (wrong origin)', () => {
+    window.__TAURI__ = {};
+    window.__MAILVAULT_FORCE_PREMIUM__ = true;
+    Object.defineProperty(window, 'location', {
+      value: { origin: 'tauri://localhost' },
+      writable: true, configurable: true,
+    });
+    expect(hasPremiumAccess(null)).toBe(false);
+  });
+
+  it('override is ignored in tauri build --debug (wrong origin)', () => {
+    window.__TAURI__ = {};
+    window.__MAILVAULT_FORCE_PREMIUM__ = true;
+    Object.defineProperty(window, 'location', {
+      value: { origin: 'https://tauri.localhost' },
+      writable: true, configurable: true,
+    });
+    expect(hasPremiumAccess(null)).toBe(false);
+  });
+});
+
+describe('hasPremiumAccess — billing logic', () => {
+  afterEach(cleanupGlobals);
+
   it('returns false for null/undefined profile', () => {
     expect(hasPremiumAccess(null)).toBe(false);
     expect(hasPremiumAccess(undefined)).toBe(false);
@@ -55,9 +157,7 @@ describe('hasPremiumAccess', () => {
   });
 
   it('trusts server-computed premiumAccess when present', () => {
-    // Server says no access even though status is active (edge case)
     expect(hasPremiumAccess({ hasSubscription: true, status: 'active', premiumAccess: false })).toBe(false);
-    // Server says yes even though status is unusual
     expect(hasPremiumAccess({ hasSubscription: true, status: 'past_due', premiumAccess: true })).toBe(true);
   });
 

@@ -853,8 +853,8 @@ function EmailListComponent() {
     [searchActive, getChatEmails, sortedEmails, sentEmails, activeMailbox]
   );
   const threadFingerprint = useMemo(
-    () => mergedEmails ? `${viewMode}-${mergedEmails.length}-${mergedEmails[0]?.uid || 0}-${mergedEmails[mergedEmails.length - 1]?.uid || 0}-${flagSeq}-${archivedSize}-${alertCount}` : '',
-    [mergedEmails, flagSeq, viewMode, archivedSize, alertCount]
+    () => mergedEmails ? `${activeAccountId}-${activeMailbox}-${viewMode}-${mergedEmails.length}-${mergedEmails[0]?.uid || 0}-${mergedEmails[mergedEmails.length - 1]?.uid || 0}-${flagSeq}-${archivedSize}-${alertCount}` : '',
+    [mergedEmails, flagSeq, viewMode, archivedSize, alertCount, activeAccountId, activeMailbox]
   );
 
   // Compute threads in a deferred callback to avoid blocking render
@@ -891,7 +891,7 @@ function EmailListComponent() {
     // Only merge INBOX + Sent when viewing INBOX; other folders use their own emails
     const usesMerged = activeAccountEmail && activeMailbox === 'INBOX';
     const emails = usesMerged ? getChatEmails() : displayEmails;
-    const fp = `sender-${emails.length}-${emails[0]?.uid}-${emails[emails.length - 1]?.uid}-${archivedSize}-${activeAccountEmail}-${sentEmails.length}-${alertCount}`;
+    const fp = `sender-${activeAccountId}-${activeMailbox}-${emails.length}-${emails[0]?.uid}-${emails[emails.length - 1]?.uid}-${archivedSize}-${activeAccountEmail}-${sentEmails.length}-${alertCount}`;
 
     if (senderGroupCacheRef.current.fingerprint === fp) {
       if (senderGroups !== senderGroupCacheRef.current.groups) {
@@ -923,13 +923,15 @@ function EmailListComponent() {
 
     // Build lookup from displayEmails so thread items use fresh flag state
     // (deferredThreads is computed async and may have stale isArchived/isLocal)
-    const freshByUid = new Map(displayEmails.map(e => [e.uid, e]));
-    const freshen = (e) => freshByUid.get(e.uid) || e;
+    // Use compound key (accountId:uid) to avoid cross-account collisions
+    const emailKey = (e) => `${e._accountId || ''}:${e.uid}`;
+    const freshByKey = new Map(displayEmails.map(e => [emailKey(e), e]));
+    const freshen = (e) => freshByKey.get(emailKey(e)) || e;
 
     // Only show threads that contain at least one email from the current display set
-    const displayUids = new Set(displayEmails.map(e => e.uid));
+    const displayKeys = new Set(displayEmails.map(emailKey));
     const filtered = Array.from(threads.values())
-      .filter(thread => thread.emails.some(e => displayUids.has(e.uid)));
+      .filter(thread => thread.emails.some(e => displayKeys.has(emailKey(e))));
 
     // Sort threads by latest date descending
     const sorted = filtered.sort((a, b) => b.lastDate - a.lastDate);
