@@ -1,30 +1,19 @@
-// API module — routes all IMAP/SMTP/OAuth2 calls through Tauri invoke()
+// API module — routes IMAP/SMTP/OAuth2 calls through the daemon transport layer.
 // In dev mode (no __TAURI__), falls back to the sidecar HTTP server.
+// In Tauri mode, transport.send() tries daemon socket first, then Tauri invoke().
 
-const IS_TAURI = !!window.__TAURI__;
+import { send as transportSend } from './transport.js';
+
+const IS_TAURI = typeof window !== 'undefined' && !!window.__TAURI__;
 
 console.log('[api.js] Running in Tauri:', IS_TAURI);
 
-// ── Tauri invoke helper ─────────────────────────────────────────────────────
-
-let invoke = null;
-
-const invokeReady = IS_TAURI
-  ? import('@tauri-apps/api/core').then(mod => {
-      invoke = mod.invoke;
-      console.log('[api.js] Tauri invoke loaded');
-    }).catch(err => {
-      console.error('[api.js] Failed to load Tauri invoke:', err);
-    })
-  : Promise.resolve();
+// ── Transport-aware invoke ──────────────────────────────────────────────────
 
 async function tauriInvoke(command, args = {}) {
-  await invokeReady;
-  if (!invoke) throw new ApiError('Tauri invoke not available', 0);
   try {
-    return await invoke(command, args);
+    return await transportSend(command, args);
   } catch (error) {
-    // Tauri invoke errors come as strings
     throw new ApiError(
       typeof error === 'string' ? error : error.message || 'Unknown error',
       0

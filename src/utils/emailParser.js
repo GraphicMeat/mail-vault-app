@@ -921,21 +921,36 @@ export function formatRelativeTime(dateStr) {
   if (diffMins < 60) return `${diffMins}m ago`;
   if (diffHours < 24) return `${diffHours}h ago`;
   if (diffDays === 1) return 'Yesterday';
-  if (diffDays < 7) return date.toLocaleDateString('en-US', { weekday: 'short' });
+  if (diffDays < 7) return date.toLocaleDateString(undefined, { weekday: 'short' });
 
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+// Lazy-loaded formatTime from dateFormat.js — avoids importing settingsStore
+// at the module level (emailParser tests run in Node without a DOM).
+let _cachedFormatTime = null;
+let _formatTimeLoadAttempted = false;
+
 /**
- * Format time for message bubble
+ * Format time for message bubble — respects the user's time format setting.
  */
 export function formatMessageTime(dateStr) {
+  // Try to load formatTime on first call (sync — the module will already be
+  // in Vite's module graph if any component that renders times has loaded).
+  if (!_formatTimeLoadAttempted) {
+    _formatTimeLoadAttempted = true;
+    try {
+      // Kick off a dynamic import; it resolves asynchronously but we cache
+      // the result for subsequent calls. First call uses the fallback.
+      import('./dateFormat.js').then(mod => { _cachedFormatTime = mod.formatTime; }).catch(() => {});
+    } catch { /* ignore */ }
+  }
+
+  if (_cachedFormatTime) return _cachedFormatTime(dateStr);
+
+  // Fallback: locale default (used in tests or before async import resolves)
   const date = new Date(dateStr);
-  return date.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  });
+  return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
 /**
@@ -949,7 +964,7 @@ export function formatDateSeparator(dateStr) {
   if (diffDays === 0) return 'Today';
   if (diffDays === 1) return 'Yesterday';
 
-  return date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString(undefined, {
     weekday: 'long',
     month: 'long',
     day: 'numeric',

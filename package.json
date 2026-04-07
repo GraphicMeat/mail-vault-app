@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
+    "dev:full": "./scripts/dev.sh",
     "tauri:build": "npm run build:server && tauri build",
     "tauri:build:debug": "npm run build:server && tauri build --debug",
     "build:server": "node scripts/build-server.js",

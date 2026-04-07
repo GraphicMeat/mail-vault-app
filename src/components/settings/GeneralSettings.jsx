@@ -73,8 +73,10 @@ export function GeneralSettings({ accounts }) {
     isAccountHidden,
     dateFormat,
     customDateFormat,
+    timeFormat,
     setDateFormat,
     setCustomDateFormat,
+    setTimeFormat,
     signatureDisplay,
     setSignatureDisplay,
     actionButtonDisplay,
@@ -301,6 +303,26 @@ export function GeneralSettings({ accounts }) {
               <div className="mt-2 flex items-center gap-4 text-xs text-mail-text-muted">
                 <span>Today: <span className="text-mail-text">{formatEmailDate(new Date().toISOString())}</span></span>
                 <span>Older: <span className="text-mail-text">{formatEmailDate('2023-06-15T10:00:00Z')}</span></span>
+              </div>
+            </div>
+
+            {/* Time Format */}
+            <div className="pt-4 border-t border-mail-border">
+              <div className="font-medium text-mail-text mb-1">Time Format</div>
+              <div className="text-sm text-mail-text-muted mb-3">
+                Controls how times appear across the app
+              </div>
+              <select
+                value={timeFormat}
+                onChange={(e) => setTimeFormat(e.target.value)}
+                className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg text-mail-text focus:border-mail-accent transition-all cursor-pointer"
+              >
+                <option value="auto">System Default ({navigator.language})</option>
+                <option value="12h">12-hour (2:30 PM)</option>
+                <option value="24h">24-hour (14:30)</option>
+              </select>
+              <div className="mt-2 text-xs text-mail-text-muted">
+                Now: <span className="text-mail-text">{formatEmailDate(new Date().toISOString())}</span>
               </div>
             </div>
 

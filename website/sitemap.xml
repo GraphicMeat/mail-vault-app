@@ -41,6 +41,11 @@
     <priority>0.5</priority>
   </url>
   <url>
+    <loc>https://mailvaultapp.com/ai-setup.html</loc>
+    <lastmod>2026-04-04</lastmod>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://mailvaultapp.com/mentioned-in.html</loc>
     <lastmod>2026-04-02</lastmod>
     <priority>0.6</priority>

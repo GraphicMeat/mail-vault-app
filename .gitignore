@@ -4,11 +4,13 @@ node_modules/
 # Build output
 dist/
 
-# Tauri
+# Rust / Tauri
+target/
 src-tauri/target/
 src-tauri/WixTools/
 src-tauri/Cargo.lock
 src-tauri/binaries/
+!src-tauri/binaries/server-bundle.cjs
 src-tauri/Sparkle.framework/
 src-tauri/sparkle-bin/
 
@@ -55,3 +57,6 @@ website/api/data.db-wal
 .superpowers/
 .planning/
 tests/visual/.tmp/
+
+# OMC state
+.omc/

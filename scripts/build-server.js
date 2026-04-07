@@ -163,6 +163,48 @@ node "$DIR/server-bundle.cjs" "$@"
   
   console.log('\n🎉 Server build complete!');
   console.log(`   Output: src-tauri/binaries/${sidecarName}`);
+
+  // ── Build and stage mailvault-daemon (Rust sidecar) ───────────────────────
+  // The daemon is a separate Rust binary in the workspace. Cargo builds it to
+  // target/<profile>/mailvault-daemon, and we copy it into src-tauri/binaries/
+  // with the target-triple suffix so Tauri's externalBin bundles it correctly.
+
+  const daemonSidecarName = `mailvault-daemon-${targetTriple}${binaryExt}`;
+  const daemonSidecarPath = join(outputDir, daemonSidecarName);
+
+  // Skip on Windows — daemon uses Unix sockets
+  if (platform !== 'win32') {
+    console.log('\n🔧 Building mailvault-daemon...');
+
+    const cargoProfile = process.env.DAEMON_PROFILE || 'release';
+    const cargoTarget = tauriTarget || ''; // empty = host target
+    const cargoTargetFlag = cargoTarget ? `--target ${cargoTarget}` : '';
+
+    try {
+      execSync(
+        `cargo build -p mailvault-daemon --${cargoProfile} ${cargoTargetFlag}`.replace(/\s+/g, ' ').trim(),
+        { stdio: 'inherit', cwd: rootDir }
+      );
+
+      // Locate the built binary
+      const targetSubdir = cargoTarget ? join('target', cargoTarget, cargoProfile) : join('target', cargoProfile);
+      const builtBin = join(rootDir, targetSubdir, `mailvault-daemon${binaryExt}`);
+
+      if (existsSync(builtBin)) {
+        copyFileSync(builtBin, daemonSidecarPath);
+        chmodSync(daemonSidecarPath, '755');
+        console.log(`✅ Daemon staged: src-tauri/binaries/${daemonSidecarName}`);
+      } else {
+        console.error(`⚠️  Daemon binary not found at ${builtBin}`);
+        console.error('   The Tauri bundle will not include the daemon.');
+      }
+    } catch (e) {
+      console.error('⚠️  Failed to build mailvault-daemon:', e.message);
+      console.error('   The Tauri bundle will not include the daemon.');
+    }
+  } else {
+    console.log('\nℹ️  Skipping daemon build (Unix sockets not supported on Windows)');
+  }
 }
 
 buildServer().catch(console.error);

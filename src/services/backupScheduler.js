@@ -1,8 +1,9 @@
 import * as api from './api';
-import { useSettingsStore } from '../stores/settingsStore';
+import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { useBackupStore } from '../stores/backupStore';
 import { useMailStore } from '../stores/mailStore';
 import { hasValidCredentials, resolveServerAccount } from './authUtils';
+import { createSnapshotFromMaildir } from './snapshotService';
 
 const RETRY_DELAYS = [30_000, 120_000, 300_000]; // 30s, 2min, 5min
 
@@ -320,6 +321,24 @@ class BackupCoordinator {
         lastError: entry.error || (externalDegraded ? result.external_copy_error : null),
         emailsBackedUp: (storeNow.backupState[accountId]?.emailsBackedUp || 0) + entry.emailsBackedUp
       });
+
+      // Create Time Capsule snapshot after successful backup (premium only, respects cadence)
+      if (entry.success && hasPremiumAccess(storeNow.billingProfile) && storeNow.snapshotAutoEnabled) {
+        const cadence = storeNow.snapshotCadence || 'after_every_backup';
+        const lastSnap = storeNow.snapshotLastTimes?.[accountId] || 0;
+        const now = Date.now();
+        const isDue = cadence === 'after_every_backup'
+          || (cadence === 'daily' && now - lastSnap >= 86_400_000)
+          || (cadence === 'weekly' && now - lastSnap >= 604_800_000);
+
+        if (isDue) {
+          createSnapshotFromMaildir(accountId, account.email)
+            .then(() => storeNow.recordSnapshotTime(accountId))
+            .catch(err => {
+              console.warn(`[backup] Snapshot creation failed for ${account.email}:`, err.message);
+            });
+        }
+      }
 
       // Send notification
       if (entry.success && !externalDegraded && storeNow.backupNotifyOnSuccess) {

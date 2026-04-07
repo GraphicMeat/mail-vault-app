@@ -1,26 +1,39 @@
 import { readTextFile, writeTextFile, readDir, mkdir, remove, exists, BaseDirectory } from '@tauri-apps/plugin-fs';
 import { parseKeychainValue, getAccountsFromKeychain } from './keychainUtils.js';
 import * as keychainSession from './keychainSession.js';
+import { send as transportSend } from './transport.js';
+import { isPersonalMicrosoftEmail } from './graphConfig.js';
 
 // Re-export for any consumers that import from db.js
 export { parseKeychainValue, getAccountsFromKeychain };
 
-// Use global Tauri API (more reliable in production builds)
-const invoke = window.__TAURI__?.core?.invoke;
+// Transport-aware invoke: tries daemon socket first, falls back to Tauri invoke
+const invoke = (cmd, args) => transportSend(cmd, args);
 
 console.log('[db.js] Initializing (Maildir .eml)...');
-console.log('[db.js] invoke available:', !!invoke);
 
-if (invoke) {
-  invoke('get_app_data_dir')
-    .then(result => {
-      console.log('[db.js] Tauri invoke working. App data dir:', result);
-      _isSnap = typeof result === 'string' && result.includes('/snap/');
-    })
-    .catch(error => console.error('[db.js] Tauri invoke failed:', error));
-}
+// Check Tauri connectivity on init
+transportSend('get_app_data_dir', {})
+  .then(result => {
+    console.log('[db.js] Transport working. App data dir:', result);
+    _isSnap = typeof result === 'string' && result.includes('/snap/');
+  })
+  .catch(error => console.error('[db.js] Transport init check failed:', error));
 
 let initialized = false;
+
+/**
+ * Safely parse a response that may be a JSON string (from Tauri invoke)
+ * or an already-parsed object (from daemon RPC via transport).
+ */
+function safeParse(data) {
+  if (data == null) return null;
+  if (typeof data === 'object') return data; // Already parsed (daemon response)
+  if (typeof data === 'string') {
+    try { return JSON.parse(data); } catch { return null; }
+  }
+  return null;
+}
 
 // Keychain cache - stores full account objects (id, email, servers, password)
 // Each value in the HashMap is a JSON-serialized account object.
@@ -367,9 +380,58 @@ export async function getAccountsWithoutPasswords() {
 
 // Ensure account metadata (no password) exists in accounts.json for quick-load.
 // Called after full init to backfill from keychain data.
+/**
+ * Logical account identity key — same email + same server/provider = same account.
+ * Used to detect duplicates across keychain and accounts.json.
+ */
+function accountLogicalKey(a) {
+  const email = (a.email || '').toLowerCase();
+  const server = (a.imapHost || a.oauth2Provider || '').toLowerCase();
+  return `${email}@${server}`;
+}
+
+/**
+ * Deduplicate accounts by logical identity (email + server/provider).
+ * Prefers accounts with credentials (password/token) over empty ones.
+ * Prefers keychain-sourced accounts over file-only accounts.
+ */
+function deduplicateAccounts(accounts) {
+  const seen = new Map(); // logicalKey → account
+  const deduped = [];
+
+  for (const account of accounts) {
+    const key = accountLogicalKey(account);
+    if (seen.has(key)) {
+      const existing = seen.get(key);
+      // Prefer the one with credentials
+      const existingHasCreds = !!(existing.password || existing.oauth2RefreshToken);
+      const newHasCreds = !!(account.password || account.oauth2RefreshToken);
+      if (newHasCreds && !existingHasCreds) {
+        // Replace with the credentialed version
+        const idx = deduped.indexOf(existing);
+        if (idx >= 0) deduped[idx] = account;
+        seen.set(key, account);
+        console.log(`[db.js] Dedup: replaced ${existing.id} with ${account.id} for ${account.email} (has credentials)`);
+      } else {
+        console.log(`[db.js] Dedup: skipping duplicate ${account.id} for ${account.email} (keeping ${existing.id})`);
+      }
+    } else {
+      seen.set(key, account);
+      deduped.push(account);
+    }
+  }
+
+  if (deduped.length < accounts.length) {
+    console.log(`[db.js] Deduplicated ${accounts.length - deduped.length} duplicate account(s)`);
+  }
+
+  return deduped;
+}
+
 export async function ensureAccountInFile(account) {
   const accounts = await readAccountsFile();
-  if (accounts.some(a => a.id === account.id)) return;
+  // Check both id and logical key to prevent duplicates
+  if (accounts.some(a => a.id === account.id || accountLogicalKey(a) === accountLogicalKey(account))) return;
   const { password, ...acctData } = account;
   accounts.push(acctData);
   await writeAccountsFile(accounts);
@@ -380,8 +442,9 @@ export async function ensureAccountInFile(account) {
 export async function ensureAccountsInFile(accounts) {
   const existing = await readAccountsFile();
   const existingIds = new Set(existing.map(a => a.id));
+  const existingKeys = new Set(existing.map(a => accountLogicalKey(a)));
   const newAccounts = accounts
-    .filter(a => !existingIds.has(a.id))
+    .filter(a => !existingIds.has(a.id) && !existingKeys.has(accountLogicalKey(a)))
     .map(({ password, oauth2AccessToken, oauth2RefreshToken, ...acctData }) => acctData);
   if (newAccounts.length > 0) {
     await writeAccountsFile([...existing, ...newAccounts]);
@@ -391,6 +454,8 @@ export async function ensureAccountsInFile(accounts) {
 
 export async function getAccounts() {
   await initDB();
+
+  let accounts;
 
   if (invoke) {
     const data = await loadKeychain();
@@ -405,21 +470,62 @@ export async function getAccounts() {
 
     if (validAccounts.length > 0) {
       // Merge: keychain is authoritative, but include file-only accounts (missing from keychain due to timeout)
+      // Use both id AND logical key to prevent duplicates from 2.3.2 upgrade path
       const keychainIds = new Set(validAccounts.map(a => a.id));
-      const fileOnly = fileAccounts.filter(a => !keychainIds.has(a.id));
+      const keychainKeys = new Set(validAccounts.map(a => accountLogicalKey(a)));
+      const fileOnly = fileAccounts.filter(a => !keychainIds.has(a.id) && !keychainKeys.has(accountLogicalKey(a)));
       if (fileOnly.length > 0) {
         console.log(`[db.js] ${fileOnly.length} account(s) from file not in keychain — adding without credentials`);
       }
-      return [...validAccounts, ...fileOnly];
+      accounts = [...validAccounts, ...fileOnly];
+    } else {
+      // Keychain empty (timeout or fresh install) — use file accounts with whatever passwords are available
+      accounts = fileAccounts.map(a => ({
+        ...a,
+        password: data[a.id] || undefined
+      }));
     }
 
-    // Keychain empty (timeout or fresh install) — use file accounts with whatever passwords are available
-    return fileAccounts.map(a => ({
-      ...a,
-      password: data[a.id] || undefined
-    }));
+    // Deduplicate by logical identity (email + server/provider)
+    accounts = deduplicateAccounts(accounts);
+
+    // One-time cleanup: remove duplicates from accounts.json
+    const cleanedFile = deduplicateAccounts(fileAccounts);
+    if (cleanedFile.length < fileAccounts.length) {
+      console.log(`[db.js] Cleaning up ${fileAccounts.length - cleanedFile.length} duplicate(s) from accounts.json`);
+      const cleanedWithoutCreds = cleanedFile.map(({ password, oauth2AccessToken, oauth2RefreshToken, ...rest }) => rest);
+      await writeAccountsFile(cleanedWithoutCreds).catch(e => console.warn('[db.js] Failed to clean accounts.json:', e));
+    }
+  } else {
+    accounts = deduplicateAccounts(await readAccountsFile());
   }
-  return await readAccountsFile();
+
+  // Auto-repair: personal Microsoft accounts must use Graph transport.
+  // Older saved accounts may have oauth2Transport: 'imap' which fails with XOAUTH2.
+  let repaired = false;
+  for (const account of accounts) {
+    if (account.authType === 'oauth2' && isPersonalMicrosoftEmail(account.email) && account.oauth2Transport !== 'graph') {
+      console.log(`[db.js] Auto-repairing ${account.email}: switching oauth2Transport from '${account.oauth2Transport}' to 'graph'`);
+      account.oauth2Transport = 'graph';
+      repaired = true;
+    }
+  }
+
+  // Persist the repair to keychain so it's permanent
+  if (repaired && invoke) {
+    try {
+      const credentials = {};
+      for (const a of accounts) {
+        credentials[a.id] = JSON.stringify(a);
+      }
+      await invoke('store_credentials', { credentials });
+      console.log('[db.js] Persisted auto-repaired account transports to keychain');
+    } catch (e) {
+      console.warn('[db.js] Failed to persist transport repair:', e);
+    }
+  }
+
+  return accounts;
 }
 
 export async function getAccount(id) {
@@ -921,7 +1027,7 @@ export async function getCachedMailboxEntry(accountId) {
     try {
       const data = await invoke('load_mailbox_cache', { accountId });
       if (data) {
-        const entry = JSON.parse(data);
+        const entry = safeParse(data);
         if (Array.isArray(entry)) {
           return { mailboxes: entry, fetchedAt: null, lastKnownGoodMailboxes: null, lastKnownGoodAt: null };
         }
@@ -993,7 +1099,7 @@ export async function getEmailHeadersPartial(accountId, mailbox, limit = 200) {
     try {
       const data = await invoke('load_email_cache_partial', { accountId, mailbox, limit });
       if (data) {
-        const entry = JSON.parse(data);
+        const entry = safeParse(data);
         console.log('[db.js] Partial email headers loaded:', entry.emails?.length, 'of', entry.totalCached, 'emails');
         return {
           emails: entry.emails,
@@ -1019,7 +1125,7 @@ export async function getEmailHeadersMeta(accountId, mailbox) {
     try {
       const data = await invoke('load_email_cache_meta', { accountId, mailbox });
       if (data) {
-        const entry = JSON.parse(data);
+        const entry = safeParse(data);
         return {
           totalEmails: entry.totalEmails,
           totalCached: entry.totalCached ?? 0,
@@ -1043,7 +1149,7 @@ export async function getEmailHeaders(accountId, mailbox) {
     try {
       const data = await invoke('load_email_cache', { accountId, mailbox });
       if (data) {
-        const entry = JSON.parse(data);
+        const entry = safeParse(data);
         console.log('[db.js] Email headers loaded from file cache:', entry.emails?.length, 'emails');
         return {
           emails: entry.emails,
@@ -1091,7 +1197,7 @@ export async function loadGraphIdMap(accountId, mailbox) {
     try {
       const data = await invoke('load_graph_id_map', { accountId, mailbox });
       if (data) {
-        return JSON.parse(data);
+        return safeParse(data);
       }
     } catch (error) {
       console.warn('[db.js] Failed to load graph ID map:', error);

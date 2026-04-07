@@ -103,7 +103,7 @@ rm -f "$DATA_DIR/daemon.sock" "$DATA_DIR/daemon.pid" 2>/dev/null || true
 
 LOCK_FILE="$DATA_DIR/daemon.lock"
 if [[ -f "$LOCK_FILE" ]]; then
-  LOCK_HOLDER_PID=$(lsof -t "$LOCK_FILE" 2>/dev/null | head -1)
+  LOCK_HOLDER_PID=$(lsof -t "$LOCK_FILE" 2>/dev/null | head -1 || true)
   if [[ -n "$LOCK_HOLDER_PID" ]]; then
     LOCK_HOLDER_CMD=$(ps -p "$LOCK_HOLDER_PID" -o comm= 2>/dev/null || echo "unknown")
     echo -e "${DIM}Lock held by PID $LOCK_HOLDER_PID ($LOCK_HOLDER_CMD)${RESET}"

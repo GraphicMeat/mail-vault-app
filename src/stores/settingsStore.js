@@ -132,6 +132,7 @@ export const useSettingsStore = create(
       threadSortOrder: 'oldest-first', // 'oldest-first' | 'newest-first'
       dateFormat: 'auto', // 'auto' | 'MM/dd/yyyy' | 'dd/MM/yyyy' | 'yyyy-MM-dd' | 'dd MMM yyyy' | 'custom'
       customDateFormat: '', // Only used when dateFormat === 'custom'
+      timeFormat: 'auto', // 'auto' (system locale) | '12h' | '24h'
       signatureDisplay: 'smart', // 'smart' | 'always-show' | 'always-hide' | 'collapsed'
       actionButtonDisplay: 'icon-only', // 'icon-only' | 'icon-label' | 'text-only'
       sidebarCollapsed: false, // Whether sidebar is in compact/collapsed mode
@@ -182,6 +183,16 @@ export const useSettingsStore = create(
       // Auto-cleanup rules
       // Each: { id, accountEmail: '*' | 'email@...', folder, olderThan: { value: number, unit: 'days'|'months' }, action: 'delete'|'archive-delete', enabled: boolean }
       cleanupRules: [],
+
+      // Daemon mode: 'on-demand' (default) or 'always-on' (recommended)
+      // on-demand: daemon starts with app, stops when app quits
+      // always-on: daemon runs as system service (launchd/systemd), persists after app close
+      daemonMode: 'on-demand',
+
+      // Time Capsule snapshot configuration
+      snapshotAutoEnabled: true,     // Whether automatic snapshots are created after backups
+      snapshotCadence: 'after_every_backup', // 'after_every_backup' | 'daily' | 'weekly'
+      snapshotLastTimes: {},         // { [accountId]: timestamp } — last auto-snapshot per account
 
       // Global backup configuration
       backupGlobalEnabled: false,    // Master switch: true = all accounts use global schedule
@@ -250,6 +261,16 @@ export const useSettingsStore = create(
       // Backup notification preferences
       backupNotifyOnSuccess: true,
       backupNotifyOnFailure: true,
+
+      // Time Capsule actions
+      setSnapshotAutoEnabled: (val) => set({ snapshotAutoEnabled: val }),
+      setSnapshotCadence: (cadence) => set({ snapshotCadence: cadence }),
+      recordSnapshotTime: (accountId) => set(state => ({
+        snapshotLastTimes: { ...state.snapshotLastTimes, [accountId]: Date.now() }
+      })),
+
+      // Daemon actions
+      setDaemonMode: (mode) => set({ daemonMode: mode }),
 
       // Global backup actions
       setBackupGlobalEnabled: (val) => set({ backupGlobalEnabled: val }),
@@ -445,6 +466,7 @@ export const useSettingsStore = create(
       setThreadSortOrder: (order) => set({ threadSortOrder: order }),
       setDateFormat: (value) => set({ dateFormat: value }),
       setCustomDateFormat: (value) => set({ customDateFormat: value }),
+      setTimeFormat: (value) => set({ timeFormat: value }),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
       toggleSidebarCollapsed: () => set(state => ({ sidebarCollapsed: !state.sidebarCollapsed })),
       setSidebarAccountsRatio: (ratio) => set({ sidebarAccountsRatio: Math.max(0.15, Math.min(0.55, ratio)) }),
@@ -623,6 +645,7 @@ export const useSettingsStore = create(
           threadSortOrder: 'oldest-first',
           dateFormat: 'auto',
           customDateFormat: '',
+          timeFormat: 'auto',
           signatureDisplay: 'smart',
           actionButtonDisplay: 'icon-only',
           sidebarCollapsed: false,

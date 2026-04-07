@@ -36,10 +36,17 @@
     <key>com.apple.security.usernotifications.alerts</key>
     <true/>
 
-    <!-- Keychain access for storing passwords -->
+    <!-- Keychain access for storing passwords (shared with daemon) -->
     <key>com.apple.security.keychain-access-groups</key>
     <array>
         <string>$(AppIdentifierPrefix)com.mailvault.app</string>
+        <string>$(AppIdentifierPrefix)group.com.mailvault</string>
+    </array>
+
+    <!-- App group for sharing data between app and daemon -->
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.com.mailvault</string>
     </array>
 
     <!-- Sparkle auto-updater XPC services (mach-lookup names = bundle-id + suffix) -->

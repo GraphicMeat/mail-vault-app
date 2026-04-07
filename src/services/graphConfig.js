@@ -6,6 +6,28 @@ export function isGraphAccount(account) {
   return account?.oauth2Transport === 'graph';
 }
 
+/**
+ * Personal Microsoft domains that require Graph transport (IMAP XOAUTH2 is broken).
+ * Shared source of truth — used by AccountModal, db.js auto-repair, and error handling.
+ */
+export const PERSONAL_MS_DOMAINS = [
+  'outlook.com', 'hotmail.com', 'live.com', 'msn.com',
+  'outlook.co.uk', 'hotmail.co.uk', 'live.co.uk',
+  'outlook.fr', 'hotmail.fr', 'live.fr',
+  'outlook.de', 'hotmail.de', 'live.de',
+  'outlook.jp', 'hotmail.co.jp', 'live.jp',
+];
+
+/**
+ * Check if an email address belongs to a personal Microsoft domain.
+ * These accounts must use Graph transport, not IMAP XOAUTH2.
+ */
+export function isPersonalMicrosoftEmail(email) {
+  if (!email) return false;
+  const domain = email.toLowerCase().split('@')[1];
+  return domain ? PERSONAL_MS_DOMAINS.includes(domain) : false;
+}
+
 // Map Graph API folder display names to IMAP-style names used by the app
 export const GRAPH_FOLDER_NAME_MAP = {
   'Inbox': 'INBOX',
