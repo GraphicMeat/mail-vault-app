@@ -348,12 +348,15 @@ export async function activateAccount(accountId, mailbox, options = {}) {
     _saveRestore(_buildRestoreDescriptor(get(), previousMailbox));
   }
 
+  // Skip descriptor restore on background refresh — it must do a full load,
+  // otherwise it re-enters the descriptor path and loops infinitely.
+  const isBackgroundRefresh = options._backgroundRefresh === true;
   const viewMode = get().viewMode || 'all';
-  const restored = _getRestore(
+  const restored = !isBackgroundRefresh ? _getRestore(
     accountId,
     isMailboxSwitch ? mailbox : (get().activeMailbox || mailbox),
     viewMode
-  );
+  ) : null;
   if (restored) {
     const isAccountSwitch = !isMailboxSwitch;
     const label = isAccountSwitch ? 'Account' : 'Mailbox';
@@ -403,8 +406,6 @@ export async function activateAccount(accountId, mailbox, options = {}) {
 
   invalidateChatAndThreadCaches();
   setLoadEmailsRetried(false);
-
-  const isBackgroundRefresh = options._backgroundRefresh === true;
 
   if (!isBackgroundRefresh) {
     useMailStore.setState({
