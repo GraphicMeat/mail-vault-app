@@ -3909,6 +3909,232 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
     }
 }
 
+// ── Daemon RPC proxy ────────────────────────────────────────────────────────
+// Bridges frontend invoke() calls to the mailvault-daemon Unix socket.
+// In on-demand mode, auto-spawns the daemon if the socket isn't reachable.
+
+use std::sync::Mutex;
+use once_cell::sync::Lazy;
+
+/// Tracks a daemon child process spawned in on-demand mode.
+static DAEMON_CHILD: Lazy<Mutex<Option<std::process::Child>>> = Lazy::new(|| Mutex::new(None));
+
+/// Find the daemon binary. Checks next to the app binary (with Tauri sidecar triple suffix
+/// for release bundles, then plain name), then common build paths for development.
+fn find_daemon_binary(_app_handle: &tauri::AppHandle) -> Option<PathBuf> {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            // 1. Tauri sidecar naming: mailvault-daemon-<target-triple> (release bundles)
+            let triple = format!("mailvault-daemon-{}", std::env::consts::ARCH);
+            let os_suffix = if cfg!(target_os = "macos") {
+                "-apple-darwin"
+            } else if cfg!(target_os = "linux") {
+                "-unknown-linux-gnu"
+            } else {
+                ""
+            };
+            let sidecar_name = format!("{}{}", triple, os_suffix);
+            let candidate = dir.join(&sidecar_name);
+            if candidate.exists() {
+                return Some(candidate);
+            }
+
+            // 2. Plain binary name (flat layout, dev builds)
+            let candidate = dir.join("mailvault-daemon");
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    // 3. Cargo workspace target directories (dev mode)
+    for base in [
+        std::env::current_dir().ok(),
+        std::env::current_exe().ok().and_then(|e| {
+            // Walk up from src-tauri/target/debug/ to workspace root
+            e.parent()?.parent()?.parent()?.parent().map(|p| p.to_path_buf())
+        }),
+    ].into_iter().flatten() {
+        for profile in ["debug", "release"] {
+            let candidate = base.join("target").join(profile).join("mailvault-daemon");
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    None
+}
+
+/// Spawn daemon as a child process (on-demand mode). Waits for socket to appear.
+fn ensure_daemon_running(app_handle: &tauri::AppHandle, socket_path: &Path) -> Result<(), String> {
+    // Already running? Try to connect to existing daemon.
+    if socket_path.exists() {
+        if std::os::unix::net::UnixStream::connect(socket_path).is_ok() {
+            info!("Connected to existing daemon at {:?}", socket_path);
+            return Ok(());
+        }
+        // Stale socket — remove it
+        info!("Removing stale daemon socket at {:?}", socket_path);
+        let _ = std::fs::remove_file(socket_path);
+    }
+
+    let mut guard = DAEMON_CHILD.lock().map_err(|e| e.to_string())?;
+
+    // Check if our child is still alive
+    if let Some(ref mut child) = *guard {
+        match child.try_wait() {
+            Ok(Some(_)) => { *guard = None; } // Exited, need to respawn
+            Ok(None) => {
+                // Still running but socket gone — wait a moment
+                for _ in 0..20 {
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    if socket_path.exists() { return Ok(()); }
+                }
+                return Err("Daemon child is running but socket not appearing".into());
+            }
+            Err(_) => { *guard = None; }
+        }
+    }
+
+    // Spawn new daemon
+    let daemon_bin = find_daemon_binary(app_handle)
+        .ok_or_else(|| "mailvault-daemon binary not found".to_string())?;
+
+    info!("Spawning daemon on-demand: {:?}", daemon_bin);
+
+    let child = Command::new(&daemon_bin)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn daemon: {}", e))?;
+
+    *guard = Some(child);
+
+    // Wait for socket to appear (up to 3 seconds)
+    for _ in 0..30 {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        if socket_path.exists() {
+            info!("Daemon socket ready");
+            return Ok(());
+        }
+    }
+
+    Err("Daemon spawned but socket did not appear within 3 seconds".into())
+}
+
+/// Kill the on-demand daemon child process (called on app exit).
+pub fn shutdown_daemon_child() {
+    if let Ok(mut guard) = DAEMON_CHILD.lock() {
+        if let Some(ref mut child) = *guard {
+            info!("Shutting down on-demand daemon (PID {})", child.id());
+            let _ = child.kill();
+            let _ = child.wait();
+            *guard = None;
+        }
+    }
+}
+
+// ── Daemon RPC — per-request connections with cached auth token ──────────────
+// Each request gets its own socket (supports full concurrency).
+// Token and daemon-spawn state are cached to avoid redundant I/O.
+
+static DAEMON_TOKEN_CACHE: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
+static DAEMON_SPAWNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[tauri::command]
+async fn daemon_rpc(
+    app_handle: tauri::AppHandle,
+    method: String,
+    params: serde_json::Value,
+    #[allow(unused)] daemon_mode: Option<String>,
+) -> Result<serde_json::Value, String> {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+    static RPC_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+    let data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not get app data directory: {}", e))?;
+
+    let socket_path = data_dir.join("daemon.sock");
+
+    // Spawn daemon once (not on every call)
+    if !DAEMON_SPAWNED.load(std::sync::atomic::Ordering::Relaxed) {
+        let mode = daemon_mode.as_deref().unwrap_or("on-demand");
+        if mode == "always-on" {
+            // In always-on mode, never spawn — the system service manages the daemon.
+            // Just check if it's reachable.
+            if !socket_path.exists() || std::os::unix::net::UnixStream::connect(&socket_path).is_err() {
+                return Err("Daemon not running. Install the daemon service in Settings > Background Daemon.".to_string());
+            }
+        } else {
+            ensure_daemon_running(&app_handle, &socket_path)?;
+        }
+        DAEMON_SPAWNED.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    // Read token once, cache for future calls
+    let token = {
+        let guard = DAEMON_TOKEN_CACHE.lock().map_err(|e| e.to_string())?;
+        guard.clone()
+    };
+    let token = match token {
+        Some(t) => t,
+        None => {
+            let t = std::fs::read_to_string(data_dir.join("daemon.token"))
+                .map_err(|_| "Daemon token not found — is the daemon running?".to_string())?
+                .trim().to_string();
+            if let Ok(mut g) = DAEMON_TOKEN_CACHE.lock() { *g = Some(t.clone()); }
+            t
+        }
+    };
+
+    // Per-request connection (supports full concurrency)
+    let stream = tokio::net::UnixStream::connect(&socket_path)
+        .await
+        .map_err(|e| format!("Cannot connect to daemon — is it running? ({})", e))?;
+
+    let (reader, mut writer) = stream.into_split();
+    let mut lines = tokio::io::BufReader::new(reader).lines();
+
+    // Auth handshake (fast — token is cached)
+    let mut buf = serde_json::to_vec(&serde_json::json!({"token": token})).unwrap();
+    buf.push(b'\n');
+    writer.write_all(&buf).await.map_err(|e| e.to_string())?;
+
+    let auth_resp = lines.next_line().await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Daemon closed connection during auth".to_string())?;
+
+    if serde_json::from_str::<serde_json::Value>(&auth_resp)
+        .ok().and_then(|v| v.get("error").cloned()).is_some() {
+        return Err("Daemon authentication failed".to_string());
+    }
+
+    // Send request
+    let id = RPC_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let mut buf = serde_json::to_vec(&serde_json::json!({
+        "jsonrpc": "2.0", "method": method, "params": params, "id": id,
+    })).unwrap();
+    buf.push(b'\n');
+    writer.write_all(&buf).await.map_err(|e| e.to_string())?;
+
+    // Read response
+    let resp_line = lines.next_line().await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Daemon closed connection before responding".to_string())?;
+
+    let resp: serde_json::Value = serde_json::from_str(&resp_line)
+        .map_err(|e| format!("Invalid RPC response: {}", e))?;
+
+    if let Some(error) = resp.get("error") {
+        return Err(error.get("message").and_then(|m| m.as_str()).unwrap_or("Unknown daemon error").to_string());
+    }
+
+    Ok(resp.get("result").cloned().unwrap_or(serde_json::Value::Null))
+}
+
 fn main() {
     // Log panics before abort — set_hook fires even with panic = "abort"
     std::panic::set_hook(Box::new(|info| {
@@ -4125,7 +4351,8 @@ fn main() {
             commands::get_migration_state,
             commands::clear_migration_state_cmd,
             commands::count_migration_folders,
-            commands::get_folder_mappings
+            commands::get_folder_mappings,
+            daemon_rpc
         ])
         .setup(|app| {
             // Set up logging to app log directory
@@ -4253,7 +4480,7 @@ fn main() {
                     let _ = app_handle_for_menu.emit("open-shortcuts", ());
                 } else if event.id().as_ref() == "quit_app" {
                     info!("Application quitting via menu");
-                    std::process::exit(0);
+                    app_handle_for_menu.exit(0);
                 }
             });
 
@@ -4309,7 +4536,7 @@ fn main() {
                         }
                         "quit" => {
                             info!("Application quitting via tray menu");
-                            std::process::exit(0);
+                            app.exit(0);
                         }
                         _ => {}
                     }
@@ -4359,7 +4586,8 @@ fn main() {
                     }
                 }
                 tauri::RunEvent::Exit => {
-                    info!("Application exiting");
+                    info!("Application exiting — cleaning up daemon child if on-demand");
+                    shutdown_daemon_child();
                 }
                 #[cfg(target_os = "linux")]
                 tauri::RunEvent::MainEventsCleared => {
