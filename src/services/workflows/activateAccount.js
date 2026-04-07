@@ -991,10 +991,15 @@ export async function init() {
           useMailStore.setState({ mailboxes: cachedMailboxEntry.mailboxes, mailboxesFetchedAt: cachedMailboxEntry.fetchedAt });
         }
       } else if (currentActiveId === firstVisible.id) {
-        console.log('[init] Account already active from quick-load via activateAccount');
         const { emails: currentEmails, loading: currentLoading, sortedEmails: currentSorted } = get();
-        console.log('[init] Current state: emails=%d, sortedEmails=%d, loading=%s', currentEmails.length, currentSorted.length, currentLoading);
-        if (currentEmails.length > 0 && currentLoading) {
+        console.log('[init] Account already active: emails=%d, sortedEmails=%d, loading=%s', currentEmails.length, currentSorted.length, currentLoading);
+        if (currentEmails.length === 0) {
+          // Quick-load set account active but didn't hydrate — force activation
+          console.log('[init] No emails hydrated — forcing activateAccount');
+          const lastMailbox = useSettingsStore.getState().getLastMailbox(firstVisible.id);
+          await get().activateAccount(firstVisible.id, lastMailbox || 'INBOX');
+        } else if (currentLoading) {
+          // Loading stuck with emails present — clear the flag
           console.warn('[init] Loading stuck with %d emails — forcing loading=false', currentEmails.length);
           useMailStore.setState({ loading: false });
           if (currentSorted.length === 0) get().updateSortedEmails();
