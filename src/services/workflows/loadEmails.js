@@ -569,10 +569,7 @@ export async function loadEmails() {
       useSettingsStore.getState().setUnreadForAccount(activeAccountId, unread);
     }
 
-    if (!get().unifiedInbox) {
-      _saveRestore(_buildRestoreDescriptor(get()));
-    }
-
+    // Descriptor saved on switch-away, not after every load
     db.saveEmailHeaders(activeAccountId, activeMailbox, mergedEmails, serverTotal, {
       uidValidity: newUidValidity,
       uidNext: newUidNext,
@@ -742,10 +739,7 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
       useSettingsStore.getState().setUnreadForAccount(activeAccountId, unread);
     }
 
-    if (!get().unifiedInbox) {
-      _saveRestore(_buildRestoreDescriptor(get()));
-    }
-
+    // Descriptor saved on switch-away, not after every load
     db.saveEmailHeaders(activeAccountId, activeMailbox, mergedEmails, serverTotal)
       .catch(e => console.warn('[loadEmailsViaGraph] Failed to cache headers:', e));
 

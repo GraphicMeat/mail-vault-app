@@ -183,6 +183,16 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
     return dateB - dateA;
   });
 
+  // Cap unified folder cache at 3 entries (LRU eviction)
+  const UNIFIED_FOLDER_CACHE_MAX = 3;
+  while (_unifiedFolderCache.size >= UNIFIED_FOLDER_CACHE_MAX) {
+    let oldest = null, oldestTime = Infinity;
+    for (const [k, v] of _unifiedFolderCache) {
+      if (v.timestamp < oldestTime) { oldest = k; oldestTime = v.timestamp; }
+    }
+    if (oldest) _unifiedFolderCache.delete(oldest);
+    else break;
+  }
   _unifiedFolderCache.set(targetFolder, { emails: allEmails, timestamp: Date.now() });
 
   const total = allEmails.length;

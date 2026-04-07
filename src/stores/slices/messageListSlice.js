@@ -72,7 +72,9 @@ export function getLoadEmailsRetried() { return _loadEmailsRetried; }
 export function setLoadEmailsRetried(v) { _loadEmailsRetried = v; }
 export function bumpFlagChangeCounter() { _flagChangeCounter++; }
 export function invalidateChatAndThreadCaches() {
+  _chatEmailsCache = [];
   _chatEmailsFingerprint = '';
+  _threadsCache = new Map();
   _threadsFingerprint = '';
 }
 

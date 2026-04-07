@@ -605,7 +605,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
                 ...(freshCache.serverUids ? { serverUidSet: freshCache.serverUids } : {}),
               });
 
-              if (!get().unifiedInbox) _saveRestore(_buildRestoreDescriptor(get()));
+              // Descriptor saved on switch-away, not during load
               db.saveEmailHeaders(accountId, effectiveMailbox, uidMap.toSortedArray(), freshCache.totalEmails || freshCache.emails.length)
                 .catch(e => console.warn('[activateAccount] Failed to persist headers:', e));
             }
@@ -719,7 +719,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
             setLoadMoreTimer(setTimeout(() => { setLoadMoreTimer(null); get().loadMoreEmails(); }, 500));
           }
 
-          if (!get().unifiedInbox) _saveRestore(_buildRestoreDescriptor(get()));
+          // Descriptor saved on switch-away, not during load
 
           serverTrace.end('condstore-noop');
           return;
@@ -741,7 +741,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
             setLoadMoreTimer(setTimeout(() => { setLoadMoreTimer(null); get().loadMoreEmails(); }, 500));
           }
 
-          if (!get().unifiedInbox) _saveRestore(_buildRestoreDescriptor(get()));
+          // Descriptor saved on switch-away, not during load
 
           serverTrace.end('delta-noop');
           return;
@@ -848,7 +848,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       });
       serverTrace.mark('server-merged', { count: sorted.length, serverTotal });
 
-      if (!get().unifiedInbox) _saveRestore(_buildRestoreDescriptor(get()));
+      // Descriptor saved on switch-away, not during load
 
       db.saveEmailHeaders(accountId, effectiveMailbox, sorted, serverTotal, {
         uidValidity: newUidValidity,

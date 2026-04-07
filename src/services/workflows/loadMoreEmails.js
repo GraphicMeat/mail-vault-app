@@ -71,10 +71,7 @@ export async function loadMoreEmails() {
 
       get().updateSortedEmails();
 
-      if (!get().unifiedInbox) {
-        _saveRestore(_buildRestoreDescriptor(get()));
-      }
-
+      // Descriptor saved on switch-away, not on every page load
       db.saveEmailHeaders(activeAccountId, activeMailbox, newEmails, serverResult.total)
         .catch(e => console.warn('[loadMoreEmails] Failed to cache headers:', e));
 
