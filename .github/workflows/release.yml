@@ -153,6 +153,7 @@ jobs:
           CI: 'true'
           BUILD_TARGET: universal-apple-darwin
           SKIP_SERVER_BUILD: 'true'
+          SPARKLE_FRAMEWORK_PATH: ${{ github.workspace }}/src-tauri
           SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           KEYCHAIN_PATH: ${{ env.KEYCHAIN_PATH }}
           SPARKLE_EDDSA_PRIVATE_KEY: ${{ secrets.SPARKLE_EDDSA_PRIVATE_KEY }}
