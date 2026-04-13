@@ -38,6 +38,10 @@
         {
           "name": "mailvault-server",
           "sidecar": true
+        },
+        {
+          "name": "mailvault-daemon",
+          "sidecar": true
         }
       ]
     },

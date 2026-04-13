@@ -3912,59 +3912,15 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
 // ── Daemon RPC proxy ────────────────────────────────────────────────────────
 // Bridges frontend invoke() calls to the mailvault-daemon Unix socket.
 // In on-demand mode, auto-spawns the daemon if the socket isn't reachable.
+// Uses Tauri's shell sidecar API so the daemon runs correctly under App Sandbox.
 
 use std::sync::Mutex;
 use once_cell::sync::Lazy;
+use tauri_plugin_shell::ShellExt;
+use tauri_plugin_shell::process::CommandChild;
 
 /// Tracks a daemon child process spawned in on-demand mode.
-static DAEMON_CHILD: Lazy<Mutex<Option<std::process::Child>>> = Lazy::new(|| Mutex::new(None));
-
-/// Find the daemon binary. Checks next to the app binary (with Tauri sidecar triple suffix
-/// for release bundles, then plain name), then common build paths for development.
-fn find_daemon_binary(_app_handle: &tauri::AppHandle) -> Option<PathBuf> {
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            // 1. Tauri sidecar naming: mailvault-daemon-<target-triple> (release bundles)
-            let triple = format!("mailvault-daemon-{}", std::env::consts::ARCH);
-            let os_suffix = if cfg!(target_os = "macos") {
-                "-apple-darwin"
-            } else if cfg!(target_os = "linux") {
-                "-unknown-linux-gnu"
-            } else {
-                ""
-            };
-            let sidecar_name = format!("{}{}", triple, os_suffix);
-            let candidate = dir.join(&sidecar_name);
-            if candidate.exists() {
-                return Some(candidate);
-            }
-
-            // 2. Plain binary name (flat layout, dev builds)
-            let candidate = dir.join("mailvault-daemon");
-            if candidate.exists() {
-                return Some(candidate);
-            }
-        }
-    }
-
-    // 3. Cargo workspace target directories (dev mode)
-    for base in [
-        std::env::current_dir().ok(),
-        std::env::current_exe().ok().and_then(|e| {
-            // Walk up from src-tauri/target/debug/ to workspace root
-            e.parent()?.parent()?.parent()?.parent().map(|p| p.to_path_buf())
-        }),
-    ].into_iter().flatten() {
-        for profile in ["debug", "release"] {
-            let candidate = base.join("target").join(profile).join("mailvault-daemon");
-            if candidate.exists() {
-                return Some(candidate);
-            }
-        }
-    }
-
-    None
-}
+static DAEMON_CHILD: Lazy<Mutex<Option<CommandChild>>> = Lazy::new(|| Mutex::new(None));
 
 /// Spawn daemon as a child process (on-demand mode). Waits for socket to appear.
 fn ensure_daemon_running(app_handle: &tauri::AppHandle, socket_path: &Path) -> Result<(), String> {
@@ -3981,38 +3937,35 @@ fn ensure_daemon_running(app_handle: &tauri::AppHandle, socket_path: &Path) -> R
 
     let mut guard = DAEMON_CHILD.lock().map_err(|e| e.to_string())?;
 
-    // Check if our child is still alive
-    if let Some(ref mut child) = *guard {
-        match child.try_wait() {
-            Ok(Some(_)) => { *guard = None; } // Exited, need to respawn
-            Ok(None) => {
-                // Still running but socket gone — wait a moment
-                for _ in 0..20 {
-                    std::thread::sleep(std::time::Duration::from_millis(100));
-                    if socket_path.exists() { return Ok(()); }
-                }
-                return Err("Daemon child is running but socket not appearing".into());
-            }
-            Err(_) => { *guard = None; }
+    // If we have a tracked child but socket is gone, drop it and respawn
+    if guard.is_some() {
+        // Socket was stale or gone — wait briefly in case daemon is still starting
+        for _ in 0..20 {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            if socket_path.exists() { return Ok(()); }
+        }
+        // Kill stale child and respawn
+        if let Some(child) = guard.take() {
+            info!("Killing stale daemon child (PID {})", child.pid());
+            let _ = child.kill();
         }
     }
 
-    // Spawn new daemon
-    let daemon_bin = find_daemon_binary(app_handle)
-        .ok_or_else(|| "mailvault-daemon binary not found".to_string())?;
+    // Spawn new daemon via Tauri sidecar API (works under App Sandbox)
+    info!("Spawning daemon on-demand via sidecar API");
 
-    info!("Spawning daemon on-demand: {:?}", daemon_bin);
+    let sidecar_cmd = app_handle.shell().sidecar("mailvault-daemon")
+        .map_err(|e| format!("Failed to create daemon sidecar command: {}", e))?;
 
-    let child = Command::new(&daemon_bin)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
+    let (_rx, child) = sidecar_cmd.spawn()
         .map_err(|e| format!("Failed to spawn daemon: {}", e))?;
 
+    let pid = child.pid();
+    info!("Daemon spawned with PID {}", pid);
     *guard = Some(child);
 
-    // Wait for socket to appear (up to 3 seconds)
-    for _ in 0..30 {
+    // Wait for socket to appear (up to 5 seconds)
+    for _ in 0..50 {
         std::thread::sleep(std::time::Duration::from_millis(100));
         if socket_path.exists() {
             info!("Daemon socket ready");
@@ -4020,17 +3973,15 @@ fn ensure_daemon_running(app_handle: &tauri::AppHandle, socket_path: &Path) -> R
         }
     }
 
-    Err("Daemon spawned but socket did not appear within 3 seconds".into())
+    Err("Daemon spawned but socket did not appear within 5 seconds".into())
 }
 
 /// Kill the on-demand daemon child process (called on app exit).
 pub fn shutdown_daemon_child() {
     if let Ok(mut guard) = DAEMON_CHILD.lock() {
-        if let Some(ref mut child) = *guard {
-            info!("Shutting down on-demand daemon (PID {})", child.id());
+        if let Some(child) = guard.take() {
+            info!("Shutting down on-demand daemon (PID {})", child.pid());
             let _ = child.kill();
-            let _ = child.wait();
-            *guard = None;
         }
     }
 }
