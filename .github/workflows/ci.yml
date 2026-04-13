@@ -69,8 +69,8 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             ~/.cargo/bin
-            src-tauri/target
-          key: rust-e2e-${{ hashFiles('src-tauri/Cargo.lock') }}
+            target
+          key: rust-e2e-${{ hashFiles('Cargo.lock') }}
           restore-keys: rust-e2e-
       - uses: actions/setup-node@v4
         with:
@@ -105,6 +105,6 @@ jobs:
         run: touch .env.test
       - name: Run E2E tests (ui-headless suite)
         env:
-          TAURI_APP_BINARY: ${{ github.workspace }}/src-tauri/target/debug/mailvault
+          TAURI_APP_BINARY: ${{ github.workspace }}/target/debug/mailvault
           CI: "true"
         run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npx wdio run wdio.conf.js --suite ui-headless

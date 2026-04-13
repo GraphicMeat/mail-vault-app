@@ -85,8 +85,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            src-tauri/target
-          key: macos-universal-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+            target
+          key: macos-universal-cargo-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
             macos-universal-cargo-
 
@@ -192,8 +192,8 @@ jobs:
         with:
           name: macos-artifacts
           path: |
-            src-tauri/target/universal-apple-darwin/release/bundle/dmg/MailVault-*.dmg
-            src-tauri/target/universal-apple-darwin/release/bundle/dmg/appcast.xml
+            target/universal-apple-darwin/release/bundle/dmg/MailVault-*.dmg
+            target/universal-apple-darwin/release/bundle/dmg/appcast.xml
           retention-days: 1
 
   build-linux-x86_64:
@@ -230,8 +230,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            src-tauri/target
-          key: linux-x86_64-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+            target
+          key: linux-x86_64-cargo-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
             linux-x86_64-cargo-
 
@@ -263,8 +263,8 @@ jobs:
         with:
           name: linux-x86_64-artifacts
           path: |
-            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb
-            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb.sig
+            target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb
+            target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb.sig
           retention-days: 1
 
   build-linux-aarch64:
@@ -301,8 +301,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            src-tauri/target
-          key: linux-aarch64-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+            target
+          key: linux-aarch64-cargo-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
             linux-aarch64-cargo-
 
@@ -334,8 +334,8 @@ jobs:
         with:
           name: linux-aarch64-artifacts
           path: |
-            src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/deb/*.deb
-            src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/deb/*.deb.sig
+            target/aarch64-unknown-linux-gnu/release/bundle/deb/*.deb
+            target/aarch64-unknown-linux-gnu/release/bundle/deb/*.deb.sig
           retention-days: 1
 
   build-snap-x86_64:
@@ -372,8 +372,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            src-tauri/target
-          key: linux-x86_64-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+            target
+          key: linux-x86_64-cargo-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
             linux-x86_64-cargo-
 
@@ -451,8 +451,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            src-tauri/target
-          key: linux-aarch64-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+            target
+          key: linux-aarch64-cargo-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
             linux-aarch64-cargo-
 

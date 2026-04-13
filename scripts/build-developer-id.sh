@@ -55,10 +55,10 @@ VERSION=$(grep '"version"' package.json | head -1 | sed 's/.*"version": *"\([^"]
 # Determine build target and output paths
 if [ -n "$BUILD_TARGET" ]; then
     TAURI_ARGS="--target $BUILD_TARGET"
-    TARGET_DIR="src-tauri/target/$BUILD_TARGET/release"
+    TARGET_DIR="target/$BUILD_TARGET/release"
 else
     TAURI_ARGS=""
-    TARGET_DIR="src-tauri/target/release"
+    TARGET_DIR="target/release"
 fi
 
 # ── Signing Identity ────────────────────────────────────────────────
