@@ -195,6 +195,30 @@ if [ ! -d "$APP_PATH" ]; then
     exit 1
 fi
 
+# ── Replace Tauri's lipo'd sidecars with pre-built universal binaries ──
+# Tauri's universal bundler lipo's external binaries from the two arch builds,
+# but Bun-compiled binaries have custom embedded sections that get corrupted.
+# Replace them with our known-good pre-built universal binaries.
+
+echo ""
+echo -e "${YELLOW}🔄 Replacing bundled sidecars with pre-built universal binaries...${NC}"
+
+PREBUILT_SERVER="src-tauri/binaries/mailvault-server-universal-apple-darwin"
+BUNDLED_SERVER="$APP_PATH/Contents/MacOS/mailvault-server"
+if [ -f "$BUNDLED_SERVER" ] && [ -f "$PREBUILT_SERVER" ]; then
+    cp "$PREBUILT_SERVER" "$BUNDLED_SERVER"
+    chmod +x "$BUNDLED_SERVER"
+    echo "   ✓ Replaced mailvault-server ($(file -b "$BUNDLED_SERVER"))"
+fi
+
+PREBUILT_DAEMON="src-tauri/binaries/mailvault-daemon-universal-apple-darwin"
+BUNDLED_DAEMON="$APP_PATH/Contents/MacOS/mailvault-daemon"
+if [ -f "$BUNDLED_DAEMON" ] && [ -f "$PREBUILT_DAEMON" ]; then
+    cp "$PREBUILT_DAEMON" "$BUNDLED_DAEMON"
+    chmod +x "$BUNDLED_DAEMON"
+    echo "   ✓ Replaced mailvault-daemon ($(file -b "$BUNDLED_DAEMON"))"
+fi
+
 # ── Sign ───────────────────────────────────────────────────────────
 
 echo ""
