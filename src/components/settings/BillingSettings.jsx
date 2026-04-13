@@ -8,6 +8,7 @@ import {
 } from '../../services/billingApi';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { Toast } from '../Toast';
+import { formatDateLong, formatTime } from '../../utils/dateFormat';
 import {
   CreditCard,
   CheckCircle2,
@@ -32,7 +33,7 @@ const STALE_THRESHOLD = 3600_000;       // 1h before mount auto-refresh
 
 function formatDate(dateStr) {
   if (!dateStr) return '--';
-  return new Date(dateStr).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  return formatDateLong(dateStr) || '--';
 }
 
 function timeAgo(dateStr) {
@@ -424,7 +425,7 @@ export function BillingSettings() {
           </div>
         )}
         {syncError && <p className="text-xs text-mail-danger mt-2">{syncError}</p>}
-        {billingLastChecked && isSignedIn && <p className="text-xs text-mail-text-muted mt-1">Last synced: {new Date(billingLastChecked).toLocaleTimeString()}</p>}
+        {billingLastChecked && isSignedIn && <p className="text-xs text-mail-text-muted mt-1">Last synced: {formatTime(billingLastChecked)}</p>}
       </div>
 
       {/* Early Bird Pricing */}

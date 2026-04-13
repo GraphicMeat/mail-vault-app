@@ -195,7 +195,7 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
         "graph.move_emails" => handle_graph(&state, req.params, id, "move_emails").await,
 
         // ── Sync engine (Phase 3) ───────────────────────────────────
-        "sync.now" => handle_sync_now(Arc::clone(&state.sync_engine), req.params, id).await,
+        "sync.now" => handle_sync_now(Arc::clone(state), req.params, id).await,
         "sync.wait" => handle_sync_wait(Arc::clone(&state.sync_engine), req.params, id).await,
         "sync.status" => handle_sync_status(&state.sync_engine, req.params, id).await,
 
@@ -253,6 +253,9 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
         "llm.unload" => handle_llm_unload(&state.inference, id).await,
         "llm.classify" => handle_llm_classify(&state.inference, req.params, id).await,
 
+        "classification.run" => handle_classification_run(Arc::clone(state), req.params, id).await,
+        "classification.reclassify_all" => handle_reclassify_all(Arc::clone(state), req.params, id).await,
+        "classification.cancel" => handle_classification_cancel(&state.classification, id).await,
         "classification.summary" => handle_classification_summary(&state.data_dir, req.params, id),
         "classification.results" => handle_classification_results(&state.data_dir, req.params, id),
         "classification.override" => handle_classification_override(&state.data_dir, req.params, id),
@@ -885,21 +888,29 @@ async fn handle_graph(_state: &Arc<DaemonState>, params: Value, id: Value, op: &
 
 // ── Sync handlers (Phase 3) ─────────────────────────────────────────────────
 
-async fn handle_sync_now(engine: Arc<sync_engine::SyncEngine>, params: Value, id: Value) -> RpcResponse {
+async fn handle_sync_now(state: Arc<DaemonState>, params: Value, id: Value) -> RpcResponse {
     let account: sync_engine::SyncAccount = match params.get("account").and_then(|v| serde_json::from_value(v.clone()).ok()) {
         Some(a) => a,
         None => return RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing account"),
     };
     let mailbox = params.get("mailbox").and_then(|v| v.as_str()).unwrap_or("INBOX");
+    let auto_classify = params.get("autoClassify").and_then(|v| v.as_bool()).unwrap_or(false);
 
     // Spawn sync as background task so RPC returns immediately
-    let account_clone = account.clone();
+    let account_id = account.id.clone();
+    let response_account_id = account_id.clone();
     let mailbox_clone = mailbox.to_string();
     tokio::spawn(async move {
-        engine.sync_account(&account_clone, &mailbox_clone).await;
+        let result = state.sync_engine.sync_account(&account, &mailbox_clone).await;
+
+        // Auto-trigger heuristic classification after successful sync (if enabled)
+        if auto_classify && result.success && result.new_emails > 0 {
+            info!("[sync] Enqueuing post-sync classification for {}", account_id);
+            enqueue_for_classification(Arc::clone(&state), &account_id, classification::QueueTier::New).await;
+        }
     });
 
-    RpcResponse::success(id, serde_json::json!({"started": true, "accountId": account.id, "mailbox": mailbox}))
+    RpcResponse::success(id, serde_json::json!({"started": true, "accountId": response_account_id, "mailbox": mailbox}))
 }
 
 async fn handle_sync_wait(engine: Arc<sync_engine::SyncEngine>, params: Value, id: Value) -> RpcResponse {
@@ -1170,16 +1181,43 @@ fn handle_classification_results(data_dir: &Path, params: Value, id: Value) -> R
         None => return RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing accountId"),
     };
 
-    if let Some(category) = params.get("category").and_then(|v| v.as_str()) {
-        let results = classification::get_by_category(data_dir, account_id, category);
-        let entries: Vec<_> = results.into_iter().map(|(mid, c)| {
-            serde_json::json!({"messageId": mid, "classification": c})
-        }).collect();
-        RpcResponse::success(id, serde_json::to_value(entries).unwrap())
+    let all = classification::load_classifications(data_dir, account_id);
+
+    let build_entry = |mid: &str, c: &classification::EmailClassification| {
+        let snap = c.snapshot.as_ref();
+        serde_json::json!({
+            "messageId": mid,
+            "classification": c,
+            "subject": snap.map(|s| s.subject.as_str()).unwrap_or(""),
+            "from": snap.map(|s| s.from.as_str()).unwrap_or(""),
+            "date": snap.map(|s| s.date.as_str()).unwrap_or(""),
+            "uid": snap.map(|s| s.uid).unwrap_or(0),
+            "mailbox": snap.map(|s| s.mailbox.as_str()).unwrap_or("INBOX"),
+        })
+    };
+
+    let mut entries: Vec<_> = if let Some(category) = params.get("category").and_then(|v| v.as_str()) {
+        all.iter()
+            .filter(|(_, c)| c.category == category)
+            .map(|(mid, c)| build_entry(mid, c))
+            .collect()
     } else {
-        let all = classification::load_classifications(data_dir, account_id);
-        RpcResponse::success(id, serde_json::to_value(all).unwrap())
-    }
+        all.iter().map(|(mid, c)| build_entry(mid, c)).collect()
+    };
+
+    // Sort by snapshot date descending (newest first); missing/empty dates sort to end.
+    entries.sort_by(|a, b| {
+        let da = a.get("date").and_then(|v| v.as_str()).unwrap_or("");
+        let db = b.get("date").and_then(|v| v.as_str()).unwrap_or("");
+        match (da.is_empty(), db.is_empty()) {
+            (true, true) => std::cmp::Ordering::Equal,
+            (true, false) => std::cmp::Ordering::Greater,
+            (false, true) => std::cmp::Ordering::Less,
+            _ => db.cmp(da),
+        }
+    });
+
+    RpcResponse::success(id, serde_json::to_value(entries).unwrap())
 }
 
 fn handle_classification_override(data_dir: &Path, params: Value, id: Value) -> RpcResponse {
@@ -1202,9 +1240,401 @@ fn handle_classification_override(data_dir: &Path, params: Value, id: Value) -> 
     }
 }
 
+async fn handle_classification_cancel(state: &classification::ClassificationState, id: Value) -> RpcResponse {
+    *state.cancel_flag.lock().await = true;
+    // Wake the worker so it can check the cancel flag and clear the queue
+    state.notify.notify_one();
+    RpcResponse::success(id, serde_json::json!({"cancelled": true}))
+}
+
 async fn handle_classification_status(state: &classification::ClassificationState, id: Value) -> RpcResponse {
     let progress = state.progress.lock().await.clone();
     RpcResponse::success(id, serde_json::to_value(progress).unwrap())
+}
+
+async fn handle_classification_run(state: Arc<DaemonState>, params: Value, id: Value) -> RpcResponse {
+    let account_id = match params.get("accountId").and_then(|v| v.as_str()) {
+        Some(id) => id.to_string(),
+        None => return RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing accountId"),
+    };
+
+    // Reset progress counters for a fresh manual run, keeping any resumed queue items in total
+    {
+        let existing_depth = state.classification.queue_depth().await;
+        let mut progress = state.classification.progress.lock().await;
+        progress.classified = 0;
+        progress.total = existing_depth;
+        progress.skipped_by_rules = 0;
+    }
+
+    let aid = account_id.clone();
+    let state_clone = Arc::clone(&state);
+    tokio::spawn(async move {
+        // Enqueue all unclassified: newest as New tier, then older as Backfill.
+        // Since this is a manual "Reclassify All", everything goes through the queue
+        // with New tier so it all processes newest-first in one pass.
+        enqueue_for_classification(state_clone, &aid, classification::QueueTier::New).await;
+    });
+
+    RpcResponse::success(id, serde_json::json!({"started": true, "accountId": account_id}))
+}
+
+async fn handle_reclassify_all(state: Arc<DaemonState>, params: Value, id: Value) -> RpcResponse {
+    let account_id = match params.get("accountId").and_then(|v| v.as_str()) {
+        Some(id) => id.to_string(),
+        None => return RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing accountId"),
+    };
+
+    // Reset progress, keeping any resumed queue items in total
+    {
+        let existing_depth = state.classification.queue_depth().await;
+        let mut progress = state.classification.progress.lock().await;
+        progress.classified = 0;
+        progress.total = existing_depth;
+        progress.skipped_by_rules = 0;
+    }
+
+    let aid = account_id.clone();
+    let state_clone = Arc::clone(&state);
+    tokio::spawn(async move {
+        // 1. Retrain model with current labeled data
+        retrain_model(&state_clone.data_dir, &aid);
+
+        // 2. Force-enqueue all emails (bypasses "already classified" check)
+        let emails = load_emails_all_mailboxes(&state_clone.data_dir, &aid);
+        if emails.is_empty() {
+            info!("[reclassify] No emails to reclassify for {}", aid);
+            return;
+        }
+
+        // Filter out UserOverride classifications — those stay
+        let existing = classification::load_classifications(&state_clone.data_dir, &aid);
+        let reclassify_emails: Vec<_> = emails
+            .into_iter()
+            .filter(|e| {
+                let mid = e.message_id.as_deref().unwrap_or("");
+                if mid.is_empty() { return false; }
+                match existing.get(mid) {
+                    Some(c) if c.source == classification::ClassificationSource::UserOverride => false,
+                    _ => true,
+                }
+            })
+            .collect();
+
+        let count = state_clone
+            .classification
+            .enqueue_force(&aid, reclassify_emails, classification::QueueTier::New)
+            .await;
+
+        info!("[reclassify] Enqueued {} emails for reclassification ({})", count, aid);
+    });
+
+    RpcResponse::success(id, serde_json::json!({"started": true, "accountId": account_id}))
+}
+
+/// Retrain the Naive Bayes model using user overrides and local rules applied to cached emails.
+fn retrain_model(data_dir: &Path, account_id: &str) {
+    let classifications = classification::load_classifications(data_dir, account_id);
+    let emails = load_emails_all_mailboxes(data_dir, account_id);
+
+    // Build labeled data from user overrides and local rules
+    let mut labeled: Vec<(classification::EmailForClassification, String)> = Vec::new();
+
+    // Map emails by message_id for lookup
+    let email_map: HashMap<String, &classification::EmailForClassification> = emails
+        .iter()
+        .filter_map(|e| e.message_id.as_ref().map(|mid| (mid.clone(), e)))
+        .collect();
+
+    for (mid, cls) in &classifications {
+        // Only use high-quality labels: user overrides and local rules
+        if cls.source != classification::ClassificationSource::UserOverride
+            && cls.source != classification::ClassificationSource::LocalRule
+        {
+            continue;
+        }
+        if let Some(email) = email_map.get(mid) {
+            labeled.push(((*email).clone(), cls.category.clone()));
+        }
+    }
+
+    if labeled.is_empty() {
+        // Not enough data to train — also add bootstrap labels
+        for email in &emails {
+            if let Some((cat, _)) = classification::bootstrap_label(email) {
+                labeled.push((email.clone(), cat.to_string()));
+            }
+        }
+    }
+
+    if labeled.len() < 5 {
+        info!("[retrain] Not enough labeled data ({}) to train model for {}", labeled.len(), account_id);
+        return;
+    }
+
+    let model = classification::NaiveBayesModel::train(&labeled);
+    info!(
+        "[retrain] Trained NB model for {} with {} examples, {} vocab",
+        account_id, model.training_count, model.vocab_size
+    );
+
+    if let Err(e) = classification::save_model(data_dir, account_id, &model) {
+        warn!("[retrain] Failed to save model: {}", e);
+    }
+}
+
+/// Load cached email headers and enqueue unclassified ones for the background worker.
+async fn enqueue_for_classification(
+    state: Arc<DaemonState>,
+    account_id: &str,
+    tier: classification::QueueTier,
+) {
+    let emails = load_emails_all_mailboxes(&state.data_dir, account_id);
+    if emails.is_empty() {
+        info!("[classification] No emails to enqueue for {}", account_id);
+        return;
+    }
+
+    let count = state
+        .classification
+        .enqueue(account_id, emails, tier)
+        .await;
+
+    info!(
+        "[classification] Enqueued {} emails for {} (tier: {:?})",
+        count, account_id, tier
+    );
+}
+
+/// Discover all cached mailboxes for an account and load emails from each.
+fn load_emails_all_mailboxes(
+    data_dir: &Path,
+    account_id: &str,
+) -> Vec<classification::EmailForClassification> {
+    let cache_dir = data_dir.join("email_cache");
+    let prefix = format!(
+        "{}_",
+        account_id.replace(|c: char| !c.is_alphanumeric(), "_"),
+    );
+
+    let entries = match std::fs::read_dir(&cache_dir) {
+        Ok(e) => e,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut all_emails = Vec::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if !name.starts_with(&prefix) || !entry.path().is_dir() {
+            continue;
+        }
+        // Extract mailbox name from dir name: {sanitized_account}_{sanitized_mailbox}
+        let mailbox = &name[prefix.len()..];
+        let mut emails = load_emails_for_classification(data_dir, account_id, mailbox);
+        // Tag each email with its mailbox so the snapshot records the correct folder
+        for email in &mut emails {
+            email.mailbox = mailbox.to_string();
+        }
+        all_emails.append(&mut emails);
+    }
+
+    all_emails
+}
+
+/// Read cached email JSON files and convert to EmailForClassification.
+fn load_emails_for_classification(
+    data_dir: &Path,
+    account_id: &str,
+    mailbox: &str,
+) -> Vec<classification::EmailForClassification> {
+    let cache_dir = data_dir
+        .join("email_cache")
+        .join(format!(
+            "{}_{}",
+            account_id.replace(|c: char| !c.is_alphanumeric(), "_"),
+            mailbox.replace(|c: char| !c.is_alphanumeric(), "_"),
+        ));
+
+    let entries = match std::fs::read_dir(&cache_dir) {
+        Ok(e) => e,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut emails = Vec::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if !name.ends_with(".json") || name == "_meta.json" {
+            continue;
+        }
+
+        let json = match std::fs::read_to_string(entry.path()) {
+            Ok(j) => j,
+            Err(_) => continue,
+        };
+
+        let val: serde_json::Value = match serde_json::from_str(&json) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+
+        let uid = val.get("uid").and_then(|v| v.as_u64()).unwrap_or(0);
+        let message_id = val.get("messageId").and_then(|v| v.as_str()).map(String::from);
+        let subject = val.get("subject").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let date = val.get("date").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+        // from is an object { name, address }
+        let from_addr = val.get("from").and_then(|f| f.get("address")).and_then(|v| v.as_str()).unwrap_or("");
+        let from_name = val.get("from").and_then(|f| f.get("name")).and_then(|v| v.as_str()).unwrap_or("");
+        let from = if from_name.is_empty() { from_addr.to_string() } else { format!("{} <{}>", from_name, from_addr) };
+
+        // reply_to is an object { name, address } — check if it differs from from
+        let reply_to_addr = val.get("replyTo").and_then(|r| r.get("address")).and_then(|v| v.as_str()).unwrap_or("");
+        let reply_to_differs = !reply_to_addr.is_empty() && !reply_to_addr.eq_ignore_ascii_case(from_addr);
+
+        let to_count = val.get("to").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
+        let has_attachments = val.get("hasAttachments").and_then(|v| v.as_bool()).unwrap_or(false);
+        let size = val.get("size").and_then(|v| v.as_u64()).map(|s| s as u32);
+        let in_reply_to = val.get("inReplyTo").and_then(|v| v.as_str()).map(String::from);
+        let list_unsubscribe_val = val.get("listUnsubscribe").and_then(|v| v.as_str()).unwrap_or("");
+        let list_unsubscribe = !list_unsubscribe_val.is_empty();
+        let list_id = val.get("listId").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(String::from);
+        let precedence = val.get("precedence").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(String::from);
+
+        emails.push(classification::EmailForClassification {
+            uid,
+            message_id,
+            subject,
+            from,
+            date,
+            body_preview: String::new(),
+            mailbox: String::new(),
+            to_count,
+            has_attachments,
+            size,
+            in_reply_to,
+            list_unsubscribe,
+            list_id,
+            precedence,
+            reply_to_differs,
+        });
+    }
+
+    emails
+}
+
+// ── Classification Worker ─────────────────────────────────────────────────
+
+/// Start the background classification worker. Call once after DaemonState is created.
+pub fn start_classification_worker(state: Arc<DaemonState>) {
+    let data_dir = state.data_dir.clone();
+    let state_clone = Arc::clone(&state);
+
+    let load_rules: Arc<dyn Fn(&str) -> Vec<classification::LearnedRule> + Send + Sync> = {
+        Arc::new(move |account_id: &str| {
+            let feedback = learning::load_feedback(&data_dir, account_id);
+            feedback
+                .rules
+                .iter()
+                .filter_map(|v| serde_json::from_value(v.clone()).ok())
+                .collect()
+        })
+    };
+
+    tokio::spawn(async move {
+        run_classification_worker(state_clone, load_rules).await;
+    });
+}
+
+/// Inline worker loop that processes the queue via DaemonState.
+async fn run_classification_worker(
+    state: Arc<DaemonState>,
+    load_rules: Arc<dyn Fn(&str) -> Vec<classification::LearnedRule> + Send + Sync>,
+) {
+    info!("[queue-worker] Classification worker started");
+
+    loop {
+        // Wait for items
+        if state.classification.queue_depth().await == 0 {
+            {
+                let mut progress = state.classification.progress.lock().await;
+                if progress.status == classification::PipelineStatus::Running {
+                    progress.status = classification::PipelineStatus::Complete;
+                    progress.phase = "idle".to_string();
+                }
+            }
+            state.classification.notify.notified().await;
+        }
+
+        // Check cancel flag
+        {
+            let mut cancel = state.classification.cancel_flag.lock().await;
+            if *cancel {
+                *cancel = false;
+                // Clear the queue via a temporary lock scope
+                let depth = {
+                    let mut queue = state.classification.queue.lock().await;
+                    state.classification.queued_ids.lock().await.clear();
+                    queue.clear();
+                    state.classification.persist_queue_locked(&queue);
+                    0
+                };
+                let mut progress = state.classification.progress.lock().await;
+                progress.status = classification::PipelineStatus::Cancelled;
+                progress.queue_depth = depth;
+                progress.phase = "idle".to_string();
+                info!("[queue-worker] Classification cancelled, queue cleared");
+                continue;
+            }
+        }
+
+        let item = match state.classification.pop_next().await {
+            Some(item) => item,
+            None => continue,
+        };
+
+        // Mark as running
+        {
+            let mut progress = state.classification.progress.lock().await;
+            progress.account_id = item.account_id.clone();
+            progress.status = classification::PipelineStatus::Running;
+        }
+
+        // Check if already classified (race between enqueue and processing)
+        let existing = classification::load_classifications(&state.data_dir, &item.account_id);
+        if existing.contains_key(&item.message_id) {
+            let mut progress = state.classification.progress.lock().await;
+            progress.classified += 1;
+            continue;
+        }
+
+        let rules = load_rules(&item.account_id);
+        let model = classification::load_model(&state.data_dir, &item.account_id);
+        let result = classification::classify_single_with_model(&item.email, &rules, model.as_ref());
+        let was_rule = result.source == classification::ClassificationSource::LocalRule;
+
+        if let Err(e) = classification::save_single_classification(
+            &state.data_dir,
+            &item.account_id,
+            &item.message_id,
+            &result,
+        ) {
+            warn!(
+                "[queue-worker] Failed to save classification for {}: {}",
+                item.message_id, e
+            );
+            let mut progress = state.classification.progress.lock().await;
+            progress.status = classification::PipelineStatus::Failed(e);
+            continue;
+        }
+
+        {
+            let mut progress = state.classification.progress.lock().await;
+            progress.classified += 1;
+            if was_rule {
+                progress.skipped_by_rules += 1;
+            }
+        }
+    }
 }
 
 // ── Learning handlers ──────────────────────────────────────────────────────

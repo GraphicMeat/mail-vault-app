@@ -2,74 +2,32 @@ import React, { useEffect, useState } from 'react';
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { useLearningStore } from '../../stores/learningStore';
 import { useAccountStore } from '../../stores/accountStore';
-import * as llmService from '../../services/llmService';
 import { exportRules, previewImport, importRules } from '../../services/ruleExporter';
+import * as classificationService from '../../services/classificationService';
 import {
-  Sparkles, Download, Trash2, HardDrive, Loader, CheckCircle2,
-  AlertCircle, XCircle, Upload, FileDown, Lock, Cpu, Zap,
-  Info, Brain,
+  Sparkles, Trash2, AlertCircle, XCircle, Upload, FileDown, Lock,
+  Info, Brain, ChevronDown, ChevronRight, Save, Plus,
 } from 'lucide-react';
 
 export function AISettings() {
   const billingProfile = useSettingsStore(s => s.billingProfile);
   const isPremium = hasPremiumAccess(billingProfile);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
+  const customCategories = useSettingsStore(s => s.customCategories);
+  const addCustomCategory = useSettingsStore(s => s.addCustomCategory);
+  const removeCustomCategory = useSettingsStore(s => s.removeCustomCategory);
 
-  const [llmStatus, setLlmStatus] = useState(null);
-  const [models, setModels] = useState([]);
   const [error, setError] = useState(null);
-
-  const { rules, stats, loadRules, deleteRule } = useLearningStore();
-
-  const refreshStatus = async () => {
-    try {
-      const [status, modelList] = await Promise.all([
-        llmService.getStatus(),
-        llmService.listModels(),
-      ]);
-      setLlmStatus(status);
-      setModels(modelList);
-    } catch (e) {
-      setError(e.message);
-    }
-  };
+  const [editingRuleId, setEditingRuleId] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [newCategoryRule, setNewCategoryRule] = useState(false);
+  const [newRuleForm, setNewRuleForm] = useState({ domain: '', address: '', subject: '' });
+  const { rules, stats, loadRules, deleteRule, saveRule } = useLearningStore();
 
   useEffect(() => {
-    if (!isPremium) return;
-    refreshStatus();
-    if (activeAccountId) loadRules(activeAccountId);
-
-    const interval = setInterval(async () => {
-      try {
-        const status = await llmService.getStatus();
-        setLlmStatus(prev => {
-          // Refresh model list when download finishes
-          if (prev?.status === 'downloading' && status.status !== 'downloading') {
-            llmService.listModels().then(setModels).catch(() => {});
-          }
-          return status;
-        });
-      } catch {}
-    }, 2000);
-
-    return () => clearInterval(interval);
+    if (!isPremium || !activeAccountId) return;
+    loadRules(activeAccountId);
   }, [isPremium, activeAccountId]);
-
-  const handleDownload = async (modelId) => {
-    setError(null);
-    try { await llmService.downloadModel(modelId); } catch (e) { setError(e.message); }
-  };
-
-  const handleCancelDownload = async () => {
-    try { await llmService.cancelDownload(); } catch {}
-  };
-
-  const handleDeleteModel = async (modelId) => {
-    try {
-      await llmService.deleteModel(modelId);
-      await refreshStatus();
-    } catch (e) { setError(e.message); }
-  };
 
   const handleExportRules = async () => {
     if (!activeAccountId) return;
@@ -97,7 +55,7 @@ export function AISettings() {
       const preview = previewImport(text);
       if (!preview.valid) { setError(preview.error); return; }
       try {
-        const count = await importRules(
+        await importRules(
           activeAccountId,
           preview.rules,
           async (aid) => {
@@ -130,9 +88,6 @@ export function AISettings() {
     );
   }
 
-  const isDownloading = llmStatus?.status === 'downloading';
-  const downloadProgress = llmStatus?.download;
-
   return (
     <div className="p-6 space-y-6">
       {error && (
@@ -149,97 +104,17 @@ export function AISettings() {
           <div className="w-10 h-10 rounded-full bg-mail-accent/10 flex items-center justify-center">
             <Info size={20} className="text-mail-accent" />
           </div>
-          <h3 className="text-sm font-semibold text-mail-text">How classification works</h3>
+          <h3 className="text-sm font-semibold text-mail-text">How Email Cleanup works</h3>
         </div>
-        <div className="text-xs text-mail-text-muted space-y-2">
-          <p>MailVault runs an AI model entirely on your machine — no email data ever leaves your device.</p>
-          <ol className="list-decimal list-inside space-y-1 pl-1">
-            <li><strong>Download a model</strong> below (one-time, ~2-5 GB).</li>
-            <li><strong>Run a backup</strong> — the backup provides the email content for classification.</li>
-            <li><strong>View results</strong> in AI Cleanup — emails are sorted into categories with suggested actions.</li>
-            <li><strong>Correct mistakes</strong> — your corrections become learned rules that improve accuracy over time.</li>
-          </ol>
-        </div>
-      </div>
-
-      {/* AI Models */}
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-full bg-mail-accent/10 flex items-center justify-center">
-            <Cpu size={20} className="text-mail-accent" />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-mail-text">AI Models</h3>
-            <p className="text-xs text-mail-text-muted">Download a model to enable email classification.</p>
-          </div>
-        </div>
-
-        {/* Download progress */}
-        {isDownloading && downloadProgress && (
-          <div className="mb-4 p-3 rounded-lg bg-mail-accent/5 border border-mail-accent/20">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs font-medium text-mail-text">Downloading {downloadProgress.model_id}...</span>
-              <button onClick={handleCancelDownload} className="text-xs text-red-500 hover:text-red-600">Cancel</button>
-            </div>
-            <div className="h-2 bg-mail-surface-hover rounded-full overflow-hidden">
-              <div
-                className="h-full bg-mail-accent rounded-full transition-all duration-300"
-                style={{ width: `${downloadProgress.total_bytes > 0 ? (downloadProgress.downloaded_bytes / downloadProgress.total_bytes * 100) : 0}%` }}
-              />
-            </div>
-            <p className="text-[11px] text-mail-text-muted mt-1">
-              {formatBytes(downloadProgress.downloaded_bytes)} / {formatBytes(downloadProgress.total_bytes)}
-            </p>
-          </div>
-        )}
-
-        <div className="space-y-2">
-          {models.map(model => (
-            <div key={model.id} className="flex items-center justify-between p-3 rounded-lg border border-mail-border">
-              <div className="flex items-center gap-3">
-                <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${model.downloaded ? 'bg-emerald-500/10' : 'bg-mail-surface-hover'}`}>
-                  {model.downloaded
-                    ? <CheckCircle2 size={16} className="text-emerald-500" />
-                    : <Download size={16} className="text-mail-text-muted" />}
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-mail-text">
-                    {model.name}
-                    {model.recommended && (
-                      <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-mail-accent/10 text-mail-accent">Recommended</span>
-                    )}
-                  </p>
-                  <p className="text-[11px] text-mail-text-muted">{formatBytes(model.size_bytes)}</p>
-                </div>
-              </div>
-
-              {model.downloaded ? (
-                <button
-                  onClick={() => handleDeleteModel(model.id)}
-                  className="p-1.5 rounded hover:bg-red-500/10 text-mail-text-muted hover:text-red-500 transition-colors"
-                  title="Delete model"
-                >
-                  <Trash2 size={14} />
-                </button>
-              ) : (
-                <button
-                  onClick={() => handleDownload(model.id)}
-                  disabled={isDownloading}
-                  className="px-3 py-1.5 text-xs font-medium rounded-lg bg-mail-accent text-white hover:bg-mail-accent/90 disabled:opacity-50 transition-colors"
-                >
-                  Download
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {llmStatus && (
-          <p className="text-[11px] text-mail-text-muted mt-3 flex items-center gap-1">
-            <HardDrive size={12} />
-            Models stored in: {llmStatus.models_dir}
-          </p>
-        )}
+        <p className="text-xs text-mail-text-muted mb-3">
+          Email Cleanup uses a local AI classifier to sort your emails into categories like newsletters, promotions, notifications, transactional, work, and personal — then suggests whether to keep, archive, or delete each one.
+        </p>
+        <ol className="text-sm text-mail-text-muted list-decimal list-inside space-y-1.5">
+          <li>MailVault analyzes sender domains, subject keywords, email headers, and metadata — all locally on your device.</li>
+          <li>Each email gets a category, a suggested action, and a confidence score so you can see how certain the classifier is.</li>
+          <li>When you correct a classification, MailVault learns from it — generating rules for that sender or pattern and retraining its model to get smarter over time.</li>
+          <li>You can review and manage your learned rules below, and export them to share across accounts.</li>
+        </ol>
       </div>
 
       {/* Learned Rules */}
@@ -289,38 +164,219 @@ export function AISettings() {
 
         {rules.length === 0 ? (
           <p className="text-xs text-mail-text-muted text-center py-4">
-            No rules yet. Rules are auto-generated as you correct AI classifications in the cleanup report.
+            No rules yet. Rules are auto-generated as you correct classifications in the Email Cleanup tab.
           </p>
         ) : (
           <div className="space-y-1">
             {rules.map(rule => (
-              <div key={rule.id} className="flex items-center justify-between p-2.5 rounded-lg border border-mail-border text-xs">
-                <div>
-                  <span className="font-medium text-mail-text">{rule.pattern?.fromDomain || rule.pattern?.subjectContains || '?'}</span>
-                  <span className="text-mail-text-muted ml-1.5">&rarr; {rule.category || rule.action}</span>
-                  {rule.source === 'imported' && (
-                    <span className="ml-1.5 text-[10px] px-1 py-0.5 rounded bg-mail-surface-hover text-mail-text-muted">imported</span>
-                  )}
-                </div>
-                <button
-                  onClick={() => deleteRule(activeAccountId, rule.id)}
-                  className="p-1 rounded hover:bg-red-500/10 text-mail-text-muted hover:text-red-500 transition-colors"
+              <div key={rule.id} className="rounded-lg border border-mail-border text-xs">
+                <div
+                  className="flex items-center justify-between p-2.5 cursor-pointer hover:bg-mail-surface-hover transition-colors"
+                  onClick={() => {
+                    if (editingRuleId === rule.id) {
+                      setEditingRuleId(null);
+                    } else {
+                      setEditingRuleId(rule.id);
+                      setEditForm({
+                        fromDomain: rule.pattern?.fromDomain || '',
+                        fromAddress: rule.pattern?.fromAddress || '',
+                        subjectContains: rule.pattern?.subjectContains || '',
+                        bodyContains: rule.pattern?.bodyContains || '',
+                        category: rule.category || '',
+                        action: rule.action || '',
+                      });
+                    }
+                  }}
                 >
-                  <Trash2 size={12} />
-                </button>
+                  <div className="flex items-center gap-1.5">
+                    {editingRuleId === rule.id ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                    <span className="font-medium text-mail-text">{rule.pattern?.fromDomain || rule.pattern?.fromAddress || rule.pattern?.subjectContains || '?'}</span>
+                    <span className="text-mail-text-muted">&rarr; {rule.category || rule.action}</span>
+                    {rule.source === 'imported' && (
+                      <span className="text-[10px] px-1 py-0.5 rounded bg-mail-surface-hover text-mail-text-muted">imported</span>
+                    )}
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); deleteRule(activeAccountId, rule.id); }}
+                    className="p-1 rounded hover:bg-red-500/10 text-mail-text-muted hover:text-red-500 transition-colors"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+                {editingRuleId === rule.id && (
+                  <div className="px-3 pb-3 pt-1 border-t border-mail-border space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="space-y-0.5">
+                        <span className="text-[10px] text-mail-text-muted">Domain</span>
+                        <input value={editForm.fromDomain} onChange={e => setEditForm(f => ({ ...f, fromDomain: e.target.value }))}
+                          className="w-full px-2 py-1 text-xs rounded border border-mail-border bg-mail-bg text-mail-text" placeholder="example.com" />
+                      </label>
+                      <label className="space-y-0.5">
+                        <span className="text-[10px] text-mail-text-muted">Address</span>
+                        <input value={editForm.fromAddress} onChange={e => setEditForm(f => ({ ...f, fromAddress: e.target.value }))}
+                          className="w-full px-2 py-1 text-xs rounded border border-mail-border bg-mail-bg text-mail-text" placeholder="user@example.com" />
+                      </label>
+                      <label className="space-y-0.5">
+                        <span className="text-[10px] text-mail-text-muted">Subject contains</span>
+                        <input value={editForm.subjectContains} onChange={e => setEditForm(f => ({ ...f, subjectContains: e.target.value }))}
+                          className="w-full px-2 py-1 text-xs rounded border border-mail-border bg-mail-bg text-mail-text" placeholder="keyword" />
+                      </label>
+                      <label className="space-y-0.5">
+                        <span className="text-[10px] text-mail-text-muted">Body contains</span>
+                        <input value={editForm.bodyContains} onChange={e => setEditForm(f => ({ ...f, bodyContains: e.target.value }))}
+                          className="w-full px-2 py-1 text-xs rounded border border-mail-border bg-mail-bg text-mail-text" placeholder="keyword" />
+                      </label>
+                      <label className="space-y-0.5">
+                        <span className="text-[10px] text-mail-text-muted">Category</span>
+                        <input value={editForm.category} onChange={e => setEditForm(f => ({ ...f, category: e.target.value }))}
+                          className="w-full px-2 py-1 text-xs rounded border border-mail-border bg-mail-bg text-mail-text" />
+                      </label>
+                      <label className="space-y-0.5">
+                        <span className="text-[10px] text-mail-text-muted">Action</span>
+                        <select value={editForm.action} onChange={e => setEditForm(f => ({ ...f, action: e.target.value }))}
+                          className="w-full px-2 py-1 text-xs rounded border border-mail-border bg-mail-bg text-mail-text">
+                          <option value="keep">Keep</option>
+                          <option value="archive">Archive</option>
+                          <option value="delete-from-server">Delete</option>
+                          <option value="review">Review</option>
+                        </select>
+                      </label>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        const updated = {
+                          ...rule,
+                          pattern: {
+                            fromDomain: editForm.fromDomain || undefined,
+                            fromAddress: editForm.fromAddress || undefined,
+                            subjectContains: editForm.subjectContains || undefined,
+                            bodyContains: editForm.bodyContains || undefined,
+                          },
+                          category: editForm.category || rule.category,
+                          action: editForm.action || rule.action,
+                        };
+                        await saveRule(activeAccountId, updated);
+                        setEditingRuleId(null);
+                      }}
+                      className="flex items-center gap-1 px-3 py-1 text-[11px] rounded-lg bg-mail-accent text-white hover:bg-mail-accent/90 transition-colors"
+                    >
+                      <Save size={10} /> Save
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Custom Categories */}
+      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-full bg-mail-accent/10 flex items-center justify-center">
+            <Sparkles size={20} className="text-mail-accent" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-mail-text">Custom Categories</h3>
+            <p className="text-xs text-mail-text-muted">Add your own categories for classification.</p>
+          </div>
+        </div>
+
+        <div className="space-y-2 mb-4">
+          {customCategories.length === 0 ? (
+            <p className="text-xs text-mail-text-muted italic">No custom categories yet.</p>
+          ) : (
+            customCategories.map(cat => (
+              <div key={cat} className="flex items-center justify-between p-2 rounded-lg border border-mail-border">
+                <span className="text-sm text-mail-text">{cat}</span>
+                <button
+                  onClick={() => removeCustomCategory(cat)}
+                  className="p-1 rounded hover:bg-red-500/10 text-mail-text-muted hover:text-red-500 transition-colors"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+
+        <form onSubmit={async (e) => {
+          e.preventDefault();
+          const input = e.target.elements.categoryName;
+          const name = input.value.trim();
+          if (!name) return;
+          addCustomCategory(name);
+
+          // If rule fields were filled, create the rule + reclassify
+          const { domain, address, subject } = newRuleForm;
+          if (domain || address || subject) {
+            const rule = {
+              id: `r-${Date.now()}`,
+              type: 'sender-action',
+              pattern: {
+                fromDomain: domain || undefined,
+                fromAddress: address || undefined,
+                subjectContains: subject || undefined,
+              },
+              category: name.toLowerCase(),
+              action: 'review',
+              confidence: 0.95,
+              source: 'manual',
+              createdAt: new Date().toISOString(),
+            };
+            await saveRule(activeAccountId, rule);
+            classificationService.reclassifyAll(activeAccountId).catch(() => {});
+          }
+
+          input.value = '';
+          setNewCategoryRule(false);
+          setNewRuleForm({ domain: '', address: '', subject: '' });
+        }} className="space-y-2">
+          <div className="flex gap-2">
+            <input
+              name="categoryName"
+              type="text"
+              placeholder="New category name..."
+              className="flex-1 px-3 py-2 text-sm rounded-lg border border-mail-border bg-mail-bg text-mail-text placeholder-mail-text-muted focus:outline-none focus:border-mail-accent"
+            />
+            <button
+              type="button"
+              onClick={() => setNewCategoryRule(!newCategoryRule)}
+              className={`px-2 py-2 text-sm rounded-lg border transition-colors ${
+                newCategoryRule ? 'border-mail-accent text-mail-accent' : 'border-mail-border text-mail-text-muted hover:border-mail-accent'
+              }`}
+              title="Add rule for this category"
+            >
+              <Plus size={14} />
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 text-sm rounded-lg bg-mail-accent text-white hover:bg-mail-accent/90 transition-colors"
+            >
+              Add
+            </button>
+          </div>
+          {newCategoryRule && (
+            <div className="grid grid-cols-3 gap-2 p-3 rounded-lg bg-mail-surface-hover border border-mail-border">
+              <label className="space-y-0.5">
+                <span className="text-[10px] text-mail-text-muted">Sender domain</span>
+                <input value={newRuleForm.domain} onChange={e => setNewRuleForm(f => ({ ...f, domain: e.target.value }))}
+                  className="w-full px-2 py-1 text-xs rounded border border-mail-border bg-mail-bg text-mail-text" placeholder="booking.com" />
+              </label>
+              <label className="space-y-0.5">
+                <span className="text-[10px] text-mail-text-muted">Sender address</span>
+                <input value={newRuleForm.address} onChange={e => setNewRuleForm(f => ({ ...f, address: e.target.value }))}
+                  className="w-full px-2 py-1 text-xs rounded border border-mail-border bg-mail-bg text-mail-text" placeholder="noreply@..." />
+              </label>
+              <label className="space-y-0.5">
+                <span className="text-[10px] text-mail-text-muted">Subject contains</span>
+                <input value={newRuleForm.subject} onChange={e => setNewRuleForm(f => ({ ...f, subject: e.target.value }))}
+                  className="w-full px-2 py-1 text-xs rounded border border-mail-border bg-mail-bg text-mail-text" placeholder="keyword" />
+              </label>
+            </div>
+          )}
+        </form>
+      </div>
     </div>
   );
-}
-
-function formatBytes(bytes) {
-  if (!bytes) return '0 B';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1048576) return `${(bytes / 1024).toFixed(0)} KB`;
-  if (bytes < 1073741824) return `${(bytes / 1048576).toFixed(1)} MB`;
-  return `${(bytes / 1073741824).toFixed(2)} GB`;
 }

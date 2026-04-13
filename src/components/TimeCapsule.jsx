@@ -4,23 +4,23 @@ import { useAccountStore } from '../stores/accountStore';
 import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { AttachmentItem } from './email/AttachmentBar';
-import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Clock, ChevronLeft, X, Download, Trash2, Inbox, Send, Archive,
+  Clock, ChevronLeft, Download, Trash2, Inbox, Send, Archive,
   Folder, Mail, Calendar, Loader, AlertCircle, Lock, File, Paperclip,
   Cloud, HardDrive,
 } from 'lucide-react';
+import { formatDateTime, formatDateOnly } from '../utils/dateFormat';
 
 const ROW_HEIGHT = 56;
 
 /**
  * Time Capsule — settings-style modal for browsing point-in-time mailbox snapshots.
  */
-export function TimeCapsule({ isOpen, onClose }) {
+export function TimeCapsuleView({ accountId, onDetailChange }) {
   const store = useSnapshotStore();
-  const activeAccountId = useAccountStore(s => s.activeAccountId);
+  const resolvedAccountId = accountId || useAccountStore(s => s.activeAccountId);
   const accounts = useAccountStore(s => s.accounts);
-  const activeAccount = accounts.find(a => a.id === activeAccountId);
+  const activeAccount = accounts.find(a => a.id === resolvedAccountId);
   const billingProfile = useSettingsStore(s => s.billingProfile);
   const isPremium = hasPremiumAccess(billingProfile);
 
@@ -28,90 +28,70 @@ export function TimeCapsule({ isOpen, onClose }) {
   const [confirmDelete, setConfirmDelete] = useState(null);
 
   useEffect(() => {
-    if (isOpen && activeAccountId && isPremium) store.loadSnapshots(activeAccountId);
-    if (!isOpen) store.reset();
-  }, [isOpen, activeAccountId, isPremium]);
+    if (resolvedAccountId && isPremium) store.loadSnapshots(resolvedAccountId);
+    return () => store.reset();
+  }, [resolvedAccountId, isPremium]);
 
   const handleCreate = async () => {
-    if (!activeAccountId || !activeAccount) return;
+    if (!resolvedAccountId || !activeAccount) return;
     setCreating(true);
-    await store.createSnapshot(activeAccountId, activeAccount.email);
+    await store.createSnapshot(resolvedAccountId, activeAccount.email);
     setCreating(false);
   };
-
-  if (!isOpen) return null;
 
   // Determine which "page" to show
   const page = store.viewerEmail ? 'viewer'
     : store.activeSnapshot ? 'browser'
     : 'list';
 
-  const pageTitle = page === 'viewer' ? (store.viewerEmail?.subject || 'Email')
-    : page === 'browser' ? `Snapshot — ${formatSnapshotDate(store.activeSnapshot?.timestamp)}`
-    : 'Time Capsule';
+  useEffect(() => {
+    onDetailChange?.(page !== 'list');
+  }, [page]);
 
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-        onClick={onClose}
-      >
-        <motion.div
-          initial={{ scale: 0.95, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.95, opacity: 0 }}
-          className="bg-mail-bg border border-mail-border rounded-xl shadow-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden"
-          onClick={e => e.stopPropagation()}
-        >
-          {/* Header — settings style */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-mail-border h-[57px] shrink-0">
-            <div className="flex items-center gap-3 min-w-0">
-              {page !== 'list' && (
-                <button
-                  onClick={page === 'viewer' ? store.closeViewer : store.closeSnapshot}
-                  className="p-1.5 hover:bg-mail-surface-hover rounded-lg transition-colors"
-                >
-                  <ChevronLeft size={18} className="text-mail-text-muted" />
-                </button>
-              )}
-              <Clock size={20} className="text-mail-accent shrink-0" />
-              <h3 className="text-lg font-semibold text-mail-text truncate">{pageTitle}</h3>
-              {page === 'browser' && (
-                <span className="text-xs text-mail-text-muted shrink-0 ml-1">Read-only</span>
-              )}
-            </div>
-            <button onClick={onClose} className="p-2 hover:bg-mail-surface-hover rounded-lg transition-colors">
-              <X size={20} className="text-mail-text-muted" />
-            </button>
-          </div>
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Sub-header for internal navigation */}
+      {page !== 'list' && (
+        <div className="flex items-center gap-2 px-6 py-2 border-b border-mail-border shrink-0">
+          <button
+            onClick={page === 'viewer' ? store.closeViewer : store.closeSnapshot}
+            className="p-1.5 hover:bg-mail-surface-hover rounded-lg transition-colors"
+          >
+            <ChevronLeft size={18} className="text-mail-text-muted" />
+          </button>
+          <span className="text-sm font-medium text-mail-text truncate">
+            {page === 'viewer'
+              ? (store.viewerEmail?.subject || 'Email')
+              : `Snapshot — ${formatSnapshotDate(store.activeSnapshot?.timestamp)}`}
+          </span>
+          {page === 'browser' && (
+            <span className="text-xs text-mail-text-muted shrink-0 ml-1">Read-only</span>
+          )}
+        </div>
+      )}
 
-          {/* Content */}
-          <div className="flex-1 overflow-hidden">
-            {!isPremium ? (
-              <PremiumGate />
-            ) : page === 'viewer' ? (
-              <SnapshotViewer email={store.viewerEmail} loading={store.loadingViewer} accountId={activeAccountId} mailbox={store.mailboxMap[store.selectedMailbox] || store.selectedMailbox} />
-            ) : page === 'browser' ? (
-              <SnapshotBrowser accountId={activeAccountId} />
-            ) : (
-              <SnapshotList
-                snapshots={store.snapshots} loading={store.loadingSnapshots}
-                creating={creating} error={store.error}
-                confirmDelete={confirmDelete}
-                onOpen={fn => store.openSnapshot(activeAccountId, fn)}
-                onCreate={handleCreate}
-                onDelete={async fn => { await store.deleteSnapshot(activeAccountId, fn); setConfirmDelete(null); }}
-                onConfirmDelete={setConfirmDelete}
-                accountEmail={activeAccount?.email}
-              />
-            )}
-          </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
+      {/* Content */}
+      <div className="flex-1 overflow-hidden">
+        {!isPremium ? (
+          <PremiumGate />
+        ) : page === 'viewer' ? (
+          <SnapshotViewer email={store.viewerEmail} loading={store.loadingViewer} accountId={resolvedAccountId} mailbox={store.mailboxMap[store.selectedMailbox] || store.selectedMailbox} />
+        ) : page === 'browser' ? (
+          <SnapshotBrowser accountId={resolvedAccountId} />
+        ) : (
+          <SnapshotList
+            snapshots={store.snapshots} loading={store.loadingSnapshots}
+            creating={creating} error={store.error}
+            confirmDelete={confirmDelete}
+            onOpen={fn => store.openSnapshot(resolvedAccountId, fn)}
+            onCreate={handleCreate}
+            onDelete={async fn => { await store.deleteSnapshot(resolvedAccountId, fn); setConfirmDelete(null); }}
+            onConfirmDelete={setConfirmDelete}
+            accountEmail={activeAccount?.email}
+          />
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -311,7 +291,7 @@ function SnapshotBrowser({ accountId }) {
                           {email.subject || (isHydrated ? '(No subject)' : `UID ${email.uid}`)}
                         </span>
                         {hasAttach && <Paperclip size={12} className="text-mail-text-muted shrink-0" />}
-                        {email.date && <span className="text-[11px] text-mail-text-muted shrink-0">{formatEmailDate(email.date)}</span>}
+                        {email.date && <span className="text-[11px] text-mail-text-muted shrink-0">{formatTcEmailDate(email.date)}</span>}
                       </div>
                       {fromStr && (
                         <p className="text-xs text-mail-text-muted truncate mt-0.5">{fromStr}</p>
@@ -362,7 +342,7 @@ function SnapshotViewer({ email, loading, accountId, mailbox }) {
           <p><span className="text-mail-text-muted font-medium w-12 inline-block">From</span> <span className="text-mail-text">{from}</span></p>
           {to && <p><span className="text-mail-text-muted font-medium w-12 inline-block">To</span> <span className="text-mail-text">{to}</span></p>}
           {cc && <p><span className="text-mail-text-muted font-medium w-12 inline-block">Cc</span> <span className="text-mail-text">{cc}</span></p>}
-          <p><span className="text-mail-text-muted font-medium w-12 inline-block">Date</span> <span className="text-mail-text">{new Date(email.date).toLocaleString()}</span></p>
+          <p><span className="text-mail-text-muted font-medium w-12 inline-block">Date</span> <span className="text-mail-text">{formatDateTime(email.date)}</span></p>
         </div>
       </div>
 
@@ -459,13 +439,13 @@ function MailboxIcon({ name }) {
 }
 
 function formatSnapshotDate(ts) {
-  try { return new Date(ts).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); }
-  catch { return ts; }
+  const result = formatDateTime(ts);
+  return result || ts;
 }
 
-function formatEmailDate(d) {
-  try { return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); }
-  catch { return d; }
+function formatTcEmailDate(d) {
+  const result = formatDateOnly(d);
+  return result || d;
 }
 
 function formatBytes(b) {

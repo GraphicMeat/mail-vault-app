@@ -6,22 +6,20 @@ import { useSelectionStore } from '../stores/selectionStore';
 import { useSyncStore } from '../stores/syncStore';
 import { useUiStore } from '../stores/uiStore';
 import { useSearchStore } from '../stores/searchStore';
-import { useSettingsStore, getAccountColor, getAccountInitial, hashColor } from '../stores/settingsStore';
+import { useSettingsStore, getAccountInitial, hashColor } from '../stores/settingsStore';
 import { shouldPrefetch } from '../services/cachePressure';
 import { buildThreads, groupBySender, getSenderName } from '../utils/emailParser';
-import { getLinkAlertLevel, getCachedAlerts, getAlertsForEmails } from '../utils/linkSafety';
+import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
 import { motion, AnimatePresence } from 'framer-motion';
-import { formatEmailDate } from '../utils/dateFormat';
+import { formatEmailDate, formatDateOnly } from '../utils/dateFormat';
 import { SearchBar } from './SearchBar';
 import {
   RefreshCw,
   HardDrive,
   Cloud,
   Paperclip,
-  MoreHorizontal,
-  Trash2,
   CheckSquare,
   Square,
   Archive,
@@ -35,623 +33,12 @@ import { BulkOperationsModal } from './BulkOperationsModal';
 import { BulkOperationProgress } from './BulkOperationProgress';
 import { bulkOperationManager } from '../services/BulkOperationManager';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { EmailRow, CompactEmailRow } from './EmailRow';
+import { ThreadRow, CompactThreadRow } from './ThreadRow';
 
 const ROW_HEIGHT_DEFAULT = 56;
 const ROW_HEIGHT_COMPACT = 52;
 
-
-const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors }) {
-  const { saveEmailLocally, removeLocalEmail, deleteEmailFromServer } = actions;
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-
-  const handleSave = async (e) => {
-    e.stopPropagation();
-    setSaving(true);
-    try {
-      await saveEmailLocally(email.uid);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleRemoveLocal = async (e) => {
-    e.stopPropagation();
-    await removeLocalEmail(email.uid);
-    setMenuOpen(false);
-  };
-
-  const handleDeleteServer = (e) => {
-    e.stopPropagation();
-    if (confirmingDelete) {
-      deleteEmailFromServer(email.uid);
-      setMenuOpen(false);
-      setConfirmingDelete(false);
-    } else {
-      setConfirmingDelete(true);
-    }
-  };
-
-  const isUnread = !email.flags?.includes('\\Seen');
-
-  return (
-    <div
-      data-testid="email-row"
-      style={style}
-      className={`virtual-row group relative flex items-center gap-3 px-4 border-b border-mail-border
-                 cursor-pointer transition-colors
-                 ${isSelected ? 'bg-mail-accent/10' : 'hover:bg-mail-surface-hover'}
-                 ${isUnread ? 'bg-mail-surface' : ''}`}
-      onClick={() => onSelect(email.uid, email.source)}
-    >
-      <div onClick={(e) => { e.stopPropagation(); onToggleSelection(email.uid, email._accountId); }}>
-        <input
-          type="checkbox"
-          checked={isChecked}
-          onChange={() => {}}
-          className="custom-checkbox"
-        />
-      </div>
-
-      <div className="w-5 flex items-center justify-center flex-shrink-0">
-        {email.source === 'local-only' ? (
-          <div title="Local only (deleted from server)">
-            <HardDrive size={14} className="text-mail-warning" />
-          </div>
-        ) : email.isArchived ? (
-          <div title="Archived">
-            <HardDrive size={14} className="text-mail-local" />
-          </div>
-        ) : (
-          <Cloud size={14} style={{ color: 'rgba(59, 130, 246, 0.5)' }} />
-        )}
-      </div>
-
-      <div className={`w-48 min-w-[80px] truncate flex-shrink flex items-center gap-1.5 ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
-        {unifiedInbox && email._accountEmail && (
-          <span
-            data-testid="account-dot"
-            className="w-2 h-2 rounded-full flex-shrink-0"
-            style={{ backgroundColor: getAccountColor(accountColors, { id: email._accountId, email: email._accountEmail }) }}
-            title={email._accountEmail}
-          />
-        )}
-        <span className="truncate">{getSenderName(email)}</span>
-      </div>
-
-      <div className="flex-1 min-w-0 flex items-center gap-2">
-        <SenderAlertIcon level={email._senderAlert} email={email} />
-        <LinkAlertIcon level={email._linkAlert} alerts={getCachedAlerts(email.uid)} />
-        <span className={`truncate ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
-          {email.subject}
-        </span>
-        {email.hasAttachments && (
-          <Paperclip size={14} className="text-mail-text-muted flex-shrink-0" />
-        )}
-        <span className="ml-auto text-xs text-mail-text-muted whitespace-nowrap flex-shrink-0">
-          {formatEmailDate(email.date)}
-        </span>
-      </div>
-
-      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-mail-surface-hover rounded-md px-1">
-        {!email.isArchived && (
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="p-1.5 hover:bg-mail-border rounded transition-colors"
-            title="Archive"
-          >
-            {saving ? (
-              <RefreshCw size={14} className="animate-spin text-mail-accent" />
-            ) : (
-              <Archive size={14} className="text-mail-text-muted hover:text-mail-local" />
-            )}
-          </button>
-        )}
-
-        <div className="relative">
-          <button
-            onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
-            className="p-1.5 hover:bg-mail-border rounded transition-colors"
-          >
-            <MoreHorizontal size={14} className="text-mail-text-muted" />
-          </button>
-
-          <AnimatePresence>
-            {menuOpen && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={(e) => { e.stopPropagation(); setMenuOpen(false); setConfirmingDelete(false); }}
-                />
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  className="absolute right-0 top-full mt-1 bg-mail-bg border border-mail-border
-                            rounded-lg shadow-lg z-50 py-1 min-w-[160px]"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {email.isArchived && (
-                    <button
-                      onClick={handleRemoveLocal}
-                      className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover
-                                flex items-center gap-2 text-mail-text"
-                    >
-                      <Archive size={14} />
-                      Unarchive
-                    </button>
-                  )}
-                  {email.source !== 'local-only' && (
-                    <button
-                      onClick={handleDeleteServer}
-                      className={`w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover
-                                flex items-center gap-2 ${confirmingDelete ? 'text-white bg-red-600 hover:bg-red-700' : 'text-mail-danger'}`}
-                    >
-                      <Trash2 size={14} />
-                      {confirmingDelete ? 'Confirm delete?' : 'Delete from server'}
-                    </button>
-                  )}
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
-        </div>
-      </div>
-    </div>
-  );
-});
-
-const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSelected, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors }) {
-  const { saveEmailLocally, removeLocalEmail, deleteEmailFromServer } = actions;
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-
-  const handleSave = async (e) => {
-    e.stopPropagation();
-    setSaving(true);
-    try { await saveEmailLocally(email.uid); } finally { setSaving(false); }
-  };
-
-  const handleRemoveLocal = async (e) => {
-    e.stopPropagation();
-    await removeLocalEmail(email.uid);
-    setMenuOpen(false);
-  };
-
-  const handleDeleteServer = (e) => {
-    e.stopPropagation();
-    if (confirmingDelete) {
-      deleteEmailFromServer(email.uid);
-      setMenuOpen(false);
-      setConfirmingDelete(false);
-    } else {
-      setConfirmingDelete(true);
-    }
-  };
-
-  const isUnread = !email.flags?.includes('\\Seen');
-
-  return (
-    <div
-      data-testid="email-row"
-      style={style}
-      className={`virtual-row group relative flex items-center gap-2 px-4 border-b border-mail-border
-                 cursor-pointer transition-colors
-                 ${isSelected ? 'bg-mail-accent/10' : 'hover:bg-mail-surface-hover'}
-                 ${isUnread ? 'bg-mail-surface' : ''}`}
-      onClick={() => onSelect(email.uid, email.source)}
-    >
-      <div onClick={(e) => { e.stopPropagation(); onToggleSelection(email.uid, email._accountId); }}>
-        <input type="checkbox" checked={isChecked} onChange={() => {}} className="custom-checkbox" />
-      </div>
-
-      {/* Source icon */}
-      <div className="w-4 flex items-center justify-center flex-shrink-0">
-        {email.source === 'local-only' ? (
-          <HardDrive size={13} className="text-mail-warning" title="Local only" />
-        ) : email.isArchived ? (
-          <HardDrive size={13} className="text-mail-local" title="Archived" />
-        ) : (
-          <Cloud size={13} style={{ color: 'rgba(59, 130, 246, 0.5)' }} />
-        )}
-      </div>
-
-      {/* Two-line content */}
-      <div className="flex-1 min-w-0 py-1.5">
-        {/* Line 1: Sender ... Date */}
-        <div className="flex items-center gap-2">
-          {unifiedInbox && email._accountEmail && (
-            <span
-              data-testid="account-dot"
-              className="w-2 h-2 rounded-full flex-shrink-0"
-              style={{ backgroundColor: getAccountColor(accountColors, { id: email._accountId, email: email._accountEmail }) }}
-              title={email._accountEmail}
-            />
-          )}
-          <span className={`truncate text-xs ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
-            {getSenderName(email)}
-          </span>
-          <span className="text-xs text-mail-text-muted whitespace-nowrap ml-auto">
-            {formatEmailDate(email.date)}
-          </span>
-        </div>
-        {/* Line 2: Subject + attachment */}
-        <div className="flex items-center gap-1.5">
-          <SenderAlertIcon level={email._senderAlert} email={email} size={12} />
-          <LinkAlertIcon level={email._linkAlert} size={12} alerts={getCachedAlerts(email.uid)} />
-          <span className={`truncate text-sm leading-snug ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
-            {email.subject}
-          </span>
-          {email.hasAttachments && (
-            <Paperclip size={12} className="text-mail-text-muted flex-shrink-0" />
-          )}
-        </div>
-      </div>
-
-      {/* Hover actions */}
-      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-mail-surface-hover rounded-md px-1">
-        {!email.isArchived && (
-          <button onClick={handleSave} disabled={saving}
-            className="p-1 hover:bg-mail-border rounded transition-colors" title="Archive">
-            {saving ? <RefreshCw size={13} className="animate-spin text-mail-accent" />
-              : <Archive size={13} className="text-mail-text-muted hover:text-mail-local" />}
-          </button>
-        )}
-        <div className="relative">
-          <button onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
-            className="p-1 hover:bg-mail-border rounded transition-colors">
-            <MoreHorizontal size={13} className="text-mail-text-muted" />
-          </button>
-          <AnimatePresence>
-            {menuOpen && (
-              <>
-                <div className="fixed inset-0 z-40"
-                  onClick={(e) => { e.stopPropagation(); setMenuOpen(false); setConfirmingDelete(false); }} />
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-                  className="absolute right-0 top-full mt-1 bg-mail-bg border border-mail-border rounded-lg shadow-lg z-50 py-1 min-w-[160px]"
-                  onClick={(e) => e.stopPropagation()}>
-                  {email.isArchived && (
-                    <button onClick={handleRemoveLocal}
-                      className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover flex items-center gap-2 text-mail-text">
-                      <Archive size={14} /> Unarchive
-                    </button>
-                  )}
-                  {email.source !== 'local-only' && (
-                    <button onClick={handleDeleteServer}
-                      className={`w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover flex items-center gap-2 ${confirmingDelete ? 'text-white bg-red-600 hover:bg-red-700' : 'text-mail-danger'}`}>
-                      <Trash2 size={14} /> {confirmingDelete ? 'Confirm delete?' : 'Delete from server'}
-                    </button>
-                  )}
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
-        </div>
-      </div>
-    </div>
-  );
-});
-
-// Thread row for default layout — shows collapsed thread with participant names and count
-const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectThread, onToggleSelection, anyChecked, style, actions }) {
-  const { saveEmailsLocally, deleteEmailFromServer } = actions;
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [confirmingDeleteThread, setConfirmingDeleteThread] = useState(false);
-
-  if (!thread?.lastEmail) return null;
-  const latestEmail = thread.lastEmail;
-  const hasUnread = thread.unreadCount > 0;
-  const allArchived = thread.emails.every(e => e.isArchived);
-
-  // Build participant display: show sender names (not the user)
-  const participantNames = useMemo(() => {
-    const seen = new Set();
-    const names = [];
-    for (const email of thread.emails) {
-      const name = getSenderName(email);
-      const addr = email.from?.address?.toLowerCase() || '';
-      if (!seen.has(addr)) {
-        seen.add(addr);
-        names.push(name);
-      }
-    }
-    return names.length <= 2 ? names.join(', ') : `${names[0]}, ${names[1]} +${names.length - 2}`;
-  }, [thread.emails]);
-
-  const handleArchiveThread = async (e) => {
-    e.stopPropagation();
-    setSaving(true);
-    try {
-      const uids = thread.emails.filter(em => !em.isArchived).map(em => em.uid);
-      if (uids.length > 0) await saveEmailsLocally(uids);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDeleteThread = async (e) => {
-    e.stopPropagation();
-    if (!confirmingDeleteThread) {
-      setConfirmingDeleteThread(true);
-      return;
-    }
-    // Delete all server emails in the thread, using correct mailbox per email
-    const serverEmails = thread.emails.filter(em => em.source !== 'local-only');
-    const activeMailbox = useMailStore.getState().activeMailbox;
-    const sentPath = useMailStore.getState().getSentMailboxPath();
-    console.log(`[handleDeleteThread] Deleting ${serverEmails.length} emails, activeMailbox="${activeMailbox}", sentPath="${sentPath}"`);
-    console.log(`[handleDeleteThread] Thread emails:`, thread.emails.map(e => ({ uid: e.uid, source: e.source, _fromSentFolder: e._fromSentFolder, subject: e.subject?.substring(0, 40) })));
-    for (const email of serverEmails) {
-      // Use the correct mailbox — sent emails need the Sent folder path
-      const mailbox = email._fromSentFolder && sentPath ? sentPath : activeMailbox;
-      try {
-        await deleteEmailFromServer(email.uid, { skipRefresh: true, mailboxOverride: mailbox });
-      } catch (err) {
-        console.error(`[handleDeleteThread] Failed to delete email ${email.uid} from ${mailbox}:`, err);
-      }
-    }
-    // Single refresh after all deletions
-    if (serverEmails.length > 0) useMailStore.getState().loadEmails();
-    setMenuOpen(false);
-    setConfirmingDeleteThread(false);
-  };
-
-  return (
-    <div
-      data-testid="email-row"
-      style={style}
-      className={`virtual-row group relative flex items-center gap-3 px-4 border-b border-mail-border
-                 cursor-pointer transition-colors
-                 ${isSelected ? 'bg-mail-accent/10' : 'hover:bg-mail-surface-hover'}
-                 ${hasUnread ? 'bg-mail-surface' : ''}`}
-      onClick={() => onSelectThread(thread)}
-    >
-      <div onClick={(e) => { e.stopPropagation(); thread.emails.forEach(em => onToggleSelection(em.uid, em._accountId)); }}>
-        <input type="checkbox" checked={anyChecked} onChange={() => {}} className="custom-checkbox" />
-      </div>
-
-      <div className="w-5 flex items-center justify-center flex-shrink-0">
-        {latestEmail.source === 'local-only' ? (
-          <HardDrive size={14} className="text-mail-warning" title="Local only" />
-        ) : latestEmail.isArchived ? (
-          <HardDrive size={14} className="text-mail-local" title="Archived" />
-        ) : (
-          <Cloud size={14} style={{ color: 'rgba(59, 130, 246, 0.5)' }} />
-        )}
-      </div>
-
-      <div className={`w-48 min-w-[80px] truncate flex-shrink ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
-        {participantNames}
-      </div>
-
-      <div className="flex-1 min-w-0 flex items-center gap-2">
-        {(() => { const sa = getSenderAlertLevel(thread.emails); return sa ? <SenderAlertIcon level={sa.level} email={sa.email} /> : null; })()}
-        <LinkAlertIcon level={getLinkAlertLevel(thread.emails)} alerts={getAlertsForEmails(thread.emails)} />
-        <span className={`truncate ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
-          {thread.subject}
-        </span>
-        {thread.messageCount > 1 && (
-          <span className="flex-shrink-0 min-w-[20px] h-5 px-1.5 bg-mail-text-muted/15 rounded-full
-                        text-mail-text-muted text-xs font-medium flex items-center justify-center">
-            {thread.messageCount}
-          </span>
-        )}
-        {latestEmail.hasAttachments && (
-          <Paperclip size={14} className="text-mail-text-muted flex-shrink-0" />
-        )}
-        <span className="ml-auto text-xs text-mail-text-muted whitespace-nowrap flex-shrink-0">
-          {formatEmailDate(latestEmail.date)}
-        </span>
-      </div>
-
-      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-mail-surface-hover rounded-md px-1">
-        {!allArchived && (
-          <button
-            onClick={handleArchiveThread}
-            disabled={saving}
-            className="p-1.5 hover:bg-mail-border rounded transition-colors"
-            title="Archive thread"
-          >
-            {saving ? (
-              <RefreshCw size={14} className="animate-spin text-mail-accent" />
-            ) : (
-              <Archive size={14} className="text-mail-text-muted hover:text-mail-local" />
-            )}
-          </button>
-        )}
-
-        <div className="relative">
-          <button
-            onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); setConfirmingDeleteThread(false); }}
-            className="p-1.5 hover:bg-mail-border rounded transition-colors"
-          >
-            <MoreHorizontal size={14} className="text-mail-text-muted" />
-          </button>
-
-          <AnimatePresence>
-            {menuOpen && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={(e) => { e.stopPropagation(); setMenuOpen(false); setConfirmingDeleteThread(false); }}
-                />
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  className="absolute right-0 top-full mt-1 bg-mail-bg border border-mail-border
-                            rounded-lg shadow-lg z-50 py-1 min-w-[200px]"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <button
-                    onClick={handleDeleteThread}
-                    className={`w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover
-                              flex items-center gap-2 ${confirmingDeleteThread ? 'text-white bg-red-600 hover:bg-red-700' : 'text-mail-danger'}`}
-                  >
-                    <Trash2 size={14} />
-                    {confirmingDeleteThread ? `Delete ${thread.messageCount} emails?` : 'Delete thread from server'}
-                  </button>
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
-        </div>
-      </div>
-    </div>
-  );
-});
-
-// Compact thread row for compact layout
-const CompactThreadRow = React.memo(function CompactThreadRow({ thread, isSelected, onSelectThread, onToggleSelection, anyChecked, style, actions }) {
-  const { saveEmailsLocally, deleteEmailFromServer } = actions;
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [confirmingDeleteThread, setConfirmingDeleteThread] = useState(false);
-
-  if (!thread?.lastEmail) return null;
-  const latestEmail = thread.lastEmail;
-  const hasUnread = thread.unreadCount > 0;
-  const allArchived = thread.emails.every(e => e.isArchived);
-
-  const participantNames = useMemo(() => {
-    const seen = new Set();
-    const names = [];
-    for (const email of thread.emails) {
-      const name = getSenderName(email);
-      const addr = email.from?.address?.toLowerCase() || '';
-      if (!seen.has(addr)) {
-        seen.add(addr);
-        names.push(name);
-      }
-    }
-    return names.length <= 2 ? names.join(', ') : `${names[0]}, ${names[1]} +${names.length - 2}`;
-  }, [thread.emails]);
-
-  const handleArchiveThread = async (e) => {
-    e.stopPropagation();
-    setSaving(true);
-    try {
-      const uids = thread.emails.filter(em => !em.isArchived).map(em => em.uid);
-      if (uids.length > 0) await saveEmailsLocally(uids);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDeleteThread = async (e) => {
-    e.stopPropagation();
-    if (!confirmingDeleteThread) {
-      setConfirmingDeleteThread(true);
-      return;
-    }
-    const serverEmails = thread.emails.filter(em => em.source !== 'local-only');
-    const activeMailbox = useMailStore.getState().activeMailbox;
-    const sentPath = useMailStore.getState().getSentMailboxPath();
-    for (const email of serverEmails) {
-      const mailbox = email._fromSentFolder && sentPath ? sentPath : activeMailbox;
-      try {
-        await deleteEmailFromServer(email.uid, { skipRefresh: true, mailboxOverride: mailbox });
-      } catch (err) {
-        console.error(`Failed to delete email ${email.uid} from ${mailbox}:`, err);
-      }
-    }
-    if (serverEmails.length > 0) useMailStore.getState().loadEmails();
-    setMenuOpen(false);
-    setConfirmingDeleteThread(false);
-  };
-
-  return (
-    <div
-      data-testid="email-row"
-      style={style}
-      className={`virtual-row group relative flex items-center gap-2 px-4 border-b border-mail-border
-                 cursor-pointer transition-colors
-                 ${isSelected ? 'bg-mail-accent/10' : 'hover:bg-mail-surface-hover'}
-                 ${hasUnread ? 'bg-mail-surface' : ''}`}
-      onClick={() => onSelectThread(thread)}
-    >
-      <div onClick={(e) => { e.stopPropagation(); thread.emails.forEach(em => onToggleSelection(em.uid, em._accountId)); }}>
-        <input type="checkbox" checked={anyChecked} onChange={() => {}} className="custom-checkbox" />
-      </div>
-
-      <div className="w-4 flex items-center justify-center flex-shrink-0">
-        {latestEmail.source === 'local-only' ? (
-          <HardDrive size={13} className="text-mail-warning" title="Local only" />
-        ) : latestEmail.isArchived ? (
-          <HardDrive size={13} className="text-mail-local" title="Archived" />
-        ) : (
-          <Cloud size={13} style={{ color: 'rgba(59, 130, 246, 0.5)' }} />
-        )}
-      </div>
-
-      <div className="flex-1 min-w-0 py-1.5">
-        <div className="flex items-center gap-2">
-          <span className={`truncate text-xs ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
-            {participantNames}
-          </span>
-          {thread.messageCount > 1 && (
-            <span className="flex-shrink-0 min-w-[16px] h-4 px-1 bg-mail-text-muted/15 rounded-full
-                          text-mail-text-muted text-[10px] font-medium flex items-center justify-center">
-              {thread.messageCount}
-            </span>
-          )}
-          <span className="text-xs text-mail-text-muted whitespace-nowrap ml-auto">
-            {formatEmailDate(latestEmail.date)}
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          {(() => { const sa = getSenderAlertLevel(thread.emails); return sa ? <SenderAlertIcon level={sa.level} email={sa.email} size={12} /> : null; })()}
-          <LinkAlertIcon level={getLinkAlertLevel(thread.emails)} size={12} alerts={getAlertsForEmails(thread.emails)} />
-          <span className={`truncate text-sm leading-snug ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
-            {thread.subject}
-          </span>
-          {latestEmail.hasAttachments && (
-            <Paperclip size={12} className="text-mail-text-muted flex-shrink-0" />
-          )}
-        </div>
-      </div>
-
-      {/* Hover actions */}
-      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-mail-surface-hover rounded-md px-1">
-        {!allArchived && (
-          <button onClick={handleArchiveThread} disabled={saving}
-            className="p-1 hover:bg-mail-border rounded transition-colors" title="Archive thread">
-            {saving ? <RefreshCw size={13} className="animate-spin text-mail-accent" />
-              : <Archive size={13} className="text-mail-text-muted hover:text-mail-local" />}
-          </button>
-        )}
-        <div className="relative">
-          <button onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); setConfirmingDeleteThread(false); }}
-            className="p-1 hover:bg-mail-border rounded transition-colors">
-            <MoreHorizontal size={13} className="text-mail-text-muted" />
-          </button>
-          <AnimatePresence>
-            {menuOpen && (
-              <>
-                <div className="fixed inset-0 z-40"
-                  onClick={(e) => { e.stopPropagation(); setMenuOpen(false); setConfirmingDeleteThread(false); }} />
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-                  className="absolute right-0 top-full mt-1 bg-mail-bg border border-mail-border rounded-lg shadow-lg z-50 py-1 min-w-[200px]"
-                  onClick={(e) => e.stopPropagation()}>
-                  <button onClick={handleDeleteThread}
-                    className={`w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover flex items-center gap-2 ${confirmingDeleteThread ? 'text-white bg-red-600 hover:bg-red-700' : 'text-mail-danger'}`}>
-                    <Trash2 size={14} /> {confirmingDeleteThread ? `Delete ${thread.messageCount} emails?` : 'Delete thread from server'}
-                  </button>
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
-        </div>
-      </div>
-    </div>
-  );
-});
 
 function getDateRange(emails) {
   if (!emails || emails.length === 0) return null;
@@ -664,7 +51,7 @@ function getDateRange(emails) {
     if (!newest || d > newest) newest = d;
   }
   if (!oldest || !newest) return null;
-  const fmt = (d) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  const fmt = (d) => formatDateOnly(d, { alwaysShowYear: true });
   if (oldest.toDateString() === newest.toDateString()) return fmt(newest);
   return `${fmt(oldest)} – ${fmt(newest)}`;
 }
@@ -728,6 +115,13 @@ function EmailListComponent() {
   const [expandedTopics, setExpandedTopics] = useState(new Set());
   const [expandedEmail, setExpandedEmail] = useState(null);
   const [focusedRow, setFocusedRow] = useState(null);
+  // Lifted row menu state — only one menu/confirm can be active at a time
+  const [activeMenuRowId, setActiveMenuRowId] = useState(null);
+  const [confirmingDeleteRowId, setConfirmingDeleteRowId] = useState(null);
+  // Lifted saving state — tracks which rows have active save operations
+  const [savingRowIds, setSavingRowIds] = useState(() => new Set());
+  const startSaving = useCallback((id) => setSavingRowIds(prev => { const next = new Set(prev); next.add(id); return next; }), []);
+  const stopSaving = useCallback((id) => setSavingRowIds(prev => { const next = new Set(prev); next.delete(id); return next; }), []);
   const scrollContainerRef = useRef(null);
 
   const expandedSenderRef = useRef(expandedSender);
@@ -821,13 +215,33 @@ function EmailListComponent() {
 
   useEffect(() => {
     setFocusedRow(null);
+    // Clear display row cache when grouping mode changes
+    displayRowCache.current = { deferredThreads: null, rows: [], displayEmails: null };
   }, [emailListGrouping]);
 
+  // Skeleton transition — show lightweight placeholders during account/mailbox switches
+  const [showSkeleton, setShowSkeleton] = useState(false);
+  const prevViewRef = useRef({ accountId: activeAccountId, mailbox: activeMailbox });
+
   useEffect(() => {
+    const prev = prevViewRef.current;
+    if (prev.accountId !== activeAccountId || prev.mailbox !== activeMailbox) {
+      setShowSkeleton(true);
+      // Aggressively clear all stale derived data to prevent retained memory
+      displayRowCache.current = { deferredThreads: null, rows: [], displayEmails: null };
+      threadCache.current = { fingerprint: '', threads: new Map() };
+      senderGroupCacheRef.current = { fingerprint: null, groups: null };
+      setDeferredThreads(null);
+      setSenderGroups(null);
+      setSavingRowIds(new Set());
+      prevViewRef.current = { accountId: activeAccountId, mailbox: activeMailbox };
+    }
     setExpandedSender(null);
     setExpandedTopics(new Set());
     setExpandedEmail(null);
     setFocusedRow(null);
+    setActiveMenuRowId(null);
+    setConfirmingDeleteRowId(null);
   }, [activeAccountId, activeMailbox]);
 
   // Pull-to-refresh
@@ -843,10 +257,23 @@ function EmailListComponent() {
     [searchActive, searchResults, sortedEmails]
   );
 
+  // Exit skeleton mode once loading finishes for the current view (even if empty)
+  useEffect(() => {
+    if (showSkeleton && !loading) {
+      setShowSkeleton(false);
+    }
+  }, [showSkeleton, loading]);
+
   const dateRange = useMemo(() => getDateRange(displayEmails), [displayEmails]);
 
   // Count emails with alerts — used in fingerprints to invalidate caches when alerts change
-  const alertCount = useMemo(() => displayEmails.filter(e => e._linkAlert || e._senderAlert).length, [displayEmails]);
+  const alertCount = useMemo(() => {
+    let count = 0;
+    for (const e of displayEmails) {
+      if (e._linkAlert || e._senderAlert) count++;
+    }
+    return count;
+  }, [displayEmails]);
 
   // Deferred threading — buildThreads(17k+) is too slow for synchronous render.
   // Show flat list instantly, then compute threads in background and re-render.
@@ -878,13 +305,15 @@ function EmailListComponent() {
 
     // Schedule thread computation after paint — keeps UI responsive
     // Note: requestIdleCallback is NOT available in WebKit/Safari (Tauri macOS webview)
+    let cancelled = false;
     const timer = setTimeout(() => {
+      if (cancelled) return; // Guard against stale callback after view change
       const threads = buildThreads(mergedEmails);
       threadCache.current = { fingerprint: threadFingerprint, threads };
       setDeferredThreads(threads);
     }, 0);
 
-    return () => clearTimeout(timer);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [mergedEmails, threadFingerprint, searchActive, viewMode]);
 
   // Deferred sender grouping computation
@@ -906,54 +335,77 @@ function EmailListComponent() {
       return;
     }
 
+    let cancelled = false;
     const timer = setTimeout(() => {
+      if (cancelled) return;
       const groups = groupBySender(emails, activeAccountEmail);
       senderGroupCacheRef.current = { fingerprint: fp, groups };
       setSenderGroups(groups);
     }, 0);
 
-    return () => clearTimeout(timer);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [displayEmails, sentEmails, emailListGrouping, archivedSize, activeAccountEmail, activeMailbox, alertCount]);
 
-  // Build display list: use threads if available, flat list as fallback
+  // ── Cached display-row builder ──
+  // Separates structural rebuilds (membership/order) from lightweight flag-freshening passes.
+  // Structural rebuild: when thread set or display email UIDs change.
+  // Freshening: when only flags/archived state change, reuse existing rows and update email refs.
+  const displayRowCache = useRef({ deferredThreads: null, rows: [], displayEmails: null });
+
+  const emailKey = useCallback((e) => `${e._accountId || ''}:${e.uid}`, []);
+
   const threadedDisplay = useMemo(() => {
-    if (searchActive) {
-      return displayEmails.map(email => ({ type: 'email', email }));
+    const isFlat = searchActive || !deferredThreads || deferredThreads.size === 0;
+
+    const cache = displayRowCache.current;
+
+    if (isFlat) {
+      // Flat list — reuse row array if displayEmails identity hasn't changed
+      if (cache.displayEmails === displayEmails && cache.rows.length === displayEmails.length) {
+        return cache.rows;
+      }
+      // Rebuild — either structural change or flag-only change (new sortedEmails array)
+      const rows = displayEmails.map(email => ({ type: 'email', email }));
+      displayRowCache.current = { deferredThreads: null, rows, displayEmails };
+      return rows;
     }
 
-    // If threads haven't been computed yet, show flat list immediately
-    const threads = deferredThreads;
-    if (!threads || threads.size === 0) {
-      return displayEmails.map(email => ({ type: 'email', email }));
+    // Threaded path — build lookup for freshening
+    const freshByKey = new Map();
+    for (const e of displayEmails) {
+      freshByKey.set(emailKey(e), e);
     }
-
-    // Build lookup from displayEmails so thread items use fresh flag state
-    // (deferredThreads is computed async and may have stale isArchived/isLocal)
-    // Use compound key (accountId:uid) to avoid cross-account collisions
-    const emailKey = (e) => `${e._accountId || ''}:${e.uid}`;
-    const freshByKey = new Map(displayEmails.map(e => [emailKey(e), e]));
     const freshen = (e) => freshByKey.get(emailKey(e)) || e;
 
-    // Only show threads that contain at least one email from the current display set
-    const displayKeys = new Set(displayEmails.map(emailKey));
-    const filtered = Array.from(threads.values())
-      .filter(thread => thread.emails.some(e => displayKeys.has(emailKey(e))));
+    // Reuse cached rows only when thread model AND display emails are both unchanged.
+    // deferredThreads is a new Map on every recomputation, so identity check is reliable.
+    if (cache.deferredThreads === deferredThreads && cache.displayEmails === displayEmails) {
+      return cache.rows;
+    }
 
-    // Sort threads by latest date descending
-    const sorted = filtered.sort((a, b) => b.lastDate - a.lastDate);
-
-    return sorted.map(thread => {
-      if (thread.messageCount === 1) {
-        return { type: 'email', email: freshen(thread.emails[0]) };
+    // Structural rebuild — filter, sort, wrap
+    const result = [];
+    for (const thread of deferredThreads.values()) {
+      if (thread.emails.some(e => freshByKey.has(emailKey(e)))) {
+        result.push(thread);
       }
-      // Freshen thread emails in-place — update references without cloning the thread object
-      const freshEmails = thread.emails.map(freshen);
-      const freshLast = freshen(thread.lastEmail) || freshEmails[freshEmails.length - 1];
-      thread.emails = freshEmails;
-      thread.lastEmail = freshLast;
-      return { type: 'thread', thread };
-    });
-  }, [displayEmails, searchActive, deferredThreads]);
+    }
+    result.sort((a, b) => b.lastDate - a.lastDate);
+
+    const rows = [];
+    for (const thread of result) {
+      if (thread.messageCount === 1) {
+        rows.push({ type: 'email', email: freshen(thread.emails[0]) });
+      } else {
+        thread.emails = thread.emails.map(freshen);
+        thread.lastEmail = freshen(thread.lastEmail) || thread.emails[thread.emails.length - 1];
+        rows.push({ type: 'thread', thread });
+      }
+    }
+
+    displayRowCache.current = { deferredThreads, rows, displayEmails };
+    return rows;
+  }, [displayEmails, searchActive, deferredThreads, emailKey]);
 
   const isUnified = activeMailbox === 'UNIFIED';
   // In unified mode, selection keys are "accountId:uid" to avoid cross-account UID collisions
@@ -964,11 +416,81 @@ function EmailListComponent() {
 
   const rowCount = threadedDisplay.length;
 
+  // Flatten sender-grouped hierarchy into a virtual list
+  const senderFlatItems = useMemo(() => {
+    if (emailListGrouping !== 'sender' || !senderGroups || senderGroups.length === 0) return [];
+    const items = [];
+    for (const sender of senderGroups) {
+      items.push({ type: 'sender', sender });
+      if (expandedSender === sender.senderEmail) {
+        for (const topic of sender.topics) {
+          const topicKey = `${sender.senderEmail}-${topic.subject}`;
+          items.push({ type: 'topic', topic, sender, topicKey });
+          if (expandedTopics.has(topicKey)) {
+            for (const email of topic.emails) {
+              items.push({ type: 'sender-email', email, sender, topic });
+              if (expandedEmail === selKey(email) && layoutMode !== 'three-column') {
+                items.push({ type: 'email-body', email });
+              }
+            }
+          }
+        }
+      }
+    }
+    return items;
+  }, [senderGroups, emailListGrouping, expandedSender, expandedTopics, expandedEmail, layoutMode]);
+
+  const SENDER_ROW_HEIGHT = 56;
+  const TOPIC_ROW_HEIGHT = 52;
+  const SENDER_EMAIL_ROW_HEIGHT = 44;
+  const EMAIL_BODY_HEIGHT = 120;
+
+  // Identity-based key functions — stable keys prevent row shell churn during re-renders
+  const getSenderItemKey = useCallback((index) => {
+    const item = senderFlatItems[index];
+    if (!item) return index;
+    switch (item.type) {
+      case 'sender': return `s-${item.sender.senderEmail}`;
+      case 'topic': return `t-${item.topicKey}`;
+      case 'sender-email': return `e-${item.email._accountId || ''}:${item.email.uid}`;
+      case 'email-body': return `b-${item.email._accountId || ''}:${item.email.uid}`;
+      default: return index;
+    }
+  }, [senderFlatItems]);
+
+  const getChronoItemKey = useCallback((index) => {
+    const item = threadedDisplay[index];
+    if (!item) return index;
+    if (item.type === 'thread') return `th-${item.thread.threadId}`;
+    return `em-${item.email._accountId || ''}:${item.email.uid}`;
+  }, [threadedDisplay]);
+
+  const senderVirtualizer = useVirtualizer({
+    count: senderFlatItems.length,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: (index) => {
+      const item = senderFlatItems[index];
+      if (!item) return SENDER_ROW_HEIGHT;
+      switch (item.type) {
+        case 'sender': return SENDER_ROW_HEIGHT;
+        case 'topic': return TOPIC_ROW_HEIGHT;
+        case 'sender-email': return SENDER_EMAIL_ROW_HEIGHT;
+        case 'email-body': return EMAIL_BODY_HEIGHT;
+        default: return SENDER_ROW_HEIGHT;
+      }
+    },
+    getItemKey: getSenderItemKey,
+    overscan: 5,
+    enabled: emailListGrouping === 'sender',
+  });
+
   const virtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => scrollContainerRef.current,
     estimateSize: () => ROW_HEIGHT,
+    getItemKey: getChronoItemKey,
     overscan: 5,
+    enabled: emailListGrouping !== 'sender',
   });
 
   // Diagnostic: trace loading spinner condition
@@ -1220,9 +742,18 @@ function EmailListComponent() {
             />
           </div>
         )}
-        {loading && rowCount === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <RefreshCw size={24} className="animate-spin text-mail-accent" />
+        {(loading && rowCount === 0) || showSkeleton ? (
+          /* Skeleton rows — lightweight placeholders during transitions */
+          <div className="flex flex-col">
+            {Array.from({ length: 12 }, (_, i) => (
+              <div key={i} style={{ height: ROW_HEIGHT }} className="flex items-center gap-3 px-4 border-b border-mail-border animate-pulse">
+                <div className="w-4 h-4 rounded bg-mail-border/50" />
+                <div className="w-4 h-4 rounded bg-mail-border/30" />
+                <div className="w-32 h-3.5 rounded bg-mail-border/40" />
+                <div className="flex-1 h-3.5 rounded bg-mail-border/30" />
+                <div className="w-16 h-3 rounded bg-mail-border/20" />
+              </div>
+            ))}
           </div>
         ) : rowCount === 0 ? (
           <div
@@ -1265,191 +796,175 @@ function EmailListComponent() {
             )}
           </div>
         ) : emailListGrouping === 'sender' ? (
-          /* Sender-grouped accordion view */
+          /* Virtualized sender-grouped view */
           senderGroups === null ? (
             <div className="flex items-center justify-center h-32 text-gray-400">
               <RefreshCw size={16} className="animate-spin mr-2" />
               Grouping...
             </div>
           ) : senderGroups.length === 0 ? null : (
-            <div className="divide-y divide-mail-border">
-              {senderGroups.map((sender) => (
-                <div key={sender.senderEmail}>
-                  {/* Sender row - avatar, name, email, unread badge, date */}
-                  <button
-                    onClick={() => {
-                      setExpandedSender(expandedSender === sender.senderEmail ? null : sender.senderEmail);
-                      setExpandedTopics(new Set());
-                      setExpandedEmail(null);
+            <div style={{ height: senderVirtualizer.getTotalSize() + 'px', position: 'relative' }}>
+              {senderVirtualizer.getVirtualItems().map((vr) => {
+                const item = senderFlatItems[vr.index];
+                if (!item) return null;
+
+                return (
+                  <div
+                    key={vr.key}
+                    data-index={vr.index}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      width: '100%',
+                      height: vr.size + 'px',
+                      transform: `translateY(${vr.start}px)`,
                     }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-mail-surface-hover transition-colors ${
-                      expandedSender === sender.senderEmail ? 'bg-mail-surface-hover' : ''
-                    } ${focusedRow?.type === 'sender' && focusedRow?.senderEmail === sender.senderEmail ? 'ring-2 ring-mail-accent ring-inset' : ''}`}
                   >
-                    <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0"
-                      style={{ backgroundColor: hashColor(sender.senderEmail) }}
-                    >
-                      {getAccountInitial({ email: sender.senderEmail }, sender.senderName)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-sm truncate ${sender.unreadCount > 0 ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
-                          {sender.senderName || sender.senderEmail}
-                        </span>
-                        {sender.totalEmails && (
-                          <span className="text-xs text-mail-text-muted">
-                            ({sender.totalEmails})
-                          </span>
-                        )}
-                        {sender.senderName && sender.senderName !== sender.senderEmail && (
-                          <span className="text-xs text-mail-text-muted truncate hidden sm:inline">
-                            {sender.senderEmail}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {sender.unreadCount > 0 && (
-                      <span className="px-1.5 py-0.5 text-xs font-medium bg-mail-accent/15 text-mail-accent rounded-full">
-                        {sender.unreadCount}
-                      </span>
-                    )}
-                    <span className="text-xs text-mail-text-muted flex-shrink-0">
-                      {sender.lastDate ? formatEmailDate(sender.lastDate) : ''}
-                    </span>
-                  </button>
-
-                  {/* Expanded sender: show topics */}
-                  {expandedSender === sender.senderEmail && (
-                    <div className="bg-mail-surface-hover/50">
-                      {sender.topics.map((topic) => {
-                        const topicKey = `${sender.senderEmail}-${topic.subject}`;
-                        return (
-                        <div key={topicKey}>
-                          <button
-                            onClick={() => {
-                              setExpandedTopics(prev => {
-                                const next = new Set(prev);
-                                if (next.has(topicKey)) next.delete(topicKey);
-                                else next.add(topicKey);
-                                return next;
-                              });
-                              setExpandedEmail(null);
-                            }}
-                            className={`w-full flex items-center gap-3 pl-12 pr-4 py-2.5 text-left hover:bg-mail-surface-hover transition-colors ${
-                              expandedTopics.has(topicKey) ? 'bg-mail-surface-hover' : ''
-                            } ${focusedRow?.type === 'topic' && focusedRow?.topicKey === topicKey ? 'ring-2 ring-mail-accent ring-inset' : ''}`}
-                          >
-                            <div className="flex-1 min-w-0">
-                              <div className={`text-sm truncate flex items-center gap-1 ${topic.unreadCount > 0 ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
-                                {(() => { const sa = getSenderAlertLevel(topic.emails); return sa ? <SenderAlertIcon level={sa.level} email={sa.email} size={13} /> : null; })()}
-                                <LinkAlertIcon level={getLinkAlertLevel(topic.emails)} size={13} alerts={getAlertsForEmails(topic.emails)} />
-                                {topic.originalSubject || '(No subject)'}
-                              </div>
-                              <div className="text-xs text-mail-text-muted truncate mt-0.5">
-                                {topic.participants
-                                  .filter(p => p !== sender.senderEmail)
-                                  .map(p => p.split('@')[0])
-                                  .join(', ')
-                                  || 'No other participants'
-                                }
-                                <span> · {topic.emails.length} email{topic.emails.length !== 1 ? 's' : ''}</span>
-                              </div>
-                            </div>
-                            {topic.unreadCount > 0 && (
-                              <span className="px-1.5 py-0.5 text-xs font-medium bg-mail-accent/15 text-mail-accent rounded-full">
-                                {topic.unreadCount}
-                              </span>
-                            )}
-                            <span className="text-xs text-mail-text-muted flex-shrink-0">
-                              {topic.lastDate ? formatEmailDate(topic.lastDate) : ''}
+                    {item.type === 'sender' && (
+                      <button
+                        onClick={() => {
+                          setExpandedSender(expandedSender === item.sender.senderEmail ? null : item.sender.senderEmail);
+                          setExpandedTopics(new Set());
+                          setExpandedEmail(null);
+                        }}
+                        className={`w-full h-full flex items-center gap-3 px-4 text-left hover:bg-mail-surface-hover border-b border-mail-border ${
+                          expandedSender === item.sender.senderEmail ? 'bg-mail-surface-hover' : ''
+                        } ${focusedRow?.type === 'sender' && focusedRow?.senderEmail === item.sender.senderEmail ? 'ring-2 ring-mail-accent ring-inset' : ''}`}
+                      >
+                        <div
+                          className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0"
+                          style={{ backgroundColor: hashColor(item.sender.senderEmail) }}
+                        >
+                          {getAccountInitial({ email: item.sender.senderEmail }, item.sender.senderName)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm truncate ${item.sender.unreadCount > 0 ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
+                              {item.sender.senderName || item.sender.senderEmail}
                             </span>
-                          </button>
+                            {item.sender.totalEmails && (
+                              <span className="text-xs text-mail-text-muted">({item.sender.totalEmails})</span>
+                            )}
+                            {item.sender.senderName && item.sender.senderName !== item.sender.senderEmail && (
+                              <span className="text-xs text-mail-text-muted truncate hidden sm:inline">{item.sender.senderEmail}</span>
+                            )}
+                          </div>
+                        </div>
+                        {item.sender.unreadCount > 0 && (
+                          <span className="px-1.5 py-0.5 text-xs font-medium bg-mail-accent/15 text-mail-accent rounded-full">
+                            {item.sender.unreadCount}
+                          </span>
+                        )}
+                        <span className="text-xs text-mail-text-muted flex-shrink-0">
+                          {item.sender.lastDate ? formatEmailDate(item.sender.lastDate) : ''}
+                        </span>
+                      </button>
+                    )}
 
-                          {/* Expanded topic: show emails */}
-                          {expandedTopics.has(topicKey) && (
-                            <div className="bg-mail-surface divide-y divide-mail-border">
-                              {topic.emails.map((email) => (
-                                <div key={email._fromSentFolder ? `sent-${email.uid}` : email.uid}>
-                                  <button
-                                    onClick={() => {
-                                      const mailbox = email._fromSentFolder ? getSentMailboxPath() : null;
-                                      selectEmail(email.uid, email.source, mailbox);
-                                      if (layoutMode !== 'three-column') {
-                                        if (expandedEmail === selKey(email)) {
-                                          setExpandedEmail(null);
-                                        } else {
-                                          setExpandedEmail(selKey(email));
-                                        }
-                                      }
-                                    }}
-                                    className={`w-full flex items-center gap-3 pl-16 pr-4 py-2 text-left hover:bg-mail-surface-hover transition-colors ${
-                                      expandedEmail === selKey(email) ? 'bg-mail-accent/10' : ''
-                                    } ${selectedEmailId === selKey(email) ? 'ring-1 ring-mail-accent/50' : ''} ${focusedRow?.type === 'email' && focusedRow?.emailUid === email.uid ? 'ring-2 ring-mail-accent ring-inset' : ''}`}
-                                  >
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-2">
-                                        {email._accountId && (
-                                          <div
-                                            className="w-2 h-2 rounded-full flex-shrink-0"
-                                            style={{ backgroundColor: hashColor(email._accountId) }}
-                                            title={email._accountId}
-                                          />
-                                        )}
-                                        <span className="text-xs text-mail-text-muted">
-                                          {email.date ? formatEmailDate(new Date(email.date)) : ''}
-                                        </span>
-                                        <span className={`text-xs ${!email.flags?.includes('\\Seen') ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
-                                          {email._fromSentFolder ? 'You' : getSenderName(email)}
-                                        </span>
-                                        {email._fromSentFolder && (
-                                          <span className="text-[10px] px-1 py-0.5 rounded bg-mail-accent/10 text-mail-accent font-medium">
-                                            Sent
-                                          </span>
-                                        )}
-                                      </div>
-                                      {email.snippet && (
-                                        <div className="text-xs text-mail-text-muted truncate mt-0.5">
-                                          {email.snippet}
-                                        </div>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                                      {email.has_attachments && (
-                                        <Paperclip size={12} className="text-mail-text-muted" />
-                                      )}
-                                      {email.source === 'local-only' ? (
-                                        <HardDrive size={13} className="text-mail-warning" title="Local only" />
-                                      ) : email.isArchived ? (
-                                        <HardDrive size={13} className="text-mail-local" title="Archived" />
-                                      ) : (
-                                        <Cloud size={13} style={{ color: 'rgba(59, 130, 246, 0.5)' }} />
-                                      )}
-                                    </div>
-                                  </button>
+                    {item.type === 'topic' && (
+                      <button
+                        onClick={() => {
+                          setExpandedTopics(prev => {
+                            const next = new Set(prev);
+                            if (next.has(item.topicKey)) next.delete(item.topicKey);
+                            else next.add(item.topicKey);
+                            return next;
+                          });
+                          setExpandedEmail(null);
+                        }}
+                        className={`w-full h-full flex items-center gap-3 pl-12 pr-4 text-left hover:bg-mail-surface-hover bg-mail-surface-hover/50 ${
+                          expandedTopics.has(item.topicKey) ? 'bg-mail-surface-hover' : ''
+                        } ${focusedRow?.type === 'topic' && focusedRow?.topicKey === item.topicKey ? 'ring-2 ring-mail-accent ring-inset' : ''}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className={`text-sm truncate flex items-center gap-1 ${item.topic.unreadCount > 0 ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
+                            {(() => { const sa = getSenderAlertLevel(item.topic.emails); return sa ? <SenderAlertIcon level={sa.level} email={sa.email} size={13} /> : null; })()}
+                            <LinkAlertIcon level={getLinkAlertLevel(item.topic.emails)} size={13} alerts={getAlertsForEmails(item.topic.emails)} />
+                            {item.topic.originalSubject || '(No subject)'}
+                          </div>
+                          <div className="text-xs text-mail-text-muted truncate mt-0.5">
+                            {item.topic.participants
+                              .filter(p => p !== item.sender.senderEmail)
+                              .map(p => p.split('@')[0])
+                              .join(', ')
+                              || 'No other participants'
+                            }
+                            <span> · {item.topic.emails.length} email{item.topic.emails.length !== 1 ? 's' : ''}</span>
+                          </div>
+                        </div>
+                        {item.topic.unreadCount > 0 && (
+                          <span className="px-1.5 py-0.5 text-xs font-medium bg-mail-accent/15 text-mail-accent rounded-full">
+                            {item.topic.unreadCount}
+                          </span>
+                        )}
+                        <span className="text-xs text-mail-text-muted flex-shrink-0">
+                          {item.topic.lastDate ? formatEmailDate(item.topic.lastDate) : ''}
+                        </span>
+                      </button>
+                    )}
 
-                                  {/* Inline expanded email body (plain text) */}
-                                  {expandedEmail === selKey(email) && layoutMode !== 'three-column' && (
-                                    <div className="pl-16 pr-4 py-3 border-t border-mail-border bg-mail-surface">
-                                      <div className="text-xs text-mail-text-muted mb-2">
-                                        From: {getSenderName(email)} · To: {email.to?.[0]?.address || ''}
-                                      </div>
-                                      <div className="text-sm text-mail-text whitespace-pre-wrap">
-                                        {email.text || email.textBody || email.snippet || email.subject || 'No content available'}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
+                    {item.type === 'sender-email' && (
+                      <button
+                        onClick={() => {
+                          const mailbox = item.email._fromSentFolder ? getSentMailboxPath() : null;
+                          selectEmail(item.email.uid, item.email.source, mailbox);
+                          if (layoutMode !== 'three-column') {
+                            setExpandedEmail(expandedEmail === selKey(item.email) ? null : selKey(item.email));
+                          }
+                        }}
+                        className={`w-full h-full flex items-center gap-3 pl-16 pr-4 text-left hover:bg-mail-surface-hover bg-mail-surface border-b border-mail-border ${
+                          expandedEmail === selKey(item.email) ? 'bg-mail-accent/10' : ''
+                        } ${selectedEmailId === selKey(item.email) ? 'ring-1 ring-mail-accent/50' : ''} ${focusedRow?.type === 'email' && focusedRow?.emailUid === item.email.uid ? 'ring-2 ring-mail-accent ring-inset' : ''}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            {item.email._accountId && (
+                              <div
+                                className="w-2 h-2 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: hashColor(item.email._accountId) }}
+                                title={item.email._accountId}
+                              />
+                            )}
+                            <span className="text-xs text-mail-text-muted">
+                              {item.email.date ? formatEmailDate(new Date(item.email.date)) : ''}
+                            </span>
+                            <span className={`text-xs ${!item.email.flags?.includes('\\Seen') ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
+                              {item.email._fromSentFolder ? 'You' : getSenderName(item.email)}
+                            </span>
+                            {item.email._fromSentFolder && (
+                              <span className="text-[10px] px-1 py-0.5 rounded bg-mail-accent/10 text-mail-accent font-medium">Sent</span>
+                            )}
+                          </div>
+                          {item.email.snippet && (
+                            <div className="text-xs text-mail-text-muted truncate mt-0.5">{item.email.snippet}</div>
                           )}
                         </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              ))}
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          {item.email.has_attachments && <Paperclip size={12} className="text-mail-text-muted" />}
+                          {item.email.source === 'local-only' ? (
+                            <HardDrive size={13} className="text-mail-warning" title="Local only" />
+                          ) : item.email.isArchived ? (
+                            <HardDrive size={13} className="text-mail-local" title="Archived" />
+                          ) : (
+                            <Cloud size={13} style={{ color: 'rgba(59, 130, 246, 0.5)' }} />
+                          )}
+                        </div>
+                      </button>
+                    )}
+
+                    {item.type === 'email-body' && (
+                      <div className="pl-16 pr-4 py-3 border-t border-mail-border bg-mail-surface h-full overflow-auto">
+                        <div className="text-xs text-mail-text-muted mb-2">
+                          From: {getSenderName(item.email)} · To: {item.email.to?.[0]?.address || ''}
+                        </div>
+                        <div className="text-sm text-mail-text whitespace-pre-wrap">
+                          {item.email.text || item.email.textBody || item.email.snippet || item.email.subject || 'No content available'}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )
         ) : (
@@ -1484,6 +999,14 @@ function EmailListComponent() {
                       anyChecked={anyChecked}
                       style={{ height: ROW_HEIGHT }}
                       actions={rowActions}
+                      menuOpen={activeMenuRowId === `thread-${item.thread.threadId}`}
+                      confirmingDelete={confirmingDeleteRowId === `thread-${item.thread.threadId}`}
+                      onOpenMenu={() => { setActiveMenuRowId(`thread-${item.thread.threadId}`); setConfirmingDeleteRowId(null); }}
+                      onCloseMenu={() => { setActiveMenuRowId(null); setConfirmingDeleteRowId(null); }}
+                      onConfirmDelete={() => setConfirmingDeleteRowId(`thread-${item.thread.threadId}`)}
+                      isSaving={savingRowIds.has(`thread-${item.thread.threadId}`)}
+                      onStartSaving={() => startSaving(`thread-${item.thread.threadId}`)}
+                      onStopSaving={() => stopSaving(`thread-${item.thread.threadId}`)}
                     />
                   </div>
                 );
@@ -1512,6 +1035,14 @@ function EmailListComponent() {
                     actions={rowActions}
                     unifiedInbox={unifiedInbox}
                     accountColors={accountColors}
+                    menuOpen={activeMenuRowId === item.email.uid}
+                    confirmingDelete={confirmingDeleteRowId === item.email.uid}
+                    onOpenMenu={() => { setActiveMenuRowId(item.email.uid); setConfirmingDeleteRowId(null); }}
+                    onCloseMenu={() => { setActiveMenuRowId(null); setConfirmingDeleteRowId(null); }}
+                    onConfirmDelete={() => setConfirmingDeleteRowId(item.email.uid)}
+                    isSaving={savingRowIds.has(item.email.uid)}
+                    onStartSaving={() => startSaving(item.email.uid)}
+                    onStopSaving={() => stopSaving(item.email.uid)}
                   />
                 </div>
               );

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format } from 'date-fns';
+import { formatDateTime } from '../../utils/dateFormat';
 import {
   ChevronDown,
   ChevronUp,
@@ -195,7 +195,7 @@ export function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, l
                 exit={{ height: 0, opacity: 0 }}
                 className="mt-2 text-xs text-mail-text-muted space-y-1 overflow-hidden"
               >
-                <div>Date: {format(new Date(email.date), 'PPpp')}</div>
+                <div>Date: {formatDateTime(email.date)}</div>
                 {email.messageId && <div>Message-ID: {email.messageId}</div>}
                 {email.replyTo?.length > 0 && (
                   <div>Reply-To: {email.replyTo.map(r => r.address).join(', ')}</div>
@@ -222,7 +222,7 @@ export function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, l
         </div>
 
         <div className="flex items-center gap-2 text-sm text-mail-text-muted">
-          <span>{format(new Date(email.date), 'MMM d, yyyy h:mm a')}</span>
+          <span>{formatDateTime(email.date)}</span>
           {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </div>
       </div>

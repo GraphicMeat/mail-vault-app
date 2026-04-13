@@ -188,6 +188,9 @@ impl GraphMessage {
             reply_to: None,
             return_path: None,
             authentication_results: None,
+            list_unsubscribe: self.get_header("List-Unsubscribe"),
+            list_id: self.get_header("List-Id"),
+            precedence: self.get_header("Precedence"),
         }
     }
 

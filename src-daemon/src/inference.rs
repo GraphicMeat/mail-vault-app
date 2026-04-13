@@ -172,48 +172,21 @@ fn select_device() -> Device {
     Device::Cpu
 }
 
-/// Load tokenizer.json from next to the model file, or download from HuggingFace.
+/// Load tokenizer.json from next to the model file, or download from model registry.
 fn load_tokenizer(model_path: &Path) -> Result<Tokenizer, String> {
-    // Check for tokenizer.json next to the model
-    if let Some(dir) = model_path.parent() {
-        let tokenizer_path = dir.join("tokenizer.json");
-        if tokenizer_path.exists() {
-            info!("Loading tokenizer from {:?}", tokenizer_path);
-            return Tokenizer::from_file(&tokenizer_path)
-                .map_err(|e| format!("Failed to load tokenizer: {}", e));
-        }
+    let dir = model_path.parent().ok_or("No parent directory for model")?;
+    let tokenizer_path = dir.join("tokenizer.json");
+
+    if tokenizer_path.exists() {
+        info!("Loading tokenizer from {:?}", tokenizer_path);
+        return Tokenizer::from_file(&tokenizer_path)
+            .map_err(|e| format!("Failed to load tokenizer: {}", e));
     }
 
-    // Try to download from HuggingFace hub
-    info!("Downloading tokenizer from HuggingFace hub...");
-    let api = hf_hub::api::sync::Api::new()
-        .map_err(|e| format!("HF API init failed: {}", e))?;
-
-    // Determine the repo based on model filename
-    let filename = model_path.file_name().and_then(|f| f.to_str()).unwrap_or("");
-    let repo = if filename.contains("Llama-3.2-3B") {
-        "meta-llama/Llama-3.2-3B-Instruct"
-    } else if filename.contains("Llama-3.1-8B") || filename.contains("Meta-Llama-3.1-8B") {
-        "meta-llama/Meta-Llama-3.1-8B-Instruct"
-    } else {
-        // Generic fallback — try llama3 tokenizer
-        "meta-llama/Meta-Llama-3.1-8B-Instruct"
-    };
-
-    let repo = api.model(repo.to_string());
-    let tokenizer_path = repo.get("tokenizer.json")
-        .map_err(|e| format!("Failed to download tokenizer: {}", e))?;
-
-    // Copy to models dir for future use
-    if let Some(dir) = model_path.parent() {
-        let local_path = dir.join("tokenizer.json");
-        if let Err(e) = std::fs::copy(&tokenizer_path, &local_path) {
-            warn!("Failed to cache tokenizer locally: {}", e);
-        }
-    }
-
-    Tokenizer::from_file(&tokenizer_path)
-        .map_err(|e| format!("Failed to load downloaded tokenizer: {}", e))
+    Err(format!(
+        "tokenizer.json not found at {:?} — download the model again or place tokenizer.json in the models directory",
+        tokenizer_path
+    ))
 }
 
 /// Find the EOS token ID in the tokenizer vocabulary.

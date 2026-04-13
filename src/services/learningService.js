@@ -9,7 +9,7 @@
 
 import { daemonCall } from './daemonClient.js';
 
-const RULE_THRESHOLD = 3; // Corrections needed before auto-generating a rule
+const RULE_THRESHOLD = 1; // Auto-generate rule on first correction
 
 /**
  * Record a user correction and potentially extract a new rule.
@@ -46,14 +46,48 @@ export async function recordCorrection(accountId, email, correction) {
   let newRule = null;
 
   const domain = extractDomain(email.from);
+  const address = extractAddress(email.from);
+
   if (domain) {
     const domainCorrections = feedback.corrections.filter(c =>
       extractDomain(c.from) === domain &&
       c.correctedCategory === correction.correctedCategory
     );
 
-    if (domainCorrections.length >= RULE_THRESHOLD) {
-      // Check if rule already exists
+    // Check if same domain was corrected to DIFFERENT categories — conflict
+    const conflictingCorrections = feedback.corrections.filter(c =>
+      extractDomain(c.from) === domain &&
+      c.correctedCategory !== correction.correctedCategory
+    );
+
+    if (conflictingCorrections.length > 0 && address) {
+      // 6b: Address-level rule on conflict — different senders at same domain go to different categories
+      const existingAddrRule = feedback.rules.find(r =>
+        r.pattern.fromAddress === address &&
+        r.category === correction.correctedCategory
+      );
+
+      if (!existingAddrRule) {
+        newRule = {
+          id: `r-${Date.now()}`,
+          type: 'sender-action',
+          pattern: { fromAddress: address },
+          category: correction.correctedCategory,
+          importance: null,
+          action: correction.correctedAction,
+          confidence: 0.95,
+          learnedFrom: 1,
+          createdAt: new Date().toISOString(),
+          source: 'learned',
+        };
+        feedback.rules.push(newRule);
+        ruleGenerated = true;
+      } else {
+        existingAddrRule.learnedFrom = (existingAddrRule.learnedFrom || 1) + 1;
+        existingAddrRule.confidence = Math.min(0.99, existingAddrRule.confidence + 0.01);
+      }
+    } else if (domainCorrections.length >= RULE_THRESHOLD) {
+      // Normal domain-level rule
       const existingRule = feedback.rules.find(r =>
         r.pattern.fromDomain === domain &&
         r.category === correction.correctedCategory
@@ -65,7 +99,7 @@ export async function recordCorrection(accountId, email, correction) {
           type: 'sender-action',
           pattern: { fromDomain: domain },
           category: correction.correctedCategory,
-          importance: null, // Inherit from LLM
+          importance: null,
           action: correction.correctedAction,
           confidence: 0.95,
           learnedFrom: domainCorrections.length,
@@ -75,8 +109,36 @@ export async function recordCorrection(accountId, email, correction) {
         feedback.rules.push(newRule);
         ruleGenerated = true;
       } else {
-        // Update existing rule's confidence
+        // 6a: Strengthen existing rule
         existingRule.learnedFrom = domainCorrections.length;
+        existingRule.confidence = Math.min(0.99, existingRule.confidence + 0.01);
+        if (correction.correctedAction) {
+          existingRule.action = correction.correctedAction;
+        }
+      }
+    }
+
+    // 6c: Subject-pattern learning — 2+ corrections from same domain with shared subject words
+    if (domainCorrections.length >= 2) {
+      const sharedWords = findSharedSubjectWords(domainCorrections);
+      if (sharedWords && !feedback.rules.some(r =>
+        r.pattern.fromDomain === domain &&
+        r.pattern.subjectContains === sharedWords &&
+        r.category === correction.correctedCategory
+      )) {
+        const subjectRule = {
+          id: `r-${Date.now()}-subj`,
+          type: 'sender-action',
+          pattern: { fromDomain: domain, subjectContains: sharedWords },
+          category: correction.correctedCategory,
+          importance: null,
+          action: correction.correctedAction,
+          confidence: 0.90,
+          learnedFrom: domainCorrections.length,
+          createdAt: new Date().toISOString(),
+          source: 'learned',
+        };
+        feedback.rules.push(subjectRule);
       }
     }
   }
@@ -104,6 +166,22 @@ export async function getRules(accountId) {
 export async function deleteRule(accountId, ruleId) {
   const feedback = await loadFeedback(accountId);
   feedback.rules = feedback.rules.filter(r => r.id !== ruleId);
+  await saveFeedback(accountId, feedback);
+}
+
+/**
+ * Save (add or update) a rule.
+ * @param {string} accountId
+ * @param {object} rule - rule object with id, pattern, category, action, etc.
+ */
+export async function saveRule(accountId, rule) {
+  const feedback = await loadFeedback(accountId);
+  const idx = feedback.rules.findIndex(r => r.id === rule.id);
+  if (idx >= 0) {
+    feedback.rules[idx] = { ...feedback.rules[idx], ...rule };
+  } else {
+    feedback.rules.push(rule);
+  }
   await saveFeedback(accountId, feedback);
 }
 
@@ -140,5 +218,32 @@ async function saveFeedback(accountId, feedback) {
 function extractDomain(email) {
   if (!email) return null;
   const at = email.lastIndexOf('@');
-  return at > 0 ? email.slice(at + 1).toLowerCase() : null;
+  if (at <= 0) return null;
+  return email.slice(at + 1).replace(/[>]/g, '').toLowerCase();
+}
+
+function extractAddress(from) {
+  if (!from) return null;
+  const match = from.match(/<([^>]+)>/);
+  if (match) return match[1].toLowerCase();
+  if (from.includes('@')) return from.trim().toLowerCase();
+  return null;
+}
+
+function findSharedSubjectWords(corrections) {
+  if (corrections.length < 2) return null;
+  const subjects = corrections.map(c => (c.subject || '').toLowerCase());
+  const wordSets = subjects.map(s =>
+    new Set(s.split(/\s+/).filter(w => w.length >= 4))
+  );
+  if (wordSets.length === 0 || wordSets[0].size === 0) return null;
+
+  const shared = [...wordSets[0]].filter(w =>
+    wordSets.every(set => set.has(w))
+  );
+
+  if (shared.length === 0) return null;
+  // Return the longest shared word as the subject pattern
+  shared.sort((a, b) => b.length - a.length);
+  return shared[0];
 }

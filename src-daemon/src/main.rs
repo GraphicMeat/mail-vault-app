@@ -152,11 +152,14 @@ async fn main() {
         started_at: std::time::Instant::now(),
         llm: llm_state,
         inference: inference_engine,
-        classification: classification::ClassificationState::new(),
+        classification: classification::ClassificationState::new(data_dir.clone()),
         imap_pool,
         _oauth2_manager: oauth2::OAuth2Manager::new(),
         sync_engine: sync_eng,
     });
+
+    // Start background classification queue worker
+    server::start_classification_worker(Arc::clone(&state));
 
     let socket_path = get_socket_path(&data_dir);
 

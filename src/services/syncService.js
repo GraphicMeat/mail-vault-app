@@ -6,17 +6,21 @@
  */
 
 import { daemonCall } from './daemonClient.js';
+import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore.js';
 
 /**
  * Trigger an immediate sync for an account.
  * Returns immediately — sync runs in the daemon background.
+ * When the user has premium access, the daemon will also
+ * classify new emails in the background after sync completes.
  *
  * @param {object} account - { id, email, imapConfig: { email, password, imapHost, imapPort, ... } }
  * @param {string} [mailbox='INBOX']
  * @returns {Promise<{ started: boolean, accountId: string, mailbox: string }>}
  */
 export async function syncNow(account, mailbox = 'INBOX') {
-  return daemonCall('sync.now', { account, mailbox });
+  const autoClassify = hasPremiumAccess(useSettingsStore.getState().billingProfile);
+  return daemonCall('sync.now', { account, mailbox, autoClassify });
 }
 
 /**

@@ -1468,6 +1468,23 @@ export async function refreshAllAccounts(options = {}) {
 
   console.log(`[mailStore] All accounts refreshed. Total unread: ${totalUnread}, New emails: ${newEmails}`);
 
+  // Auto-classify all accounts in background if premium (one by one, single thread)
+  const { hasPremiumAccess } = await import('../../stores/settingsStore.js');
+  if (hasPremiumAccess(useSettingsStore.getState().billingProfile)) {
+    import('../classificationService.js').then(({ run }) => {
+      (async () => {
+        for (const account of accounts) {
+          if (useSettingsStore.getState().isAccountHidden(account.id)) continue;
+          try {
+            await run(account.id);
+          } catch (e) {
+            console.warn(`[mailStore] Background classification failed for ${account.email}:`, e);
+          }
+        }
+      })();
+    }).catch(() => {});
+  }
+
   return { newEmails, totalUnread, perAccountResults };
 }
 

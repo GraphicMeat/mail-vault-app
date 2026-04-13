@@ -11,6 +11,7 @@ import { useAccountStore } from '../../stores/accountStore.js';
 import * as api from '../../services/api.js';
 import { ensureFreshToken } from '../../services/authUtils.js';
 import { migrationManager } from '../../services/migrationManager.js';
+import { formatDateTime } from '../../utils/dateFormat.js';
 
 function formatDuration(secs) {
   if (!secs || secs < 1) return '< 1s';
@@ -611,8 +612,7 @@ export default function MigrationSettings({ onUpgrade }) {
                     <span className="truncate">{entry.destEmail}</span>
                   </div>
                   <div className="text-xs text-mail-text-muted mt-0.5">
-                    {new Date(entry.completedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}{', '}
-                    {new Date(entry.completedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                    {formatDateTime(entry.completedAt)}
                   </div>
                 </div>
                 <div className="text-right flex-shrink-0">

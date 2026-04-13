@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { format } from 'date-fns';
 import { useSenderInsights } from '../hooks/useSenderInsights';
+import { formatDateOnly } from '../utils/dateFormat';
 
 function StatRow({ label, value }) {
   return (
@@ -20,11 +20,8 @@ export function SenderInsightsPanel({ senderEmail }) {
   const { totalReceived, totalSent, total, firstDate, lastDate, frequency, topSubjects, accountsUsed } = insights;
 
   const formatDate = (d) => {
-    try {
-      return format(d, 'MMM d, yyyy');
-    } catch {
-      return '—';
-    }
+    const result = formatDateOnly(d, { alwaysShowYear: true });
+    return result || '—';
   };
 
   return (

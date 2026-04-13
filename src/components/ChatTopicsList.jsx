@@ -6,8 +6,8 @@ import {
   formatRelativeTime
 } from '../utils/emailParser';
 import { ChevronLeft, MessageCircle, Calendar } from 'lucide-react';
-import { format } from 'date-fns';
 import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
+import { formatDateOnly } from '../utils/dateFormat';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
 
@@ -75,11 +75,11 @@ const TopicRow = memo(function TopicRow({ topic, onClick, index }) {
 
     // Same day
     if (start.toDateString() === end.toDateString()) {
-      return format(end, 'MMM d');
+      return formatDateOnly(end);
     }
 
     // Different days
-    return `${format(start, 'MMM d')} - ${format(end, 'MMM d')}`;
+    return `${formatDateOnly(start)} - ${formatDateOnly(end)}`;
   }, [topic.dateRange]);
 
   return (

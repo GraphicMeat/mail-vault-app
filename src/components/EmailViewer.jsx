@@ -495,18 +495,18 @@ function EmailViewerComponent() {
       </AnimatePresence>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="p-4">
+      <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">
+        <div className="p-4 flex-1 flex flex-col">
           {showRaw && rawSource ? (
             <pre className="text-xs font-mono text-mail-text bg-mail-surface rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-all">
               {atob(rawSource)}
             </pre>
           ) : selectedEmail.html ? (
-            <div className="rounded-lg overflow-hidden bg-white max-w-full" style={{ contain: 'inline-size' }}>
+            <div className="rounded-lg overflow-hidden bg-white max-w-full h-full" style={{ contain: 'inline-size' }}>
               <iframe
                 ref={iframeRef}
                 srcDoc={iframeContent}
-                className="w-full border-0"
+                className="w-full border-0 h-full"
                 style={{ minHeight: '300px', display: 'block', maxWidth: '100%' }}
                 sandbox="allow-same-origin allow-popups allow-scripts"
                 title="Email content"

@@ -16,6 +16,7 @@ pub struct ModelInfo {
     pub description: String,
     pub filename: String,
     pub url: String,
+    pub tokenizer_url: String,
     pub size_bytes: u64,
     pub sha256: String,
     pub min_ram_gb: u32,
@@ -37,22 +38,36 @@ pub struct ModelStatus {
 pub fn get_model_registry() -> Vec<ModelInfo> {
     vec![
         ModelInfo {
+            id: "llama3.2-1b".into(),
+            name: "Llama 3.2 1B (Fast)".into(),
+            description: "Fastest classification. ~700MB RAM, works on any machine.".into(),
+            filename: "Llama-3.2-1B-Instruct-Q4_K_M.gguf".into(),
+            url: "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf".into(),
+            tokenizer_url: "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/tokenizer.json".into(),
+            size_bytes: 776_089_792, // ~740MB
+            sha256: String::new(),
+            min_ram_gb: 4,
+            recommended: true,
+        },
+        ModelInfo {
             id: "llama3.2-3b".into(),
             name: "Llama 3.2 3B".into(),
-            description: "Compact model, good for classification. Works on 8GB RAM machines.".into(),
+            description: "Good balance of speed and quality. Works on 8GB RAM machines.".into(),
             filename: "Llama-3.2-3B-Instruct-Q4_K_M.gguf".into(),
             url: "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf".into(),
+            tokenizer_url: "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/tokenizer.json".into(),
             size_bytes: 2_019_377_408, // ~1.9GB
-            sha256: String::new(), // Will be verified after first known-good download
+            sha256: String::new(),
             min_ram_gb: 8,
             recommended: false,
         },
         ModelInfo {
             id: "llama3.1-8b".into(),
-            name: "Llama 3.1 8B (Recommended)".into(),
-            description: "Best quality for email classification. Needs 16GB RAM.".into(),
+            name: "Llama 3.1 8B".into(),
+            description: "Best quality, slowest. Needs 16GB RAM.".into(),
             filename: "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf".into(),
             url: "https://huggingface.co/bartowski/Meta-Llama-3.1-8B-Instruct-GGUF/resolve/main/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf".into(),
+            tokenizer_url: "https://huggingface.co/bartowski/Meta-Llama-3.1-8B-Instruct-GGUF/resolve/main/tokenizer.json".into(),
             size_bytes: 4_920_916_992, // ~4.6GB
             sha256: String::new(),
             min_ram_gb: 16,
@@ -267,6 +282,16 @@ pub async fn download_model(state: Arc<LlmState>, model_id: &str) -> Result<(), 
     fs::rename(&temp_dest, &dest)
         .map_err(|e| format!("Failed to move model file: {}", e))?;
 
+    // Download tokenizer.json if not already present
+    let tokenizer_path = dir.join("tokenizer.json");
+    if !tokenizer_path.exists() && !model.tokenizer_url.is_empty() {
+        info!("Downloading tokenizer from {}", model.tokenizer_url);
+        match download_tokenizer(&model.tokenizer_url, &tokenizer_path).await {
+            Ok(()) => info!("Tokenizer saved to {:?}", tokenizer_path),
+            Err(e) => warn!("Failed to download tokenizer (classification may not work): {}", e),
+        }
+    }
+
     let mut progress = state.download_progress.lock().await;
     progress.status = DownloadStatus::Complete;
 
@@ -282,6 +307,25 @@ pub async fn cancel_download(state: Arc<LlmState>) {
 /// Get current download progress.
 pub async fn get_download_progress(state: &LlmState) -> DownloadProgress {
     state.download_progress.lock().await.clone()
+}
+
+/// Download tokenizer.json from a URL to the models directory.
+async fn download_tokenizer(url: &str, dest: &Path) -> Result<(), String> {
+    let client = reqwest::Client::new();
+    let response = client.get(url).send().await
+        .map_err(|e| format!("request error: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("HTTP {}", response.status()));
+    }
+
+    let bytes = response.bytes().await
+        .map_err(|e| format!("Failed to read response: {}", e))?;
+
+    fs::write(dest, &bytes)
+        .map_err(|e| format!("Failed to write tokenizer: {}", e))?;
+
+    Ok(())
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────

@@ -1,0 +1,60 @@
+name: Promote Snaps
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version to promote (e.g. v2.3.2)'
+        required: true
+        type: string
+      channel:
+        description: 'Snap Store channel to publish to'
+        required: false
+        type: choice
+        options:
+          - stable
+          - candidate
+          - beta
+          - edge
+        default: stable
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Install snapcraft
+        run: sudo snap install snapcraft --classic
+
+      - name: Download snaps from GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          INPUT_VERSION="${{ inputs.version }}"
+          VERSION="v${INPUT_VERSION#v}"
+
+          echo "Downloading snap artifacts from release ${VERSION}..."
+          gh release download "$VERSION" \
+            --repo "${{ github.repository }}" \
+            --pattern "*.snap" \
+            --dir snaps
+
+          echo "Downloaded snaps:"
+          ls -lh snaps/
+
+      - name: Publish to Snap Store
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        run: |
+          if [ -z "$SNAPCRAFT_STORE_CREDENTIALS" ]; then
+            echo "::error::SNAPCRAFT_STORE_CREDENTIALS not set"
+            exit 1
+          fi
+          CHANNEL="${{ inputs.channel }}"
+          for snap in snaps/*.snap; do
+            echo "Publishing $(basename "$snap") to ${CHANNEL} channel..."
+            snapcraft upload "$snap" --release="${CHANNEL}"
+          done
+          echo "All snaps published to ${CHANNEL}."

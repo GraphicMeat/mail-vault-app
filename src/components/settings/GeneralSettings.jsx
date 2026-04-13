@@ -27,6 +27,7 @@ import {
   Keyboard,
   SendHorizontal,
   Mail,
+  HardDrive,
 } from 'lucide-react';
 
 export function GeneralSettings({ accounts }) {
@@ -92,6 +93,10 @@ export function GeneralSettings({ accounts }) {
     setUndoSendDelay,
     getDisplayName,
     getOrderedAccounts,
+    backupNotifyOnSuccess,
+    backupNotifyOnFailure,
+    setBackupNotifyOnSuccess,
+    setBackupNotifyOnFailure,
   } = useSettingsStore();
 
   const [generalSubTab, setGeneralSubTab] = useState('appearance');
@@ -794,6 +799,25 @@ export function GeneralSettings({ accounts }) {
               </>
             )}
 
+          </div>
+        </div>
+
+        {/* Backup Notifications */}
+        <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+          <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
+            <HardDrive size={18} className="text-mail-accent" />
+            Backup Notifications
+          </h4>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-mail-text">Notify when backup completes</span>
+              <ToggleSwitch active={backupNotifyOnSuccess} onClick={() => setBackupNotifyOnSuccess(!backupNotifyOnSuccess)} />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-mail-text">Notify when backup fails</span>
+              <ToggleSwitch active={backupNotifyOnFailure} onClick={() => setBackupNotifyOnFailure(!backupNotifyOnFailure)} />
+            </div>
           </div>
         </div>
 

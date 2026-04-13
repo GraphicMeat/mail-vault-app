@@ -12,12 +12,12 @@ vi.mock('framer-motion', () => ({
 }));
 
 // Mock stores
-vi.mock('../../src/stores/settingsStore', () => ({
-  useSettingsStore: vi.fn((selector) => {
-    const state = { actionButtonDisplay: 'icon-only', signatureDisplay: 'smart' };
-    return selector(state);
-  }),
-}));
+vi.mock('../../src/stores/settingsStore', () => {
+  const state = { actionButtonDisplay: 'icon-only', signatureDisplay: 'smart', dateFormat: 'auto', customDateFormat: '', timeFormat: 'auto' };
+  const hook = vi.fn((selector) => selector(state));
+  hook.getState = () => state;
+  return { useSettingsStore: hook };
+});
 
 vi.mock('../../src/stores/mailStore', () => {
   const state = { activeAccountId: 'test', activeMailbox: 'INBOX', archivedEmailIds: new Set() };

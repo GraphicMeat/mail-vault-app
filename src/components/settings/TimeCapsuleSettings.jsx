@@ -17,7 +17,7 @@ export function TimeCapsuleSettings() {
           <Lock size={32} className="text-mail-text-muted mx-auto mb-4" />
           <h3 className="text-sm font-semibold text-mail-text mb-2">Time Capsule Requires Premium</h3>
           <p className="text-xs text-mail-text-muted max-w-md mx-auto">
-            Point-in-time mailbox snapshots, browsable history, and email restoration are available with a Premium subscription.
+            Travel back in time through your mailbox. Time Capsule takes lightweight snapshots of your email so you can browse any folder as it looked on a past date — and restore emails you may have lost.
           </p>
         </div>
       </div>
@@ -32,10 +32,13 @@ export function TimeCapsuleSettings() {
           <div className="w-10 h-10 rounded-full bg-mail-accent/10 flex items-center justify-center">
             <Info size={20} className="text-mail-accent" />
           </div>
-          <h3 className="text-sm font-semibold text-mail-text">What are snapshots?</h3>
+          <h3 className="text-sm font-semibold text-mail-text">How Time Capsule works</h3>
         </div>
+        <p className="text-xs text-mail-text-muted mb-2">
+          Time Capsule lets you travel back to any point in your email history. It takes lightweight snapshots of your mailbox — small records of which emails existed and where — so you can browse your inbox, sent mail, or any folder exactly as it looked on that date.
+        </p>
         <p className="text-xs text-mail-text-muted">
-          A snapshot is a lightweight record of which emails existed in your mailbox at a specific point in time. The actual email files are already stored locally by MailVault — snapshots just track <em>what was there when</em>. You can browse any snapshot to see your mailbox as it was on that date, and restore individual emails if needed.
+          Your actual emails are already stored locally by MailVault. Snapshots just track <em>what was there when</em>, so they take up very little space (a few hundred KB each). If you ever accidentally delete or lose an email, you can open a past snapshot, find it, and restore it.
         </p>
       </div>
 

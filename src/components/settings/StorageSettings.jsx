@@ -186,12 +186,12 @@ export function StorageSettings({ accounts, onUpgrade }) {
               <div className="text-xs text-mail-text-muted">
                 {localStorageUsage ? (
                   <>
-                    {localStorageUsage.totalMB >= 1024
-                      ? `${(localStorageUsage.totalMB / 1024).toFixed(2)} GB`
-                      : localStorageUsage.totalMB >= 1
-                      ? `${localStorageUsage.totalMB.toFixed(2)} MB`
-                      : `${(localStorageUsage.totalMB * 1024).toFixed(0)} KB`}
-                    {' '}({localStorageUsage.emailCount.toLocaleString()} emails saved)
+                    {(localStorageUsage.totalMB || 0) >= 1024
+                      ? `${((localStorageUsage.totalMB || 0) / 1024).toFixed(2)} GB`
+                      : (localStorageUsage.totalMB || 0) >= 1
+                      ? `${(localStorageUsage.totalMB || 0).toFixed(2)} MB`
+                      : `${((localStorageUsage.totalMB || 0) * 1024).toFixed(0)} KB`}
+                    {' '}({(localStorageUsage.emailCount || 0).toLocaleString()} emails saved)
                   </>
                 ) : (
                   'Calculating...'
@@ -467,7 +467,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                     >
                       <option value="all">All accounts</option>
                       {accounts
-                        .filter(a => !hiddenAccounts.includes(a.id))
+                        .filter(a => !hiddenAccounts?.[a.id])
                         .map(a => (
                           <option key={a.id} value={a.email}>{a.email}</option>
                         ))

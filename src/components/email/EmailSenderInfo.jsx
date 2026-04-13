@@ -1,6 +1,6 @@
 import React, { useState, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format } from 'date-fns';
+import { formatDateTime } from '../../utils/dateFormat';
 import {
   ChevronDown,
   ChevronUp,
@@ -125,7 +125,7 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
           {/* Timestamp + expand chevron */}
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <span className="text-[10px] text-mail-text-muted">
-              {email.date ? format(new Date(email.date), 'MMM d, h:mm a') : ''}
+              {email.date ? formatDateTime(email.date) : ''}
             </span>
             {expanded ? (
               <ChevronUp size={14} className="text-mail-text-muted" />
@@ -160,7 +160,7 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
                   exit={{ height: 0, opacity: 0 }}
                   className="mt-1 space-y-0.5 overflow-hidden"
                 >
-                  <div>Date: {email.date ? format(new Date(email.date), 'PPpp') : 'Unknown'}</div>
+                  <div>Date: {email.date ? formatDateTime(email.date) : 'Unknown'}</div>
                   {email.messageId && <div className="break-all">Message-ID: {email.messageId}</div>}
                   {email.replyTo?.length > 0 && (
                     <div>Reply-To: {email.replyTo.map(r => r.address || r).join(', ')}</div>

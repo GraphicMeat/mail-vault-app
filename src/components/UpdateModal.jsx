@@ -71,6 +71,15 @@ export function UpdateModal({ updateInfo, onClose }) {
 
   const newVersion = updateInfo?.version || 'unknown';
   const notes = updateInfo?.notes || '';
+
+  // ESC to close (only when idle, not during download/install)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && state === 'idle') { e.preventDefault(); onClose(); }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [state, onClose]);
   // Listen for download progress events from Rust (Linux only)
   useEffect(() => {
     if (state !== 'downloading') return;

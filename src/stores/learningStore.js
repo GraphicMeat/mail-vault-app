@@ -45,6 +45,18 @@ export const useLearningStore = create((set, get) => ({
   },
 
   /**
+   * Save (add or update) a rule and refresh.
+   */
+  saveRule: async (accountId, rule) => {
+    try {
+      await learningService.saveRule(accountId, rule);
+      await get().loadRules(accountId);
+    } catch (e) {
+      set({ error: e.message });
+    }
+  },
+
+  /**
    * Delete a rule and refresh.
    */
   deleteRule: async (accountId, ruleId) => {

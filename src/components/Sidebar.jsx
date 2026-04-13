@@ -6,7 +6,7 @@ import { useMessageListStore } from '../stores/messageListStore';
 import { useSyncStore } from '../stores/syncStore';
 import { useUiStore } from '../stores/uiStore';
 import { useThemeStore } from '../stores/themeStore';
-import { useSettingsStore, getAccountInitial, getAccountColor } from '../stores/settingsStore';
+import { useSettingsStore, getAccountInitial, getAccountColor, hasPremiumAccess } from '../stores/settingsStore';
 import { useBackupStore } from '../stores/backupStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -38,8 +38,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Loader,
-  Clock,
-  Sparkles
 } from 'lucide-react';
 
 const MAILBOX_ICONS = {
@@ -300,7 +298,7 @@ const ExpandedAccountRow = memo(function ExpandedAccountRow({
   );
 });
 
-export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup, onOpenAccounts, onOpenTimeCapsule, onOpenCleanup }) {
+export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup, onOpenAccounts }) {
   const accounts = useAccountStore(s => s.accounts);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   const mailboxes = useAccountStore(s => s.mailboxes);
@@ -330,6 +328,9 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const accountOrder = useSettingsStore(s => s.accountOrder);
   const sidebarAccountsRatio = useSettingsStore(s => s.sidebarAccountsRatio);
   const setSidebarAccountsRatio = useSettingsStore(s => s.setSidebarAccountsRatio);
+
+  const billingProfile = useSettingsStore(s => s.billingProfile);
+  const isPremium = hasPremiumAccess(billingProfile);
 
   const [expandedFolders, setExpandedFolders] = useState(new Set(['INBOX']));
   const [showErrorModal, setShowErrorModal] = useState(false);
@@ -946,26 +947,6 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
 
       {/* Footer */}
       <div className="p-3 border-t border-mail-border space-y-0.5">
-        {onOpenTimeCapsule && (
-          <button
-            onClick={onOpenTimeCapsule}
-            className="w-full flex items-center gap-2 p-2 text-sm text-mail-text-muted
-                      hover:text-mail-text hover:bg-mail-surface-hover rounded-lg transition-all"
-          >
-            <Clock size={16} />
-            Time Capsule
-          </button>
-        )}
-        {onOpenCleanup && (
-          <button
-            onClick={onOpenCleanup}
-            className="w-full flex items-center gap-2 p-2 text-sm text-mail-text-muted
-                      hover:text-mail-text hover:bg-mail-surface-hover rounded-lg transition-all"
-          >
-            <Sparkles size={16} />
-            AI Cleanup
-          </button>
-        )}
         <button
           onClick={onOpenSettings}
           className="w-full flex items-center gap-2 p-2 text-sm text-mail-text-muted

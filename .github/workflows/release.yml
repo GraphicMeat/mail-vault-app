@@ -7,6 +7,11 @@ on:
         description: 'Release version (e.g. v1.0.2)'
         required: true
         type: string
+      publish_snaps:
+        description: 'Publish snaps to Snap Store (default: false — use Promote Snaps workflow instead)'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   # ── E2E Tests (disabled — uncomment to enable) ──
@@ -468,6 +473,7 @@ jobs:
           retention-days: 1
 
   publish-snaps:
+    if: inputs.publish_snaps
     needs: [build-snap-x86_64, build-snap-aarch64]
     permissions:
       contents: write

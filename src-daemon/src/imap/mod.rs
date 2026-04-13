@@ -93,6 +93,12 @@ pub struct EmailHeader {
     pub return_path: Option<String>,
     #[serde(rename = "authenticationResults", skip_serializing_if = "Option::is_none")]
     pub authentication_results: Option<String>,
+    #[serde(rename = "listUnsubscribe", skip_serializing_if = "Option::is_none")]
+    pub list_unsubscribe: Option<String>,
+    #[serde(rename = "listId", skip_serializing_if = "Option::is_none")]
+    pub list_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub precedence: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -350,9 +356,9 @@ impl async_imap::Authenticator for XOAuth2Authenticator {
 
 // ── Fetch spec constants ────────────────────────────────────────────────────
 // Lean spec: no BODYSTRUCTURE/RFC822.SIZE — used for header loading (pages, ranges, delta-sync)
-const HEADER_FETCH_SPEC: &str = "(UID FLAGS ENVELOPE INTERNALDATE BODY.PEEK[HEADER.FIELDS (References Authentication-Results Return-Path Reply-To)])";
+const HEADER_FETCH_SPEC: &str = "(UID FLAGS ENVELOPE INTERNALDATE BODY.PEEK[HEADER.FIELDS (References Authentication-Results Return-Path Reply-To List-Unsubscribe List-Id Precedence)])";
 // Full spec: includes BODYSTRUCTURE + RFC822.SIZE — used for search results (smaller sets, full info)
-const HEADER_FETCH_SPEC_FULL: &str = "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (References Authentication-Results Return-Path Reply-To)])";
+const HEADER_FETCH_SPEC_FULL: &str = "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (References Authentication-Results Return-Path Reply-To List-Unsubscribe List-Id Precedence)])";
 
 // ── UID helpers ─────────────────────────────────────────────────────────────
 
@@ -1351,6 +1357,15 @@ fn parse_header_from_fetch(fetch: &Fetch) -> Result<EmailHeader, String> {
         .and_then(|raw| parse_single_header(raw, "Reply-To"))
         .and_then(|val| parse_email_address_from_header(&val));
 
+    let list_unsubscribe = raw_headers.as_ref()
+        .and_then(|raw| parse_single_header(raw, "List-Unsubscribe"));
+
+    let list_id = raw_headers.as_ref()
+        .and_then(|raw| parse_single_header(raw, "List-Id"));
+
+    let precedence = raw_headers.as_ref()
+        .and_then(|raw| parse_single_header(raw, "Precedence"));
+
     let date = envelope
         .date
         .as_ref()
@@ -1410,6 +1425,9 @@ fn parse_header_from_fetch(fetch: &Fetch) -> Result<EmailHeader, String> {
         reply_to,
         return_path,
         authentication_results,
+        list_unsubscribe,
+        list_id,
+        precedence,
     })
 }
 

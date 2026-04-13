@@ -910,6 +910,7 @@ export function getInitials(name, email) {
  * Format relative time for chat display
  */
 export function formatRelativeTime(dateStr) {
+  _ensureDateFormatLoaded();
   const date = new Date(dateStr);
   const now = new Date();
   const diffMs = now - date;
@@ -923,28 +924,35 @@ export function formatRelativeTime(dateStr) {
   if (diffDays === 1) return 'Yesterday';
   if (diffDays < 7) return date.toLocaleDateString(undefined, { weekday: 'short' });
 
+  if (_cachedFormatDateOnly) return _cachedFormatDateOnly(date);
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-// Lazy-loaded formatTime from dateFormat.js — avoids importing settingsStore
+// Lazy-loaded formatters from dateFormat.js — avoids importing settingsStore
 // at the module level (emailParser tests run in Node without a DOM).
 let _cachedFormatTime = null;
+let _cachedFormatDateOnly = null;
+let _cachedFormatDateLong = null;
 let _formatTimeLoadAttempted = false;
+
+function _ensureDateFormatLoaded() {
+  if (!_formatTimeLoadAttempted) {
+    _formatTimeLoadAttempted = true;
+    try {
+      import('./dateFormat.js').then(mod => {
+        _cachedFormatTime = mod.formatTime;
+        _cachedFormatDateOnly = mod.formatDateOnly;
+        _cachedFormatDateLong = mod.formatDateLong;
+      }).catch(() => {});
+    } catch { /* ignore */ }
+  }
+}
 
 /**
  * Format time for message bubble — respects the user's time format setting.
  */
 export function formatMessageTime(dateStr) {
-  // Try to load formatTime on first call (sync — the module will already be
-  // in Vite's module graph if any component that renders times has loaded).
-  if (!_formatTimeLoadAttempted) {
-    _formatTimeLoadAttempted = true;
-    try {
-      // Kick off a dynamic import; it resolves asynchronously but we cache
-      // the result for subsequent calls. First call uses the fallback.
-      import('./dateFormat.js').then(mod => { _cachedFormatTime = mod.formatTime; }).catch(() => {});
-    } catch { /* ignore */ }
-  }
+  _ensureDateFormatLoaded();
 
   if (_cachedFormatTime) return _cachedFormatTime(dateStr);
 
@@ -957,6 +965,7 @@ export function formatMessageTime(dateStr) {
  * Format date separator for chat view
  */
 export function formatDateSeparator(dateStr) {
+  _ensureDateFormatLoaded();
   const date = new Date(dateStr);
   const now = new Date();
   const diffDays = Math.floor((now - date) / 86400000);
@@ -964,6 +973,7 @@ export function formatDateSeparator(dateStr) {
   if (diffDays === 0) return 'Today';
   if (diffDays === 1) return 'Yesterday';
 
+  if (_cachedFormatDateLong) return _cachedFormatDateLong(date);
   return date.toLocaleDateString(undefined, {
     weekday: 'long',
     month: 'long',

@@ -62,6 +62,56 @@ export function formatDateTime(dateInput) {
   return `${datePart}, ${formatTime(date)}`;
 }
 
+/**
+ * Format a date-only string (no time), respecting the dateFormat setting.
+ * @param {Date|string|number} dateInput
+ * @param {object} [opts]
+ * @param {boolean} [opts.alwaysShowYear=false] — force year even for current-year dates
+ */
+export function formatDateOnly(dateInput, { alwaysShowYear = false } = {}) {
+  const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(date.getTime())) return '';
+
+  const { dateFormat, customDateFormat } = useSettingsStore.getState();
+  const isPreviousYear = date.getFullYear() !== new Date().getFullYear();
+  const showYear = alwaysShowYear || isPreviousYear;
+
+  if (dateFormat === 'custom' && customDateFormat) {
+    try { return format(date, customDateFormat); } catch { return format(date, 'MMM d, yyyy'); }
+  }
+
+  if (dateFormat !== 'auto' && DATE_PRESETS[dateFormat]) {
+    return format(date, showYear ? DATE_PRESETS[dateFormat].withYear : DATE_PRESETS[dateFormat].withoutYear);
+  }
+
+  // 'auto' — locale default
+  const options = showYear
+    ? { year: 'numeric', month: 'short', day: 'numeric' }
+    : { month: 'short', day: 'numeric' };
+  return new Intl.DateTimeFormat(navigator.language, options).format(date);
+}
+
+/**
+ * Format a date-only string with long month (e.g. "January 5, 2026").
+ * Respects dateFormat setting for preset/custom; uses long month only in auto mode.
+ */
+export function formatDateLong(dateInput) {
+  const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(date.getTime())) return '';
+
+  const { dateFormat, customDateFormat } = useSettingsStore.getState();
+
+  if (dateFormat === 'custom' && customDateFormat) {
+    try { return format(date, customDateFormat); } catch { return format(date, 'MMMM d, yyyy'); }
+  }
+
+  if (dateFormat !== 'auto' && DATE_PRESETS[dateFormat]) {
+    return format(date, DATE_PRESETS[dateFormat].withYear);
+  }
+
+  return new Intl.DateTimeFormat(navigator.language, { year: 'numeric', month: 'long', day: 'numeric' }).format(date);
+}
+
 export function formatEmailDate(dateStr) {
   const date = new Date(dateStr);
   if (isNaN(date.getTime())) return '';

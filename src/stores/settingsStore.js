@@ -75,7 +75,10 @@ export const useSettingsStore = create(
 
       // Local email caching duration (in months)
       localCacheDurationMonths: 3, // Default 3 months
-      
+
+      // User-added classification categories
+      customCategories: [],
+
       // Signature settings (per account)
       signatures: {}, // { [accountId]: { html: string, text: string, enabled: boolean } }
       
@@ -334,6 +337,18 @@ export const useSettingsStore = create(
       // Set cache limit
       setCacheLimitMB: (limit) => {
         set({ cacheLimitMB: limit });
+      },
+
+      // Custom categories
+      addCustomCategory: (name) => {
+        const current = get().customCategories;
+        const trimmed = name.trim();
+        if (trimmed && !current.includes(trimmed)) {
+          set({ customCategories: [...current, trimmed] });
+        }
+      },
+      removeCustomCategory: (name) => {
+        set({ customCategories: get().customCategories.filter(c => c !== name) });
       },
 
       // Set local cache duration (validates: 0 (all), 1, 3, 6, or 12 months)
@@ -615,6 +630,7 @@ export const useSettingsStore = create(
           storageConfigured: false,
           cacheLimitMB: 128,
           localCacheDurationMonths: 3,
+          customCategories: [],
           accountOrder: [],
           hiddenAccounts: {},
           lastMailboxPerAccount: {},

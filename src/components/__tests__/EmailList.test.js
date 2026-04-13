@@ -68,6 +68,7 @@ vi.mock('../../utils/linkSafety', () => ({
 }));
 vi.mock('../../utils/dateFormat', () => ({
   formatEmailDate: (d) => String(d),
+  formatDateOnly: (d) => String(d),
 }));
 
 // Build mock emails

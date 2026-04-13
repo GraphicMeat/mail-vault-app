@@ -44,8 +44,36 @@ export async function overrideClassification(accountId, messageId, overrides) {
 }
 
 /**
+ * Trigger classification pipeline for an account.
+ * @param {string} accountId
+ * @returns {Promise<{ started: boolean }>}
+ */
+export async function run(accountId) {
+  return daemonCall('classification.run', { accountId });
+}
+
+/**
+ * Cancel a running classification pipeline.
+ * @returns {Promise<{ cancelled: boolean }>}
+ */
+export async function cancel() {
+  return daemonCall('classification.cancel');
+}
+
+/**
+ * Reclassify all emails for an account: retrains the model and re-queues everything.
+ * Preserves user overrides.
+ * @param {string} accountId
+ * @returns {Promise<{ started: boolean }>}
+ */
+export async function reclassifyAll(accountId) {
+  return daemonCall('classification.reclassify_all', { accountId });
+}
+
+/**
  * Get classification pipeline progress.
- * @returns {Promise<{ account_id, status, classified, total, skipped_by_rules }>}
+ * @returns {Promise<{ account_id, status, classified, total, skipped_by_rules, queue_depth, phase }>}
+ * phase is "new" | "backfill" | "idle"
  */
 export async function getStatus() {
   return daemonCall('classification.status');
