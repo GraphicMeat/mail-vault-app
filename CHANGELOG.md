@@ -4,6 +4,22 @@
 
 ## [2.4.0] - 2026-04-13
 
+### Added
+- **Email Cleanup settings view**: Moved Email Cleanup from sidebar into Settings as an inline feature view with Naive Bayes classification controls
+- **Time Capsule settings view**: Moved Time Capsule from sidebar into Settings as an inline feature view
+- **Backup settings components**: Decomposed backup settings into focused subcomponents (account cards, config, restore, schedule, verification tree)
+- **Snap publish gating**: Release pipeline no longer auto-publishes snaps; new Promote Snaps workflow for manual publish after testing
+
+### Improved
+- **Email classification**: Replaced heuristic-based classification with Naive Bayes classifier for more accurate email categorization
+- **Email list performance**: Extracted EmailRow and ThreadRow into standalone memoized components
+- **Settings architecture**: Restructured settings into modular subcomponents for better maintainability
+
+### Fixed
+- **Module cache invalidation**: Clear module-level caches on invalidation, cap unified folder cache, remove redundant descriptor saves
+- **Account activation**: Prevent infinite recursion in activateAccount descriptor restore path
+- **Store architecture**: Remove state-duplicating domain store wrappers, use thin selector re-exports
+
 ## [2.3.2] - 2026-03-29
 
 ### Fixed
