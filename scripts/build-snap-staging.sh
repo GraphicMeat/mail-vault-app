@@ -12,8 +12,9 @@ fi
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STAGING="$REPO_ROOT/snap-staging"
 
-TAURI_BIN="$REPO_ROOT/src-tauri/target/$TAURI_TARGET/release/mailvault"
+TAURI_BIN="$REPO_ROOT/target/$TAURI_TARGET/release/mailvault"
 SIDECAR_BIN="$REPO_ROOT/src-tauri/binaries/mailvault-server-$TAURI_TARGET"
+DAEMON_BIN="$REPO_ROOT/src-tauri/binaries/mailvault-daemon-$TAURI_TARGET"
 ICON_SRC="$REPO_ROOT/src-tauri/icons/128x128.png"
 
 # Verify Tauri binary exists
@@ -39,6 +40,15 @@ if [[ -f "$SIDECAR_BIN" ]]; then
   echo "Staged: usr/bin/mailvault-server"
 else
   echo "WARNING: Sidecar not found at $SIDECAR_BIN — skipping"
+fi
+
+# Copy daemon (warn if missing)
+if [[ -f "$DAEMON_BIN" ]]; then
+  cp "$DAEMON_BIN" "$STAGING/usr/bin/mailvault-daemon"
+  chmod +x "$STAGING/usr/bin/mailvault-daemon"
+  echo "Staged: usr/bin/mailvault-daemon"
+else
+  echo "WARNING: Daemon not found at $DAEMON_BIN — skipping"
 fi
 
 # Desktop file and icon are in snap/gui/ — snapd handles them automatically.

@@ -149,15 +149,21 @@ jobs:
           # Build x86_64
           cargo build -p mailvault-daemon --release --target x86_64-apple-darwin
 
-          # Create universal binary
+          # Stage arch-specific binaries (Tauri needs these during per-arch compilation)
+          cp target/aarch64-apple-darwin/release/mailvault-daemon src-tauri/binaries/mailvault-daemon-aarch64-apple-darwin
+          cp target/x86_64-apple-darwin/release/mailvault-daemon src-tauri/binaries/mailvault-daemon-x86_64-apple-darwin
+          chmod +x src-tauri/binaries/mailvault-daemon-aarch64-apple-darwin
+          chmod +x src-tauri/binaries/mailvault-daemon-x86_64-apple-darwin
+
+          # Create universal binary (used by the final app bundle)
           lipo -create \
             target/aarch64-apple-darwin/release/mailvault-daemon \
             target/x86_64-apple-darwin/release/mailvault-daemon \
             -output src-tauri/binaries/mailvault-daemon-universal-apple-darwin
           chmod +x src-tauri/binaries/mailvault-daemon-universal-apple-darwin
 
-          echo "Universal daemon binary:"
-          file src-tauri/binaries/mailvault-daemon-universal-apple-darwin
+          echo "Daemon binaries:"
+          file src-tauri/binaries/mailvault-daemon-*
 
       - name: Install create-dmg
         run: brew install create-dmg
