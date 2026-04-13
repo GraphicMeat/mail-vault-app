@@ -276,6 +276,17 @@ if [ -f "$SIDECAR_PATH" ]; then
     echo "   ✓ Signed sidecar binary (with sidecar entitlements)"
 fi
 
+# Sign the daemon binary with its own entitlements
+DAEMON_PATH="$APP_PATH/Contents/MacOS/mailvault-daemon"
+DAEMON_ENTITLEMENTS="src-daemon/entitlements.plist"
+if [ -f "$DAEMON_PATH" ]; then
+    codesign --force --options runtime --timestamp \
+        --entitlements "$DAEMON_ENTITLEMENTS" \
+        --sign "$SIGNING_ID" $KEYCHAIN_ARG \
+        "$DAEMON_PATH"
+    echo "   ✓ Signed daemon binary (with daemon entitlements)"
+fi
+
 # Sign the main app bundle (no --deep to preserve sidecar entitlements)
 echo "   Signing main app bundle..."
 codesign --force --options runtime --timestamp \

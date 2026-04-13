@@ -139,8 +139,25 @@ jobs:
             -output src-tauri/binaries/mailvault-server-universal-apple-darwin
           chmod +x src-tauri/binaries/mailvault-server-universal-apple-darwin
 
-          echo "Universal binary:"
+          echo "Universal server binary:"
           file src-tauri/binaries/mailvault-server-universal-apple-darwin
+
+      - name: Build universal daemon sidecar
+        run: |
+          # Build ARM64
+          cargo build -p mailvault-daemon --release --target aarch64-apple-darwin
+          # Build x86_64
+          cargo build -p mailvault-daemon --release --target x86_64-apple-darwin
+
+          # Create universal binary
+          lipo -create \
+            target/aarch64-apple-darwin/release/mailvault-daemon \
+            target/x86_64-apple-darwin/release/mailvault-daemon \
+            -output src-tauri/binaries/mailvault-daemon-universal-apple-darwin
+          chmod +x src-tauri/binaries/mailvault-daemon-universal-apple-darwin
+
+          echo "Universal daemon binary:"
+          file src-tauri/binaries/mailvault-daemon-universal-apple-darwin
 
       - name: Install create-dmg
         run: brew install create-dmg
