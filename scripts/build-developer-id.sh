@@ -290,9 +290,14 @@ for dylib in "$APP_PATH/Contents/Frameworks"/*.dylib; do
 done
 
 # Sign the sidecar binary with its own entitlements (no app-sandbox — Bun needs JIT)
+# Bun-compiled universal binaries need ad-hoc pre-sign to allocate code signature space
+# before proper signing — codesign fails with "invalid or unsupported format" otherwise.
 SIDECAR_PATH="$APP_PATH/Contents/MacOS/mailvault-server"
 SIDECAR_ENTITLEMENTS="src-tauri/entitlements-sidecar.plist"
 if [ -f "$SIDECAR_PATH" ]; then
+    echo "   Pre-signing sidecar ($(file -b "$SIDECAR_PATH" | head -c80))"
+    codesign --remove-signature "$SIDECAR_PATH" 2>/dev/null || true
+    codesign --force --sign - "$SIDECAR_PATH"
     codesign --force --options runtime --timestamp \
         --entitlements "$SIDECAR_ENTITLEMENTS" \
         --sign "$SIGNING_ID" $KEYCHAIN_ARG \
