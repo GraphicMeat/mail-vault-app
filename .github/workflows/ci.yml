@@ -100,7 +100,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ""
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
       - name: Install tauri-wd
-        run: cargo install tauri-webdriver-automation --locked
+        run: cargo install tauri-webdriver-automation --locked --force
       - name: Create empty .env.test for UI-only suite
         run: touch .env.test
       - name: Run E2E tests (ui-headless suite)
