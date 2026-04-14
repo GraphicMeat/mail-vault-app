@@ -34,17 +34,12 @@ fn get_data_dir() -> PathBuf {
 }
 
 /// Socket path must be short enough for Unix SUN_LEN limit (104 bytes on macOS).
-/// The sandbox container path can exceed this, so use /tmp with a user-specific directory.
+/// The app data dir inside the sandbox container exceeds this limit, so we use the
+/// temp directory which is shorter and sandbox-writable.
+/// macOS sandbox: ~/Library/Containers/<bundle>/Data/tmp/daemon.sock (~70 bytes)
+/// Outside sandbox: /tmp or $TMPDIR
 fn get_socket_path(_data_dir: &PathBuf) -> PathBuf {
-    let user = std::env::var("USER").unwrap_or_else(|_| format!("{}", std::process::id()));
-    let sock_dir = PathBuf::from(format!("/tmp/mailvault-{}", user));
-    let _ = std::fs::create_dir_all(&sock_dir);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(&sock_dir, std::fs::Permissions::from_mode(0o700));
-    }
-    sock_dir.join("daemon.sock")
+    std::env::temp_dir().join("daemon.sock")
 }
 
 fn setup_logging(data_dir: &PathBuf) -> tracing_appender::non_blocking::WorkerGuard {

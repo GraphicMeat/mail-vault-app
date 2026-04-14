@@ -4009,11 +4009,8 @@ async fn daemon_rpc(
         .map_err(|e| format!("Could not get app data directory: {}", e))?;
 
     // Socket path must be short for Unix SUN_LEN limit (104 bytes on macOS).
-    // Sandbox container paths exceed this, so use /tmp with a user-specific dir.
-    let user = std::env::var("USER").unwrap_or_else(|_| format!("{}", std::process::id()));
-    let sock_dir = PathBuf::from(format!("/tmp/mailvault-{}", user));
-    let _ = std::fs::create_dir_all(&sock_dir);
-    let socket_path = sock_dir.join("daemon.sock");
+    // The sandbox container's temp dir is short and writable.
+    let socket_path = std::env::temp_dir().join("daemon.sock");
 
     // Spawn daemon once (not on every call)
     if !DAEMON_SPAWNED.load(std::sync::atomic::Ordering::Relaxed) {
