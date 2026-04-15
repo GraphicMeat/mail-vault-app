@@ -4091,15 +4091,19 @@ r#"<?xml version="1.0" encoding="UTF-8"?>
     <string>/dev/null</string>
     <key>StandardErrorPath</key>
     <string>/dev/null</string>
+    <key>AssociatedBundleIdentifiers</key>
+    <string>com.mailvault.app</string>
 </dict>
 </plist>"#,
             label = LAUNCHD_LABEL,
             bin = daemon_path,
         );
 
-        // Unload existing service if present
+        let uid = unsafe { libc::getuid() };
+
+        // Bootout existing service if present (ignore errors — may not be loaded)
         let _ = Command::new("launchctl")
-            .args(["unload", &plist_path.to_string_lossy()])
+            .args(["bootout", &format!("gui/{}/{}", uid, LAUNCHD_LABEL)])
             .output();
 
         std::fs::write(&plist_path, &plist_content)
@@ -4109,13 +4113,13 @@ r#"<?xml version="1.0" encoding="UTF-8"?>
         let _ = std::fs::remove_file(&socket_path);
 
         let output = Command::new("launchctl")
-            .args(["load", &plist_path.to_string_lossy()])
+            .args(["bootstrap", &format!("gui/{}", uid), &plist_path.to_string_lossy()])
             .output()
             .map_err(|e| format!("Failed to run launchctl: {}", e))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("launchctl load failed: {}", stderr));
+            return Err(format!("launchctl bootstrap failed: {}", stderr));
         }
 
         info!("Installed launchd service: {}", LAUNCHD_LABEL);
@@ -4177,8 +4181,9 @@ async fn uninstall_daemon_service() -> Result<(), String> {
         let plist_path = home.join(format!("Library/LaunchAgents/{}.plist", LAUNCHD_LABEL));
 
         if plist_path.exists() {
+            let uid = unsafe { libc::getuid() };
             let _ = Command::new("launchctl")
-                .args(["unload", &plist_path.to_string_lossy()])
+                .args(["bootout", &format!("gui/{}/{}", uid, LAUNCHD_LABEL)])
                 .output();
             std::fs::remove_file(&plist_path)
                 .map_err(|e| format!("Failed to remove plist: {}", e))?;
