@@ -321,6 +321,10 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           ? (plainTextRef.current || htmlToText(formData.body)) + '\n\n-------- Original Message --------\n' + htmlToText(quotedHtml)
           : (plainTextRef.current || htmlToText(formData.body));
 
+        // Determine Sent folder for IMAP append (skip for Graph — server handles it)
+        const isGraph = freshAccount.oauth2Transport === 'graph';
+        const sentMailbox = isGraph ? null : (useMailStore.getState().getSentMailboxPath() || null);
+
         await api.sendEmail(
           { ...freshAccount, name: displayName },
           {
@@ -333,7 +337,8 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             inReplyTo: formData.inReplyTo || undefined,
             references: formData.references || undefined,
             attachments: emailAttachments.length > 0 ? emailAttachments : undefined
-          }
+          },
+          sentMailbox
         );
       };
 

@@ -225,9 +225,9 @@ export async function deleteEmail(account, uid, mailbox = 'INBOX', permanent = n
   });
 }
 
-export async function sendEmail(account, email) {
+export async function sendEmail(account, email, sentMailbox = null) {
   if (IS_TAURI) {
-    return tauriInvoke('smtp_send_email', { account, email });
+    return tauriInvoke('smtp_send_email', { account, email, sentMailbox });
   }
   return httpRequest('/send', {
     method: 'POST',

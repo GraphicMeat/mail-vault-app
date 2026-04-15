@@ -20,7 +20,13 @@ pub struct OutgoingEmail {
     pub references: Option<String>,
 }
 
-pub async fn send_email(account: &ImapConfig, email: &OutgoingEmail) -> Result<String, String> {
+/// Send result with message ID and raw RFC2822 bytes for Sent folder append.
+pub struct SendResult {
+    pub message_id: String,
+    pub raw_rfc2822: Vec<u8>,
+}
+
+pub async fn send_email(account: &ImapConfig, email: &OutgoingEmail) -> Result<SendResult, String> {
     let smtp_host = account
         .smtp_host
         .as_deref()
@@ -153,6 +159,9 @@ pub async fn send_email(account: &ImapConfig, email: &OutgoingEmail) -> Result<S
         account.is_oauth2()
     );
 
+    // Capture raw RFC2822 bytes before sending (for Sent folder append)
+    let raw_rfc2822 = message.formatted();
+
     let response = transport
         .send(message)
         .await
@@ -164,5 +173,5 @@ pub async fn send_email(account: &ImapConfig, email: &OutgoingEmail) -> Result<S
         .join("");
 
     info!("Email sent via SMTP to {}: {}", email.to, message_id);
-    Ok(message_id)
+    Ok(SendResult { message_id, raw_rfc2822 })
 }

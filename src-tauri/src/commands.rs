@@ -445,14 +445,35 @@ pub async fn imap_append_email(
 
 #[tauri::command]
 pub async fn smtp_send_email(
+    pool: tauri::State<'_, ImapPool>,
     account: ImapConfig,
     email: smtp::OutgoingEmail,
+    #[allow(unused)] sent_mailbox: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let message_id = smtp::send_email(&account, &email).await?;
+    let result = smtp::send_email(&account, &email).await?;
+
+    // Append to Sent folder if specified (skip for Graph accounts — server handles it)
+    if let Some(ref mailbox) = sent_mailbox {
+        if !mailbox.is_empty() {
+            let raw = String::from_utf8_lossy(&result.raw_rfc2822).to_string();
+            let account_clone = account.clone();
+            let mailbox_clone = mailbox.clone();
+            // Best-effort append — don't fail the send if append fails
+            let append_result = with_background(&pool, &account_clone, |mut session| async move {
+                imap::append_email(&mut session, &mailbox_clone, raw.as_bytes(), "\\Seen").await?;
+                Ok(((), session, Some(mailbox_clone)))
+            }).await;
+            if let Err(e) = append_result {
+                tracing::warn!("[smtp_send_email] Failed to append to Sent folder '{}': {}", mailbox, e);
+            } else {
+                tracing::info!("[smtp_send_email] Appended sent email to '{}'", mailbox);
+            }
+        }
+    }
 
     Ok(serde_json::json!({
         "success": true,
-        "messageId": message_id
+        "messageId": result.message_id
     }))
 }
 
