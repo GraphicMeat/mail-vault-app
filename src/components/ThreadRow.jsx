@@ -78,7 +78,7 @@ export const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onS
       style={style}
       className={`virtual-row group relative flex items-center gap-3 px-4 border-b border-mail-border
                  cursor-pointer
-                 ${isSelected ? 'bg-mail-accent/10' : 'hover:bg-mail-surface-hover'}
+                 ${isSelected && !anyChecked ? 'border-l-2 border-l-mail-accent pl-[14px]' : 'hover:bg-mail-surface-hover'}
                  ${hasUnread ? 'bg-mail-surface' : ''}`}
       onClick={() => onSelectThread(thread)}
     >
@@ -238,7 +238,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ thread, i
       style={style}
       className={`virtual-row group relative flex items-center gap-2 px-4 border-b border-mail-border
                  cursor-pointer
-                 ${isSelected ? 'bg-mail-accent/10' : 'hover:bg-mail-surface-hover'}
+                 ${isSelected && !anyChecked ? 'border-l-2 border-l-mail-accent pl-[14px]' : 'hover:bg-mail-surface-hover'}
                  ${hasUnread ? 'bg-mail-surface' : ''}`}
       onClick={() => onSelectThread(thread)}
     >
