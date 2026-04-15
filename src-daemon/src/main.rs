@@ -34,34 +34,29 @@ fn get_data_dir() -> PathBuf {
 }
 
 /// Resolve the real user home directory, bypassing macOS sandbox container redirect.
-/// Inside a sandboxed process, dirs::home_dir() returns ~/Library/Containers/<bundle>/Data/
-/// instead of the actual /Users/<name>. We use $HOME with validation.
+/// Inside the sandbox, $HOME and dirs::home_dir() both return
+/// /Users/{name}/Library/Containers/{bundle}/Data — we strip at /Library/Containers/.
 #[cfg(target_os = "macos")]
 fn real_home_dir() -> Option<PathBuf> {
-    if let Ok(home) = std::env::var("HOME") {
-        let p = PathBuf::from(&home);
-        if p.to_string_lossy().contains("/Library/Containers/") {
-            info!("$HOME points to sandbox container ({}), skipping", home);
-        } else if p.starts_with("/Users/") && p.is_dir() {
-            info!("Using real home from $HOME: {}", home);
-            return Some(p);
-        } else {
-            info!("$HOME={} rejected (not /Users/... or not a directory), trying fallback", home);
-        }
+    let raw = std::env::var("HOME")
+        .ok()
+        .or_else(|| dirs::home_dir().map(|p| p.to_string_lossy().to_string()))?;
+
+    let effective = if let Some(idx) = raw.find("/Library/Containers/") {
+        info!("Extracting real home from sandbox container path: {}", raw);
+        &raw[..idx]
+    } else {
+        &raw
+    };
+
+    let p = PathBuf::from(effective);
+    if p.starts_with("/Users/") && p.is_dir() {
+        info!("Resolved real home: {}", effective);
+        Some(p)
+    } else {
+        error!("Could not resolve real home directory from: {}", raw);
+        None
     }
-    if let Some(fb) = dirs::home_dir() {
-        if fb.to_string_lossy().contains("/Library/Containers/") {
-            info!("dirs::home_dir() also containerized ({}), no valid home found", fb.display());
-            return None;
-        }
-        if !fb.starts_with("/Users/") || !fb.is_dir() {
-            info!("dirs::home_dir()={} rejected (not /Users/... or not a directory)", fb.display());
-            return None;
-        }
-        info!("Using real home from dirs::home_dir(): {}", fb.display());
-        return Some(fb);
-    }
-    None
 }
 
 /// Socket path must be short (SUN_LEN ≤ 104 bytes) and accessible from both the
