@@ -987,7 +987,6 @@ function EmailListComponent() {
                       width: '100%',
                       height: vr.size + 'px',
                       transform: `translateY(${vr.start}px)`,
-                      overflow: 'hidden',
                     }}
                   >
                     <ThreadRowComponent
