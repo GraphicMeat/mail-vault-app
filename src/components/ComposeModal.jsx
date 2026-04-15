@@ -300,6 +300,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       const sendFn = async () => {
         // Refresh OAuth2 token if needed before sending
         const freshAccount = await ensureFreshToken(selectedAccount);
+        if (!freshAccount) throw new Error('Could not refresh account credentials');
 
         // Get display name from settings or account
         const displayName = getDisplayName(selectedAccountId) || freshAccount.name || freshAccount.email;

@@ -48,6 +48,8 @@ function countMailboxes(mailboxes = []) {
 function isMailboxTreeComplete(mailboxes = []) {
   const total = countMailboxes(mailboxes);
   if (total === 0) return false;
+  // If any mailbox has nested children, the cache uses the old tree format — force refresh
+  if (mailboxes.some(m => m.children?.length > 0)) return false;
   if (total > 1) return true;
   const only = mailboxes[0];
   return !!only && only.path !== 'INBOX';

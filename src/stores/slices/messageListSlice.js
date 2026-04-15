@@ -263,6 +263,8 @@ export const createMessageListSlice = (set, get) => ({
     }
 
     for (const email of sentEmails) {
+      // Only merge sent emails from the active account to prevent cross-account thread contamination
+      if (activeAccountId && email._accountId && email._accountId !== activeAccountId) continue;
       if (email.messageId && seen.has(email.messageId)) continue;
       if (email.messageId) seen.add(email.messageId);
       email._fromSentFolder = true;
