@@ -4219,9 +4219,22 @@ async fn daemon_rpc(
         .app_data_dir()
         .map_err(|e| format!("Could not get app data directory: {}", e))?;
 
-    // Socket path must be short for Unix SUN_LEN limit (104 bytes on macOS).
-    // The sandbox container's temp dir is short and writable.
-    let socket_path = std::env::temp_dir().join("daemon.sock");
+    // Socket path must be short (SUN_LEN ≤ 104 bytes) and accessible from both
+    // the sandboxed app and the launchd-launched daemon. The App Group container
+    // satisfies both constraints (~69 bytes, shared via group.com.mailvault entitlement).
+    let socket_path = {
+        #[cfg(target_os = "macos")]
+        {
+            let home = dirs::home_dir().ok_or("Could not determine home directory")?;
+            let group_dir = home.join("Library/Group Containers/group.com.mailvault");
+            let _ = std::fs::create_dir_all(&group_dir);
+            group_dir.join("daemon.sock")
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            std::env::temp_dir().join("daemon.sock")
+        }
+    };
 
     // Spawn daemon once (not on every call)
     if !DAEMON_SPAWNED.load(std::sync::atomic::Ordering::Relaxed) {

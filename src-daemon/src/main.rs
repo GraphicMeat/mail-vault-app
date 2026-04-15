@@ -33,12 +33,24 @@ fn get_data_dir() -> PathBuf {
         .join("com.mailvault.app")
 }
 
-/// Socket path must be short enough for Unix SUN_LEN limit (104 bytes on macOS).
-/// The app data dir inside the sandbox container exceeds this limit, so we use the
-/// temp directory which is shorter and sandbox-writable.
-/// macOS sandbox: ~/Library/Containers/<bundle>/Data/tmp/daemon.sock (~70 bytes)
-/// Outside sandbox: /tmp or $TMPDIR
+/// Socket path must be:
+/// 1. Short enough for Unix SUN_LEN (104 bytes on macOS)
+/// 2. Accessible from BOTH the sandboxed app AND the launchd-launched daemon
+///
+/// std::env::temp_dir() differs between contexts:
+///   - Sandboxed sidecar: ~/Library/Containers/.../Data/tmp/
+///   - launchd daemon:    /tmp/
+/// So we use the App Group container which both can access (~69 bytes).
 fn get_socket_path(_data_dir: &PathBuf) -> PathBuf {
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(home) = dirs::home_dir() {
+            let group_dir = home.join("Library/Group Containers/group.com.mailvault");
+            let _ = std::fs::create_dir_all(&group_dir);
+            return group_dir.join("daemon.sock");
+        }
+    }
+    // Fallback for Linux and other platforms
     std::env::temp_dir().join("daemon.sock")
 }
 
