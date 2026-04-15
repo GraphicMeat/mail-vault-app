@@ -3919,6 +3919,49 @@ use once_cell::sync::Lazy;
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_shell::process::CommandChild;
 
+/// Resolve the real user home directory, bypassing macOS sandbox container redirect.
+/// Inside a sandboxed process, dirs::home_dir() returns ~/Library/Containers/<bundle>/Data/
+/// instead of the actual /Users/<name>. We use $HOME with validation.
+#[cfg(target_os = "macos")]
+fn real_home_dir() -> Option<PathBuf> {
+    if let Ok(home) = std::env::var("HOME") {
+        let p = PathBuf::from(&home);
+        if p.to_string_lossy().contains("/Library/Containers/") {
+            info!("$HOME points to sandbox container ({}), skipping", home);
+        } else if p.starts_with("/Users/") && p.is_dir() {
+            return Some(p);
+        } else {
+            warn!("$HOME={} rejected (not /Users/... or not a directory), trying fallback", home);
+        }
+    }
+    if let Some(fb) = dirs::home_dir() {
+        if fb.to_string_lossy().contains("/Library/Containers/") {
+            warn!("dirs::home_dir() also containerized ({}), no valid home found", fb.display());
+            return None;
+        }
+        if !fb.starts_with("/Users/") || !fb.is_dir() {
+            warn!("dirs::home_dir()={} rejected (not /Users/... or not a directory)", fb.display());
+            return None;
+        }
+        return Some(fb);
+    }
+    None
+}
+
+/// Get the daemon socket path. Must match the daemon's get_socket_path().
+#[cfg(target_os = "macos")]
+fn daemon_socket_path() -> Result<PathBuf, String> {
+    let home = real_home_dir().ok_or("Could not resolve real home directory for daemon socket")?;
+    let group_dir = home.join("Library/Group Containers/group.com.mailvault");
+    let _ = std::fs::create_dir_all(&group_dir);
+    Ok(group_dir.join("daemon.sock"))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn daemon_socket_path() -> Result<PathBuf, String> {
+    Ok(std::env::temp_dir().join("daemon.sock"))
+}
+
 /// Tracks a daemon child process spawned in on-demand mode.
 static DAEMON_CHILD: Lazy<Mutex<Option<CommandChild>>> = Lazy::new(|| Mutex::new(None));
 
@@ -4015,11 +4058,10 @@ async fn install_daemon_service(app_handle: tauri::AppHandle) -> Result<String, 
             .ok_or_else(|| "Daemon binary not found in app bundle".to_string())?;
 
         let daemon_path = daemon_bin.to_string_lossy();
-        let socket_path = std::env::temp_dir().join("daemon.sock");
+        let socket_path = daemon_socket_path()?;
 
-        let plist_dir = dirs::home_dir()
-            .ok_or("Could not determine home directory")?
-            .join("Library/LaunchAgents");
+        let home = real_home_dir().ok_or("Could not resolve real home directory for LaunchAgent")?;
+        let plist_dir = home.join("Library/LaunchAgents");
         std::fs::create_dir_all(&plist_dir)
             .map_err(|e| format!("Failed to create LaunchAgents dir: {}", e))?;
 
@@ -4131,9 +4173,8 @@ r#"<?xml version="1.0" encoding="UTF-8"?>
 async fn uninstall_daemon_service() -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        let plist_path = dirs::home_dir()
-            .ok_or("Could not determine home directory")?
-            .join(format!("Library/LaunchAgents/{}.plist", LAUNCHD_LABEL));
+        let home = real_home_dir().ok_or("Could not resolve real home directory")?;
+        let plist_path = home.join(format!("Library/LaunchAgents/{}.plist", LAUNCHD_LABEL));
 
         if plist_path.exists() {
             let _ = Command::new("launchctl")
@@ -4179,8 +4220,8 @@ async fn uninstall_daemon_service() -> Result<(), String> {
 async fn is_daemon_service_installed() -> Result<bool, String> {
     #[cfg(target_os = "macos")]
     {
-        let plist_path = dirs::home_dir()
-            .ok_or("Could not determine home directory")?
+        let plist_path = real_home_dir()
+            .ok_or("Could not resolve real home directory")?
             .join(format!("Library/LaunchAgents/{}.plist", LAUNCHD_LABEL));
         Ok(plist_path.exists())
     }
@@ -4222,19 +4263,7 @@ async fn daemon_rpc(
     // Socket path must be short (SUN_LEN ≤ 104 bytes) and accessible from both
     // the sandboxed app and the launchd-launched daemon. The App Group container
     // satisfies both constraints (~69 bytes, shared via group.com.mailvault entitlement).
-    let socket_path = {
-        #[cfg(target_os = "macos")]
-        {
-            let home = dirs::home_dir().ok_or("Could not determine home directory")?;
-            let group_dir = home.join("Library/Group Containers/group.com.mailvault");
-            let _ = std::fs::create_dir_all(&group_dir);
-            group_dir.join("daemon.sock")
-        }
-        #[cfg(not(target_os = "macos"))]
-        {
-            std::env::temp_dir().join("daemon.sock")
-        }
-    };
+    let socket_path = daemon_socket_path()?;
 
     // Spawn daemon once (not on every call)
     if !DAEMON_SPAWNED.load(std::sync::atomic::Ordering::Relaxed) {

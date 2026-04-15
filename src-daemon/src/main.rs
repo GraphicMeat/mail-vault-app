@@ -33,22 +33,49 @@ fn get_data_dir() -> PathBuf {
         .join("com.mailvault.app")
 }
 
-/// Socket path must be:
-/// 1. Short enough for Unix SUN_LEN (104 bytes on macOS)
-/// 2. Accessible from BOTH the sandboxed app AND the launchd-launched daemon
-///
-/// std::env::temp_dir() differs between contexts:
-///   - Sandboxed sidecar: ~/Library/Containers/.../Data/tmp/
-///   - launchd daemon:    /tmp/
-/// So we use the App Group container which both can access (~69 bytes).
+/// Resolve the real user home directory, bypassing macOS sandbox container redirect.
+/// Inside a sandboxed process, dirs::home_dir() returns ~/Library/Containers/<bundle>/Data/
+/// instead of the actual /Users/<name>. We use $HOME with validation.
+#[cfg(target_os = "macos")]
+fn real_home_dir() -> Option<PathBuf> {
+    if let Ok(home) = std::env::var("HOME") {
+        let p = PathBuf::from(&home);
+        if p.to_string_lossy().contains("/Library/Containers/") {
+            info!("$HOME points to sandbox container ({}), skipping", home);
+        } else if p.starts_with("/Users/") && p.is_dir() {
+            info!("Using real home from $HOME: {}", home);
+            return Some(p);
+        } else {
+            info!("$HOME={} rejected (not /Users/... or not a directory), trying fallback", home);
+        }
+    }
+    if let Some(fb) = dirs::home_dir() {
+        if fb.to_string_lossy().contains("/Library/Containers/") {
+            info!("dirs::home_dir() also containerized ({}), no valid home found", fb.display());
+            return None;
+        }
+        if !fb.starts_with("/Users/") || !fb.is_dir() {
+            info!("dirs::home_dir()={} rejected (not /Users/... or not a directory)", fb.display());
+            return None;
+        }
+        info!("Using real home from dirs::home_dir(): {}", fb.display());
+        return Some(fb);
+    }
+    None
+}
+
+/// Socket path must be short (SUN_LEN ≤ 104 bytes) and accessible from both the
+/// sandboxed app sidecar and the launchd-launched daemon. The App Group container
+/// at ~/Library/Group Containers/group.com.mailvault/ satisfies both (~69 bytes).
 fn get_socket_path(_data_dir: &PathBuf) -> PathBuf {
     #[cfg(target_os = "macos")]
     {
-        if let Some(home) = dirs::home_dir() {
+        if let Some(home) = real_home_dir() {
             let group_dir = home.join("Library/Group Containers/group.com.mailvault");
             let _ = std::fs::create_dir_all(&group_dir);
             return group_dir.join("daemon.sock");
         }
+        error!("Could not resolve real home directory — falling back to temp_dir for socket");
     }
     // Fallback for Linux and other platforms
     std::env::temp_dir().join("daemon.sock")
