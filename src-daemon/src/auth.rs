@@ -45,18 +45,40 @@ pub fn generate_token(data_dir: &Path) -> io::Result<String> {
 
 /// Read the existing token from disk, or generate a new one if missing/unreadable.
 pub fn load_or_generate_token(data_dir: &Path) -> io::Result<String> {
-    let path = token_path(data_dir);
-    match fs::read_to_string(&path) {
+    load_or_generate_token_at(&token_path(data_dir))
+}
+
+/// Read the existing token from a specific path, or generate a new one.
+pub fn load_or_generate_token_at(path: &Path) -> io::Result<String> {
+    match fs::read_to_string(path) {
         Ok(token) if token.len() == TOKEN_BYTES * 2 => {
             info!("Loaded existing daemon token from {:?}", path);
             Ok(token)
         }
         Ok(_) => {
-            warn!("Token file exists but has invalid length, regenerating");
-            generate_token(data_dir)
+            warn!("Token file exists but has invalid length, regenerating at {:?}", path);
+            generate_token_at(path)
         }
-        Err(_) => generate_token(data_dir),
+        Err(_) => generate_token_at(path),
     }
+}
+
+/// Generate a fresh random token at a specific path.
+fn generate_token_at(path: &Path) -> io::Result<String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let mut bytes = [0u8; TOKEN_BYTES];
+    rand::thread_rng().fill(&mut bytes);
+    let token = hex::encode(&bytes);
+    fs::write(path, token.as_bytes())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+    }
+    info!("Generated new daemon token at {:?}", path);
+    Ok(token)
 }
 
 /// Constant-time comparison to prevent timing attacks on token validation.

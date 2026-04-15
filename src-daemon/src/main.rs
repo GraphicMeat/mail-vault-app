@@ -59,21 +59,30 @@ fn real_home_dir() -> Option<PathBuf> {
     }
 }
 
-/// Socket path must be short (SUN_LEN ≤ 104 bytes) and accessible from both the
-/// sandboxed app sidecar and the launchd-launched daemon. The App Group container
-/// at ~/Library/Group Containers/group.com.mailvault/ satisfies both (~69 bytes).
+/// Socket path must be short (SUN_LEN ≤ 104 bytes on macOS).
+/// Uses ~/mv.sock via dirs::home_dir() — inside the sandbox this is the container
+/// home (shared with the sandboxed app), outside it's the real home.
 fn get_socket_path(_data_dir: &PathBuf) -> PathBuf {
     #[cfg(target_os = "macos")]
     {
-        if let Some(home) = real_home_dir() {
-            let group_dir = home.join("Library/Group Containers/group.com.mailvault");
-            let _ = std::fs::create_dir_all(&group_dir);
-            return group_dir.join("daemon.sock");
+        if let Some(home) = dirs::home_dir() {
+            let sock = home.join("mv.sock");
+            info!("Daemon socket path: {}", sock.display());
+            return sock;
         }
-        error!("Could not resolve real home directory — falling back to temp_dir for socket");
     }
-    // Fallback for Linux and other platforms
     std::env::temp_dir().join("daemon.sock")
+}
+
+/// Token path — same directory as socket for consistency.
+fn get_token_path() -> PathBuf {
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(home) = dirs::home_dir() {
+            return home.join("mv.token");
+        }
+    }
+    std::env::temp_dir().join("mv.token")
 }
 
 fn setup_logging(data_dir: &PathBuf) -> tracing_appender::non_blocking::WorkerGuard {
@@ -169,8 +178,9 @@ async fn main() {
 
     write_pid_file(&data_dir);
 
-    // Load or generate auth token
-    let token = match auth::load_or_generate_token(&data_dir) {
+    // Load or generate auth token — use the shared token path (same location as socket)
+    let token_path = get_token_path();
+    let token = match auth::load_or_generate_token_at(&token_path) {
         Ok(t) => t,
         Err(e) => {
             error!("Failed to initialize auth token: {}", e);

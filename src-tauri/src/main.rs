@@ -3949,17 +3949,29 @@ fn real_home_dir() -> Option<PathBuf> {
 }
 
 /// Get the daemon socket path. Must match the daemon's get_socket_path().
+/// Uses dirs::home_dir() directly — inside sandbox this is the container home
+/// (shared with the sandboxed sidecar daemon), outside it's the real home.
 #[cfg(target_os = "macos")]
 fn daemon_socket_path() -> Result<PathBuf, String> {
-    let home = real_home_dir().ok_or("Could not resolve real home directory for daemon socket")?;
-    let group_dir = home.join("Library/Group Containers/group.com.mailvault");
-    let _ = std::fs::create_dir_all(&group_dir);
-    Ok(group_dir.join("daemon.sock"))
+    let home = dirs::home_dir().ok_or("Could not determine home directory")?;
+    Ok(home.join("mv.sock"))
+}
+
+/// Get the daemon token path. Same directory as socket.
+#[cfg(target_os = "macos")]
+fn daemon_token_path() -> Result<PathBuf, String> {
+    let home = dirs::home_dir().ok_or("Could not determine home directory")?;
+    Ok(home.join("mv.token"))
 }
 
 #[cfg(not(target_os = "macos"))]
 fn daemon_socket_path() -> Result<PathBuf, String> {
     Ok(std::env::temp_dir().join("daemon.sock"))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn daemon_token_path() -> Result<PathBuf, String> {
+    Ok(std::env::temp_dir().join("mv.token"))
 }
 
 /// Tracks a daemon child process spawned in on-demand mode.
@@ -4293,8 +4305,9 @@ async fn daemon_rpc(
     let token = match token {
         Some(t) => t,
         None => {
-            let t = std::fs::read_to_string(data_dir.join("daemon.token"))
-                .map_err(|_| "Daemon token not found — is the daemon running?".to_string())?
+            let token_file = daemon_token_path()?;
+            let t = std::fs::read_to_string(&token_file)
+                .map_err(|_| format!("Daemon token not found at {:?} — is the daemon running?", token_file))?
                 .trim().to_string();
             if let Ok(mut g) = DAEMON_TOKEN_CACHE.lock() { *g = Some(t.clone()); }
             t
