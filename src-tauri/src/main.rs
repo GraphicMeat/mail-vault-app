@@ -3986,6 +3986,217 @@ pub fn shutdown_daemon_child() {
     }
 }
 
+// ── Daemon service management (launchd / systemd) ───────────────────────────
+// Installs or removes a persistent system service so the daemon survives app exit.
+
+#[cfg(target_os = "macos")]
+const LAUNCHD_LABEL: &str = "com.mailvault.daemon";
+
+/// Install the daemon as a launchd LaunchAgent (macOS) or systemd user service (Linux).
+#[tauri::command]
+async fn install_daemon_service(app_handle: tauri::AppHandle) -> Result<String, String> {
+    #[cfg(target_os = "macos")]
+    {
+        // Find daemon binary inside the app bundle
+        let daemon_bin = app_handle.path().resource_dir()
+            .ok()
+            .and_then(|d| {
+                let bin = d.join("mailvault-daemon");
+                if bin.exists() { return Some(bin); }
+                // Sidecar naming: check Contents/MacOS/
+                if let Ok(exe) = std::env::current_exe() {
+                    if let Some(dir) = exe.parent() {
+                        let candidate = dir.join("mailvault-daemon");
+                        if candidate.exists() { return Some(candidate); }
+                    }
+                }
+                None
+            })
+            .ok_or_else(|| "Daemon binary not found in app bundle".to_string())?;
+
+        let daemon_path = daemon_bin.to_string_lossy();
+        let socket_path = std::env::temp_dir().join("daemon.sock");
+
+        let plist_dir = dirs::home_dir()
+            .ok_or("Could not determine home directory")?
+            .join("Library/LaunchAgents");
+        std::fs::create_dir_all(&plist_dir)
+            .map_err(|e| format!("Failed to create LaunchAgents dir: {}", e))?;
+
+        let plist_path = plist_dir.join(format!("{}.plist", LAUNCHD_LABEL));
+
+        let plist_content = format!(
+r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{label}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{bin}</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>StandardOutPath</key>
+    <string>/dev/null</string>
+    <key>StandardErrorPath</key>
+    <string>/dev/null</string>
+</dict>
+</plist>"#,
+            label = LAUNCHD_LABEL,
+            bin = daemon_path,
+        );
+
+        // Unload existing service if present
+        let _ = Command::new("launchctl")
+            .args(["unload", &plist_path.to_string_lossy()])
+            .output();
+
+        std::fs::write(&plist_path, &plist_content)
+            .map_err(|e| format!("Failed to write plist: {}", e))?;
+
+        // Remove stale socket before loading
+        let _ = std::fs::remove_file(&socket_path);
+
+        let output = Command::new("launchctl")
+            .args(["load", &plist_path.to_string_lossy()])
+            .output()
+            .map_err(|e| format!("Failed to run launchctl: {}", e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("launchctl load failed: {}", stderr));
+        }
+
+        info!("Installed launchd service: {}", LAUNCHD_LABEL);
+        Ok(format!("Service installed at {}", plist_path.display()))
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let daemon_bin = std::env::current_exe()
+            .ok()
+            .and_then(|e| e.parent().map(|d| d.join("mailvault-daemon")))
+            .filter(|p| p.exists())
+            .ok_or_else(|| "Daemon binary not found".to_string())?;
+
+        let unit_dir = dirs::config_dir()
+            .ok_or("Could not determine config directory")?
+            .join("systemd/user");
+        std::fs::create_dir_all(&unit_dir)
+            .map_err(|e| format!("Failed to create systemd user dir: {}", e))?;
+
+        let unit_path = unit_dir.join("mailvault-daemon.service");
+        let unit_content = format!(
+            "[Unit]\nDescription=MailVault Background Daemon\n\n[Service]\nExecStart={}\nRestart=on-failure\nRestartSec=5\n\n[Install]\nWantedBy=default.target\n",
+            daemon_bin.display()
+        );
+
+        std::fs::write(&unit_path, &unit_content)
+            .map_err(|e| format!("Failed to write unit file: {}", e))?;
+
+        Command::new("systemctl")
+            .args(["--user", "daemon-reload"])
+            .output()
+            .map_err(|e| format!("systemctl daemon-reload failed: {}", e))?;
+
+        let output = Command::new("systemctl")
+            .args(["--user", "enable", "--now", "mailvault-daemon.service"])
+            .output()
+            .map_err(|e| format!("systemctl enable failed: {}", e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("systemctl enable failed: {}", stderr));
+        }
+
+        info!("Installed systemd user service: mailvault-daemon.service");
+        Ok(format!("Service installed at {}", unit_path.display()))
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    Err("Daemon service not supported on this platform".to_string())
+}
+
+/// Uninstall the daemon system service.
+#[tauri::command]
+async fn uninstall_daemon_service() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let plist_path = dirs::home_dir()
+            .ok_or("Could not determine home directory")?
+            .join(format!("Library/LaunchAgents/{}.plist", LAUNCHD_LABEL));
+
+        if plist_path.exists() {
+            let _ = Command::new("launchctl")
+                .args(["unload", &plist_path.to_string_lossy()])
+                .output();
+            std::fs::remove_file(&plist_path)
+                .map_err(|e| format!("Failed to remove plist: {}", e))?;
+        }
+
+        info!("Uninstalled launchd service: {}", LAUNCHD_LABEL);
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let _ = Command::new("systemctl")
+            .args(["--user", "disable", "--now", "mailvault-daemon.service"])
+            .output();
+
+        let unit_path = dirs::config_dir()
+            .ok_or("Could not determine config directory")?
+            .join("systemd/user/mailvault-daemon.service");
+
+        if unit_path.exists() {
+            std::fs::remove_file(&unit_path)
+                .map_err(|e| format!("Failed to remove unit file: {}", e))?;
+        }
+
+        let _ = Command::new("systemctl")
+            .args(["--user", "daemon-reload"])
+            .output();
+
+        info!("Uninstalled systemd user service");
+        Ok(())
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    Err("Daemon service not supported on this platform".to_string())
+}
+
+/// Check if the daemon system service is installed.
+#[tauri::command]
+async fn is_daemon_service_installed() -> Result<bool, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let plist_path = dirs::home_dir()
+            .ok_or("Could not determine home directory")?
+            .join(format!("Library/LaunchAgents/{}.plist", LAUNCHD_LABEL));
+        Ok(plist_path.exists())
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let unit_path = dirs::config_dir()
+            .ok_or("Could not determine config directory")?
+            .join("systemd/user/mailvault-daemon.service");
+        Ok(unit_path.exists())
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    Ok(false)
+}
+
 // ── Daemon RPC — per-request connections with cached auth token ──────────────
 // Each request gets its own socket (supports full concurrency).
 // Token and daemon-spawn state are cached to avoid redundant I/O.
@@ -4305,7 +4516,10 @@ fn main() {
             commands::clear_migration_state_cmd,
             commands::count_migration_folders,
             commands::get_folder_mappings,
-            daemon_rpc
+            daemon_rpc,
+            install_daemon_service,
+            uninstall_daemon_service,
+            is_daemon_service_installed
         ])
         .setup(|app| {
             // Set up logging to app log directory

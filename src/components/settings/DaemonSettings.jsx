@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { isDaemonAvailable, getDaemonStatus } from '../../services/daemonClient';
 import {
@@ -11,6 +12,8 @@ export function DaemonSettings() {
   const [status, setStatus] = useState(null); // { version, uptime_secs, data_dir }
   const [checking, setChecking] = useState(false);
   const [connected, setConnected] = useState(null); // null = unknown, true/false
+  const [serviceInstalled, setServiceInstalled] = useState(null);
+  const [installing, setInstalling] = useState(false);
 
   const checkConnection = async () => {
     setChecking(true);
@@ -24,7 +27,30 @@ export function DaemonSettings() {
     } catch {
       setConnected(false);
     }
+    try {
+      const installed = await invoke('is_daemon_service_installed');
+      setServiceInstalled(installed);
+    } catch { /* ignore */ }
     setChecking(false);
+  };
+
+  const handleModeChange = async (mode) => {
+    setInstalling(true);
+    try {
+      if (mode === 'always-on') {
+        await invoke('install_daemon_service');
+        setServiceInstalled(true);
+      } else {
+        await invoke('uninstall_daemon_service');
+        setServiceInstalled(false);
+      }
+      setDaemonMode(mode);
+      // Re-check connection after a moment (service needs time to start)
+      setTimeout(() => checkConnection(), 2000);
+    } catch (e) {
+      console.error('Failed to toggle daemon service:', e);
+    }
+    setInstalling(false);
   };
 
   useEffect(() => { checkConnection(); }, []);
@@ -87,7 +113,8 @@ export function DaemonSettings() {
               type="radio"
               name="daemonMode"
               checked={daemonMode === 'on-demand'}
-              onChange={() => setDaemonMode('on-demand')}
+              onChange={() => handleModeChange('on-demand')}
+              disabled={installing}
               className="mt-0.5 accent-mail-accent"
             />
             <div>
@@ -109,7 +136,8 @@ export function DaemonSettings() {
               type="radio"
               name="daemonMode"
               checked={daemonMode === 'always-on'}
-              onChange={() => setDaemonMode('always-on')}
+              onChange={() => handleModeChange('always-on')}
+              disabled={installing}
               className="mt-0.5 accent-mail-accent"
             />
             <div>
@@ -125,6 +153,33 @@ export function DaemonSettings() {
           </label>
         </div>
       </div>
+
+      {/* Service Status */}
+      {daemonMode === 'always-on' && (
+        <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+          <h3 className="text-sm font-semibold text-mail-text mb-2">System Service</h3>
+          <div className="flex items-center gap-2 text-xs">
+            {serviceInstalled ? (
+              <>
+                <CheckCircle2 size={14} className="text-emerald-500" />
+                <span className="text-mail-text-muted">Service installed — daemon starts at login and survives app exit</span>
+              </>
+            ) : (
+              <>
+                <XCircle size={14} className="text-amber-500" />
+                <span className="text-mail-text-muted">Service not installed</span>
+                <button
+                  onClick={() => handleModeChange('always-on')}
+                  disabled={installing}
+                  className="ml-2 text-mail-accent hover:text-mail-accent/80 font-medium"
+                >
+                  {installing ? 'Installing...' : 'Install Now'}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* About */}
       <div className="text-xs text-mail-text-muted space-y-1">
