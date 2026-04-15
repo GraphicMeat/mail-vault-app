@@ -4,14 +4,13 @@ import { getSenderName } from '../utils/emailParser';
 import { getCachedAlerts } from '../utils/linkSafety';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon } from './SenderAlertIcon';
-import { motion, AnimatePresence } from 'framer-motion';
+import { RowActionMenu } from './RowActionMenu';
 import { formatEmailDate } from '../utils/dateFormat';
 import {
   RefreshCw,
   HardDrive,
   Cloud,
   Paperclip,
-  MoreHorizontal,
   Trash2,
   Archive,
 } from 'lucide-react';
@@ -122,54 +121,28 @@ export const EmailRow = React.memo(function EmailRow({ email, isSelected, onSele
           </button>
         )}
 
-        <div className="relative">
-          <button
-            onClick={(e) => { e.stopPropagation(); menuOpen ? onCloseMenu() : onOpenMenu(); }}
-            className="p-1.5 hover:bg-mail-border rounded transition-colors"
-          >
-            <MoreHorizontal size={14} className="text-mail-text-muted" />
-          </button>
-
-          <AnimatePresence>
-            {menuOpen && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={(e) => { e.stopPropagation(); onCloseMenu(); }}
-                />
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  className="absolute right-0 top-full mt-1 bg-mail-bg border border-mail-border
-                            rounded-lg shadow-lg z-50 py-1 min-w-[160px]"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {email.isArchived && (
-                    <button
-                      onClick={handleRemoveLocal}
-                      className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover
-                                flex items-center gap-2 text-mail-text"
-                    >
-                      <Archive size={14} />
-                      Unarchive
-                    </button>
-                  )}
-                  {email.source !== 'local-only' && (
-                    <button
-                      onClick={handleDeleteServer}
-                      className={`w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover
-                                flex items-center gap-2 ${confirmingDelete ? 'text-white bg-red-600 hover:bg-red-700' : 'text-mail-danger'}`}
-                    >
-                      <Trash2 size={14} />
-                      {confirmingDelete ? 'Confirm delete?' : 'Delete from server'}
-                    </button>
-                  )}
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
-        </div>
+        <RowActionMenu open={menuOpen} onOpen={onOpenMenu} onClose={onCloseMenu}>
+          {email.isArchived && (
+            <button
+              onClick={handleRemoveLocal}
+              className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover
+                        flex items-center gap-2 text-mail-text"
+            >
+              <Archive size={14} />
+              Unarchive
+            </button>
+          )}
+          {email.source !== 'local-only' && (
+            <button
+              onClick={handleDeleteServer}
+              className={`w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover
+                        flex items-center gap-2 ${confirmingDelete ? 'text-white bg-red-600 hover:bg-red-700' : 'text-mail-danger'}`}
+            >
+              <Trash2 size={14} />
+              {confirmingDelete ? 'Confirm delete?' : 'Delete from server'}
+            </button>
+          )}
+        </RowActionMenu>
       </div>
     </div>
   );
@@ -268,37 +241,20 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSe
               : <Archive size={13} className="text-mail-text-muted hover:text-mail-local" />}
           </button>
         )}
-        <div className="relative">
-          <button onClick={(e) => { e.stopPropagation(); menuOpen ? onCloseMenu() : onOpenMenu(); }}
-            className="p-1 hover:bg-mail-border rounded transition-colors">
-            <MoreHorizontal size={13} className="text-mail-text-muted" />
-          </button>
-          <AnimatePresence>
-            {menuOpen && (
-              <>
-                <div className="fixed inset-0 z-40"
-                  onClick={(e) => { e.stopPropagation(); onCloseMenu(); }} />
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-                  className="absolute right-0 top-full mt-1 bg-mail-bg border border-mail-border rounded-lg shadow-lg z-50 py-1 min-w-[160px]"
-                  onClick={(e) => e.stopPropagation()}>
-                  {email.isArchived && (
-                    <button onClick={handleRemoveLocal}
-                      className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover flex items-center gap-2 text-mail-text">
-                      <Archive size={14} /> Unarchive
-                    </button>
-                  )}
-                  {email.source !== 'local-only' && (
-                    <button onClick={handleDeleteServer}
-                      className={`w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover flex items-center gap-2 ${confirmingDelete ? 'text-white bg-red-600 hover:bg-red-700' : 'text-mail-danger'}`}>
-                      <Trash2 size={14} /> {confirmingDelete ? 'Confirm delete?' : 'Delete from server'}
-                    </button>
-                  )}
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
-        </div>
+        <RowActionMenu open={menuOpen} onOpen={onOpenMenu} onClose={onCloseMenu} size={13}>
+          {email.isArchived && (
+            <button onClick={handleRemoveLocal}
+              className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover flex items-center gap-2 text-mail-text">
+              <Archive size={14} /> Unarchive
+            </button>
+          )}
+          {email.source !== 'local-only' && (
+            <button onClick={handleDeleteServer}
+              className={`w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover flex items-center gap-2 ${confirmingDelete ? 'text-white bg-red-600 hover:bg-red-700' : 'text-mail-danger'}`}>
+              <Trash2 size={14} /> {confirmingDelete ? 'Confirm delete?' : 'Delete from server'}
+            </button>
+          )}
+        </RowActionMenu>
       </div>
     </div>
   );

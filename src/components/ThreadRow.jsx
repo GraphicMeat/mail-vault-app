@@ -4,14 +4,13 @@ import { getSenderName } from '../utils/emailParser';
 import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
-import { motion, AnimatePresence } from 'framer-motion';
+import { RowActionMenu } from './RowActionMenu';
 import { formatEmailDate } from '../utils/dateFormat';
 import {
   RefreshCw,
   HardDrive,
   Cloud,
   Paperclip,
-  MoreHorizontal,
   Trash2,
   Archive,
 } from 'lucide-react';
@@ -136,42 +135,16 @@ export const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onS
           </button>
         )}
 
-        <div className="relative">
+        <RowActionMenu open={menuOpen} onOpen={onOpenMenu} onClose={onCloseMenu}>
           <button
-            onClick={(e) => { e.stopPropagation(); menuOpen ? onCloseMenu() : onOpenMenu(); }}
-            className="p-1.5 hover:bg-mail-border rounded transition-colors"
+            onClick={handleDeleteThread}
+            className={`w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover
+                      flex items-center gap-2 ${confirmingDelete ? 'text-white bg-red-600 hover:bg-red-700' : 'text-mail-danger'}`}
           >
-            <MoreHorizontal size={14} className="text-mail-text-muted" />
+            <Trash2 size={14} />
+            {confirmingDelete ? `Delete ${thread.messageCount} emails?` : 'Delete thread from server'}
           </button>
-
-          <AnimatePresence>
-            {menuOpen && (
-              <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={(e) => { e.stopPropagation(); onCloseMenu(); }}
-                />
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  className="absolute right-0 top-full mt-1 bg-mail-bg border border-mail-border
-                            rounded-lg shadow-lg z-50 py-1 min-w-[200px]"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <button
-                    onClick={handleDeleteThread}
-                    className={`w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover
-                              flex items-center gap-2 ${confirmingDelete ? 'text-white bg-red-600 hover:bg-red-700' : 'text-mail-danger'}`}
-                  >
-                    <Trash2 size={14} />
-                    {confirmingDelete ? `Delete ${thread.messageCount} emails?` : 'Delete thread from server'}
-                  </button>
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
-        </div>
+        </RowActionMenu>
       </div>
     </div>
   );
@@ -292,29 +265,12 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ thread, i
               : <Archive size={13} className="text-mail-text-muted hover:text-mail-local" />}
           </button>
         )}
-        <div className="relative">
-          <button onClick={(e) => { e.stopPropagation(); menuOpen ? onCloseMenu() : onOpenMenu(); }}
-            className="p-1 hover:bg-mail-border rounded transition-colors">
-            <MoreHorizontal size={13} className="text-mail-text-muted" />
+        <RowActionMenu open={menuOpen} onOpen={onOpenMenu} onClose={onCloseMenu} size={13}>
+          <button onClick={handleDeleteThread}
+            className={`w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover flex items-center gap-2 ${confirmingDelete ? 'text-white bg-red-600 hover:bg-red-700' : 'text-mail-danger'}`}>
+            <Trash2 size={14} /> {confirmingDelete ? `Delete ${thread.messageCount} emails?` : 'Delete thread from server'}
           </button>
-          <AnimatePresence>
-            {menuOpen && (
-              <>
-                <div className="fixed inset-0 z-40"
-                  onClick={(e) => { e.stopPropagation(); onCloseMenu(); }} />
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-                  className="absolute right-0 top-full mt-1 bg-mail-bg border border-mail-border rounded-lg shadow-lg z-50 py-1 min-w-[200px]"
-                  onClick={(e) => e.stopPropagation()}>
-                  <button onClick={handleDeleteThread}
-                    className={`w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover flex items-center gap-2 ${confirmingDelete ? 'text-white bg-red-600 hover:bg-red-700' : 'text-mail-danger'}`}>
-                    <Trash2 size={14} /> {confirmingDelete ? `Delete ${thread.messageCount} emails?` : 'Delete thread from server'}
-                  </button>
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
-        </div>
+        </RowActionMenu>
       </div>
     </div>
   );
