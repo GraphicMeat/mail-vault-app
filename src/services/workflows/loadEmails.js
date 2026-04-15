@@ -782,7 +782,8 @@ export async function loadSentHeaders(accountId) {
   const cached = await db.getEmailHeadersPartial(accountId, sentPath, 200);
   if (get().activeAccountId !== accountId) return;
   if (cached?.emails?.length > 0) {
-    useMailStore.setState({ sentEmails: cached.emails });
+    useMailStore.setState({ sentEmails: cached.emails.map(e => ({ ...e, _accountId: accountId })) });
+    invalidateChatAndThreadCaches();
   }
 
   const { accounts, connectionStatus, mailboxes } = get();
@@ -800,7 +801,8 @@ export async function loadSentHeaders(accountId) {
         if (sentHeaders.length > 0) {
           await db.saveEmailHeaders(accountId, sentPath, sentHeaders, sentHeaders.length);
           if (get().activeAccountId !== accountId) return;
-          useMailStore.setState({ sentEmails: sentHeaders });
+          useMailStore.setState({ sentEmails: sentHeaders.map(e => ({ ...e, _accountId: accountId })) });
+          invalidateChatAndThreadCaches();
         }
       }
     } else {
@@ -809,7 +811,8 @@ export async function loadSentHeaders(accountId) {
       if (result?.emails?.length > 0) {
         await db.saveEmailHeaders(accountId, sentPath, result.emails, result.total);
         if (get().activeAccountId !== accountId) return;
-        useMailStore.setState({ sentEmails: result.emails });
+        useMailStore.setState({ sentEmails: result.emails.map(e => ({ ...e, _accountId: accountId })) });
+        invalidateChatAndThreadCaches();
       }
     }
   } catch (e) {
