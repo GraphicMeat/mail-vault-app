@@ -449,44 +449,11 @@ pub async fn list_mailboxes(session: &mut ImapSession) -> Result<Vec<MailboxInfo
         });
     }
 
-    // Build tree: attach children to parents
-    let mut result: Vec<MailboxInfo> = Vec::new();
-    let paths: Vec<String> = all.iter().map(|m| m.path.clone()).collect();
-
-    for mbox in all {
-        let is_child = if let Some(ref delim) = mbox.delimiter {
-            if let Some(idx) = mbox.path.rfind(delim.as_str()) {
-                let parent = &mbox.path[..idx];
-                paths.iter().any(|p| p == parent)
-            } else {
-                false
-            }
-        } else {
-            false
-        };
-
-        if is_child {
-            // Find parent in result and attach
-            let delim = mbox.delimiter.as_deref().unwrap_or("/");
-            let parent_path = mbox.path.rsplitn(2, delim).nth(1).unwrap_or("");
-            let mut attached = false;
-            for root in &mut result {
-                if root.path == parent_path {
-                    root.children.push(mbox.clone());
-                    attached = true;
-                    break;
-                }
-            }
-            if !attached {
-                result.push(mbox);
-            }
-        } else {
-            result.push(mbox);
-        }
-    }
-
-    info!("[IMAP] list_mailboxes returning {} top-level mailboxes", result.len());
-    Ok(result)
+    // Return flat list — the frontend handles grouping/display.
+    // Tree-building was nesting children under INBOX (e.g. INBOX.Sent, INBOX.Drafts)
+    // which caused Hostinger accounts to show only 1 top-level mailbox.
+    info!("[IMAP] list_mailboxes returning {} mailboxes (flat)", all.len());
+    Ok(all)
 }
 
 fn detect_special_use(attrs: &[String], path: &str) -> Option<String> {

@@ -656,7 +656,7 @@ function EmailListComponent() {
           ) : (
             <div className="flex flex-col">
               <h2 className="text-lg font-semibold text-mail-text">
-                {activeMailbox === 'UNIFIED' ? 'All Inboxes' : activeMailbox}
+                {activeMailbox === 'UNIFIED' ? 'All Inboxes' : (activeMailbox.includes('.') ? activeMailbox.split('.').pop() : activeMailbox.includes('/') ? activeMailbox.split('/').pop() : activeMailbox)}
               </h2>
               <div className="text-xs text-mail-text-muted mt-0.5 flex items-center gap-1.5">
                 <span>{totalEmails.toLocaleString()} emails</span>

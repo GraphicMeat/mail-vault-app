@@ -53,6 +53,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const [templateName, setTemplateName] = useState('');
   const [quotedExpanded, setQuotedExpanded] = useState(false);
   const [quotedHtml, setQuotedHtml] = useState('');
+  const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef(null);
   const editorRef = useRef(null);
   const templatesRef = useRef(null);
@@ -202,7 +203,17 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       fileInputRef.current.value = '';
     }
   };
-  
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+    const files = Array.from(e.dataTransfer?.files || []);
+    if (files.length > 0) {
+      handleFileSelect({ target: { files } });
+    }
+  };
+
   const removeAttachment = (index) => {
     setAttachments(prev => prev.filter((_, i) => i !== index));
   };
@@ -354,7 +365,8 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
        formData.subject !== initialSnapshot.current.subject ||
        htmlToText(formData.body).trim() !== htmlToText(initialSnapshot.current.body).trim() ||
        attachments.some(a => !a.isFromOriginal))
-    : false;
+    : (formData.to.trim() !== '' || formData.subject.trim() !== '' ||
+       htmlToText(formData.body).trim() !== '' || attachments.length > 0);
 
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
 
@@ -415,9 +427,13 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         data-testid="compose-modal"
-        className="bg-mail-surface border border-mail-border rounded-xl shadow-2xl
-                   w-full max-w-4xl max-h-[90vh] h-[min(80vh,700px)] min-h-[320px] flex flex-col overflow-hidden"
+        className={`bg-mail-surface border rounded-xl shadow-2xl
+                   w-full max-w-4xl max-h-[90vh] h-[min(80vh,700px)] min-h-[320px] flex flex-col overflow-hidden
+                   ${dragOver ? 'border-mail-accent border-2' : 'border-mail-border'}`}
         onClick={(e) => e.stopPropagation()}
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false); }}
+        onDrop={handleDrop}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-mail-border">
