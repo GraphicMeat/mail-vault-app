@@ -98,9 +98,10 @@ export const useSettingsStore = create(
       // Default settings
       defaultSignatureEnabled: true,
       
-      // Undo send settings
-      undoSendEnabled: false,  // OFF by default
-      undoSendDelay: 5,        // seconds: 5, 10, 15, 30
+      // Send delay (undo send) — 0 = immediate, or seconds: 15, 30, 60, 120, 180, 240, 300
+      undoSendEnabled: false,  // kept for backward compat; true when sendDelay > 0
+      undoSendDelay: 5,        // kept for backward compat
+      sendDelay: 0,            // seconds — 0 = immediate (no delay)
 
       // Auto-save drafts
       autoSaveDrafts: true,
@@ -415,6 +416,7 @@ export const useSettingsStore = create(
       // Undo send settings
       setUndoSendEnabled: (enabled) => set({ undoSendEnabled: enabled }),
       setUndoSendDelay: (delay) => set({ undoSendDelay: delay }),
+      setSendDelay: (seconds) => set({ sendDelay: seconds, undoSendEnabled: seconds > 0, undoSendDelay: seconds }),
 
       // Email sync settings
       setRefreshInterval: (minutes) => set({ refreshInterval: minutes }),

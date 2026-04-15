@@ -91,6 +91,8 @@ export function GeneralSettings({ accounts }) {
     setUndoSendEnabled,
     undoSendDelay,
     setUndoSendDelay,
+    sendDelay,
+    setSendDelay,
     getDisplayName,
     getOrderedAccounts,
     backupNotifyOnSuccess,
@@ -881,38 +883,33 @@ export function GeneralSettings({ accounts }) {
           </p>
 
           <div className="space-y-4">
-            <div className="flex items-center justify-between py-2">
-              <div>
-                <div className="font-medium text-mail-text">Enable Undo Send</div>
-                <div className="text-sm text-mail-text-muted">
-                  Briefly delay sending so you can undo
-                </div>
+            <div>
+              <label className="block font-medium text-mail-text mb-1">Send Delay</label>
+              <div className="text-sm text-mail-text-muted mb-3">
+                Delay outgoing emails so you can undo before they're sent. You can override this per-email in the compose window.
               </div>
-              <ToggleSwitch
-                active={undoSendEnabled}
-                onClick={() => setUndoSendEnabled(!undoSendEnabled)}
-              />
+              <select
+                value={sendDelay ?? 0}
+                onChange={(e) => setSendDelay(Number(e.target.value))}
+                className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
+                          text-mail-text focus:border-mail-accent transition-all cursor-pointer"
+              >
+                <option value={0}>Off — send immediately</option>
+                <option value={15}>15 seconds</option>
+                <option value={30}>30 seconds</option>
+                <option value={60}>1 minute</option>
+                <option value={120}>2 minutes</option>
+                <option value={180}>3 minutes</option>
+                <option value={240}>4 minutes</option>
+                <option value={300}>5 minutes</option>
+              </select>
+              {(sendDelay ?? 0) > 0 && (
+                <p className="mt-2 text-xs text-amber-500 flex items-center gap-1.5">
+                  <span>⚠</span>
+                  Your computer must stay awake during the delay. If it sleeps, the email will be sent when it wakes.
+                </p>
+              )}
             </div>
-
-            {undoSendEnabled && (
-              <div>
-                <label className="block text-sm font-medium text-mail-text mb-2">
-                  Undo send delay
-                </label>
-                <select
-                  value={undoSendDelay}
-                  onChange={(e) => setUndoSendDelay(Number(e.target.value))}
-                  className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
-                            text-mail-text focus:border-mail-accent transition-all
-                            cursor-pointer"
-                >
-                  <option value={5}>5 seconds</option>
-                  <option value={10}>10 seconds</option>
-                  <option value={15}>15 seconds</option>
-                  <option value={30}>30 seconds</option>
-                </select>
-              </div>
-            )}
           </div>
         </div>
 

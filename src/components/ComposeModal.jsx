@@ -36,6 +36,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   const getSignature = useSettingsStore(s => s.getSignature);
   const getDisplayName = useSettingsStore(s => s.getDisplayName);
+  const globalSendDelay = useSettingsStore(s => s.sendDelay) ?? 0;
   const emailTemplates = useSettingsStore(s => s.emailTemplates);
   const addEmailTemplate = useSettingsStore(s => s.addEmailTemplate);
   const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
@@ -54,6 +55,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const [quotedExpanded, setQuotedExpanded] = useState(false);
   const [quotedHtml, setQuotedHtml] = useState('');
   const [dragOver, setDragOver] = useState(false);
+  const [composeDelay, setComposeDelay] = useState(null); // null = use global
   const fileInputRef = useRef(null);
   const editorRef = useRef(null);
   const templatesRef = useRef(null);
@@ -343,7 +345,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       };
 
       // Queue send (may delay if undo send is enabled)
-      useMailStore.getState().queueSend(composeState, sendFn);
+      useMailStore.getState().queueSend(composeState, sendFn, composeDelay);
       onClose();
     } catch (err) {
       setError(err.message || 'Failed to send email');
@@ -715,6 +717,21 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               >
                 Discard
               </button>
+              <select
+                value={composeDelay ?? globalSendDelay}
+                onChange={(e) => setComposeDelay(Number(e.target.value))}
+                className="px-2 py-2 bg-mail-bg border border-mail-border rounded-lg
+                          text-xs text-mail-text-muted cursor-pointer"
+                title="Send delay"
+              >
+                <option value={0}>Send now</option>
+                <option value={15}>15s delay</option>
+                <option value={30}>30s delay</option>
+                <option value={60}>1m delay</option>
+                <option value={120}>2m delay</option>
+                <option value={180}>3m delay</option>
+                <option value={300}>5m delay</option>
+              </select>
               <button
                 type="submit"
                 data-testid="compose-send"
