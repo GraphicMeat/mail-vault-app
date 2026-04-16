@@ -2,13 +2,15 @@
 
 ## [Unreleased]
 
-## [2.4.0] - 2026-04-13
+## [2.4.0] - 2026-04-16
 
 ### Added
 - **Email Cleanup settings view**: Moved Email Cleanup from sidebar into Settings as an inline feature view with Naive Bayes classification controls
 - **Time Capsule settings view**: Moved Time Capsule from sidebar into Settings as an inline feature view
 - **Backup settings components**: Decomposed backup settings into focused subcomponents (account cards, config, restore, schedule, verification tree)
 - **Snap publish gating**: Release pipeline no longer auto-publishes snaps; new Promote Snaps workflow for manual publish after testing
+- **Configurable send delay**: Per-compose send delay override (15s–5min) with global default in settings
+- **Sent folder sync**: Copy sent email to IMAP Sent folder after SMTP send
 
 ### Improved
 - **Email classification**: Replaced heuristic-based classification with Naive Bayes classifier for more accurate email categorization
@@ -16,6 +18,9 @@
 - **Settings architecture**: Restructured settings into modular subcomponents for better maintainability
 
 ### Fixed
+- **Daemon always-on mode**: Moved IPC socket to App Group container so the sandboxed app and launchd daemon resolve to the same path — fixes "daemon not running" when switching to always-on mode
+- **Daemon socket path**: Consolidated socket+token to `~/Library/Group Containers/group.com.mailvault/` following the 1Password App Group pattern
+- **Daemon mode switching**: Reset token cache and spawn state when toggling between on-demand and always-on modes
 - **Module cache invalidation**: Clear module-level caches on invalidation, cap unified folder cache, remove redundant descriptor saves
 - **Account activation**: Prevent infinite recursion in activateAccount descriptor restore path
 - **Store architecture**: Remove state-duplicating domain store wrappers, use thin selector re-exports
