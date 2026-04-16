@@ -16,6 +16,7 @@
 - **Email classification**: Replaced heuristic-based classification with Naive Bayes classifier for more accurate email categorization
 - **Email list performance**: Extracted EmailRow and ThreadRow into standalone memoized components
 - **Settings architecture**: Restructured settings into modular subcomponents for better maintainability
+- **Background helper architecture**: Extracted daemon management into dedicated `helper.rs` module separating launch strategy from RPC transport; daemon is now sandboxed; UI reworded from "system service" to "background helper"
 
 ### Fixed
 - **Daemon always-on mode**: Moved IPC socket to App Group container so the sandboxed app and launchd daemon resolve to the same path — fixes "daemon not running" when switching to always-on mode

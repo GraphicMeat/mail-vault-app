@@ -191,6 +191,10 @@
               <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
               <span><strong>Settings architecture</strong>: Restructured settings into modular subcomponents for better maintainability</span>
             </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Background helper architecture</strong>: Extracted daemon management into dedicated <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">helper.rs</code> module separating launch strategy from RPC transport; daemon is now sandboxed; UI reworded from "system service" to "background helper"</span>
+            </li>
           </ul>
         </div>
 
