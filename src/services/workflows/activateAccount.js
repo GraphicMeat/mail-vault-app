@@ -253,8 +253,13 @@ async function _loadServerEmailsViaGraph(account, accountId, activeMailbox, uidM
   const headers = result.headers || [];
   const graphMessageIds = result.graphMessageIds || [];
 
+  // Embed Graph message ID directly on each header — avoids fragile positional
+  // UID→GraphID map that breaks when email order changes between fetches.
   const uidToGraphId = new Map();
-  headers.forEach((h, i) => { uidToGraphId.set(h.uid, graphMessageIds[i]); });
+  headers.forEach((h, i) => {
+    h._graphId = graphMessageIds[i];
+    uidToGraphId.set(h.uid, graphMessageIds[i]);
+  });
   _setGraphIdMap(accountId, activeMailbox, uidToGraphId);
 
   const serverEmails = headers.map((email, idx) => ({

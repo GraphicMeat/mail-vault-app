@@ -704,6 +704,7 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
 
     const uidToGraphId = new Map();
     headers.forEach((h, i) => {
+      h._graphId = graphMessageIds[i];
       uidToGraphId.set(h.uid, graphMessageIds[i]);
     });
     _setGraphIdMap(activeAccountId, activeMailbox, uidToGraphId);

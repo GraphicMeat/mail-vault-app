@@ -114,7 +114,12 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
       // 3a. Graph API: fetch full message by Graph message ID
       const freshAccount = await ensureFreshToken(account);
       const token = freshAccount.oauth2AccessToken;
-      let graphId = getGraphMessageId(accountId, mailbox, uid);
+
+      // Prefer _graphId embedded on the email header (stable across refreshes).
+      // Fall back to the positional map, then rebuild as last resort.
+      const emailHeader = get().emails.find(e => e.uid === uid)
+        || get().sortedEmails.find(e => e.uid === uid);
+      let graphId = emailHeader?._graphId || getGraphMessageId(accountId, mailbox, uid);
 
       if (!graphId) {
         console.log('[selectEmail] Graph ID not found for UID', uid, '— rebuilding map');
@@ -125,9 +130,12 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
             return normalized === mailbox || f.displayName === mailbox;
           });
           if (folder) {
-            const { graphMessageIds } = await api.graphListMessages(token, folder.id, 200, 0);
+            const { headers: rebuildHeaders, graphMessageIds } = await api.graphListMessages(token, folder.id, 200, 0);
             const uidMap = new Map();
-            graphMessageIds.forEach((gid, i) => uidMap.set(i + 1, gid));
+            // Use headers' UIDs (not positional index) to match correctly
+            rebuildHeaders.forEach((h, i) => {
+              uidMap.set(h.uid, graphMessageIds[i]);
+            });
             _setGraphIdMap(accountId, mailbox, uidMap);
             graphId = uidMap.get(uid);
           }
