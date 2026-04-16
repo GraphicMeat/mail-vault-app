@@ -3948,20 +3948,38 @@ fn real_home_dir() -> Option<PathBuf> {
     }
 }
 
+/// App Group container directory shared between the sandboxed app and the
+/// non-sandboxed launchd daemon.  Both declare `group.com.mailvault` in their
+/// `com.apple.security.application-groups` entitlement, so the sandbox allows
+/// access to this real-home-relative path regardless of container redirect.
+/// Pattern proven by 1Password and Keybase for IPC sockets.
+#[cfg(target_os = "macos")]
+const APP_GROUP_ID: &str = "group.com.mailvault";
+
+/// Resolve the App Group container directory.  Uses `real_home_dir()` so the
+/// path is identical from inside the sandbox and from a launchd daemon.
+#[cfg(target_os = "macos")]
+fn app_group_dir() -> Result<PathBuf, String> {
+    let home = real_home_dir().ok_or("Could not resolve real home directory for App Group")?;
+    let dir = home.join("Library/Group Containers").join(APP_GROUP_ID);
+    // Ensure the directory exists (first launch, or after OS upgrade)
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create App Group dir {:?}: {}", dir, e))?;
+    Ok(dir)
+}
+
 /// Get the daemon socket path. Must match the daemon's get_socket_path().
-/// Uses dirs::home_dir() directly — inside sandbox this is the container home
-/// (shared with the sandboxed sidecar daemon), outside it's the real home.
+/// Lives in the App Group container so both the sandboxed app and the
+/// non-sandboxed launchd daemon resolve to the same file.
 #[cfg(target_os = "macos")]
 fn daemon_socket_path() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or("Could not determine home directory")?;
-    Ok(home.join("mv.sock"))
+    Ok(app_group_dir()?.join("mv.sock"))
 }
 
 /// Get the daemon token path. Same directory as socket.
 #[cfg(target_os = "macos")]
 fn daemon_token_path() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or("Could not determine home directory")?;
-    Ok(home.join("mv.token"))
+    Ok(app_group_dir()?.join("mv.token"))
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -4121,8 +4139,14 @@ r#"<?xml version="1.0" encoding="UTF-8"?>
         std::fs::write(&plist_path, &plist_content)
             .map_err(|e| format!("Failed to write plist: {}", e))?;
 
-        // Remove stale socket before loading
+        // Remove stale socket before loading (new group container path + old ~/mv.sock)
         let _ = std::fs::remove_file(&socket_path);
+        if let Some(old_sock) = dirs::home_dir().map(|h| h.join("mv.sock")) {
+            let _ = std::fs::remove_file(&old_sock);
+        }
+        if let Some(old_tok) = dirs::home_dir().map(|h| h.join("mv.token")) {
+            let _ = std::fs::remove_file(&old_tok);
+        }
 
         let output = Command::new("launchctl")
             .args(["bootstrap", &format!("gui/{}", uid), &plist_path.to_string_lossy()])
@@ -4133,6 +4157,10 @@ r#"<?xml version="1.0" encoding="UTF-8"?>
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(format!("launchctl bootstrap failed: {}", stderr));
         }
+
+        // Reset cached state so daemon_rpc reconnects to the new service
+        DAEMON_SPAWNED.store(false, std::sync::atomic::Ordering::Relaxed);
+        if let Ok(mut g) = DAEMON_TOKEN_CACHE.lock() { *g = None; }
 
         info!("Installed launchd service: {}", LAUNCHD_LABEL);
         Ok(format!("Service installed at {}", plist_path.display()))
@@ -4200,6 +4228,10 @@ async fn uninstall_daemon_service() -> Result<(), String> {
             std::fs::remove_file(&plist_path)
                 .map_err(|e| format!("Failed to remove plist: {}", e))?;
         }
+
+        // Reset cached state so daemon_rpc respawns on-demand
+        DAEMON_SPAWNED.store(false, std::sync::atomic::Ordering::Relaxed);
+        if let Ok(mut g) = DAEMON_TOKEN_CACHE.lock() { *g = None; }
 
         info!("Uninstalled launchd service: {}", LAUNCHD_LABEL);
         Ok(())

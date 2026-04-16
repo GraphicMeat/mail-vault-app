@@ -59,14 +59,32 @@ fn real_home_dir() -> Option<PathBuf> {
     }
 }
 
-/// Socket path must be short (SUN_LEN ≤ 104 bytes on macOS).
-/// Uses ~/mv.sock via dirs::home_dir() — inside the sandbox this is the container
-/// home (shared with the sandboxed app), outside it's the real home.
+/// App Group container shared between the sandboxed app and the daemon.
+/// Both declare `group.com.mailvault` in their application-groups entitlement.
+#[cfg(target_os = "macos")]
+const APP_GROUP_ID: &str = "group.com.mailvault";
+
+/// Resolve the App Group container directory using the real home path.
+/// Inside the sandbox `real_home_dir()` strips the container prefix;
+/// outside (launchd) `dirs::home_dir()` already returns the real home.
+#[cfg(target_os = "macos")]
+fn app_group_dir() -> Option<PathBuf> {
+    let home = real_home_dir()?;
+    let dir = home.join("Library/Group Containers").join(APP_GROUP_ID);
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        error!("Failed to create App Group dir {:?}: {}", dir, e);
+        return None;
+    }
+    Some(dir)
+}
+
+/// Socket path inside the App Group container (SUN_LEN ≤ 104 bytes).
+/// Pattern proven by 1Password (SSH agent socket in Group Containers).
 fn get_socket_path(_data_dir: &PathBuf) -> PathBuf {
     #[cfg(target_os = "macos")]
     {
-        if let Some(home) = dirs::home_dir() {
-            let sock = home.join("mv.sock");
+        if let Some(dir) = app_group_dir() {
+            let sock = dir.join("mv.sock");
             info!("Daemon socket path: {}", sock.display());
             return sock;
         }
@@ -78,8 +96,8 @@ fn get_socket_path(_data_dir: &PathBuf) -> PathBuf {
 fn get_token_path() -> PathBuf {
     #[cfg(target_os = "macos")]
     {
-        if let Some(home) = dirs::home_dir() {
-            return home.join("mv.token");
+        if let Some(dir) = app_group_dir() {
+            return dir.join("mv.token");
         }
     }
     std::env::temp_dir().join("mv.token")
