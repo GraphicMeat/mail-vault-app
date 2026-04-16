@@ -16,12 +16,14 @@
 - **Email classification**: Replaced heuristic-based classification with Naive Bayes classifier for more accurate email categorization
 - **Email list performance**: Extracted EmailRow and ThreadRow into standalone memoized components
 - **Settings architecture**: Restructured settings into modular subcomponents for better maintainability
-- **Background helper architecture**: Extracted daemon management into dedicated `helper.rs` module separating launch strategy from RPC transport; daemon is now sandboxed; UI reworded from "system service" to "background helper"
+- **Background helper architecture**: Extracted daemon management into dedicated `helper.rs` module separating launch strategy from RPC transport; UI reworded from "system service" to "background helper"
 
 ### Fixed
-- **Daemon always-on mode**: Moved IPC socket to App Group container so the sandboxed app and launchd daemon resolve to the same path — fixes "daemon not running" when switching to always-on mode
-- **Daemon socket path**: Consolidated socket+token to `~/Library/Group Containers/group.com.mailvault/` following the 1Password App Group pattern
-- **Daemon mode switching**: Reset token cache and spawn state when toggling between on-demand and always-on modes
+- **Outlook/Graph email content mismatch**: Clicking one email could display a different email's content — synthetic positional UIDs drifted when email order changed between fetches; Graph message ID now embedded directly on each email header
+- **Cross-account email bleed**: Switching folders showed stale emails from the previous account when the target folder was empty — all email state is now cleared atomically on account/mailbox switch
+- **Daemon sandbox socket**: IPC socket moved to `~/.mailvault/mv.sock` via `dirs::home_dir()` so both the sandboxed app and sidecar daemon resolve the same container-relative path
+- **Daemon entitlements**: Removed `app-sandbox` from daemon (crashes standalone binaries without Info.plist); removed `application-groups` (not needed with shared container home)
+- **Release signing**: `$(AppIdentifierPrefix)` in entitlements is now expanded before codesign — fixes silently broken keychain sharing between app and daemon
 - **Module cache invalidation**: Clear module-level caches on invalidation, cap unified folder cache, remove redundant descriptor saves
 - **Account activation**: Prevent infinite recursion in activateAccount descriptor restore path
 - **Store architecture**: Remove state-duplicating domain store wrappers, use thin selector re-exports
