@@ -1,9 +1,9 @@
 /**
- * Daemon Client — communicates with the mailvault-daemon background service.
+ * Helper Client — communicates with the mailvault-daemon background helper.
  *
  * In Tauri mode, requests are proxied through a Tauri invoke command that
- * connects to the daemon's Unix socket. The Tauri binary handles socket
- * management and token authentication transparently.
+ * connects to the helper's Unix socket (in the App Group container on macOS).
+ * The Tauri binary handles socket management and token authentication.
  *
  * This module provides the same interface as direct invoke() calls so existing
  * services can migrate incrementally by swapping tauriInvoke → daemonCall.
@@ -47,7 +47,7 @@ export async function daemonCall(method, params = {}) {
   } catch (error) {
     const message = typeof error === 'string' ? error : error.message || 'Unknown daemon error';
 
-    if (message.includes('daemon not running') || message.includes('connection refused')) {
+    if (message.includes('not running') || message.includes('connection refused')) {
       throw new DaemonError(message, 'DAEMON_OFFLINE');
     }
     if (message.includes('auth')) {

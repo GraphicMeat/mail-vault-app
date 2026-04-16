@@ -2,6 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <!-- App Sandbox — helper is sandboxed like the main app.
+         Aligned for both Developer ID and Mac App Store builds. -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+
     <!-- Network access for IMAP/SMTP sync -->
     <key>com.apple.security.network.client</key>
     <true/>
@@ -13,7 +18,7 @@
         <string>$(AppIdentifierPrefix)group.com.mailvault</string>
     </array>
 
-    <!-- App group for sharing data between app and daemon -->
+    <!-- App Group for IPC socket, token, and shared state -->
     <key>com.apple.security.application-groups</key>
     <array>
         <string>group.com.mailvault</string>

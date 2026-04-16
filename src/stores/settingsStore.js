@@ -188,9 +188,9 @@ export const useSettingsStore = create(
       // Each: { id, accountEmail: '*' | 'email@...', folder, olderThan: { value: number, unit: 'days'|'months' }, action: 'delete'|'archive-delete', enabled: boolean }
       cleanupRules: [],
 
-      // Daemon mode: 'on-demand' (default) or 'always-on' (recommended)
-      // on-demand: daemon starts with app, stops when app quits
-      // always-on: daemon runs as system service (launchd/systemd), persists after app close
+      // Helper mode: 'on-demand' (default) or 'always-on' (recommended)
+      // on-demand: helper starts with app, stops when app quits
+      // always-on: helper registered for background availability, persists after app close
       daemonMode: 'on-demand',
 
       // Time Capsule snapshot configuration

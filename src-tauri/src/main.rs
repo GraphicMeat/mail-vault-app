@@ -22,6 +22,7 @@ mod commands;
 mod dns;
 mod external_location;
 pub mod graph;
+pub mod helper;
 mod imap;
 mod migration;
 mod move_emails;
@@ -3911,484 +3912,44 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
 
 // ── Daemon RPC proxy ────────────────────────────────────────────────────────
 // Bridges frontend invoke() calls to the mailvault-daemon Unix socket.
-// In on-demand mode, auto-spawns the daemon if the socket isn't reachable.
-// Uses Tauri's shell sidecar API so the daemon runs correctly under App Sandbox.
+// ── Background helper — Tauri command wrappers ──────────────────────────────
+// All lifecycle, transport, and path logic lives in helper.rs.
+// These thin commands keep the invoke surface stable while the underlying
+// implementation evolves toward a fully sandbox-safe model.
 
-use std::sync::Mutex;
-use once_cell::sync::Lazy;
-use tauri_plugin_shell::ShellExt;
-use tauri_plugin_shell::process::CommandChild;
-
-/// Resolve the real user home directory, bypassing macOS sandbox container redirect.
-/// Inside a sandboxed process, dirs::home_dir() returns ~/Library/Containers/<bundle>/Data/
-/// instead of the actual /Users/<name>. We use $HOME with validation.
-/// Resolve the real user home directory, bypassing macOS sandbox container redirect.
-/// Inside the sandbox, $HOME and dirs::home_dir() both return
-/// /Users/{name}/Library/Containers/{bundle}/Data — we strip at /Library/Containers/.
-#[cfg(target_os = "macos")]
-fn real_home_dir() -> Option<PathBuf> {
-    let raw = std::env::var("HOME")
-        .ok()
-        .or_else(|| dirs::home_dir().map(|p| p.to_string_lossy().to_string()))?;
-
-    let effective = if let Some(idx) = raw.find("/Library/Containers/") {
-        info!("Extracting real home from sandbox container path: {}", raw);
-        &raw[..idx]
-    } else {
-        &raw
-    };
-
-    let p = PathBuf::from(effective);
-    if p.starts_with("/Users/") && p.is_dir() {
-        info!("Resolved real home: {}", effective);
-        Some(p)
-    } else {
-        warn!("Could not resolve real home directory from: {}", raw);
-        None
-    }
-}
-
-/// App Group container directory shared between the sandboxed app and the
-/// non-sandboxed launchd daemon.  Both declare `group.com.mailvault` in their
-/// `com.apple.security.application-groups` entitlement, so the sandbox allows
-/// access to this real-home-relative path regardless of container redirect.
-/// Pattern proven by 1Password and Keybase for IPC sockets.
-#[cfg(target_os = "macos")]
-const APP_GROUP_ID: &str = "group.com.mailvault";
-
-/// Resolve the App Group container directory.  Uses `real_home_dir()` so the
-/// path is identical from inside the sandbox and from a launchd daemon.
-#[cfg(target_os = "macos")]
-fn app_group_dir() -> Result<PathBuf, String> {
-    let home = real_home_dir().ok_or("Could not resolve real home directory for App Group")?;
-    let dir = home.join("Library/Group Containers").join(APP_GROUP_ID);
-    // Ensure the directory exists (first launch, or after OS upgrade)
-    std::fs::create_dir_all(&dir)
-        .map_err(|e| format!("Failed to create App Group dir {:?}: {}", dir, e))?;
-    Ok(dir)
-}
-
-/// Get the daemon socket path. Must match the daemon's get_socket_path().
-/// Lives in the App Group container so both the sandboxed app and the
-/// non-sandboxed launchd daemon resolve to the same file.
-#[cfg(target_os = "macos")]
-fn daemon_socket_path() -> Result<PathBuf, String> {
-    Ok(app_group_dir()?.join("mv.sock"))
-}
-
-/// Get the daemon token path. Same directory as socket.
-#[cfg(target_os = "macos")]
-fn daemon_token_path() -> Result<PathBuf, String> {
-    Ok(app_group_dir()?.join("mv.token"))
-}
-
-#[cfg(not(target_os = "macos"))]
-fn daemon_socket_path() -> Result<PathBuf, String> {
-    Ok(std::env::temp_dir().join("daemon.sock"))
-}
-
-#[cfg(not(target_os = "macos"))]
-fn daemon_token_path() -> Result<PathBuf, String> {
-    Ok(std::env::temp_dir().join("mv.token"))
-}
-
-/// Tracks a daemon child process spawned in on-demand mode.
-static DAEMON_CHILD: Lazy<Mutex<Option<CommandChild>>> = Lazy::new(|| Mutex::new(None));
-
-/// Spawn daemon as a child process (on-demand mode). Waits for socket to appear.
-fn ensure_daemon_running(app_handle: &tauri::AppHandle, socket_path: &Path) -> Result<(), String> {
-    // Already running? Try to connect to existing daemon.
-    if socket_path.exists() {
-        if std::os::unix::net::UnixStream::connect(socket_path).is_ok() {
-            info!("Connected to existing daemon at {:?}", socket_path);
-            return Ok(());
-        }
-        // Stale socket — remove it
-        info!("Removing stale daemon socket at {:?}", socket_path);
-        let _ = std::fs::remove_file(socket_path);
-    }
-
-    let mut guard = DAEMON_CHILD.lock().map_err(|e| e.to_string())?;
-
-    // If we have a tracked child but socket is gone, drop it and respawn
-    if guard.is_some() {
-        // Socket was stale or gone — wait briefly in case daemon is still starting
-        for _ in 0..20 {
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            if socket_path.exists() { return Ok(()); }
-        }
-        // Kill stale child and respawn
-        if let Some(child) = guard.take() {
-            info!("Killing stale daemon child (PID {})", child.pid());
-            let _ = child.kill();
-        }
-    }
-
-    // Spawn new daemon via Tauri sidecar API (works under App Sandbox)
-    info!("Spawning daemon on-demand via sidecar API");
-
-    let sidecar_cmd = app_handle.shell().sidecar("mailvault-daemon")
-        .map_err(|e| format!("Failed to create daemon sidecar command: {}", e))?;
-
-    let (_rx, child) = sidecar_cmd.spawn()
-        .map_err(|e| format!("Failed to spawn daemon: {}", e))?;
-
-    let pid = child.pid();
-    info!("Daemon spawned with PID {}", pid);
-    *guard = Some(child);
-
-    // Wait for socket to appear (up to 5 seconds)
-    for _ in 0..50 {
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        if socket_path.exists() {
-            info!("Daemon socket ready");
-            return Ok(());
-        }
-    }
-
-    Err("Daemon spawned but socket did not appear within 5 seconds".into())
-}
-
-/// Kill the on-demand daemon child process (called on app exit).
-pub fn shutdown_daemon_child() {
-    if let Ok(mut guard) = DAEMON_CHILD.lock() {
-        if let Some(child) = guard.take() {
-            info!("Shutting down on-demand daemon (PID {})", child.pid());
-            let _ = child.kill();
-        }
-    }
-}
-
-// ── Daemon service management (launchd / systemd) ───────────────────────────
-// Installs or removes a persistent system service so the daemon survives app exit.
-
-#[cfg(target_os = "macos")]
-const LAUNCHD_LABEL: &str = "com.mailvault.daemon";
-
-/// Install the daemon as a launchd LaunchAgent (macOS) or systemd user service (Linux).
+/// Register the background helper for login/background availability.
 #[tauri::command]
 async fn install_daemon_service(app_handle: tauri::AppHandle) -> Result<String, String> {
-    #[cfg(target_os = "macos")]
-    {
-        // Find daemon binary inside the app bundle
-        let daemon_bin = app_handle.path().resource_dir()
-            .ok()
-            .and_then(|d| {
-                let bin = d.join("mailvault-daemon");
-                if bin.exists() { return Some(bin); }
-                // Sidecar naming: check Contents/MacOS/
-                if let Ok(exe) = std::env::current_exe() {
-                    if let Some(dir) = exe.parent() {
-                        let candidate = dir.join("mailvault-daemon");
-                        if candidate.exists() { return Some(candidate); }
-                    }
-                }
-                None
-            })
-            .ok_or_else(|| "Daemon binary not found in app bundle".to_string())?;
-
-        let daemon_path = daemon_bin.to_string_lossy();
-        let socket_path = daemon_socket_path()?;
-
-        let home = real_home_dir().ok_or("Could not resolve real home directory for LaunchAgent")?;
-        let plist_dir = home.join("Library/LaunchAgents");
-        std::fs::create_dir_all(&plist_dir)
-            .map_err(|e| format!("Failed to create LaunchAgents dir: {}", e))?;
-
-        let plist_path = plist_dir.join(format!("{}.plist", LAUNCHD_LABEL));
-
-        let plist_content = format!(
-r#"<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>{label}</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>{bin}</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <dict>
-        <key>SuccessfulExit</key>
-        <false/>
-    </dict>
-    <key>ProcessType</key>
-    <string>Background</string>
-    <key>StandardOutPath</key>
-    <string>/dev/null</string>
-    <key>StandardErrorPath</key>
-    <string>/dev/null</string>
-    <key>AssociatedBundleIdentifiers</key>
-    <string>com.mailvault.app</string>
-</dict>
-</plist>"#,
-            label = LAUNCHD_LABEL,
-            bin = daemon_path,
-        );
-
-        let uid = unsafe { libc::getuid() };
-
-        // Bootout existing service if present (ignore errors — may not be loaded)
-        let _ = Command::new("launchctl")
-            .args(["bootout", &format!("gui/{}/{}", uid, LAUNCHD_LABEL)])
-            .output();
-
-        std::fs::write(&plist_path, &plist_content)
-            .map_err(|e| format!("Failed to write plist: {}", e))?;
-
-        // Remove stale socket before loading (new group container path + old ~/mv.sock)
-        let _ = std::fs::remove_file(&socket_path);
-        if let Some(old_sock) = dirs::home_dir().map(|h| h.join("mv.sock")) {
-            let _ = std::fs::remove_file(&old_sock);
-        }
-        if let Some(old_tok) = dirs::home_dir().map(|h| h.join("mv.token")) {
-            let _ = std::fs::remove_file(&old_tok);
-        }
-
-        let output = Command::new("launchctl")
-            .args(["bootstrap", &format!("gui/{}", uid), &plist_path.to_string_lossy()])
-            .output()
-            .map_err(|e| format!("Failed to run launchctl: {}", e))?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("launchctl bootstrap failed: {}", stderr));
-        }
-
-        // Reset cached state so daemon_rpc reconnects to the new service
-        DAEMON_SPAWNED.store(false, std::sync::atomic::Ordering::Relaxed);
-        if let Ok(mut g) = DAEMON_TOKEN_CACHE.lock() { *g = None; }
-
-        info!("Installed launchd service: {}", LAUNCHD_LABEL);
-        Ok(format!("Service installed at {}", plist_path.display()))
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let daemon_bin = std::env::current_exe()
-            .ok()
-            .and_then(|e| e.parent().map(|d| d.join("mailvault-daemon")))
-            .filter(|p| p.exists())
-            .ok_or_else(|| "Daemon binary not found".to_string())?;
-
-        let unit_dir = dirs::config_dir()
-            .ok_or("Could not determine config directory")?
-            .join("systemd/user");
-        std::fs::create_dir_all(&unit_dir)
-            .map_err(|e| format!("Failed to create systemd user dir: {}", e))?;
-
-        let unit_path = unit_dir.join("mailvault-daemon.service");
-        let unit_content = format!(
-            "[Unit]\nDescription=MailVault Background Daemon\n\n[Service]\nExecStart={}\nRestart=on-failure\nRestartSec=5\n\n[Install]\nWantedBy=default.target\n",
-            daemon_bin.display()
-        );
-
-        std::fs::write(&unit_path, &unit_content)
-            .map_err(|e| format!("Failed to write unit file: {}", e))?;
-
-        Command::new("systemctl")
-            .args(["--user", "daemon-reload"])
-            .output()
-            .map_err(|e| format!("systemctl daemon-reload failed: {}", e))?;
-
-        let output = Command::new("systemctl")
-            .args(["--user", "enable", "--now", "mailvault-daemon.service"])
-            .output()
-            .map_err(|e| format!("systemctl enable failed: {}", e))?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("systemctl enable failed: {}", stderr));
-        }
-
-        info!("Installed systemd user service: mailvault-daemon.service");
-        Ok(format!("Service installed at {}", unit_path.display()))
-    }
-
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    Err("Daemon service not supported on this platform".to_string())
+    helper::register_background(&app_handle)
 }
 
-/// Uninstall the daemon system service.
+/// Unregister the background helper.
 #[tauri::command]
 async fn uninstall_daemon_service() -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        let home = real_home_dir().ok_or("Could not resolve real home directory")?;
-        let plist_path = home.join(format!("Library/LaunchAgents/{}.plist", LAUNCHD_LABEL));
-
-        if plist_path.exists() {
-            let uid = unsafe { libc::getuid() };
-            let _ = Command::new("launchctl")
-                .args(["bootout", &format!("gui/{}/{}", uid, LAUNCHD_LABEL)])
-                .output();
-            std::fs::remove_file(&plist_path)
-                .map_err(|e| format!("Failed to remove plist: {}", e))?;
-        }
-
-        // Reset cached state so daemon_rpc respawns on-demand
-        DAEMON_SPAWNED.store(false, std::sync::atomic::Ordering::Relaxed);
-        if let Ok(mut g) = DAEMON_TOKEN_CACHE.lock() { *g = None; }
-
-        info!("Uninstalled launchd service: {}", LAUNCHD_LABEL);
-        Ok(())
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let _ = Command::new("systemctl")
-            .args(["--user", "disable", "--now", "mailvault-daemon.service"])
-            .output();
-
-        let unit_path = dirs::config_dir()
-            .ok_or("Could not determine config directory")?
-            .join("systemd/user/mailvault-daemon.service");
-
-        if unit_path.exists() {
-            std::fs::remove_file(&unit_path)
-                .map_err(|e| format!("Failed to remove unit file: {}", e))?;
-        }
-
-        let _ = Command::new("systemctl")
-            .args(["--user", "daemon-reload"])
-            .output();
-
-        info!("Uninstalled systemd user service");
-        Ok(())
-    }
-
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    Err("Daemon service not supported on this platform".to_string())
+    helper::unregister_background()
 }
 
-/// Check if the daemon system service is installed.
+/// Check whether the background helper is registered.
 #[tauri::command]
 async fn is_daemon_service_installed() -> Result<bool, String> {
-    #[cfg(target_os = "macos")]
-    {
-        let plist_path = real_home_dir()
-            .ok_or("Could not resolve real home directory")?
-            .join(format!("Library/LaunchAgents/{}.plist", LAUNCHD_LABEL));
-        Ok(plist_path.exists())
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let unit_path = dirs::config_dir()
-            .ok_or("Could not determine config directory")?
-            .join("systemd/user/mailvault-daemon.service");
-        Ok(unit_path.exists())
-    }
-
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    Ok(false)
+    helper::is_background_registered()
 }
 
-// ── Daemon RPC — per-request connections with cached auth token ──────────────
-// Each request gets its own socket (supports full concurrency).
-// Token and daemon-spawn state are cached to avoid redundant I/O.
+/// Structured helper status for the settings UI.
+#[tauri::command]
+async fn helper_status(daemon_mode: Option<String>) -> Result<helper::HelperStatus, String> {
+    Ok(helper::status(daemon_mode.as_deref().unwrap_or("on-demand")))
+}
 
-static DAEMON_TOKEN_CACHE: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
-static DAEMON_SPAWNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
+/// JSON-RPC call to the background helper.
 #[tauri::command]
 async fn daemon_rpc(
     app_handle: tauri::AppHandle,
     method: String,
     params: serde_json::Value,
-    #[allow(unused)] daemon_mode: Option<String>,
+    daemon_mode: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
-    static RPC_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-
-    let data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not get app data directory: {}", e))?;
-
-    // Socket path must be short (SUN_LEN ≤ 104 bytes) and accessible from both
-    // the sandboxed app and the launchd-launched daemon. The App Group container
-    // satisfies both constraints (~69 bytes, shared via group.com.mailvault entitlement).
-    let socket_path = daemon_socket_path()?;
-
-    // Spawn daemon once (not on every call)
-    if !DAEMON_SPAWNED.load(std::sync::atomic::Ordering::Relaxed) {
-        let mode = daemon_mode.as_deref().unwrap_or("on-demand");
-        if mode == "always-on" {
-            // In always-on mode, never spawn — the system service manages the daemon.
-            // Just check if it's reachable.
-            if !socket_path.exists() || std::os::unix::net::UnixStream::connect(&socket_path).is_err() {
-                return Err("Daemon not running. Install the daemon service in Settings > Background Daemon.".to_string());
-            }
-        } else {
-            ensure_daemon_running(&app_handle, &socket_path)?;
-        }
-        DAEMON_SPAWNED.store(true, std::sync::atomic::Ordering::Relaxed);
-    }
-
-    // Read token once, cache for future calls
-    let token = {
-        let guard = DAEMON_TOKEN_CACHE.lock().map_err(|e| e.to_string())?;
-        guard.clone()
-    };
-    let token = match token {
-        Some(t) => t,
-        None => {
-            let token_file = daemon_token_path()?;
-            let t = std::fs::read_to_string(&token_file)
-                .map_err(|_| format!("Daemon token not found at {:?} — is the daemon running?", token_file))?
-                .trim().to_string();
-            if let Ok(mut g) = DAEMON_TOKEN_CACHE.lock() { *g = Some(t.clone()); }
-            t
-        }
-    };
-
-    // Per-request connection (supports full concurrency)
-    let stream = tokio::net::UnixStream::connect(&socket_path)
-        .await
-        .map_err(|e| format!("Cannot connect to daemon — is it running? ({})", e))?;
-
-    let (reader, mut writer) = stream.into_split();
-    let mut lines = tokio::io::BufReader::new(reader).lines();
-
-    // Auth handshake (fast — token is cached)
-    let mut buf = serde_json::to_vec(&serde_json::json!({"token": token})).unwrap();
-    buf.push(b'\n');
-    writer.write_all(&buf).await.map_err(|e| e.to_string())?;
-
-    let auth_resp = lines.next_line().await
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "Daemon closed connection during auth".to_string())?;
-
-    if serde_json::from_str::<serde_json::Value>(&auth_resp)
-        .ok().and_then(|v| v.get("error").cloned()).is_some() {
-        return Err("Daemon authentication failed".to_string());
-    }
-
-    // Send request
-    let id = RPC_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let mut buf = serde_json::to_vec(&serde_json::json!({
-        "jsonrpc": "2.0", "method": method, "params": params, "id": id,
-    })).unwrap();
-    buf.push(b'\n');
-    writer.write_all(&buf).await.map_err(|e| e.to_string())?;
-
-    // Read response
-    let resp_line = lines.next_line().await
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "Daemon closed connection before responding".to_string())?;
-
-    let resp: serde_json::Value = serde_json::from_str(&resp_line)
-        .map_err(|e| format!("Invalid RPC response: {}", e))?;
-
-    if let Some(error) = resp.get("error") {
-        return Err(error.get("message").and_then(|m| m.as_str()).unwrap_or("Unknown daemon error").to_string());
-    }
-
-    Ok(resp.get("result").cloned().unwrap_or(serde_json::Value::Null))
+    helper::rpc(&app_handle, &method, params, daemon_mode.as_deref()).await
 }
 
 fn main() {
@@ -4611,7 +4172,8 @@ fn main() {
             daemon_rpc,
             install_daemon_service,
             uninstall_daemon_service,
-            is_daemon_service_installed
+            is_daemon_service_installed,
+            helper_status
         ])
         .setup(|app| {
             // Set up logging to app log directory
@@ -4845,8 +4407,8 @@ fn main() {
                     }
                 }
                 tauri::RunEvent::Exit => {
-                    info!("Application exiting — cleaning up daemon child if on-demand");
-                    shutdown_daemon_child();
+                    info!("Application exiting — cleaning up helper child if on-demand");
+                    helper::shutdown_child();
                 }
                 #[cfg(target_os = "linux")]
                 tauri::RunEvent::MainEventsCleared => {

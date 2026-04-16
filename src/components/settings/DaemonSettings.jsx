@@ -12,7 +12,7 @@ export function DaemonSettings() {
   const [status, setStatus] = useState(null); // { version, uptime_secs, data_dir }
   const [checking, setChecking] = useState(false);
   const [connected, setConnected] = useState(null); // null = unknown, true/false
-  const [serviceInstalled, setServiceInstalled] = useState(null);
+  const [helperStatus, setHelperStatus] = useState(null);
   const [installing, setInstalling] = useState(false);
 
   const checkConnection = async () => {
@@ -28,8 +28,8 @@ export function DaemonSettings() {
       setConnected(false);
     }
     try {
-      const installed = await invoke('is_daemon_service_installed');
-      setServiceInstalled(installed);
+      const hs = await invoke('helper_status', { daemonMode });
+      setHelperStatus(hs);
     } catch { /* ignore */ }
     setChecking(false);
   };
@@ -39,16 +39,14 @@ export function DaemonSettings() {
     try {
       if (mode === 'always-on') {
         await invoke('install_daemon_service');
-        setServiceInstalled(true);
       } else {
         await invoke('uninstall_daemon_service');
-        setServiceInstalled(false);
       }
       setDaemonMode(mode);
-      // Re-check connection after a moment (service needs time to start)
+      // Re-check connection after a moment (helper needs time to start)
       setTimeout(() => checkConnection(), 2000);
     } catch (e) {
-      console.error('Failed to toggle daemon service:', e);
+      console.error('Failed to toggle background helper:', e);
     }
     setInstalling(false);
   };
@@ -73,7 +71,7 @@ export function DaemonSettings() {
           </div>
           <div>
             <h3 className="text-sm font-semibold text-mail-text">
-              {checking ? 'Checking...' : connected ? 'Daemon Connected' : connected === false ? 'Daemon Not Running' : 'Background Daemon'}
+              {checking ? 'Checking...' : connected ? 'Helper Connected' : connected === false ? 'Helper Not Running' : 'Background Helper'}
             </h3>
             {status && (
               <p className="text-xs text-mail-text-muted">
@@ -85,7 +83,9 @@ export function DaemonSettings() {
 
         {connected === false && (
           <p className="text-xs text-mail-text-muted mb-3">
-            The daemon is not currently reachable. In on-demand mode it starts when the app opens. In always-on mode, check that the system service is installed.
+            {helperStatus?.last_error
+              ? helperStatus.last_error
+              : 'The background helper is not currently reachable. In on-demand mode it starts when the app opens. In always-on mode, check that it is enabled below.'}
           </p>
         )}
 
@@ -98,11 +98,11 @@ export function DaemonSettings() {
         </button>
       </div>
 
-      {/* Daemon Mode */}
+      {/* Helper Mode */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
-        <h3 className="text-sm font-semibold text-mail-text mb-1">Daemon Mode</h3>
+        <h3 className="text-sm font-semibold text-mail-text mb-1">Helper Mode</h3>
         <p className="text-xs text-mail-text-muted mb-4">
-          Controls when the background daemon runs. The daemon handles email sync, backups, and AI classification.
+          Controls when the background helper runs. The helper handles email sync, backups, and AI classification.
         </p>
 
         <div className="space-y-3">
@@ -147,33 +147,33 @@ export function DaemonSettings() {
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">Recommended</span>
               </div>
               <p className="text-xs text-mail-text-muted mt-1">
-                Runs as a system service even when the app is closed. Emails sync in the background, backups run on schedule, and AI classification happens automatically. Uses minimal resources when idle.
+                Runs in the background even when the app is closed. Emails sync continuously, backups run on schedule, and AI classification happens automatically. Uses minimal resources when idle.
               </p>
             </div>
           </label>
         </div>
       </div>
 
-      {/* Service Status */}
+      {/* Background Status */}
       {daemonMode === 'always-on' && (
         <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-mail-text mb-2">System Service</h3>
+          <h3 className="text-sm font-semibold text-mail-text mb-2">Background Helper</h3>
           <div className="flex items-center gap-2 text-xs">
-            {serviceInstalled ? (
+            {helperStatus?.registered ? (
               <>
                 <CheckCircle2 size={14} className="text-emerald-500" />
-                <span className="text-mail-text-muted">Service installed — daemon starts at login and survives app exit</span>
+                <span className="text-mail-text-muted">Enabled — helper starts at login and continues after the app quits</span>
               </>
             ) : (
               <>
                 <XCircle size={14} className="text-amber-500" />
-                <span className="text-mail-text-muted">Service not installed</span>
+                <span className="text-mail-text-muted">Not enabled</span>
                 <button
                   onClick={() => handleModeChange('always-on')}
                   disabled={installing}
                   className="ml-2 text-mail-accent hover:text-mail-accent/80 font-medium"
                 >
-                  {installing ? 'Installing...' : 'Install Now'}
+                  {installing ? 'Enabling...' : 'Enable Now'}
                 </button>
               </>
             )}
@@ -183,8 +183,8 @@ export function DaemonSettings() {
 
       {/* About */}
       <div className="text-xs text-mail-text-muted space-y-1">
-        <p>The daemon is a lightweight background process that handles all server communication, local storage, and AI processing.</p>
-        <p>In always-on mode, it's installed as a system service (launchd on macOS, systemd on Linux) and starts automatically at login.</p>
+        <p>The background helper is a lightweight process that handles all server communication, local storage, and AI processing.</p>
+        <p>In always-on mode it is registered as a background helper that starts at login and continues running when the app is closed.</p>
       </div>
     </div>
   );
