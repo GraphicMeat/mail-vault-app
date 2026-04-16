@@ -1,19 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { useSettingsStore } from '../../stores/settingsStore';
 import { isDaemonAvailable, getDaemonStatus } from '../../services/daemonClient';
 import {
-  Server, CheckCircle2, XCircle, Loader, Clock, Zap,
+  Server, CheckCircle2, XCircle, Loader,
 } from 'lucide-react';
 
 export function DaemonSettings() {
-  const daemonMode = useSettingsStore(s => s.daemonMode);
-  const setDaemonMode = useSettingsStore(s => s.setDaemonMode);
-  const [status, setStatus] = useState(null); // { version, uptime_secs, data_dir }
+  const [status, setStatus] = useState(null);
   const [checking, setChecking] = useState(false);
-  const [connected, setConnected] = useState(null); // null = unknown, true/false
+  const [connected, setConnected] = useState(null);
   const [helperStatus, setHelperStatus] = useState(null);
-  const [installing, setInstalling] = useState(false);
 
   const checkConnection = async () => {
     setChecking(true);
@@ -28,27 +24,10 @@ export function DaemonSettings() {
       setConnected(false);
     }
     try {
-      const hs = await invoke('helper_status', { daemonMode });
+      const hs = await invoke('helper_status', { daemonMode: 'on-demand' });
       setHelperStatus(hs);
     } catch { /* ignore */ }
     setChecking(false);
-  };
-
-  const handleModeChange = async (mode) => {
-    setInstalling(true);
-    try {
-      if (mode === 'always-on') {
-        await invoke('install_daemon_service');
-      } else {
-        await invoke('uninstall_daemon_service');
-      }
-      setDaemonMode(mode);
-      // Re-check connection after a moment (helper needs time to start)
-      setTimeout(() => checkConnection(), 2000);
-    } catch (e) {
-      console.error('Failed to toggle background helper:', e);
-    }
-    setInstalling(false);
   };
 
   useEffect(() => { checkConnection(); }, []);
@@ -98,93 +77,10 @@ export function DaemonSettings() {
         </button>
       </div>
 
-      {/* Helper Mode */}
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
-        <h3 className="text-sm font-semibold text-mail-text mb-1">Helper Mode</h3>
-        <p className="text-xs text-mail-text-muted mb-4">
-          Controls when the background helper runs. The helper handles email sync, backups, and AI classification.
-        </p>
-
-        <div className="space-y-3">
-          <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-            daemonMode === 'on-demand' ? 'border-mail-accent bg-mail-accent/5' : 'border-mail-border hover:bg-mail-surface-hover'
-          }`}>
-            <input
-              type="radio"
-              name="daemonMode"
-              checked={daemonMode === 'on-demand'}
-              onChange={() => handleModeChange('on-demand')}
-              disabled={installing}
-              className="mt-0.5 accent-mail-accent"
-            />
-            <div>
-              <div className="flex items-center gap-2">
-                <Clock size={14} className="text-mail-text-muted" />
-                <span className="text-sm font-medium text-mail-text">On demand</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-mail-surface-hover text-mail-text-muted">Default</span>
-              </div>
-              <p className="text-xs text-mail-text-muted mt-1">
-                Starts when you open MailVault, stops when you quit. No background activity between sessions. Lower resource usage.
-              </p>
-            </div>
-          </label>
-
-          <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-            daemonMode === 'always-on' ? 'border-mail-accent bg-mail-accent/5' : 'border-mail-border hover:bg-mail-surface-hover'
-          }`}>
-            <input
-              type="radio"
-              name="daemonMode"
-              checked={daemonMode === 'always-on'}
-              onChange={() => handleModeChange('always-on')}
-              disabled={installing}
-              className="mt-0.5 accent-mail-accent"
-            />
-            <div>
-              <div className="flex items-center gap-2">
-                <Zap size={14} className="text-emerald-500" />
-                <span className="text-sm font-medium text-mail-text">Always on</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">Recommended</span>
-              </div>
-              <p className="text-xs text-mail-text-muted mt-1">
-                Runs in the background even when the app is closed. Emails sync continuously, backups run on schedule, and AI classification happens automatically. Uses minimal resources when idle.
-              </p>
-            </div>
-          </label>
-        </div>
-      </div>
-
-      {/* Background Status */}
-      {daemonMode === 'always-on' && (
-        <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-mail-text mb-2">Background Helper</h3>
-          <div className="flex items-center gap-2 text-xs">
-            {helperStatus?.registered ? (
-              <>
-                <CheckCircle2 size={14} className="text-emerald-500" />
-                <span className="text-mail-text-muted">Enabled — helper starts at login and continues after the app quits</span>
-              </>
-            ) : (
-              <>
-                <XCircle size={14} className="text-amber-500" />
-                <span className="text-mail-text-muted">Not enabled</span>
-                <button
-                  onClick={() => handleModeChange('always-on')}
-                  disabled={installing}
-                  className="ml-2 text-mail-accent hover:text-mail-accent/80 font-medium"
-                >
-                  {installing ? 'Enabling...' : 'Enable Now'}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* About */}
       <div className="text-xs text-mail-text-muted space-y-1">
         <p>The background helper is a lightweight process that handles all server communication, local storage, and AI processing.</p>
-        <p>In always-on mode it is registered as a background helper that starts at login and continues running when the app is closed.</p>
+        <p>It starts automatically when you open MailVault and stops when you quit.</p>
       </div>
     </div>
   );
