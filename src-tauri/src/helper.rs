@@ -35,9 +35,6 @@ use tracing::{info, warn};
 // ── Shared constants ────────────────────────────────────────────────────────
 
 #[cfg(target_os = "macos")]
-const APP_GROUP_ID: &str = "group.com.mailvault";
-
-#[cfg(target_os = "macos")]
 const LAUNCHD_LABEL: &str = "com.mailvault.daemon";
 
 // ── Helper status model ─────────────────────────────────────────────────────
@@ -48,73 +45,32 @@ pub struct HelperStatus {
     pub mode: String,
     pub registered: bool,
     pub reachable: bool,
-    pub shared_container_ok: bool,
+    pub ipc_dir_ok: bool,
     pub auth_ok: bool,
     pub last_error: Option<String>,
 }
 
 // ── Path resolution ─────────────────────────────────────────────────────────
 
-/// Resolve the real user home directory, bypassing macOS sandbox container
-/// redirect.  Inside the sandbox $HOME points to
-/// /Users/{name}/Library/Containers/{bundle}/Data — we strip at
-/// /Library/Containers/.
-#[cfg(target_os = "macos")]
-pub fn real_home_dir() -> Option<PathBuf> {
-    let raw = std::env::var("HOME")
-        .ok()
-        .or_else(|| dirs::home_dir().map(|p| p.to_string_lossy().to_string()))?;
-
-    let effective = if let Some(idx) = raw.find("/Library/Containers/") {
-        info!("Extracting real home from sandbox container path: {}", raw);
-        &raw[..idx]
-    } else {
-        &raw
-    };
-
-    let p = PathBuf::from(effective);
-    if p.starts_with("/Users/") && p.is_dir() {
-        info!("Resolved real home: {}", effective);
-        Some(p)
-    } else {
-        warn!("Could not resolve real home directory from: {}", raw);
-        None
-    }
-}
-
-/// App Group container directory shared between sandboxed app and helper.
-/// Both declare `group.com.mailvault` in their
-/// `com.apple.security.application-groups` entitlement, so the sandbox allows
-/// access to this real-home-relative path regardless of container redirect.
-#[cfg(target_os = "macos")]
-fn app_group_dir() -> Result<PathBuf, String> {
-    let home = real_home_dir().ok_or("Could not resolve real home directory for App Group")?;
-    let dir = home.join("Library/Group Containers").join(APP_GROUP_ID);
+/// IPC directory for socket and token.
+/// Uses `dirs::home_dir()` which inside the App Sandbox returns the container
+/// home — both the app and the sidecar daemon see the same path.
+fn ipc_dir() -> Result<PathBuf, String> {
+    let home = dirs::home_dir().ok_or("Could not determine home directory")?;
+    let dir = home.join(".mailvault");
     std::fs::create_dir_all(&dir)
-        .map_err(|e| format!("Failed to create App Group dir {:?}: {}", dir, e))?;
+        .map_err(|e| format!("Failed to create IPC dir {:?}: {}", dir, e))?;
     Ok(dir)
 }
 
-/// Socket path.  Must match the helper's `get_socket_path()`.
-#[cfg(target_os = "macos")]
+/// Socket path.  Must match the daemon's `get_socket_path()`.
 pub fn socket_path() -> Result<PathBuf, String> {
-    Ok(app_group_dir()?.join("mv.sock"))
+    Ok(ipc_dir()?.join("mv.sock"))
 }
 
 /// Token path.  Same directory as socket.
-#[cfg(target_os = "macos")]
 pub fn token_path() -> Result<PathBuf, String> {
-    Ok(app_group_dir()?.join("mv.token"))
-}
-
-#[cfg(not(target_os = "macos"))]
-pub fn socket_path() -> Result<PathBuf, String> {
-    Ok(std::env::temp_dir().join("daemon.sock"))
-}
-
-#[cfg(not(target_os = "macos"))]
-pub fn token_path() -> Result<PathBuf, String> {
-    Ok(std::env::temp_dir().join("mv.token"))
+    Ok(ipc_dir()?.join("mv.token"))
 }
 
 // ── On-demand child process management ──────────────────────────────────────
@@ -258,7 +214,7 @@ pub fn status(mode: &str) -> HelperStatus {
     let registered = is_background_registered().unwrap_or(false);
 
     let sock = socket_path();
-    let shared_container_ok = sock.is_ok();
+    let ipc_dir_ok = sock.is_ok();
     let reachable = sock
         .as_ref()
         .map(|p| p.exists() && std::os::unix::net::UnixStream::connect(p).is_ok())
@@ -270,8 +226,8 @@ pub fn status(mode: &str) -> HelperStatus {
         .map(|t| !t.trim().is_empty())
         .unwrap_or(false);
 
-    let last_error = if !shared_container_ok {
-        Some("Cannot resolve App Group container".to_string())
+    let last_error = if !ipc_dir_ok {
+        Some("Cannot resolve IPC directory".to_string())
     } else if mode == "always-on" && !registered {
         Some("Background helper not registered — enable it in settings".to_string())
     } else if !reachable {
@@ -286,13 +242,29 @@ pub fn status(mode: &str) -> HelperStatus {
         mode: mode.to_string(),
         registered,
         reachable,
-        shared_container_ok,
+        ipc_dir_ok,
         auth_ok,
         last_error,
     }
 }
 
 // ── macOS: launchd LaunchAgent (transitional) ───────────────────────────────
+
+/// Real home dir for launchd plist paths only.  Strips the sandbox container
+/// prefix so ~/Library/LaunchAgents resolves to the actual filesystem path.
+#[cfg(target_os = "macos")]
+fn real_home_dir() -> Option<PathBuf> {
+    let raw = std::env::var("HOME")
+        .ok()
+        .or_else(|| dirs::home_dir().map(|p| p.to_string_lossy().to_string()))?;
+    let effective = if let Some(idx) = raw.find("/Library/Containers/") {
+        &raw[..idx]
+    } else {
+        &raw
+    };
+    let p = PathBuf::from(effective);
+    if p.starts_with("/Users/") && p.is_dir() { Some(p) } else { None }
+}
 
 #[cfg(target_os = "macos")]
 fn register_launchd(app_handle: &tauri::AppHandle) -> Result<String, String> {
@@ -368,14 +340,8 @@ r#"<?xml version="1.0" encoding="UTF-8"?>
     std::fs::write(&plist_path, &plist_content)
         .map_err(|e| format!("Failed to write plist: {}", e))?;
 
-    // Remove stale sockets (new group-container path + legacy ~/mv.sock)
+    // Remove stale socket before loading
     let _ = std::fs::remove_file(&sock);
-    if let Some(old) = dirs::home_dir().map(|h| h.join("mv.sock")) {
-        let _ = std::fs::remove_file(&old);
-    }
-    if let Some(old) = dirs::home_dir().map(|h| h.join("mv.token")) {
-        let _ = std::fs::remove_file(&old);
-    }
 
     let output = Command::new("launchctl")
         .args(["bootstrap", &format!("gui/{}", uid), &plist_path.to_string_lossy()])

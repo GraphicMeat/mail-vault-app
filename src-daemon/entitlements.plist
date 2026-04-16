@@ -19,11 +19,5 @@
         <string>$(AppIdentifierPrefix)com.mailvault.app</string>
         <string>$(AppIdentifierPrefix)group.com.mailvault</string>
     </array>
-
-    <!-- App Group for IPC socket, token, and shared state -->
-    <key>com.apple.security.application-groups</key>
-    <array>
-        <string>group.com.mailvault</string>
-    </array>
 </dict>
 </plist>

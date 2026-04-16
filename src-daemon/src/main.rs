@@ -33,74 +33,27 @@ fn get_data_dir() -> PathBuf {
         .join("com.mailvault.app")
 }
 
-/// Resolve the real user home directory, bypassing macOS sandbox container redirect.
-/// Inside the sandbox, $HOME and dirs::home_dir() both return
-/// /Users/{name}/Library/Containers/{bundle}/Data — we strip at /Library/Containers/.
-#[cfg(target_os = "macos")]
-fn real_home_dir() -> Option<PathBuf> {
-    let raw = std::env::var("HOME")
-        .ok()
-        .or_else(|| dirs::home_dir().map(|p| p.to_string_lossy().to_string()))?;
-
-    let effective = if let Some(idx) = raw.find("/Library/Containers/") {
-        info!("Extracting real home from sandbox container path: {}", raw);
-        &raw[..idx]
-    } else {
-        &raw
-    };
-
-    let p = PathBuf::from(effective);
-    if p.starts_with("/Users/") && p.is_dir() {
-        info!("Resolved real home: {}", effective);
-        Some(p)
-    } else {
-        error!("Could not resolve real home directory from: {}", raw);
-        None
-    }
+/// IPC directory for socket and token.
+/// Uses `dirs::home_dir()` which inside the App Sandbox returns the container
+/// home — both the app and this sidecar daemon see the same path.
+/// Outside the sandbox (dev/testing) it returns the real home.
+fn ipc_dir() -> PathBuf {
+    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+    let dir = home.join(".mailvault");
+    let _ = std::fs::create_dir_all(&dir);
+    dir
 }
 
-/// App Group container shared between the sandboxed app and the daemon.
-/// Both declare `group.com.mailvault` in their application-groups entitlement.
-#[cfg(target_os = "macos")]
-const APP_GROUP_ID: &str = "group.com.mailvault";
-
-/// Resolve the App Group container directory using the real home path.
-/// Inside the sandbox `real_home_dir()` strips the container prefix;
-/// outside (launchd) `dirs::home_dir()` already returns the real home.
-#[cfg(target_os = "macos")]
-fn app_group_dir() -> Option<PathBuf> {
-    let home = real_home_dir()?;
-    let dir = home.join("Library/Group Containers").join(APP_GROUP_ID);
-    if let Err(e) = std::fs::create_dir_all(&dir) {
-        error!("Failed to create App Group dir {:?}: {}", dir, e);
-        return None;
-    }
-    Some(dir)
-}
-
-/// Socket path inside the App Group container (SUN_LEN ≤ 104 bytes).
-/// Pattern proven by 1Password (SSH agent socket in Group Containers).
+/// Socket path — under ~/.mailvault/ (SUN_LEN ≤ 104 bytes).
 fn get_socket_path(_data_dir: &PathBuf) -> PathBuf {
-    #[cfg(target_os = "macos")]
-    {
-        if let Some(dir) = app_group_dir() {
-            let sock = dir.join("mv.sock");
-            info!("Daemon socket path: {}", sock.display());
-            return sock;
-        }
-    }
-    std::env::temp_dir().join("daemon.sock")
+    let sock = ipc_dir().join("mv.sock");
+    info!("Daemon socket path: {}", sock.display());
+    sock
 }
 
-/// Token path — same directory as socket for consistency.
+/// Token path — same directory as socket.
 fn get_token_path() -> PathBuf {
-    #[cfg(target_os = "macos")]
-    {
-        if let Some(dir) = app_group_dir() {
-            return dir.join("mv.token");
-        }
-    }
-    std::env::temp_dir().join("mv.token")
+    ipc_dir().join("mv.token")
 }
 
 fn setup_logging(data_dir: &PathBuf) -> tracing_appender::non_blocking::WorkerGuard {
