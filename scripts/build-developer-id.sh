@@ -46,7 +46,7 @@ echo ""
 # Configuration
 APP_NAME="MailVault"
 BUNDLE_ID="com.mailvault.app"
-ENTITLEMENTS="src-tauri/entitlements.plist"
+ENTITLEMENTS_SRC="src-tauri/entitlements.plist"
 NOTARYTOOL_PROFILE="${NOTARYTOOL_PROFILE:-notarytool-profile}"
 
 # Get version from package.json
@@ -95,6 +95,44 @@ KEYCHAIN_ARG=""
 if [ -n "$KEYCHAIN_PATH" ]; then
     KEYCHAIN_ARG="--keychain $KEYCHAIN_PATH"
 fi
+
+# ── Expand Xcode variables in entitlements ────────────────────────
+# codesign does NOT expand $(AppIdentifierPrefix) or $(TeamIdentifierPrefix).
+# Without expansion, keychain-access-groups are embedded as literal strings
+# that the OS ignores — breaking keychain sharing between app and daemon.
+
+RESOLVED_TEAM_ID="${APPLE_TEAM_ID:-$TEAM_ID}"
+if [ -z "$RESOLVED_TEAM_ID" ]; then
+    # Extract team ID from signing identity string
+    RESOLVED_TEAM_ID=$(echo "$SIGNING_ID" | grep -oE '\([A-Z0-9]{10}\)' | tr -d '()' || true)
+fi
+
+if [ -z "$RESOLVED_TEAM_ID" ]; then
+    echo -e "${RED}❌ Cannot determine Team ID for entitlements expansion${NC}"
+    exit 1
+fi
+
+APP_ID_PREFIX="${RESOLVED_TEAM_ID}."
+echo -e "${GREEN}✅ AppIdentifierPrefix: ${APP_ID_PREFIX}${NC}"
+
+# Create temp entitlements with variables expanded
+ENTITLEMENTS=$(mktemp /tmp/entitlements-app.XXXXXX.plist)
+DAEMON_ENT_EXPANDED=$(mktemp /tmp/entitlements-daemon.XXXXXX.plist)
+SIDECAR_ENT_EXPANDED=$(mktemp /tmp/entitlements-sidecar.XXXXXX.plist)
+
+sed -e "s/\$(AppIdentifierPrefix)/${APP_ID_PREFIX}/g" \
+    -e "s/\$(TeamIdentifierPrefix)/${APP_ID_PREFIX}/g" \
+    "$ENTITLEMENTS_SRC" > "$ENTITLEMENTS"
+sed -e "s/\$(AppIdentifierPrefix)/${APP_ID_PREFIX}/g" \
+    -e "s/\$(TeamIdentifierPrefix)/${APP_ID_PREFIX}/g" \
+    "src-daemon/entitlements.plist" > "$DAEMON_ENT_EXPANDED"
+sed -e "s/\$(AppIdentifierPrefix)/${APP_ID_PREFIX}/g" \
+    -e "s/\$(TeamIdentifierPrefix)/${APP_ID_PREFIX}/g" \
+    "src-tauri/entitlements-sidecar.plist" > "$SIDECAR_ENT_EXPANDED"
+
+trap 'rm -f "$ENTITLEMENTS" "$DAEMON_ENT_EXPANDED" "$SIDECAR_ENT_EXPANDED"' EXIT
+
+echo "   Expanded entitlements written to temp files"
 
 # ── Sparkle EdDSA Signing Key ─────────────────────────────────────
 
@@ -293,27 +331,25 @@ done
 # Bun-compiled universal binaries need ad-hoc pre-sign to allocate code signature space
 # before proper signing — codesign fails with "invalid or unsupported format" otherwise.
 SIDECAR_PATH="$APP_PATH/Contents/MacOS/mailvault-server"
-SIDECAR_ENTITLEMENTS="src-tauri/entitlements-sidecar.plist"
 if [ -f "$SIDECAR_PATH" ]; then
     echo "   Pre-signing sidecar ($(file -b "$SIDECAR_PATH" | head -c80))"
     codesign --remove-signature "$SIDECAR_PATH" 2>/dev/null || true
     codesign --force --sign - "$SIDECAR_PATH"
     codesign --force --options runtime --timestamp \
-        --entitlements "$SIDECAR_ENTITLEMENTS" \
+        --entitlements "$SIDECAR_ENT_EXPANDED" \
         --sign "$SIGNING_ID" $KEYCHAIN_ARG \
         "$SIDECAR_PATH"
-    echo "   ✓ Signed sidecar binary (with sidecar entitlements)"
+    echo "   ✓ Signed sidecar binary (with expanded sidecar entitlements)"
 fi
 
 # Sign the daemon binary with its own entitlements
 DAEMON_PATH="$APP_PATH/Contents/MacOS/mailvault-daemon"
-DAEMON_ENTITLEMENTS="src-daemon/entitlements.plist"
 if [ -f "$DAEMON_PATH" ]; then
     codesign --force --options runtime --timestamp \
-        --entitlements "$DAEMON_ENTITLEMENTS" \
+        --entitlements "$DAEMON_ENT_EXPANDED" \
         --sign "$SIGNING_ID" $KEYCHAIN_ARG \
         "$DAEMON_PATH"
-    echo "   ✓ Signed daemon binary (with daemon entitlements)"
+    echo "   ✓ Signed daemon binary (with expanded daemon entitlements)"
 fi
 
 # Sign the main app bundle (no --deep to preserve sidecar entitlements)
@@ -325,11 +361,42 @@ codesign --force --options runtime --timestamp \
 
 echo -e "${GREEN}✅ Application signed${NC}"
 
-# Verify signature
+# ── Verify signatures and entitlements ────────────────────────────
+
 echo ""
-echo -e "${YELLOW}🔍 Verifying signature...${NC}"
-codesign --verify --verbose "$APP_PATH"
-echo -e "${GREEN}✅ Signature verified${NC}"
+echo -e "${YELLOW}🔍 Verifying signatures and entitlements...${NC}"
+
+# Verify overall app bundle
+codesign --verify --verbose=4 "$APP_PATH"
+echo "   ✓ App bundle signature valid"
+
+# Verify nested binaries individually
+for BIN_NAME in mailvault mailvault-daemon mailvault-server; do
+    BIN_PATH="$APP_PATH/Contents/MacOS/$BIN_NAME"
+    if [ -f "$BIN_PATH" ]; then
+        codesign --verify --verbose=4 "$BIN_PATH" 2>&1 || {
+            echo -e "${RED}❌ Signature verification failed for $BIN_NAME${NC}"
+            exit 1
+        }
+        echo "   ✓ $BIN_NAME signature valid"
+    fi
+done
+
+# Verify entitlements don't contain unexpanded variables
+for BIN_NAME in mailvault mailvault-daemon; do
+    BIN_PATH="$APP_PATH/Contents/MacOS/$BIN_NAME"
+    if [ -f "$BIN_PATH" ]; then
+        EMBEDDED_ENT=$(codesign -d --entitlements :- "$BIN_PATH" 2>/dev/null || true)
+        if echo "$EMBEDDED_ENT" | grep -q '$(AppIdentifierPrefix)\|$(TeamIdentifierPrefix)'; then
+            echo -e "${RED}❌ $BIN_NAME has unexpanded entitlement variables!${NC}"
+            echo "$EMBEDDED_ENT" | grep 'AppIdentifierPrefix\|TeamIdentifierPrefix'
+            exit 1
+        fi
+        echo "   ✓ $BIN_NAME entitlements properly expanded"
+    fi
+done
+
+echo -e "${GREEN}✅ All signatures and entitlements verified${NC}"
 
 # ── DMG ────────────────────────────────────────────────────────────
 
