@@ -2,10 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- App Sandbox — helper is sandboxed like the main app.
-         Aligned for both Developer ID and Mac App Store builds. -->
-    <key>com.apple.security.app-sandbox</key>
-    <true/>
+    <!-- NO app-sandbox here.  A standalone binary (no Info.plist / bundle
+         structure) cannot opt into its own sandbox — libsystem_secinit
+         aborts at launch.  Instead the daemon inherits the parent app's
+         sandbox when spawned as a Tauri sidecar (on-demand mode).
+         To sandbox the daemon independently it must first be packaged as
+         an app bundle with Info.plist, then registered via SMAppService. -->
 
     <!-- Network access for IMAP/SMTP sync -->
     <key>com.apple.security.network.client</key>

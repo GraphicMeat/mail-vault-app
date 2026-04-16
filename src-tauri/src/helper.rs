@@ -5,7 +5,10 @@
 // regardless of the underlying launch strategy or transport.
 //
 // Design:
-//   - Both the main app and the helper are sandboxed.
+//   - The main app is sandboxed.  The helper inherits its sandbox when
+//     spawned as a sidecar (on-demand).  A standalone binary cannot opt
+//     into its own sandbox (no Info.plist) — packaging as an app bundle
+//     is required before the helper can be independently sandboxed.
 //   - Shared state (socket, token) lives in the App Group container.
 //   - Launch strategy is platform-specific and swappable:
 //       macOS on-demand  → Tauri sidecar (inherits app sandbox)
