@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MailVault 2.4.0: A Stability Release - MailVault Blog</title>
+  <meta name="description" content="Behind MailVault 2.4.0: fixing the Outlook wrong-email bug, killing cross-account bleed, taming the sandboxed daemon, and making releases safe to roll back.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/blog/mailvault-240-stability.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/blog/mailvault-240-stability.html">
+  <meta property="og:title" content="MailVault 2.4.0: A Stability Release">
+  <meta property="og:description" content="Behind MailVault 2.4.0: fixing the Outlook wrong-email bug, killing cross-account bleed, taming the sandboxed daemon, and making releases safe to roll back.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MailVault 2.4.0: A Stability Release">
+  <meta name="twitter:description" content="Behind MailVault 2.4.0: fixing the Outlook wrong-email bug, killing cross-account bleed, taming the sandboxed daemon, and making releases safe to roll back.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc',
+              400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca',
+              800: '#3730a3', 900: '#312e81',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .gradient-text {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .gradient-bg { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); }
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/" class="flex items-center gap-3">
+          <img src="/icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Features</a>
+          <a href="/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Use Cases</a>
+          <a href="/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" title="Toggle theme">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex gradient-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Download
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Features</a>
+          <a href="/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Use Cases</a>
+          <a href="/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg gradient-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Back to Blog
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-04-17" class="text-sm text-primary-500 font-medium">April 17, 2026</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">MailVault 2.4.0: A Stability Release</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>7 min read</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Most of the work that went into MailVault 2.4.0 is invisible. The UI looks almost identical. The feature list is modest &mdash; a configurable send delay, a Sent folder copy, some settings reshuffling. But under the hood this release is mostly about fixing the kinds of bugs that quietly erode trust in a mail app: the wrong email showing up when you click, stale messages bleeding across accounts, a background helper that couldn't talk to itself, and release plumbing that could ship a broken binary.
+          </p>
+
+          <p>
+            This is a stability release. Here's what was broken, and what we did about it.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">The Bug That Made Us Write This Post</h3>
+
+          <p>
+            On Outlook and Microsoft 365 accounts, clicking one email could display a completely different email's content. The subject line in the list and the subject line at the top of the viewer would match &mdash; but the body, the sender, and the headers belonged to some other message entirely. Reported rarely, impossible to reproduce on demand, terrifying the first time you see it.
+          </p>
+
+          <p>
+            The root cause was an accident of how we bridged two different mail protocols. Classic IMAP gives every message a stable <code>UID</code> that never changes for the life of a mailbox. The Microsoft Graph API doesn't &mdash; it has opaque string message IDs instead. To keep the rest of MailVault's codebase uniform, our Graph transport layer was synthesizing positional UIDs on the fly: index the folder, hand out <code>1</code>, <code>2</code>, <code>3</code>, and so on.
+          </p>
+
+          <p>
+            That works until the order changes. A new message arrives, a thread moves to another folder, server-side sorting shifts by a millisecond &mdash; and the positional UID that pointed to email A now points to email B. The header list was fine because we fetched it fresh. But the cache of bodies, keyed by that same drifting UID, now handed out the wrong content.
+          </p>
+
+          <p>
+            The fix is architectural: we embed the real Graph message ID directly on each email header, and use that as the canonical identifier throughout the body cache, content loader, and action paths. The synthetic UID still exists for compatibility with the IMAP-shaped interfaces inside the app, but it's no longer the source of truth for "which message is this, really."
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Cross-Account Bleed</h3>
+
+          <p>
+            A related class of "wrong email" bug: switching from Account A to Account B, opening a folder in B that happened to be empty, and briefly seeing emails from Account A still sitting in the list.
+          </p>
+
+          <p>
+            This was a cache invalidation problem. Account switching cleared some email state but not all of it. The sorted-email list, the in-memory body cache, and the thread cache were updated on slightly different schedules. If the target folder had new emails, the fresh data arrived fast enough to mask the stale entries. If the target folder was empty, the stale list was what you saw until the "empty" result finally propagated.
+          </p>
+
+          <p>
+            The fix was unglamorous: every place that clears email state on an account or mailbox switch now clears <em>all</em> of it, atomically, before the new account's data starts loading. No more half-cleared caches, no more race between "empty folder arrived" and "previous account's emails got evicted."
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">The Sandboxed Daemon That Couldn't Find Its Own Socket</h3>
+
+          <p>
+            MailVault has a background helper &mdash; a small sidecar daemon that keeps your mail synced even when the main window is closed. On macOS, both the app and the daemon run inside App Sandbox, which means each of them sees a different view of the filesystem. They need a shared rendezvous point to talk over a Unix domain socket.
+          </p>
+
+          <p>
+            The bug: the app resolved the socket path one way, the daemon resolved it another way, and on sandboxed builds those two paths pointed to different container directories. The daemon would start, bind its socket, and sit there waiting. The app would try to connect, miss, and conclude the daemon wasn't running.
+          </p>
+
+          <p>
+            We now use <code>dirs::home_dir()</code> on both sides to resolve <code>~/.mailvault/mv.sock</code>. Under sandboxing that expands to the same container-relative path for both processes, so the client always finds the server it was just launched by.
+          </p>
+
+          <p>
+            The helper's entitlements got a parallel cleanup. The daemon binary was inheriting <code>app-sandbox</code> from the app's signing config, which crashes standalone binaries that don't have an <code>Info.plist</code> of their own. <code>application-groups</code> was also set, left over from an earlier plan to use App Group IPC &mdash; unnecessary now that both processes share the same container home. Both were removed. The helper launches cleanly on every macOS version we test against, including freshly installed sandboxed builds.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">The Entitlements That Looked Right But Weren't</h3>
+
+          <p>
+            This one is the most worrying kind of bug: everything <em>looks</em> correct, and it silently doesn't work.
+          </p>
+
+          <p>
+            macOS entitlements files let you reference the developer team prefix as <code>$(AppIdentifierPrefix)</code>. Xcode expands this variable before passing the file to <code>codesign</code>. Our release pipeline isn't Xcode &mdash; it invokes <code>codesign</code> directly &mdash; and it turns out <code>codesign</code> does <em>not</em> expand that variable. The literal string <code>$(AppIdentifierPrefix)</code> was being embedded into the signed binary.
+          </p>
+
+          <p>
+            The symptom: keychain sharing between the app and the daemon was silently broken. The app could read credentials from the keychain, but the daemon couldn't see them &mdash; because the access group identifier it was asking for was a literal <code>$(AppIdentifierPrefix).com.mailvault...</code> string rather than the real team-prefixed identifier. The daemon would fall back to asking for credentials it didn't have and give up.
+          </p>
+
+          <p>
+            The fix is a <code>sed</code> expansion step that rewrites the entitlements file with the real team prefix substituted in before the <code>codesign</code> call. We added it alongside our existing version-consistency check so that a similar class of "configuration that looks right at a glance" bug can be caught in CI.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Snap Publish Gating</h3>
+
+          <p>
+            Speaking of CI: until 2.4.0, pushing a release tag automatically published the resulting snap to the stable channel. If something broke after the initial smoke test &mdash; and sometimes it did, because Snap confinement behaves differently from a dev build in ways that only show up after install &mdash; the broken version was already live by the time we found out.
+          </p>
+
+          <p>
+            The release pipeline now stops at the "snap uploaded" step. A separate <em>Promote Snaps</em> workflow moves a build from the edge channel to stable, and only after we've installed it from the edge channel on a clean machine and verified the basics: account add, email load, backup. It's one extra button click on a successful release and a much calmer rollback story on an unsuccessful one.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">The Quieter Fixes</h3>
+
+          <p>
+            A handful of smaller fixes fall under the same "stop the app from contradicting itself" theme.
+          </p>
+
+          <p>
+            <strong>Module cache invalidation.</strong> Several lazily-initialized module-level caches &mdash; things like memoized folder lookups and descriptor lookups &mdash; weren't being cleared when the data underneath them changed. Now they are, and the unified-folder cache has a size cap so it can't grow without bound.
+          </p>
+
+          <p>
+            <strong>Redundant descriptor saves.</strong> Account activation was writing the account descriptor to disk more than once per activation, sometimes racing with itself on fast switches. The duplicate writes are gone.
+          </p>
+
+          <p>
+            <strong>Infinite recursion in account activation.</strong> A rare path in <code>activateAccount</code> &mdash; the descriptor restore fallback after a cache miss &mdash; could call back into itself if the restored descriptor triggered another restore. It was capped by a re-entrancy guard; a cleaner fix removes the recursion entirely.
+          </p>
+
+          <p>
+            <strong>Store architecture.</strong> We had a set of "domain store" wrappers that sat between components and the main Zustand store, duplicating state into local copies. They were intended to provide a cleaner API, but in practice they introduced two sources of truth per piece of state and occasional update-order bugs. They're now thin selector re-exports &mdash; same ergonomics, one source of truth.
+          </p>
+
+          <p>
+            <strong>Background helper architecture.</strong> The Rust code that managed the background helper was doing two jobs in one module: deciding <em>how</em> to launch the daemon (which binary, with what arguments, under what sandbox) and handling the <em>RPC transport</em> once it was running. We split those into <code>helper.rs</code> for launch strategy and a separate transport module. Debugging a startup failure no longer requires grepping through the request/response code, and vice versa. User-facing text was reworded at the same time &mdash; "system service" became "background helper," which is more honest about what it actually is.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Why This Release Took a While</h3>
+
+          <p>
+            Stability releases are weirdly hard to plan. Each individual fix is small, but the surface area they cover is enormous &mdash; the Graph transport, account switching, sandboxed IPC, code signing, and release infrastructure all got touched. Most of these bugs were rare enough that we couldn't reproduce them on demand; we had to reason from traces, user reports, and reading the code until we could see how the bad state would arise, then write the fix and wait to confirm the reports stopped coming in.
+          </p>
+
+          <p>
+            The payoff is the kind of change you don't notice until you're suddenly not seeing a bug that used to bite you once a week. If you were hit by any of the behaviors above &mdash; wrong email content on Outlook, stale emails on account switch, a background helper that wouldn't stay connected &mdash; 2.4.0 is the release that makes them go away.
+          </p>
+
+          <p>
+            Next on the list: finishing <a href="/blog/refactoring-mailvault-from-monolith-to-modules.html" class="text-primary-500 hover:text-primary-600 underline">the five-phase refactor</a>, closing out the remaining items on the v2.4 follow-up list (IMAP single-mailbox detection for Hostinger, folder-switch edge cases, compose draft bubble), and continuing to push the classifier rewrite into shape. The feature work continues &mdash; but only on top of a foundation we trust.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex items-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/docs.html" class="hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacy</a>
+          <a href="/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Terms</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. All rights reserved.
+        </p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+</body>
+</html>
