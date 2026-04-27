@@ -1,5 +1,6 @@
 mod auth;
 pub mod classification;
+pub mod contacts_index;
 mod dns;
 mod graph;
 pub mod imap;
@@ -149,6 +150,16 @@ async fn main() {
 
     write_pid_file(&data_dir);
 
+    // One-time Maildir filename migration: append `.eml` to message files that
+    // pre-date the extension change. Idempotent; version-guarded.
+    let mig = mailvault_core::maildir::migrate_add_eml_extension(&data_dir);
+    if mig.renamed > 0 || mig.errors > 0 {
+        info!(
+            "Maildir .eml migration: renamed={} already_ok={} skipped={} errors={}",
+            mig.renamed, mig.already_ok, mig.skipped_non_message, mig.errors
+        );
+    }
+
     // Load or generate auth token — use the shared token path (same location as socket)
     let token_path = get_token_path();
     let token = match auth::load_or_generate_token_at(&token_path) {
@@ -164,7 +175,12 @@ async fn main() {
     let inference_engine = Arc::new(inference::InferenceEngine::new());
 
     let imap_pool = Arc::new(imap::ImapPool::new());
-    let sync_eng = Arc::new(sync_engine::SyncEngine::new(Arc::clone(&imap_pool), data_dir.clone()));
+    let contacts = contacts_index::ContactsState::new(data_dir.clone());
+    let sync_eng = Arc::new(sync_engine::SyncEngine::new(
+        Arc::clone(&imap_pool),
+        data_dir.clone(),
+        Arc::clone(&contacts),
+    ));
 
     let state = Arc::new(server::DaemonState {
         token,
@@ -176,10 +192,24 @@ async fn main() {
         imap_pool,
         _oauth2_manager: oauth2::OAuth2Manager::new(),
         sync_engine: sync_eng,
+        contacts: Arc::clone(&contacts),
     });
 
     // Start background classification queue worker
     server::start_classification_worker(Arc::clone(&state));
+
+    // Debounced flush of the contacts index to disk (every 30s).
+    {
+        let contacts = Arc::clone(&contacts);
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(std::time::Duration::from_secs(30));
+            ticker.tick().await;
+            loop {
+                ticker.tick().await;
+                contacts.flush_dirty();
+            }
+        });
+    }
 
     let socket_path = get_socket_path(&data_dir);
 

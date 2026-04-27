@@ -1,5 +1,6 @@
 use crate::auth;
 use crate::classification;
+use crate::contacts_index;
 use crate::imap;
 use crate::inference;
 use crate::ipc::{self, AuthHandshake, RpcRequest, RpcResponse};
@@ -27,6 +28,7 @@ pub struct DaemonState {
     pub imap_pool: Arc<imap::ImapPool>,
     pub _oauth2_manager: oauth2::OAuth2Manager,
     pub sync_engine: Arc<sync_engine::SyncEngine>,
+    pub contacts: Arc<contacts_index::ContactsState>,
 }
 
 /// Start the daemon socket server.
@@ -264,8 +266,38 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
         "learning.load" => handle_learning_load(&state.data_dir, req.params, id),
         "learning.save" => handle_learning_save(&state.data_dir, req.params, id),
 
+        "contacts_index.get" => handle_contacts_index_get(Arc::clone(&state.contacts), req.params, id),
+        "contacts_index.flush" => handle_contacts_index_flush(Arc::clone(&state.contacts), id),
+
         _ => RpcResponse::error(id, ipc::METHOD_NOT_FOUND, format!("Unknown method: {}", req.method)),
     }
+}
+
+fn handle_contacts_index_get(
+    contacts: Arc<contacts_index::ContactsState>,
+    params: Value,
+    id: Value,
+) -> RpcResponse {
+    let account_ids: Vec<String> = match params.get("accountIds").and_then(|v| v.as_array()) {
+        Some(arr) => arr
+            .iter()
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .collect(),
+        None => return RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing accountIds"),
+    };
+    let snapshot = contacts.get_snapshot(&account_ids);
+    match serde_json::to_value(&snapshot) {
+        Ok(v) => RpcResponse::success(id, v),
+        Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, format!("Serialize: {}", e)),
+    }
+}
+
+fn handle_contacts_index_flush(
+    contacts: Arc<contacts_index::ContactsState>,
+    id: Value,
+) -> RpcResponse {
+    contacts.flush_dirty();
+    RpcResponse::success(id, serde_json::json!({"ok": true}))
 }
 
 /// Proof-of-concept: list UIDs in a Maildir folder.

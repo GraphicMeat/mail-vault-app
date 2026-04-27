@@ -16,7 +16,7 @@ tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
-rand = "0.8"
+rand = "0.9"
 dirs = "5"
 thiserror = "2"
 chrono = "0.4"
