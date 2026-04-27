@@ -37,18 +37,53 @@ function looksLikeUrl(text) {
   return trimmed.includes('://') || trimmed.startsWith('www.');
 }
 
-/**
- * Scan email HTML for suspicious links.
- * Returns { alerts, modifiedHtml, maxAlertLevel }.
- */
-export function scanEmailLinks(html, uid) {
-  if (!html) return { alerts: [], modifiedHtml: html, maxAlertLevel: null };
+// Style block markup appended to <head> when any alerts are detected.
+const INDICATOR_STYLE_CONTENT = `
+  a[data-link-alert]::before {
+    display: inline !important;
+    margin-right: 3px !important;
+    font-size: 0.9em !important;
+    cursor: help !important;
+  }
+  a[data-link-alert="red"]::before {
+    content: "\\26A0" !important;
+    color: #ef4444 !important;
+  }
+  a[data-link-alert="yellow"]::before {
+    content: "\\26A0" !important;
+    color: #f59e0b !important;
+  }
+  a[data-link-alert="red"] {
+    outline: 2px solid rgba(239, 68, 68, 0.3) !important;
+    outline-offset: 2px !important;
+    border-radius: 2px !important;
+  }
+  a[data-link-alert="yellow"] {
+    outline: 2px solid rgba(245, 158, 11, 0.3) !important;
+    outline-offset: 2px !important;
+    border-radius: 2px !important;
+  }
+`;
 
-  // Check cache
+/**
+ * Scan email body HTML for suspicious links.
+ * Returns { alerts, modifiedBodyHtml, indicatorStyle, maxAlertLevel }.
+ *
+ * Cache is keyed by uid only: the input (body HTML) is stable per email, so
+ * the cached result is reusable across theme toggles and re-renders. Callers
+ * wrap the modified body with their own iframe template and place
+ * `indicatorStyle` into <head> (as a <style>…</style> block) when non-empty.
+ */
+export function scanEmailLinks(bodyHtml, uid) {
+  if (!bodyHtml) {
+    return { alerts: [], modifiedBodyHtml: bodyHtml, indicatorStyle: '', maxAlertLevel: null };
+  }
+
   if (uid && _scanCache.has(uid)) return _scanCache.get(uid);
 
+  // Wrap as a full document so DOMParser gives us a predictable body.
   const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
+  const doc = parser.parseFromString(`<!DOCTYPE html><html><body>${bodyHtml}</body></html>`, 'text/html');
   const links = doc.querySelectorAll('a[href]');
   const alerts = [];
   let maxAlertLevel = null;
@@ -116,43 +151,10 @@ export function scanEmailLinks(html, uid) {
     }
   }
 
-  // Inject CSS for warning indicators if any alerts found
-  if (alerts.length > 0) {
-    const style = doc.createElement('style');
-    style.textContent = `
-      a[data-link-alert]::before {
-        display: inline;
-        margin-right: 3px;
-        font-size: 0.9em;
-        cursor: help;
-      }
-      a[data-link-alert="red"]::before {
-        content: "\\26A0";
-        color: #ef4444;
-      }
-      a[data-link-alert="yellow"]::before {
-        content: "\\26A0";
-        color: #f59e0b;
-      }
-      a[data-link-alert="red"] {
-        outline: 2px solid rgba(239, 68, 68, 0.3);
-        outline-offset: 2px;
-        border-radius: 2px;
-      }
-      a[data-link-alert="yellow"] {
-        outline: 2px solid rgba(245, 158, 11, 0.3);
-        outline-offset: 2px;
-        border-radius: 2px;
-      }
-    `;
-    doc.head.appendChild(style);
-  }
+  const modifiedBodyHtml = doc.body.innerHTML;
+  const indicatorStyle = alerts.length > 0 ? INDICATOR_STYLE_CONTENT : '';
+  const result = { alerts, modifiedBodyHtml, indicatorStyle, maxAlertLevel };
 
-  // Serialize back to HTML
-  const modifiedHtml = new XMLSerializer().serializeToString(doc);
-  const result = { alerts, modifiedHtml, maxAlertLevel };
-
-  // Cache result
   if (uid) {
     if (_scanCache.size > MAX_CACHE) _scanCache.clear();
     _scanCache.set(uid, result);

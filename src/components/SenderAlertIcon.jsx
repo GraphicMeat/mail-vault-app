@@ -1,8 +1,19 @@
-import React, { useState } from 'react';
-import { AlertTriangle, X, ShieldAlert } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { X, ShieldAlert } from 'lucide-react';
 
 export function SenderAlertIcon({ level, email, size = 14 }) {
   const [showModal, setShowModal] = useState(false);
+
+  useEffect(() => {
+    if (!showModal) return;
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); setShowModal(false); }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [showModal]);
+
   if (!level) return null;
 
   const isRed = level === 'red';
@@ -20,7 +31,10 @@ export function SenderAlertIcon({ level, email, size = 14 }) {
       >
         <ShieldAlert size={size} />
       </button>
-      {showModal && (
+      {showModal && createPortal(
+        // Portal to body: virtualized list cells have `transform` on their
+        // ancestor, which creates a containing block for `position: fixed`
+        // and clips full-screen overlays. Portaling to <body> escapes that.
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
           <div
@@ -59,7 +73,8 @@ export function SenderAlertIcon({ level, email, size = 14 }) {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

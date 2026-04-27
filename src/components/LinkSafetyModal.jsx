@@ -1,7 +1,16 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { AlertTriangle, ExternalLink, X } from 'lucide-react';
 
 export function LinkSafetyModal({ alert, onOpenAnyway, onCancel }) {
+  useEffect(() => {
+    if (!alert) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [alert, onCancel]);
+
   if (!alert) return null;
 
   const isRed = alert.level === 'red';
