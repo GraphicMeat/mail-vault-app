@@ -14,6 +14,10 @@ pub fn cur_path(data_dir: &Path, account_id: &str, mailbox: &str) -> PathBuf {
 }
 
 /// Build a Maildir filename from UID and flags.
+///
+/// Filename format: `{uid}:{flags}:{timestamp}.eml`. The `.eml` suffix makes
+/// the file double-clickable in the user's OS and keeps the zip export usable
+/// without a rename step.
 pub fn build_filename(uid: u32, flags: &[String]) -> String {
     let ts = chrono::Utc::now().timestamp();
     let flags_str = if flags.is_empty() {
@@ -24,7 +28,7 @@ pub fn build_filename(uid: u32, flags: &[String]) -> String {
             .collect::<Vec<_>>()
             .join(",")
     };
-    format!("{}:{}:{}", uid, flags_str, ts)
+    format!("{}:{}:{}.eml", uid, flags_str, ts)
 }
 
 /// Find a file by UID in a Maildir/cur directory.
@@ -176,6 +180,127 @@ pub struct StorageStats {
     pub total_size: u64,
     pub total_emails: u64,
     pub mailbox_count: u64,
+}
+
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct EmlMigrationStats {
+    pub renamed: u64,
+    pub already_ok: u64,
+    pub skipped_non_message: u64,
+    pub errors: u64,
+}
+
+const MAILDIR_VERSION_FILE: &str = ".maildir_version";
+const MAILDIR_CURRENT_VERSION: u32 = 2;
+
+/// One-time migration: append `.eml` to every Maildir message file that lacks
+/// the extension. Idempotent — guarded by `{data_dir}/Maildir/.maildir_version`.
+///
+/// Walks `{data_dir}/Maildir/*/*/{cur,new,tmp}/` and renames files whose name
+/// looks like a Maildir message (`{uid}:...`) but does not already end in
+/// `.eml`. Files that don't match the pattern (e.g. `local-index.json`) are
+/// left alone.
+pub fn migrate_add_eml_extension(data_dir: &Path) -> EmlMigrationStats {
+    let mut stats = EmlMigrationStats::default();
+    let maildir_root = data_dir.join("Maildir");
+    if !maildir_root.exists() {
+        return stats;
+    }
+
+    let version_path = maildir_root.join(MAILDIR_VERSION_FILE);
+    if let Ok(s) = fs::read_to_string(&version_path) {
+        if s.trim().parse::<u32>().unwrap_or(0) >= MAILDIR_CURRENT_VERSION {
+            return stats;
+        }
+    }
+
+    let account_dirs = match fs::read_dir(&maildir_root) {
+        Ok(d) => d,
+        Err(e) => {
+            warn!("migrate_add_eml_extension: read Maildir root failed: {}", e);
+            return stats;
+        }
+    };
+
+    for account_entry in account_dirs.flatten() {
+        if !account_entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+            continue;
+        }
+        let mailbox_dirs = match fs::read_dir(account_entry.path()) {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+        for mailbox_entry in mailbox_dirs.flatten() {
+            if !mailbox_entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                continue;
+            }
+            for sub in ["cur", "new", "tmp"] {
+                let dir = mailbox_entry.path().join(sub);
+                if !dir.exists() {
+                    continue;
+                }
+                rename_dir_add_eml(&dir, &mut stats);
+            }
+        }
+    }
+
+    if let Err(e) = fs::write(&version_path, MAILDIR_CURRENT_VERSION.to_string()) {
+        warn!("migrate_add_eml_extension: write version file failed: {}", e);
+    }
+
+    info!(
+        "migrate_add_eml_extension: renamed={} already_ok={} skipped={} errors={}",
+        stats.renamed, stats.already_ok, stats.skipped_non_message, stats.errors
+    );
+    stats
+}
+
+fn rename_dir_add_eml(dir: &Path, stats: &mut EmlMigrationStats) {
+    let entries = match fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        if !entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().to_string();
+
+        // Heuristic: Maildir message filenames start with `{uid}:`.
+        // Anything else (local-index.json, hidden files, etc.) is left alone.
+        let looks_like_message = name
+            .split(':')
+            .next()
+            .and_then(|s| s.parse::<u64>().ok())
+            .is_some();
+        if !looks_like_message {
+            stats.skipped_non_message += 1;
+            continue;
+        }
+
+        if name.ends_with(".eml") {
+            stats.already_ok += 1;
+            continue;
+        }
+
+        let src = entry.path();
+        let dst = dir.join(format!("{}.eml", name));
+        if dst.exists() {
+            // Collision: a sibling already has the `.eml` variant. Leave the
+            // extension-less file in place — readers match by `{uid}:` prefix,
+            // so the first hit still resolves. Don't silently overwrite.
+            warn!("migrate_add_eml_extension: collision, skipping: {:?}", src);
+            stats.errors += 1;
+            continue;
+        }
+        match fs::rename(&src, &dst) {
+            Ok(()) => stats.renamed += 1,
+            Err(e) => {
+                warn!("migrate_add_eml_extension: rename {:?} failed: {}", src, e);
+                stats.errors += 1;
+            }
+        }
+    }
 }
 
 /// Check if a UID exists in the Maildir.
@@ -492,6 +617,49 @@ mod tests {
 
         delete(&dir, "acc1", "INBOX", 99).unwrap();
         assert!(list_uids(&dir, "acc1", "INBOX").is_empty());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_build_filename_has_eml_extension() {
+        let name = build_filename(7, &["\\Seen".into()]);
+        assert!(name.ends_with(".eml"), "got {}", name);
+    }
+
+    #[test]
+    fn test_migrate_add_eml_extension_renames_and_is_idempotent() {
+        let dir = std::env::temp_dir().join("mailvault-test-migrate-eml");
+        let _ = fs::remove_dir_all(&dir);
+
+        let cur = dir.join("Maildir").join("acc1").join("INBOX").join("cur");
+        fs::create_dir_all(&cur).unwrap();
+        // Pre-migration files (no `.eml`) in both filename formats we ship.
+        fs::write(cur.join("101:2,S"), b"A").unwrap();
+        fs::write(cur.join("102:seen:1700000000"), b"B").unwrap();
+        // Already-migrated sibling — must be left alone.
+        fs::write(cur.join("103:2,S.eml"), b"C").unwrap();
+        // Non-message file — must be left alone.
+        fs::write(cur.join("local-index.json"), b"{}").unwrap();
+
+        let s1 = migrate_add_eml_extension(&dir);
+        assert_eq!(s1.renamed, 2);
+        assert_eq!(s1.already_ok, 1);
+        assert_eq!(s1.skipped_non_message, 1);
+        assert_eq!(s1.errors, 0);
+        assert!(cur.join("101:2,S.eml").exists());
+        assert!(cur.join("102:seen:1700000000.eml").exists());
+        assert!(cur.join("103:2,S.eml").exists());
+        assert!(cur.join("local-index.json").exists());
+
+        // Second run — version marker must short-circuit it.
+        let s2 = migrate_add_eml_extension(&dir);
+        assert_eq!(s2.renamed, 0);
+        assert_eq!(s2.already_ok, 0);
+
+        // Readers still resolve by UID prefix after migration.
+        assert!(find_by_uid(&cur, 101).is_some());
+        assert!(find_by_uid(&cur, 102).is_some());
 
         let _ = fs::remove_dir_all(&dir);
     }

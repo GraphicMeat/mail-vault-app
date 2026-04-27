@@ -4,6 +4,7 @@
 //! The app never calls IMAP directly — it reads from local storage
 //! and listens for sync events.
 
+use crate::contacts_index::ContactsState;
 use crate::imap::{self, ImapConfig, EmailHeader as ImapEmailHeader};
 use crate::imap::pool::{ImapPool, PooledSessionGuard};
 use serde::{Deserialize, Serialize};
@@ -61,15 +62,17 @@ pub struct SyncEngine {
     /// Watch channels per account — notified when sync completes.
     /// `sync.wait` RPC handler subscribes to these for efficient blocking.
     watchers: Mutex<HashMap<String, tokio::sync::watch::Sender<Option<SyncResult>>>>,
+    contacts: Arc<ContactsState>,
 }
 
 impl SyncEngine {
-    pub fn new(pool: Arc<ImapPool>, data_dir: PathBuf) -> Self {
+    pub fn new(pool: Arc<ImapPool>, data_dir: PathBuf, contacts: Arc<ContactsState>) -> Self {
         Self {
             pool,
             data_dir,
             states: Mutex::new(HashMap::new()),
             watchers: Mutex::new(HashMap::new()),
+            contacts,
         }
     }
 
@@ -300,6 +303,9 @@ impl SyncEngine {
         ) {
             warn!("[sync] Failed to write cache for {}: {}", account.email, e);
         }
+
+        // Feed headers into the daemon-owned contacts index.
+        self.contacts.observe_headers(account_id, mailbox, &headers);
 
         // Return session to pool
         let return_guard = PooledSessionGuard {
