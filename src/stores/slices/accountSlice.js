@@ -29,6 +29,67 @@ import {
   exportEmail as _exportEmail,
 } from '../../services/workflows/messageMutations';
 
+// ── Manual-refresh throttle ──
+// UI fires instantly on every click (brief spinner). Actual sync runs at most
+// once per REFRESH_COOLDOWN_MS, and at most one at a time. Clicks during the
+// cooldown or during an in-flight sync are coalesced into a single trailing
+// run.
+const REFRESH_COOLDOWN_MS = 15_000;
+const REFRESH_SPINNER_MIN_MS = 600;
+let _lastRefreshAt = 0;
+let _refreshInFlight = false;
+let _pendingRefresh = false;
+let _pendingTimer = null;
+
+function _flashSpinner(set) {
+  set({ manualRefreshSpinning: true });
+  setTimeout(() => set({ manualRefreshSpinning: false }), REFRESH_SPINNER_MIN_MS);
+}
+
+function _scheduleTrailingRefresh(set, delayMs) {
+  if (_pendingTimer) return;
+  _pendingTimer = setTimeout(() => {
+    _pendingTimer = null;
+    if (_pendingRefresh) {
+      _pendingRefresh = false;
+      _runRefresh(set);
+    }
+  }, Math.max(0, delayMs));
+}
+
+async function _runRefresh(set) {
+  if (_refreshInFlight) {
+    _pendingRefresh = true;
+    return;
+  }
+  const now = Date.now();
+  const elapsed = now - _lastRefreshAt;
+  if (elapsed < REFRESH_COOLDOWN_MS) {
+    _pendingRefresh = true;
+    _scheduleTrailingRefresh(set, REFRESH_COOLDOWN_MS - elapsed);
+    return;
+  }
+  _refreshInFlight = true;
+  _lastRefreshAt = Date.now();
+  try {
+    await _refreshCurrentView();
+  } catch (err) {
+    console.warn('[accountSlice] refreshCurrentView failed:', err);
+  } finally {
+    _refreshInFlight = false;
+    if (_pendingRefresh) {
+      _pendingRefresh = false;
+      const wait = Math.max(0, REFRESH_COOLDOWN_MS - (Date.now() - _lastRefreshAt));
+      _scheduleTrailingRefresh(set, wait);
+    }
+  }
+}
+
+function _throttledRefreshCurrentView(set) {
+  _flashSpinner(set);
+  _runRefresh(set);
+}
+
 export const createAccountSlice = (set, get) => ({
   // Accounts
   accounts: [],
@@ -88,7 +149,11 @@ export const createAccountSlice = (set, get) => ({
     return unreadCount;
   },
 
-  refreshCurrentView: () => _refreshCurrentView(),
+  // Manual-refresh UI spinner — briefly spins on every click so the button
+  // feels instant even when the underlying sync is throttled or already running.
+  manualRefreshSpinning: false,
+
+  refreshCurrentView: () => _throttledRefreshCurrentView(set),
   refreshAllAccounts: (options) => _refreshAllAccounts(options),
   retryKeychainAccess: () => _retryKeychainAccess(),
 });

@@ -235,6 +235,27 @@ export async function sendEmail(account, email, sentMailbox = null) {
   });
 }
 
+// Resolve or CREATE the Sent mailbox on the IMAP server. Tier 3 fallback for
+// servers that don't advertise SPECIAL-USE and whose Sent folder name isn't
+// matched by the frontend heuristic. Returns the resolved mailbox path.
+export async function ensureSentMailbox(account) {
+  if (IS_TAURI) {
+    return tauriInvoke('imap_ensure_sent_mailbox', { account });
+  }
+  throw new Error('ensureSentMailbox: not supported outside Tauri');
+}
+
+// Build RFC2822 MIME bytes without sending. Used by the compose flow to
+// archive outgoing mail locally before SMTP submission so the email is never
+// lost even if SMTP or the server-side Sent APPEND fails.
+// Returns { rawBase64, messageId, rawSize }.
+export async function buildOutgoingMime(account, email) {
+  if (IS_TAURI) {
+    return tauriInvoke('smtp_build_mime', { account, email });
+  }
+  throw new Error('buildOutgoingMime: not supported outside Tauri');
+}
+
 export async function disconnect(account) {
   if (IS_TAURI) {
     return tauriInvoke('imap_disconnect', { account });

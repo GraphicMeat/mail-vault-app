@@ -3,7 +3,9 @@ import { useMailStore } from '../../stores/mailStore';
 import { useAccountStore } from '../../stores/accountStore';
 import { useSettingsStore, AVATAR_COLORS, getAccountInitial, getAccountColor, hasPremiumAccess } from '../../stores/settingsStore';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getOAuth2AuthUrl, exchangeOAuth2Code } from '../../services/api';
+import { getOAuth2AuthUrl, exchangeOAuth2Code, ensureSentMailbox, fetchMailboxes } from '../../services/api';
+import { findSentMailboxPath } from '../../utils/sentFolder';
+import { Send } from 'lucide-react';
 import { ToggleSwitch } from './ToggleSwitch';
 import { Toast } from '../Toast';
 import {
@@ -56,6 +58,10 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
   const [oauthReconnecting, setOauthReconnecting] = useState(false);
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
   const [billingWarning, setBillingWarning] = useState(null);
+  const [accountMailboxes, setAccountMailboxes] = useState([]);
+  const [sentOverride, setSentOverride] = useState('');
+  const [savingSent, setSavingSent] = useState(false);
+  const [autoCreatingSent, setAutoCreatingSent] = useState(false);
 
   const orderedAccounts = getOrderedAccounts(accounts);
   const selectedAccount = accounts.find(a => a.id === selectedAccountId);
@@ -80,6 +86,95 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
       setShowRemoveConfirm(false);
     }
   }, [selectedAccountId]);
+
+  // Load mailbox tree + current Sent override for the selected account
+  useEffect(() => {
+    if (!selectedAccountId) return;
+    setSentOverride(selectedAccount?.sentFolderOverride || '');
+    let cancelled = false;
+    (async () => {
+      const { activeAccountId, mailboxes } = useMailStore.getState();
+      let list = activeAccountId === selectedAccountId && mailboxes?.length ? mailboxes : null;
+      if (!list) {
+        const { getCachedMailboxes } = await import('../../services/db');
+        list = await getCachedMailboxes(selectedAccountId).catch(() => []);
+      }
+      if (!cancelled) setAccountMailboxes(list || []);
+    })();
+    return () => { cancelled = true; };
+  }, [selectedAccountId, selectedAccount?.sentFolderOverride]);
+
+  const flattenedMailboxes = React.useMemo(() => {
+    const out = [];
+    const walk = (boxes, depth = 0) => {
+      for (const b of boxes || []) {
+        if (!b.noselect) out.push({ path: b.path, label: `${'\u2003'.repeat(depth)}${b.name || b.path}` });
+        if (b.children?.length) walk(b.children, depth + 1);
+      }
+    };
+    walk(accountMailboxes);
+    return out;
+  }, [accountMailboxes]);
+
+  const autoDetectedSentPath = React.useMemo(
+    () => findSentMailboxPath(accountMailboxes, null),
+    [accountMailboxes]
+  );
+
+  const handleSaveSentFolder = async () => {
+    if (!selectedAccount) return;
+    setSavingSent(true);
+    try {
+      const nextOverride = sentOverride || null;
+      const updated = { ...selectedAccount, sentFolderOverride: nextOverride };
+      const { saveAccount } = await import('../../services/db');
+      await saveAccount(updated);
+      useMailStore.setState(s => ({
+        accounts: (s.accounts || []).map(a => a.id === selectedAccountId ? { ...a, sentFolderOverride: nextOverride } : a),
+      }));
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      console.error('Failed to save Sent folder:', err);
+      alert('Failed to save Sent folder: ' + (err.message || err));
+    } finally {
+      setSavingSent(false);
+    }
+  };
+
+  const handleAutoCreateSent = async () => {
+    if (!selectedAccount) return;
+    setAutoCreatingSent(true);
+    try {
+      const path = await ensureSentMailbox(selectedAccount);
+      if (!path) throw new Error('Server returned empty path');
+      const updated = { ...selectedAccount, sentFolderOverride: path };
+      const { saveAccount, saveMailboxes } = await import('../../services/db');
+      await saveAccount(updated);
+      // Refresh mailbox tree so a newly-created folder becomes visible
+      try {
+        const fresh = await fetchMailboxes(updated);
+        if (Array.isArray(fresh) && fresh.length) {
+          await saveMailboxes?.(selectedAccountId, fresh).catch(() => {});
+          setAccountMailboxes(fresh);
+          useMailStore.setState(s => ({
+            mailboxes: s.activeAccountId === selectedAccountId ? fresh : s.mailboxes,
+          }));
+        }
+      } catch {}
+      useMailStore.setState(s => ({
+        accounts: (s.accounts || []).map(a => a.id === selectedAccountId ? { ...a, sentFolderOverride: path } : a),
+      }));
+      setSentOverride(path);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      console.error('Auto-create Sent folder failed:', err);
+      alert('Could not auto-detect or create a Sent folder: ' + (err.message || err));
+    } finally {
+      setAutoCreatingSent(false);
+    }
+  };
 
   const handleSaveAccountSettings = () => {
     if (selectedAccountId) {
@@ -458,6 +553,67 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                               text-mail-text placeholder-mail-text-muted resize-none
                               font-mono text-sm focus:border-mail-accent transition-all"
                   />
+                </div>
+              </div>
+            </div>
+
+            {/* Sent Folder */}
+            <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+              <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
+                <Send size={18} className="text-mail-accent" />
+                Sent Folder
+              </h4>
+
+              <p className="text-sm text-mail-text-muted mb-4">
+                MailVault auto-detects the Sent folder via IMAP SPECIAL-USE and common names, and can create one on the server if none exists. Override here if the wrong folder is selected.
+              </p>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-mail-text mb-2">
+                    Sent folder
+                  </label>
+                  <select
+                    value={sentOverride}
+                    onChange={(e) => setSentOverride(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
+                              text-mail-text focus:border-mail-accent transition-all"
+                  >
+                    <option value="">
+                      Auto-detect{autoDetectedSentPath ? ` — currently "${autoDetectedSentPath}"` : ' — no match yet'}
+                    </option>
+                    {flattenedMailboxes.map(m => (
+                      <option key={m.path} value={m.path}>{m.label}</option>
+                    ))}
+                  </select>
+                  {selectedAccount.sentFolderOverride && (
+                    <p className="text-xs text-mail-text-muted mt-2">
+                      Current saved override: <code className="text-mail-text">{selectedAccount.sentFolderOverride}</code>
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={handleSaveSentFolder}
+                    disabled={savingSent || sentOverride === (selectedAccount.sentFolderOverride || '')}
+                    className="px-4 py-2 bg-mail-accent hover:bg-mail-accent-hover
+                              text-white rounded-lg transition-colors text-sm font-medium
+                              disabled:opacity-50"
+                  >
+                    {savingSent ? 'Saving…' : 'Save Sent folder'}
+                  </button>
+                  <button
+                    onClick={handleAutoCreateSent}
+                    disabled={autoCreatingSent}
+                    className="px-4 py-2 bg-mail-surface-hover hover:bg-mail-border
+                              text-mail-text rounded-lg transition-colors text-sm font-medium
+                              flex items-center gap-2 disabled:opacity-50"
+                    title="Ask the server to auto-detect or create a Sent folder"
+                  >
+                    {autoCreatingSent ? <Loader size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                    {autoCreatingSent ? 'Working…' : 'Auto-detect or create'}
+                  </button>
                 </div>
               </div>
             </div>

@@ -1436,13 +1436,18 @@ async fn open_email_window(app: tauri::AppHandle, html: String, title: String) -
     let n = WINDOW_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let label = format!("email-popup-{}", n);
 
-    // Write HTML to a temp file — eval on about:blank fails on macOS WKWebView
+    // Write HTML to a temp file — eval on about:blank fails on macOS WKWebView.
+    // Prepend UTF-8 BOM so WKWebView decodes the file as UTF-8 unambiguously
+    // (file:// loads otherwise fall back to Latin-1 and mojibake non-ASCII).
     let cache_dir = app.path().app_data_dir()
         .map_err(|e| e.to_string())?
         .join("popup_cache");
     fs::create_dir_all(&cache_dir).map_err(|e| e.to_string())?;
     let html_file = cache_dir.join(format!("email-popup-{}.html", n));
-    fs::write(&html_file, &html).map_err(|e| e.to_string())?;
+    let mut bytes = Vec::with_capacity(html.len() + 3);
+    bytes.extend_from_slice(&[0xEF, 0xBB, 0xBF]);
+    bytes.extend_from_slice(html.as_bytes());
+    fs::write(&html_file, &bytes).map_err(|e| e.to_string())?;
 
     WebviewWindowBuilder::new(
         &app,
@@ -1620,7 +1625,7 @@ pub fn build_maildir_filename(uid: u32, flags: &[String]) -> String {
     flag_chars.sort();
     flag_chars.dedup();
     let flag_str: String = flag_chars.into_iter().collect();
-    format!("{}:2,{}", uid, flag_str)
+    format!("{}:2,{}.eml", uid, flag_str)
 }
 
 pub fn find_file_by_uid(dir: &Path, uid: u32) -> Option<PathBuf> {
@@ -4136,6 +4141,9 @@ fn main() {
             commands::imap_delete_email,
             commands::imap_fetch_raw,
             commands::imap_append_email,
+            commands::imap_ensure_sent_mailbox,
+            commands::imap_ensure_drafts_mailbox,
+            commands::smtp_build_mime,
             commands::smtp_send_email,
             commands::imap_search_emails,
             commands::imap_disconnect,

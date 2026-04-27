@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use serde::Deserialize;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tracing::info;
 
 use crate::imap::pool::PooledSessionGuard;
@@ -441,39 +441,254 @@ pub async fn imap_append_email(
     Ok(serde_json::json!({ "success": true }))
 }
 
+// ── Ensure Sent mailbox (auto-create if missing) ──────────────────────────
+//
+// Tiered Sent-folder resolution for IMAP accounts whose server does not
+// advertise SPECIAL-USE and whose Sent folder name doesn't match our
+// heuristics. Falls back to CREATE "Sent" (Thunderbird-style lazy creation)
+// so the user never has to configure it manually for generic IMAP.
+
+#[tauri::command]
+pub async fn imap_ensure_sent_mailbox(
+    pool: tauri::State<'_, ImapPool>,
+    account: ImapConfig,
+) -> Result<String, String> {
+    with_background(&pool, &account, |mut session| async move {
+        let path = imap::ensure_sent_mailbox(&mut session).await?;
+        Ok((path, session, None))
+    }).await
+}
+
+#[tauri::command]
+pub async fn imap_ensure_drafts_mailbox(
+    pool: tauri::State<'_, ImapPool>,
+    account: ImapConfig,
+) -> Result<String, String> {
+    with_background(&pool, &account, |mut session| async move {
+        let path = imap::ensure_drafts_mailbox(&mut session).await?;
+        Ok((path, session, None))
+    }).await
+}
+
+/// Build the RFC2822 MIME bytes for an outgoing email WITHOUT sending.
+/// Used by the JS compose flow so it can write the raw .eml to the local
+/// Maildir archive BEFORE SMTP submission (and replace the on-disk copy with
+/// a sent-state version after SMTP succeeds).
+#[tauri::command]
+pub async fn smtp_build_mime(
+    account: ImapConfig,
+    email: smtp::OutgoingEmail,
+) -> Result<serde_json::Value, String> {
+    use base64::Engine;
+    let built = smtp::build_mime(&account, &email)?;
+    let raw_base64 = base64::engine::general_purpose::STANDARD.encode(&built.raw_rfc2822);
+
+    // Extract Message-ID header from raw bytes for later server-side dedupe.
+    let message_id = {
+        let text = String::from_utf8_lossy(&built.raw_rfc2822);
+        text.lines()
+            .take_while(|line| !line.is_empty())
+            .find(|line| line.to_lowercase().starts_with("message-id:"))
+            .map(|line| line.splitn(2, ':').nth(1).unwrap_or("").trim().trim_matches(|c| c == '<' || c == '>').to_string())
+            .filter(|s| !s.is_empty())
+    };
+
+    tracing::info!(
+        "[send:build_mime] account={} bytes={} messageId={:?}",
+        account.email, built.raw_rfc2822.len(), message_id
+    );
+
+    Ok(serde_json::json!({
+        "rawBase64": raw_base64,
+        "messageId": message_id,
+        "rawSize": built.raw_rfc2822.len(),
+    }))
+}
+
 // ── Send email ──────────────────────────────────────────────────────────────
 
 #[tauri::command]
 pub async fn smtp_send_email(
+    app_handle: tauri::AppHandle,
     pool: tauri::State<'_, ImapPool>,
     account: ImapConfig,
     email: smtp::OutgoingEmail,
     #[allow(unused)] sent_mailbox: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let result = smtp::send_email(&account, &email).await?;
+    // Flow: local Maildir archive is handled by the JS side BEFORE and AFTER
+    // this call (see ComposeModal.sendFn). This command only submits via SMTP
+    // and best-effort appends to the server Sent folder in the background.
+    //
+    // Structured logging uses `[send]` prefix so step-by-step grep is trivial.
 
-    // Append to Sent folder if specified (skip for Graph accounts — server handles it)
+    let account_id_for_log = account.email.clone();
+    tracing::info!("[send:smtp_start] account={} recipient={}", account_id_for_log, email.to);
+
+    let result = smtp::send_email(&account, &email).await
+        .map_err(|e| {
+            tracing::error!("[send:smtp_fail] account={} error={}", account_id_for_log, e);
+            e
+        })?;
+
+    tracing::info!(
+        "[send:smtp_ok] account={} messageId={} raw_bytes={}",
+        account_id_for_log, result.message_id, result.raw_rfc2822.len()
+    );
+
+    // Dump the first 800 bytes of the raw MIME so we can see what headers
+    // lettre produced — specifically whether Message-ID is present.
+    let header_preview = {
+        let text = String::from_utf8_lossy(&result.raw_rfc2822);
+        let end = text.find("\r\n\r\n").or_else(|| text.find("\n\n")).unwrap_or(text.len());
+        let headers_only = &text[..end.min(800)];
+        headers_only.to_string()
+    };
+    tracing::info!("[send:raw_headers]\n{}", header_preview);
+
+    let message_id_for_response = result.message_id.clone();
+
+    // Extract the Message-ID header from the RFC2822 raw bytes — used by the
+    // post-APPEND UID SEARCH so we can prove the server indexed the message.
+    // Handle both LF and CRLF line endings, folded header continuations, and
+    // optional whitespace around the `:`.
+    let message_id_header: Option<String> = {
+        let text = String::from_utf8_lossy(&result.raw_rfc2822);
+        let header_block = match text.find("\r\n\r\n") {
+            Some(idx) => &text[..idx],
+            None => match text.find("\n\n") {
+                Some(idx) => &text[..idx],
+                None => &text,
+            },
+        };
+        header_block
+            .lines()
+            .find(|line| line.to_lowercase().starts_with("message-id"))
+            .and_then(|line| {
+                let after_colon = line.splitn(2, ':').nth(1)?;
+                let trimmed = after_colon.trim();
+                let stripped: String = trimmed
+                    .trim_start_matches('<')
+                    .trim_end_matches('>')
+                    .to_string();
+                if stripped.is_empty() { None } else { Some(stripped) }
+            })
+    };
+
+    tracing::info!(
+        "[send:messageid_header] account={} extracted={:?}",
+        account_id_for_log, message_id_header
+    );
+
+    // Background: APPEND to server Sent folder. Never blocks the UI response.
     if let Some(ref mailbox) = sent_mailbox {
         if !mailbox.is_empty() {
-            let raw = String::from_utf8_lossy(&result.raw_rfc2822).to_string();
+            let raw_bytes: Vec<u8> = result.raw_rfc2822.clone();
             let account_clone = account.clone();
             let mailbox_clone = mailbox.clone();
-            // Best-effort append — don't fail the send if append fails
-            let append_result = with_background(&pool, &account_clone, |mut session| async move {
-                imap::append_email(&mut session, &mailbox_clone, raw.as_bytes(), "\\Seen").await?;
-                Ok(((), session, Some(mailbox_clone)))
-            }).await;
-            if let Err(e) = append_result {
-                tracing::warn!("[smtp_send_email] Failed to append to Sent folder '{}': {}", mailbox, e);
-            } else {
-                tracing::info!("[smtp_send_email] Appended sent email to '{}'", mailbox);
-            }
+            let pool_clone: ImapPool = (*pool).clone();
+            let app_handle_clone = app_handle.clone();
+            let account_id_bg = account_id_for_log.clone();
+            let message_id_bg = result.message_id.clone();
+            let message_id_header_bg = message_id_header.clone();
+            tauri::async_runtime::spawn(async move {
+                let mailbox_for_log = mailbox_clone.clone();
+                tracing::info!(
+                    "[send:server_append_start] account={} mailbox={} bytes={} messageId_header={:?}",
+                    account_id_bg, mailbox_for_log, raw_bytes.len(), message_id_header_bg
+                );
+                let mid_for_closure = message_id_header_bg.clone();
+                let mailbox_for_closure = mailbox_clone.clone();
+                let pool_for_log = pool_clone.clone();
+                let account_for_log = account_clone.clone();
+                let account_id_inner = account_id_bg.clone();
+                tracing::info!("[send:dedicated_session_start] account={} mailbox={} — using fresh no-compress session to avoid Hostinger APPEND hang", account_id_inner, mailbox_for_log);
+                let verified_result: Result<Result<(u32, u32, Option<u32>), String>, tokio::time::error::Elapsed> = tokio::time::timeout(
+                    std::time::Duration::from_secs(60),
+                    async {
+                        let mut session = imap::create_imap_session_no_compress(&account_for_log).await
+                            .map_err(|e| format!("dedicated session create failed: {}", e))?;
+                        tracing::info!("[send:dedicated_session_ok] account={} — calling append_email_verified", account_id_inner);
+                        let res = imap::append_email_verified(
+                            &mut session,
+                            &mailbox_for_closure,
+                            &raw_bytes,
+                            "\\Seen",
+                            mid_for_closure.as_deref(),
+                        ).await;
+                        // Best-effort logout regardless of result
+                        let _ = session.logout().await;
+                        tracing::info!("[send:dedicated_session_logout] account={}", account_id_inner);
+                        res
+                    },
+                ).await;
+                let _ = (pool_clone, pool_for_log, account_clone, mailbox_clone);
+                let (ok, verify_payload) = match verified_result {
+                    Ok(Ok((before, after, found_uid))) => {
+                        let _ = (before, after, found_uid); // silence unused if refactored
+                        let delta = after as i64 - before as i64;
+                        tracing::info!(
+                            "[send:server_append_ok] account={} mailbox={} messageId={} messageId_header={:?} exists_before={} exists_after={} delta={} searched_uid={:?}",
+                            account_id_bg, mailbox_for_log, message_id_bg, message_id_header_bg,
+                            before, after, delta, found_uid
+                        );
+                        if delta <= 0 {
+                            tracing::warn!(
+                                "[send:server_append_no_delta] account={} mailbox={} server reports no change in EXISTS — APPEND may have been silently rejected or routed elsewhere",
+                                account_id_bg, mailbox_for_log
+                            );
+                        }
+                        if found_uid.is_none() && message_id_header_bg.is_some() {
+                            tracing::warn!(
+                                "[send:server_append_search_miss] account={} mailbox={} Message-ID {:?} not found via UID SEARCH HEADER — server may not index Message-ID or email is in a different folder",
+                                account_id_bg, mailbox_for_log, message_id_header_bg
+                            );
+                        }
+                        (true, serde_json::json!({
+                            "existsBefore": before,
+                            "existsAfter": after,
+                            "delta": delta,
+                            "foundUid": found_uid,
+                        }))
+                    }
+                    Ok(Err(e)) => {
+                        tracing::warn!(
+                            "[send:server_append_fail] account={} mailbox={} error={}",
+                            account_id_bg, mailbox_for_log, e
+                        );
+                        (false, serde_json::json!({ "error": e }))
+                    }
+                    Err(_) => {
+                        tracing::warn!(
+                            "[send:server_append_timeout] account={} mailbox={} timeout=60s",
+                            account_id_bg, mailbox_for_log
+                        );
+                        (false, serde_json::json!({ "error": "timeout" }))
+                    }
+                };
+                // Emit UI event so the frontend can refresh the Sent view.
+                let payload = serde_json::json!({
+                    "accountId": account_id_bg,
+                    "mailbox": mailbox_for_log,
+                    "messageId": message_id_bg,
+                    "messageIdHeader": message_id_header_bg,
+                    "ok": ok,
+                    "verify": verify_payload,
+                });
+                tracing::info!("[send:server_append_event_emit] payload={}", payload);
+                if let Err(e) = app_handle_clone.emit("send-server-append-complete", payload) {
+                    tracing::warn!("[send:event_emit_fail] error={}", e);
+                }
+            });
+        } else {
+            tracing::warn!("[send:server_append_skip] account={} reason=empty_sent_mailbox", account_id_for_log);
         }
+    } else {
+        tracing::warn!("[send:server_append_skip] account={} reason=no_sent_mailbox_passed", account_id_for_log);
     }
 
     Ok(serde_json::json!({
         "success": true,
-        "messageId": result.message_id
+        "messageId": message_id_for_response,
     }))
 }
 

@@ -4,6 +4,7 @@ import { getSenderName } from '../utils/emailParser';
 import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
+import { ReplyToAlertIcon, getThreadReplyToMismatch } from './ReplyToAlertIcon';
 import { RowActionMenu } from './RowActionMenu';
 import { formatEmailDate } from '../utils/dateFormat';
 import {
@@ -101,6 +102,7 @@ export const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onS
 
       <div className="flex-1 min-w-0 flex items-center gap-2">
         {(() => { const sa = getSenderAlertLevel(thread.emails); return sa ? <SenderAlertIcon level={sa.level} email={sa.email} /> : null; })()}
+        <ReplyToAlertIcon mismatch={getThreadReplyToMismatch(thread.emails)} />
         <LinkAlertIcon level={getLinkAlertLevel(thread.emails)} alerts={getAlertsForEmails(thread.emails)} />
         <span className={`truncate ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
           {thread.subject}
@@ -246,6 +248,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ thread, i
         </div>
         <div className="flex items-center gap-1.5">
           {(() => { const sa = getSenderAlertLevel(thread.emails); return sa ? <SenderAlertIcon level={sa.level} email={sa.email} size={12} /> : null; })()}
+          <ReplyToAlertIcon mismatch={getThreadReplyToMismatch(thread.emails)} size={12} />
           <LinkAlertIcon level={getLinkAlertLevel(thread.emails)} size={12} alerts={getAlertsForEmails(thread.emails)} />
           <span className={`truncate text-sm leading-snug ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
             {thread.subject}

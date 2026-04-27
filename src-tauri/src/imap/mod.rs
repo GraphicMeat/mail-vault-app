@@ -1039,6 +1039,135 @@ pub async fn delete_email(
     Ok(())
 }
 
+/// Resolve or auto-create the Drafts mailbox for this account.
+/// Order: IMAP SPECIAL-USE `\Drafts` → common name candidates → CREATE "Drafts".
+pub async fn ensure_drafts_mailbox(session: &mut ImapSession) -> Result<String, String> {
+    ensure_role_mailbox(
+        session,
+        "drafts",
+        "Drafts",
+        &[
+            "Drafts", "Draft", "Draft Mail",
+            "INBOX.Drafts", "INBOX/Drafts", "INBOX.Draft", "INBOX/Draft",
+            "Entwürfe", "Entwurfe", "Borradores", "Brouillons", "Bozze",
+            "Concepten", "Utkast", "Kladder", "Luonnokset", "Szkice",
+        ],
+    )
+    .await
+}
+
+async fn ensure_role_mailbox(
+    session: &mut ImapSession,
+    attr_substring: &str,
+    create_name: &str,
+    candidates: &[&str],
+) -> Result<String, String> {
+    let names_stream = session
+        .list(Some(""), Some("*"))
+        .await
+        .map_err(|e| format!("LIST failed: {}", e))?;
+    let names: Vec<Name> = names_stream
+        .collect::<Vec<_>>()
+        .await
+        .into_iter()
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let entries: Vec<(String, Vec<String>)> = names
+        .iter()
+        .map(|n| {
+            let path = n.name().to_string();
+            let attrs: Vec<String> = n.attributes().iter().map(|a| format!("{:?}", a)).collect();
+            (path, attrs)
+        })
+        .collect();
+
+    for (path, attrs) in &entries {
+        if attrs.iter().any(|a| a.to_lowercase().contains(attr_substring)) {
+            return Ok(path.clone());
+        }
+    }
+    for cand in candidates {
+        if let Some((path, _)) = entries.iter().find(|(p, _)| p.eq_ignore_ascii_case(cand)) {
+            return Ok(path.clone());
+        }
+        if let Some((path, _)) = entries.iter().find(|(p, _)| {
+            p.rsplit_once(|c: char| c == '/' || c == '.').map(|(_, t)| t).unwrap_or(p)
+                .eq_ignore_ascii_case(cand)
+        }) {
+            return Ok(path.clone());
+        }
+    }
+
+    session
+        .create(create_name)
+        .await
+        .map_err(|e| format!("CREATE {} failed: {}", create_name, e))?;
+    let _ = session.subscribe(create_name).await;
+    tracing::info!("[ensure_role_mailbox] Created '{}' (no existing match for attr '{}')", create_name, attr_substring);
+    Ok(create_name.to_string())
+}
+
+/// Resolve or auto-create the Sent mailbox for this account.
+/// Order: IMAP SPECIAL-USE `\Sent` → common name candidates → CREATE "Sent".
+/// Returns the resolved mailbox path.
+pub async fn ensure_sent_mailbox(session: &mut ImapSession) -> Result<String, String> {
+    ensure_role_mailbox(
+        session,
+        "sent",
+        "Sent",
+        &[
+            "Sent", "Sent Items", "Sent Mail", "Sent Messages",
+            "INBOX.Sent", "INBOX/Sent", "INBOX.Sent Items", "INBOX/Sent Items",
+            "Gesendet", "Enviados", "Envoyés", "Envoyes", "Inviati", "Verzonden",
+            "Skickat", "Sendt", "Lähetetyt", "Lahetetyt", "Wysłane", "Wyslane",
+        ],
+    )
+    .await
+}
+
+/// Best-effort: delete the most recently-APPENDed draft in `mailbox` whose
+/// Subject matches `subject`. Used after a successful SMTP send + Sent APPEND
+/// to remove the staged-draft copy so the user does not see a duplicate.
+/// Silently ignores errors — leaving a stale draft is better than losing data.
+pub async fn delete_latest_draft_by_subject(
+    session: &mut ImapSession,
+    mailbox: &str,
+    subject: &str,
+) -> Result<(), String> {
+    select_mailbox(session, mailbox).await?;
+
+    // IMAP SEARCH uses quoted strings; escape backslashes + double quotes.
+    let escaped = subject.replace('\\', "\\\\").replace('"', "\\\"");
+    let criteria = format!("DRAFT SUBJECT \"{}\"", escaped);
+
+    let uids = session
+        .uid_search(&criteria)
+        .await
+        .map_err(|e| format!("SEARCH failed: {}", e))?;
+
+    let max_uid = uids.iter().copied().max();
+    let Some(uid) = max_uid else {
+        return Ok(()); // No matching draft — fine, nothing to clean up.
+    };
+
+    let uid_seq = uid.to_string();
+    let _ = session
+        .uid_store(&uid_seq, "+FLAGS (\\Deleted)")
+        .await
+        .map_err(|e| format!("STORE \\Deleted failed: {}", e))?
+        .collect::<Vec<_>>()
+        .await;
+    session
+        .expunge()
+        .await
+        .map_err(|e| format!("EXPUNGE failed: {}", e))?
+        .collect::<Vec<_>>()
+        .await;
+    tracing::info!("[delete_latest_draft_by_subject] Removed staged draft UID {} from '{}'", uid, mailbox);
+    Ok(())
+}
+
 /// Append a raw email (RFC 5322) to a mailbox via IMAP APPEND
 pub async fn append_email(
     session: &mut ImapSession,
@@ -1054,6 +1183,162 @@ pub async fn append_email(
         .map_err(|e| format!("IMAP APPEND to '{}' failed: {}", mailbox, e))?;
 
     Ok(())
+}
+
+/// Dedicated fresh IMAP session that explicitly DOES NOT enable COMPRESS=DEFLATE.
+/// Observed: Hostinger + async_imap's compressed stream hangs indefinitely on
+/// APPEND literal upload. Sent-folder APPEND uses this helper instead of the
+/// pool-cached (compressed) session.
+pub async fn create_imap_session_no_compress(config: &ImapConfig) -> Result<ImapSession, String> {
+    let port = config.effective_port();
+    let addr = format!("{}:{}", config.host, port);
+
+    tracing::info!("[imap_no_compress:connect_start] addr={} oauth2={}", addr, config.is_oauth2());
+    use async_std::net::ToSocketAddrs;
+    let addrs: Vec<std::net::SocketAddr> = addr
+        .to_socket_addrs()
+        .await
+        .map_err(|e| format!("DNS resolve failed for {}: {}", addr, e))?
+        .filter(|a| a.is_ipv4())
+        .collect();
+    if addrs.is_empty() {
+        return Err(format!("No IPv4 address found for {}", config.host));
+    }
+
+    let tcp = async_std::io::timeout(
+        std::time::Duration::from_secs(15),
+        TcpStream::connect(&addrs[..]),
+    )
+    .await
+    .map_err(|e| format!("TCP connect to {} failed: {}", addr, e))?;
+
+    let tls = TlsConnector::new();
+    let tls_stream = tls
+        .connect(&config.host, tcp)
+        .await
+        .map_err(|e| format!("TLS handshake with {} failed: {}", config.host, e))?;
+    let boxed_stream: Box<dyn ImapTransport> = Box::new(tls_stream);
+    let mut client = async_imap::Client::new(boxed_stream);
+    let _greeting = client.read_response().await
+        .map_err(|e| format!("Failed to read server greeting: {}", e))?;
+    let session = if config.is_oauth2() {
+        let token = config.access_token.as_deref()
+            .ok_or_else(|| "OAuth2 access token missing".to_string())?;
+        let xoauth2 = build_xoauth2(&config.email, token);
+        client
+            .authenticate("XOAUTH2", XOAuth2Authenticator::new(xoauth2.into_bytes()))
+            .await
+            .map_err(|(e, _)| format!("XOAUTH2 auth failed for {}: {}", config.email, e))?
+    } else {
+        let password = config.password.as_deref()
+            .ok_or_else(|| "Password missing".to_string())?;
+        client
+            .login(&config.email, password)
+            .await
+            .map_err(|(e, _)| format!("Login failed for {}: {}", config.email, e))?
+    };
+    tracing::info!("[imap_no_compress:session_established] account={}", config.email);
+    Ok(session)
+}
+
+/// APPEND with pre/post verification. Returns the mailbox EXISTS count before
+/// and after the APPEND, and whether a UID SEARCH for the Message-ID header
+/// finds the new message. Used by the compose send flow so logs can prove
+/// whether the server actually accepted and indexed the email.
+pub async fn append_email_verified(
+    session: &mut ImapSession,
+    mailbox: &str,
+    raw_email: &[u8],
+    flags: &str,
+    message_id: Option<&str>,
+) -> Result<(u32, u32, Option<u32>), String> {
+    tracing::info!("[append_verified:select_before_start] mailbox={}", mailbox);
+    let before = select_mailbox(session, mailbox).await?;
+    let exists_before = before.exists;
+    tracing::info!("[append_verified:select_before_ok] mailbox={} exists={}", mailbox, exists_before);
+
+    // Use LITERAL+ (non-synchronous literal, RFC 3516) instead of async-imap's
+    // built-in `append()` which uses synchronous literal `{N}` and waits for a
+    // `+ OK` continue response. Observed: on Hostinger IMAP that wait never
+    // returns and the call hangs forever even on a fresh non-compressed
+    // session. LITERAL+ sends `{N+}\r\n<N bytes>\r\n` in one go, no wait.
+    //
+    // We hand-roll the command string and push it through the public
+    // `run_command_and_check_ok` — the underlying stream encoder writes bytes
+    // as-is + a trailing CRLF, which is exactly what RFC 3516 APPEND wants.
+    // Raw bytes are embedded via `from_utf8_unchecked`; the encoder does not
+    // rely on UTF-8 validity, just copies the bytes to the wire. For plain
+    // test emails the bytes are ASCII anyway.
+    let quoted_mailbox = format!("\"{}\"", mailbox.replace('\\', "\\\\").replace('"', "\\\""));
+    let flags_clause: String = if flags.is_empty() {
+        String::new()
+    } else {
+        format!(" ({})", flags)
+    };
+    let header = format!(
+        "APPEND {}{} {{{}+}}\r\n",
+        quoted_mailbox, flags_clause, raw_email.len()
+    );
+    let mut cmd_bytes: Vec<u8> = Vec::with_capacity(header.len() + raw_email.len());
+    cmd_bytes.extend_from_slice(header.as_bytes());
+    cmd_bytes.extend_from_slice(raw_email);
+    // SAFETY: the underlying encoder treats the command as raw bytes. We cast
+    // to &str only because `run_command_and_check_ok` requires `S: AsRef<str>`.
+    // `run_command` immediately calls `.as_bytes()` on the &str without any
+    // UTF-8 validation on the write path.
+    let cmd_str: &str = unsafe { std::str::from_utf8_unchecked(&cmd_bytes) };
+    tracing::info!(
+        "[append_verified:append_start] mailbox={} bytes={} flags={} mode=LITERAL+",
+        mailbox, raw_email.len(), flags
+    );
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(20),
+        session.run_command_and_check_ok(cmd_str),
+    ).await {
+        Ok(Ok(())) => {
+            tracing::info!("[append_verified:append_ok] mailbox={}", mailbox);
+        }
+        Ok(Err(e)) => {
+            return Err(format!("IMAP APPEND to '{}' failed: {}", mailbox, e));
+        }
+        Err(_) => {
+            tracing::warn!(
+                "[append_verified:append_inner_timeout] mailbox={} after 20s (LITERAL+ path) — server not responding to tagged APPEND completion",
+                mailbox
+            );
+            return Err(format!("IMAP APPEND to '{}' inner timeout after 20s (LITERAL+ path)", mailbox));
+        }
+    }
+
+    // Re-SELECT to get the fresh EXISTS count. Some servers update the
+    // selected mailbox's status mid-session; others require a fresh SELECT.
+    tracing::info!("[append_verified:select_after_start] mailbox={}", mailbox);
+    let after = select_mailbox(session, mailbox).await?;
+    let exists_after = after.exists;
+    tracing::info!("[append_verified:select_after_ok] mailbox={} exists={}", mailbox, exists_after);
+
+    // Try to locate the new message via UID SEARCH HEADER Message-ID.
+    let found_uid = if let Some(mid) = message_id.filter(|s| !s.is_empty()) {
+        let escaped = mid.replace('\\', "\\\\").replace('"', "\\\"");
+        let criteria = format!("HEADER Message-ID \"{}\"", escaped);
+        tracing::info!("[append_verified:search_start] criteria=\"{}\"", criteria);
+        match session.uid_search(&criteria).await {
+            Ok(set) => {
+                let max_uid = set.iter().copied().max();
+                tracing::info!("[append_verified:search_ok] matches={} max_uid={:?}", set.len(), max_uid);
+                max_uid
+            }
+            Err(e) => {
+                tracing::warn!("[append_verified:search_fail] error={}", e);
+                None
+            }
+        }
+    } else {
+        tracing::info!("[append_verified:search_skip] reason=no_message_id");
+        None
+    };
+
+    Ok((exists_before, exists_after, found_uid))
 }
 
 /// Search emails using IMAP SEARCH

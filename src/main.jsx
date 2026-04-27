@@ -3,6 +3,10 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './styles/index.css';
 
+if (navigator.platform?.startsWith('Mac') || navigator.userAgent?.includes('Mac')) {
+  document.documentElement.classList.add('platform-mac');
+}
+
 // Debug: Log Tauri API availability at startup
 console.log('=== MailVault Frontend Initializing ===');
 console.log('[main.jsx] window.__TAURI__:', window.__TAURI__);

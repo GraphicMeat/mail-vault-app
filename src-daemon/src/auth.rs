@@ -19,7 +19,7 @@ pub fn generate_token(data_dir: &Path) -> io::Result<String> {
     fs::create_dir_all(data_dir)?;
 
     let mut bytes = [0u8; TOKEN_BYTES];
-    rand::thread_rng().fill(&mut bytes);
+    rand::rng().fill(&mut bytes);
     let token = hex::encode(&bytes);
 
     let path = token_path(data_dir);
@@ -69,7 +69,7 @@ fn generate_token_at(path: &Path) -> io::Result<String> {
         fs::create_dir_all(parent)?;
     }
     let mut bytes = [0u8; TOKEN_BYTES];
-    rand::thread_rng().fill(&mut bytes);
+    rand::rng().fill(&mut bytes);
     let token = hex::encode(&bytes);
     fs::write(path, token.as_bytes())?;
     #[cfg(unix)]

@@ -25,26 +25,69 @@ DIM='\033[2m'
 RESET='\033[0m'
 
 DAEMON_PID=""
+IPC_DIR="$HOME/.mailvault"
+SOCKET_PATH="$IPC_DIR/mv.sock"
+
+# Daemon data dir (holds daemon.pid / daemon.lock). Needed by cleanup trap,
+# so resolve before any signal can fire.
+if [[ "$(uname)" == "Darwin" ]]; then
+  DATA_DIR="$HOME/Library/Application Support/com.mailvault.app"
+else
+  DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/com.mailvault.app"
+fi
 
 cleanup() {
+  # Guard against double-invocation (EXIT + INT both fire on Ctrl+C).
+  if [[ -n "${_CLEANUP_DONE:-}" ]]; then return; fi
+  _CLEANUP_DONE=1
+
   echo ""
   echo -e "${YELLOW}Shutting down...${RESET}"
 
-  # Kill daemon if we spawned it
+  # Kill daemon if we spawned it. Fall back to pidfile/pgrep in case $DAEMON_PID
+  # wasn't captured correctly (e.g. when stdout was piped).
+  local pids_to_kill=()
   if [[ -n "$DAEMON_PID" ]] && kill -0 "$DAEMON_PID" 2>/dev/null; then
-    echo -e "${DIM}Stopping daemon (PID $DAEMON_PID)${RESET}"
-    kill "$DAEMON_PID" 2>/dev/null
-    wait "$DAEMON_PID" 2>/dev/null || true
+    pids_to_kill+=("$DAEMON_PID")
+  fi
+  if [[ -f "$DATA_DIR/daemon.pid" ]]; then
+    local pid_from_file
+    pid_from_file=$(cat "$DATA_DIR/daemon.pid" 2>/dev/null || true)
+    if [[ -n "$pid_from_file" ]] && kill -0 "$pid_from_file" 2>/dev/null; then
+      pids_to_kill+=("$pid_from_file")
+    fi
+  fi
+  # Belt-and-suspenders: any stray daemon spawned by this session's binary.
+  local stray
+  stray=$(pgrep -f "target/debug/mailvault-daemon" 2>/dev/null || true)
+  if [[ -n "$stray" ]]; then
+    while IFS= read -r p; do
+      [[ -n "$p" ]] && pids_to_kill+=("$p")
+    done <<< "$stray"
   fi
 
-  # Clean up stale socket
-  local data_dir
-  if [[ "$(uname)" == "Darwin" ]]; then
-    data_dir="$HOME/Library/Application Support/com.mailvault.app"
-  else
-    data_dir="${XDG_DATA_HOME:-$HOME/.local/share}/com.mailvault.app"
+  if [[ ${#pids_to_kill[@]} -gt 0 ]]; then
+    # Deduplicate
+    local uniq_pids
+    uniq_pids=$(printf '%s\n' "${pids_to_kill[@]}" | sort -u | tr '\n' ' ')
+    echo -e "${DIM}Stopping daemon (PIDs:$uniq_pids)${RESET}"
+    # shellcheck disable=SC2086
+    kill -TERM $uniq_pids 2>/dev/null || true
+    # Wait up to 3s for graceful exit, then SIGKILL survivors.
+    for i in $(seq 1 15); do
+      local alive=""
+      for p in $uniq_pids; do
+        if kill -0 "$p" 2>/dev/null; then alive="1"; break; fi
+      done
+      [[ -z "$alive" ]] && break
+      sleep 0.2
+    done
+    # shellcheck disable=SC2086
+    kill -KILL $uniq_pids 2>/dev/null || true
   fi
-  rm -f "$data_dir/daemon.sock" "$data_dir/daemon.pid" 2>/dev/null || true
+
+  # Clean up stale socket + pidfile
+  rm -f "$SOCKET_PATH" "$DATA_DIR/daemon.pid" 2>/dev/null || true
 
   echo -e "${GREEN}Done.${RESET}"
 }
@@ -83,21 +126,24 @@ fi
 # ── Step 4: Stop any existing daemon ──────────────────────────────────────
 
 # Kill any running daemon from a previous dev session
-if [[ "$(uname)" == "Darwin" ]]; then
-  DATA_DIR="$HOME/Library/Application Support/com.mailvault.app"
-else
-  DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/com.mailvault.app"
-fi
-
 if [[ -f "$DATA_DIR/daemon.pid" ]]; then
   OLD_PID=$(cat "$DATA_DIR/daemon.pid" 2>/dev/null || echo "")
   if [[ -n "$OLD_PID" ]] && kill -0 "$OLD_PID" 2>/dev/null; then
     echo -e "${DIM}Stopping previous daemon (PID $OLD_PID)...${RESET}"
-    kill "$OLD_PID" 2>/dev/null || true
-    sleep 0.5
+    kill -TERM "$OLD_PID" 2>/dev/null || true
+    # Graceful shutdown grace period
+    for i in $(seq 1 10); do
+      if ! kill -0 "$OLD_PID" 2>/dev/null; then break; fi
+      sleep 0.2
+    done
+    # Escalate to SIGKILL if SIGTERM didn't take
+    if kill -0 "$OLD_PID" 2>/dev/null; then
+      echo -e "${YELLOW}SIGTERM ignored — SIGKILL PID $OLD_PID${RESET}"
+      kill -KILL "$OLD_PID" 2>/dev/null || true
+    fi
   fi
 fi
-rm -f "$DATA_DIR/daemon.sock" "$DATA_DIR/daemon.pid" 2>/dev/null || true
+rm -f "$SOCKET_PATH" "$DATA_DIR/daemon.pid" 2>/dev/null || true
 
 # ── Step 4b: Check daemon.lock for active lock holders ───────────────────
 
@@ -109,20 +155,33 @@ if [[ -f "$LOCK_FILE" ]]; then
     echo -e "${DIM}Lock held by PID $LOCK_HOLDER_PID ($LOCK_HOLDER_CMD)${RESET}"
 
     case "$LOCK_HOLDER_CMD" in
-      mailvault-daemon|mailvault|MailVault)
+      *mailvault-daemon*|*mailvault*|*MailVault*)
         echo -e "${DIM}Terminating existing $LOCK_HOLDER_CMD (PID $LOCK_HOLDER_PID)...${RESET}"
-        kill "$LOCK_HOLDER_PID" 2>/dev/null || true
-        # Wait for lock release
+        kill -TERM "$LOCK_HOLDER_PID" 2>/dev/null || true
+        # Wait for graceful exit
         for i in $(seq 1 15); do
           if ! kill -0 "$LOCK_HOLDER_PID" 2>/dev/null; then
             break
           fi
           sleep 0.2
         done
+        # Escalate to SIGKILL if SIGTERM ignored
         if kill -0 "$LOCK_HOLDER_PID" 2>/dev/null; then
-          echo -e "${RED}Failed to stop $LOCK_HOLDER_CMD (PID $LOCK_HOLDER_PID) after 3s${RESET}"
+          echo -e "${YELLOW}SIGTERM ignored — sending SIGKILL to PID $LOCK_HOLDER_PID${RESET}"
+          kill -KILL "$LOCK_HOLDER_PID" 2>/dev/null || true
+          for i in $(seq 1 10); do
+            if ! kill -0 "$LOCK_HOLDER_PID" 2>/dev/null; then
+              break
+            fi
+            sleep 0.2
+          done
+        fi
+        if kill -0 "$LOCK_HOLDER_PID" 2>/dev/null; then
+          echo -e "${RED}Failed to stop $LOCK_HOLDER_CMD (PID $LOCK_HOLDER_PID) even after SIGKILL${RESET}"
           exit 1
         fi
+        # Lock holder dead — clear stale lock file
+        rm -f "$LOCK_FILE" 2>/dev/null || true
         ;;
       *)
         echo -e "${RED}daemon.lock held by unexpected process: $LOCK_HOLDER_CMD (PID $LOCK_HOLDER_PID)${RESET}"
@@ -132,7 +191,7 @@ if [[ -f "$LOCK_FILE" ]]; then
     esac
   fi
 fi
-rm -f "$DATA_DIR/daemon.sock" "$DATA_DIR/daemon.pid" 2>/dev/null || true
+rm -f "$SOCKET_PATH" "$DATA_DIR/daemon.pid" 2>/dev/null || true
 
 # ── Step 4c: Stop any running MailVault app (avoids port/resource conflicts) ──
 
@@ -149,18 +208,23 @@ done
 # ── Step 5: Start daemon with logs ─────────────────────────────────────────
 
 echo -e "${CYAN}Starting daemon...${RESET}"
-RUST_LOG=debug target/debug/mailvault-daemon 2>&1 | while IFS= read -r line; do echo -e "${DIM}[daemon]${RESET} $line"; done &
+# Use process substitution so `$!` captures the daemon's PID (not the reader
+# subshell's). Piping via `cmd | while read` would have assigned the PID of
+# the while-loop, leaving the actual daemon orphaned on cleanup.
+RUST_LOG=debug target/debug/mailvault-daemon \
+  > >(while IFS= read -r line; do echo -e "${DIM}[daemon]${RESET} $line"; done) \
+  2>&1 &
 DAEMON_PID=$!
 
 # Wait for socket
 for i in $(seq 1 30); do
-  if [[ -S "$DATA_DIR/daemon.sock" ]]; then
+  if [[ -S "$SOCKET_PATH" ]]; then
     break
   fi
   sleep 0.1
 done
 
-if [[ -S "$DATA_DIR/daemon.sock" ]]; then
+if [[ -S "$SOCKET_PATH" ]]; then
   echo -e "${GREEN}Daemon running (PID $DAEMON_PID)${RESET}"
 else
   echo -e "${RED}Daemon failed to start (no socket after 3s)${RESET}"

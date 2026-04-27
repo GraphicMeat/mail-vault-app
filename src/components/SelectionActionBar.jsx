@@ -100,10 +100,11 @@ export function SelectionActionBar() {
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 80, opacity: 0 }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40"
+          className="fixed inset-x-0 bottom-4 sm:bottom-6 z-40 flex justify-center px-3 pointer-events-none"
         >
           <div className="flex items-center gap-1 px-2 py-1.5 bg-mail-surface border border-mail-border
-                         rounded-xl shadow-2xl backdrop-blur-sm">
+                         rounded-xl shadow-2xl backdrop-blur-sm
+                         max-w-[calc(100vw-1.5rem)] overflow-x-auto pointer-events-auto">
             {/* Selection count */}
             <span className="text-sm font-medium text-mail-text px-3 whitespace-nowrap">
               {selectionLabel}
@@ -206,7 +207,7 @@ export function SelectionActionBar() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 10 }}
                 className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-mail-bg border border-mail-border
-                          rounded-xl shadow-2xl p-4 min-w-[280px]"
+                          rounded-xl shadow-2xl p-4 min-w-[280px] pointer-events-auto"
               >
                 <div className="flex items-start gap-2 mb-3">
                   <AlertTriangle size={16} className="text-mail-danger flex-shrink-0 mt-0.5" />

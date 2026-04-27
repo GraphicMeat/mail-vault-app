@@ -4,6 +4,7 @@ import { getSenderName } from '../utils/emailParser';
 import { getCachedAlerts } from '../utils/linkSafety';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon } from './SenderAlertIcon';
+import { ReplyToAlertIcon } from './ReplyToAlertIcon';
 import { RowActionMenu } from './RowActionMenu';
 import { formatEmailDate } from '../utils/dateFormat';
 import {
@@ -93,6 +94,7 @@ export const EmailRow = React.memo(function EmailRow({ email, isSelected, onSele
 
       <div className="flex-1 min-w-0 flex items-center gap-2">
         <SenderAlertIcon level={email._senderAlert} email={email} />
+        <ReplyToAlertIcon mismatch={email._replyToMismatch} />
         <LinkAlertIcon level={email._linkAlert} alerts={getCachedAlerts(email.uid)} />
         <span className={`truncate ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
           {email.subject}
@@ -222,6 +224,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSe
         {/* Line 2: Subject + attachment */}
         <div className="flex items-center gap-1.5">
           <SenderAlertIcon level={email._senderAlert} email={email} size={12} />
+          <ReplyToAlertIcon mismatch={email._replyToMismatch} size={12} />
           <LinkAlertIcon level={email._linkAlert} size={12} alerts={getCachedAlerts(email.uid)} />
           <span className={`truncate text-sm leading-snug ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
             {email.subject}

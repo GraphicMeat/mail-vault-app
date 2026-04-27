@@ -335,12 +335,23 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     const quoteColor = fromUser ? 'rgba(255,255,255,0.6)' : '#6b7280';
     const quoteBorder = fromUser ? 'rgba(255,255,255,0.3)' : '#d1d5db';
 
-    let builtHtml = `
+    const rawBody = replaceCidUrls(mergedEmail.html, mergedEmail.attachments);
+    let scannedBody = rawBody;
+    let indicatorStyle = '';
+    let chatAlertLevel = null;
+    if (linkSafetyEnabled) {
+      const scan = scanEmailLinks(rawBody, email.uid);
+      scannedBody = scan.modifiedBodyHtml;
+      indicatorStyle = scan.indicatorStyle;
+      chatAlertLevel = scan.maxAlertLevel;
+    }
+
+    const builtHtml = `
       <!DOCTYPE html>
       <html>
         <head>
-          <base target="_blank">
           <meta charset="UTF-8">
+          <base target="_blank">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <style>
             * { box-sizing: border-box; }
@@ -378,17 +389,12 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
               padding-left: 12px;
               color: ${quoteColor};
             }
+            ${indicatorStyle}
           </style>
         </head>
-        <body>${replaceCidUrls(mergedEmail.html, mergedEmail.attachments)}${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}</body>
+        <body>${scannedBody}${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}</body>
       </html>
     `;
-    let chatAlertLevel = null;
-    if (linkSafetyEnabled) {
-      const { modifiedHtml, maxAlertLevel } = scanEmailLinks(builtHtml, email.uid);
-      builtHtml = modifiedHtml;
-      chatAlertLevel = maxAlertLevel;
-    }
     return { html: builtHtml, alertLevel: chatAlertLevel };
   }, [mergedEmail.html, fromUser, signatureDisplay, linkSafetyEnabled]);
 

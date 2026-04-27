@@ -302,10 +302,23 @@ function commitToStore(uidMap, signal, accountId, useMailStoreRef, extras = {}) 
   if (store.activeAccountId !== accountId) return;
 
   const sortedEmails = uidMap.toSortedArray();
+
+  // Preserve optimistic sent-email entries that have not yet been reconciled
+  // by the server copy. IMAP APPEND can lag the UI by >8s on slow servers;
+  // wiping them here would make a just-sent email vanish from the Sent list
+  // until the next refresh. Match by messageId (set by the optimistic insert).
+  const freshMessageIds = new Set(sortedEmails.map(e => e.messageId).filter(Boolean));
+  const optimisticSurvivors = (store.emails || []).filter(
+    e => e._optimistic && e._accountId === accountId && !freshMessageIds.has(e.messageId)
+  );
+  const merged = optimisticSurvivors.length > 0
+    ? [...optimisticSurvivors, ...sortedEmails]
+    : sortedEmails;
+
   useMailStoreRef.setState({
-    emails: sortedEmails,
-    totalEmails: extras.totalEmails ?? sortedEmails.length,
-    loadedRanges: [{ start: 0, end: sortedEmails.length }],
+    emails: merged,
+    totalEmails: (extras.totalEmails ?? sortedEmails.length) + optimisticSurvivors.length,
+    loadedRanges: [{ start: 0, end: merged.length }],
     ...extras,
   });
 
@@ -495,6 +508,19 @@ export async function activateAccount(accountId, mailbox, options = {}) {
         });
         localTrace.mark('first-paint', { emailCount: cachedHeaders.emails.length });
 
+        // Persist a restore descriptor for this mailbox NOW — previously this
+        // only happened on switch-away, so the first visit to any non-INBOX
+        // folder (e.g. Spam/Junk) stayed on the slow path until the user
+        // navigated away and back. Saving here makes subsequent visits
+        // instant, matching INBOX behavior.
+        if (!isBackgroundRefresh && !signal.aborted) {
+          try {
+            _saveRestore(_buildRestoreDescriptor(get(), resolvedMailbox));
+          } catch (e) {
+            console.warn('[activateAccount] Failed to save early restore descriptor:', e);
+          }
+        }
+
         if (resolvedMailbox === 'INBOX') {
           const unread = cachedHeaders.emails.filter(e => !e.flags?.includes('\\Seen')).length;
           useSettingsStore.getState().setUnreadForAccount(accountId, unread);
@@ -624,7 +650,18 @@ export async function activateAccount(accountId, mailbox, options = {}) {
                 ...(freshCache.serverUids ? { serverUidSet: freshCache.serverUids } : {}),
               });
 
-              // Descriptor saved on switch-away, not during load
+              // Save an in-memory restore descriptor for this mailbox so the
+              // next activation restores instantly. Without this, first-time
+              // visits to non-INBOX folders (Spam, Junk, custom folders)
+              // stayed on the slow path even after the server populated.
+              if (!signal.aborted) {
+                try {
+                  _saveRestore(_buildRestoreDescriptor(get(), effectiveMailbox));
+                } catch (e) {
+                  console.warn('[activateAccount] Failed to save restore descriptor after server sync:', e);
+                }
+              }
+
               db.saveEmailHeaders(accountId, effectiveMailbox, uidMap.toSortedArray(), freshCache.totalEmails || freshCache.emails.length)
                 .catch(e => console.warn('[activateAccount] Failed to persist headers:', e));
             }
@@ -1554,7 +1591,10 @@ export async function retryKeychainAccess() {
     });
 
     const { activeMailbox } = get();
-    await get().activateAccount(activeAccountId, activeMailbox || 'INBOX');
+    // Pass _backgroundRefresh so activateAccount skips the `emails: []` wipe
+    // at lines 430-442. Without this, retrying after a dismissed keychain
+    // prompt blanks the already-rendered cached mailbox mid-retry.
+    await get().activateAccount(activeAccountId, activeMailbox || 'INBOX', { _backgroundRefresh: true });
     return true;
   } catch (error) {
     console.error('[mailStore] Keychain retry failed:', error);

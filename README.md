@@ -132,6 +132,13 @@ Archived emails are already stored as `.eml` files. You can:
 1. Open an archived email and click "Show in Finder" / "Open File" to access the `.eml` directly
 2. Copy `.eml` files from the Maildir directory for backup or transfer
 3. Open any `.eml` file with other email clients (Thunderbird, Apple Mail, etc.)
+4. Import `.eml` files into Apple Mail via the mbox trick:
+   1. Place the `.eml` files in a directory (e.g., `In`)
+   2. Add an `.mbox` extension to the directory (`In.mbox`)
+   3. In Mail, choose **File → Import Mailboxes…**, select **Apple Mail** as the format, and click **Continue**
+   4. Browse to and select the `In.mbox` directory → **Choose → Continue → Done**
+
+   Confirmed working through macOS Tahoe. The "Items to import" window may list every email under each folder, but the import still completes correctly. Credit: [@tinyapps](https://tinyapps.org/blog/202206140700_mail_app_export.html).
 
 ## Project Structure
 

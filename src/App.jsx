@@ -19,6 +19,7 @@ import { ChatViewWrapper } from './components/ChatViewWrapper';
 import { UpdateModal } from './components/UpdateModal';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { UndoSendToast } from './components/UndoSendToast';
+import { OutboxTray } from './components/OutboxTray';
 import { MoveToFolderDropdown } from './components/MoveToFolderDropdown';
 import { MigrationToast } from './components/MigrationToast';
 import { KeychainToast } from './components/KeychainToast';
@@ -742,6 +743,7 @@ function App() {
         onOpenAccounts={() => { setSettingsInitialTab('accounts'); setShowSettings(true); }}
       />
       <UndoSendToast onUndo={(cs) => openCompose(cs)} />
+      <OutboxTray onRestoreDraft={(cs) => openCompose(cs)} />
 
       {/* Move to Folder dropdown (triggered by keyboard shortcut M) */}
       {showMoveDropdown && (() => {

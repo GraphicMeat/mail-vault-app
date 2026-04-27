@@ -773,50 +773,115 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
 
 // ── loadSentHeaders workflow ──
 
+// Merge fresh server headers with any optimistic sent entries that have not
+// yet been reconciled by the server copy (IMAP APPEND runs in the background,
+// so the server may not return the newly-sent message immediately).
+function _mergeOptimisticSent(fresh, existing, accountId) {
+  const freshMessageIds = new Set(
+    fresh.map(e => e.messageId).filter(Boolean)
+  );
+  const pendingOptimistic = (existing || []).filter(
+    e => e._optimistic && e._accountId === accountId && !freshMessageIds.has(e.messageId)
+  );
+  return [...pendingOptimistic, ...fresh.map(e => ({ ...e, _accountId: accountId }))];
+}
+
 export async function loadSentHeaders(accountId) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
 
   const sentPath = get().getSentMailboxPath();
-  if (!sentPath) { useMailStore.setState({ sentEmails: [] }); return; }
+  console.log('[loadSentHeaders:start]', { accountId, sentPath });
+  if (!sentPath) {
+    console.warn('[loadSentHeaders:no_sent_path] accountId=%s — getSentMailboxPath returned null', accountId);
+    useMailStore.setState({ sentEmails: [] });
+    return;
+  }
 
   const cached = await db.getEmailHeadersPartial(accountId, sentPath, 200);
   if (get().activeAccountId !== accountId) return;
+  console.log('[loadSentHeaders:cache]', {
+    accountId,
+    sentPath,
+    cachedCount: cached?.emails?.length || 0,
+    firstCachedMessageIds: (cached?.emails || []).slice(0, 3).map(e => e.messageId),
+  });
   if (cached?.emails?.length > 0) {
-    useMailStore.setState({ sentEmails: cached.emails.map(e => ({ ...e, _accountId: accountId })) });
+    useMailStore.setState(s => ({
+      sentEmails: _mergeOptimisticSent(cached.emails, s.sentEmails, accountId),
+    }));
     invalidateChatAndThreadCaches();
   }
 
   const { accounts, connectionStatus, mailboxes } = get();
   const account = accounts.find(a => a.id === accountId);
-  if (!account || connectionStatus !== 'connected') return;
+  if (!account || connectionStatus !== 'connected') {
+    console.warn('[loadSentHeaders:skip_server_fetch]', { accountId, hasAccount: !!account, connectionStatus });
+    return;
+  }
 
   try {
     if (isGraphAccount(account)) {
       const sentFolder = mailboxes.find(m => m.path === sentPath);
       if (sentFolder?._graphFolderId) {
         const freshAccount = await ensureFreshToken(account);
+        console.log('[loadSentHeaders:graph_fetch_start]', { accountId, folderId: sentFolder._graphFolderId });
         const result = await api.graphListMessages(freshAccount.oauth2AccessToken, sentFolder._graphFolderId, 200, 0);
         if (get().activeAccountId !== accountId) return;
         const sentHeaders = result.headers || [];
+        console.log('[loadSentHeaders:graph_fetch_ok]', {
+          accountId,
+          count: sentHeaders.length,
+          firstMessageIds: sentHeaders.slice(0, 5).map(e => e.messageId),
+          firstSubjects: sentHeaders.slice(0, 5).map(e => e.subject),
+        });
         if (sentHeaders.length > 0) {
           await db.saveEmailHeaders(accountId, sentPath, sentHeaders, sentHeaders.length);
           if (get().activeAccountId !== accountId) return;
-          useMailStore.setState({ sentEmails: sentHeaders.map(e => ({ ...e, _accountId: accountId })) });
+          useMailStore.setState(s => ({
+            sentEmails: _mergeOptimisticSent(sentHeaders, s.sentEmails, accountId),
+          }));
           invalidateChatAndThreadCaches();
         }
+      } else {
+        console.warn('[loadSentHeaders:graph_no_folder_id]', { accountId, sentPath });
       }
     } else {
+      console.log('[loadSentHeaders:imap_fetch_start]', { accountId, sentPath });
       const result = await api.fetchEmails(account, sentPath, 1, 200);
       if (get().activeAccountId !== accountId) return;
+      console.log('[loadSentHeaders:imap_fetch_ok]', {
+        accountId,
+        sentPath,
+        count: result?.emails?.length || 0,
+        total: result?.total,
+        firstUids: (result?.emails || []).slice(0, 5).map(e => e.uid),
+        firstMessageIds: (result?.emails || []).slice(0, 5).map(e => e.messageId),
+        firstSubjects: (result?.emails || []).slice(0, 5).map(e => e.subject),
+      });
       if (result?.emails?.length > 0) {
         await db.saveEmailHeaders(accountId, sentPath, result.emails, result.total);
         if (get().activeAccountId !== accountId) return;
-        useMailStore.setState({ sentEmails: result.emails.map(e => ({ ...e, _accountId: accountId })) });
+        const existingOptimistic = (get().sentEmails || []).filter(e => e._optimistic && e._accountId === accountId);
+        useMailStore.setState(s => ({
+          sentEmails: _mergeOptimisticSent(result.emails, s.sentEmails, accountId),
+        }));
         invalidateChatAndThreadCaches();
+        const merged = get().sentEmails || [];
+        const optimisticSurvivors = merged.filter(e => e._optimistic && e._accountId === accountId);
+        console.log('[loadSentHeaders:merge_done]', {
+          accountId,
+          fresh_count: result.emails.length,
+          optimistic_before: existingOptimistic.length,
+          optimistic_after: optimisticSurvivors.length,
+          optimistic_messageIds_dropped: existingOptimistic
+            .filter(e => !optimisticSurvivors.find(s => s.uid === e.uid))
+            .map(e => e.messageId),
+          merged_count: merged.length,
+        });
       }
     }
   } catch (e) {
-    console.warn('[loadSentHeaders] fetch failed:', e.message);
+    console.warn('[loadSentHeaders:fetch_fail]', { accountId, error: e.message });
   }
 }

@@ -53,6 +53,8 @@ export function GeneralSettings({ accounts }) {
     setMarkAsReadDelay,
     layoutMode,
     setLayoutMode,
+    sidebarStyle,
+    setSidebarStyle,
     viewStyle,
     setViewStyle,
     emailListStyle,
@@ -82,6 +84,8 @@ export function GeneralSettings({ accounts }) {
     setSignatureDisplay,
     actionButtonDisplay,
     setActionButtonDisplay,
+    emailViewerTheme,
+    setEmailViewerTheme,
     keyboardShortcuts,
     keyboardShortcutsEnabled,
     setKeyboardShortcut,
@@ -275,6 +279,23 @@ export function GeneralSettings({ accounts }) {
               </div>
             </div>
 
+            {/* Email viewer theme — how email bodies render, independent of app theme */}
+            <div className="pt-4 border-t border-mail-border">
+              <div className="font-medium text-mail-text mb-1">Email viewer theme</div>
+              <div className="text-sm text-mail-text-muted mb-3">
+                Some people prefer a dark app but like reading emails in light mode. Set the default theme for email content here — the per-email Light/Dark button always overrides.
+              </div>
+              <select
+                value={emailViewerTheme}
+                onChange={(e) => setEmailViewerTheme(e.target.value)}
+                className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg text-mail-text focus:border-mail-accent transition-all cursor-pointer"
+              >
+                <option value="system">Match app theme</option>
+                <option value="light">Always light</option>
+                <option value="dark">Always dark</option>
+              </select>
+            </div>
+
             {/* Date Format */}
             <div className="pt-4 border-t border-mail-border">
               <div className="font-medium text-mail-text mb-1">Date Format</div>
@@ -406,6 +427,56 @@ export function GeneralSettings({ accounts }) {
               <span className="text-xs text-mail-text-muted">
                 List above Content
               </span>
+            </button>
+          </div>
+        </div>
+
+        {/* Sidebar Style */}
+        <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+          <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
+            <LayoutGrid size={18} className="text-mail-accent" />
+            Sidebar Style
+          </h4>
+
+          <p className="text-sm text-mail-text-muted mb-4">
+            How accounts and folders appear in the sidebar. Tag cloud packs more into less space.
+          </p>
+
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => setSidebarStyle('list')}
+              className={`p-4 rounded-lg border-2 transition-all flex flex-col items-center gap-3
+                        ${sidebarStyle === 'list'
+                          ? 'border-mail-accent bg-mail-accent/10'
+                          : 'border-mail-border hover:border-mail-accent/50'}`}
+            >
+              <div className="w-full h-12 flex flex-col gap-1 justify-center">
+                <div className="h-2 bg-mail-border rounded w-full" />
+                <div className="h-2 bg-mail-border rounded w-5/6" />
+                <div className="h-2 bg-mail-border rounded w-full" />
+                <div className="h-2 bg-mail-border rounded w-4/6" />
+              </div>
+              <span className="text-sm font-medium text-mail-text">List</span>
+              <span className="text-xs text-mail-text-muted">One row per item</span>
+            </button>
+
+            <button
+              onClick={() => setSidebarStyle('tagcloud')}
+              className={`p-4 rounded-lg border-2 transition-all flex flex-col items-center gap-3
+                        ${sidebarStyle === 'tagcloud'
+                          ? 'border-mail-accent bg-mail-accent/10'
+                          : 'border-mail-border hover:border-mail-accent/50'}`}
+            >
+              <div className="w-full h-12 flex flex-wrap gap-1 content-center items-center">
+                <div className="h-2.5 bg-mail-border rounded-full w-10" />
+                <div className="h-2.5 bg-mail-accent/40 rounded-full w-8" />
+                <div className="h-2.5 bg-mail-border rounded-full w-12" />
+                <div className="h-2.5 bg-mail-border rounded-full w-6" />
+                <div className="h-2.5 bg-mail-border rounded-full w-10" />
+                <div className="h-2.5 bg-mail-border rounded-full w-8" />
+              </div>
+              <span className="text-sm font-medium text-mail-text">Tag Cloud</span>
+              <span className="text-xs text-mail-text-muted">Compact bubbles</span>
             </button>
           </div>
         </div>

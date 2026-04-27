@@ -92,7 +92,7 @@ fn get_provider_config(provider: &str) -> Result<ProviderConfig, String> {
 
 fn generate_code_verifier() -> String {
     use rand::Rng;
-    let bytes: Vec<u8> = (0..32).map(|_| rand::thread_rng().gen::<u8>()).collect();
+    let bytes: Vec<u8> = (0..32).map(|_| rand::rng().random::<u8>()).collect();
     base64_url_encode(&bytes)
 }
 
@@ -198,7 +198,7 @@ impl OAuth2Manager {
         let code_challenge = generate_code_challenge(&code_verifier);
 
         use rand::Rng;
-        let state_bytes: Vec<u8> = (0..16).map(|_| rand::thread_rng().gen::<u8>()).collect();
+        let state_bytes: Vec<u8> = (0..16).map(|_| rand::rng().random::<u8>()).collect();
         let state = hex_encode(&state_bytes);
 
         // Ensure callback server is running

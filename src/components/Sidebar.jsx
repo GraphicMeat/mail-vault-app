@@ -72,9 +72,39 @@ const UNIFIED_FOLDERS = [
   { id: 'Archive', name: 'Archive', icon: Archive, specialUse: '\\Archive' },
 ];
 
-function UnifiedFolderList() {
+function UnifiedFolderList({ tagCloud = false }) {
   const unifiedFolder = useAccountStore(s => s.unifiedFolder);
   const switchUnifiedFolder = useAccountStore(s => s.switchUnifiedFolder);
+
+  if (tagCloud) {
+    return (
+      <div className="overflow-y-auto p-3 flex-1" style={{ minHeight: 60 }}>
+        <div className="text-xs text-mail-text-muted uppercase tracking-wide mb-2">
+          All Accounts
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {UNIFIED_FOLDERS.map(folder => {
+            const isActive = unifiedFolder === folder.id;
+            const Icon = folder.icon;
+            return (
+              <button
+                key={folder.id}
+                onClick={() => switchUnifiedFolder(folder.id)}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs transition-colors border
+                           ${isActive
+                             ? 'bg-mail-accent text-white border-mail-accent'
+                             : 'text-mail-text border-mail-border hover:bg-mail-surface-hover'}`}
+                title={folder.name}
+              >
+                <Icon size={12} />
+                <span className="truncate max-w-[140px]">{folder.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="overflow-y-auto p-3 flex-1" style={{ minHeight: 60 }}>
@@ -298,6 +328,43 @@ const ExpandedAccountRow = memo(function ExpandedAccountRow({
   );
 });
 
+/** Tag-cloud account bubble — compact pill form of ExpandedAccountRow */
+const TagCloudAccountBubble = memo(function TagCloudAccountBubble({
+  account, isActive, color, initial, unifiedInbox, connectionStatus,
+  unreadCount, label, onActivate,
+}) {
+  return (
+    <button
+      onClick={onActivate}
+      title={account.name ? `${account.name} — ${account.email}` : account.email}
+      className={`relative inline-flex items-center gap-1.5 pl-0.5 pr-2.5 py-0.5 rounded-full text-xs transition-all border max-w-full min-w-0
+                 ${isActive && !unifiedInbox
+                   ? 'bg-mail-accent text-white border-mail-accent'
+                   : 'text-mail-text border-mail-border hover:bg-mail-surface-hover'}`}
+    >
+      <span
+        className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold select-none flex-shrink-0"
+        style={{ backgroundColor: color }}
+      >
+        {initial}
+      </span>
+      <span className="truncate min-w-0">{label}</span>
+      {unreadCount > 0 && (
+        <span className="min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-[9px] font-bold text-white flex items-center justify-center leading-none">
+          {unreadCount > 99 ? '99+' : unreadCount}
+        </span>
+      )}
+      {isActive && !unifiedInbox && (
+        <span
+          className={`w-1.5 h-1.5 rounded-full flex-shrink-0
+                     ${connectionStatus === 'connected' ? 'bg-mail-success' :
+                       connectionStatus === 'error' ? 'bg-mail-danger' : 'bg-mail-warning'}`}
+        />
+      )}
+    </button>
+  );
+});
+
 export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup, onOpenAccounts }) {
   const accounts = useAccountStore(s => s.accounts);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
@@ -312,6 +379,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const totalEmails = useMessageListStore(s => s.totalEmails);
   const loading = useSyncStore(s => s.loading);
   const loadingMore = useSyncStore(s => s.loadingMore);
+  const manualRefreshSpinning = useAccountStore(s => s.manualRefreshSpinning);
   const hasMoreEmails = useMessageListStore(s => s.hasMoreEmails);
   const activateAccount = useAccountStore(s => s.activateAccount);
   const setViewMode = useUiStore(s => s.setViewMode);
@@ -325,6 +393,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const hiddenAccounts = useSettingsStore(s => s.hiddenAccounts);
   const sidebarCollapsed = useSettingsStore(s => s.sidebarCollapsed);
   const toggleSidebarCollapsed = useSettingsStore(s => s.toggleSidebarCollapsed);
+  const sidebarStyle = useSettingsStore(s => s.sidebarStyle);
   const accountOrder = useSettingsStore(s => s.accountOrder);
   const sidebarAccountsRatio = useSettingsStore(s => s.sidebarAccountsRatio);
   const setSidebarAccountsRatio = useSettingsStore(s => s.setSidebarAccountsRatio);
@@ -354,6 +423,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   );
   const collapsed = sidebarCollapsed;
   const showUnifiedInbox = orderedAccounts.length >= 2;
+  const tagCloud = sidebarStyle === 'tagcloud';
+  const activeAccount = orderedAccounts.find(a => a.id === activeAccountId);
 
   // Sort mailboxes: INBOX first, then alphabetically; children sorted alphabetically too
   const sortedMailboxes = useMemo(() => {
@@ -576,7 +647,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             className="p-2 hover:bg-mail-surface-hover rounded-lg transition-colors"
             title="Refresh emails"
           >
-            <RefreshCw size={16} className={`text-mail-text-muted ${loading || loadingMore ? 'animate-spin' : ''}`} />
+            <RefreshCw size={16} className={`text-mail-text-muted ${loading || loadingMore || manualRefreshSpinning ? 'animate-spin' : ''}`} />
           </button>
           {/* Backup in progress indicator (collapsed) */}
           <CollapsedBackupIcon onOpenBackup={onOpenBackup} />
@@ -634,7 +705,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             className="p-2 hover:bg-mail-surface-hover rounded-lg transition-colors"
             title="Refresh emails"
           >
-            <RefreshCw size={18} className={`text-mail-text-muted ${loading || loadingMore ? 'animate-spin' : ''}`} />
+            <RefreshCw size={18} className={`text-mail-text-muted ${loading || loadingMore || manualRefreshSpinning ? 'animate-spin' : ''}`} />
           </button>
           <button
             onClick={toggleSidebarCollapsed}
@@ -660,10 +731,134 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
       </div>
 
       {/* Account Selector */}
-      <div className="p-3 overflow-y-auto flex-shrink-0" style={{ flex: `0 0 ${sidebarAccountsRatio * 100}%`, minHeight: 60, maxHeight: 'calc(100% - 340px)' }}>
+      <div className="p-3 overflow-y-auto flex-shrink-0" style={{ flex: `0 0 ${sidebarAccountsRatio * 100}%`, minHeight: 60, maxHeight: 'calc(100% - 260px)' }}>
         <div className="relative">
+          {tagCloud && (
+            <>
+              <div className="flex flex-wrap gap-1.5">
+                {showUnifiedInbox && (
+                  <button
+                    data-testid="all-inboxes-btn"
+                    onClick={() => setUnifiedInbox(true)}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs transition-colors border
+                               ${unifiedInbox
+                                 ? 'bg-mail-accent text-white border-mail-accent'
+                                 : 'text-mail-text border-mail-border hover:bg-mail-surface-hover'}`}
+                    title="All Inboxes"
+                  >
+                    <Inbox size={12} />
+                    <span>All Inboxes</span>
+                  </button>
+                )}
+                {orderedAccounts.map(account => (
+                  <TagCloudAccountBubble
+                    key={account.id}
+                    account={account}
+                    isActive={account.id === activeAccountId}
+                    color={getAccountColor(accountColors, account)}
+                    initial={getAccountInitial(account, getDisplayName(account.id))}
+                    label={getDisplayName(account.id) || account.name || account.email}
+                    unifiedInbox={unifiedInbox}
+                    connectionStatus={connectionStatus}
+                    unreadCount={unreadPerAccount[account.id] || 0}
+                    onActivate={() => {
+                      const lastMailbox = useSettingsStore.getState().getLastMailbox(account.id);
+                      activateAccount(account.id, lastMailbox || 'INBOX');
+                    }}
+                  />
+                ))}
+              </div>
+
+              {activeAccount && suspectEmptyServerData?.accountId === activeAccount.id && (
+                <div className="mt-2 p-2 rounded-lg border bg-mail-warning/10 border-mail-warning/20">
+                  <div className="flex items-center justify-between text-xs text-mail-warning">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle size={14} />
+                      <span>Showing cached data</span>
+                    </div>
+                    <button
+                      onClick={() => activateAccount(activeAccountId, activeMailbox)}
+                      className="p-1 hover:bg-mail-warning/20 rounded transition-colors"
+                      title="Retry connection"
+                    >
+                      <RefreshCw size={12} />
+                    </button>
+                  </div>
+                  <p className="mt-1 text-[10px] text-mail-text-muted leading-tight">
+                    {suspectEmptyServerData.message}
+                  </p>
+                </div>
+              )}
+
+              {activeAccount && showError && connectionStatus === 'error' && (
+                <div className={`mt-2 p-2 rounded-lg border ${
+                  connectionErrorType === 'passwordMissing'
+                    ? 'bg-mail-warning/10 border-mail-warning/20'
+                    : 'bg-mail-danger/10 border-mail-danger/20'
+                }`}>
+                  {connectionErrorType === 'passwordMissing' ? (
+                    <div className="text-xs text-mail-warning">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Key size={14} />
+                          <span>Password missing</span>
+                        </div>
+                        <button
+                          onClick={retryKeychainAccess}
+                          className="p-1 hover:bg-mail-warning/20 rounded transition-colors"
+                          title="Retry"
+                        >
+                          <RefreshCw size={12} />
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => onOpenAccounts?.(activeAccount.id)}
+                        className="mt-1.5 w-full px-2 py-1 text-xs font-medium bg-mail-warning/20
+                                   hover:bg-mail-warning/30 rounded transition-colors text-center"
+                      >
+                        Re-enter Password in Settings
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between text-xs text-mail-danger">
+                      <div className="flex items-center gap-2">
+                        {connectionErrorType === 'offline' ? (
+                          <><WifiOff size={14} /><span>No internet</span></>
+                        ) : connectionErrorType === 'outlookOAuth' ? (
+                          <><ServerOff size={14} /><span>Microsoft issue</span></>
+                        ) : connectionErrorType === 'oauthExpired' ? (
+                          <><Key size={14} /><span>OAuth2 expired</span></>
+                        ) : connectionErrorType === 'timeout' ? (
+                          <><RefreshCw size={14} /><span>Timed out</span></>
+                        ) : (
+                          <><ServerOff size={14} /><span>Server error</span></>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setShowErrorModal(true)}
+                          className="p-1 hover:bg-mail-danger/20 rounded transition-colors"
+                          title="View error details"
+                        >
+                          <Info size={12} />
+                        </button>
+                        <button
+                          onClick={() => activateAccount(activeAccountId, activeMailbox)}
+                          className="p-1 hover:bg-mail-danger/20 rounded transition-colors"
+                          title="Retry connection"
+                        >
+                          <RefreshCw size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+
           {/* All Inboxes (expanded) */}
-          {showUnifiedInbox && (
+          {!tagCloud && showUnifiedInbox && (
             <div
               data-testid="all-inboxes-btn"
               className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all mb-1
@@ -679,7 +874,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             </div>
           )}
 
-          {orderedAccounts.map(account => {
+          {!tagCloud && orderedAccounts.map(account => {
             const color = getAccountColor(accountColors, account);
             const initial = getAccountInitial(account, getDisplayName(account.id));
             return (
@@ -819,19 +1014,21 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           e.preventDefault();
           const sidebar = e.currentTarget.closest('.flex.flex-col');
           if (!sidebar) return;
-          const sidebarRect = sidebar.getBoundingClientRect();
-          // Get fixed heights (logo + compose + view mode + footer)
-          const fixedHeight = 200; // approximate fixed sections height
-          const availableHeight = sidebarRect.height - fixedHeight;
+          const sidebarHeight = sidebar.getBoundingClientRect().height;
+          if (sidebarHeight <= 0) return;
+          const startY = e.clientY;
+          const startRatio = useSettingsStore.getState().sidebarAccountsRatio;
+          const prevUserSelect = document.body.style.userSelect;
+          document.body.style.userSelect = 'none';
 
           const handleMouseMove = (moveEvent) => {
-            const relativeY = moveEvent.clientY - sidebarRect.top - 120; // offset for logo+compose
-            const ratio = relativeY / availableHeight;
-            setSidebarAccountsRatio(ratio);
+            const delta = (moveEvent.clientY - startY) / sidebarHeight;
+            setSidebarAccountsRatio(startRatio + delta);
           };
           const handleMouseUp = () => {
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('mouseup', handleMouseUp);
+            document.body.style.userSelect = prevUserSelect;
           };
           document.addEventListener('mousemove', handleMouseMove);
           document.addEventListener('mouseup', handleMouseUp);
@@ -868,9 +1065,61 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
 
       {/* Mailboxes — show common folders in unified mode, full tree otherwise */}
       {unifiedInbox && (
-        <UnifiedFolderList />
+        <UnifiedFolderList tagCloud={tagCloud} />
       )}
-      {!unifiedInbox && <div className="overflow-y-auto p-3 flex-1" style={{ minHeight: 60 }}>
+      {!unifiedInbox && tagCloud && (
+        <div className="overflow-y-auto p-3 flex-1" style={{ minHeight: 60 }}>
+          <div className="text-xs text-mail-text-muted uppercase tracking-wide mb-2">
+            Folders
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {sortedMailboxes.flatMap(mailbox => {
+              const bubbles = [];
+              if (!mailbox.noselect) {
+                const Icon = getMailboxIcon(mailbox);
+                const isActive = activeMailbox === mailbox.path;
+                bubbles.push(
+                  <button
+                    key={mailbox.path}
+                    onClick={() => activateAccount(activeAccountId, mailbox.path)}
+                    title={getMailboxDisplayName(mailbox.name)}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs transition-colors border
+                               ${isActive
+                                 ? 'bg-mail-accent text-white border-mail-accent'
+                                 : 'text-mail-text border-mail-border hover:bg-mail-surface-hover'}`}
+                  >
+                    <Icon size={12} />
+                    <span className="truncate max-w-[140px]">{getMailboxDisplayName(mailbox.name)}</span>
+                  </button>
+                );
+              }
+              if (mailbox.children?.length > 0) {
+                mailbox.children.forEach(child => {
+                  if (child.noselect) return;
+                  const ChildIcon = getMailboxIcon(child);
+                  const isChildActive = activeMailbox === child.path;
+                  bubbles.push(
+                    <button
+                      key={child.path}
+                      onClick={() => activateAccount(activeAccountId, child.path)}
+                      title={getMailboxDisplayName(child.name)}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs transition-colors border
+                                 ${isChildActive
+                                   ? 'bg-mail-accent text-white border-mail-accent'
+                                   : 'text-mail-text-muted border-mail-border hover:bg-mail-surface-hover hover:text-mail-text'}`}
+                    >
+                      <ChildIcon size={12} />
+                      <span className="truncate max-w-[140px]">{getMailboxDisplayName(child.name)}</span>
+                    </button>
+                  );
+                });
+              }
+              return bubbles;
+            })}
+          </div>
+        </div>
+      )}
+      {!unifiedInbox && !tagCloud && <div className="overflow-y-auto p-3 flex-1" style={{ minHeight: 60 }}>
         <div className="text-xs text-mail-text-muted uppercase tracking-wide mb-2">
           Folders
         </div>

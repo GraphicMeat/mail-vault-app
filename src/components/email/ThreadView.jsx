@@ -11,6 +11,9 @@ import { getQuoteFoldingScript, getSignatureFoldingScript } from '../../utils/if
 import { splitQuotedContent } from '../../utils/quoteFolding';
 import { splitSignature, hashSignature } from '../../utils/signatureFolding';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useThemeStore } from '../../stores/themeStore';
+import { buildEmailIframeHtml, getEmailBodyContent } from '../../utils/emailIframeTemplate';
+import { getDarkReaderInlineScripts } from '../../utils/darkReaderInject';
 import {
   Paperclip,
   Archive,
@@ -27,13 +30,16 @@ import { LinkAlertIcon } from '../LinkAlertIcon';
 
 // ── Thread Email Item Content ────────────────────────────────────────────────
 
-function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDisplay, shouldShowSignature }) {
+function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDisplay, shouldShowSignature, effectiveTheme }) {
   const iframeRef = useRef(null);
   const [quotesExpanded, setQuotesExpanded] = useState(false);
   const [sigExpanded, setSigExpanded] = useState(false);
   const [linkSafetyAlert, setLinkSafetyAlert] = useState(null);
   const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
   const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
+  const appTheme = useThemeStore(s => s.theme);
+  const theme = effectiveTheme ?? appTheme;
+  const isDark = theme === 'dark';
 
   const { newContent, quotedContent } = useMemo(
     () => splitQuotedContent(loadedEmail?.text || loadedEmail?.textBody || ''),
@@ -53,47 +59,29 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
   const { iframeContent, scanAlertLevel: threadScanAlert } = useMemo(() => {
     if (!loadedEmail?.html) return { iframeContent: '', scanAlertLevel: null };
     const htmlWithCid = replaceCidUrls(loadedEmail.html, loadedEmail.attachments);
-    const bodyMatch = htmlWithCid.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-    const bodyHtml = bodyMatch ? bodyMatch[1] : htmlWithCid;
-    let html = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <base target="_blank">
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          * { box-sizing: border-box; }
-          html, body {
-            margin: 0;
-            padding: 16px;
-            background: #ffffff;
-            color: #333333;
-            overflow-x: hidden;
-            max-width: 100%;
-          }
-          body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            font-size: 14px;
-            line-height: 1.6;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
-          }
-          img { max-width: 100%; height: auto; }
-          table { max-width: 100% !important; width: auto !important; }
-          pre, code { white-space: pre-wrap; max-width: 100%; overflow-wrap: break-word; }
-        </style>
-      </head>
-      <body>${bodyHtml}${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}</body>
-    </html>`;
+    const bodyHtml = getEmailBodyContent(htmlWithCid);
+    // Scan body (stable per uid → cacheable); wrap with iframe template so
+    // theme toggles don't invalidate the scan cache.
+    let renderedBody = bodyHtml;
+    let indicatorStyle = '';
     let alertLevel = null;
     if (linkSafetyEnabled) {
-      const { modifiedHtml, maxAlertLevel } = scanEmailLinks(html, email.uid);
-      html = modifiedHtml;
-      alertLevel = maxAlertLevel;
+      const scan = scanEmailLinks(bodyHtml, email.uid);
+      renderedBody = scan.modifiedBodyHtml;
+      indicatorStyle = scan.indicatorStyle;
+      alertLevel = scan.maxAlertLevel;
     }
+    // Light baseline; DR inlined when dark so it runs during load —
+    // no post-load injection race, no flash on theme toggle.
+    const extraHead = `${isDark ? getDarkReaderInlineScripts() : ''}${indicatorStyle ? `<style>${indicatorStyle}</style>` : ''}`;
+    const html = buildEmailIframeHtml({
+      bodyHtml: renderedBody,
+      themeTag: theme,
+      extraHead,
+      extraBody: `${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}`,
+    });
     return { iframeContent: html, scanAlertLevel: alertLevel };
-  }, [loadedEmail?.html, signatureDisplay, linkSafetyEnabled]);
+  }, [loadedEmail?.html, signatureDisplay, linkSafetyEnabled, theme]);
 
   // Persist link alert outside render
   useEffect(() => {
@@ -152,6 +140,8 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
       try {
         const doc = iframe.contentDocument || iframe.contentWindow?.document;
         if (doc) doc.addEventListener('click', handleClick);
+        // Dark Reader is inlined into the iframe HTML (see useMemo above);
+        // runs during load, so no post-load injection is needed here.
       } catch (e) {}
       resizeIframe();
       resizeTimers.push(setTimeout(resizeIframe, 200));
@@ -173,6 +163,8 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
       window.removeEventListener('message', handleMessage);
       resizeTimers.forEach(t => clearTimeout(t));
     };
+    // Theme is NOT a dep: DR is inlined into the iframe HTML (see useMemo),
+    // so theme toggles don't need to tear down the load listener.
   }, [loadedEmail?.html]);
 
   if (isLoading) {
@@ -194,7 +186,10 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
   return (
     <>
       {loadedEmail.html ? (
-        <div className="rounded-lg overflow-hidden bg-white mt-2 max-w-full">
+        <div
+          className="rounded-lg overflow-hidden mt-2 max-w-full"
+          style={{ backgroundColor: isDark ? '#0a0a0f' : '#ffffff' }}
+        >
           <iframe
             ref={iframeRef}
             srcDoc={iframeContent}
@@ -205,7 +200,13 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
           />
         </div>
       ) : (
-        <div className="email-content whitespace-pre-wrap text-mail-text mt-2 text-sm break-words overflow-hidden">
+        <div
+          className="email-content whitespace-pre-wrap mt-2 text-sm break-words overflow-hidden rounded-lg p-3"
+          style={{
+            backgroundColor: isDark ? '#0a0a0f' : '#ffffff',
+            color: isDark ? '#e4e4e7' : '#333333',
+          }}
+        >
           {bodyWithoutSig || 'No content'}
           {signature && signatureDisplay !== 'always-hide' && (
             showSigInline
@@ -271,6 +272,13 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, acti
   const [rawSource, setRawSource] = useState(null);
   const [loadingRaw, setLoadingRaw] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
+  const [emailThemeOverride, setEmailThemeOverride] = useState(null);
+  const appTheme = useThemeStore(s => s.theme);
+  const emailViewerTheme = useSettingsStore(s => s.emailViewerTheme);
+  // Default: user preference ('light'|'dark') or follow app theme.
+  const defaultEmailTheme = emailViewerTheme === 'system' ? appTheme : emailViewerTheme;
+  const effectiveTheme = emailThemeOverride ?? defaultEmailTheme;
+  const emailDarkMode = effectiveTheme === 'dark';
   const key = emailKey(email);
 
   // Register for body load notifications
@@ -346,8 +354,16 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, acti
               const invoke = window.__TAURI__?.core?.invoke;
               if (!invoke) return;
               const bodyEntry = bodiesMapRef.current.get(key);
-              const html = bodyEntry?.email?.html || '';
-              if (html) invoke('open_email_window', { html, title: email.subject || 'Email' });
+              const loaded = bodyEntry?.email;
+              const rawHtml = loaded?.html || '';
+              if (!rawHtml) return;
+              const bodyHtml = getEmailBodyContent(rawHtml);
+              const popupHtml = buildEmailIframeHtml({
+                bodyHtml,
+                themeTag: effectiveTheme,
+                extraHead: emailDarkMode ? getDarkReaderInlineScripts() : '',
+              });
+              invoke('open_email_window', { html: popupHtml, title: email.subject || 'Email' });
             }}
             onViewSource={async () => {
               if (showRaw) { setShowRaw(false); return; }
@@ -372,6 +388,8 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, acti
               }
               setShowRaw(true);
             }}
+            onToggleEmailTheme={() => setEmailThemeOverride(emailDarkMode ? 'light' : 'dark')}
+            emailThemeDark={emailDarkMode}
             isArchived={archivedEmailIds?.has(email.uid)}
             isRead={!email.flags?.includes('\\Unseen')}
             isLocalOnly={email.source === 'local-only'}
@@ -398,7 +416,7 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, acti
                 {atob(rawSource)}
               </pre>
             ) : (
-              <ThreadEmailItemContent email={email} loadedEmail={loadedEmail} isLoading={isLoading} signatureDisplay={signatureDisplay} shouldShowSignature={shouldShowSignature} />
+              <ThreadEmailItemContent email={email} loadedEmail={loadedEmail} isLoading={isLoading} signatureDisplay={signatureDisplay} shouldShowSignature={shouldShowSignature} effectiveTheme={effectiveTheme} />
             )}
           </div>
 

@@ -4,6 +4,7 @@
 
 import { useSettingsStore } from '../settingsStore';
 import { buildThreads } from '../../utils/emailParser';
+import { detectReplyToMismatch } from '../../utils/replyToCheck';
 import {
   loadEmails as _loadEmails,
   _loadEmailsViaGraph,
@@ -13,6 +14,7 @@ import {
   loadMoreEmails as _loadMoreEmails,
   loadEmailRange as _loadEmailRange,
 } from '../../services/workflows/loadMoreEmails';
+import { findSentMailboxPath } from '../../utils/sentFolder';
 
 // Module-level flag change counter — used in updateSortedEmails fingerprint
 let _flagChangeCounter = 0;
@@ -169,26 +171,38 @@ export const createMessageListSlice = (set, get) => ({
       }
     }
 
-    // Detect sender impersonation
+    // Detect sender impersonation + reply-to domain mismatch
     if (linkSafetyEnabled) {
       for (const e of result) {
-        if (e._senderAlert !== undefined) continue;
-        const name = (e.from?.name || '').replace(/^["\\]+|["\\]+$/g, '').replace(/\\"/g, '"').trim();
         const addr = (e.from?.address || '').toLowerCase();
-        if (!name || !addr) continue;
-        const nameLower = name.toLowerCase();
-        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(name) && nameLower !== addr) {
-          const nameDomain = nameLower.split('@')[1] || '';
-          const addrDomain = addr.split('@')[1] || '';
-          if (nameDomain !== addrDomain && !addrDomain.endsWith('.' + nameDomain) && !nameDomain.endsWith('.' + addrDomain)) {
-            e._senderAlert = 'red';
+        const addrDomain = addr.split('@')[1] || '';
+
+        // Sender impersonation (display name looks like email/domain)
+        if (e._senderAlert === undefined && addr) {
+          const name = (e.from?.name || '').replace(/^["\\]+|["\\]+$/g, '').replace(/\\"/g, '"').trim();
+          if (name) {
+            const nameLower = name.toLowerCase();
+            if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(name) && nameLower !== addr) {
+              const nameDomain = nameLower.split('@')[1] || '';
+              if (nameDomain !== addrDomain && !addrDomain.endsWith('.' + nameDomain) && !nameDomain.endsWith('.' + addrDomain)) {
+                e._senderAlert = 'red';
+              }
+            }
+            else if (/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(nameLower)) {
+              if (nameLower !== addrDomain && !addrDomain.endsWith('.' + nameLower) && !nameLower.endsWith('.' + addrDomain)) {
+                e._senderAlert = 'yellow';
+              }
+            }
           }
         }
-        else if (/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(nameLower)) {
-          const senderDomain = addr.split('@')[1] || '';
-          if (nameLower !== senderDomain && !senderDomain.endsWith('.' + nameLower) && !nameLower.endsWith('.' + senderDomain)) {
-            e._senderAlert = 'yellow';
-          }
+
+        // Reply-To domain mismatch: common phishing signal — legit bulk
+        // senders usually route replies to the same domain (or a subdomain)
+        // they send from. Detection lives in utils/replyToCheck.js so it's
+        // unit-testable and can be shared by other consumers later.
+        if (e._replyToMismatch === undefined) {
+          const mismatch = detectReplyToMismatch(e);
+          if (mismatch) e._replyToMismatch = mismatch;
         }
       }
     }
@@ -226,18 +240,9 @@ export const createMessageListSlice = (set, get) => ({
   },
 
   getSentMailboxPath: () => {
-    const { mailboxes } = get();
-    const findSent = (boxes) => {
-      for (const box of boxes) {
-        if (box.specialUse === '\\Sent') return box.path;
-        if (box.children?.length > 0) {
-          const found = findSent(box.children);
-          if (found) return found;
-        }
-      }
-      return null;
-    };
-    return findSent(mailboxes);
+    const { mailboxes, accounts, activeAccountId } = get();
+    const active = (accounts || []).find(a => a.id === activeAccountId);
+    return findSentMailboxPath(mailboxes, active?.sentFolderOverride || null);
   },
 
   // Get merged INBOX + Sent emails for chat view (memoized via module-level cache)
