@@ -23,8 +23,12 @@ import { scanEmailLinks, checkLinkAlert } from '../utils/linkSafety';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon } from './SenderAlertIcon';
+import { ReplyToAlertIcon } from './ReplyToAlertIcon';
 import { getCachedAlerts } from '../utils/linkSafety';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useThemeStore } from '../stores/themeStore';
+import { buildEmailIframeHtml, getEmailBodyContent, getContextMenuColors } from '../utils/emailIframeTemplate';
+import { getDarkReaderInlineScripts } from '../utils/darkReaderInject';
 
 // Re-export AttachmentItem for any external consumers
 export { AttachmentItem } from './email/AttachmentBar';
@@ -48,6 +52,10 @@ function EmailViewerComponent() {
 
   const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
   const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
+  const emailViewerTheme = useSettingsStore(s => s.emailViewerTheme);
+  const appTheme = useThemeStore(s => s.theme);
+  // Default email theme: user preference ('light'|'dark') or follow app theme.
+  const theme = emailViewerTheme === 'system' ? appTheme : emailViewerTheme;
   const [linkSafetyAlert, setLinkSafetyAlert] = useState(null);
   const [headerExpanded, setHeaderExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -61,8 +69,13 @@ function EmailViewerComponent() {
   const [loadingRaw, setLoadingRaw] = useState(false);
   const [showMoveDropdown, setShowMoveDropdown] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
+  // Per-email theme override. null = follow app theme; 'light'|'dark' = forced.
+  const [emailThemeOverride, setEmailThemeOverride] = useState(null);
   const moveButtonRef = useRef(null);
   const iframeRef = useRef(null);
+
+  const effectiveEmailTheme = emailThemeOverride ?? theme;
+  const emailDarkMode = effectiveEmailTheme === 'dark';
 
   const isCached = selectedEmail && savedEmailIds.has(selectedEmail.uid);
   const isArchived = selectedEmail && archivedEmailIds.has(selectedEmail.uid);
@@ -76,6 +89,7 @@ function EmailViewerComponent() {
     setConfirmDelete(false);
     setConfirmUnarchive(false);
     setShowInsights(false);
+    setEmailThemeOverride(null);
   }, [selectedEmail?.uid]);
 
   const handleSave = async () => {
@@ -148,58 +162,36 @@ function EmailViewerComponent() {
     }
   };
 
-  // Extract body content from email HTML — strip outer document structure
-  // so we don't nest <html>/<body> inside our template
-  const getEmailBodyContent = (html) => {
-    if (!html) return '';
-    // Extract content between <body...> and </body>
-    const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-    return bodyMatch ? bodyMatch[1] : html;
-  };
-
-  // Render email with its original styling on a light background (like Apple Mail)
-  // Email HTML is designed for light backgrounds — forcing dark mode breaks formatting
+  // Render email with theme-aware iframe (low-specificity body defaults;
+  // inline email styles always win). Also sets color-scheme so emails with
+  // `@media (prefers-color-scheme: dark)` honor the app theme, not the OS.
   const { iframeContent, scanAlertLevel } = useMemo(() => {
     if (!selectedEmail?.html) return { iframeContent: '', scanAlertLevel: null };
-    let html = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <base target="_blank">
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          * { box-sizing: border-box; }
-          html, body {
-            margin: 0;
-            padding: 16px;
-            background: #ffffff;
-            color: #333333;
-          }
-          body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            font-size: 14px;
-            line-height: 1.6;
-          }
-          img { max-width: 100%; height: auto; }
-          * { overflow-wrap: break-word; word-wrap: break-word; }
-          body { overflow-x: hidden; max-width: 100%; }
-          table { table-layout: fixed; width: 100% !important; overflow: hidden; }
-          td, th { overflow: hidden; text-overflow: ellipsis; }
-          pre { white-space: pre-wrap; overflow-x: auto; max-width: 100%; }
-          blockquote { margin-left: 0; padding-left: 1em; border-left: 3px solid #ddd; overflow: hidden; }
-        </style>
-      </head>
-      <body>${getEmailBodyContent(replaceCidUrls(selectedEmail.html, selectedEmail.attachments))}</body>
-    </html>`;
+    const bodyHtml = getEmailBodyContent(replaceCidUrls(selectedEmail.html, selectedEmail.attachments));
+    // Scan body HTML (stable per uid → cacheable); theme/DR is layered on
+    // top via buildEmailIframeHtml so toggling theme doesn't invalidate the
+    // scan cache or strip Dark Reader scripts from a cached modifiedHtml.
+    let renderedBody = bodyHtml;
+    let indicatorStyle = '';
     let alertLevel = null;
     if (linkSafetyEnabled) {
-      const { modifiedHtml, maxAlertLevel } = scanEmailLinks(html, selectedEmail.uid);
-      html = modifiedHtml;
-      alertLevel = maxAlertLevel;
+      const scan = scanEmailLinks(bodyHtml, selectedEmail.uid);
+      renderedBody = scan.modifiedBodyHtml;
+      indicatorStyle = scan.indicatorStyle;
+      alertLevel = scan.maxAlertLevel;
     }
+    // Light baseline always. When dark, Dark Reader is INLINED into the
+    // iframe HTML (not injected post-load) so it runs during page load —
+    // eliminates the load-event race and prevents a flash of light content
+    // on theme toggle. srcDoc diff on theme change still forces reload.
+    const extraHead = `${emailDarkMode ? getDarkReaderInlineScripts() : ''}${indicatorStyle ? `<style>${indicatorStyle}</style>` : ''}`;
+    const html = buildEmailIframeHtml({
+      bodyHtml: renderedBody,
+      themeTag: effectiveEmailTheme,
+      extraHead,
+    });
     return { iframeContent: html, scanAlertLevel: alertLevel };
-  }, [selectedEmail?.html, selectedEmail?.uid, linkSafetyEnabled]);
+  }, [selectedEmail?.html, selectedEmail?.uid, linkSafetyEnabled, effectiveEmailTheme]);
 
   // Persist link alert to store + settings (outside render, in useEffect)
   useEffect(() => {
@@ -266,9 +258,12 @@ function EmailViewerComponent() {
       e.preventDefault();
       const existing = doc.getElementById('mv-ctx-menu');
       if (existing) existing.remove();
+      // Always emit light colors; Dark Reader will invert them in dark mode
+      // via its MutationObserver (it catches the dynamically-added menu).
+      const { menuBg, menuBorder, menuShadow, itemColor, itemHoverBg } = getContextMenuColors();
       const menu = doc.createElement('div');
       menu.id = 'mv-ctx-menu';
-      menu.style.cssText = 'position:fixed;z-index:99999;background:#ffffff;border:1px solid #d1d5db;border-radius:6px;padding:4px 0;min-width:180px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.15);';
+      menu.style.cssText = `position:fixed;z-index:99999;background:${menuBg};border:1px solid ${menuBorder};border-radius:6px;padding:4px 0;min-width:180px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;box-shadow:${menuShadow};`;
       menu.style.left = e.clientX + 'px';
       menu.style.top = e.clientY + 'px';
       const items = [
@@ -278,8 +273,8 @@ function EmailViewerComponent() {
       items.forEach(({ label, action }) => {
         const item = doc.createElement('div');
         item.textContent = label;
-        item.style.cssText = 'padding:6px 14px;cursor:pointer;color:#333333;';
-        item.onmouseover = () => item.style.background = '#f3f4f6';
+        item.style.cssText = `padding:6px 14px;cursor:pointer;color:${itemColor};`;
+        item.onmouseover = () => item.style.background = itemHoverBg;
         item.onmouseout = () => item.style.background = 'none';
         item.onclick = () => { action(); menu.remove(); };
         menu.appendChild(item);
@@ -303,6 +298,8 @@ function EmailViewerComponent() {
         currentDoc = doc;
         doc.addEventListener('click', handleClick);
         doc.addEventListener('contextmenu', handleContextMenu);
+        // Dark Reader is inlined into the iframe HTML (see useMemo above);
+        // it runs during load, so no post-load injection is needed here.
       } catch (e) {
         console.error('Failed to intercept iframe links:', e);
       }
@@ -324,6 +321,10 @@ function EmailViewerComponent() {
         } catch { /* iframe may already be detached */ }
       }
     };
+    // Theme is NOT a dep: DR is now inlined into the iframe HTML (via the
+    // iframeContent useMemo), so theme toggles don't need to tear down and
+    // re-attach the load listener — which would race with the iframe reload
+    // that srcDoc changes trigger.
   }, [selectedEmail?.html]);
 
   // Thread view — show all emails in the thread
@@ -363,6 +364,7 @@ function EmailViewerComponent() {
       <div className="px-3 py-2.5 border-b border-mail-border flex items-start gap-2">
         <h1 className="text-lg font-semibold text-mail-text flex-1 min-w-0 flex items-center gap-1.5">
           <SenderAlertIcon level={selectedEmail._senderAlert} email={selectedEmail} size={18} />
+          <ReplyToAlertIcon mismatch={selectedEmail._replyToMismatch} size={18} />
           <LinkAlertIcon level={selectedEmail._linkAlert} size={18} alerts={getCachedAlerts(selectedEmail.uid)} />
           {selectedEmail.subject}
         </h1>
@@ -443,8 +445,16 @@ function EmailViewerComponent() {
             onToggleRead={handleToggleReadStatus}
             onOpenInWindow={() => {
               const invoke = window.__TAURI__?.core?.invoke;
-              if (!invoke) return;
-              invoke('open_email_window', { html: iframeContent, title: selectedEmail.subject || 'Email' });
+              if (!invoke || !selectedEmail?.html) return;
+              // Build a standalone document so the popup matches the in-app
+              // view: charset declared, plus inline Dark Reader when dark.
+              const bodyHtml = getEmailBodyContent(replaceCidUrls(selectedEmail.html, selectedEmail.attachments));
+              const popupHtml = buildEmailIframeHtml({
+                bodyHtml,
+                themeTag: effectiveEmailTheme,
+                extraHead: emailDarkMode ? getDarkReaderInlineScripts() : '',
+              });
+              invoke('open_email_window', { html: popupHtml, title: selectedEmail.subject || 'Email' });
             }}
             onViewSource={async () => {
               if (showRaw) { setShowRaw(false); return; }
@@ -469,6 +479,8 @@ function EmailViewerComponent() {
               }
               setShowRaw(true);
             }}
+            onToggleEmailTheme={() => setEmailThemeOverride(emailDarkMode ? 'light' : 'dark')}
+            emailThemeDark={emailDarkMode}
             isArchived={isArchived}
             isRead={isRead}
             isLocalOnly={isLocalOnly}
@@ -502,7 +514,15 @@ function EmailViewerComponent() {
               {atob(rawSource)}
             </pre>
           ) : selectedEmail.html ? (
-            <div className="rounded-lg overflow-hidden bg-white max-w-full h-full" style={{ contain: 'inline-size' }}>
+            // Outer wrapper matches app theme so DR-inverted iframe content
+            // blends seamlessly. In light mode, white wrapper + white iframe.
+            <div
+              className="rounded-lg overflow-hidden max-w-full h-full"
+              style={{
+                contain: 'inline-size',
+                backgroundColor: emailDarkMode ? '#0a0a0f' : '#ffffff',
+              }}
+            >
               <iframe
                 ref={iframeRef}
                 srcDoc={iframeContent}
@@ -514,7 +534,13 @@ function EmailViewerComponent() {
               />
             </div>
           ) : (
-            <div className="email-content whitespace-pre-wrap text-mail-text">
+            <div
+              className="email-content whitespace-pre-wrap rounded-lg p-4"
+              style={{
+                backgroundColor: emailDarkMode ? '#0a0a0f' : '#ffffff',
+                color: emailDarkMode ? '#e4e4e7' : '#333333',
+              }}
+            >
               {selectedEmail.text || 'No content'}
             </div>
           )}

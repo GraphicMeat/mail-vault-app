@@ -139,8 +139,10 @@ export const useSettingsStore = create(
       timeFormat: 'auto', // 'auto' (system locale) | '12h' | '24h'
       signatureDisplay: 'smart', // 'smart' | 'always-show' | 'always-hide' | 'collapsed'
       actionButtonDisplay: 'icon-only', // 'icon-only' | 'icon-label' | 'text-only'
+      emailViewerTheme: 'system', // 'light' | 'dark' | 'system' — default theme for email content rendering
       sidebarCollapsed: false, // Whether sidebar is in compact/collapsed mode
       sidebarAccountsRatio: 0.4, // Ratio of accounts section height vs total available (0.2 - 0.8)
+      sidebarStyle: 'list', // 'list' | 'tagcloud' — render accounts & folders as list rows or wrapped bubble tags
       listPaneSize: 350, // Width of email list in 3-column, or height in 2-column
       viewerPaneSize: 50, // Percentage of remaining space for viewer in 3-column
 
@@ -486,9 +488,11 @@ export const useSettingsStore = create(
       setTimeFormat: (value) => set({ timeFormat: value }),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
       toggleSidebarCollapsed: () => set(state => ({ sidebarCollapsed: !state.sidebarCollapsed })),
-      setSidebarAccountsRatio: (ratio) => set({ sidebarAccountsRatio: Math.max(0.15, Math.min(0.55, ratio)) }),
+      setSidebarAccountsRatio: (ratio) => set({ sidebarAccountsRatio: Math.max(0.1, Math.min(0.85, ratio)) }),
+      setSidebarStyle: (style) => set({ sidebarStyle: style === 'tagcloud' ? 'tagcloud' : 'list' }),
       setSignatureDisplay: (mode) => set({ signatureDisplay: mode }),
       setActionButtonDisplay: (mode) => set({ actionButtonDisplay: mode }),
+      setEmailViewerTheme: (mode) => set({ emailViewerTheme: mode }),
       setListPaneSize: (size) => set({ listPaneSize: size }),
       setViewerPaneSize: (size) => set({ viewerPaneSize: size }),
 
@@ -666,7 +670,9 @@ export const useSettingsStore = create(
           timeFormat: 'auto',
           signatureDisplay: 'smart',
           actionButtonDisplay: 'icon-only',
+          emailViewerTheme: 'system',
           sidebarCollapsed: false,
+          sidebarStyle: 'list',
           listPaneSize: 350,
           viewerPaneSize: 50,
           onboardingComplete: false,
