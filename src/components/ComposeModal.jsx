@@ -7,7 +7,82 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Send, Paperclip, Loader, Minimize2, FileText, Trash2, ChevronDown, BookTemplate, ChevronRight } from 'lucide-react';
 import * as api from '../services/api';
 import { ensureFreshToken } from '../services/authUtils';
+import * as db from '../services/db';
 import { RichTextEditor, textToHtml, htmlToText } from './RichTextEditor';
+import { ContactsPickerButton, ContactsAutocomplete } from './ContactsPicker';
+import { findSentMailboxPath } from '../utils/sentFolder';
+
+// Find the Sent mailbox path for a specific account.
+// Tiers: account.sentFolderOverride → disk/store mailbox tree via SPECIAL-USE
+// or localized name → tier 3 server-side ensure/CREATE (Thunderbird-style).
+// On tier 3 success, the resolved path is persisted to the account so future
+// sends skip the probe. Returns { path, account } where account reflects
+// any persisted override.
+async function resolveSentMailboxForAccount(account) {
+  const accountId = account.id;
+  const { activeAccountId, mailboxes } = useMailStore.getState();
+  let list = activeAccountId === accountId && mailboxes?.length ? mailboxes : null;
+  if (!list) {
+    list = await db.getCachedMailboxes(accountId).catch(() => null);
+  }
+  const localHit = findSentMailboxPath(list, account.sentFolderOverride || null);
+  if (localHit) return { path: localHit, account };
+
+  // Tier 3: probe/create on server
+  try {
+    const path = await api.ensureSentMailbox(account);
+    if (path) {
+      const updated = { ...account, sentFolderOverride: path };
+      await db.saveAccount(updated).catch(err => {
+        console.warn('[ComposeModal] failed to persist sentFolderOverride:', err);
+      });
+      useMailStore.setState(s => ({
+        accounts: (s.accounts || []).map(a => a.id === accountId ? { ...a, sentFolderOverride: path } : a),
+      }));
+      // Refresh mailbox tree so sidebar/Zustand reflect any newly-created Sent folder.
+      try {
+        const freshBoxes = await api.fetchMailboxes(updated);
+        if (Array.isArray(freshBoxes) && freshBoxes.length) {
+          await db.saveMailboxes?.(accountId, freshBoxes).catch(() => {});
+          useMailStore.setState(s => ({
+            mailboxes: s.activeAccountId === accountId ? freshBoxes : s.mailboxes,
+          }));
+        }
+      } catch (err) {
+        console.warn('[ComposeModal] post-ensure mailbox refresh failed:', err);
+      }
+      return { path, account: updated };
+    }
+  } catch (err) {
+    console.warn('[ComposeModal] ensureSentMailbox failed:', err);
+  }
+  return { path: null, account };
+}
+
+// Recipient input row with inline autocomplete + contacts-popover button.
+function RecipientField({ name, label, placeholder, value, onChange, setValue, testid, boostAccountId }) {
+  const inputRef = useRef(null);
+  return (
+    <div className="flex items-center gap-2 relative">
+      <label className="w-12 text-sm text-mail-text-muted">{label}</label>
+      <div className="flex-1 flex items-center gap-1">
+        <input
+          ref={inputRef}
+          type="text"
+          name={name}
+          data-testid={testid}
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          className="flex-1 bg-transparent text-mail-text placeholder-mail-text-muted
+                    outline-none text-sm py-1"
+        />
+        <ContactsPickerButton value={value} onChange={setValue} fieldName={name.toUpperCase()} boostAccountId={boostAccountId} />
+      </div>
+      <ContactsAutocomplete value={value} onChange={setValue} inputRef={inputRef} boostAccountId={boostAccountId} />
+    </div>
+  );
+}
 
 function AttachmentPreview({ attachment, onRemove }) {
   const formatSize = (bytes) => {
@@ -231,15 +306,19 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     };
     const handleKey = (e) => {
       if (e.key === 'Escape') {
+        e.stopPropagation();
         setShowTemplates(false);
         setSavingTemplate(false);
       }
     };
     document.addEventListener('mousedown', handleClick);
-    document.addEventListener('keydown', handleKey);
+    // Capture phase so this runs before the modal-level Escape handler,
+    // letting us stopPropagation and keep the compose modal open while
+    // the templates dropdown is visible.
+    document.addEventListener('keydown', handleKey, true);
     return () => {
       document.removeEventListener('mousedown', handleClick);
-      document.removeEventListener('keydown', handleKey);
+      document.removeEventListener('keydown', handleKey, true);
     };
   }, [showTemplates]);
 
@@ -323,25 +402,329 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           ? (plainTextRef.current || htmlToText(formData.body)) + '\n\n-------- Original Message --------\n' + htmlToText(quotedHtml)
           : (plainTextRef.current || htmlToText(formData.body));
 
-        // Determine Sent folder for IMAP append (skip for Graph — server handles it)
+        // Resolve the account's Sent folder once — used for both local
+        // Maildir archival (where we write the raw .eml so the email is
+        // visible/retrievable even if the server never sees it) and for the
+        // subsequent server-side IMAP APPEND.
         const isGraph = freshAccount.oauth2Transport === 'graph';
-        const sentMailbox = isGraph ? null : (useMailStore.getState().getSentMailboxPath() || null);
+        const resolved = await resolveSentMailboxForAccount(freshAccount);
+        const sentFolderPath = resolved.path;
+        const accountForSend = resolved.account;
+        const sentMailbox = isGraph ? null : sentFolderPath;
 
-        await api.sendEmail(
-          { ...freshAccount, name: displayName },
-          {
-            to: formData.to,
-            cc: formData.cc || undefined,
-            bcc: formData.bcc || undefined,
-            subject: formData.subject,
-            text: fullText,
-            html: fullHtml,
-            inReplyTo: formData.inReplyTo || undefined,
-            references: formData.references || undefined,
-            attachments: emailAttachments.length > 0 ? emailAttachments : undefined
-          },
-          sentMailbox
-        );
+        const parseAddresses = (raw) => (raw || '')
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean)
+          .map(s => ({ address: s, name: '' }));
+
+        const outgoingPayload = {
+          to: formData.to,
+          cc: formData.cc || undefined,
+          bcc: formData.bcc || undefined,
+          subject: formData.subject,
+          text: fullText,
+          html: fullHtml,
+          inReplyTo: formData.inReplyTo || undefined,
+          references: formData.references || undefined,
+          attachments: emailAttachments.length > 0 ? emailAttachments : undefined,
+        };
+
+        const pseudoUid = Math.floor(Date.now() / 1000);
+        // Local archive target: must be a non-empty string — Maildir dirs use
+        // it as the mailbox folder name. Default to literal 'Sent' so the
+        // .eml lands under <data>/Maildir/<account>/Sent/cur/.
+        const localMailbox = sentFolderPath || 'Sent';
+        const invoke = window.__TAURI__?.core?.invoke;
+
+        // ── STAGE 1: archive raw MIME locally as DRAFT ──
+        // Build the RFC2822 bytes via Rust so we can store them BEFORE SMTP.
+        // Failure here is fatal — the whole point is to have a safety copy.
+        let builtMime;
+        try {
+          builtMime = await api.buildOutgoingMime(
+            { ...accountForSend, name: displayName },
+            outgoingPayload
+          );
+        } catch (err) {
+          console.error('[compose:build_mime_fail]', err);
+          throw new Error('Failed to build outgoing MIME: ' + (err?.message || err));
+        }
+        console.log('[compose:build_mime_ok]', {
+          account: freshAccount.email,
+          bytes: builtMime?.rawSize,
+          messageId: builtMime?.messageId,
+        });
+
+        if (invoke && builtMime?.rawBase64) {
+          try {
+            await invoke('maildir_store', {
+              accountId: freshAccount.id,
+              mailbox: localMailbox,
+              uid: pseudoUid,
+              rawSourceBase64: builtMime.rawBase64,
+              flags: ['draft', 'seen'],
+            });
+            console.log('[compose:stage_local]', {
+              account: freshAccount.email,
+              mailbox: localMailbox,
+              uid: pseudoUid,
+              bytes: builtMime.rawSize,
+              messageId: builtMime.messageId,
+            });
+          } catch (err) {
+            console.error('[compose:stage_local_fail]', err);
+            throw new Error('Could not archive outgoing email locally: ' + (err?.message || err));
+          }
+        }
+
+        const indexBase = {
+          uid: pseudoUid,
+          from: { address: freshAccount.email, name: displayName },
+          to: parseAddresses(formData.to),
+          subject: formData.subject,
+          date: new Date().toISOString(),
+          has_attachments: emailAttachments.length > 0,
+          message_id: builtMime?.messageId || null,
+          in_reply_to: formData.inReplyTo || null,
+          references: formData.references || null,
+          snippet: (plainTextRef.current || htmlToText(formData.body)).slice(0, 200),
+        };
+        if (invoke) {
+          try {
+            await api.appendLocalIndex(freshAccount.id, localMailbox, [{
+              ...indexBase,
+              flags: ['draft', 'seen'],
+              source: 'local_draft',
+            }]);
+            console.log('[compose:index_draft_ok]', { uid: pseudoUid, mailbox: localMailbox });
+          } catch (err) {
+            console.warn('[compose:index_draft_fail]', err);
+          }
+        }
+
+        // Optimistic in-memory entry — mirrors the just-archived local copy
+        // so the Sent list view updates instantly.
+        const optimistic = {
+          uid: pseudoUid,
+          subject: formData.subject,
+          from: { address: freshAccount.email, name: displayName },
+          to: parseAddresses(formData.to),
+          cc: parseAddresses(formData.cc),
+          bcc: parseAddresses(formData.bcc),
+          date: new Date().toISOString(),
+          internal_date: new Date().toISOString(),
+          internalDate: new Date().toISOString(),
+          messageId: builtMime?.messageId || null,
+          hasAttachments: emailAttachments.length > 0,
+          has_attachments: emailAttachments.length > 0,
+          read: true,
+          flags: ['\\Seen', '\\Draft'],
+          _accountId: freshAccount.id,
+          _optimistic: true,
+          _localStaged: true,
+        };
+        useMailStore.setState(s => {
+          const dedupById = (list) => (optimistic.messageId
+            ? (list || []).filter(e => e.messageId !== optimistic.messageId)
+            : (list || []));
+          const updates = { sentEmails: [optimistic, ...dedupById(s.sentEmails)] };
+          if (
+            sentFolderPath &&
+            s.activeAccountId === freshAccount.id &&
+            s.activeMailbox === sentFolderPath
+          ) {
+            updates.emails = [optimistic, ...dedupById(s.emails)];
+            updates.totalEmails = (s.totalEmails || 0) + 1;
+          }
+          return updates;
+        });
+        useMailStore.getState().updateSortedEmails?.();
+        console.log('[compose:optimistic_insert]', {
+          account: freshAccount.email,
+          uid: pseudoUid,
+          messageId: builtMime?.messageId,
+        });
+
+        // ── STAGE 2: SMTP send ──
+        let sendResult;
+        try {
+          sendResult = await api.sendEmail(
+            { ...accountForSend, name: displayName },
+            outgoingPayload,
+            sentMailbox
+          );
+          console.log('[compose:smtp_ok]', {
+            account: freshAccount.email,
+            smtpMessageId: sendResult?.messageId,
+          });
+        } catch (err) {
+          console.error('[compose:smtp_fail]', err);
+          // Local draft survives — user can retry via outbox bubble.
+          throw err;
+        }
+
+        // ── STAGE 3: re-archive locally as SENT ──
+        // Overwrite the .eml file: flags transition D→A. maildir_store
+        // removes the old file for this UID and writes the new one.
+        if (invoke && builtMime?.rawBase64) {
+          try {
+            await invoke('maildir_store', {
+              accountId: freshAccount.id,
+              mailbox: localMailbox,
+              uid: pseudoUid,
+              rawSourceBase64: builtMime.rawBase64,
+              flags: ['archived', 'seen'],
+            });
+            await api.appendLocalIndex(freshAccount.id, localMailbox, [{
+              ...indexBase,
+              flags: ['archived', 'seen'],
+              source: 'local_sent',
+            }]);
+            console.log('[compose:mark_sent_local]', {
+              account: freshAccount.email,
+              mailbox: localMailbox,
+              uid: pseudoUid,
+            });
+          } catch (err) {
+            console.warn('[compose:mark_sent_local_fail]', err);
+          }
+        }
+
+        // Strip \Draft flag from the in-memory optimistic entry.
+        useMailStore.setState(s => ({
+          sentEmails: (s.sentEmails || []).map(e =>
+            e.uid === pseudoUid && e._accountId === freshAccount.id
+              ? { ...e, flags: ['\\Seen'] }
+              : e
+          ),
+          emails: (s.emails || []).map(e =>
+            e.uid === pseudoUid && e._accountId === freshAccount.id
+              ? { ...e, flags: ['\\Seen'] }
+              : e
+          ),
+        }));
+
+        // ── STAGE 4: listen for Rust's server-APPEND completion, then
+        // refresh the Sent headers so the real server UID replaces the
+        // optimistic one (and Message-ID dedupe hides the synthetic copy).
+        try {
+          const { listen } = await import('@tauri-apps/api/event');
+          let handled = false;
+          const unlisten = await listen('send-server-append-complete', async (event) => {
+            const p = event.payload || {};
+            // Rust emits `account.email` as accountId (ImapConfig has no `id` field).
+            if (p.accountId !== freshAccount.email && p.accountId !== freshAccount.id) {
+              console.log('[compose:server_append_event_skip]', {
+                eventAccountId: p.accountId,
+                expectEmail: freshAccount.email,
+                expectId: freshAccount.id,
+              });
+              return;
+            }
+            if (handled) return;
+            handled = true;
+            console.log('[compose:server_append_event]', p);
+            if (p.ok && p.verify) {
+              console.log('[compose:server_append_verify]', {
+                existsBefore: p.verify.existsBefore,
+                existsAfter: p.verify.existsAfter,
+                delta: p.verify.delta,
+                foundUid: p.verify.foundUid,
+                serverMessageIdHeader: p.messageIdHeader,
+              });
+              if (p.verify.delta <= 0) {
+                console.error('[compose:server_append_no_delta] server reported no EXISTS change — APPEND was silently rejected or routed elsewhere');
+              }
+              if (!p.verify.foundUid && p.messageIdHeader) {
+                console.warn('[compose:server_append_search_miss] UID SEARCH could not find Message-ID — server may not index it or stored in different folder');
+              }
+            }
+            unlisten();
+
+            // Server-side copy exists — remove the pre-SMTP local Maildir
+            // staged entry so the UI doesn't show both (local pseudoUid and
+            // server UID). Per Q2=c policy: local copy is a safety net while
+            // the server round-trip is pending; once server confirms, the
+            // server copy is canonical.
+            if (p.ok && invoke) {
+              try {
+                await invoke('maildir_delete', {
+                  accountId: freshAccount.id,
+                  mailbox: localMailbox,
+                  uid: pseudoUid,
+                });
+                await invoke('local_index_remove', {
+                  accountId: freshAccount.id,
+                  mailbox: localMailbox,
+                  uid: pseudoUid,
+                });
+                console.log('[compose:local_cleanup_ok]', {
+                  account: freshAccount.email,
+                  mailbox: localMailbox,
+                  uid: pseudoUid,
+                });
+              } catch (err) {
+                console.warn('[compose:local_cleanup_fail]', err);
+              }
+              // Also drop the in-memory optimistic entry so the list view
+              // rebuilds clean after loadSentHeaders re-populates from server.
+              useMailStore.setState(s => ({
+                sentEmails: (s.sentEmails || []).filter(
+                  e => !(e.uid === pseudoUid && e._accountId === freshAccount.id)
+                ),
+                emails: (s.emails || []).filter(
+                  e => !(e.uid === pseudoUid && e._accountId === freshAccount.id)
+                ),
+                localEmails: (s.localEmails || []).filter(
+                  e => !(e.uid === pseudoUid && e._accountId === freshAccount.id)
+                ),
+              }));
+            }
+
+            const st = useMailStore.getState();
+            console.log('[compose:refresh_start]', {
+              account: freshAccount.email,
+              mailbox: sentFolderPath,
+              server_ok: p.ok,
+            });
+            try {
+              await st.loadSentHeaders?.(freshAccount.id);
+            } catch (err) {
+              console.warn('[compose:refresh_loadSent_fail]', err);
+            }
+            if (
+              sentFolderPath &&
+              st.activeAccountId === freshAccount.id &&
+              st.activeMailbox === sentFolderPath
+            ) {
+              try {
+                await st.activateAccount?.(freshAccount.id, sentFolderPath, { _backgroundRefresh: true });
+              } catch (err) {
+                console.warn('[compose:refresh_activate_fail]', err);
+              }
+            }
+            const finalSent = useMailStore.getState().sentEmails || [];
+            const messageIdMatch = builtMime?.messageId
+              ? finalSent.some(e => !e._optimistic && e.messageId === builtMime.messageId)
+              : false;
+            console.log('[compose:refresh_done]', {
+              account: freshAccount.email,
+              mailbox: sentFolderPath,
+              sent_count: finalSent.length,
+              messageId_matched_server: messageIdMatch,
+            });
+          });
+          // Safety: unsubscribe after 30s even if event never fires.
+          setTimeout(() => { try { unlisten(); } catch {} }, 30000);
+        } catch (err) {
+          console.warn('[compose:event_listen_fail]', err);
+          // Fallback to the original 8s reconcile.
+          setTimeout(() => {
+            const st = useMailStore.getState();
+            st.loadSentHeaders?.(freshAccount.id);
+          }, 8000);
+        }
       };
 
       // Queue send (may delay if undo send is enabled)
@@ -385,6 +768,25 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     }
     onClose();
   };
+
+  // Modal-level Escape: mirror the backdrop click — minimize to a draft
+  // bubble if there's user content, close otherwise. If the discard dialog
+  // is open, Escape dismisses that first. Templates-dropdown Escape uses
+  // capture-phase + stopPropagation, so it preempts this handler.
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (e.key !== 'Escape') return;
+      if (showDiscardDialog) {
+        e.preventDefault();
+        setShowDiscardDialog(false);
+        return;
+      }
+      e.preventDefault();
+      handleBackdropClick();
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [showDiscardDialog, hasUserContent, onClose, onMinimize]);
 
   // Backdrop click: minimize if has content, close if empty
   const handleBackdropClick = () => {
@@ -466,7 +868,23 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSend} className="flex-1 flex flex-col overflow-hidden">
+        <form
+          onSubmit={handleSend}
+          onKeyDown={(e) => {
+            // Enter in text inputs must NOT submit the form — autocomplete
+            // selection with Enter would otherwise send an empty/incomplete
+            // email. Shift+Enter is the explicit send shortcut.
+            if (e.key === 'Enter' && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) {
+              if (e.shiftKey) {
+                e.preventDefault();
+                handleSend(e);
+              } else {
+                e.preventDefault();
+              }
+            }
+          }}
+          className="flex-1 flex flex-col overflow-hidden"
+        >
           <div className="px-4 py-2 space-y-2 border-b border-mail-border">
             {/* From */}
             {accounts.length > 1 && (
@@ -492,47 +910,38 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             )}
 
             {/* To */}
-            <div className="flex items-center gap-2">
-              <label className="w-12 text-sm text-mail-text-muted">To:</label>
-              <input
-                type="text"
-                name="to"
-                data-testid="compose-to"
-                value={formData.to}
-                onChange={handleChange}
-                placeholder="recipient@example.com"
-                className="flex-1 bg-transparent text-mail-text placeholder-mail-text-muted
-                          outline-none text-sm py-1"
-              />
-            </div>
-            
+            <RecipientField
+              name="to"
+              label="To:"
+              placeholder="recipient@example.com"
+              value={formData.to}
+              onChange={handleChange}
+              setValue={(v) => setFormData(prev => ({ ...prev, to: v }))}
+              testid="compose-to"
+              boostAccountId={selectedAccountId}
+            />
+
             {/* CC */}
-            <div className="flex items-center gap-2">
-              <label className="w-12 text-sm text-mail-text-muted">Cc:</label>
-              <input
-                type="text"
-                name="cc"
-                value={formData.cc}
-                onChange={handleChange}
-                placeholder="cc@example.com"
-                className="flex-1 bg-transparent text-mail-text placeholder-mail-text-muted
-                          outline-none text-sm py-1"
-              />
-            </div>
-            
+            <RecipientField
+              name="cc"
+              label="Cc:"
+              placeholder="cc@example.com"
+              value={formData.cc}
+              onChange={handleChange}
+              setValue={(v) => setFormData(prev => ({ ...prev, cc: v }))}
+              boostAccountId={selectedAccountId}
+            />
+
             {/* BCC */}
-            <div className="flex items-center gap-2">
-              <label className="w-12 text-sm text-mail-text-muted">Bcc:</label>
-              <input
-                type="text"
-                name="bcc"
-                value={formData.bcc}
-                onChange={handleChange}
-                placeholder="bcc@example.com"
-                className="flex-1 bg-transparent text-mail-text placeholder-mail-text-muted
-                          outline-none text-sm py-1"
-              />
-            </div>
+            <RecipientField
+              name="bcc"
+              label="Bcc:"
+              placeholder="bcc@example.com"
+              value={formData.bcc}
+              onChange={handleChange}
+              setValue={(v) => setFormData(prev => ({ ...prev, bcc: v }))}
+              boostAccountId={selectedAccountId}
+            />
             
             {/* Subject */}
             <div className="flex items-center gap-2">
@@ -736,6 +1145,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                 type="submit"
                 data-testid="compose-send"
                 disabled={sending}
+                title="Send (Shift+Enter)"
                 className="flex items-center gap-2 px-4 py-2 bg-mail-accent
                           hover:bg-mail-accent-hover disabled:opacity-50
                           text-white font-medium rounded-lg transition-all text-sm"

@@ -135,7 +135,7 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
   }, [content, editor]);
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 border border-mail-border rounded-lg overflow-hidden bg-mail-bg">
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden bg-mail-bg">
       <Toolbar editor={editor} />
       <div className="flex-1 overflow-y-auto">
         <EditorContent editor={editor} className="h-full" />

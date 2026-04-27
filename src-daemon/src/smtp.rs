@@ -20,6 +20,24 @@ pub struct OutgoingEmail {
     pub references: Option<String>,
 }
 
+/// Parse a comma-separated recipient string into a list of mailboxes.
+/// Empty entries (e.g. trailing commas, "a, ,b") are skipped so a stray
+/// comma doesn't cause a send failure.
+fn parse_address_list(raw: &str) -> Result<Vec<Mailbox>, String> {
+    let mut out = Vec::new();
+    for part in raw.split(',') {
+        let trimmed = part.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let mb: Mailbox = trimmed
+            .parse()
+            .map_err(|e| format!("{} ({})", e, trimmed))?;
+        out.push(mb);
+    }
+    Ok(out)
+}
+
 pub async fn send_email(account: &ImapConfig, email: &OutgoingEmail) -> Result<String, String> {
     let smtp_host = account
         .smtp_host
@@ -36,28 +54,31 @@ pub async fn send_email(account: &ImapConfig, email: &OutgoingEmail) -> Result<S
         }
     };
 
-    let to_mailbox: Mailbox = email
-        .to
-        .parse()
+    let to_mailboxes = parse_address_list(&email.to)
         .map_err(|e| format!("Invalid to address: {}", e))?;
+    if to_mailboxes.is_empty() {
+        return Err("Invalid to address: no recipients".to_string());
+    }
 
     let mut builder = Message::builder()
         .from(from_mailbox)
-        .to(to_mailbox)
         .subject(&email.subject);
+    for mb in to_mailboxes {
+        builder = builder.to(mb);
+    }
 
     if let Some(ref cc) = email.cc {
-        if !cc.is_empty() {
-            if let Ok(cc_mbox) = cc.parse::<Mailbox>() {
-                builder = builder.cc(cc_mbox);
+        if let Ok(list) = parse_address_list(cc) {
+            for mb in list {
+                builder = builder.cc(mb);
             }
         }
     }
 
     if let Some(ref bcc) = email.bcc {
-        if !bcc.is_empty() {
-            if let Ok(bcc_mbox) = bcc.parse::<Mailbox>() {
-                builder = builder.bcc(bcc_mbox);
+        if let Ok(list) = parse_address_list(bcc) {
+            for mb in list {
+                builder = builder.bcc(mb);
             }
         }
     }

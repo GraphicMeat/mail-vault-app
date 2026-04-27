@@ -261,22 +261,43 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
   let account = unified?.account || state.accounts.find(a => a.id === accountId);
   const selectedEmailId = state.selectedEmailId;
   if (!account) { console.error('[deleteEmail] No account found for', accountId); return; }
-  account = await ensureFreshToken(account);
 
-  console.log(`[deleteEmail] Deleting UID ${uid} from mailbox "${mailbox}" (account: ${account.email}, isGraph: ${isGraphAccount(account)}, override: ${mailboxOverride})`);
+  // Local-only short-circuit: if this UID belongs to an email that only
+  // exists in Maildir + local-index (never confirmed server-side), route to
+  // the local delete path. Otherwise the server delete would error on the
+  // pseudo-UID and the entry would re-hydrate on next loadEmails.
+  const candidate = [...(state.emails || []), ...(state.sentEmails || [])].find(e => e.uid === uid);
+  const isLocalOnly = candidate?.source === 'local-only' || candidate?._localStaged === true;
 
-  try {
-    if (isGraphAccount(account)) {
-      const graphId = getGraphMessageId(accountId, mailbox, uid);
-      if (!graphId) throw new Error('Cannot delete: no Graph message ID found for this email.');
-      await api.graphDeleteMessage(account.oauth2AccessToken, graphId);
-    } else {
-      await api.deleteEmail(account, uid, mailbox);
+  const invoke = window.__TAURI__?.core?.invoke;
+
+  if (isLocalOnly) {
+    if (invoke) {
+      try {
+        await invoke('maildir_delete', { accountId, mailbox, uid });
+        await invoke('local_index_remove', { accountId, mailbox, uid });
+        console.log(`[deleteEmail] Local-only delete: UID ${uid} (${accountId}/${mailbox})`);
+      } catch (err) {
+        console.error(`[deleteEmail] Local-only delete FAILED for UID ${uid}:`, err);
+        throw err;
+      }
     }
-    console.log(`[deleteEmail] Successfully deleted UID ${uid} from "${mailbox}"`);
-  } catch (err) {
-    console.error(`[deleteEmail] FAILED to delete UID ${uid} from "${mailbox}":`, err);
-    throw err;
+  } else {
+    account = await ensureFreshToken(account);
+    console.log(`[deleteEmail] Deleting UID ${uid} from mailbox "${mailbox}" (account: ${account.email}, isGraph: ${isGraphAccount(account)}, override: ${mailboxOverride})`);
+    try {
+      if (isGraphAccount(account)) {
+        const graphId = getGraphMessageId(accountId, mailbox, uid);
+        if (!graphId) throw new Error('Cannot delete: no Graph message ID found for this email.');
+        await api.graphDeleteMessage(account.oauth2AccessToken, graphId);
+      } else {
+        await api.deleteEmail(account, uid, mailbox);
+      }
+      console.log(`[deleteEmail] Successfully deleted UID ${uid} from "${mailbox}"`);
+    } catch (err) {
+      console.error(`[deleteEmail] FAILED to delete UID ${uid} from "${mailbox}":`, err);
+      throw err;
+    }
   }
 
   const filteredEmails = get().emails.filter(e => e.uid !== uid);
@@ -489,6 +510,8 @@ export async function deleteSelectedFromServer() {
 
   const deletedRealUids = new Set();
 
+  const invoke = window.__TAURI__?.core?.invoke;
+
   for (const key of keys) {
     try {
       const ctx = isUnified ? _resolveUnifiedContext(key, state) : null;
@@ -497,6 +520,26 @@ export async function deleteSelectedFromServer() {
       const emailObj = emailMap.get(key);
       const rawMailbox = ctx?.mailbox || (emailObj?._fromSentFolder && sentPath ? sentPath : state.activeMailbox);
       const mailbox = rawMailbox === 'UNIFIED' ? 'INBOX' : rawMailbox;
+
+      // Local-only messages (e.g. sent emails that never made it to server via
+      // IMAP APPEND) live only in Maildir + local-index. Route them through the
+      // local-delete path — otherwise the IMAP/Graph delete either errors or
+      // no-ops on the pseudo-UID and the entry re-hydrates on next loadEmails.
+      const isLocalOnly = emailObj?.source === 'local-only' || emailObj?._localStaged === true;
+      if (isLocalOnly) {
+        if (invoke) {
+          try {
+            await invoke('maildir_delete', { accountId, mailbox, uid: realUid });
+            await invoke('local_index_remove', { accountId, mailbox, uid: realUid });
+            console.log(`[deleteSelectedFromServer] Local-only delete: UID ${realUid} (${accountId}/${mailbox})`);
+          } catch (err) {
+            console.warn(`[deleteSelectedFromServer] Local-only delete failed for UID ${realUid}:`, err);
+          }
+        }
+        deletedRealUids.add(realUid);
+        continue;
+      }
+
       let account = ctx?.account || accounts.find(a => a.id === accountId);
       account = await ensureFreshToken(account);
 
