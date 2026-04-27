@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-04-27
+
+### Added
+- **Outbox tray + local stage-then-send**: Compose now archives to local Maildir before SMTP send; new outbox tray surfaces in-flight sends with cancel and retry; Shift+Enter sends; configurable per-compose send delay
+- **Per-account Sent folder resolution**: Tiered SPECIAL-USE → name-heuristic → lazy CREATE detection with auto-heal so sent emails reliably land in the right Sent folder per account
+- **Contacts picker popover**: Per-account filtered + boosted contact suggestions in compose; 15s reload throttle; daemon-side contacts indexing across INBOX, Sent, and custom folders (with frontend disk-walk fallback)
+- **Reply-To mismatch alert**: New `ReplyToAlertIcon` flags emails whose `Reply-To` header diverges from the `From` address — common phishing tell
+- **Email viewer dark mode v5**: Inlined DarkReader with body-only scan, per-email toggle, and new `emailViewerTheme` setting that decouples app theme from email rendering theme
+- **Maildir `.eml` suffix + migration**: Stored email files now carry the `.eml` extension for OS-level interoperability; daemon performs a one-time version-guarded rename of legacy filenames on startup
+
+### Improved
+- **Link safety modal**: Portal-rendered so it escapes virtualized-row transform ancestors and sits correctly over the viewport
+- **Selection action bar**: Narrow-screen layout fit and pointer-events fix on the delete confirmation popover
+- **Account activation**: Guards against wiping email state on background refresh paths
+- **Dev script**: Daemon socket and lockfile path aligned at `~/.mailvault/mv.sock` for sandboxed/sidecar parity
+- **Settings menu**: Sidebar restructure continues — feature views (Email Cleanup, Time Capsule) consolidated under settings
+
+### Fixed
+- **Sent IMAP APPEND hang on Hostinger**: Added pool-checkout and append-verified breadcrumbs; Message-ID parser rewritten for CRLF; secondary IMAP append spawned instead of awaited so a stalled secondary cannot block the primary send response
+- **Compose Escape behavior**: Escape now mirrors backdrop click (minimize to outbox bubble) instead of popping a discard prompt
+- **Iframe load race / cache scope**: Fixed intermittent "blank email" caused by iframe load-event race and cache-key scope mismatch
+- **macOS WKWebView dark scrollbars**: Themes now declare CSS `color-scheme` so scrollbars render correctly on dark backgrounds
+- **WKWebView file:// charset**: Email HTML loads with UTF-8 BOM + meta charset first to avoid Latin-1 default decoding
+- **Stacked keychain prompts**: Removed second uncancellable `spawn_blocking` retry path that produced a duplicate macOS keychain dialog
+
 ## [2.4.0] - 2026-04-16
 
 ### Added
