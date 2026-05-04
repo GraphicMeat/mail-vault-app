@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-05-04
+
 ### Improved
 - **Row delete confirmation**: The 3-dots row menu's "Delete from server" no longer relies on an unreliable inline two-click confirm inside the virtualized row. Confirmation is now lifted to a portal-rendered modal at the list level so it escapes the virtualizer's transform stacking context and works consistently across the default and compact email/thread rows.
 
