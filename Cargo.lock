@@ -3559,6 +3559,7 @@ dependencies = [
  "libc",
  "log",
  "mailparse",
+ "mailvault-core",
  "objc",
  "once_cell",
  "rand 0.9.4",
@@ -3595,6 +3596,7 @@ name = "mailvault-core"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "charset",
  "chrono",
  "dirs 5.0.1",
  "mailparse",

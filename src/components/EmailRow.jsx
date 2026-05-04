@@ -16,7 +16,7 @@ import {
   Archive,
 } from 'lucide-react';
 
-export const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, confirmingDelete, onOpenMenu, onCloseMenu, onConfirmDelete, isSaving, onStartSaving, onStopSaving }) {
+export const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
   const { saveEmailLocally, removeLocalEmail, deleteEmailFromServer } = actions;
 
   const handleSave = async (e) => {
@@ -37,12 +37,10 @@ export const EmailRow = React.memo(function EmailRow({ email, isSelected, onSele
 
   const handleDeleteServer = (e) => {
     e.stopPropagation();
-    if (confirmingDelete) {
-      deleteEmailFromServer(email.uid);
-      onCloseMenu();
-    } else {
-      onConfirmDelete();
-    }
+    onRequestDelete(
+      () => deleteEmailFromServer(email.uid),
+      'This email will be permanently deleted from the server. This cannot be undone.'
+    );
   };
 
   const isUnread = !email.flags?.includes('\\Seen');
@@ -137,11 +135,11 @@ export const EmailRow = React.memo(function EmailRow({ email, isSelected, onSele
           {email.source !== 'local-only' && (
             <button
               onClick={handleDeleteServer}
-              className={`w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover
-                        flex items-center gap-2 ${confirmingDelete ? 'text-white bg-red-600 hover:bg-red-700' : 'text-mail-danger'}`}
+              className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover
+                        flex items-center gap-2 text-mail-danger"
             >
               <Trash2 size={14} />
-              {confirmingDelete ? 'Confirm delete?' : 'Delete from server'}
+              Delete from server
             </button>
           )}
         </RowActionMenu>
@@ -150,7 +148,7 @@ export const EmailRow = React.memo(function EmailRow({ email, isSelected, onSele
   );
 });
 
-export const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSelected, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, confirmingDelete, onOpenMenu, onCloseMenu, onConfirmDelete, isSaving, onStartSaving, onStopSaving }) {
+export const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSelected, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
   const { saveEmailLocally, removeLocalEmail, deleteEmailFromServer } = actions;
 
   const handleSave = async (e) => {
@@ -167,12 +165,10 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSe
 
   const handleDeleteServer = (e) => {
     e.stopPropagation();
-    if (confirmingDelete) {
-      deleteEmailFromServer(email.uid);
-      onCloseMenu();
-    } else {
-      onConfirmDelete();
-    }
+    onRequestDelete(
+      () => deleteEmailFromServer(email.uid),
+      'This email will be permanently deleted from the server. This cannot be undone.'
+    );
   };
 
   const isUnread = !email.flags?.includes('\\Seen');
@@ -253,8 +249,8 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSe
           )}
           {email.source !== 'local-only' && (
             <button onClick={handleDeleteServer}
-              className={`w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover flex items-center gap-2 ${confirmingDelete ? 'text-white bg-red-600 hover:bg-red-700' : 'text-mail-danger'}`}>
-              <Trash2 size={14} /> {confirmingDelete ? 'Confirm delete?' : 'Delete from server'}
+              className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover flex items-center gap-2 text-mail-danger">
+              <Trash2 size={14} /> Delete from server
             </button>
           )}
         </RowActionMenu>

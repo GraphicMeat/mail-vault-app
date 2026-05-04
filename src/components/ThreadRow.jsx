@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 
 // Thread row for default layout — shows collapsed thread with participant names and count
-export const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectThread, onToggleSelection, anyChecked, style, actions, menuOpen, confirmingDelete, onOpenMenu, onCloseMenu, onConfirmDelete, isSaving, onStartSaving, onStopSaving }) {
+export const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectThread, onToggleSelection, anyChecked, style, actions, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
   const { saveEmailsLocally, deleteEmailFromServer } = actions;
 
   if (!thread?.lastEmail) return null;
@@ -51,25 +51,25 @@ export const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onS
     }
   };
 
-  const handleDeleteThread = async (e) => {
+  const handleDeleteThread = (e) => {
     e.stopPropagation();
-    if (!confirmingDelete) {
-      onConfirmDelete();
-      return;
-    }
     const serverEmails = thread.emails.filter(em => em.source !== 'local-only');
-    const activeMailbox = useMailStore.getState().activeMailbox;
-    const sentPath = useMailStore.getState().getSentMailboxPath();
-    for (const email of serverEmails) {
-      const mailbox = email._fromSentFolder && sentPath ? sentPath : activeMailbox;
-      try {
-        await deleteEmailFromServer(email.uid, { skipRefresh: true, mailboxOverride: mailbox });
-      } catch (err) {
-        console.error(`[handleDeleteThread] Failed to delete email ${email.uid} from ${mailbox}:`, err);
-      }
-    }
-    if (serverEmails.length > 0) useMailStore.getState().loadEmails();
-    onCloseMenu();
+    onRequestDelete(
+      async () => {
+        const activeMailbox = useMailStore.getState().activeMailbox;
+        const sentPath = useMailStore.getState().getSentMailboxPath();
+        for (const email of serverEmails) {
+          const mailbox = email._fromSentFolder && sentPath ? sentPath : activeMailbox;
+          try {
+            await deleteEmailFromServer(email.uid, { skipRefresh: true, mailboxOverride: mailbox });
+          } catch (err) {
+            console.error(`[handleDeleteThread] Failed to delete email ${email.uid} from ${mailbox}:`, err);
+          }
+        }
+        if (serverEmails.length > 0) useMailStore.getState().loadEmails();
+      },
+      `${serverEmails.length} email${serverEmails.length !== 1 ? 's' : ''} in this thread will be permanently deleted from the server. This cannot be undone.`
+    );
   };
 
   return (
@@ -140,11 +140,11 @@ export const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onS
         <RowActionMenu open={menuOpen} onOpen={onOpenMenu} onClose={onCloseMenu}>
           <button
             onClick={handleDeleteThread}
-            className={`w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover
-                      flex items-center gap-2 ${confirmingDelete ? 'text-white bg-red-600 hover:bg-red-700' : 'text-mail-danger'}`}
+            className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover
+                      flex items-center gap-2 text-mail-danger"
           >
             <Trash2 size={14} />
-            {confirmingDelete ? `Delete ${thread.messageCount} emails?` : 'Delete thread from server'}
+            Delete thread from server
           </button>
         </RowActionMenu>
       </div>
@@ -153,7 +153,7 @@ export const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onS
 });
 
 // Compact thread row for compact layout
-export const CompactThreadRow = React.memo(function CompactThreadRow({ thread, isSelected, onSelectThread, onToggleSelection, anyChecked, style, actions, menuOpen, confirmingDelete, onOpenMenu, onCloseMenu, onConfirmDelete, isSaving, onStartSaving, onStopSaving }) {
+export const CompactThreadRow = React.memo(function CompactThreadRow({ thread, isSelected, onSelectThread, onToggleSelection, anyChecked, style, actions, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
   const { saveEmailsLocally, deleteEmailFromServer } = actions;
 
   if (!thread?.lastEmail) return null;
@@ -186,25 +186,25 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ thread, i
     }
   };
 
-  const handleDeleteThread = async (e) => {
+  const handleDeleteThread = (e) => {
     e.stopPropagation();
-    if (!confirmingDelete) {
-      onConfirmDelete();
-      return;
-    }
     const serverEmails = thread.emails.filter(em => em.source !== 'local-only');
-    const activeMailbox = useMailStore.getState().activeMailbox;
-    const sentPath = useMailStore.getState().getSentMailboxPath();
-    for (const email of serverEmails) {
-      const mailbox = email._fromSentFolder && sentPath ? sentPath : activeMailbox;
-      try {
-        await deleteEmailFromServer(email.uid, { skipRefresh: true, mailboxOverride: mailbox });
-      } catch (err) {
-        console.error(`Failed to delete email ${email.uid} from ${mailbox}:`, err);
-      }
-    }
-    if (serverEmails.length > 0) useMailStore.getState().loadEmails();
-    onCloseMenu();
+    onRequestDelete(
+      async () => {
+        const activeMailbox = useMailStore.getState().activeMailbox;
+        const sentPath = useMailStore.getState().getSentMailboxPath();
+        for (const email of serverEmails) {
+          const mailbox = email._fromSentFolder && sentPath ? sentPath : activeMailbox;
+          try {
+            await deleteEmailFromServer(email.uid, { skipRefresh: true, mailboxOverride: mailbox });
+          } catch (err) {
+            console.error(`Failed to delete email ${email.uid} from ${mailbox}:`, err);
+          }
+        }
+        if (serverEmails.length > 0) useMailStore.getState().loadEmails();
+      },
+      `${serverEmails.length} email${serverEmails.length !== 1 ? 's' : ''} in this thread will be permanently deleted from the server. This cannot be undone.`
+    );
   };
 
   return (
@@ -270,8 +270,8 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ thread, i
         )}
         <RowActionMenu open={menuOpen} onOpen={onOpenMenu} onClose={onCloseMenu} size={13}>
           <button onClick={handleDeleteThread}
-            className={`w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover flex items-center gap-2 ${confirmingDelete ? 'text-white bg-red-600 hover:bg-red-700' : 'text-mail-danger'}`}>
-            <Trash2 size={14} /> {confirmingDelete ? `Delete ${thread.messageCount} emails?` : 'Delete thread from server'}
+            className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover flex items-center gap-2 text-mail-danger">
+            <Trash2 size={14} /> Delete thread from server
           </button>
         </RowActionMenu>
       </div>

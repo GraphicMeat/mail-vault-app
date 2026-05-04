@@ -26,6 +26,7 @@ chrono = "0.4"
 base64 = "0.22"
 dirs = "5"
 mailparse = "0.15"
+mailvault-core = { path = "../src-core" }
 walkdir = "2"
 zip = "2"
 uuid = { version = "1", features = ["v4"] }

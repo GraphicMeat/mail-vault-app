@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Improved
+- **Row delete confirmation**: The 3-dots row menu's "Delete from server" no longer relies on an unreliable inline two-click confirm inside the virtualized row. Confirmation is now lifted to a portal-rendered modal at the list level so it escapes the virtualizer's transform stacking context and works consistently across the default and compact email/thread rows.
+
+### Fixed
+- **MIME-encoded subjects with non-conformant whitespace**: Subjects like `=?utf-8?Q?Dovan=C4=97l=C4=97_?=naujagimiui ir mamai` (encoded-word adjacent to plain text without RFC-required separating whitespace) now decode correctly in the email list and thread view. Replaced strict `mailparse`-based decoder with a lenient RFC 2047 scanner shared between the desktop app and daemon (`mailvault_core::mime::decode_rfc2047`). Full-mail Subject extraction now reads `get_value_raw()` and routes through the same decoder.
+
 ## [2.5.0] - 2026-04-27
 
 ### Added

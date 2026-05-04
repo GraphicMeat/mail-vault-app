@@ -5,5 +5,6 @@
 //! of depending on Tauri's AppHandle.
 
 pub mod maildir;
+pub mod mime;
 pub mod types;
 pub mod cache;

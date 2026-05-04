@@ -942,8 +942,16 @@ pub async fn fetch_email_by_uid(
             .find(|h| h.get_key().eq_ignore_ascii_case(name))
             .map(|h| h.get_value())
     };
+    let get_header_raw = |name: &str| -> Option<Vec<u8>> {
+        headers
+            .iter()
+            .find(|h| h.get_key().eq_ignore_ascii_case(name))
+            .map(|h| h.get_value_raw().to_vec())
+    };
 
-    let subject = get_header("Subject").unwrap_or_else(|| "(No Subject)".to_string());
+    let subject = get_header_raw("Subject")
+        .map(|raw| decode_rfc2047(&raw))
+        .unwrap_or_else(|| "(No Subject)".to_string());
     let message_id = get_header("Message-ID");
     let date = get_header("Date");
 
@@ -1522,21 +1530,8 @@ fn parse_email_address_from_header(val: &str) -> Option<EmailAddress> {
     }
 }
 
-/// Decode RFC 2047 encoded-words (e.g. `=?windows-1257?Q?Ona_...?=`) in raw
-/// IMAP envelope bytes.  Falls back to lossy UTF-8 if parsing fails.
-fn decode_rfc2047(raw: &[u8]) -> String {
-    let lossy = String::from_utf8_lossy(raw);
-    // Fast path: no encoded-word marker present
-    if !lossy.contains("=?") {
-        return lossy.into_owned();
-    }
-    // Build a synthetic header so mailparse can decode it
-    let fake_header = format!("X: {}", lossy);
-    match mailparse::parse_header(fake_header.as_bytes()) {
-        Ok((hdr, _)) => hdr.get_value(),
-        Err(_) => lossy.into_owned(),
-    }
-}
+// Lenient RFC 2047 decoder lives in `mailvault_core::mime`.
+use mailvault_core::mime::decode_rfc2047;
 
 fn imap_addr_to_email_address(addr: &imap_proto::types::Address) -> EmailAddress {
     let name = addr
@@ -1775,8 +1770,16 @@ pub async fn fetch_email_by_uid_light(
             .find(|h| h.get_key().eq_ignore_ascii_case(name))
             .map(|h| h.get_value())
     };
+    let get_header_raw = |name: &str| -> Option<Vec<u8>> {
+        headers
+            .iter()
+            .find(|h| h.get_key().eq_ignore_ascii_case(name))
+            .map(|h| h.get_value_raw().to_vec())
+    };
 
-    let subject = get_header("Subject").unwrap_or_else(|| "(No Subject)".to_string());
+    let subject = get_header_raw("Subject")
+        .map(|raw| decode_rfc2047(&raw))
+        .unwrap_or_else(|| "(No Subject)".to_string());
     let message_id = get_header("Message-ID");
     let date = get_header("Date");
 

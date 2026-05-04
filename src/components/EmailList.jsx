@@ -1,4 +1,5 @@
 import React, { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import ReactDOM from 'react-dom';
 import { useMailStore } from '../stores/mailStore';
 import { useAccountStore } from '../stores/accountStore';
 import { useMessageListStore } from '../stores/messageListStore';
@@ -27,7 +28,9 @@ import {
   Layers,
   Search,
   MessageSquare,
-  Users
+  Users,
+  AlertTriangle,
+  Trash2,
 } from 'lucide-react';
 import { BulkOperationsModal } from './BulkOperationsModal';
 import { BulkOperationProgress } from './BulkOperationProgress';
@@ -115,9 +118,12 @@ function EmailListComponent() {
   const [expandedTopics, setExpandedTopics] = useState(new Set());
   const [expandedEmail, setExpandedEmail] = useState(null);
   const [focusedRow, setFocusedRow] = useState(null);
-  // Lifted row menu state — only one menu/confirm can be active at a time
+  // Lifted row menu state — only one menu can be active at a time
   const [activeMenuRowId, setActiveMenuRowId] = useState(null);
-  const [confirmingDeleteRowId, setConfirmingDeleteRowId] = useState(null);
+  // Pending delete confirmation lifted out of rows so the modal escapes the
+  // virtualizer's transform stacking context. { label, executor } | null
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [deletingPending, setDeletingPending] = useState(false);
   // Lifted saving state — tracks which rows have active save operations
   const [savingRowIds, setSavingRowIds] = useState(() => new Set());
   const startSaving = useCallback((id) => setSavingRowIds(prev => { const next = new Set(prev); next.add(id); return next; }), []);
@@ -241,7 +247,7 @@ function EmailListComponent() {
     setExpandedEmail(null);
     setFocusedRow(null);
     setActiveMenuRowId(null);
-    setConfirmingDeleteRowId(null);
+    setPendingDelete(null);
   }, [activeAccountId, activeMailbox]);
 
   // Pull-to-refresh
@@ -999,10 +1005,9 @@ function EmailListComponent() {
                       style={{ height: ROW_HEIGHT }}
                       actions={rowActions}
                       menuOpen={activeMenuRowId === `thread-${item.thread.threadId}`}
-                      confirmingDelete={confirmingDeleteRowId === `thread-${item.thread.threadId}`}
-                      onOpenMenu={() => { setActiveMenuRowId(`thread-${item.thread.threadId}`); setConfirmingDeleteRowId(null); }}
-                      onCloseMenu={() => { setActiveMenuRowId(null); setConfirmingDeleteRowId(null); }}
-                      onConfirmDelete={() => setConfirmingDeleteRowId(`thread-${item.thread.threadId}`)}
+                      onOpenMenu={() => { setActiveMenuRowId(`thread-${item.thread.threadId}`); }}
+                      onCloseMenu={() => { setActiveMenuRowId(null); }}
+                      onRequestDelete={(executor, label) => { setActiveMenuRowId(null); setPendingDelete({ executor, label }); }}
                       isSaving={savingRowIds.has(`thread-${item.thread.threadId}`)}
                       onStartSaving={() => startSaving(`thread-${item.thread.threadId}`)}
                       onStopSaving={() => stopSaving(`thread-${item.thread.threadId}`)}
@@ -1035,10 +1040,9 @@ function EmailListComponent() {
                     unifiedInbox={unifiedInbox}
                     accountColors={accountColors}
                     menuOpen={activeMenuRowId === item.email.uid}
-                    confirmingDelete={confirmingDeleteRowId === item.email.uid}
-                    onOpenMenu={() => { setActiveMenuRowId(item.email.uid); setConfirmingDeleteRowId(null); }}
-                    onCloseMenu={() => { setActiveMenuRowId(null); setConfirmingDeleteRowId(null); }}
-                    onConfirmDelete={() => setConfirmingDeleteRowId(item.email.uid)}
+                    onOpenMenu={() => { setActiveMenuRowId(item.email.uid); }}
+                    onCloseMenu={() => { setActiveMenuRowId(null); }}
+                    onRequestDelete={(executor, label) => { setActiveMenuRowId(null); setPendingDelete({ executor, label }); }}
                     isSaving={savingRowIds.has(item.email.uid)}
                     onStartSaving={() => startSaving(item.email.uid)}
                     onStopSaving={() => stopSaving(item.email.uid)}
@@ -1077,7 +1081,69 @@ function EmailListComponent() {
         onCancel={handleBulkCancel}
         onDismiss={() => setBulkOpProgress(null)}
       />
+      <RowDeleteConfirmModal
+        pending={pendingDelete}
+        busy={deletingPending}
+        onCancel={() => { if (!deletingPending) setPendingDelete(null); }}
+        onConfirm={async () => {
+          if (!pendingDelete || deletingPending) return;
+          const exec = pendingDelete.executor;
+          setDeletingPending(true);
+          try { await exec(); } catch (err) { console.error('[EmailList] row delete failed:', err); }
+          finally { setDeletingPending(false); setPendingDelete(null); }
+        }}
+      />
     </div>
+  );
+}
+
+function RowDeleteConfirmModal({ pending, busy, onCancel, onConfirm }) {
+  return ReactDOM.createPortal(
+    <AnimatePresence>
+      {pending && (
+        <motion.div
+          key="row-delete-confirm"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          onClick={onCancel}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="bg-mail-bg border border-mail-border rounded-xl shadow-2xl p-5 min-w-[320px] max-w-[420px] mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3 mb-4">
+              <AlertTriangle size={20} className="text-mail-danger flex-shrink-0 mt-0.5" />
+              <div>
+                <h3 className="text-base font-semibold text-mail-text mb-1">Delete from server?</h3>
+                <p className="text-sm text-mail-text-muted">{pending.label}</p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={onCancel}
+                disabled={busy}
+                className="px-3 py-1.5 text-sm text-mail-text-muted hover:bg-mail-border rounded-lg transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={onConfirm}
+                disabled={busy}
+                className="px-3 py-1.5 text-sm font-medium bg-mail-danger text-white rounded-lg hover:bg-mail-danger/90 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <Trash2 size={14} /> {busy ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    document.body
   );
 }
 
