@@ -36,10 +36,6 @@
       "identifier": "shell:allow-execute",
       "allow": [
         {
-          "name": "mailvault-server",
-          "sidecar": true
-        },
-        {
           "name": "mailvault-daemon",
           "sidecar": true
         }
@@ -52,13 +48,6 @@
     "notification:allow-notify",
     "notification:allow-request-permission",
     "notification:allow-is-permission-granted",
-    "http:default",
-    {
-      "identifier": "http:allow-fetch",
-      "allow": [
-        { "url": "http://localhost:3001/**" },
-        { "url": "http://127.0.0.1:3001/**" }
-      ]
-    }
+    "http:default"
   ]
 }

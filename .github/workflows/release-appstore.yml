@@ -1,0 +1,190 @@
+name: Release (Mac App Store)
+
+# Builds a sandboxed, IAP-gated MAS .pkg and (optionally) uploads it to
+# App Store Connect. Triggered manually because MAS submissions are not
+# fire-and-forget — Apple review happens after upload.
+#
+# Required repository secrets:
+#   APPLE_APPSTORE_CERT             Apple Distribution cert (.p12, base64)
+#   APPLE_APPSTORE_CERT_PASSWORD    .p12 password
+#   APPLE_INSTALLER_CERT            Mac Installer Distribution cert (.p12, base64)
+#   APPLE_INSTALLER_CERT_PASSWORD   .p12 password
+#   APPLE_PROVISIONING_PROFILE      MAS provisioning profile (.provisionprofile, base64)
+#   APPLE_TEAM_ID                   10-char team identifier
+#   APP_STORE_CONNECT_API_KEY       App Store Connect API private key (.p8 contents)
+#   APP_STORE_CONNECT_API_KEY_ID    API key id (e.g. ABCDEF1234)
+#   APP_STORE_CONNECT_API_ISSUER    API issuer uuid
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (must match tauri.conf.json, e.g. 2.6.0)'
+        required: true
+        type: string
+      upload:
+        description: 'Upload to App Store Connect after build'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build-mas:
+    permissions:
+      contents: read
+    runs-on: macos-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        run: |
+          brew install rustup
+          rustup-init -y --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          source "$HOME/.cargo/env"
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: macos-mas-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            macos-mas-cargo-
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Verify version matches tauri.conf.json
+        run: |
+          TAURI_VERSION=$(grep '"version"' src-tauri/tauri.conf.json | head -1 | sed 's/.*: "\(.*\)".*/\1/')
+          if [ "$TAURI_VERSION" != "${{ inputs.version }}" ]; then
+            echo "::error::Version mismatch — input=${{ inputs.version }} tauri.conf.json=$TAURI_VERSION"
+            exit 1
+          fi
+          echo "Version $TAURI_VERSION confirmed"
+
+      - name: Import Apple Distribution + Installer certificates
+        env:
+          APPSTORE_CERT: ${{ secrets.APPLE_APPSTORE_CERT }}
+          APPSTORE_CERT_PASSWORD: ${{ secrets.APPLE_APPSTORE_CERT_PASSWORD }}
+          INSTALLER_CERT: ${{ secrets.APPLE_INSTALLER_CERT }}
+          INSTALLER_CERT_PASSWORD: ${{ secrets.APPLE_INSTALLER_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH=$RUNNER_TEMP/mas-signing.keychain-db
+          security create-keychain -p "actions" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "actions" "$KEYCHAIN_PATH"
+
+          APP_CERT_PATH=$RUNNER_TEMP/appstore-cert.p12
+          INST_CERT_PATH=$RUNNER_TEMP/installer-cert.p12
+          echo -n "$APPSTORE_CERT" | base64 --decode -o "$APP_CERT_PATH"
+          echo -n "$INSTALLER_CERT" | base64 --decode -o "$INST_CERT_PATH"
+
+          security import "$APP_CERT_PATH"  -P "$APPSTORE_CERT_PASSWORD"  -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security import "$INST_CERT_PATH" -P "$INSTALLER_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -k "actions" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
+          security default-keychain -s "$KEYCHAIN_PATH"
+          security find-identity -v -p codesigning
+
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+      - name: Install MAS provisioning profile
+        env:
+          PROFILE_B64: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
+        run: |
+          set -euo pipefail
+          PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILE_DIR"
+          PROFILE_PATH="$PROFILE_DIR/mailvault-mas.provisionprofile"
+          echo -n "$PROFILE_B64" | base64 --decode -o "$PROFILE_PATH"
+          ls -la "$PROFILE_DIR"
+
+      - name: Build daemon (universal2)
+        run: |
+          set -euo pipefail
+          for ARCH in aarch64-apple-darwin x86_64-apple-darwin; do
+            TAURI_TARGET=$ARCH npm run build:daemon
+          done
+          BIN_DIR=src-tauri/binaries
+          if [ -f "$BIN_DIR/mailvault-daemon-aarch64-apple-darwin" ] && [ -f "$BIN_DIR/mailvault-daemon-x86_64-apple-darwin" ]; then
+            lipo -create -output "$BIN_DIR/mailvault-daemon-universal-apple-darwin" \
+              "$BIN_DIR/mailvault-daemon-aarch64-apple-darwin" \
+              "$BIN_DIR/mailvault-daemon-x86_64-apple-darwin"
+            cp "$BIN_DIR/mailvault-daemon-universal-apple-darwin" "$BIN_DIR/mailvault-daemon-aarch64-apple-darwin"
+            cp "$BIN_DIR/mailvault-daemon-universal-apple-darwin" "$BIN_DIR/mailvault-daemon-x86_64-apple-darwin"
+          fi
+
+      - name: Build MAS .pkg
+        env:
+          APPSTORE_CERT_PASSWORD: ${{ secrets.APPLE_APPSTORE_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          security unlock-keychain -p "actions" "$KEYCHAIN_PATH"
+          export VITE_MV_APPSTORE=1
+          # The build script signs and packages; it locates the certs from the keychain.
+          bash scripts/build-appstore.sh <<< "n"
+
+      - name: Locate built .pkg
+        id: pkg
+        run: |
+          PKG=$(ls src-tauri/target/release/bundle/MailVault-${{ inputs.version }}-appstore.pkg 2>/dev/null | head -1)
+          if [ -z "$PKG" ]; then
+            echo "::error::No .pkg found in src-tauri/target/release/bundle/"
+            ls -R src-tauri/target/release/bundle/ || true
+            exit 1
+          fi
+          echo "path=$PKG" >> "$GITHUB_OUTPUT"
+          echo "Built $PKG"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mailvault-mas-${{ inputs.version }}
+          path: ${{ steps.pkg.outputs.path }}
+          retention-days: 14
+
+      - name: Validate with App Store Connect
+        if: ${{ inputs.upload }}
+        env:
+          API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          API_ISSUER: ${{ secrets.APP_STORE_CONNECT_API_ISSUER }}
+        run: |
+          set -euo pipefail
+          KEY_DIR="$HOME/.appstoreconnect/private_keys"
+          mkdir -p "$KEY_DIR"
+          KEY_PATH="$KEY_DIR/AuthKey_${API_KEY_ID}.p8"
+          echo -n "$API_KEY" > "$KEY_PATH"
+          xcrun altool --validate-app -f "${{ steps.pkg.outputs.path }}" -t macos \
+            --apiKey "$API_KEY_ID" --apiIssuer "$API_ISSUER"
+
+      - name: Upload to App Store Connect
+        if: ${{ inputs.upload }}
+        env:
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          API_ISSUER: ${{ secrets.APP_STORE_CONNECT_API_ISSUER }}
+        run: |
+          set -euo pipefail
+          xcrun altool --upload-app -f "${{ steps.pkg.outputs.path }}" -t macos \
+            --apiKey "$API_KEY_ID" --apiIssuer "$API_ISSUER"
+          echo "Submitted to App Store Connect. Open https://appstoreconnect.apple.com to start review."
+
+      - name: Clean up keychain
+        if: always()
+        run: |
+          security delete-keychain "$KEYCHAIN_PATH" || true

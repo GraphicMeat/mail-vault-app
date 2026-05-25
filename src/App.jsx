@@ -409,8 +409,11 @@ function App() {
     return () => { active = false; if (unlisten) unlisten(); };
   }, [handleReportBug]);
 
-  // Listen for update-available event from Rust updater
+  // Listen for update-available event from Rust updater.
+  // MAS builds rely on the App Store for updates — the event is never emitted there,
+  // but we also skip the listener to avoid pulling in the Sparkle plugin module.
   useEffect(() => {
+    if (import.meta.env.VITE_MV_APPSTORE === '1') return;
     let unlisten;
     let active = true;
     import('@tauri-apps/api/event').then(({ listen }) => {

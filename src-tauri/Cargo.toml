@@ -52,7 +52,12 @@ tauri-plugin-webdriver-automation = { version = "0.1", optional = true }
 cocoa = "0.26"
 objc = "0.2"
 keyring = { version = "3", features = ["apple-native"] }
-tauri-plugin-sparkle-updater = "0.2"
+tauri-plugin-sparkle-updater = { version = "0.2", optional = true }
+# StoreKit bindings — Mac App Store IAP (enabled by `appstore` feature)
+objc2 = { version = "0.6", optional = true }
+objc2-foundation = { version = "0.3", optional = true }
+objc2-store-kit = { version = "0.3", optional = true }
+block2 = { version = "0.6", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
@@ -63,9 +68,13 @@ tauri-plugin-updater = "2"
 signal-hook = "0.3"
 
 [features]
-default = ["custom-protocol"]
+default = ["custom-protocol", "sparkle"]
 custom-protocol = ["tauri/custom-protocol"]
 webdriver = ["tauri-plugin-webdriver-automation"]
+# Developer ID / non-MAS macOS builds use Sparkle for auto-updates.
+sparkle = ["dep:tauri-plugin-sparkle-updater"]
+# Mac App Store build: drops Sparkle, enables StoreKit IAP for paid features.
+appstore = ["dep:objc2", "dep:objc2-foundation", "dep:objc2-store-kit", "dep:block2"]
 
 [profile.release]
 panic = "abort"

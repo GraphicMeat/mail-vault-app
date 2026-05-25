@@ -6,15 +6,8 @@
     <key>com.apple.security.app-sandbox</key>
     <true/>
 
-    <!-- Required for Bun-compiled sidecar (JIT) under hardened runtime + sandbox -->
-    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
-    <true/>
-    <key>com.apple.security.cs.allow-jit</key>
-    <true/>
-    <key>com.apple.security.cs.disable-library-validation</key>
-    <true/>
-
-    <!-- Network access for IMAP/SMTP and sidecar server -->
+    <!-- Network access for IMAP/SMTP. network.server is required for the
+         OAuth2 callback loopback listener on 127.0.0.1:19876. -->
     <key>com.apple.security.network.client</key>
     <true/>
     <key>com.apple.security.network.server</key>

@@ -3547,6 +3547,7 @@ dependencies = [
  "async-native-tls",
  "async-std",
  "base64 0.22.1",
+ "block2",
  "chrono",
  "cocoa",
  "dirs 5.0.1",
@@ -3561,6 +3562,9 @@ dependencies = [
  "mailparse",
  "mailvault-core",
  "objc",
+ "objc2",
+ "objc2-foundation",
+ "objc2-store-kit",
  "once_cell",
  "rand 0.9.4",
  "reqwest 0.12.28",
@@ -4281,6 +4285,20 @@ checksum = "96c1358452b371bf9f104e21ec536d37a650eb10f7ee379fff67d2e08d537f1f"
 dependencies = [
  "bitflags 2.11.0",
  "objc2",
+ "objc2-core-foundation",
+ "objc2-foundation",
+]
+
+[[package]]
+name = "objc2-store-kit"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29a1cef520f802b637e2cca72d7dfd2f17cfff947fb5f802dd2d8c68e6c63072"
+dependencies = [
+ "bitflags 2.11.0",
+ "block2",
+ "objc2",
+ "objc2-app-kit",
  "objc2-core-foundation",
  "objc2-foundation",
 ]

@@ -96,9 +96,6 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - name: Install Bun
-        uses: oven-sh/setup-bun@v2
-
       - name: Install frontend dependencies
         run: npm ci
 
@@ -117,30 +114,6 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -k "actions" $KEYCHAIN_PATH
           security list-keychains -d user -s $KEYCHAIN_PATH login.keychain-db
           echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
-
-      - name: Build universal server sidecar
-        run: |
-          mkdir -p src-tauri/binaries
-
-          # Build ARM64 natively
-          bun build server/index.js --compile --outfile src-tauri/binaries/mailvault-server-aarch64-apple-darwin
-          chmod +x src-tauri/binaries/mailvault-server-aarch64-apple-darwin
-
-          # Download x86_64 Bun and build x86_64 sidecar
-          curl -fsSL -o /tmp/bun-x64.zip "https://github.com/oven-sh/bun/releases/latest/download/bun-darwin-x64.zip"
-          unzip -o /tmp/bun-x64.zip -d /tmp/bun-x64
-          arch -x86_64 /tmp/bun-x64/bun-darwin-x64/bun build server/index.js --compile --outfile src-tauri/binaries/mailvault-server-x86_64-apple-darwin
-          chmod +x src-tauri/binaries/mailvault-server-x86_64-apple-darwin
-
-          # Create universal binary
-          lipo -create \
-            src-tauri/binaries/mailvault-server-aarch64-apple-darwin \
-            src-tauri/binaries/mailvault-server-x86_64-apple-darwin \
-            -output src-tauri/binaries/mailvault-server-universal-apple-darwin
-          chmod +x src-tauri/binaries/mailvault-server-universal-apple-darwin
-
-          echo "Universal server binary:"
-          file src-tauri/binaries/mailvault-server-universal-apple-darwin
 
       - name: Build universal daemon sidecar
         run: |
@@ -241,16 +214,13 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - name: Install Bun
-        uses: oven-sh/setup-bun@v2
-
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build server sidecar
+      - name: Build daemon sidecar
         env:
           TAURI_TARGET: x86_64-unknown-linux-gnu
-        run: npm run build:server
+        run: npm run build:daemon
 
       - name: Build Linux x86_64
         env:
@@ -312,16 +282,13 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - name: Install Bun
-        uses: oven-sh/setup-bun@v2
-
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build server sidecar
+      - name: Build daemon sidecar
         env:
           TAURI_TARGET: aarch64-unknown-linux-gnu
-        run: npm run build:server
+        run: npm run build:daemon
 
       - name: Build Linux aarch64
         env:
@@ -383,16 +350,13 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - name: Install Bun
-        uses: oven-sh/setup-bun@v2
-
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build server sidecar
+      - name: Build daemon sidecar
         env:
           TAURI_TARGET: x86_64-unknown-linux-gnu
-        run: npm run build:server
+        run: npm run build:daemon
 
       - name: Build Tauri binary
         run: npx tauri build --target x86_64-unknown-linux-gnu --no-bundle
@@ -462,16 +426,13 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - name: Install Bun
-        uses: oven-sh/setup-bun@v2
-
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build server sidecar
+      - name: Build daemon sidecar
         env:
           TAURI_TARGET: aarch64-unknown-linux-gnu
-        run: npm run build:server
+        run: npm run build:daemon
 
       - name: Build Tauri binary
         run: npx tauri build --target aarch64-unknown-linux-gnu --no-bundle

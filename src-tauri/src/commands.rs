@@ -1025,6 +1025,11 @@ pub async fn backup_save_external_location(
     app_handle: tauri::AppHandle,
     path: String,
 ) -> Result<crate::external_location::ExternalLocation, String> {
+    // MAS builds gate external backups behind a non-consumable IAP. Non-MAS
+    // builds always pass this check (stub returns true).
+    if !crate::iap::is_entitled("com.mailvault.app.backups") {
+        return Err("Cloud Backups requires a one-time in-app purchase. Open Settings → Backups to unlock.".to_string());
+    }
     let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
     crate::external_location::save_external_location(&data_dir, &path)
 }

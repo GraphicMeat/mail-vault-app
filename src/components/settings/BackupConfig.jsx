@@ -4,7 +4,10 @@ import {
   AlertCircle,
   Loader,
   HardDrive,
+  Lock,
+  RefreshCcw,
 } from 'lucide-react';
+import { IS_APPSTORE_BUILD, IAP_PRODUCT_BACKUPS } from '../../utils/buildFlags';
 
 const selectClass = 'w-full px-4 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent';
 
@@ -18,6 +21,9 @@ export default function BackupConfig() {
 
   const [defaultBackupPath, setDefaultBackupPath] = useState(null);
   const [validatingExternal, setValidatingExternal] = useState(false);
+  const [entitled, setEntitled] = useState(!IS_APPSTORE_BUILD);
+  const [iapBusy, setIapBusy] = useState(null); // 'purchase' | 'restore' | null
+  const [iapError, setIapError] = useState('');
 
   // Load default backup path, external location, and migrate legacy on mount
   useEffect(() => {
@@ -33,6 +39,12 @@ export default function BackupConfig() {
         setExternalBackupLocation(loc);
         if (loc.status === 'ready') setBackupCustomPath(null);
       }).catch(() => {});
+    }
+    // IAP entitlement check — MAS only. Non-MAS builds are always entitled.
+    if (IS_APPSTORE_BUILD) {
+      inv('iap_is_entitled', { productId: IAP_PRODUCT_BACKUPS })
+        .then(v => setEntitled(!!v))
+        .catch(() => setEntitled(false));
     }
   }, []);
 
@@ -75,6 +87,94 @@ export default function BackupConfig() {
       setBackupCustomPath(null);
     } catch { /* ignore */ }
   };
+
+  const handlePurchase = async () => {
+    setIapBusy('purchase');
+    setIapError('');
+    try {
+      const inv = window.__TAURI__?.core?.invoke;
+      await inv('iap_purchase', { productId: IAP_PRODUCT_BACKUPS });
+      setEntitled(true);
+    } catch (e) {
+      setIapError(typeof e === 'string' ? e : e?.message || 'Purchase failed');
+    } finally {
+      setIapBusy(null);
+    }
+  };
+
+  const handleRestore = async () => {
+    setIapBusy('restore');
+    setIapError('');
+    try {
+      const inv = window.__TAURI__?.core?.invoke;
+      await inv('iap_restore');
+      const v = await inv('iap_is_entitled', { productId: IAP_PRODUCT_BACKUPS });
+      setEntitled(!!v);
+      if (!v) setIapError('No prior purchases found for this Apple ID.');
+    } catch (e) {
+      setIapError(typeof e === 'string' ? e : e?.message || 'Restore failed');
+    } finally {
+      setIapBusy(null);
+    }
+  };
+
+  if (IS_APPSTORE_BUILD && !entitled) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-mail-surface border border-mail-border rounded-xl p-6 space-y-5">
+          <div className="flex items-start gap-3">
+            <div className="rounded-full bg-mail-accent/10 p-2.5">
+              <Lock size={20} className="text-mail-accent" />
+            </div>
+            <div className="flex-1">
+              <h4 className="font-semibold text-mail-text">Cloud Backups (One-time purchase)</h4>
+              <p className="text-sm text-mail-text-muted mt-1">
+                Unlock external backup folders to keep a safe copy of your emails outside MailVault's app sandbox — survives uninstalls, syncs with iCloud Drive, Dropbox, or any other location.
+              </p>
+            </div>
+          </div>
+
+          <ul className="space-y-2 text-sm text-mail-text-muted pl-1">
+            <li>• Save .eml files to any folder you choose</li>
+            <li>• Incremental backups — new mail only</li>
+            <li>• Works offline; no MailVault account required</li>
+            <li>• One-time payment, no subscription</li>
+          </ul>
+
+          {iapError && (
+            <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/20 rounded-lg p-2.5">
+              <AlertCircle size={14} className="text-mail-danger flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-mail-danger">{iapError}</p>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handlePurchase}
+              disabled={iapBusy !== null}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-mail-accent hover:bg-mail-accent-hover disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+            >
+              {iapBusy === 'purchase' ? <Loader size={16} className="animate-spin" /> : <Lock size={16} />}
+              {iapBusy === 'purchase' ? 'Contacting App Store…' : 'Unlock Cloud Backups'}
+            </button>
+            <button
+              onClick={handleRestore}
+              disabled={iapBusy !== null}
+              className="flex items-center gap-1.5 px-3 py-2.5 text-sm text-mail-text-muted hover:text-mail-text bg-mail-bg border border-mail-border hover:bg-mail-surface-hover disabled:opacity-50 rounded-lg transition-colors"
+              title="Restore prior purchase from this Apple ID"
+            >
+              {iapBusy === 'restore' ? <Loader size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
+              Restore
+            </button>
+          </div>
+
+          <p className="text-xs text-mail-text-muted">
+            Already purchased on another Mac signed in to the same Apple ID? Click <strong>Restore</strong>.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

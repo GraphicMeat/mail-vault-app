@@ -147,15 +147,49 @@ echo -e "${GREEN}✅ Entitlements: $ENTITLEMENTS${NC}"
 # Build the app
 echo ""
 echo -e "${YELLOW}🔨 Building the application...${NC}"
-npm run build:server
+npm run build:daemon
+
+# Temporarily disable the Sparkle updater capability — its `sparkle-updater:default`
+# permission only exists when the plugin is in the Cargo graph, and MAS builds drop
+# the plugin via --no-default-features.
+SPARKLE_CAP_FILE="src-tauri/capabilities/updater-macos.json"
+SPARKLE_CAP_DISABLED="${SPARKLE_CAP_FILE}.disabled"
+RESTORE_SPARKLE_CAP=0
+if [ -f "$SPARKLE_CAP_FILE" ]; then
+    mv "$SPARKLE_CAP_FILE" "$SPARKLE_CAP_DISABLED"
+    RESTORE_SPARKLE_CAP=1
+fi
+restore_sparkle_cap() {
+    if [ "$RESTORE_SPARKLE_CAP" = "1" ] && [ -f "$SPARKLE_CAP_DISABLED" ]; then
+        mv "$SPARKLE_CAP_DISABLED" "$SPARKLE_CAP_FILE"
+    fi
+}
+trap restore_sparkle_cap EXIT
 
 # For App Store, we need to set the entitlements
 export TAURI_APPLE_SIGNING_IDENTITY="$APP_SIGNING_IDENTITY"
-npm run tauri build
+
+# Mark the build as MAS-mode for both frontend (Vite) and Rust (Cargo features):
+#   - VITE_MV_APPSTORE=1 hides Sparkle UI and shows the IAP paywall in BackupConfig.
+#   - --no-default-features drops the `sparkle` feature so tauri-plugin-sparkle-updater
+#     never enters the Cargo graph.
+#   - `appstore` enables the StoreKit IAP bridge (objc2-store-kit).
+#   - The appstore overlay config strips Sparkle.framework and the dmg target.
+export VITE_MV_APPSTORE=1
+npx tauri build \
+    --config src-tauri/tauri.appstore.conf.json \
+    --no-default-features \
+    --features custom-protocol,appstore
 
 # Paths
 APP_PATH="src-tauri/target/release/bundle/macos/${APP_NAME}.app"
 PKG_PATH="src-tauri/target/release/bundle/${APP_NAME}-${VERSION}-appstore.pkg"
+
+# Sanity-check: Sparkle.framework should NOT be in the bundle.
+if [ -d "$APP_PATH/Contents/Frameworks/Sparkle.framework" ]; then
+    echo -e "${YELLOW}⚠️  Sparkle.framework leaked into the MAS bundle. Removing.${NC}"
+    rm -rf "$APP_PATH/Contents/Frameworks/Sparkle.framework"
+fi
 
 if [ ! -d "$APP_PATH" ]; then
     echo -e "${RED}❌ App bundle not found at $APP_PATH${NC}"
@@ -177,14 +211,14 @@ echo -e "${YELLOW}🔏 Signing for App Store...${NC}"
 # Sign all nested components
 echo "   Signing nested components..."
 
-# Sign the sidecar binary
-SIDECAR_PATH="$APP_PATH/Contents/MacOS/mailvault-server"
-if [ -f "$SIDECAR_PATH" ]; then
+# Sign the daemon binary
+DAEMON_PATH="$APP_PATH/Contents/MacOS/mailvault-daemon"
+if [ -f "$DAEMON_PATH" ]; then
     codesign --force --options runtime --timestamp \
         --entitlements "$ENTITLEMENTS" \
         --sign "$APP_SIGNING_IDENTITY" \
-        "$SIDECAR_PATH"
-    echo "   ✓ Signed sidecar binary"
+        "$DAEMON_PATH"
+    echo "   ✓ Signed daemon binary"
 fi
 
 # Sign any frameworks

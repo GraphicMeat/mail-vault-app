@@ -118,7 +118,6 @@ echo -e "${GREEN}✅ AppIdentifierPrefix: ${APP_ID_PREFIX}${NC}"
 # Create temp entitlements with variables expanded
 ENTITLEMENTS=$(mktemp /tmp/entitlements-app.XXXXXX.plist)
 DAEMON_ENT_EXPANDED=$(mktemp /tmp/entitlements-daemon.XXXXXX.plist)
-SIDECAR_ENT_EXPANDED=$(mktemp /tmp/entitlements-sidecar.XXXXXX.plist)
 
 sed -e "s/\$(AppIdentifierPrefix)/${APP_ID_PREFIX}/g" \
     -e "s/\$(TeamIdentifierPrefix)/${APP_ID_PREFIX}/g" \
@@ -126,11 +125,8 @@ sed -e "s/\$(AppIdentifierPrefix)/${APP_ID_PREFIX}/g" \
 sed -e "s/\$(AppIdentifierPrefix)/${APP_ID_PREFIX}/g" \
     -e "s/\$(TeamIdentifierPrefix)/${APP_ID_PREFIX}/g" \
     "src-daemon/entitlements.plist" > "$DAEMON_ENT_EXPANDED"
-sed -e "s/\$(AppIdentifierPrefix)/${APP_ID_PREFIX}/g" \
-    -e "s/\$(TeamIdentifierPrefix)/${APP_ID_PREFIX}/g" \
-    "src-tauri/entitlements-sidecar.plist" > "$SIDECAR_ENT_EXPANDED"
 
-trap 'rm -f "$ENTITLEMENTS" "$DAEMON_ENT_EXPANDED" "$SIDECAR_ENT_EXPANDED"' EXIT
+trap 'rm -f "$ENTITLEMENTS" "$DAEMON_ENT_EXPANDED"' EXIT
 
 echo "   Expanded entitlements written to temp files"
 
@@ -216,7 +212,7 @@ echo ""
 echo -e "${YELLOW}🔨 Building the application...${NC}"
 
 if [ "$SKIP_SERVER_BUILD" != "true" ]; then
-    npm run build:server
+    npm run build:daemon
 fi
 
 npm run tauri build -- $TAURI_ARGS
@@ -233,21 +229,12 @@ if [ ! -d "$APP_PATH" ]; then
     exit 1
 fi
 
-# ── Replace Tauri's lipo'd sidecars with pre-built universal binaries ──
-# Tauri's universal bundler lipo's external binaries from the two arch builds,
-# but Bun-compiled binaries have custom embedded sections that get corrupted.
-# Replace them with our known-good pre-built universal binaries.
+# ── Replace Tauri's lipo'd daemon with the pre-built universal binary ──
+# Tauri's universal bundler lipo's external binaries from the two arch builds.
+# We prefer the pre-built universal binary as a known-good replacement.
 
 echo ""
-echo -e "${YELLOW}🔄 Replacing bundled sidecars with pre-built universal binaries...${NC}"
-
-PREBUILT_SERVER="src-tauri/binaries/mailvault-server-universal-apple-darwin"
-BUNDLED_SERVER="$APP_PATH/Contents/MacOS/mailvault-server"
-if [ -f "$BUNDLED_SERVER" ] && [ -f "$PREBUILT_SERVER" ]; then
-    cp "$PREBUILT_SERVER" "$BUNDLED_SERVER"
-    chmod +x "$BUNDLED_SERVER"
-    echo "   ✓ Replaced mailvault-server ($(file -b "$BUNDLED_SERVER"))"
-fi
+echo -e "${YELLOW}🔄 Replacing bundled daemon with pre-built universal binary...${NC}"
 
 PREBUILT_DAEMON="src-tauri/binaries/mailvault-daemon-universal-apple-darwin"
 BUNDLED_DAEMON="$APP_PATH/Contents/MacOS/mailvault-daemon"
@@ -327,21 +314,6 @@ for dylib in "$APP_PATH/Contents/Frameworks"/*.dylib; do
     fi
 done
 
-# Sign the sidecar binary with its own entitlements (no app-sandbox — Bun needs JIT)
-# Bun-compiled universal binaries need ad-hoc pre-sign to allocate code signature space
-# before proper signing — codesign fails with "invalid or unsupported format" otherwise.
-SIDECAR_PATH="$APP_PATH/Contents/MacOS/mailvault-server"
-if [ -f "$SIDECAR_PATH" ]; then
-    echo "   Pre-signing sidecar ($(file -b "$SIDECAR_PATH" | head -c80))"
-    codesign --remove-signature "$SIDECAR_PATH" 2>/dev/null || true
-    codesign --force --sign - "$SIDECAR_PATH"
-    codesign --force --options runtime --timestamp \
-        --entitlements "$SIDECAR_ENT_EXPANDED" \
-        --sign "$SIGNING_ID" $KEYCHAIN_ARG \
-        "$SIDECAR_PATH"
-    echo "   ✓ Signed sidecar binary (with expanded sidecar entitlements)"
-fi
-
 # Sign the daemon binary with its own entitlements
 DAEMON_PATH="$APP_PATH/Contents/MacOS/mailvault-daemon"
 if [ -f "$DAEMON_PATH" ]; then
@@ -371,7 +343,7 @@ codesign --verify --verbose=4 "$APP_PATH"
 echo "   ✓ App bundle signature valid"
 
 # Verify nested binaries individually
-for BIN_NAME in mailvault mailvault-daemon mailvault-server; do
+for BIN_NAME in mailvault mailvault-daemon; do
     BIN_PATH="$APP_PATH/Contents/MacOS/$BIN_NAME"
     if [ -f "$BIN_PATH" ]; then
         codesign --verify --verbose=4 "$BIN_PATH" 2>&1 || {

@@ -21,6 +21,7 @@ mod backup;
 mod commands;
 mod dns;
 mod external_location;
+mod iap;
 pub mod graph;
 pub mod helper;
 mod imap;
@@ -3837,7 +3838,19 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(feature = "sparkle")))]
+async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
+    // Mac App Store build: updates ship through the App Store, not Sparkle.
+    if show_no_update {
+        use tauri_plugin_dialog::DialogExt;
+        handle.dialog()
+            .message("MailVault is up to date through the Mac App Store. Open the App Store app to install any pending updates.")
+            .title("Updates")
+            .show(|_| {});
+    }
+}
+
+#[cfg(all(target_os = "macos", feature = "sparkle"))]
 async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
     use tauri_plugin_dialog::DialogExt;
     use tauri_plugin_sparkle_updater::SparkleUpdaterExt;
@@ -3946,6 +3959,34 @@ async fn helper_status(daemon_mode: Option<String>) -> Result<helper::HelperStat
     Ok(helper::status(daemon_mode.as_deref().unwrap_or("on-demand")))
 }
 
+// ── In-app purchase commands ─────────────────────────────────────────────
+//
+// Mac App Store builds gate paid features (e.g. external backups) behind
+// these. Non-MAS builds short-circuit: `iap_is_entitled` always returns true
+// and purchase/restore are no-ops.
+
+#[tauri::command]
+fn iap_build_info() -> serde_json::Value {
+    serde_json::json!({
+        "isAppStoreBuild": iap::is_appstore_build(),
+    })
+}
+
+#[tauri::command]
+fn iap_is_entitled(product_id: String) -> bool {
+    iap::is_entitled(&product_id)
+}
+
+#[tauri::command]
+async fn iap_purchase(product_id: String) -> Result<(), String> {
+    iap::purchase(&product_id).await
+}
+
+#[tauri::command]
+async fn iap_restore() -> Result<(), String> {
+    iap::restore().await
+}
+
 /// JSON-RPC call to the background helper.
 #[tauri::command]
 async fn daemon_rpc(
@@ -4039,8 +4080,9 @@ fn main() {
     #[cfg(feature = "webdriver")]
     let builder = builder.plugin(tauri_plugin_webdriver_automation::init());
 
-    // Updater plugins — Sparkle on macOS, tauri-plugin-updater on Linux
-    #[cfg(target_os = "macos")]
+    // Updater plugins — Sparkle on Developer ID macOS, tauri-plugin-updater on Linux.
+    // MAS builds (feature = "appstore", default features disabled) skip both — updates flow through the App Store.
+    #[cfg(all(target_os = "macos", feature = "sparkle"))]
     let builder = builder.plugin(tauri_plugin_sparkle_updater::init());
     #[cfg(target_os = "linux")]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
@@ -4053,7 +4095,8 @@ fn main() {
         .manage(migration::MigrationNotify::default())
         .manage(imap::ImapPool::new())
         .manage(oauth2::OAuth2Manager::new())
-        .manage(UpdateCheckGuard::default());
+        .manage(UpdateCheckGuard::default())
+        .manage(iap::IapState::new());
 
     #[cfg(target_os = "linux")]
     let builder = builder.manage(PendingUpdate::default());
@@ -4181,7 +4224,11 @@ fn main() {
             install_daemon_service,
             uninstall_daemon_service,
             is_daemon_service_installed,
-            helper_status
+            helper_status,
+            iap_build_info,
+            iap_is_entitled,
+            iap_purchase,
+            iap_restore
         ])
         .setup(|app| {
             // Set up logging to app log directory
@@ -4209,6 +4256,8 @@ fn main() {
             info!("App version: {}", env!("CARGO_PKG_VERSION"));
 
             // --- Set up app menu ---
+            // Sparkle "Check for Updates..." is hidden on MAS builds (App Store handles updates).
+            #[cfg(any(not(target_os = "macos"), feature = "sparkle"))]
             let check_updates = MenuItem::with_id(app, "check_updates", "Check for Updates...", true, None::<&str>)?;
             #[cfg(target_os = "macos")]
             let open_settings = MenuItem::with_id(app, "open_settings", "Settings...", true, Some("cmd+,"))?;
@@ -4229,10 +4278,19 @@ fn main() {
                             let sep1 = PredefinedMenuItem::separator(app)?;
                             let sep2 = PredefinedMenuItem::separator(app)?;
                             let _ = app_submenu.insert(&sep1, 1);
-                            let _ = app_submenu.insert(&check_updates, 2);
-                            let _ = app_submenu.insert(&open_settings, 3);
-                            let _ = app_submenu.insert(&report_bug, 4);
-                            let _ = app_submenu.insert(&sep2, 5);
+                            #[cfg(feature = "sparkle")]
+                            {
+                                let _ = app_submenu.insert(&check_updates, 2);
+                                let _ = app_submenu.insert(&open_settings, 3);
+                                let _ = app_submenu.insert(&report_bug, 4);
+                                let _ = app_submenu.insert(&sep2, 5);
+                            }
+                            #[cfg(not(feature = "sparkle"))]
+                            {
+                                let _ = app_submenu.insert(&open_settings, 2);
+                                let _ = app_submenu.insert(&report_bug, 3);
+                                let _ = app_submenu.insert(&sep2, 4);
+                            }
                         }
                     }
                 }
@@ -4372,13 +4430,22 @@ fn main() {
                 })
                 .build(app)?;
 
-            // Check for updates in background
-            let update_handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                // Delay update check to let the app initialize first
-                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                check_for_updates(update_handle, false).await;
-            });
+            // Install StoreKit transaction observer (MAS builds only — stub otherwise).
+            {
+                let state = app.state::<iap::IapState>();
+                iap::install_observer(&state);
+            }
+
+            // Check for updates in background (skipped on Mac App Store — App Store handles updates).
+            #[cfg(any(not(target_os = "macos"), feature = "sparkle"))]
+            {
+                let update_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    // Delay update check to let the app initialize first
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    check_for_updates(update_handle, false).await;
+                });
+            }
 
             info!("Application setup complete");
             Ok(())

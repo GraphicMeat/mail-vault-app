@@ -1,0 +1,19 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "app": {
+    "security": {
+      "capabilities": ["default"]
+    }
+  },
+  "bundle": {
+    "macOS": {
+      "entitlements": "entitlements-appstore.plist",
+      "frameworks": []
+    },
+    "targets": ["app"],
+    "createUpdaterArtifacts": false
+  },
+  "plugins": {
+    "updater": null
+  }
+}

@@ -13,7 +13,6 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STAGING="$REPO_ROOT/snap-staging"
 
 TAURI_BIN="$REPO_ROOT/target/$TAURI_TARGET/release/mailvault"
-SIDECAR_BIN="$REPO_ROOT/src-tauri/binaries/mailvault-server-$TAURI_TARGET"
 DAEMON_BIN="$REPO_ROOT/src-tauri/binaries/mailvault-daemon-$TAURI_TARGET"
 ICON_SRC="$REPO_ROOT/src-tauri/icons/128x128.png"
 
@@ -32,15 +31,6 @@ mkdir -p "$STAGING/usr/bin"
 cp "$TAURI_BIN" "$STAGING/usr/bin/mailvault"
 chmod +x "$STAGING/usr/bin/mailvault"
 echo "Staged: usr/bin/mailvault"
-
-# Copy sidecar (warn if missing)
-if [[ -f "$SIDECAR_BIN" ]]; then
-  cp "$SIDECAR_BIN" "$STAGING/usr/bin/mailvault-server"
-  chmod +x "$STAGING/usr/bin/mailvault-server"
-  echo "Staged: usr/bin/mailvault-server"
-else
-  echo "WARNING: Sidecar not found at $SIDECAR_BIN — skipping"
-fi
 
 # Copy daemon (warn if missing)
 if [[ -f "$DAEMON_BIN" ]]; then

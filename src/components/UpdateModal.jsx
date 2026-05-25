@@ -111,6 +111,17 @@ export function UpdateModal({ updateInfo, onClose }) {
   };
 
   const handleUpdateNow = async () => {
+    // MAS builds never reach this codepath (Rust skips emitting `update-available`),
+    // but if it ever does, route the user to the App Store instead of Sparkle.
+    if (import.meta.env.VITE_MV_APPSTORE === '1') {
+      try {
+        const { open } = await import('@tauri-apps/plugin-shell');
+        await open('macappstore://apps.apple.com/app/id0');
+      } catch { /* ignore */ }
+      onClose();
+      return;
+    }
+
     // macOS: trigger Sparkle native install/relaunch flow
     const isMacOS = navigator.platform?.startsWith('Mac') || navigator.userAgent?.includes('Mac');
     if (isMacOS) {

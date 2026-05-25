@@ -2,29 +2,41 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- App Sandbox (required for App Store) -->
+    <!-- App Sandbox (required for Mac App Store distribution) -->
     <key>com.apple.security.app-sandbox</key>
     <true/>
 
-    <!-- Network access for IMAP/SMTP -->
+    <!-- Network access for IMAP/SMTP/OAuth2 -->
     <key>com.apple.security.network.client</key>
     <true/>
 
-    <!-- File access - user selected files -->
+    <!-- OAuth2 callback loopback listener on 127.0.0.1:19876 (see src-tauri/src/oauth2.rs) -->
+    <key>com.apple.security.network.server</key>
+    <true/>
+
+    <!-- File access for user-chosen attachments, exports, and backup folders -->
     <key>com.apple.security.files.user-selected.read-write</key>
     <true/>
 
-    <!-- Downloads folder access -->
+    <!-- Long-lived access to user-chosen backup folder (StoreKit-gated) -->
+    <key>com.apple.security.files.bookmarks.app-scope</key>
+    <true/>
+
+    <!-- Downloads folder access for save-attachment shortcut -->
     <key>com.apple.security.files.downloads.read-write</key>
     <true/>
 
-    <!-- Keychain access for storing passwords -->
+    <!-- User notifications -->
+    <key>com.apple.security.usernotifications.alerts</key>
+    <true/>
+
+    <!-- Keychain access for storing IMAP/SMTP passwords -->
     <key>com.apple.security.keychain-access-groups</key>
     <array>
         <string>$(AppIdentifierPrefix)com.mailvault.app</string>
     </array>
 
-    <!-- App Groups for shared data -->
+    <!-- App Groups for shared data with the background daemon -->
     <key>com.apple.security.application-groups</key>
     <array>
         <string>$(TeamIdentifierPrefix)com.mailvault.app</string>
