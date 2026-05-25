@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-05-25
+
 ### Added
 - **Mac App Store build target**: New `appstore` Cargo feature, `tauri.appstore.conf.json` overlay, and `Release (Mac App Store)` GitHub Actions workflow. Build locally with `npm run build:appstore`; CI builds + signs + uploads via App Store Connect API. See `BUILDING.md` for required secrets and gotchas.
 - **In-app purchase gating for Cloud Backups (MAS only)**: External backup folders are now gated behind a non-consumable StoreKit IAP (`com.mailvault.app.backups`) in App Store builds. New `iap_*` Tauri commands bridge to `SKPaymentQueue`/`SKMutablePayment` via `objc2-store-kit`; entitlement is persisted in `NSUserDefaults`. Non-MAS builds are unaffected — the IAP module is stubbed out and always reports entitlement.
