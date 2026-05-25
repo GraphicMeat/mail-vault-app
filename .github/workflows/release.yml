@@ -117,6 +117,7 @@ jobs:
 
       - name: Build universal daemon sidecar
         run: |
+          mkdir -p src-tauri/binaries
           # Build ARM64
           cargo build -p mailvault-daemon --release --target aarch64-apple-darwin
           # Build x86_64
