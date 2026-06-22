@@ -1,4 +1,5 @@
 import * as api from './api.js';
+import { resolveServerAccount } from './authUtils.js';
 import { getMailboxes } from '../stores/accountStore.js';
 import { useSettingsStore } from '../stores/settingsStore.js';
 
@@ -21,6 +22,19 @@ export async function checkRestoreNeeded(account) {
   try {
     if (!account?.id || !account.previousImapHost) return;
 
+    const ss = useSettingsStore.getState();
+    // Don't re-prompt while a prompt/restore is already active, or if the user
+    // dismissed this account's prompt this session.
+    if (ss.restoreDetected || ss.activeRestore) return;
+    if (ss.restoreDismissedIds.includes(account.id)) return;
+
+    // Hydrate credentials (store copy may be secret-stripped). If we can't get
+    // valid creds, do NOT prompt — a credential-less server check would report
+    // 0 messages and false-positive the restore offer.
+    const resolved = await resolveServerAccount(account.id, account);
+    if (!resolved.ok) return;
+    const fullAccount = resolved.account;
+
     // `mailboxes` items may be objects ({ path, name, ... }) or raw strings.
     // Reduce each to a real mailbox-name string; fall back to a minimal set.
     const mailboxes = (getMailboxes() || [])
@@ -40,7 +54,7 @@ export async function checkRestoreNeeded(account) {
 
     let serverTotal = 0;
     for (const { mailbox } of folders) {
-      const status = await api.checkMailboxStatus(account, mailbox).catch(() => ({ exists: 0 }));
+      const status = await api.checkMailboxStatus(fullAccount, mailbox).catch(() => ({ exists: 0 }));
       serverTotal += status?.exists || 0;
     }
 
@@ -48,7 +62,7 @@ export async function checkRestoreNeeded(account) {
     if (shouldPromptRestore({ hostChanged, localTotal, serverTotal })) {
       useSettingsStore.getState().setRestoreDetected({
         accountId: account.id,
-        account,
+        account: fullAccount,
         folders,
       });
     }

@@ -9,6 +9,7 @@ export default function RestoreModal() {
   const active = useSettingsStore((s) => s.activeRestore);
   const clearDetected = useSettingsStore((s) => s.clearRestoreDetected);
   const clearActive = useSettingsStore((s) => s.clearActiveRestore);
+  const dismissRestore = useSettingsStore((s) => s.dismissRestore);
 
   const open = !!detected || (!!active && active.status === 'running');
   const localTotal = useMemo(
@@ -57,7 +58,7 @@ export default function RestoreModal() {
             <div className="flex justify-end gap-2">
               <button
                 className="text-sm font-medium text-mail-text border border-mail-border rounded-lg px-4 py-2 hover:bg-mail-surface-hover transition-colors"
-                onClick={onClose}
+                onClick={() => dismissRestore(detected.accountId)}
               >
                 Not now
               </button>
