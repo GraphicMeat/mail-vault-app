@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- Restore-to-server: when an account's IMAP host is changed to a new, empty server, the app detects that the local Maildir still holds the account's mail and offers to re-upload it (all folders, flags preserved, dedup-safe re-runs).
+
 ## [2.7.0] - 2026-05-25
 
 ### Added
