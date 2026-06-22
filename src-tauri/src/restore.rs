@@ -40,3 +40,72 @@ pub struct LocalMsg {
     pub imap_flags: String, // e.g. "\\Seen \\Flagged", possibly empty
     pub path: PathBuf,
 }
+
+/// Parse Maildir flags from a filename in EITHER format and return a
+/// space-joined IMAP flag string. archived/trashed are local-only and dropped.
+///
+/// Tauri format:  `{uid}:2,{LETTERS}.eml`  (letters: S F R D A T)
+/// Core format:   `{uid}:{word,word}:{ts}.eml`  (words: seen,flagged,replied,draft,...)
+pub fn parse_local_flags(filename: &str) -> String {
+    let name = filename.strip_suffix(".eml").unwrap_or(filename);
+
+    let mut out: Vec<&str> = Vec::new();
+    let push = |out: &mut Vec<&str>, flag: &'static str| {
+        if !out.contains(&flag) {
+            out.push(flag);
+        }
+    };
+
+    if let Some(letters) = name.split(":2,").nth(1) {
+        let letters = letters.split(':').next().unwrap_or("");
+        for c in letters.chars() {
+            match c {
+                'S' => push(&mut out, "\\Seen"),
+                'F' => push(&mut out, "\\Flagged"),
+                'R' => push(&mut out, "\\Answered"),
+                'D' => push(&mut out, "\\Draft"),
+                _ => {}
+            }
+        }
+    } else {
+        let parts: Vec<&str> = name.splitn(3, ':').collect();
+        if let Some(words) = parts.get(1) {
+            for w in words.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()) {
+                match w.to_lowercase().as_str() {
+                    "seen" => push(&mut out, "\\Seen"),
+                    "flagged" => push(&mut out, "\\Flagged"),
+                    "replied" | "answered" => push(&mut out, "\\Answered"),
+                    "draft" => push(&mut out, "\\Draft"),
+                    _ => {}
+                }
+            }
+        }
+    }
+    out.join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_local_flags_tauri_format() {
+        assert_eq!(parse_local_flags("123:2,FS.eml"), "\\Flagged \\Seen");
+        assert_eq!(parse_local_flags("9:2,R.eml"), "\\Answered");
+        assert_eq!(parse_local_flags("9:2,AS.eml"), "\\Seen");
+        assert_eq!(parse_local_flags("9:2,.eml"), "");
+    }
+
+    #[test]
+    fn test_parse_local_flags_core_format() {
+        assert_eq!(parse_local_flags("123:seen,flagged:1700000000.eml"), "\\Seen \\Flagged");
+        assert_eq!(parse_local_flags("123:replied:1700000000.eml"), "\\Answered");
+        assert_eq!(parse_local_flags("123::1700000000.eml"), "");
+    }
+
+    #[test]
+    fn test_parse_local_flags_none() {
+        assert_eq!(parse_local_flags("123.eml"), "");
+        assert_eq!(parse_local_flags("123:.eml"), "");
+    }
+}
