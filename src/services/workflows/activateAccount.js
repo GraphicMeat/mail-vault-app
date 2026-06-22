@@ -9,6 +9,7 @@ import { buildThreads } from '../../utils/emailParser';
 import { UidMap } from '../UidMap';
 import { getDaemonHealth } from '../transport';
 import { syncNow, waitForSync } from '../syncService';
+import { checkRestoreNeeded } from '../restoreDetection';
 import { isGraphAccount, GRAPH_FOLDER_NAME_MAP, APP_TO_GRAPH_FOLDER_MAP, normalizeGraphFolderName, graphFoldersToMailboxes, inferSpecialUse, graphMessageToEmail } from '../graphConfig';
 import { saveRestoreDescriptor as _saveRestore, getRestoreDescriptor as _getRestore, invalidateRestoreDescriptors as _invalidateRestore, getAccountCacheMailboxes as _getAccountMailboxes, setGraphIdMap as _setGraphIdMap, getGraphMessageId, clearGraphIdMap as _clearGraphIdMap, restoreGraphIdMap as _restoreGraphIdMap } from '../cacheManager';
 import { createPerfTrace } from '../../utils/perfTrace';
@@ -998,6 +999,17 @@ export async function activateAccount(accountId, mailbox, options = {}) {
   // Clear restoring flag — disk hydration and/or server sync is complete
   if (get().restoring) {
     useMailStore.setState({ restoring: false });
+  }
+
+  // Post-sync: if this account's IMAP host recently changed, check whether the
+  // new server is near-empty vs. our local Maildir and offer to restore.
+  // Fire-and-forget — must never block or break activation. Skip background
+  // refreshes (the foreground pass already covers it) and re-resolve the
+  // account from the store so previousImapHost (stamped at saveAccount) is
+  // present even if the closure's copy predates the host change.
+  if (!isBackgroundRefresh && !signal.aborted && get().activeAccountId === accountId) {
+    const detectAccount = get().accounts.find(a => a.id === accountId) || account;
+    Promise.resolve().then(() => checkRestoreNeeded(detectAccount)).catch(() => {});
   }
 
   activationTrace.end('done', { emailCount: get().emails.length });
