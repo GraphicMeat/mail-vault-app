@@ -264,6 +264,15 @@ export const useSettingsStore = create(
       })),
       clearMigrationFolderCounts: () => set({ migrationFolderCounts: {} }),
 
+      // Restore-to-server state
+      activeRestore: null,          // RestoreProgress object from Tauri events, or null
+      restoreDetected: null,        // { accountId, account, folders: [{ mailbox, localCount }] } or null
+
+      setActiveRestore: (restore) => set({ activeRestore: restore }),
+      clearActiveRestore: () => set({ activeRestore: null }),
+      setRestoreDetected: (detected) => set({ restoreDetected: detected }),
+      clearRestoreDetected: () => set({ restoreDetected: null }),
+
       // Backup notification preferences
       backupNotifyOnSuccess: true,
       backupNotifyOnFailure: true,
@@ -695,6 +704,8 @@ export const useSettingsStore = create(
           activeMigration: null,
           migrationHistory: [],
           incompleteMigration: null,
+          activeRestore: null,
+          restoreDetected: null,
         });
       }
     }),
