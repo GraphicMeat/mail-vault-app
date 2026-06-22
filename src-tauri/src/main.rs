@@ -27,6 +27,7 @@ pub mod helper;
 mod imap;
 mod migration;
 mod move_emails;
+mod restore;
 mod oauth2;
 mod smtp;
 
