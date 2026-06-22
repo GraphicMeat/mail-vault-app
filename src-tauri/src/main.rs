@@ -4094,6 +4094,7 @@ fn main() {
         .manage(migration::MigrationCancelToken::default())
         .manage(migration::MigrationPauseToken::default())
         .manage(migration::MigrationNotify::default())
+        .manage(restore::RestoreCancelToken::default())
         .manage(imap::ImapPool::new())
         .manage(oauth2::OAuth2Manager::new())
         .manage(UpdateCheckGuard::default())
@@ -4221,6 +4222,9 @@ fn main() {
             commands::clear_migration_state_cmd,
             commands::count_migration_folders,
             commands::get_folder_mappings,
+            commands::start_restore,
+            commands::cancel_restore,
+            commands::count_local_folder,
             daemon_rpc,
             install_daemon_service,
             uninstall_daemon_service,

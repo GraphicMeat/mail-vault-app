@@ -1373,3 +1373,51 @@ pub async fn get_folder_mappings(
 
     Ok(mappings)
 }
+
+// ── Restore ──────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn count_local_folder(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    mailbox: String,
+) -> Result<usize, String> {
+    let msgs = crate::restore::list_local_messages(&app_handle, &account_id, &mailbox)?;
+    Ok(msgs.len())
+}
+
+#[tauri::command]
+pub async fn start_restore(
+    app_handle: tauri::AppHandle,
+    account: String,
+    account_id: String,
+    folders: Vec<String>,
+    cancel_token: tauri::State<'_, crate::restore::RestoreCancelToken>,
+) -> Result<(), String> {
+    let config: ImapConfig = serde_json::from_str(&account)
+        .map_err(|e| format!("Bad account JSON: {}", e))?;
+
+    let cancel = {
+        let mut guard = cancel_token.0.lock().unwrap();
+        let fresh = Arc::new(AtomicBool::new(false));
+        *guard = Arc::clone(&fresh);
+        fresh
+    };
+
+    tokio::spawn(async move {
+        if let Err(e) = crate::restore::run_restore(app_handle, config, account_id, folders, cancel).await {
+            tracing::error!("[restore] run_restore failed: {}", e);
+        }
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn cancel_restore(
+    cancel_token: tauri::State<'_, crate::restore::RestoreCancelToken>,
+) -> Result<(), String> {
+    let guard = cancel_token.0.lock().unwrap();
+    guard.store(true, Ordering::SeqCst);
+    Ok(())
+}
