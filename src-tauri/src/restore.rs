@@ -129,6 +129,148 @@ pub fn list_local_messages(
     Ok(list_messages_in_dir(&cur))
 }
 
+/// Re-upload local Maildir messages for `folders` (real mailbox names) to the
+/// dest IMAP server. Idempotent: per folder, server Message-IDs are fetched
+/// first and matching local messages are skipped (safe re-runs / partial-run
+/// resume). Each APPEND is wrapped in a timeout to avoid the known Hostinger
+/// APPEND hang stalling the whole run.
+pub async fn run_restore(
+    app_handle: tauri::AppHandle,
+    account: ImapConfig,
+    account_id: String,
+    folders: Vec<String>,
+    cancel: Arc<AtomicBool>,
+) -> Result<(), String> {
+    let pool = app_handle.state::<ImapPool>();
+    let email = account.email.clone();
+
+    let mut per_folder: Vec<(String, Vec<LocalMsg>)> = Vec::new();
+    for folder in &folders {
+        let msgs = list_local_messages(&app_handle, &account_id, folder)?;
+        if !msgs.is_empty() {
+            per_folder.push((folder.clone(), msgs));
+        }
+    }
+    let total_emails: u32 = per_folder.iter().map(|(_, m)| m.len() as u32).sum();
+
+    let mut uploaded: u32 = 0;
+    let mut skipped: u32 = 0;
+    let mut failed: u32 = 0;
+
+    let emit = |app: &tauri::AppHandle,
+                status: &str,
+                current_folder: Option<String>,
+                folder_progress: Option<String>,
+                uploaded: u32,
+                skipped: u32,
+                failed: u32| {
+        let _ = app.emit(
+            "restore-progress",
+            RestoreProgress {
+                account_id: account_id.clone(),
+                email: email.clone(),
+                total_emails,
+                uploaded_emails: uploaded,
+                skipped_emails: skipped,
+                failed_emails: failed,
+                current_folder,
+                folder_progress,
+                status: status.to_string(),
+            },
+        );
+    };
+
+    emit(&app_handle, "running", None, None, 0, 0, 0);
+
+    for (folder, msgs) in &per_folder {
+        if cancel.load(Ordering::Relaxed) {
+            emit(&app_handle, "cancelled", Some(folder.clone()), None, uploaded, skipped, failed);
+            return Ok(());
+        }
+
+        let mut guard = match pool.get_priority(&account).await {
+            Ok(g) => g,
+            Err(e) => {
+                warn!("[restore] pool checkout failed for {}: {}", folder, e);
+                failed += msgs.len() as u32;
+                emit(&app_handle, "running", Some(folder.clone()), None, uploaded, skipped, failed);
+                continue;
+            }
+        };
+
+        if let Err(e) = migration::ensure_dest_folder_imap(&mut guard.session, folder).await {
+            warn!("[restore] CREATE {} failed, skipping folder: {}", folder, e);
+            failed += msgs.len() as u32;
+            pool.return_priority(&account, guard).await;
+            emit(&app_handle, "running", Some(folder.clone()), None, uploaded, skipped, failed);
+            continue;
+        }
+
+        let dest_ids = migration::fetch_dest_message_ids_imap(&mut guard.session, folder)
+            .await
+            .unwrap_or_default();
+
+        let folder_total = msgs.len();
+        for (idx, msg) in msgs.iter().enumerate() {
+            if cancel.load(Ordering::Relaxed) {
+                pool.return_priority(&account, guard).await;
+                emit(&app_handle, "cancelled", Some(folder.clone()), None, uploaded, skipped, failed);
+                return Ok(());
+            }
+
+            let raw = match std::fs::read(&msg.path) {
+                Ok(b) => b,
+                Err(e) => {
+                    warn!("[restore] read {:?} failed: {}", msg.path, e);
+                    failed += 1;
+                    continue;
+                }
+            };
+
+            if let Some(mid) = migration::extract_message_id(&raw) {
+                if dest_ids.contains(&mid) {
+                    skipped += 1;
+                    continue;
+                }
+            }
+
+            let append = imap::append_email(&mut guard.session, folder, &raw, &msg.imap_flags);
+            match tokio::time::timeout(std::time::Duration::from_secs(30), append).await {
+                Ok(Ok(())) => uploaded += 1,
+                Ok(Err(e)) => {
+                    warn!("[restore] APPEND uid {} to {} failed: {}", msg.uid, folder, e);
+                    failed += 1;
+                }
+                Err(_) => {
+                    warn!("[restore] APPEND uid {} to {} timed out", msg.uid, folder);
+                    failed += 1;
+                }
+            }
+
+            if idx % 10 == 0 || idx + 1 == folder_total {
+                emit(
+                    &app_handle,
+                    "running",
+                    Some(folder.clone()),
+                    Some(format!("{}/{}", idx + 1, folder_total)),
+                    uploaded,
+                    skipped,
+                    failed,
+                );
+            }
+        }
+
+        pool.return_priority(&account, guard).await;
+    }
+
+    info!(
+        "[restore] done account={} uploaded={} skipped={} failed={}",
+        account_id, uploaded, skipped, failed
+    );
+    emit(&app_handle, "completed", None, None, uploaded, skipped, failed);
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
