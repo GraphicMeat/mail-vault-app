@@ -84,6 +84,51 @@ pub fn parse_local_flags(filename: &str) -> String {
     out.join(" ")
 }
 
+/// List uploadable messages in a Maildir `cur` directory. Skips trashed
+/// messages and non-message files. Returns messages sorted by UID.
+pub fn list_messages_in_dir(cur_dir: &std::path::Path) -> Vec<LocalMsg> {
+    let mut msgs: Vec<LocalMsg> = Vec::new();
+    let entries = match std::fs::read_dir(cur_dir) {
+        Ok(e) => e,
+        Err(_) => return msgs,
+    };
+    for entry in entries.flatten() {
+        if !entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().to_string();
+        let uid = match name.split(|c| c == ':' || c == '.').next().and_then(|s| s.parse::<u32>().ok()) {
+            Some(u) => u,
+            None => continue,
+        };
+        let is_trashed = name.split(":2,").nth(1)
+            .map(|l| l.split(':').next().unwrap_or("").contains('T'))
+            .unwrap_or(false)
+            || name.split(':').nth(1).map(|w| w.split(',').any(|x| x.trim() == "trashed")).unwrap_or(false);
+        if is_trashed {
+            continue;
+        }
+        msgs.push(LocalMsg {
+            uid,
+            imap_flags: parse_local_flags(&name),
+            path: entry.path(),
+        });
+    }
+    msgs.sort_by_key(|m| m.uid);
+    msgs
+}
+
+/// List uploadable messages for an account mailbox (real mailbox name).
+/// Forward-maps the real name to its sanitized on-disk `cur` path.
+pub fn list_local_messages(
+    app_handle: &tauri::AppHandle,
+    account_id: &str,
+    mailbox: &str,
+) -> Result<Vec<LocalMsg>, String> {
+    let cur = crate::maildir_cur_path(app_handle, account_id, mailbox)?;
+    Ok(list_messages_in_dir(&cur))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -107,5 +152,25 @@ mod tests {
     fn test_parse_local_flags_none() {
         assert_eq!(parse_local_flags("123.eml"), "");
         assert_eq!(parse_local_flags("123:.eml"), "");
+    }
+
+    #[test]
+    fn test_list_messages_in_dir() {
+        let dir = std::env::temp_dir().join("mailvault-test-restore-list");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("10:2,S.eml"), b"a").unwrap();
+        std::fs::write(dir.join("2:2,.eml"), b"b").unwrap();
+        std::fs::write(dir.join("30:seen,flagged:1700000000.eml"), b"c").unwrap();
+        std::fs::write(dir.join("40:2,T.eml"), b"d").unwrap();
+        std::fs::write(dir.join("local-index.json"), b"{}").unwrap();
+
+        let msgs = list_messages_in_dir(&dir);
+        let uids: Vec<u32> = msgs.iter().map(|m| m.uid).collect();
+        assert_eq!(uids, vec![2, 10, 30]);
+        let m30 = msgs.iter().find(|m| m.uid == 30).unwrap();
+        assert_eq!(m30.imap_flags, "\\Seen \\Flagged");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
