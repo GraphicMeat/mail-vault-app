@@ -23,6 +23,7 @@ import { OutboxTray } from './components/OutboxTray';
 import { MoveToFolderDropdown } from './components/MoveToFolderDropdown';
 import { MigrationToast } from './components/MigrationToast';
 import { KeychainToast } from './components/KeychainToast';
+import RestoreModal from './components/RestoreModal.jsx';
 // BackupToast removed — backup progress now shows in sidebar via BackupIndicator
 import { useEmailScheduler } from './hooks/useEmailScheduler';
 import { usePipelineCoordinator } from './hooks/usePipelineCoordinator';
@@ -752,6 +753,7 @@ function App() {
       />
       <UndoSendToast onUndo={(cs) => openCompose(cs)} />
       <OutboxTray onRestoreDraft={(cs) => openCompose(cs)} />
+      <RestoreModal />
 
       {/* Move to Folder dropdown (triggered by keyboard shortcut M) */}
       {showMoveDropdown && (() => {
