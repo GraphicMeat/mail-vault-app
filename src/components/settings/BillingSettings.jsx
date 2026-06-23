@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { useAccountStore } from '../../stores/accountStore';
+import { useBackupStore } from '../../stores/backupStore';
+import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
 import {
   createCheckoutSession, createPortalSession, fetchSubscriptionStatus, fetchPricing,
   unregisterBillingClient, getClientInfo, openInBrowser,
@@ -12,6 +14,7 @@ import { formatDateLong, formatTime } from '../../utils/dateFormat';
 import {
   CreditCard,
   CheckCircle2,
+  Gift,
   Loader,
   ExternalLink,
   RefreshCw,
@@ -521,6 +524,17 @@ export function BillingSettings() {
 
       {checkoutError && <p className="text-xs text-mail-danger">{checkoutError}</p>}
       {/* emailError removed — dropdown prevents invalid input */}
+
+      {/* Free alternative: share-to-unlock (non-MAS, non-premium only) */}
+      {!IS_APPSTORE_BUILD && !isPremium && (
+        <button
+          onClick={() => useBackupStore.getState().setShareUnlock({ emailsBackedUp: 0 })}
+          className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-mail-accent border border-mail-border rounded-lg hover:border-mail-accent transition-colors"
+        >
+          <Gift size={15} />
+          Or unlock premium free — star &amp; share MailVault
+        </button>
+      )}
 
       {/* Manage Billing */}
       {billingProfile?.hasSubscription && customerId && (

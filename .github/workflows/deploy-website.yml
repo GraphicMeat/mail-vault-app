@@ -1,0 +1,149 @@
+name: Deploy Website
+
+# Deploys website/ static + website/api/ Node service to Hetzner sda-prod.
+#
+# Triggers on push to main affecting website/. Splits writes:
+#   - Static HTML/assets → /var/www/mailvaultapp (Caddy file_server)
+#   - Node API source    → /opt/mailvault-api (runs as mailvault-api.service)
+#   - CI-managed secrets → /etc/mailvault-api/secrets.env
+# Server-local DB config in /etc/mailvault-api/.env is NEVER touched.
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   DEPLOY_SSH_KEY            Private key authorized on Hetzner (matches an /root/.ssh/authorized_keys entry)
+#   DEPLOY_HOST               178.104.231.107
+#   DEPLOY_USER               root
+#   DEPLOY_KNOWN_HOSTS        Output of: ssh-keyscan -t ed25519,rsa 178.104.231.107
+#   STRIPE_SECRET_KEY
+#   STRIPE_WEBHOOK_SECRET
+#   STRIPE_PRICE_MONTHLY_EUR
+#   STRIPE_PRICE_YEARLY_EUR
+#   SMTP_HOST
+#   SMTP_PORT
+#   SMTP_USER
+#   SMTP_PASS
+#   NOTIFY_EMAIL
+#   IP_SALT                   Random 32+ char string
+#   ADMIN_KEY                 Random 32+ char string
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - '.github/workflows/deploy-website.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-website
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Rsync static files (excluding api/)
+        run: |
+          rsync -avz --delete \
+            --exclude='api/' \
+            --exclude='*.db' \
+            --exclude='*.db-shm' \
+            --exclude='*.db-wal' \
+            --exclude='node_modules/' \
+            --exclude='.env*' \
+            -e "ssh -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts" \
+            ./website/ \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/var/www/mailvaultapp/
+
+      - name: Rsync API source (excluding node_modules, .env, data.db)
+        run: |
+          rsync -avz --delete \
+            --exclude='node_modules/' \
+            --exclude='.env*' \
+            --exclude='data.db' \
+            --exclude='data.db-shm' \
+            --exclude='data.db-wal' \
+            -e "ssh -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts" \
+            ./website/api/ \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/mailvault-api/
+
+      - name: Write CI-managed secrets.env atomically
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_PRICE_MONTHLY_EUR: ${{ secrets.STRIPE_PRICE_MONTHLY_EUR }}
+          STRIPE_PRICE_YEARLY_EUR: ${{ secrets.STRIPE_PRICE_YEARLY_EUR }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+          IP_SALT: ${{ secrets.IP_SALT }}
+          ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
+        run: |
+          # Build secrets file locally so we don't leak via shell history on server
+          cat > /tmp/secrets.env <<EOF
+          # CI-managed — overwritten by GitHub Actions on every deploy
+          # DO NOT edit by hand
+          CORS_ORIGIN=https://mailvaultapp.com
+          IP_SALT=${IP_SALT}
+          ADMIN_KEY=${ADMIN_KEY}
+          NOTIFY_EMAIL=${NOTIFY_EMAIL}
+          SMTP_HOST=${SMTP_HOST}
+          SMTP_PORT=${SMTP_PORT}
+          SMTP_USER=${SMTP_USER}
+          SMTP_PASS=${SMTP_PASS}
+          STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+          STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+          STRIPE_PRICE_MONTHLY_EUR=${STRIPE_PRICE_MONTHLY_EUR}
+          STRIPE_PRICE_YEARLY_EUR=${STRIPE_PRICE_YEARLY_EUR}
+          EOF
+          chmod 600 /tmp/secrets.env
+
+          # scp to server, install with correct perms
+          scp -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts \
+            /tmp/secrets.env \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/secrets.env.new
+
+          ssh -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            'install -m 640 -o root -g mailvault /tmp/secrets.env.new /etc/mailvault-api/secrets.env && rm -f /tmp/secrets.env.new'
+
+          rm -f /tmp/secrets.env
+
+      - name: Install deps + restart service
+        run: |
+          ssh -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            'set -e
+             cd /opt/mailvault-api
+             chown -R mailvault:mailvault /opt/mailvault-api
+             # Only npm ci if package-lock changed (faster deploys)
+             npm ci --omit=dev
+             systemctl restart mailvault-api
+             sleep 3
+             systemctl is-active mailvault-api
+             # Smoke test
+             curl -sS -f --max-time 10 http://127.0.0.1:3001/api/health | head -1'
+
+      - name: Verify via Cloudflare (public)
+        run: |
+          curl -sS -f --max-time 15 https://mailvaultapp.com/api/health
+          curl -sS -f --max-time 15 -o /dev/null -w "homepage: %{http_code}\n" https://mailvaultapp.com/
+
+      - name: Clean up SSH key
+        if: always()
+        run: |
+          rm -f ~/.ssh/deploy_key

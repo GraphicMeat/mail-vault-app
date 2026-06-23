@@ -21,9 +21,7 @@ mod backup;
 mod commands;
 mod dns;
 mod external_location;
-mod iap;
 pub mod graph;
-pub mod helper;
 mod imap;
 mod migration;
 mod move_emails;
@@ -1437,18 +1435,13 @@ async fn open_email_window(app: tauri::AppHandle, html: String, title: String) -
     let n = WINDOW_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let label = format!("email-popup-{}", n);
 
-    // Write HTML to a temp file — eval on about:blank fails on macOS WKWebView.
-    // Prepend UTF-8 BOM so WKWebView decodes the file as UTF-8 unambiguously
-    // (file:// loads otherwise fall back to Latin-1 and mojibake non-ASCII).
+    // Write HTML to a temp file — eval on about:blank fails on macOS WKWebView
     let cache_dir = app.path().app_data_dir()
         .map_err(|e| e.to_string())?
         .join("popup_cache");
     fs::create_dir_all(&cache_dir).map_err(|e| e.to_string())?;
     let html_file = cache_dir.join(format!("email-popup-{}.html", n));
-    let mut bytes = Vec::with_capacity(html.len() + 3);
-    bytes.extend_from_slice(&[0xEF, 0xBB, 0xBF]);
-    bytes.extend_from_slice(html.as_bytes());
-    fs::write(&html_file, &bytes).map_err(|e| e.to_string())?;
+    fs::write(&html_file, &html).map_err(|e| e.to_string())?;
 
     WebviewWindowBuilder::new(
         &app,
@@ -1626,7 +1619,7 @@ pub fn build_maildir_filename(uid: u32, flags: &[String]) -> String {
     flag_chars.sort();
     flag_chars.dedup();
     let flag_str: String = flag_chars.into_iter().collect();
-    format!("{}:2,{}.eml", uid, flag_str)
+    format!("{}:2,{}", uid, flag_str)
 }
 
 pub fn find_file_by_uid(dir: &Path, uid: u32) -> Option<PathBuf> {
@@ -3838,19 +3831,7 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
     }
 }
 
-#[cfg(all(target_os = "macos", not(feature = "sparkle")))]
-async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
-    // Mac App Store build: updates ship through the App Store, not Sparkle.
-    if show_no_update {
-        use tauri_plugin_dialog::DialogExt;
-        handle.dialog()
-            .message("MailVault is up to date through the Mac App Store. Open the App Store app to install any pending updates.")
-            .title("Updates")
-            .show(|_| {});
-    }
-}
-
-#[cfg(all(target_os = "macos", feature = "sparkle"))]
+#[cfg(target_os = "macos")]
 async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
     use tauri_plugin_dialog::DialogExt;
     use tauri_plugin_sparkle_updater::SparkleUpdaterExt;
@@ -3930,72 +3911,194 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
 
 // ── Daemon RPC proxy ────────────────────────────────────────────────────────
 // Bridges frontend invoke() calls to the mailvault-daemon Unix socket.
-// ── Background helper — Tauri command wrappers ──────────────────────────────
-// All lifecycle, transport, and path logic lives in helper.rs.
-// These thin commands keep the invoke surface stable while the underlying
-// implementation evolves toward a fully sandbox-safe model.
+// In on-demand mode, auto-spawns the daemon if the socket isn't reachable.
 
-/// Register the background helper for login/background availability.
-#[tauri::command]
-async fn install_daemon_service(app_handle: tauri::AppHandle) -> Result<String, String> {
-    helper::register_background(&app_handle)
+use std::sync::Mutex;
+use once_cell::sync::Lazy;
+
+/// Tracks a daemon child process spawned in on-demand mode.
+static DAEMON_CHILD: Lazy<Mutex<Option<std::process::Child>>> = Lazy::new(|| Mutex::new(None));
+
+/// Find the daemon binary. Checks next to the app binary first, then common build paths.
+fn find_daemon_binary(app_handle: &tauri::AppHandle) -> Option<PathBuf> {
+    // 1. Next to the Tauri app binary (release layout)
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let candidate = dir.join("mailvault-daemon");
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    // 2. Cargo workspace target directories (dev mode)
+    let workspace_root = app_handle
+        .path()
+        .resource_dir()
+        .ok()
+        .and_then(|p| p.parent().map(|pp| pp.to_path_buf()));
+
+    for base in [
+        workspace_root,
+        std::env::current_dir().ok(),
+    ].into_iter().flatten() {
+        for profile in ["debug", "release"] {
+            let candidate = base.join("target").join(profile).join("mailvault-daemon");
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    None
 }
 
-/// Unregister the background helper.
-#[tauri::command]
-async fn uninstall_daemon_service() -> Result<(), String> {
-    helper::unregister_background()
+/// Spawn daemon as a child process (on-demand mode). Waits for socket to appear.
+fn ensure_daemon_running(app_handle: &tauri::AppHandle, socket_path: &Path) -> Result<(), String> {
+    // Already running?
+    if socket_path.exists() {
+        // Quick liveness check: can we connect?
+        if std::os::unix::net::UnixStream::connect(socket_path).is_ok() {
+            return Ok(());
+        }
+        // Stale socket — remove it
+        let _ = std::fs::remove_file(socket_path);
+    }
+
+    let mut guard = DAEMON_CHILD.lock().map_err(|e| e.to_string())?;
+
+    // Check if our child is still alive
+    if let Some(ref mut child) = *guard {
+        match child.try_wait() {
+            Ok(Some(_)) => { *guard = None; } // Exited, need to respawn
+            Ok(None) => {
+                // Still running but socket gone — wait a moment
+                for _ in 0..20 {
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    if socket_path.exists() { return Ok(()); }
+                }
+                return Err("Daemon child is running but socket not appearing".into());
+            }
+            Err(_) => { *guard = None; }
+        }
+    }
+
+    // Spawn new daemon
+    let daemon_bin = find_daemon_binary(app_handle)
+        .ok_or_else(|| "mailvault-daemon binary not found".to_string())?;
+
+    info!("Spawning daemon on-demand: {:?}", daemon_bin);
+
+    let child = Command::new(&daemon_bin)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn daemon: {}", e))?;
+
+    *guard = Some(child);
+
+    // Wait for socket to appear (up to 3 seconds)
+    for _ in 0..30 {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        if socket_path.exists() {
+            info!("Daemon socket ready");
+            return Ok(());
+        }
+    }
+
+    Err("Daemon spawned but socket did not appear within 3 seconds".into())
 }
 
-/// Check whether the background helper is registered.
-#[tauri::command]
-async fn is_daemon_service_installed() -> Result<bool, String> {
-    helper::is_background_registered()
+/// Kill the on-demand daemon child process (called on app exit).
+pub fn shutdown_daemon_child() {
+    if let Ok(mut guard) = DAEMON_CHILD.lock() {
+        if let Some(ref mut child) = *guard {
+            info!("Shutting down on-demand daemon (PID {})", child.id());
+            let _ = child.kill();
+            let _ = child.wait();
+            *guard = None;
+        }
+    }
 }
 
-/// Structured helper status for the settings UI.
-#[tauri::command]
-async fn helper_status(daemon_mode: Option<String>) -> Result<helper::HelperStatus, String> {
-    Ok(helper::status(daemon_mode.as_deref().unwrap_or("on-demand")))
-}
-
-// ── In-app purchase commands ─────────────────────────────────────────────
-//
-// Mac App Store builds gate paid features (e.g. external backups) behind
-// these. Non-MAS builds short-circuit: `iap_is_entitled` always returns true
-// and purchase/restore are no-ops.
-
-#[tauri::command]
-fn iap_build_info() -> serde_json::Value {
-    serde_json::json!({
-        "isAppStoreBuild": iap::is_appstore_build(),
-    })
-}
-
-#[tauri::command]
-fn iap_is_entitled(product_id: String) -> bool {
-    iap::is_entitled(&product_id)
-}
-
-#[tauri::command]
-async fn iap_purchase(product_id: String) -> Result<(), String> {
-    iap::purchase(&product_id).await
-}
-
-#[tauri::command]
-async fn iap_restore() -> Result<(), String> {
-    iap::restore().await
-}
-
-/// JSON-RPC call to the background helper.
 #[tauri::command]
 async fn daemon_rpc(
     app_handle: tauri::AppHandle,
     method: String,
     params: serde_json::Value,
-    daemon_mode: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    helper::rpc(&app_handle, &method, params, daemon_mode.as_deref()).await
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use tokio::net::UnixStream;
+
+    let data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not get app data directory: {}", e))?;
+
+    let socket_path = data_dir.join("daemon.sock");
+    let token_path = data_dir.join("daemon.token");
+
+    // Auto-spawn daemon if not running (on-demand mode)
+    ensure_daemon_running(&app_handle, &socket_path)?;
+
+    // Read auth token
+    let token = std::fs::read_to_string(&token_path)
+        .map_err(|_| "Daemon token not found — is the daemon running?".to_string())?;
+
+    // Connect to daemon socket
+    let stream = UnixStream::connect(&socket_path)
+        .await
+        .map_err(|e| format!("Cannot connect to daemon — is it running? ({})", e))?;
+
+    let (reader, mut writer) = stream.into_split();
+    let mut lines = BufReader::new(reader).lines();
+
+    // Send auth handshake
+    let auth_msg = serde_json::json!({"token": token.trim()});
+    let mut buf = serde_json::to_vec(&auth_msg).unwrap();
+    buf.push(b'\n');
+    writer.write_all(&buf).await.map_err(|e| e.to_string())?;
+
+    // Read auth response
+    let auth_resp = lines.next_line().await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Daemon closed connection during auth".to_string())?;
+
+    let auth_result: serde_json::Value = serde_json::from_str(&auth_resp)
+        .map_err(|e| format!("Invalid auth response: {}", e))?;
+
+    if auth_result.get("error").is_some() {
+        return Err("Daemon authentication failed".to_string());
+    }
+
+    // Send JSON-RPC request
+    static RPC_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    let id = RPC_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+    let rpc_req = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": method,
+        "params": params,
+        "id": id,
+    });
+    let mut buf = serde_json::to_vec(&rpc_req).unwrap();
+    buf.push(b'\n');
+    writer.write_all(&buf).await.map_err(|e| e.to_string())?;
+
+    // Read response
+    let resp_line = lines.next_line().await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Daemon closed connection before responding".to_string())?;
+
+    let resp: serde_json::Value = serde_json::from_str(&resp_line)
+        .map_err(|e| format!("Invalid RPC response: {}", e))?;
+
+    if let Some(error) = resp.get("error") {
+        let msg = error.get("message").and_then(|m| m.as_str()).unwrap_or("Unknown daemon error");
+        return Err(msg.to_string());
+    }
+
+    Ok(resp.get("result").cloned().unwrap_or(serde_json::Value::Null))
 }
 
 fn main() {
@@ -4080,9 +4183,8 @@ fn main() {
     #[cfg(feature = "webdriver")]
     let builder = builder.plugin(tauri_plugin_webdriver_automation::init());
 
-    // Updater plugins — Sparkle on Developer ID macOS, tauri-plugin-updater on Linux.
-    // MAS builds (feature = "appstore", default features disabled) skip both — updates flow through the App Store.
-    #[cfg(all(target_os = "macos", feature = "sparkle"))]
+    // Updater plugins — Sparkle on macOS, tauri-plugin-updater on Linux
+    #[cfg(target_os = "macos")]
     let builder = builder.plugin(tauri_plugin_sparkle_updater::init());
     #[cfg(target_os = "linux")]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
@@ -4095,8 +4197,7 @@ fn main() {
         .manage(migration::MigrationNotify::default())
         .manage(imap::ImapPool::new())
         .manage(oauth2::OAuth2Manager::new())
-        .manage(UpdateCheckGuard::default())
-        .manage(iap::IapState::new());
+        .manage(UpdateCheckGuard::default());
 
     #[cfg(target_os = "linux")]
     let builder = builder.manage(PendingUpdate::default());
@@ -4184,9 +4285,6 @@ fn main() {
             commands::imap_delete_email,
             commands::imap_fetch_raw,
             commands::imap_append_email,
-            commands::imap_ensure_sent_mailbox,
-            commands::imap_ensure_drafts_mailbox,
-            commands::smtp_build_mime,
             commands::smtp_send_email,
             commands::imap_search_emails,
             commands::imap_disconnect,
@@ -4220,15 +4318,7 @@ fn main() {
             commands::clear_migration_state_cmd,
             commands::count_migration_folders,
             commands::get_folder_mappings,
-            daemon_rpc,
-            install_daemon_service,
-            uninstall_daemon_service,
-            is_daemon_service_installed,
-            helper_status,
-            iap_build_info,
-            iap_is_entitled,
-            iap_purchase,
-            iap_restore
+            daemon_rpc
         ])
         .setup(|app| {
             // Set up logging to app log directory
@@ -4256,8 +4346,6 @@ fn main() {
             info!("App version: {}", env!("CARGO_PKG_VERSION"));
 
             // --- Set up app menu ---
-            // Sparkle "Check for Updates..." is hidden on MAS builds (App Store handles updates).
-            #[cfg(any(not(target_os = "macos"), feature = "sparkle"))]
             let check_updates = MenuItem::with_id(app, "check_updates", "Check for Updates...", true, None::<&str>)?;
             #[cfg(target_os = "macos")]
             let open_settings = MenuItem::with_id(app, "open_settings", "Settings...", true, Some("cmd+,"))?;
@@ -4278,19 +4366,10 @@ fn main() {
                             let sep1 = PredefinedMenuItem::separator(app)?;
                             let sep2 = PredefinedMenuItem::separator(app)?;
                             let _ = app_submenu.insert(&sep1, 1);
-                            #[cfg(feature = "sparkle")]
-                            {
-                                let _ = app_submenu.insert(&check_updates, 2);
-                                let _ = app_submenu.insert(&open_settings, 3);
-                                let _ = app_submenu.insert(&report_bug, 4);
-                                let _ = app_submenu.insert(&sep2, 5);
-                            }
-                            #[cfg(not(feature = "sparkle"))]
-                            {
-                                let _ = app_submenu.insert(&open_settings, 2);
-                                let _ = app_submenu.insert(&report_bug, 3);
-                                let _ = app_submenu.insert(&sep2, 4);
-                            }
+                            let _ = app_submenu.insert(&check_updates, 2);
+                            let _ = app_submenu.insert(&open_settings, 3);
+                            let _ = app_submenu.insert(&report_bug, 4);
+                            let _ = app_submenu.insert(&sep2, 5);
                         }
                     }
                 }
@@ -4367,7 +4446,7 @@ fn main() {
                     let _ = app_handle_for_menu.emit("open-shortcuts", ());
                 } else if event.id().as_ref() == "quit_app" {
                     info!("Application quitting via menu");
-                    app_handle_for_menu.exit(0);
+                    std::process::exit(0);
                 }
             });
 
@@ -4423,29 +4502,20 @@ fn main() {
                         }
                         "quit" => {
                             info!("Application quitting via tray menu");
-                            app.exit(0);
+                            std::process::exit(0);
                         }
                         _ => {}
                     }
                 })
                 .build(app)?;
 
-            // Install StoreKit transaction observer (MAS builds only — stub otherwise).
-            {
-                let state = app.state::<iap::IapState>();
-                iap::install_observer(&state);
-            }
-
-            // Check for updates in background (skipped on Mac App Store — App Store handles updates).
-            #[cfg(any(not(target_os = "macos"), feature = "sparkle"))]
-            {
-                let update_handle = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    // Delay update check to let the app initialize first
-                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                    check_for_updates(update_handle, false).await;
-                });
-            }
+            // Check for updates in background
+            let update_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                // Delay update check to let the app initialize first
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                check_for_updates(update_handle, false).await;
+            });
 
             info!("Application setup complete");
             Ok(())
@@ -4482,8 +4552,8 @@ fn main() {
                     }
                 }
                 tauri::RunEvent::Exit => {
-                    info!("Application exiting — cleaning up helper child if on-demand");
-                    helper::shutdown_child();
+                    info!("Application exiting — cleaning up daemon child if on-demand");
+                    shutdown_daemon_child();
                 }
                 #[cfg(target_os = "linux")]
                 tauri::RunEvent::MainEventsCleared => {

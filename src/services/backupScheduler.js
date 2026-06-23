@@ -4,6 +4,10 @@ import { useBackupStore } from '../stores/backupStore';
 import { useMailStore } from '../stores/mailStore';
 import { hasValidCredentials, resolveServerAccount } from './authUtils';
 import { createSnapshotFromMaildir } from './snapshotService';
+import { IS_APPSTORE_BUILD } from '../utils/buildFlags';
+
+// Re-prompt the share-to-unlock panel at most weekly.
+const SHARE_UNLOCK_COOLDOWN_MS = 7 * 86_400_000;
 
 const RETRY_DELAYS = [30_000, 120_000, 300_000]; // 30s, 2min, 5min
 
@@ -356,6 +360,18 @@ class BackupCoordinator {
           `Backup failed - ${account.email}`,
           `${entry.error || 'Unknown error'}. Will retry on next idle.`
         ).catch(() => {});
+      }
+
+      // Share-to-unlock: prompt non-premium users to star/share for free
+      // premium. Non-MAS only (MAS gates backups via StoreKit + review rules).
+      if (!IS_APPSTORE_BUILD && entry.success && !externalDegraded
+          && !hasPremiumAccess(storeNow.billingProfile)) {
+        const grantActive = !!(storeNow.shareGrant?.expiresAt && storeNow.shareGrant.expiresAt > Date.now());
+        const sinceLast = Date.now() - (storeNow.shareUnlockLastShownAt || 0);
+        if (!grantActive && sinceLast > SHARE_UNLOCK_COOLDOWN_MS) {
+          storeNow.markShareUnlockShown();
+          useBackupStore.getState().setShareUnlock({ emailsBackedUp: entry.emailsBackedUp });
+        }
       }
 
       this._retryCount.delete(accountId);

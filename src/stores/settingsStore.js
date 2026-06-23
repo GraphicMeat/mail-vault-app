@@ -175,6 +175,26 @@ export const useSettingsStore = create(
       setBillingProfile: (profile) => set({ billingProfile: profile, billingLastChecked: Date.now() }),
       clearBillingProfile: () => set({ billingProfile: null, billingLastChecked: null, billingEmail: '' }),
 
+      // Share-to-unlock reward (non-MAS): premium granted for starring/sharing.
+      // expiresAt is the running unlock deadline; each action grants days once.
+      shareGrant: { expiresAt: null, github: false, x: false, linkedin: false, githubUser: null },
+      shareUnlockLastShownAt: null,
+      // Grant premium days for a completed action. Idempotent per action; days stack.
+      recordShareAction: (action, days, meta = {}) => set((s) => {
+        const g = s.shareGrant || { expiresAt: null };
+        if (g[action]) return {}; // already counted this action
+        const base = Math.max(Date.now(), g.expiresAt || 0);
+        return {
+          shareGrant: {
+            ...g,
+            ...meta,
+            [action]: true,
+            expiresAt: base + days * 86_400_000,
+          },
+        };
+      }),
+      markShareUnlockShown: () => set({ shareUnlockLastShownAt: Date.now() }),
+
       // Link safety settings
       linkSafetyEnabled: true,
       linkSafetyClickConfirm: true,
@@ -740,11 +760,24 @@ export function isTauriDevPremiumOverrideEnabled() {
  * - canceled → access only until currentPeriodEnd
  * - incomplete, unpaid → no access
  */
+/** True while an unexpired share-to-unlock grant is active (non-MAS reward). */
+export function isShareGrantActive() {
+  try {
+    const g = useSettingsStore.getState().shareGrant;
+    return !!(g && g.expiresAt && g.expiresAt > Date.now());
+  } catch {
+    return false;
+  }
+}
+
 export function hasPremiumAccess(billingProfile) {
   // Override honored only in Tauri dev mode (npm run tauri:dev)
   if (isTauriDevPremiumOverrideEnabled()) {
     return window.__MAILVAULT_FORCE_PREMIUM__;
   }
+
+  // Share-to-unlock reward grants full premium for its window.
+  if (isShareGrantActive()) return true;
 
   if (!billingProfile?.hasSubscription) return false;
   const { status, currentPeriodEnd, premiumAccess, clientAccessGranted } = billingProfile;

@@ -10,4 +10,10 @@ export const useBackupStore = create((set) => ({
   activeBackup: null, // { accountId, accountEmail, folder, totalFolders, completedFolders, completedEmails, active, done, queueLength }
   setActiveBackup: (backup) => set({ activeBackup: backup }),
   clearActiveBackup: () => set({ activeBackup: null }),
+
+  // Share-to-unlock prompt trigger. Set after an eligible successful backup;
+  // ShareUnlockModal renders while non-null. { emailsBackedUp } | null
+  shareUnlock: null,
+  setShareUnlock: (payload) => set({ shareUnlock: payload }),
+  clearShareUnlock: () => set({ shareUnlock: null }),
 }));
