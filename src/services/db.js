@@ -346,6 +346,17 @@ export async function saveAccount(account) {
   console.log('[db.js] saveAccount called', { accountId: account.id, hasPassword: !!account.password });
   await initDB();
 
+  // Stamp a host change so post-sync detection can offer to restore local mail
+  // to a freshly-migrated server. Best-effort: a missing prior account (first
+  // save) simply has nothing to compare.
+  try {
+    const prior = await getAccount(account.id);
+    if (prior && prior.imapHost && account.imapHost && prior.imapHost !== account.imapHost) {
+      account.previousImapHost = prior.imapHost;
+      account.hostChangedAt = Date.now();
+    }
+  } catch { /* first save — nothing to compare */ }
+
   // Store full account (including password) in keychain
   if (invoke) {
     try {

@@ -487,6 +487,24 @@ export async function cancelMigration() {
   return await tauriInvoke('cancel_migration');
 }
 
+// ── Restore (local → server) ────────────────────────────────────────────────
+
+export async function startRestore(account, accountId, folders) {
+  return await tauriInvoke('start_restore', {
+    account: typeof account === 'string' ? account : JSON.stringify(account),
+    accountId,
+    folders,
+  });
+}
+
+export async function cancelRestore() {
+  return await tauriInvoke('cancel_restore', {});
+}
+
+export async function countLocalFolder(accountId, mailbox) {
+  return await tauriInvoke('count_local_folder', { accountId, mailbox });
+}
+
 export async function pauseMigration() {
   return await tauriInvoke('pause_migration');
 }

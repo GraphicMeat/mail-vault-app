@@ -24,6 +24,7 @@ import { MoveToFolderDropdown } from './components/MoveToFolderDropdown';
 import { MigrationToast } from './components/MigrationToast';
 import { KeychainToast } from './components/KeychainToast';
 import ShareUnlockModal from './components/ShareUnlockModal';
+import RestoreModal from './components/RestoreModal.jsx';
 // BackupToast removed — backup progress now shows in sidebar via BackupIndicator
 import { useEmailScheduler } from './hooks/useEmailScheduler';
 import { usePipelineCoordinator } from './hooks/usePipelineCoordinator';
@@ -34,6 +35,7 @@ import { RefreshCw, X } from 'lucide-react';
 import * as bulkApi from './services/api';
 import { bulkOperationManager } from './services/BulkOperationManager';
 import { migrationManager } from './services/migrationManager.js';
+import { restoreManager } from './services/restoreManager.js';
 import { version } from '../package.json';
 
 // Resizable divider component
@@ -210,7 +212,11 @@ function App() {
   // Migration manager — listens for migration progress events and checks for incomplete migrations
   useEffect(() => {
     migrationManager.init();
-    return () => migrationManager.destroy();
+    restoreManager.init();
+    return () => {
+      migrationManager.destroy();
+      restoreManager.destroy();
+    };
   }, []);
 
   // Keyboard shortcuts — wire all shortcut actions to app state/store methods
@@ -749,6 +755,7 @@ function App() {
       <UndoSendToast onUndo={(cs) => openCompose(cs)} />
       <OutboxTray onRestoreDraft={(cs) => openCompose(cs)} />
       <ShareUnlockModal onSubscribe={() => { setSettingsInitialTab('billing'); setShowSettings(true); }} />
+      <RestoreModal />
 
       {/* Move to Folder dropdown (triggered by keyboard shortcut M) */}
       {showMoveDropdown && (() => {
