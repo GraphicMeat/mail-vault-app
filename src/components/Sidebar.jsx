@@ -852,6 +852,18 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                       </div>
                     </div>
                   )}
+                  {(connectionErrorType === 'passwordMissing' ||
+                    connectionErrorType === 'oauthExpired' ||
+                    connectionErrorType === 'serverError') && (
+                    <button
+                      onClick={() => onOpenSettings?.('migration')}
+                      className="mt-1.5 w-full px-2 py-1 text-[11px] font-medium text-mail-text-muted
+                                 hover:text-mail-text hover:bg-mail-surface-hover rounded transition-colors text-center"
+                      title="If you switched email providers or servers, set up a migration to move your mail"
+                    >
+                      Switched email providers? Set up migration →
+                    </button>
+                  )}
                 </div>
               )}
             </>
