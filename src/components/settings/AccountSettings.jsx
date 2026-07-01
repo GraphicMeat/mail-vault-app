@@ -27,10 +27,11 @@ import {
   Eye,
   EyeOff,
   Save,
+  Server,
 } from 'lucide-react';
 
 export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
-  const { removeAccount } = useAccountStore();
+  const { removeAccount, updateAccount } = useAccountStore();
   const {
     signatures,
     setSignature,
@@ -62,6 +63,10 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
   const [sentOverride, setSentOverride] = useState('');
   const [savingSent, setSavingSent] = useState(false);
   const [autoCreatingSent, setAutoCreatingSent] = useState(false);
+  const [editingServer, setEditingServer] = useState(false);
+  const [serverForm, setServerForm] = useState(null);
+  const [savingServer, setSavingServer] = useState(false);
+  const [serverError, setServerError] = useState(null);
 
   const orderedAccounts = getOrderedAccounts(accounts);
   const selectedAccount = accounts.find(a => a.id === selectedAccountId);
@@ -84,6 +89,8 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
       setSignatureText(sig.text || '');
       setAccountDisplayName(getDisplayName(selectedAccountId) || '');
       setShowRemoveConfirm(false);
+      setEditingServer(false);
+      setServerError(null);
     }
   }, [selectedAccountId]);
 
@@ -173,6 +180,49 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
       alert('Could not auto-detect or create a Sent folder: ' + (err.message || err));
     } finally {
       setAutoCreatingSent(false);
+    }
+  };
+
+  const startEditServer = () => {
+    if (!selectedAccount) return;
+    setServerForm({
+      imapHost: selectedAccount.imapHost || '',
+      imapPort: selectedAccount.imapPort || 993,
+      smtpHost: selectedAccount.smtpHost || '',
+      smtpPort: selectedAccount.smtpPort || 587,
+    });
+    setServerError(null);
+    setEditingServer(true);
+  };
+
+  // Re-point the account to a new IMAP/SMTP server. updateAccount tests the
+  // connection first, then persists on the same account id (Maildir/creds/
+  // settings preserved) and — on a host change — reconnects and offers to
+  // restore local mail if the new server is empty.
+  const handleSaveServer = async () => {
+    if (!selectedAccount || !serverForm) return;
+    const imapHost = serverForm.imapHost.trim();
+    const smtpHost = serverForm.smtpHost.trim();
+    if (!imapHost || !smtpHost) {
+      setServerError('IMAP and SMTP servers are required.');
+      return;
+    }
+    setSavingServer(true);
+    setServerError(null);
+    try {
+      await updateAccount(selectedAccountId, {
+        imapHost,
+        imapPort: Number(serverForm.imapPort) || 993,
+        smtpHost,
+        smtpPort: Number(serverForm.smtpPort) || 587,
+      });
+      setEditingServer(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setServerError(err?.message || String(err));
+    } finally {
+      setSavingServer(false);
     }
   };
 
@@ -617,6 +667,112 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                 </div>
               </div>
             </div>
+
+            {/* Mail Server (password / IMAP accounts only) */}
+            {selectedAccount.authType !== 'oauth2' && (
+              <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+                <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
+                  <Server size={18} className="text-mail-accent" />
+                  Mail Server
+                </h4>
+
+                <p className="text-sm text-mail-text-muted mb-4">
+                  Changed hosting or email provider but kept the same address? Update the IMAP/SMTP servers here. Your locally archived mail stays put — if the new server is empty, MailVault will offer to restore it.
+                </p>
+
+                {editingServer && serverForm ? (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="col-span-2">
+                        <label className="block text-xs font-medium text-mail-text-muted mb-1">IMAP server</label>
+                        <input
+                          type="text"
+                          value={serverForm.imapHost}
+                          onChange={(e) => setServerForm(f => ({ ...f, imapHost: e.target.value }))}
+                          placeholder="imap.example.com"
+                          className="w-full px-3 py-2 bg-mail-bg border border-mail-border rounded-lg
+                                    text-mail-text placeholder-mail-text-muted focus:border-mail-accent transition-all"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-mail-text-muted mb-1">IMAP port</label>
+                        <input
+                          type="number"
+                          value={serverForm.imapPort}
+                          onChange={(e) => setServerForm(f => ({ ...f, imapPort: e.target.value }))}
+                          className="w-full px-3 py-2 bg-mail-bg border border-mail-border rounded-lg
+                                    text-mail-text focus:border-mail-accent transition-all"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="col-span-2">
+                        <label className="block text-xs font-medium text-mail-text-muted mb-1">SMTP server</label>
+                        <input
+                          type="text"
+                          value={serverForm.smtpHost}
+                          onChange={(e) => setServerForm(f => ({ ...f, smtpHost: e.target.value }))}
+                          placeholder="smtp.example.com"
+                          className="w-full px-3 py-2 bg-mail-bg border border-mail-border rounded-lg
+                                    text-mail-text placeholder-mail-text-muted focus:border-mail-accent transition-all"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-mail-text-muted mb-1">SMTP port</label>
+                        <input
+                          type="number"
+                          value={serverForm.smtpPort}
+                          onChange={(e) => setServerForm(f => ({ ...f, smtpPort: e.target.value }))}
+                          className="w-full px-3 py-2 bg-mail-bg border border-mail-border rounded-lg
+                                    text-mail-text focus:border-mail-accent transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    {serverError && (
+                      <div className="text-sm text-mail-danger bg-mail-danger/10 border border-mail-danger/20 rounded-lg px-3 py-2">
+                        {serverError}
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleSaveServer}
+                        disabled={savingServer}
+                        className="px-4 py-2 bg-mail-accent hover:bg-mail-accent-hover text-white rounded-lg
+                                  transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+                      >
+                        {savingServer ? <Loader size={14} className="animate-spin" /> : <Check size={14} />}
+                        {savingServer ? 'Testing & saving…' : 'Test & save server'}
+                      </button>
+                      <button
+                        onClick={() => { setEditingServer(false); setServerError(null); }}
+                        disabled={savingServer}
+                        className="px-4 py-2 bg-mail-surface-hover hover:bg-mail-border text-mail-text
+                                  rounded-lg transition-colors text-sm disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-mail-text-muted space-y-0.5">
+                      <div>IMAP: <code className="text-mail-text">{selectedAccount.imapHost || '—'}:{selectedAccount.imapPort || 993}</code></div>
+                      <div>SMTP: <code className="text-mail-text">{selectedAccount.smtpHost || '—'}:{selectedAccount.smtpPort || 587}</code></div>
+                    </div>
+                    <button
+                      onClick={startEditServer}
+                      className="px-4 py-2 bg-mail-surface-hover hover:bg-mail-border text-mail-text
+                                rounded-lg transition-colors flex items-center gap-2 text-sm"
+                    >
+                      <Server size={16} />
+                      Change server
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Password / Authentication */}
             <div className="bg-mail-surface border border-mail-border rounded-xl p-5">

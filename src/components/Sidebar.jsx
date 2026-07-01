@@ -855,14 +855,29 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                   {(connectionErrorType === 'passwordMissing' ||
                     connectionErrorType === 'oauthExpired' ||
                     connectionErrorType === 'serverError') && (
-                    <button
-                      onClick={() => onOpenSettings?.('migration')}
-                      className="mt-1.5 w-full px-2 py-1 text-[11px] font-medium text-mail-text-muted
-                                 hover:text-mail-text hover:bg-mail-surface-hover rounded transition-colors text-center"
-                      title="If you switched email providers or servers, set up a migration to move your mail"
-                    >
-                      Switched email providers? Set up migration →
-                    </button>
+                    <div className="mt-1.5">
+                      <div className="text-[11px] text-mail-text-muted text-center mb-1">
+                        Switched email providers or servers?
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => onOpenAccounts?.(activeAccount?.id)}
+                          className="flex-1 px-2 py-1 text-[11px] font-medium text-mail-text-muted
+                                     hover:text-mail-text hover:bg-mail-surface-hover rounded transition-colors text-center"
+                          title="Re-point this account to a new IMAP/SMTP server, keeping your local mail"
+                        >
+                          Change server
+                        </button>
+                        <button
+                          onClick={() => onOpenSettings?.('migration')}
+                          className="flex-1 px-2 py-1 text-[11px] font-medium text-mail-text-muted
+                                     hover:text-mail-text hover:bg-mail-surface-hover rounded transition-colors text-center"
+                          title="Copy mail from an old account/server to a new one"
+                        >
+                          Migrate mail
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
               )}

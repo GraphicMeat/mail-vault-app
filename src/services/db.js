@@ -395,7 +395,7 @@ export async function getAccountsWithoutPasswords() {
  * Logical account identity key — same email + same server/provider = same account.
  * Used to detect duplicates across keychain and accounts.json.
  */
-function accountLogicalKey(a) {
+export function accountLogicalKey(a) {
   const email = (a.email || '').toLowerCase();
   const server = (a.imapHost || a.oauth2Provider || '').toLowerCase();
   return `${email}@${server}`;
