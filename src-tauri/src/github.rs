@@ -15,7 +15,7 @@ use serde_json::{json, Value};
 /// Public OAuth App client id. Override at runtime with `MV_GITHUB_CLIENT_ID`.
 const GITHUB_CLIENT_ID: &str = "REPLACE_WITH_GITHUB_OAUTH_APP_CLIENT_ID";
 /// Repository to star, "owner/repo". Override with `MV_GITHUB_REPO`.
-const GITHUB_REPO: &str = "your-org/mailvault";
+const GITHUB_REPO: &str = "GraphicMeat/mail-vault-app";
 /// GitHub requires a User-Agent header on every API request.
 const USER_AGENT: &str = "MailVault-App";
 

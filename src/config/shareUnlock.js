@@ -10,15 +10,15 @@
  * Keep GITHUB_OWNER/GITHUB_NAME in sync with `src-tauri/src/github.rs`.
  */
 
-export const GITHUB_OWNER = 'your-org';
-export const GITHUB_NAME = 'mailvault';
+export const GITHUB_OWNER = 'GraphicMeat';
+export const GITHUB_NAME = 'mail-vault-app';
 export const GITHUB_REPO_URL = `https://github.com/${GITHUB_OWNER}/${GITHUB_NAME}`;
 
-/** Premium days each completed action grants. Star weighted highest. */
+/** Premium days each completed action grants. */
 export const REWARD_DAYS = {
-  github: 30,
-  x: 15,
-  linkedin: 15,
+  github: 5,
+  x: 5,
+  linkedin: 5,
 };
 
 /** Ordered for display. */

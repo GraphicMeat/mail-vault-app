@@ -21,6 +21,7 @@ mod backup;
 mod commands;
 mod dns;
 mod external_location;
+mod github;
 pub mod graph;
 mod imap;
 mod migration;
@@ -4323,6 +4324,9 @@ fn main() {
             commands::start_restore,
             commands::cancel_restore,
             commands::count_local_folder,
+            github::github_device_start,
+            github::github_device_poll,
+            github::github_check_star,
             daemon_rpc
         ])
         .setup(|app| {
