@@ -54,14 +54,6 @@ jobs:
           echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
-      - name: DEBUG ssh
-        run: |
-          echo "user=[${{ secrets.DEPLOY_USER }}] host=[${{ secrets.DEPLOY_HOST }}]"
-          echo "--- key ---"; wc -c ~/.ssh/deploy_key; ssh-keygen -lf ~/.ssh/deploy_key || echo KEY_LOAD_FAIL
-          echo "--- known_hosts ---"; wc -l ~/.ssh/known_hosts; head -c 60 ~/.ssh/known_hosts
-          echo "--- ssh -vvv ---"
-          ssh -vvv -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts -o BatchMode=yes -o ConnectTimeout=10 ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} 'echo CI_SSH_OK' 2>&1 | grep -iE "Offering|Authentications|Permission|Server accepts|send_pubkey|Authenticated|CI_SSH_OK|no matching|debug1: Next|Connecting to|Remote protocol" | head -40 || true
-
       - name: Rsync static files (excluding api/)
         run: |
           rsync -avz --delete \
