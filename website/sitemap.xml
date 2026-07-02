@@ -22,8 +22,13 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/blog.html</loc>
-    <lastmod>2026-04-17</lastmod>
+    <lastmod>2026-07-02</lastmod>
     <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/blog/gmail-storage-squeeze.html</loc>
+    <lastmod>2026-07-02</lastmod>
+    <priority>0.5</priority>
   </url>
   <url>
     <loc>https://mailvaultapp.com/blog/mailvault-240-stability.html</loc>
