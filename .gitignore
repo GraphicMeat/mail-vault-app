@@ -49,6 +49,10 @@ projetct.md
 scripts/signing-config.sh
 *.key
 
+# Sparkle EdDSA signing keys (generated locally via scripts/setup-sparkle-keys.sh
+# or supplied in CI via the SPARKLE_EDDSA_PRIVATE_KEY secret). Never commit these.
+keys/
+
 # Website database
 website/api/data.json
 website/api/data.db

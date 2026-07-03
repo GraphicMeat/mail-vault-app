@@ -134,6 +134,12 @@ echo "   Expanded entitlements written to temp files"
 
 echo ""
 echo -e "${YELLOW}🔍 Checking Sparkle EdDSA signing key...${NC}"
+# Prefer the repo-local key file (keys/sparkle_ed25519.key, gitignored) when the
+# env var isn't already provided by a CI secret. Keeps signing off the Keychain.
+if [ -z "${SPARKLE_EDDSA_PRIVATE_KEY:-}" ] && [ -f "keys/sparkle_ed25519.key" ]; then
+    export SPARKLE_EDDSA_PRIVATE_KEY="$(cat keys/sparkle_ed25519.key)"
+    echo -e "${GREEN}✅ Loaded Sparkle EdDSA key from keys/sparkle_ed25519.key${NC}"
+fi
 if [ -n "${SPARKLE_EDDSA_PRIVATE_KEY:-}" ]; then
     echo -e "${GREEN}✅ SPARKLE_EDDSA_PRIVATE_KEY is set — Sparkle artifacts will be signed${NC}"
     SPARKLE_SIGN=true
