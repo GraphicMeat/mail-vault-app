@@ -23,6 +23,7 @@ mod dns;
 mod external_location;
 mod github;
 pub mod graph;
+mod iap;
 mod imap;
 mod migration;
 mod move_emails;
@@ -3833,7 +3834,14 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
     }
 }
 
-#[cfg(target_os = "macos")]
+// MAS builds have no Sparkle — the App Store handles updates. No-op so the
+// menu item and startup auto-check still link.
+#[cfg(all(target_os = "macos", not(feature = "sparkle")))]
+async fn check_for_updates(_handle: tauri::AppHandle, _show_no_update: bool) {
+    info!("Update check skipped — updates are managed by the Mac App Store");
+}
+
+#[cfg(all(target_os = "macos", feature = "sparkle"))]
 async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
     use tauri_plugin_dialog::DialogExt;
     use tauri_plugin_sparkle_updater::SparkleUpdaterExt;
@@ -4185,8 +4193,9 @@ fn main() {
     #[cfg(feature = "webdriver")]
     let builder = builder.plugin(tauri_plugin_webdriver_automation::init());
 
-    // Updater plugins — Sparkle on macOS, tauri-plugin-updater on Linux
-    #[cfg(target_os = "macos")]
+    // Updater plugins — Sparkle on macOS (non-MAS), tauri-plugin-updater on Linux.
+    // MAS builds (`appstore`, no `sparkle` feature) get updates via the App Store.
+    #[cfg(all(target_os = "macos", feature = "sparkle"))]
     let builder = builder.plugin(tauri_plugin_sparkle_updater::init());
     #[cfg(target_os = "linux")]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
@@ -4200,6 +4209,7 @@ fn main() {
         .manage(restore::RestoreCancelToken::default())
         .manage(imap::ImapPool::new())
         .manage(oauth2::OAuth2Manager::new())
+        .manage(iap::IapState::new())
         .manage(UpdateCheckGuard::default());
 
     #[cfg(target_os = "linux")]
@@ -4311,6 +4321,10 @@ fn main() {
             commands::backup_get_external_location,
             commands::backup_validate_external_location,
             commands::backup_clear_external_location,
+            commands::iap_is_entitled,
+            commands::iap_is_appstore_build,
+            commands::iap_purchase,
+            commands::iap_restore,
             commands::backup_resolve_external_location,
             commands::backup_migrate_legacy_path,
             commands::start_migration,
@@ -4351,10 +4365,15 @@ fn main() {
             // Store log directory for later use
             app.manage(LogDir(log_dir));
 
+            // Install the StoreKit transaction observer (no-op on non-MAS builds)
+            iap::install_observer(&app.state::<iap::IapState>());
+
             info!("MailVault application starting");
             info!("App version: {}", env!("CARGO_PKG_VERSION"));
 
             // --- Set up app menu ---
+            // No "Check for Updates" on MAS builds — the App Store handles updates.
+            #[cfg(any(not(target_os = "macos"), feature = "sparkle"))]
             let check_updates = MenuItem::with_id(app, "check_updates", "Check for Updates...", true, None::<&str>)?;
             #[cfg(target_os = "macos")]
             let open_settings = MenuItem::with_id(app, "open_settings", "Settings...", true, Some("cmd+,"))?;
@@ -4375,10 +4394,20 @@ fn main() {
                             let sep1 = PredefinedMenuItem::separator(app)?;
                             let sep2 = PredefinedMenuItem::separator(app)?;
                             let _ = app_submenu.insert(&sep1, 1);
+                            #[cfg(feature = "sparkle")]
                             let _ = app_submenu.insert(&check_updates, 2);
+                            #[cfg(feature = "sparkle")]
                             let _ = app_submenu.insert(&open_settings, 3);
+                            #[cfg(not(feature = "sparkle"))]
+                            let _ = app_submenu.insert(&open_settings, 2);
+                            #[cfg(feature = "sparkle")]
                             let _ = app_submenu.insert(&report_bug, 4);
+                            #[cfg(not(feature = "sparkle"))]
+                            let _ = app_submenu.insert(&report_bug, 3);
+                            #[cfg(feature = "sparkle")]
                             let _ = app_submenu.insert(&sep2, 5);
+                            #[cfg(not(feature = "sparkle"))]
+                            let _ = app_submenu.insert(&sep2, 4);
                         }
                     }
                 }

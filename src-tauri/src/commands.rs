@@ -1058,6 +1058,33 @@ pub async fn backup_clear_external_location(
     crate::external_location::clear_external_location(&data_dir)
 }
 
+// ── In-app purchase (StoreKit on MAS, no-op stub elsewhere) ──────────────
+
+/// Whether the given product is entitled. Non-MAS builds always return true.
+#[tauri::command]
+pub fn iap_is_entitled(product_id: String) -> bool {
+    crate::iap::is_entitled(&product_id)
+}
+
+/// Whether this is a Mac App Store build (StoreKit paywall active).
+#[tauri::command]
+pub fn iap_is_appstore_build() -> bool {
+    crate::iap::is_appstore_build()
+}
+
+/// Start a StoreKit purchase. Resolves once the transaction completes.
+/// On non-MAS builds this succeeds immediately (no paywall).
+#[tauri::command]
+pub async fn iap_purchase(product_id: String) -> Result<(), String> {
+    crate::iap::purchase(&product_id).await
+}
+
+/// Restore prior non-consumable purchases for the signed-in Apple ID.
+#[tauri::command]
+pub async fn iap_restore() -> Result<(), String> {
+    crate::iap::restore().await
+}
+
 #[tauri::command]
 pub async fn backup_resolve_external_location(
     app_handle: tauri::AppHandle,
