@@ -271,19 +271,22 @@
             <a href="#download" class="text-center text-sm text-slate-500 dark:text-slate-400 hover:text-primary-500 transition-colors">All platforms &amp; formats &darr;</a>
           </div>
 
-          <div class="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-500 dark:text-slate-400 mb-8">
-            <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 font-medium hover:text-amber-600 dark:hover:text-amber-400 transition-colors">
-              <svg class="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+          <div class="flex flex-wrap items-center gap-3 mb-8">
+            <button id="want-this-btn" class="group inline-flex items-center gap-2.5 pl-4 pr-3 py-3 rounded-xl border-2 border-pink-400 text-pink-600 dark:text-pink-400 hover:bg-pink-50 dark:hover:bg-pink-900/20 transition-colors">
+              <svg class="w-6 h-6 shrink-0 text-pink-500 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"/>
+              </svg>
+              <span class="font-semibold text-lg">I want this!</span>
+              <span id="vote-count" class="min-w-[2.5rem] px-2.5 py-1 bg-pink-100 dark:bg-pink-900/50 rounded-lg text-lg font-bold tabular-nums">--</span>
+            </button>
+
+            <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" class="group inline-flex items-center gap-2.5 pl-4 pr-3 py-3 rounded-xl border-2 border-amber-400 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors">
+              <svg class="w-6 h-6 shrink-0 text-amber-500 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
               </svg>
-              <span id="github-stars">--</span>&nbsp;on GitHub
+              <span class="font-semibold text-lg">Star on GitHub</span>
+              <span id="github-stars" class="min-w-[2.5rem] px-2.5 py-1 bg-amber-100 dark:bg-amber-900/50 rounded-lg text-lg font-bold tabular-nums">--</span>
             </a>
-            <span id="hero-download-count" class="hidden items-center gap-1.5 font-medium">
-              <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
-              </svg>
-              <span id="hero-download-count-num"></span>&nbsp;downloads
-            </span>
           </div>
 
           <div class="flex items-center gap-6 text-sm text-slate-500 dark:text-slate-400">
@@ -1307,6 +1310,54 @@
       heroDownloadText.textContent = 'Download Free for Linux';
     }
 
+    // ============================================
+    // "I want this!" Voting
+    // ============================================
+    const wantThisBtn = document.getElementById('want-this-btn');
+    const voteCountEl = document.getElementById('vote-count');
+    let hasVoted = localStorage.getItem('mailvault-voted') === 'true';
+
+    function markAsVoted() {
+      hasVoted = true;
+      localStorage.setItem('mailvault-voted', 'true');
+      wantThisBtn.classList.add('bg-pink-50', 'dark:bg-pink-900/20');
+    }
+
+    if (hasVoted) {
+      wantThisBtn.classList.add('bg-pink-50', 'dark:bg-pink-900/20');
+    }
+
+    async function fetchVoteCount() {
+      try {
+        const res = await fetch(`${API_BASE}/api/votes`);
+        const data = await res.json();
+        voteCountEl.textContent = (data.count || 0).toLocaleString();
+      } catch (e) {
+        console.warn('Could not fetch vote count:', e);
+      }
+    }
+
+    wantThisBtn.addEventListener('click', async () => {
+      if (hasVoted) {
+        wantThisBtn.classList.add('animate-pulse');
+        setTimeout(() => wantThisBtn.classList.remove('animate-pulse'), 500);
+        return;
+      }
+      try {
+        const res = await fetch(`${API_BASE}/api/votes`, {
+          method: 'POST',
+          headers: { 'Accept': 'application/json' }
+        });
+        const data = await res.json();
+        voteCountEl.textContent = (data.count || 0).toLocaleString();
+        markAsVoted();
+      } catch (e) {
+        console.error('Vote failed:', e);
+      }
+    });
+
+    fetchVoteCount();
+
 
     // ============================================
     // Newsletter Form
@@ -1466,13 +1517,6 @@
         if (total > 0) {
           const el = document.getElementById('download-count');
           if (el) el.textContent = total.toLocaleString() + ' downloads';
-          const heroNum = document.getElementById('hero-download-count-num');
-          if (heroNum) {
-            heroNum.textContent = total.toLocaleString();
-            const wrap = document.getElementById('hero-download-count');
-            wrap.classList.remove('hidden');
-            wrap.classList.add('inline-flex');
-          }
         }
       })
       .catch(() => {});
