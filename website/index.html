@@ -261,29 +261,29 @@
             MailVault keeps every email searchable and accessible offline as standard .eml files — forever.
           </p>
 
-          <div class="flex flex-col gap-3 mb-8 max-w-xs">
-            <a href="#download" class="gradient-bg text-white px-8 py-4 rounded-xl font-semibold text-lg hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 w-full">
-              <svg class="w-5 h-5 shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+          <div class="flex flex-col gap-3 mb-5 max-w-xs">
+            <a id="hero-download" href="#download" class="gradient-bg text-white px-8 py-4 rounded-xl font-semibold text-lg hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 w-full shadow-lg shadow-primary-500/30">
+              <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
               </svg>
-              Download Free
+              <span id="hero-download-text">Download Free</span>
             </a>
+            <a href="#download" class="text-center text-sm text-slate-500 dark:text-slate-400 hover:text-primary-500 transition-colors">All platforms &amp; formats &darr;</a>
+          </div>
 
-            <button id="want-this-btn" class="group px-8 py-4 rounded-xl font-semibold text-lg border-2 border-pink-400 text-pink-600 dark:text-pink-400 hover:bg-pink-50 dark:hover:bg-pink-900/20 transition-colors inline-flex items-center justify-center gap-2 w-full">
-              <svg class="w-5 h-5 shrink-0 text-pink-500 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"/>
-              </svg>
-              I want this!
-              <span id="vote-count" class="ml-1 px-2 py-0.5 bg-pink-100 dark:bg-pink-900/50 rounded-full text-sm">--</span>
-            </button>
-
-            <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" class="group px-8 py-4 rounded-xl font-semibold text-lg border-2 border-slate-300 dark:border-slate-600 hover:border-amber-500 dark:hover:border-amber-500 text-slate-700 dark:text-slate-300 hover:text-amber-600 dark:hover:text-amber-400 transition-colors inline-flex items-center justify-center gap-2 w-full">
-              <svg class="w-5 h-5 shrink-0 group-hover:scale-110 transition-transform text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+          <div class="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-500 dark:text-slate-400 mb-8">
+            <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 font-medium hover:text-amber-600 dark:hover:text-amber-400 transition-colors">
+              <svg class="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
               </svg>
-              Star on GitHub
-              <span id="github-stars" class="ml-1 px-2 py-0.5 bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400 rounded-full text-sm">--</span>
+              <span id="github-stars">--</span>&nbsp;on GitHub
             </a>
+            <span id="hero-download-count" class="hidden items-center gap-1.5 font-medium">
+              <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
+              </svg>
+              <span id="hero-download-count-num"></span>&nbsp;downloads
+            </span>
           </div>
 
           <div class="flex items-center gap-6 text-sm text-slate-500 dark:text-slate-400">
@@ -773,6 +773,87 @@
     </div>
   </section>
 
+  <!-- Download Section -->
+  <section id="download" aria-label="Download MailVault" class="py-20 bg-primary-50/60 dark:bg-primary-900/10">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="max-w-3xl mx-auto text-center">
+        <h2 class="text-3xl sm:text-4xl font-bold mb-6">
+          Ready to Free Up Your Mailbox?
+        </h2>
+        <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
+          Download MailVault for free. Archive locally, delete from server, keep everything forever.
+        </p>
+
+        <!-- macOS -->
+        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">macOS</p>
+        <div class="flex flex-col sm:flex-row gap-3 justify-center mb-6">
+          <a id="download-dmg" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" class="gradient-bg text-white px-8 py-4 rounded-xl font-semibold text-lg hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-3">
+            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+            </svg>
+            Download for macOS
+            <span class="text-sm opacity-75">Universal</span>
+          </a>
+        </div>
+
+        <!-- Linux -->
+        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">Linux</p>
+        <div class="flex flex-col items-center gap-3 mb-6">
+          <a href="https://snapcraft.io/mailvault" target="_blank" rel="noopener" class="gradient-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M13.804 13.367L22 5.17v7.404l-4.674 4.674zm-3.607 3.607L22 5.17H14.15L5.523 13.798zM2 18.83l8.196-8.196 3.608 3.607L5.608 22.438H2zM2 18.83V11.38l4.72-4.72 3.607 3.608z"/></svg>
+            Get it from the Snap Store
+          </a>
+          <div class="flex gap-2 justify-center text-sm">
+            <a id="download-linux-x86" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" class="text-primary-600 dark:text-primary-400 hover:underline">or download .deb (Intel / AMD)</a>
+            <span class="text-slate-300 dark:text-slate-600">|</span>
+            <a id="download-linux-arm" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" class="text-primary-600 dark:text-primary-400 hover:underline">ARM .deb</a>
+          </div>
+        </div>
+
+        <div class="flex justify-center mb-4">
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-8 py-4 rounded-xl font-semibold text-lg border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-3">
+            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+            </svg>
+            View on GitHub
+          </a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          <span id="release-version"></span>macOS 10.15+ &middot; Ubuntu 22.04+ / Debian 12+
+        </p>
+
+        <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">
+          No account required &middot; No tracking &middot; Your archive stays on disk even if you uninstall
+        </p>
+
+        <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">
+          <span id="download-count" class="font-medium"></span>
+        </p>
+
+        <!-- Built with -->
+        <div class="flex items-center justify-center gap-3 mt-8 flex-wrap">
+          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 text-xs font-medium">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M23.687 11.709l-10.313-10.3a1.035 1.035 0 00-.453-.266L.905.005A.885.885 0 00.006.903l1.14 12.014a1.018 1.018 0 00.266.453L11.726 23.7a1.048 1.048 0 001.486 0l10.475-10.505a1.048 1.048 0 000-1.486zM7.543 9.493a2.756 2.756 0 110-3.897 2.756 2.756 0 010 3.897z"/></svg>
+            Rust
+          </span>
+          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400 text-xs font-medium">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M14.23 12.004a2.236 2.236 0 0 1-2.235 2.236 2.236 2.236 0 0 1-2.236-2.236 2.236 2.236 0 0 1 2.235-2.236 2.236 2.236 0 0 1 2.236 2.236zm2.648-10.69c-1.346 0-3.107.96-4.888 2.622-1.78-1.653-3.542-2.602-4.887-2.602-.31 0-.594.065-.85.196-1.645.858-1.198 4.22.684 7.23C4.733 10.293 3.6 12.053 3.6 13.62c0 3.59 3.872 5.994 8.4 5.994s8.4-2.404 8.4-5.994c0-1.564-1.128-3.322-3.327-4.862 1.877-3.008 2.327-6.37.684-7.228a1.463 1.463 0 0 0-.677-.166z"/></svg>
+            React
+          </span>
+          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 text-xs font-medium">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0L1.605 6v12L12 24l10.395-6V6L12 0zm0 2.183l8.207 4.738v9.476L12 21.134l-8.207-4.737V6.921L12 2.183z"/></svg>
+            Tauri
+          </span>
+          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">
+            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+            Open Source
+          </span>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- Comparison Table Section -->
   <section id="comparison" aria-label="Compare MailVault with other email clients" class="py-20">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -1043,7 +1124,7 @@
           What's New?
         </h2>
         <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
-          v2.6.0 fixes MIME-encoded subjects whose encoded-words skip the RFC-required separating whitespace (now decoded via a lenient shared `mailvault_core::mime` scanner across desktop and daemon) and lifts the row 3-dots "Delete from server" confirm into a portal modal so it works reliably inside the virtualized email and thread lists.
+          v2.6.0 fixes garbled subject lines from emails with non-standard encoding and makes the "Delete from server" confirmation work reliably in long email lists.
         </p>
         <a href="/changelog.html" class="inline-flex items-center gap-2 px-8 py-4 rounded-xl font-semibold text-lg border-2 border-primary-500 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">
           View Changelog
@@ -1051,83 +1132,6 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
           </svg>
         </a>
-      </div>
-    </div>
-  </section>
-
-  <!-- Download Section -->
-  <section id="download" aria-label="Download MailVault" class="py-20">
-    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="max-w-3xl mx-auto text-center">
-        <h2 class="text-3xl sm:text-4xl font-bold mb-6">
-          Ready to Free Up Your Mailbox?
-        </h2>
-        <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
-          Download MailVault for free. Archive locally, delete from server, keep everything forever.
-        </p>
-
-        <!-- macOS -->
-        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">macOS</p>
-        <div class="flex flex-col sm:flex-row gap-3 justify-center mb-6">
-          <a id="download-dmg" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" class="gradient-bg text-white px-8 py-4 rounded-xl font-semibold text-lg hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-3">
-            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
-            </svg>
-            Download for macOS
-            <span class="text-sm opacity-75">Universal</span>
-          </a>
-        </div>
-
-        <!-- Linux -->
-        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">Linux</p>
-        <div class="flex flex-col items-center gap-3 mb-6">
-          <a href="https://snapcraft.io/mailvault" target="_blank" rel="noopener" class="gradient-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
-            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M13.804 13.367L22 5.17v7.404l-4.674 4.674zm-3.607 3.607L22 5.17H14.15L5.523 13.798zM2 18.83l8.196-8.196 3.608 3.607L5.608 22.438H2zM2 18.83V11.38l4.72-4.72 3.607 3.608z"/></svg>
-            Get it from the Snap Store
-          </a>
-          <div class="flex gap-2 justify-center text-sm">
-            <a id="download-linux-x86" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" class="text-primary-600 dark:text-primary-400 hover:underline">or download .deb (Intel / AMD)</a>
-            <span class="text-slate-300 dark:text-slate-600">|</span>
-            <a id="download-linux-arm" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" class="text-primary-600 dark:text-primary-400 hover:underline">ARM .deb</a>
-          </div>
-        </div>
-
-        <div class="flex justify-center mb-4">
-          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-8 py-4 rounded-xl font-semibold text-lg border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-3">
-            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-            </svg>
-            View on GitHub
-          </a>
-        </div>
-
-        <p class="text-sm text-slate-500 dark:text-slate-400">
-          macOS 10.15+ &middot; Ubuntu 22.04+ / Debian 12+
-        </p>
-
-        <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">
-          <span id="download-count" class="font-medium"></span>
-        </p>
-
-        <!-- Built with -->
-        <div class="flex items-center justify-center gap-3 mt-8 flex-wrap">
-          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 text-xs font-medium">
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M23.687 11.709l-10.313-10.3a1.035 1.035 0 00-.453-.266L.905.005A.885.885 0 00.006.903l1.14 12.014a1.018 1.018 0 00.266.453L11.726 23.7a1.048 1.048 0 001.486 0l10.475-10.505a1.048 1.048 0 000-1.486zM7.543 9.493a2.756 2.756 0 110-3.897 2.756 2.756 0 010 3.897z"/></svg>
-            Rust
-          </span>
-          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400 text-xs font-medium">
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M14.23 12.004a2.236 2.236 0 0 1-2.235 2.236 2.236 2.236 0 0 1-2.236-2.236 2.236 2.236 0 0 1 2.235-2.236 2.236 2.236 0 0 1 2.236 2.236zm2.648-10.69c-1.346 0-3.107.96-4.888 2.622-1.78-1.653-3.542-2.602-4.887-2.602-.31 0-.594.065-.85.196-1.645.858-1.198 4.22.684 7.23C4.733 10.293 3.6 12.053 3.6 13.62c0 3.59 3.872 5.994 8.4 5.994s8.4-2.404 8.4-5.994c0-1.564-1.128-3.322-3.327-4.862 1.877-3.008 2.327-6.37.684-7.228a1.463 1.463 0 0 0-.677-.166z"/></svg>
-            React
-          </span>
-          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 text-xs font-medium">
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0L1.605 6v12L12 24l10.395-6V6L12 0zm0 2.183l8.207 4.738v9.476L12 21.134l-8.207-4.737V6.921L12 2.183z"/></svg>
-            Tauri
-          </span>
-          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">
-            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-            Open Source
-          </span>
-        </div>
       </div>
     </div>
   </section>
@@ -1290,57 +1294,18 @@
     });
 
     // ============================================
-    // "I Want This" Voting
+    // Platform-aware hero download button
     // ============================================
-    const wantThisBtn = document.getElementById('want-this-btn');
-    const voteCountEl = document.getElementById('vote-count');
-    let hasVoted = localStorage.getItem('mailvault-voted') === 'true';
+    const heroDownloadBtn = document.getElementById('hero-download');
+    const heroDownloadText = document.getElementById('hero-download-text');
+    const isMac = /Macintosh|Mac OS X/.test(navigator.userAgent);
+    const isLinux = /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
 
-    // Update button state if already voted
-    function markAsVoted() {
-      hasVoted = true;
-      localStorage.setItem('mailvault-voted', 'true');
-      wantThisBtn.classList.add('bg-primary-50', 'dark:bg-primary-900/20');
+    if (isMac) {
+      heroDownloadText.textContent = 'Download Free for macOS';
+    } else if (isLinux) {
+      heroDownloadText.textContent = 'Download Free for Linux';
     }
-
-    if (hasVoted) {
-      wantThisBtn.classList.add('bg-primary-50', 'dark:bg-primary-900/20');
-    }
-
-    // Fetch current vote count
-    async function fetchVoteCount() {
-      try {
-        const res = await fetch(`${API_BASE}/api/votes`);
-        const data = await res.json();
-        voteCountEl.textContent = data.count || 0;
-      } catch (e) {
-        // API not available
-        console.warn('Could not fetch vote count:', e);
-      }
-    }
-
-    wantThisBtn.addEventListener('click', async () => {
-      if (hasVoted) {
-        wantThisBtn.classList.add('animate-pulse');
-        setTimeout(() => wantThisBtn.classList.remove('animate-pulse'), 500);
-        return;
-      }
-
-      try {
-        const res = await fetch(`${API_BASE}/api/votes`, {
-          method: 'POST',
-          headers: { 'Accept': 'application/json' }
-        });
-        const data = await res.json();
-        voteCountEl.textContent = data.count;
-        markAsVoted();
-      } catch (e) {
-        console.error('Vote failed:', e);
-        // Don't mark as voted on failure — let user retry
-      }
-    });
-
-    fetchVoteCount();
 
 
     // ============================================
@@ -1455,6 +1420,13 @@
         const dmg = release.assets.find(a => a.name.endsWith('.dmg'));
         if (dmg) {
           document.getElementById('download-dmg').href = dmg.browser_download_url;
+          if (isMac) {
+            heroDownloadBtn.href = dmg.browser_download_url;
+          }
+        }
+        if (release.tag_name) {
+          const v = document.getElementById('release-version');
+          if (v) v.textContent = 'v' + release.tag_name.replace(/^v/, '') + ' · ';
         }
         const debX86 = release.assets.find(a => a.name.endsWith('.deb') && a.name.includes('amd64'));
         if (debX86) {
@@ -1494,6 +1466,13 @@
         if (total > 0) {
           const el = document.getElementById('download-count');
           if (el) el.textContent = total.toLocaleString() + ' downloads';
+          const heroNum = document.getElementById('hero-download-count-num');
+          if (heroNum) {
+            heroNum.textContent = total.toLocaleString();
+            const wrap = document.getElementById('hero-download-count');
+            wrap.classList.remove('hidden');
+            wrap.classList.add('inline-flex');
+          }
         }
       })
       .catch(() => {});
@@ -1536,8 +1515,11 @@
     // ============================================
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
       anchor.addEventListener('click', function (e) {
+        const href = this.getAttribute('href');
+        // href may have been rewritten to a direct download URL after load
+        if (!href.startsWith('#')) return;
         e.preventDefault();
-        const target = document.querySelector(this.getAttribute('href'));
+        const target = document.querySelector(href);
         if (target) {
           target.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
