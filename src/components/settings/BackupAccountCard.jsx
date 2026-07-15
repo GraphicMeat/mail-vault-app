@@ -6,6 +6,7 @@ import { resolveServerAccount } from '../../services/authUtils';
 import { ToggleSwitch } from './ToggleSwitch';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatDateTime } from '../../utils/dateFormat';
+import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
 import BackupVerificationTree from './BackupVerificationTree';
 import {
   Clock,
@@ -64,6 +65,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
   const backupState = useSettingsStore(s => s.backupState);
   const backupHistory = useSettingsStore(s => s.backupHistory);
   const accountColors = useSettingsStore(s => s.accountColors);
+  const upsellBackupShown = useSettingsStore(s => s.upsellBackupShown);
   const setBackupSchedule = useSettingsStore(s => s.setBackupSchedule);
   const globalScope = useSettingsStore(s => s.backupScope);
 
@@ -420,6 +422,13 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
           <div aria-label={`Enable backup schedule for ${account.email}`}>
             <ToggleSwitch active={config.enabled} onClick={handleToggle} />
           </div>
+        ) : !isPaidUser && !IS_APPSTORE_BUILD && upsellBackupShown && onUpgrade ? (
+          <button
+            onClick={onUpgrade}
+            className="text-xs px-2.5 py-1 rounded-full border border-mail-border text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover transition-colors whitespace-nowrap"
+          >
+            Automate
+          </button>
         ) : null}
       </div>
 

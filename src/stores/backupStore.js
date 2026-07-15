@@ -16,4 +16,10 @@ export const useBackupStore = create((set) => ({
   shareUnlock: null,
   setShareUnlock: (payload) => set({ shareUnlock: payload }),
   clearShareUnlock: () => set({ shareUnlock: null }),
+
+  // Post-backup automation upsell. Set after the first eligible manual backup;
+  // BackupUpsellModal renders while non-null. { emailsBackedUp } | null
+  backupUpsell: null,
+  setBackupUpsell: (payload) => set({ backupUpsell: payload }),
+  clearBackupUpsell: () => set({ backupUpsell: null }),
 }));

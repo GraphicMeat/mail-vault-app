@@ -26,6 +26,7 @@ import { MigrationToast } from './components/MigrationToast';
 import { KeychainToast } from './components/KeychainToast';
 import { VaultAlertBanner } from './components/VaultAlertBanner';
 import ShareUnlockModal from './components/ShareUnlockModal';
+import BackupUpsellModal from './components/BackupUpsellModal.jsx';
 import RestoreModal from './components/RestoreModal.jsx';
 import ChangeServerModal from './components/ChangeServerModal.jsx';
 // BackupToast removed — backup progress now shows in sidebar via BackupIndicator
@@ -780,6 +781,7 @@ function App() {
       <OutboxTray onRestoreDraft={(cs) => openCompose(cs)} />
       <RestoreTray />
       <ShareUnlockModal onSubscribe={() => { setSettingsInitialTab('billing'); setShowSettings(true); }} />
+      <BackupUpsellModal onUpgrade={() => { setSettingsInitialTab('billing'); setShowSettings(true); }} />
       <RestoreModal />
       <ChangeServerModal />
 

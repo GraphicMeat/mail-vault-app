@@ -369,8 +369,24 @@ class BackupCoordinator {
         ).catch(() => {});
       }
 
+      // First manual backup ever (non-premium, non-MAS): offer to automate.
+      // Shown once; afterward a low-key "Automate" chip remains on the card.
+      // MAS builds must not reference external purchases at all.
+      let showedBackupUpsell = false;
+      try {
+        if (!IS_APPSTORE_BUILD && isManual && entry.success && !externalDegraded
+            && !hasPremiumAccess(storeNow.billingProfile) && !storeNow.upsellBackupShown) {
+          storeNow.markUpsellBackupShown();
+          useBackupStore.getState().setBackupUpsell({ emailsBackedUp: entry.emailsBackedUp });
+          showedBackupUpsell = true;
+        }
+      } catch (e) {
+        console.warn('[backup] Automation upsell prompt failed (backup itself was fine):', e);
+      }
+
       // Share-to-unlock: prompt non-premium users to star/share for free
       // premium. Non-MAS only (MAS gates backups via StoreKit + review rules).
+      // Skip when the automation upsell just showed — never stack two modals.
       //
       // Wrapped: this is a cosmetic prompt raised AFTER the backup already
       // succeeded. Letting it throw drops into the catch below, which reports
@@ -378,7 +394,7 @@ class BackupCoordinator {
       // up to three more runs of work that was already done.
       try {
         if (!IS_APPSTORE_BUILD && entry.success && !externalDegraded
-            && !hasPremiumAccess(storeNow.billingProfile)) {
+            && !hasPremiumAccess(storeNow.billingProfile) && !showedBackupUpsell) {
           const grantActive = !!(storeNow.shareGrant?.expiresAt && storeNow.shareGrant.expiresAt > Date.now());
           const sinceLast = Date.now() - (storeNow.shareUnlockLastShownAt || 0);
           if (!grantActive && sinceLast > SHARE_UNLOCK_COOLDOWN_MS) {

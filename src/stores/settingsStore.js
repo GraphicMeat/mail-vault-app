@@ -195,6 +195,10 @@ export const useSettingsStore = create(
       }),
       markShareUnlockShown: () => set({ shareUnlockLastShownAt: Date.now() }),
 
+      // Post-backup automation upsell — shown once ever after the first manual backup.
+      upsellBackupShown: false,
+      markUpsellBackupShown: () => set({ upsellBackupShown: true }),
+
       // Link safety settings
       linkSafetyEnabled: true,
       linkSafetyClickConfirm: true,
