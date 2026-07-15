@@ -389,6 +389,68 @@ app.post('/api/contact', contactLimiter, async (req, res) => {
 });
 
 // ===========================================
+// Privacy-safe aggregate metrics
+// Daily counters only — no IP, no UA, no cookies, no per-request rows.
+// ===========================================
+
+// Events accepted from the public POST endpoint
+const PUBLIC_METRICS = new Set(['pricing_view', 'download_click']);
+// All known events (public + server-side counters); guards the DB write against typos
+const ALL_METRICS = new Set([...PUBLIC_METRICS, 'checkout_created', 'sub_activated']);
+
+// Increment today's counter for an event. Never throws — metrics must never break a caller.
+async function bumpMetric(event) {
+  try {
+    if (!ALL_METRICS.has(event) || dbError) return;
+    const db = getPool();
+    await db.execute(
+      `INSERT INTO metrics_daily (day, event, count) VALUES (CURDATE(), ?, 1)
+       ON DUPLICATE KEY UPDATE count = count + 1`,
+      [event]
+    );
+  } catch (err) {
+    console.error('[metrics] bump failed:', err.message);
+  }
+}
+
+// Light rate limit so the beacon can't be spammed into skewing counters
+const metricsLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {}, // silent
+});
+
+// POST /api/metrics/e — body is a plain-text event name. Always 204 (silent).
+app.post('/api/metrics/e', metricsLimiter, express.text({ type: '*/*', limit: '128b' }), (req, res) => {
+  const event = (typeof req.body === 'string' ? req.body : '').trim();
+  if (PUBLIC_METRICS.has(event)) bumpMetric(event); // fire-and-forget
+  res.status(204).end();
+});
+
+// GET /api/metrics/summary — daily counters for the last 60 days. Token-guarded.
+// If METRICS_TOKEN is unset the endpoint does not exist (404).
+app.get('/api/metrics/summary', metricsLimiter, async (req, res) => {
+  if (!process.env.METRICS_TOKEN) return res.status(404).end();
+  const token = req.headers['x-metrics-token'] || req.query.token;
+  if (token !== process.env.METRICS_TOKEN) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const db = getPool();
+    const [rows] = await db.execute(
+      `SELECT DATE_FORMAT(day, '%Y-%m-%d') AS date, event, count
+       FROM metrics_daily
+       WHERE day >= CURDATE() - INTERVAL 60 DAY
+       ORDER BY day DESC, event ASC`
+    );
+    res.json(rows);
+  } catch (error) {
+    console.error('Error getting metrics summary:', error);
+    res.status(500).json({ error: 'Failed to get metrics summary' });
+  }
+});
+
+// ===========================================
 // Billing Routes (Stripe)
 // ===========================================
 
@@ -471,9 +533,9 @@ async function validatePrices() {
 
 // Manual currency_options amounts (in minor units). These match what's set on the Stripe price.
 const MANUAL_AMOUNTS = {
-  eur: { monthly: 300, yearly: 2500 },
-  usd: { monthly: 300, yearly: 2500 },
-  gbp: { monthly: 250, yearly: 2100 },
+  eur: { monthly: 400, yearly: 2500 },
+  usd: { monthly: 400, yearly: 2500 },
+  gbp: { monthly: 350, yearly: 2100 },
 };
 const MANUAL_CURRENCIES = new Set(Object.keys(MANUAL_AMOUNTS));
 
@@ -541,7 +603,9 @@ function formatAmount(amount, currency) {
   } catch { return `${(amount / 100).toFixed(2)} ${currency.toUpperCase()}`; }
 }
 
-const YEARLY_TRIAL_DAYS = 14;
+// Trial applies to both monthly and yearly. TRIAL_DAYS is the current knob;
+// YEARLY_TRIAL_DAYS is honored for backward compat if TRIAL_DAYS is unset.
+const TRIAL_DAYS = parseInt(process.env.TRIAL_DAYS) || parseInt(process.env.YEARLY_TRIAL_DAYS) || 14;
 
 // Check if a customer has ever had a subscription (used trial or paid)
 async function hasCustomerEverSubscribed(db, billingCustomerId) {
@@ -606,6 +670,8 @@ app.get('/api/billing/pricing', statusLimiter, async (req, res) => {
         currency: displayCur,
         amount: resolved.monthly,
         formattedAmount: monthlyFormatted,
+        trialDays: TRIAL_DAYS,
+        trialEligible,
       },
       {
         planId: 'yearly',
@@ -615,7 +681,7 @@ app.get('/api/billing/pricing', statusLimiter, async (req, res) => {
         formattedAmount: yearlyFormatted,
         monthlyEquivalent: monthlyEquiv,
         savingsPercent,
-        trialDays: YEARLY_TRIAL_DAYS,
+        trialDays: TRIAL_DAYS,
         trialEligible,
       },
     ],
@@ -646,19 +712,17 @@ app.post('/api/billing/checkout-session', checkoutLimiter, requireBilling, async
       await db.execute('INSERT INTO billing_customers (email, stripe_customer_id) VALUES (?, ?)', [email.toLowerCase(), customerId]);
     }
 
-    // Determine trial eligibility for yearly plans
+    // Determine trial eligibility (applies to both monthly and yearly)
     let applyTrial = false;
-    if (interval === 'yearly') {
-      try {
-        const [custRows] = await db.execute('SELECT id FROM billing_customers WHERE stripe_customer_id = ?', [customerId]);
-        const custId = custRows[0]?.id;
-        if (custId) {
-          applyTrial = !(await hasCustomerEverSubscribed(db, custId));
-        } else {
-          applyTrial = true; // brand new customer
-        }
-      } catch { applyTrial = false; }
-    }
+    try {
+      const [custRows] = await db.execute('SELECT id FROM billing_customers WHERE stripe_customer_id = ?', [customerId]);
+      const custId = custRows[0]?.id;
+      if (custId) {
+        applyTrial = !(await hasCustomerEverSubscribed(db, custId));
+      } else {
+        applyTrial = true; // brand new customer
+      }
+    } catch { applyTrial = false; }
 
     const sessionParams = {
       customer: customerId,
@@ -674,11 +738,12 @@ app.post('/api/billing/checkout-session', checkoutLimiter, requireBilling, async
       allow_promotion_codes: interval === 'monthly',
     };
     if (applyTrial) {
-      sessionParams.subscription_data = { trial_period_days: YEARLY_TRIAL_DAYS };
+      sessionParams.subscription_data = { trial_period_days: TRIAL_DAYS };
     }
 
     const session = await stripe.checkout.sessions.create(sessionParams);
 
+    bumpMetric('checkout_created');
     res.json({ url: session.url, customerId, trialApplied: applyTrial });
   } catch (error) {
     console.error('[billing/checkout-session]', error.message);
@@ -1042,6 +1107,10 @@ app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), asyn
         // Fetch subscription from Stripe for full details
         const sub = await stripe.subscriptions.retrieve(session.subscription);
         await upsertSubscription(db, customerId, sub);
+        // One activation event per completed checkout (trialing or active both count as conversion)
+        if (computePremiumAccess(sub.status, sub.cancel_at_period_end, sub.current_period_end ? new Date(sub.current_period_end * 1000) : null)) {
+          bumpMetric('sub_activated');
+        }
         break;
       }
 

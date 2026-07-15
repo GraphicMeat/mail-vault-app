@@ -79,6 +79,16 @@ async function initDatabase() {
     )
   `);
 
+  // Privacy-safe aggregate metrics: one row per (day, event), count only.
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS metrics_daily (
+      day DATE NOT NULL,
+      event VARCHAR(64) NOT NULL,
+      count INT NOT NULL DEFAULT 0,
+      PRIMARY KEY (day, event)
+    )
+  `);
+
   // Billing tables
   await db.execute(`
     CREATE TABLE IF NOT EXISTS billing_customers (
