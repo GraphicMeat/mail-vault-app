@@ -191,6 +191,7 @@
 
         <div class="hidden md:flex items-center gap-8">
           <a href="/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Features</a>
+          <a href="/pricing.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Pricing</a>
           <a href="/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Use Cases</a>
           <a href="/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Docs</a>
           <a href="/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
@@ -223,6 +224,7 @@
       <div id="mobile-menu" class="hidden md:hidden pb-4">
         <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
           <a href="/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Features</a>
+          <a href="/pricing.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Pricing</a>
           <a href="/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Use Cases</a>
           <a href="/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Docs</a>
           <a href="/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
@@ -802,7 +804,7 @@
         <!-- Linux -->
         <p class="text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">Linux</p>
         <div class="flex flex-col items-center gap-3 mb-6">
-          <a href="https://snapcraft.io/mailvault" target="_blank" rel="noopener" class="gradient-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+          <a id="download-snap" href="https://snapcraft.io/mailvault" target="_blank" rel="noopener" class="gradient-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
             <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M13.804 13.367L22 5.17v7.404l-4.674 4.674zm-3.607 3.607L22 5.17H14.15L5.523 13.798zM2 18.83l8.196-8.196 3.608 3.607L5.608 22.438H2zM2 18.83V11.38l4.72-4.72 3.607 3.608z"/></svg>
             Get it from the Snap Store
           </a>
@@ -1110,6 +1112,54 @@
           </form>
           <p id="platform-notify-message" class="mt-2 text-sm hidden"></p>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing Section -->
+  <section id="pricing" aria-label="Pricing" class="py-20 bg-white dark:bg-slate-800/50">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="max-w-3xl mx-auto text-center mb-16">
+        <h2 class="text-3xl sm:text-4xl font-bold mb-6">
+          Simple, <span class="gradient-text">Honest</span> Pricing
+        </h2>
+        <p class="text-lg text-slate-600 dark:text-slate-400">
+          The core app is free forever. Premium adds automation on top, with a 14-day free trial either way.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-6 items-start max-w-4xl mx-auto">
+        <!-- Free -->
+        <div class="rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 text-center">
+          <h3 class="font-semibold mb-1">Free</h3>
+          <div class="text-3xl font-extrabold mb-2">$0</div>
+          <p class="text-sm text-slate-500 dark:text-slate-400">Full mail client &amp; unlimited manual backups, forever</p>
+        </div>
+
+        <!-- Yearly (hero) -->
+        <div class="relative rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-primary-500 p-6 text-center shadow-lg shadow-primary-500/10 md:-mt-3">
+          <span class="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full gradient-bg text-white text-xs font-bold uppercase tracking-wide whitespace-nowrap">Most Popular</span>
+          <h3 class="font-semibold mb-1 mt-2">Yearly</h3>
+          <div class="text-3xl font-extrabold gradient-text mb-1">$25<span class="text-base font-medium text-slate-500 dark:text-slate-400">/yr</span></div>
+          <p class="text-sm text-slate-500 dark:text-slate-400">~$2/month &middot; 14-day free trial</p>
+        </div>
+
+        <!-- Monthly -->
+        <div class="rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 text-center">
+          <h3 class="font-semibold mb-1">Monthly</h3>
+          <div class="text-3xl font-extrabold mb-2">$4<span class="text-base font-medium text-slate-500 dark:text-slate-400">/mo</span></div>
+          <p class="text-sm text-slate-500 dark:text-slate-400">14-day free trial</p>
+        </div>
+      </div>
+
+      <div class="text-center mt-10">
+        <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">Download free, upgrade in-app from Settings &rarr; Billing whenever you want.</p>
+        <a href="/pricing.html" class="inline-flex items-center gap-2 text-primary-500 hover:text-primary-600 font-semibold transition-colors">
+          See full pricing details
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+          </svg>
+        </a>
       </div>
     </div>
   </section>
@@ -1567,6 +1617,20 @@
         if (target) {
           target.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
+      });
+    });
+
+    // ============================================
+    // Metrics: fire-and-forget download click beacons
+    // No cookies, no IDs, doesn't block navigation
+    // ============================================
+    ['download-dmg', 'download-snap', 'download-linux-x86', 'download-linux-arm'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('click', () => {
+        try {
+          navigator.sendBeacon('/api/metrics/e', 'download_click');
+        } catch (e) {}
       });
     });
 
