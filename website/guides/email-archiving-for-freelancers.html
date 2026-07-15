@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email Archiving for Freelancers and Small Businesses — MailVault</title>
+  <meta name="description" content="Client emails are often your only record of scope, approvals, and payment terms. Here's how freelancers and small businesses can build a permanent, searchable local archive of client email.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/guides/email-archiving-for-freelancers.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/guides/email-archiving-for-freelancers.html">
+  <meta property="og:title" content="Email Archiving for Freelancers and Small Businesses — MailVault">
+  <meta property="og:description" content="Client emails are often your only record of scope, approvals, and payment terms. Here's how freelancers and small businesses can build a permanent, searchable local archive of client email.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Email Archiving for Freelancers and Small Businesses — MailVault">
+  <meta name="twitter:description" content="Client emails are often your only record of scope, approvals, and payment terms. Here's how freelancers and small businesses can build a permanent, searchable local archive of client email.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "Email Archiving for Freelancers and Small Businesses: Keep Client Email Forever",
+    "description": "Client emails are often your only record of scope, approvals, and payment terms. Here's how freelancers and small businesses can build a permanent, searchable local archive of client email.",
+    "url": "https://mailvaultapp.com/guides/email-archiving-for-freelancers.html",
+    "datePublished": "2026-07-15",
+    "dateModified": "2026-07-15",
+    "author": {
+      "@type": "Organization",
+      "name": "MailVault"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "MailVault",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://mailvaultapp.com/icon-128.png"
+      }
+    },
+    "image": "https://mailvaultapp.com/og-image.png"
+  }
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Is an email thread legally useful as proof of a client agreement?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Email threads are commonly used as evidence of scope, approvals, and agreed terms in disputes, though how much weight they carry depends on your jurisdiction and situation. Regardless of legal weight, having the actual record available at all is what matters most &mdash; you can't rely on something you can no longer find."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How often should a small business archive its email?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Often enough that you're never at risk of losing recent client communication if an account gets locked, suspended, or hits a storage limit. Many businesses archive weekly or monthly manually, or set up scheduled automatic backups so it happens without anyone needing to remember."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What happens to client emails if an employee who managed the inbox leaves?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "If the mailbox itself is only archived in that employee's head or personal habits, the business risks losing continuity. A scheduled, account-level archive that runs independent of any one person solves this &mdash; the archive keeps building regardless of staffing changes."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I search years of archived client email quickly?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes, if the archive is stored as individual files rather than one large export. Individual .eml files can be searched with normal file search tools or within a mail client, unlike a single bundled export you'd need to import somewhere first."
+        }
+      }
+    ]
+  }
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc',
+              400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca',
+              800: '#3730a3', 900: '#312e81',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .gradient-text {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .gradient-bg { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); }
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/" class="flex items-center gap-3">
+          <img src="/icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Features</a>
+          <a href="/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Use Cases</a>
+          <a href="/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" title="Toggle theme">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex gradient-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Download
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Features</a>
+          <a href="/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Use Cases</a>
+          <a href="/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg gradient-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Back to Home
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Email Archiving for Freelancers and Small Businesses</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>7 min read</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+
+          <p>
+            For a freelancer or a small business, client email isn't just correspondence &mdash; it's often the only written record of what was actually agreed to. Scope changes, approvals, quoted prices, deadline extensions, "yes go ahead" replies to a proposal: these usually live in an email thread, not a signed contract. When a dispute comes up months or years later, that email thread is frequently the entire case. And yet most freelancers treat email as disposable, trusting their provider's inbox to just always be there.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Why relying on your inbox alone is risky</h3>
+
+          <p>
+            A few realistic scenarios that happen to small businesses more often than people expect: your email provider suspends an account over a false-positive spam flag while you appeal; you switch from a personal Gmail to a business domain and old client threads get harder to find; a client asks for records from a project you did four years ago and your mailbox has quietly hit its storage limit and stopped syncing new mail; you lose access to a shared team inbox when an employee who managed it leaves. In every case, having an independent, local copy of your email &mdash; not just what happens to still be sitting in your provider's servers &mdash; is what actually protects you.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">What "permanent" actually requires</h3>
+
+          <p>
+            Keeping client email "forever" isn't really about any single backup &mdash; it's about a format and workflow that doesn't rot over time. Three things matter:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>A standard file format</strong> &mdash; individual <code>.eml</code> files, not a proprietary archive tied to one vendor's software. Standard formats stay openable regardless of what tools exist in ten years.</li>
+            <li><strong>Storage you control</strong> &mdash; a local folder you back up yourself (to an external drive, NAS, or cloud storage of your own choosing), not a subscription-dependent archiving service that stops being accessible if you stop paying.</li>
+            <li><strong>Search that actually works</strong> &mdash; when a client asks about a project from years ago, you need to find the relevant thread in seconds, not dig through folders by hand.</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">A simple archiving workflow for solo freelancers</h3>
+
+          <p>
+            Connect your business email account (whether that's a Gmail-based Google Workspace account, Outlook, or a custom domain on any IMAP provider) to a local archiving tool, and let it build a complete, searchable local copy of every client thread. Run it periodically, or set it to archive automatically so you're never relying on memory to keep it current. When a client relationship ends, you'll still have the full paper trail, independent of whether that inbox stays active.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Scaling it for a small team</h3>
+
+          <p>
+            If more than one person handles client email &mdash; a shared support inbox, multiple team members with their own client relationships &mdash; the same principle applies per account: each mailbox gets archived locally on a schedule, so the business's record of client communication doesn't depend on any one employee's inbox staying intact or any one person remembering to back things up manually.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">How MailVault fits this</h3>
+
+          <p>
+            MailVault is a free, open-source desktop email app for macOS and Linux built around exactly this kind of local, permanent archive. Connect your business email over IMAP (OAuth for Gmail and Microsoft-based Google Workspace or Microsoft 365 accounts), and MailVault downloads every email as an individual <code>.eml</code> file in a standard Maildir structure on your disk &mdash; searchable, portable, and not locked into MailVault itself. Unlimited manual archiving is free forever, which covers most solo freelancers who archive periodically.
+          </p>
+
+          <p>
+            For a business archiving multiple accounts regularly, MailVault Premium ($4/month or $25/year per account, 14-day free trial) adds scheduled automatic backups so each mailbox stays archived without anyone remembering to run it manually, plus email cleanup rules for keeping an active inbox manageable and Time Capsule snapshots for point-in-time records &mdash; useful if you ever need to show what a client's inbox looked like at a specific date.
+          </p>
+
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Build a permanent record of your client email</p>
+            <p class="text-sm mb-4">MailVault archives your business email as individual, searchable .eml files on your own disk. Free for manual backups; scheduled backups from $4/month.</p>
+            <div class="flex flex-wrap gap-3">
+              <a href="/#download" class="inline-flex gradient-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+                Download MailVault
+              </a>
+              <a href="/pricing.html" class="inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">
+                See pricing
+              </a>
+            </div>
+          </div>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Frequently Asked Questions</h3>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Is an email thread legally useful as proof of a client agreement?</p>
+            <p>Email threads are commonly used as evidence of scope, approvals, and agreed terms in disputes, though how much weight they carry depends on your jurisdiction and situation. Regardless of legal weight, having the actual record available at all is what matters most &mdash; you can't rely on something you can no longer find.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">How often should a small business archive its email?</p>
+            <p>Often enough that you're never at risk of losing recent client communication if an account gets locked, suspended, or hits a storage limit. Many businesses archive weekly or monthly manually, or set up scheduled automatic backups so it happens without anyone needing to remember.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">What happens to client emails if an employee who managed the inbox leaves?</p>
+            <p>If the mailbox itself is only archived in that employee's head or personal habits, the business risks losing continuity. A scheduled, account-level archive that runs independent of any one person solves this &mdash; the archive keeps building regardless of staffing changes.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Can I search years of archived client email quickly?</p>
+            <p>Yes, if the archive is stored as individual files rather than one large export. Individual .eml files can be searched with normal file search tools or within a mail client, unlike a single bundled export you'd need to import somewhere first.</p>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            Related reading: <a href="/guides/backup-email-before-closing-account.html" class="text-primary-500 hover:text-primary-600 underline">backing up email before closing an account</a>, <a href="/guides/imap-backup-tool-checklist.html" class="text-primary-500 hover:text-primary-600 underline">what to look for in an IMAP backup tool</a>, and <a href="/guides/archive-imap-emails-locally.html" class="text-primary-500 hover:text-primary-600 underline">how local IMAP archiving works</a>. See <a href="/pricing.html" class="text-primary-500 hover:text-primary-600 underline">pricing</a>.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex items-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/docs.html" class="hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacy</a>
+          <a href="/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Terms</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. All rights reserved.
+        </p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+</body>
+</html>

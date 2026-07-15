@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How to Back Up Yahoo Mail to Your Computer — MailVault</title>
+  <meta name="description" content="Yahoo Mail doesn't support app passwords, which trips up most backup guides. Here's how to actually back up a Yahoo Mail account to your own computer without one.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/guides/yahoo-mail-backup.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/guides/yahoo-mail-backup.html">
+  <meta property="og:title" content="How to Back Up Yahoo Mail to Your Computer — MailVault">
+  <meta property="og:description" content="Yahoo Mail doesn't support app passwords, which trips up most backup guides. Here's how to actually back up a Yahoo Mail account to your own computer without one.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="How to Back Up Yahoo Mail to Your Computer — MailVault">
+  <meta name="twitter:description" content="Yahoo Mail doesn't support app passwords, which trips up most backup guides. Here's how to actually back up a Yahoo Mail account to your own computer without one.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "How to Back Up Yahoo Mail to Your Computer",
+    "description": "Yahoo Mail doesn't support app passwords, which trips up most backup guides. Here's how to actually back up a Yahoo Mail account to your own computer without one.",
+    "url": "https://mailvaultapp.com/guides/yahoo-mail-backup.html",
+    "datePublished": "2026-07-15",
+    "dateModified": "2026-07-15",
+    "author": {
+      "@type": "Organization",
+      "name": "MailVault"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "MailVault",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://mailvaultapp.com/icon-128.png"
+      }
+    },
+    "image": "https://mailvaultapp.com/og-image.png"
+  }
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Does Yahoo Mail support app passwords?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. Yahoo Mail does not offer app-specific passwords the way Gmail or iCloud do. If a backup tool asks you to generate one specifically for Yahoo, that guidance is outdated &mdash; connect using your regular Yahoo sign-in through the client's standard IMAP connection flow instead."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What are Yahoo's IMAP settings?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "IMAP server imap.mail.yahoo.com on port 993 with SSL/TLS. For sending mail, SMTP server smtp.mail.yahoo.com on port 465 or 587 with SSL/TLS."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Why would I back up Yahoo Mail if it already gives 1 TB of free storage?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Storage limits aren't usually the issue with Yahoo. The common reasons are wanting an offline archive independent of any one provider, preparing to migrate to a different email service, or simply wanting peace of mind after Yahoo's history of ownership changes and past account security incidents."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I still use IMAP with Yahoo Mail in 2026?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Yahoo continues to support standard IMAP and SMTP access for third-party mail clients through its normal sign-in flow."
+        }
+      }
+    ]
+  }
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc',
+              400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca',
+              800: '#3730a3', 900: '#312e81',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .gradient-text {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .gradient-bg { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); }
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/" class="flex items-center gap-3">
+          <img src="/icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Features</a>
+          <a href="/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Use Cases</a>
+          <a href="/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" title="Toggle theme">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex gradient-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Download
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Features</a>
+          <a href="/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Use Cases</a>
+          <a href="/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg gradient-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Back to Home
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">How to Back Up Yahoo Mail to Your Computer</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>6 min read</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+
+          <p>
+            Yahoo Mail has changed ownership and infrastructure several times over the years, and its account security options have shifted along with it. A lot of older backup tutorials tell you to generate an "app password" for Yahoo and use it to connect a mail client over IMAP. That advice is now out of date &mdash; <strong>Yahoo Mail does not support app-specific passwords</strong> the way Gmail or iCloud do. If a tool is asking you to generate one for Yahoo specifically, it's following an outdated flow that won't work for most accounts today.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">What actually works for Yahoo Mail</h3>
+
+          <p>
+            Yahoo still fully supports IMAP access for third-party mail clients &mdash; you just connect through Yahoo's standard sign-in flow instead of an app password. In practice, that means:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>IMAP server</strong>: <code>imap.mail.yahoo.com</code>, port 993, SSL/TLS.</li>
+            <li><strong>SMTP server</strong> (if you're also sending): <code>smtp.mail.yahoo.com</code>, port 465 or 587, SSL/TLS.</li>
+            <li><strong>Sign-in</strong>: use your regular Yahoo account credentials through the client's normal connection flow. Depending on your account's security settings, Yahoo may prompt you to approve the new device or client the first time.</li>
+          </ul>
+
+          <p>
+            If your mail client specifically insists on an app password and Yahoo's account settings no longer offer a way to generate one, that client's Yahoo support may simply be broken or outdated &mdash; it's not something wrong with your account.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Why back up Yahoo Mail at all</h3>
+
+          <p>
+            Yahoo gives free accounts a generous 1 TB of storage, so running out of space is rarely the reason people back up Yahoo Mail. The more common reasons are:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li>Yahoo has been sold and restructured multiple times, and product changes or account security incidents have made long-time users understandably cautious about relying on it as the only copy of their email history.</li>
+            <li>Migrating away from Yahoo to a different provider, and wanting a local copy before making the switch.</li>
+            <li>Simply wanting an offline, searchable archive that doesn't depend on any provider staying online or keeping your account active.</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Backing up Yahoo Mail with MailVault</h3>
+
+          <p>
+            MailVault is a free, open-source desktop email app for macOS and Linux that connects to Yahoo Mail through its standard IMAP connection flow &mdash; no app password required, no workaround needed. Add your Yahoo account, sign in normally, and MailVault downloads your mail as individual <code>.eml</code> files stored in a standard Maildir structure on your disk. Each email is its own file, so you can browse, search, and open your archive directly, or point another mail client at the same files later if you ever want to.
+          </p>
+
+          <p>
+            Manual archiving of your full Yahoo mailbox is free and unlimited in MailVault. If you want your Yahoo backup to update itself automatically on a schedule rather than archiving in batches, that's part of MailVault Premium ($4/month or $25/year, with a 14-day free trial).
+          </p>
+
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Back up Yahoo Mail without an app password</p>
+            <p class="text-sm mb-4">MailVault connects to Yahoo through its standard sign-in flow and archives your mail as individual .eml files. Free and open source.</p>
+            <div class="flex flex-wrap gap-3">
+              <a href="/#download" class="inline-flex gradient-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+                Download MailVault
+              </a>
+              <a href="/pricing.html" class="inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">
+                See pricing
+              </a>
+            </div>
+          </div>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Frequently Asked Questions</h3>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Does Yahoo Mail support app passwords?</p>
+            <p>No. Yahoo Mail does not offer app-specific passwords the way Gmail or iCloud do. If a backup tool asks you to generate one specifically for Yahoo, that guidance is outdated &mdash; connect using your regular Yahoo sign-in through the client's standard IMAP connection flow instead.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">What are Yahoo's IMAP settings?</p>
+            <p>IMAP server imap.mail.yahoo.com on port 993 with SSL/TLS. For sending mail, SMTP server smtp.mail.yahoo.com on port 465 or 587 with SSL/TLS.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Why would I back up Yahoo Mail if it already gives 1 TB of free storage?</p>
+            <p>Storage limits aren't usually the issue with Yahoo. The common reasons are wanting an offline archive independent of any one provider, preparing to migrate to a different email service, or simply wanting peace of mind after Yahoo's history of ownership changes and past account security incidents.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Can I still use IMAP with Yahoo Mail in 2026?</p>
+            <p>Yes. Yahoo continues to support standard IMAP and SMTP access for third-party mail clients through its normal sign-in flow.</p>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            Related reading: <a href="/guides/imap-backup-tool-checklist.html" class="text-primary-500 hover:text-primary-600 underline">what to look for in an IMAP backup tool</a>, <a href="/guides/archive-imap-emails-locally.html" class="text-primary-500 hover:text-primary-600 underline">how local IMAP archiving works</a>, and <a href="/guides/backup-email-before-closing-account.html" class="text-primary-500 hover:text-primary-600 underline">backing up email before closing an account</a>.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex items-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/docs.html" class="hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacy</a>
+          <a href="/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Terms</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. All rights reserved.
+        </p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+</body>
+</html>
