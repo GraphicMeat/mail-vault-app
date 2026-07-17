@@ -1,4 +1,5 @@
 use hickory_resolver::TokioResolver;
+use hickory_resolver::proto::rr::RData;
 use serde::Serialize;
 use tracing::info;
 
@@ -75,7 +76,8 @@ fn patterns_from_mx(mx_host: &str) -> EmailServerSettings {
 pub async fn resolve_email_settings(domain: &str) -> Result<EmailServerSettings, String> {
     let resolver = TokioResolver::builder_tokio()
         .map_err(|e| format!("Failed to create DNS resolver: {}", e))?
-        .build();
+        .build()
+        .map_err(|e| format!("Failed to build DNS resolver: {}", e))?;
 
     // 1. Try SRV records (RFC 6186)
     info!("[dns] Checking SRV records for {}", domain);
@@ -96,9 +98,10 @@ pub async fn resolve_email_settings(domain: &str) -> Result<EmailServerSettings,
     if let Ok(mx_response) = resolver.mx_lookup(domain).await {
         let mut first_mx_host: Option<String> = None;
 
-        for mx in mx_response.iter() {
-            let mx_host = mx.exchange().to_ascii().trim_end_matches('.').to_string();
-            info!("[dns] MX record: {} (priority {})", mx_host, mx.preference());
+        for record in mx_response.answers() {
+            let RData::MX(mx) = &record.data else { continue };
+            let mx_host = mx.exchange.to_ascii().trim_end_matches('.').to_string();
+            info!("[dns] MX record: {} (priority {})", mx_host, mx.preference);
 
             if first_mx_host.is_none() {
                 first_mx_host = Some(mx_host.clone());
@@ -125,15 +128,18 @@ async fn try_srv_records(resolver: &TokioResolver, domain: &str) -> Result<Email
     let imap = resolver.srv_lookup(&imap_srv).await
         .map_err(|e| format!("SRV lookup failed: {}", e))?;
 
-    let imap_record = imap.iter().next()
+    let imap_record = imap.answers().iter()
+        .find_map(|r| match &r.data { RData::SRV(srv) => Some(srv.clone()), _ => None })
         .ok_or_else(|| "No IMAP SRV records".to_string())?;
 
-    let imap_host = imap_record.target().to_ascii().trim_end_matches('.').to_string();
-    let imap_port = imap_record.port();
+    let imap_host = imap_record.target.to_ascii().trim_end_matches('.').to_string();
+    let imap_port = imap_record.port;
 
     let (smtp_host, smtp_port) = if let Ok(smtp) = resolver.srv_lookup(&smtp_srv).await {
-        if let Some(r) = smtp.iter().next() {
-            (r.target().to_ascii().trim_end_matches('.').to_string(), r.port())
+        if let Some(r) = smtp.answers().iter()
+            .find_map(|r| match &r.data { RData::SRV(srv) => Some(srv.clone()), _ => None })
+        {
+            (r.target.to_ascii().trim_end_matches('.').to_string(), r.port)
         } else {
             (imap_host.replace("imap", "smtp"), 587)
         }
