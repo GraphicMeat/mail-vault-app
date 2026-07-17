@@ -31,11 +31,31 @@ try { nodemailer = require('nodemailer'); } catch { nodemailer = null; }
 let stripe;
 try { stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null; } catch { stripe = null; }
 const path = require('path');
+const analytics = require('meatlytics');
 const { getPool, initDatabase } = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 let dbError = null;
+
+// Self-hosted analytics (meatlytics): /gm.js, /gm/e, /_analytics, /gm/api/*.
+// Mounted first — it reads POST /gm/e's raw body itself, so it must run before
+// the JSON body parser and rate limiter below would otherwise touch it.
+const analyticsPeers = [];
+if (process.env.GRAPHICMEAT_ANALYTICS_URL) {
+  analyticsPeers.push({
+    name: 'graphicmeat',
+    url: process.env.GRAPHICMEAT_ANALYTICS_URL,
+    apiKey: process.env.GRAPHICMEAT_ANALYTICS_KEY,
+  });
+}
+app.use(analytics({
+  siteId: 'mailvault',
+  dbPath: path.join(__dirname, 'analytics.db'),
+  dashboardPassword: process.env.ANALYTICS_PASS,
+  apiKey: process.env.ANALYTICS_API_KEY,
+  peers: analyticsPeers,
+}));
 
 // Email transporter (configured via env vars)
 const transporter = (nodemailer && process.env.SMTP_HOST) ? nodemailer.createTransport({

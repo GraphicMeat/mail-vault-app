@@ -54,6 +54,11 @@ website/api/data.json
 website/api/data.db
 website/api/data.db-shm
 website/api/data.db-wal
+
+# Website analytics (meatlytics)
+website/api/analytics.db
+website/api/analytics.db-shm
+website/api/analytics.db-wal
 .superpowers/
 .planning/
 tests/visual/.tmp/
