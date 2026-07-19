@@ -140,17 +140,26 @@ jobs:
           CF=/etc/caddy/Caddyfile
           # Idempotent: the mailvaultapp block only proxies /api/*; meatlytics
           # paths must reach the Node app too, ahead of the static catch-all.
-          grep -q 'handle @gm' "$CF" && exit 0
+          # /gm/* (not enumerated subpaths) so new assets like /gm/world.svg
+          # don't fall through to the static index.html catch-all.
+          grep -qF '@gm path /gm.js /gm-overlay.js /gm/*' "$CF" && exit 0
           cp "$CF" "$CF.bak-$(date +%Y%m%d-%H%M%S)"
-          awk '/handle \/api\/\* \{/ && !done {
-            print "    @gm path /gm.js /gm/e /gm-overlay.js /gm/api/* /_analytics /_analytics/*"
-            print "    handle @gm {"
-            print "        reverse_proxy 127.0.0.1:3001 {"
-            print "            header_up X-Real-IP {remote}"
-            print "        }"
-            print "    }"
-            done=1
-          } { print }' "$CF" > /tmp/Caddyfile.new
+          awk '
+            /^[[:space:]]*@gm path / {
+              print "    @gm path /gm.js /gm-overlay.js /gm/* /_analytics /_analytics/*"
+              matched=1
+              next
+            }
+            /handle \/api\/\* \{/ && !matched && !done {
+              print "    @gm path /gm.js /gm-overlay.js /gm/* /_analytics /_analytics/*"
+              print "    handle @gm {"
+              print "        reverse_proxy 127.0.0.1:3001 {"
+              print "            header_up X-Real-IP {remote}"
+              print "        }"
+              print "    }"
+              done=1
+            }
+            { print }' "$CF" > /tmp/Caddyfile.new
           caddy validate --config /tmp/Caddyfile.new --adapter caddyfile
           install -m 644 /tmp/Caddyfile.new "$CF"
           rm -f /tmp/Caddyfile.new
