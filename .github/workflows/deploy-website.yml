@@ -92,7 +92,6 @@ jobs:
           NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
           IP_SALT: ${{ secrets.IP_SALT }}
           ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
-          ANALYTICS_PASS: ${{ secrets.ANALYTICS_PASS }}
           ANALYTICS_API_KEY: ${{ secrets.ANALYTICS_API_KEY }}
           GRAPHICMEAT_ANALYTICS_URL: ${{ secrets.GRAPHICMEAT_ANALYTICS_URL }}
           GRAPHICMEAT_ANALYTICS_KEY: ${{ secrets.GRAPHICMEAT_ANALYTICS_KEY }}
@@ -104,7 +103,6 @@ jobs:
           CORS_ORIGIN=https://mailvaultapp.com
           IP_SALT=${IP_SALT}
           ADMIN_KEY=${ADMIN_KEY}
-          ANALYTICS_PASS=${ANALYTICS_PASS}
           ANALYTICS_API_KEY=${ANALYTICS_API_KEY}
           GRAPHICMEAT_ANALYTICS_URL=${GRAPHICMEAT_ANALYTICS_URL}
           GRAPHICMEAT_ANALYTICS_KEY=${GRAPHICMEAT_ANALYTICS_KEY}

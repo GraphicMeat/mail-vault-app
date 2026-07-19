@@ -52,7 +52,6 @@ if (process.env.GRAPHICMEAT_ANALYTICS_URL) {
 app.use(analytics({
   siteId: 'mailvault',
   dbPath: path.join(__dirname, 'analytics.db'),
-  dashboardPassword: process.env.ANALYTICS_PASS,
   apiKey: process.env.ANALYTICS_API_KEY,
   peers: analyticsPeers,
 }));
