@@ -75,6 +75,9 @@ jobs:
             --exclude='data.db' \
             --exclude='data.db-shm' \
             --exclude='data.db-wal' \
+            --exclude='analytics.db' \
+            --exclude='analytics.db-shm' \
+            --exclude='analytics.db-wal' \
             -e "ssh -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts" \
             ./website/api/ \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/mailvault-api/
