@@ -132,7 +132,7 @@
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
           <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.7.0</span>
-          <span class="text-slate-500 dark:text-slate-400 text-sm">May 25, 2026</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">July 23, 2026</span>
           <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
         </div>
 
@@ -144,6 +144,14 @@
             Added
           </h3>
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span>Restore-to-server: when an account's IMAP host is changed to a new, empty server, the app detects that the local Maildir still holds the account's mail and offers to re-upload it (all folders, flags preserved, dedup-safe re-runs).</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Guided Change Server flow</strong>: dedicated 3-step modal replacing the old Settings-only server edit. Enter new IMAP/SMTP hosts and the new password in one form — hosts are pre-filled by DNS auto-detection (SRV/autoconfig/MX), with a warning when your domain's DNS still points at the current server. Both IMAP and SMTP are verified (new <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">smtp_test_connection</code> command) before anything is saved. After saving, the app offers to upload locally stored mail to the new server, then runs a DNS health check (MX/SPF/DKIM/DMARC, new <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">dns_mail_health</code> command) and warns if mail delivery would be affected.</span>
+            </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
               <span><strong>Mac App Store build target</strong>: New <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">appstore</code> Cargo feature, <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">tauri.appstore.conf.json</code> overlay, and <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">Release (Mac App Store)</code> GitHub Actions workflow. Build locally with <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">npm run build:appstore</code>; CI builds + signs + uploads via App Store Connect API. See <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">BUILDING.md</code> for required secrets and gotchas.</span>
@@ -171,6 +179,29 @@
               <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
               <span><strong>Sparkle auto-updater is now an opt-in Cargo feature (<code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">sparkle</code>, on by default)</strong>. MAS builds drop the plugin, the <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">Sparkle.framework</code>, the "Check for Updates…" menu item, and the background update check — App Store handles updates instead.</span>
             </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span>Sidebar connection-error card: "Change server" now opens the guided flow directly; "Migrate mail" removed from the card (the migration wizard needs a working source server — it remains in Settings → Migration). The expanded-sidebar card variant now also offers "Change server" (it previously only appeared in the collapsed variant).</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            </span>
+            Fixed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span>Changing servers when the stored password is missing or stale no longer dead-ends: the connection test now uses the newly entered password instead of the stored one.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span>Background-sync daemon now returns the same flat mailbox list as the app, fixing accounts on some providers (e.g. Hostinger) appearing to have only one folder in daemon-driven flows (fixed as part of consolidating the duplicated IMAP client — see Internal).</span>
+            </li>
           </ul>
         </div>
 
@@ -197,6 +228,14 @@
             Internal
           </h3>
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Codebase-wide dead-weight purge (~5.2k lines removed)</strong>: duplicated IMAP/Graph/OAuth2/DNS modules consolidated from <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">src-tauri</code> + <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">src-daemon</code> into the shared <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">mailvault-core</code> crate (the two copies had already drifted); never-compiled <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">helper.rs</code> deleted; dead Tauri commands, dead frontend modules/exports, and unused dependencies removed (<code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">uuid</code>, <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">@tauri-apps/plugin-http</code>, <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">thiserror</code>, <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">log</code>, <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">once_cell</code> → <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">std::sync::LazyLock</code>, <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">tauri-plugin-http</code>); daemon tokio features trimmed.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span>Oversized frontend modules split on existing seams with zero behavior change: <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">activateAccount.js</code> → one-workflow-per-file, <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">db.js</code> → <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">db/</code> submodules behind a facade, <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">GeneralSettings.jsx</code> → per-subtab components, <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">ChatBubbleView.jsx</code> modals extracted.</span>
+            </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
               <span><code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">iap.rs</code> module + <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">MV_IAP_DEV_ENTITLE=1</code> env override for local testing of the paywall flow.</span>
@@ -2794,7 +2833,7 @@
           <img src="icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
           <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
         </a>
-        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+        <div class="flex items-center gap-6 text-sm text-slate-600 dark:text-slate-400">
           <a href="/docs.html" class="hover:text-primary-500 transition-colors">Docs</a>
           <a href="/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
           <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacy</a>
@@ -2809,15 +2848,6 @@
         </p>
       </div>
     </div>
-    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
-            <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
-        <span>Cooked over an <span class="text-primary-500 font-semibold">open GPU</span> by</span>
-        <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
-          <img src="/graphicmeat-logo.png?v=2" alt="Made by Graphic Meat" class="w-full max-w-[400px] h-auto">
-        </a>
-      </div>
-    </div>
-
   </footer>
 
   <script>
@@ -2850,6 +2880,5 @@
       });
     });
   </script>
-  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
 </body>
 </html>

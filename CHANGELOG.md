@@ -2,30 +2,29 @@
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-07-23
+
 ### Added
 - Restore-to-server: when an account's IMAP host is changed to a new, empty server, the app detects that the local Maildir still holds the account's mail and offers to re-upload it (all folders, flags preserved, dedup-safe re-runs).
 - **Guided Change Server flow**: dedicated 3-step modal replacing the old Settings-only server edit. Enter new IMAP/SMTP hosts and the new password in one form — hosts are pre-filled by DNS auto-detection (SRV/autoconfig/MX), with a warning when your domain's DNS still points at the current server. Both IMAP and SMTP are verified (new `smtp_test_connection` command) before anything is saved. After saving, the app offers to upload locally stored mail to the new server, then runs a DNS health check (MX/SPF/DKIM/DMARC, new `dns_mail_health` command) and warns if mail delivery would be affected.
-
-### Changed
-- Sidebar connection-error card: "Change server" now opens the guided flow directly; "Migrate mail" removed from the card (the migration wizard needs a working source server — it remains in Settings → Migration). The expanded-sidebar card variant now also offers "Change server" (it previously only appeared in the collapsed variant).
-
-### Fixed
-- Changing servers when the stored password is missing or stale no longer dead-ends: the connection test now uses the newly entered password instead of the stored one.
-
-## [2.7.0] - 2026-05-25
-
-### Added
 - **Mac App Store build target**: New `appstore` Cargo feature, `tauri.appstore.conf.json` overlay, and `Release (Mac App Store)` GitHub Actions workflow. Build locally with `npm run build:appstore`; CI builds + signs + uploads via App Store Connect API. See `BUILDING.md` for required secrets and gotchas.
 - **In-app purchase gating for Cloud Backups (MAS only)**: External backup folders are now gated behind a non-consumable StoreKit IAP (`com.mailvault.app.backups`) in App Store builds. New `iap_*` Tauri commands bridge to `SKPaymentQueue`/`SKMutablePayment` via `objc2-store-kit`; entitlement is persisted in `NSUserDefaults`. Non-MAS builds are unaffected — the IAP module is stubbed out and always reports entitlement.
 - **Paywall UI in Backup settings**: `BackupConfig.jsx` shows a one-time purchase prompt with a Restore button when running an unentitled MAS build.
 
 ### Changed
 - **Sparkle auto-updater is now an opt-in Cargo feature (`sparkle`, on by default)**. MAS builds drop the plugin, the `Sparkle.framework`, the "Check for Updates…" menu item, and the background update check — App Store handles updates instead.
+- Sidebar connection-error card: "Change server" now opens the guided flow directly; "Migrate mail" removed from the card (the migration wizard needs a working source server — it remains in Settings → Migration). The expanded-sidebar card variant now also offers "Change server" (it previously only appeared in the collapsed variant).
+
+### Fixed
+- Changing servers when the stored password is missing or stale no longer dead-ends: the connection test now uses the newly entered password instead of the stored one.
+- Background-sync daemon now returns the same flat mailbox list as the app, fixing accounts on some providers (e.g. Hostinger) appearing to have only one folder in daemon-driven flows (fixed as part of consolidating the duplicated IMAP client — see Internal).
 
 ### Removed
 - **Bun-compiled `mailvault-server` sidecar deleted.** All IMAP/SMTP/OAuth2 logic already lived in the Rust Tauri process; the Node sidecar was dead weight (last frontend caller — `src/workers/emailCacheWorker.js` — was unreferenced). Drops ~30 MB from the bundle, eliminates the JavaScriptCore JIT entitlement requirement that was blocking MAS review, and removes dependencies on express/cors/helmet/imapflow/mailparser/nodemailer/express-rate-limit + Bun toolchain. OAuth2 loopback callback now bound by `src-tauri/src/oauth2.rs` on `127.0.0.1:19876`.
 
 ### Internal
+- **Codebase-wide dead-weight purge (~5.2k lines removed)**: duplicated IMAP/Graph/OAuth2/DNS modules consolidated from `src-tauri` + `src-daemon` into the shared `mailvault-core` crate (the two copies had already drifted); never-compiled `helper.rs` deleted; dead Tauri commands, dead frontend modules/exports, and unused dependencies removed (`uuid`, `@tauri-apps/plugin-http`, `thiserror`, `log`, `once_cell` → `std::sync::LazyLock`, `tauri-plugin-http`); daemon tokio features trimmed.
+- Oversized frontend modules split on existing seams with zero behavior change: `activateAccount.js` → one-workflow-per-file, `db.js` → `db/` submodules behind a facade, `GeneralSettings.jsx` → per-subtab components, `ChatBubbleView.jsx` modals extracted.
 - `iap.rs` module + `MV_IAP_DEV_ENTITLE=1` env override for local testing of the paywall flow.
 - `entitlements-appstore.plist` now omits Sparkle XPC mach-lookup keys.
 - `entitlements.plist` no longer includes JIT entitlements (`cs.allow-jit`, `cs.allow-unsigned-executable-memory`, `cs.disable-library-validation`) — they were only needed by the removed Bun sidecar.
