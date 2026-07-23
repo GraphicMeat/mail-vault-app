@@ -43,8 +43,8 @@
     "zustand": "^4.4.7"
   },
   "devDependencies": {
-    "@tauri-apps/api": "^2",
-    "@tauri-apps/cli": "^2",
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/cli": "^2.11.4",
     "@tauri-apps/plugin-dialog": "^2",
     "@tauri-apps/plugin-fs": "^2",
     "@tauri-apps/plugin-process": "^2",
