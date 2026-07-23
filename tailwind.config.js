@@ -1,3 +1,19 @@
+// mail-* palette lives as CSS vars in src/styles/index.css. Registering the
+// colors here (as alpha-aware closures) makes Tailwind opacity modifiers like
+// bg-mail-accent/10 actually generate CSS — the hand-written utility classes
+// in index.css don't support them.
+const mailColor = (name) => ({ opacityValue }) =>
+  opacityValue === undefined || opacityValue === '1'
+    ? `var(--mail-${name})`
+    : `color-mix(in srgb, var(--mail-${name}) calc(${opacityValue} * 100%), transparent)`
+
+const mailColors = Object.fromEntries(
+  [
+    'accent', 'accent-hover', 'bg', 'border', 'danger', 'input-bg', 'local',
+    'server', 'success', 'surface', 'surface-hover', 'text', 'text-muted', 'warning',
+  ].map((name) => [`mail-${name}`, mailColor(name)])
+)
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -6,6 +22,7 @@ export default {
   ],
   theme: {
     extend: {
+      colors: mailColors,
       fontFamily: {
         'display': ['Instrument Sans', 'system-ui', 'sans-serif'],
         'mono': ['JetBrains Mono', 'monospace']
