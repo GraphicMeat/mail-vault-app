@@ -3923,11 +3923,10 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
 // Bridges frontend invoke() calls to the mailvault-daemon Unix socket.
 // In on-demand mode, auto-spawns the daemon if the socket isn't reachable.
 
-use std::sync::Mutex;
-use once_cell::sync::Lazy;
+use std::sync::{LazyLock, Mutex};
 
 /// Tracks a daemon child process spawned in on-demand mode.
-static DAEMON_CHILD: Lazy<Mutex<Option<std::process::Child>>> = Lazy::new(|| Mutex::new(None));
+static DAEMON_CHILD: LazyLock<Mutex<Option<std::process::Child>>> = LazyLock::new(|| Mutex::new(None));
 
 /// Find the daemon binary. Checks next to the app binary first, then common build paths.
 fn find_daemon_binary(app_handle: &tauri::AppHandle) -> Option<PathBuf> {
@@ -4187,8 +4186,7 @@ fn main() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_http::init());
+        .plugin(tauri_plugin_notification::init());
 
     #[cfg(feature = "webdriver")]
     let builder = builder.plugin(tauri_plugin_webdriver_automation::init());
@@ -4299,8 +4297,6 @@ fn main() {
             commands::imap_get_email_light,
             commands::imap_set_flags,
             commands::imap_delete_email,
-            commands::imap_fetch_raw,
-            commands::imap_append_email,
             commands::smtp_send_email,
             commands::imap_search_emails,
             commands::imap_disconnect,
@@ -4326,7 +4322,6 @@ fn main() {
             commands::backup_validate_external_location,
             commands::backup_clear_external_location,
             commands::iap_is_entitled,
-            commands::iap_is_appstore_build,
             commands::iap_purchase,
             commands::iap_restore,
             commands::backup_resolve_external_location,

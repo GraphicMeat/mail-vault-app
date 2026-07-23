@@ -1,6 +1,5 @@
 // ── activateAccount workflow — orchestrates account/mailbox activation ──
 
-import { v4 as uuidv4 } from 'uuid';
 import * as db from '../db';
 import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -1229,7 +1228,7 @@ export async function addAccount(accountData) {
   }
 
   const account = {
-    id: uuidv4(),
+    id: crypto.randomUUID(),
     ...accountData,
     createdAt: new Date().toISOString()
   };

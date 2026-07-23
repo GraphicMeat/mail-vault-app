@@ -220,10 +220,6 @@ export function onKeychainReady(callback) {
   _keychainReadyCallbacks.push(callback);
 }
 
-export function isKeychainLoaded() {
-  return keychainLoaded;
-}
-
 // --- File helpers (accounts.json only) ---
 
 const ACCOUNTS_FILE = 'accounts.json';
@@ -439,16 +435,6 @@ function deduplicateAccounts(accounts) {
   return deduped;
 }
 
-export async function ensureAccountInFile(account) {
-  const accounts = await readAccountsFile();
-  // Check both id and logical key to prevent duplicates
-  if (accounts.some(a => a.id === account.id || accountLogicalKey(a) === accountLogicalKey(account))) return;
-  const { password, ...acctData } = account;
-  accounts.push(acctData);
-  await writeAccountsFile(accounts);
-  console.log('[db.js] Backfilled account to accounts.json:', account.email);
-}
-
 // Batch version: reads accounts.json once, merges all missing accounts, writes once.
 export async function ensureAccountsInFile(accounts) {
   const existing = await readAccountsFile();
@@ -627,26 +613,6 @@ export async function deleteAccount(id) {
 
 // --- Email operations (Rust Maildir commands) ---
 
-export async function saveEmail(email, accountId, mailbox) {
-  await initDB();
-  if (!invoke) throw new Error('Tauri invoke not available');
-
-  if (!email.rawSource) {
-    console.warn('[db.js] Email UID', email.uid, 'has no rawSource, cannot save as .eml');
-    throw new Error('Email has no rawSource for .eml storage');
-  }
-
-  await invoke('maildir_store', {
-    accountId,
-    mailbox,
-    uid: email.uid,
-    rawSourceBase64: email.rawSource,
-    flags: ['seen'],
-  });
-
-  return { ...email, localId: `${accountId}-${mailbox}-${email.uid}` };
-}
-
 export async function saveEmails(emails, accountId, mailbox) {
   await initDB();
   if (!invoke) throw new Error('Tauri invoke not available');
@@ -686,18 +652,6 @@ export async function archiveEmail(accountId, mailbox, uid) {
   } catch (error) {
     console.warn('[db.js] Failed to archive email:', error);
     throw error;
-  }
-}
-
-export async function getLocalEmail(accountId, mailbox, uid) {
-  await initDB();
-  if (!invoke) return undefined;
-
-  try {
-    const email = await invoke('maildir_read', { accountId, mailbox, uid: parseInt(uid, 10) });
-    return email || undefined;
-  } catch {
-    return undefined;
   }
 }
 
@@ -931,12 +885,6 @@ export async function deleteLocalEmail(localId) {
     });
   } catch (error) {
     console.warn('[db.js] Failed to delete email:', error);
-  }
-}
-
-export async function deleteLocalEmails(localIds) {
-  for (const localId of localIds) {
-    await deleteLocalEmail(localId);
   }
 }
 
@@ -1177,17 +1125,6 @@ export async function getEmailHeaders(accountId, mailbox) {
   }
 
   return null;
-}
-
-export async function clearEmailHeadersCache(accountId) {
-  if (invoke) {
-    try {
-      await invoke('clear_email_cache', { accountId: accountId || null });
-      console.log('[db.js] File-based email cache cleared for:', accountId || 'all accounts');
-    } catch (error) {
-      console.warn('[db.js] Failed to clear file cache:', error);
-    }
-  }
 }
 
 // ── Graph ID map persistence (UID → Graph message ID) ───────────────────

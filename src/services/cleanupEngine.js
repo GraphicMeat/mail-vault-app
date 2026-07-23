@@ -197,17 +197,6 @@ export async function runCleanupRules() {
 }
 
 /**
- * Preview a rule without executing it.
- * Returns { count: number } — how many emails would be affected.
- */
-export async function previewRule(rule) {
-  if (isProtectedFolder(rule.folder)) return { count: 0 };
-
-  const result = await executeRule({ ...rule, enabled: true }, { dryRun: true });
-  return { count: result.deleted };
-}
-
-/**
  * Check if enough time has passed since the last run.
  */
 export function shouldRunCleanup() {

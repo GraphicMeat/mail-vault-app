@@ -7,6 +7,3 @@ import { useMailStore } from './mailStore';
 export function useComposeStore(selector) {
   return useMailStore(selector);
 }
-
-// Published read contracts for imperative access from workflows
-export const getPendingSend = () => useMailStore.getState().pendingSend;

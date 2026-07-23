@@ -201,20 +201,6 @@ export function getDaemonHealth() {
   };
 }
 
-/** Force an immediate heartbeat check. */
-export async function checkDaemonNow() {
-  return sendHeartbeat();
-}
-
-/** Reset and restart the heartbeat loop (e.g. after daemon restart). */
-export function resetDaemonCache() {
-  _daemonAlive = false;
-  _heartbeatRetryDelay = HEARTBEAT_INITIAL_DELAY;
-  _lastHeartbeat = null;
-  stopHeartbeatLoop();
-  startHeartbeatLoop();
-}
-
 async function tauriInvoke(command, args) {
   if (!invoke) {
     await new Promise(r => setTimeout(r, 100));

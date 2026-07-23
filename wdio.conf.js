@@ -49,14 +49,6 @@ export const config = {
       './tests/e2e/archive-*.test.js',
       './tests/e2e/visual-*.test.js',
     ],
-    // Legacy aliases
-    ui: ['./tests/e2e/ui-*.test.js'],
-    connected: ['./tests/e2e/connected-*.test.js'],
-    perf: ['./tests/e2e/connected-performance.test.js'],
-    coldstart: ['./tests/e2e/connected-cold-start.test.js'],
-    backup: ['./tests/e2e/backup-*.test.js'],
-    migration: ['./tests/e2e/migration-*.test.js'],
-    visual: ['./tests/e2e/visual-*.test.js'],
   },
   maxInstances: 1,
   capabilities: [{

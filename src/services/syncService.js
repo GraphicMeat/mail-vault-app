@@ -35,13 +35,3 @@ export async function waitForSync(accountId, timeoutMs = 30000) {
   return daemonCall('sync.wait', { accountId, timeoutMs });
 }
 
-/**
- * Get sync status for an account or all accounts.
- *
- * @param {string} [accountId] - if omitted, returns all account states
- * @returns {Promise<object|Array>}
- */
-export async function getSyncStatus(accountId) {
-  const params = accountId ? { accountId } : {};
-  return daemonCall('sync.status', params);
-}

@@ -21,9 +21,6 @@ export const REWARD_DAYS = {
   linkedin: 5,
 };
 
-/** Ordered for display. */
-export const SHARE_ACTIONS = ['github', 'x', 'linkedin'];
-
 /** Build social post copy that brags the actual milestone (proof-of-value). */
 export function buildShareText(emailsBackedUp = 0) {
   const count = emailsBackedUp > 0 ? `${emailsBackedUp.toLocaleString()} ` : '';

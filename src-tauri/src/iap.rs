@@ -31,8 +31,8 @@ mod imp {
         restore: Option<oneshot::Sender<Result<(), String>>>,
     }
 
-    static PENDING: once_cell::sync::Lazy<Mutex<PendingWaiters>> =
-        once_cell::sync::Lazy::new(|| Mutex::new(PendingWaiters::default()));
+    static PENDING: std::sync::LazyLock<Mutex<PendingWaiters>> =
+        std::sync::LazyLock::new(|| Mutex::new(PendingWaiters::default()));
 
     fn take_purchase_waiter(product_id: &str) -> Option<oneshot::Sender<Result<(), String>>> {
         PENDING.lock().ok()?.purchases.remove(product_id)
@@ -257,7 +257,3 @@ mod imp {
 
 pub use imp::{install_observer, is_entitled, purchase, restore, IapState};
 
-/// Build-time flag exposed to the frontend so it can show paywall UI.
-pub fn is_appstore_build() -> bool {
-    cfg!(all(target_os = "macos", feature = "appstore"))
-}

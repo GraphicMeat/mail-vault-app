@@ -1047,23 +1047,6 @@ pub async fn delete_email(
     Ok(())
 }
 
-/// Resolve or auto-create the Drafts mailbox for this account.
-/// Order: IMAP SPECIAL-USE `\Drafts` → common name candidates → CREATE "Drafts".
-pub async fn ensure_drafts_mailbox(session: &mut ImapSession) -> Result<String, String> {
-    ensure_role_mailbox(
-        session,
-        "drafts",
-        "Drafts",
-        &[
-            "Drafts", "Draft", "Draft Mail",
-            "INBOX.Drafts", "INBOX/Drafts", "INBOX.Draft", "INBOX/Draft",
-            "Entwürfe", "Entwurfe", "Borradores", "Brouillons", "Bozze",
-            "Concepten", "Utkast", "Kladder", "Luonnokset", "Szkice",
-        ],
-    )
-    .await
-}
-
 async fn ensure_role_mailbox(
     session: &mut ImapSession,
     attr_substring: &str,
@@ -1132,48 +1115,6 @@ pub async fn ensure_sent_mailbox(session: &mut ImapSession) -> Result<String, St
         ],
     )
     .await
-}
-
-/// Best-effort: delete the most recently-APPENDed draft in `mailbox` whose
-/// Subject matches `subject`. Used after a successful SMTP send + Sent APPEND
-/// to remove the staged-draft copy so the user does not see a duplicate.
-/// Silently ignores errors — leaving a stale draft is better than losing data.
-pub async fn delete_latest_draft_by_subject(
-    session: &mut ImapSession,
-    mailbox: &str,
-    subject: &str,
-) -> Result<(), String> {
-    select_mailbox(session, mailbox).await?;
-
-    // IMAP SEARCH uses quoted strings; escape backslashes + double quotes.
-    let escaped = subject.replace('\\', "\\\\").replace('"', "\\\"");
-    let criteria = format!("DRAFT SUBJECT \"{}\"", escaped);
-
-    let uids = session
-        .uid_search(&criteria)
-        .await
-        .map_err(|e| format!("SEARCH failed: {}", e))?;
-
-    let max_uid = uids.iter().copied().max();
-    let Some(uid) = max_uid else {
-        return Ok(()); // No matching draft — fine, nothing to clean up.
-    };
-
-    let uid_seq = uid.to_string();
-    let _ = session
-        .uid_store(&uid_seq, "+FLAGS (\\Deleted)")
-        .await
-        .map_err(|e| format!("STORE \\Deleted failed: {}", e))?
-        .collect::<Vec<_>>()
-        .await;
-    session
-        .expunge()
-        .await
-        .map_err(|e| format!("EXPUNGE failed: {}", e))?
-        .collect::<Vec<_>>()
-        .await;
-    tracing::info!("[delete_latest_draft_by_subject] Removed staged draft UID {} from '{}'", uid, mailbox);
-    Ok(())
 }
 
 /// Append a raw email (RFC 5322) to a mailbox via IMAP APPEND

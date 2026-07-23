@@ -7,9 +7,3 @@ import { useMailStore } from './mailStore';
 export function useSelectionStore(selector) {
   return useMailStore(selector);
 }
-
-// Published read contracts for imperative access from workflows
-export const getSelectedEmailId = () => useMailStore.getState().selectedEmailId;
-export const getSelectedEmail = () => useMailStore.getState().selectedEmail;
-export const getSelectedEmailIds = () => useMailStore.getState().selectedEmailIds;
-export const getSelectedThread = () => useMailStore.getState().selectedThread;

@@ -7,9 +7,3 @@ import { useMailStore } from './mailStore';
 export function useSyncStore(selector) {
   return useMailStore(selector);
 }
-
-// Published read contracts for imperative access from workflows
-export const getLoading = () => useMailStore.getState().loading;
-export const getLoadingMore = () => useMailStore.getState().loadingMore;
-export const getRestoring = () => useMailStore.getState().restoring;
-export const getLoadingProgress = () => useMailStore.getState().loadingProgress;

@@ -185,26 +185,6 @@ impl ImapPool {
         info!("Disconnected IMAP for {}", config.email);
     }
 
-    /// Disconnect all connections (for app shutdown)
-    #[allow(dead_code)]
-    pub async fn disconnect_all(&self) {
-        // Drain all sessions from both pools under the lock, then logout outside
-        let mut to_logout = Vec::new();
-        for pool in [&self.background, &self.priority] {
-            let mut guard = pool.lock().await;
-            for (key, pooled_sessions) in guard.drain() {
-                info!("Closing {} IMAP connection(s): {}", pooled_sessions.len(), key);
-                to_logout.extend(pooled_sessions.into_iter().map(|ps| ps.session));
-            }
-        }
-        self.capabilities.lock().await.clear();
-        self.background_sem.lock().await.clear();
-        self.priority_sem.lock().await.clear();
-
-        // Logout outside any lock
-        logout_sessions(to_logout).await;
-    }
-
     async fn get_from_pool(
         &self,
         pool: &Arc<Mutex<HashMap<String, Vec<PooledSession>>>>,

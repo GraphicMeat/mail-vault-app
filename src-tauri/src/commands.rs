@@ -412,60 +412,6 @@ pub async fn imap_delete_email(
     Ok(serde_json::json!({ "success": true }))
 }
 
-// ── Fetch raw email (RFC 5322) ──────────────────────────────────────────────
-
-#[tauri::command]
-pub async fn imap_fetch_raw(
-    pool: tauri::State<'_, ImapPool>,
-    account: ImapConfig,
-    uid: u32,
-    mailbox: Option<String>,
-) -> Result<String, String> {
-    let mailbox = mailbox.unwrap_or_else(|| "INBOX".to_string());
-
-    let raw = with_priority(&pool, &account, |mut session| async move {
-        let _mbox = imap::select_mailbox(&mut session, &mailbox).await?;
-        let fetch_stream = session
-            .uid_fetch(uid.to_string(), "BODY.PEEK[]")
-            .await
-            .map_err(|e| format!("UID FETCH raw failed: {}", e))?;
-
-        use futures::StreamExt;
-        let fetches: Vec<_> = fetch_stream.collect::<Vec<_>>().await
-            .into_iter().filter_map(|r| r.ok()).collect();
-
-        let body = fetches.first()
-            .and_then(|f| f.body())
-            .ok_or_else(|| "No body in FETCH response".to_string())?;
-
-        let raw_str = String::from_utf8_lossy(body).to_string();
-        Ok((raw_str, session, Some(mailbox)))
-    }).await?;
-
-    Ok(raw)
-}
-
-// ── Append email (IMAP APPEND) ─────────────────────────────────────────────
-
-#[tauri::command]
-pub async fn imap_append_email(
-    pool: tauri::State<'_, ImapPool>,
-    account: ImapConfig,
-    mailbox: String,
-    raw_email: String,
-    flags: Option<String>,
-) -> Result<serde_json::Value, String> {
-    let flags_str = flags.unwrap_or_default();
-
-    with_priority(&pool, &account, |mut session| async move {
-        imap::append_email(&mut session, &mailbox, raw_email.as_bytes(), &flags_str).await
-            .map_err(|e| format!("Failed to append email: {}", e))?;
-        Ok(((), session, Some(mailbox)))
-    }).await?;
-
-    Ok(serde_json::json!({ "success": true }))
-}
-
 // ── Ensure Sent mailbox (auto-create if missing) ──────────────────────────
 //
 // Tiered Sent-folder resolution for IMAP accounts whose server does not
@@ -480,17 +426,6 @@ pub async fn imap_ensure_sent_mailbox(
 ) -> Result<String, String> {
     with_background(&pool, &account, |mut session| async move {
         let path = imap::ensure_sent_mailbox(&mut session).await?;
-        Ok((path, session, None))
-    }).await
-}
-
-#[tauri::command]
-pub async fn imap_ensure_drafts_mailbox(
-    pool: tauri::State<'_, ImapPool>,
-    account: ImapConfig,
-) -> Result<String, String> {
-    with_background(&pool, &account, |mut session| async move {
-        let path = imap::ensure_drafts_mailbox(&mut session).await?;
         Ok((path, session, None))
     }).await
 }
@@ -1098,12 +1033,6 @@ pub async fn backup_clear_external_location(
 #[tauri::command]
 pub fn iap_is_entitled(product_id: String) -> bool {
     crate::iap::is_entitled(&product_id)
-}
-
-/// Whether this is a Mac App Store build (StoreKit paywall active).
-#[tauri::command]
-pub fn iap_is_appstore_build() -> bool {
-    crate::iap::is_appstore_build()
 }
 
 /// Start a StoreKit purchase. Resolves once the transaction completes.

@@ -5,7 +5,7 @@
 // Uses Tauri invoke to read/write JSON files in the app data directory.
 // Falls back to in-memory storage if Tauri is not available (dev browser).
 
-const invoke = window.__TAURI__?.core?.invoke;
+const invoke = typeof window !== 'undefined' ? window.__TAURI__?.core?.invoke : undefined;
 
 // In-memory cache — always holds the current state.
 const cache = new Map();

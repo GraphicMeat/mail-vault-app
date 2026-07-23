@@ -108,14 +108,6 @@ export async function fetchSubscriptionStatus({ customerId, email, clientId, reg
   return billingFetch(`/api/billing/subscription-status?${params.toString()}`);
 }
 
-/** Register this app installation as an active billing client (standalone, for explicit registration). */
-export async function registerBillingClient({ customerId, email, clientId, clientName, platform, appVersion, osVersion }) {
-  return billingFetch('/api/billing/register-client', {
-    method: 'POST',
-    body: JSON.stringify({ customerId, email, clientId, clientName, platform, appVersion, osVersion }),
-  });
-}
-
 /** Unregister/disconnect a billing client. */
 export async function unregisterBillingClient({ customerId, email, clientId }) {
   return billingFetch('/api/billing/unregister-client', {

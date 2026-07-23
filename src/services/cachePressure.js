@@ -11,21 +11,6 @@ export function recordSize(sizeMB) {
   _sizeMB = Math.max(0, sizeMB);
 }
 
-/** Current body cache size in MB. */
-export function getSize() {
-  return _sizeMB;
-}
-
-/** Set the body cache limit. Called on init and when user changes setting. */
-export function setLimit(limitMB) {
-  _limitMB = limitMB > 0 ? limitMB : 4096;
-}
-
-/** Current body cache limit in MB. */
-export function getLimit() {
-  return _limitMB;
-}
-
 /** Whether body cache is over 80% of limit (soft threshold). */
 export function isOverPrefetchThreshold() {
   return _sizeMB > _limitMB * 0.8;

@@ -178,16 +178,6 @@ export async function hydrateContactsIndex(accounts) {
   return _hydrationPromise;
 }
 
-// Reset cached hydration so the next `hydrateContactsIndex(accounts)` call
-// re-reads from disk. Call after a mailbox-tree refresh reveals new folders.
-export function rehydrateContactsIndex() {
-  _hydrated.clear();
-  _hydrationKey = '';
-  _hydrationPromise = null;
-  _cache = null;
-  _fingerprint = '';
-}
-
 // Returns per-account hydrated sources: `[{ accountId, emails }, ...]` — one
 // entry per hydrated folder, so account attribution is preserved for each
 // contact entry.

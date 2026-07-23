@@ -382,10 +382,6 @@ export async function graphGetMessage(accessToken, messageId) {
   return await tauriInvoke('graph_get_message', { accessToken, messageId });
 }
 
-export async function graphGetMime(accessToken, messageId) {
-  return await tauriInvoke('graph_get_mime', { accessToken, messageId });
-}
-
 export async function graphCacheMime(accessToken, messageId, accountId, mailbox, uid) {
   const data = await tauriInvoke('graph_cache_mime', { accessToken, messageId, accountId, mailbox, uid });
   return data.email;
@@ -426,13 +422,6 @@ export async function verifyArchivedEmails(accountId, mailbox, uids) {
 
 // ── Local index ───────────────────────────────────────────────────────────────
 
-export async function readLocalIndex(accountId, mailbox) {
-  if (IS_TAURI) {
-    return tauriInvoke('local_index_read', { accountId, mailbox });
-  }
-  return null;
-}
-
 export async function appendLocalIndex(accountId, mailbox, entries) {
   if (IS_TAURI) {
     const entriesJson = JSON.stringify(entries);
@@ -454,30 +443,6 @@ export async function backupRunAccount(accountId, accountJson, backupPath = null
 
 export async function backupStatus(accountId, accountJson, backupPath = null) {
   return tauriInvoke('backup_status', { accountId, accountJson, backupPath });
-}
-
-export async function backupSaveExternalLocation(path) {
-  return tauriInvoke('backup_save_external_location', { path });
-}
-
-export async function backupGetExternalLocation() {
-  return tauriInvoke('backup_get_external_location', {});
-}
-
-export async function backupValidateExternalLocation() {
-  return tauriInvoke('backup_validate_external_location', {});
-}
-
-export async function backupClearExternalLocation() {
-  return tauriInvoke('backup_clear_external_location', {});
-}
-
-export async function backupResolveExternalLocation() {
-  return tauriInvoke('backup_resolve_external_location', {});
-}
-
-export async function backupMigrateLegacyPath(legacyPath) {
-  return tauriInvoke('backup_migrate_legacy_path', { legacyPath });
 }
 
 export async function backupCancel() {

@@ -17,4 +17,3 @@ dirs = "5"
 tracing = "0.1"
 sha2 = "0.10"
 uuid = { version = "1", features = ["v4"] }
-thiserror = "2"
