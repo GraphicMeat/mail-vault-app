@@ -4286,6 +4286,8 @@ fn main() {
             clear_pending_operation,
             commands::imap_test_connection,
             commands::smtp_test_connection,
+            commands::imap_ensure_sent_mailbox,
+            commands::smtp_build_mime,
             commands::imap_get_mailboxes,
             commands::imap_get_emails,
             commands::imap_get_emails_range,
