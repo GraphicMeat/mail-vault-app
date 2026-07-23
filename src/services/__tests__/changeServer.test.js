@@ -101,7 +101,7 @@ vi.mock('../../stores/mailStore', () => ({
   },
 }));
 
-const { changeServer } = await import('../workflows/activateAccount');
+const { changeServer } = await import('../workflows/changeServer');
 
 const NEW_PARAMS = {
   imapHost: 'new.host.com',

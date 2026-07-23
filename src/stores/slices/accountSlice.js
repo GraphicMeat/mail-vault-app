@@ -5,17 +5,15 @@
 import {
   activateAccount as _activateAccount,
   init as _init,
-  _prefetchAllMailboxes,
-  _prewarmAccountCaches,
-  addAccount as _addAccount,
-  updateAccount as _updateAccount,
-  changeServer as _changeServer,
-  removeAccount as _removeAccount,
   setActiveAccount as _setActiveAccount,
-  refreshCurrentView as _refreshCurrentView,
-  refreshAllAccounts as _refreshAllAccounts,
-  retryKeychainAccess as _retryKeychainAccess,
 } from '../../services/workflows/activateAccount';
+import { _prefetchAllMailboxes, _prewarmAccountCaches } from '../../services/workflows/prefetch';
+import { addAccount as _addAccount } from '../../services/workflows/addAccount';
+import { updateAccount as _updateAccount } from '../../services/workflows/updateAccount';
+import { changeServer as _changeServer } from '../../services/workflows/changeServer';
+import { removeAccount as _removeAccount } from '../../services/workflows/removeAccount';
+import { refreshCurrentView as _refreshCurrentView, refreshAllAccounts as _refreshAllAccounts } from '../../services/workflows/refreshAccounts';
+import { retryKeychainAccess as _retryKeychainAccess } from '../../services/workflows/retryKeychainAccess';
 import {
   setUnifiedInbox as _setUnifiedInbox,
   switchUnifiedFolder as _switchUnifiedFolder,
