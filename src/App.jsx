@@ -25,6 +25,7 @@ import { MigrationToast } from './components/MigrationToast';
 import { KeychainToast } from './components/KeychainToast';
 import ShareUnlockModal from './components/ShareUnlockModal';
 import RestoreModal from './components/RestoreModal.jsx';
+import ChangeServerModal from './components/ChangeServerModal.jsx';
 // BackupToast removed — backup progress now shows in sidebar via BackupIndicator
 import { useEmailScheduler } from './hooks/useEmailScheduler';
 import { usePipelineCoordinator } from './hooks/usePipelineCoordinator';
@@ -756,6 +757,7 @@ function App() {
       <OutboxTray onRestoreDraft={(cs) => openCompose(cs)} />
       <ShareUnlockModal onSubscribe={() => { setSettingsInitialTab('billing'); setShowSettings(true); }} />
       <RestoreModal />
+      <ChangeServerModal />
 
       {/* Move to Folder dropdown (triggered by keyboard shortcut M) */}
       {showMoveDropdown && (() => {

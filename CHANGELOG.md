@@ -4,6 +4,13 @@
 
 ### Added
 - Restore-to-server: when an account's IMAP host is changed to a new, empty server, the app detects that the local Maildir still holds the account's mail and offers to re-upload it (all folders, flags preserved, dedup-safe re-runs).
+- **Guided Change Server flow**: dedicated 3-step modal replacing the old Settings-only server edit. Enter new IMAP/SMTP hosts and the new password in one form — hosts are pre-filled by DNS auto-detection (SRV/autoconfig/MX), with a warning when your domain's DNS still points at the current server. Both IMAP and SMTP are verified (new `smtp_test_connection` command) before anything is saved. After saving, the app offers to upload locally stored mail to the new server, then runs a DNS health check (MX/SPF/DKIM/DMARC, new `dns_mail_health` command) and warns if mail delivery would be affected.
+
+### Changed
+- Sidebar connection-error card: "Change server" now opens the guided flow directly; "Migrate mail" removed from the card (the migration wizard needs a working source server — it remains in Settings → Migration). The expanded-sidebar card variant now also offers "Change server" (it previously only appeared in the collapsed variant).
+
+### Fixed
+- Changing servers when the stored password is missing or stale no longer dead-ends: the connection test now uses the newly entered password instead of the stored one.
 
 ## [2.7.0] - 2026-05-25
 

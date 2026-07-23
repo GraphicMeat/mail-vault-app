@@ -14,6 +14,26 @@ export function shouldPromptRestore({ hostChanged, localTotal, serverTotal }) {
 }
 
 /**
+ * Enumerate mailboxes and count locally-archived mail for each. Shared by
+ * checkRestoreNeeded and ChangeServerModal's restore step.
+ * `mailboxes` items may be objects ({ path, name, ... }) or raw strings.
+ * Reduce each to a real mailbox-name string; fall back to a minimal set.
+ */
+export async function gatherLocalFolders(account) {
+  const mailboxes = (getMailboxes() || [])
+    .map((m) => m.path || m.name || m)
+    .filter(Boolean);
+  const folderNames = mailboxes.length ? mailboxes : ['INBOX', 'Sent'];
+
+  const folders = [];
+  for (const mailbox of folderNames) {
+    const localCount = await api.countLocalFolder(account.id, mailbox).catch(() => 0);
+    if (localCount > 0) folders.push({ mailbox, localCount });
+  }
+  return folders;
+}
+
+/**
  * Run after an edited account has synced. Compares local Maildir counts against
  * server counts; on a hit, sets restoreDetected so the banner/modal appears.
  * Best-effort: any error is swallowed (detection must never break sync).
@@ -35,22 +55,8 @@ export async function checkRestoreNeeded(account) {
     if (!resolved.ok) return;
     const fullAccount = resolved.account;
 
-    // `mailboxes` items may be objects ({ path, name, ... }) or raw strings.
-    // Reduce each to a real mailbox-name string; fall back to a minimal set.
-    const mailboxes = (getMailboxes() || [])
-      .map((m) => m.path || m.name || m)
-      .filter(Boolean);
-    const folderNames = mailboxes.length ? mailboxes : ['INBOX', 'Sent'];
-
-    const folders = [];
-    let localTotal = 0;
-    for (const mailbox of folderNames) {
-      const localCount = await api.countLocalFolder(account.id, mailbox).catch(() => 0);
-      if (localCount > 0) {
-        folders.push({ mailbox, localCount });
-        localTotal += localCount;
-      }
-    }
+    const folders = await gatherLocalFolders(account);
+    const localTotal = folders.reduce((n, f) => n + f.localCount, 0);
 
     let serverTotal = 0;
     for (const { mailbox } of folders) {

@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Mail, Lock, Server, Eye, EyeOff, Check, AlertCircle, Loader, Wand2, Shield, ChevronRight } from 'lucide-react';
 
 // Common email provider configurations
-const PROVIDER_CONFIGS = {
+export const PROVIDER_CONFIGS = {
   gmail: {
     name: 'Gmail',
     domains: ['gmail.com', 'googlemail.com'],
@@ -92,7 +92,7 @@ const PROVIDER_CONFIGS = {
 };
 
 // Try to detect provider from email domain
-function detectProvider(email) {
+export function detectProvider(email) {
   const domain = email.split('@')[1]?.toLowerCase();
   if (!domain) return null;
 

@@ -90,6 +90,31 @@ pub async fn imap_test_connection(account: ImapConfig) -> Result<serde_json::Val
     }))
 }
 
+#[tauri::command]
+pub async fn smtp_test_connection(account: ImapConfig) -> Result<serde_json::Value, String> {
+    info!(
+        "[test-connection] Testing SMTP {} → {}:{}",
+        account.email,
+        account.smtp_host.as_deref().unwrap_or("<none>"),
+        account.smtp_port.unwrap_or(587)
+    );
+
+    // Whole probe capped at 15s — the transport's own io_timeout is also 15s,
+    // this guards against a stall before/around the handshake.
+    tokio::time::timeout(
+        std::time::Duration::from_secs(15),
+        smtp::test_connection(&account),
+    )
+    .await
+    .map_err(|_| format!("SMTP connection test timed out for {}", account.email))?
+    ?;
+
+    Ok(serde_json::json!({
+        "success": true,
+        "message": "SMTP connection successful"
+    }))
+}
+
 // ── List mailboxes ──────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -977,6 +1002,15 @@ pub async fn imap_move_emails(
 pub async fn resolve_email_settings(domain: String) -> Result<serde_json::Value, String> {
     let settings = crate::dns::resolve_email_settings(&domain).await?;
     serde_json::to_value(settings).map_err(|e| format!("Serialization error: {}", e))
+}
+
+#[tauri::command]
+pub async fn dns_mail_health(
+    domain: String,
+    new_imap_host: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let health = crate::dns::mail_dns_health(&domain, new_imap_host.as_deref()).await?;
+    serde_json::to_value(health).map_err(|e| format!("Serialization error: {}", e))
 }
 
 // ── Backup: Run account backup ───────────────────────────────────────────

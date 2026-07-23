@@ -328,6 +328,96 @@ const ExpandedAccountRow = memo(function ExpandedAccountRow({
   );
 });
 
+/** Password-missing / connection-error card with retry + change-server actions.
+ * Shared between the tag-cloud (collapsed) and expanded sidebar layouts so
+ * both stay in sync (see feedback_virtualized_list_portal-style parity note). */
+export const ConnectionErrorCard = memo(function ConnectionErrorCard({
+  account, connectionErrorType, activeMailbox, activateAccount,
+  retryKeychainAccess, setShowErrorModal, onOpenAccounts, wrapperClassName = 'mt-2',
+}) {
+  return (
+    <div className={`${wrapperClassName} p-2 rounded-lg border ${
+      connectionErrorType === 'passwordMissing'
+        ? 'bg-mail-warning/10 border-mail-warning/20'
+        : 'bg-mail-danger/10 border-mail-danger/20'
+    }`}>
+      {connectionErrorType === 'passwordMissing' ? (
+        <div className="text-xs text-mail-warning">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Key size={14} />
+              <span>Password missing</span>
+            </div>
+            <button
+              onClick={retryKeychainAccess}
+              className="p-1 hover:bg-mail-warning/20 rounded transition-colors"
+              title="Retry"
+            >
+              <RefreshCw size={12} />
+            </button>
+          </div>
+          <button
+            onClick={() => onOpenAccounts?.(account.id)}
+            className="mt-1.5 w-full px-2 py-1 text-xs font-medium bg-mail-warning/20
+                       hover:bg-mail-warning/30 rounded transition-colors text-center"
+          >
+            Re-enter Password in Settings
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center justify-between text-xs text-mail-danger">
+          <div className="flex items-center gap-2">
+            {connectionErrorType === 'offline' ? (
+              <><WifiOff size={14} /><span>No internet</span></>
+            ) : connectionErrorType === 'outlookOAuth' ? (
+              <><ServerOff size={14} /><span>Microsoft issue</span></>
+            ) : connectionErrorType === 'oauthExpired' ? (
+              <><Key size={14} /><span>OAuth2 expired</span></>
+            ) : connectionErrorType === 'timeout' ? (
+              <><RefreshCw size={14} /><span>Timed out</span></>
+            ) : (
+              <><ServerOff size={14} /><span>Server error</span></>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setShowErrorModal(true)}
+              className="p-1 hover:bg-mail-danger/20 rounded transition-colors"
+              title="View error details"
+            >
+              <Info size={12} />
+            </button>
+            <button
+              onClick={() => activateAccount(account.id, activeMailbox)}
+              className="p-1 hover:bg-mail-danger/20 rounded transition-colors"
+              title="Retry connection"
+            >
+              <RefreshCw size={12} />
+            </button>
+          </div>
+        </div>
+      )}
+      {account.authType !== 'oauth2' && (connectionErrorType === 'passwordMissing' ||
+        connectionErrorType === 'oauthExpired' ||
+        connectionErrorType === 'serverError') && (
+        <div className="mt-1.5">
+          <div className="text-[11px] text-mail-text-muted text-center mb-1">
+            Switched email providers or servers?
+          </div>
+          <button
+            onClick={() => useSettingsStore.getState().openChangeServer(account.id)}
+            className="w-full px-2 py-1 text-[11px] font-medium text-mail-text-muted
+                       hover:text-mail-text hover:bg-mail-surface-hover rounded transition-colors text-center"
+            title="Re-point this account to a new IMAP/SMTP server, keeping your local mail"
+          >
+            Change server
+          </button>
+        </div>
+      )}
+    </div>
+  );
+});
+
 /** Tag-cloud account bubble — compact pill form of ExpandedAccountRow */
 const TagCloudAccountBubble = memo(function TagCloudAccountBubble({
   account, isActive, color, initial, unifiedInbox, connectionStatus,
@@ -791,95 +881,16 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
               )}
 
               {activeAccount && showError && connectionStatus === 'error' && (
-                <div className={`mt-2 p-2 rounded-lg border ${
-                  connectionErrorType === 'passwordMissing'
-                    ? 'bg-mail-warning/10 border-mail-warning/20'
-                    : 'bg-mail-danger/10 border-mail-danger/20'
-                }`}>
-                  {connectionErrorType === 'passwordMissing' ? (
-                    <div className="text-xs text-mail-warning">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Key size={14} />
-                          <span>Password missing</span>
-                        </div>
-                        <button
-                          onClick={retryKeychainAccess}
-                          className="p-1 hover:bg-mail-warning/20 rounded transition-colors"
-                          title="Retry"
-                        >
-                          <RefreshCw size={12} />
-                        </button>
-                      </div>
-                      <button
-                        onClick={() => onOpenAccounts?.(activeAccount.id)}
-                        className="mt-1.5 w-full px-2 py-1 text-xs font-medium bg-mail-warning/20
-                                   hover:bg-mail-warning/30 rounded transition-colors text-center"
-                      >
-                        Re-enter Password in Settings
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between text-xs text-mail-danger">
-                      <div className="flex items-center gap-2">
-                        {connectionErrorType === 'offline' ? (
-                          <><WifiOff size={14} /><span>No internet</span></>
-                        ) : connectionErrorType === 'outlookOAuth' ? (
-                          <><ServerOff size={14} /><span>Microsoft issue</span></>
-                        ) : connectionErrorType === 'oauthExpired' ? (
-                          <><Key size={14} /><span>OAuth2 expired</span></>
-                        ) : connectionErrorType === 'timeout' ? (
-                          <><RefreshCw size={14} /><span>Timed out</span></>
-                        ) : (
-                          <><ServerOff size={14} /><span>Server error</span></>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => setShowErrorModal(true)}
-                          className="p-1 hover:bg-mail-danger/20 rounded transition-colors"
-                          title="View error details"
-                        >
-                          <Info size={12} />
-                        </button>
-                        <button
-                          onClick={() => activateAccount(activeAccountId, activeMailbox)}
-                          className="p-1 hover:bg-mail-danger/20 rounded transition-colors"
-                          title="Retry connection"
-                        >
-                          <RefreshCw size={12} />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  {(connectionErrorType === 'passwordMissing' ||
-                    connectionErrorType === 'oauthExpired' ||
-                    connectionErrorType === 'serverError') && (
-                    <div className="mt-1.5">
-                      <div className="text-[11px] text-mail-text-muted text-center mb-1">
-                        Switched email providers or servers?
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => onOpenAccounts?.(activeAccount?.id)}
-                          className="flex-1 px-2 py-1 text-[11px] font-medium text-mail-text-muted
-                                     hover:text-mail-text hover:bg-mail-surface-hover rounded transition-colors text-center"
-                          title="Re-point this account to a new IMAP/SMTP server, keeping your local mail"
-                        >
-                          Change server
-                        </button>
-                        <button
-                          onClick={() => onOpenSettings?.('migration')}
-                          className="flex-1 px-2 py-1 text-[11px] font-medium text-mail-text-muted
-                                     hover:text-mail-text hover:bg-mail-surface-hover rounded transition-colors text-center"
-                          title="Copy mail from an old account/server to a new one"
-                        >
-                          Migrate mail
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <ConnectionErrorCard
+                  account={activeAccount}
+                  connectionErrorType={connectionErrorType}
+                  activeMailbox={activeMailbox}
+                  activateAccount={activateAccount}
+                  retryKeychainAccess={retryKeychainAccess}
+                  setShowErrorModal={setShowErrorModal}
+                  onOpenAccounts={onOpenAccounts}
+                  wrapperClassName="mt-2"
+                />
               )}
             </>
           )}
@@ -946,72 +957,16 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
 
               {/* Inline error banner — shown directly below the account that has the error */}
               {account.id === activeAccountId && showError && connectionStatus === 'error' && (
-                <div className={`mt-1 mb-1 p-2 rounded-lg border ${
-                  connectionErrorType === 'passwordMissing'
-                    ? 'bg-mail-warning/10 border-mail-warning/20'
-                    : 'bg-mail-danger/10 border-mail-danger/20'
-                }`}>
-                  {connectionErrorType === 'passwordMissing' ? (
-                    <div className="text-xs text-mail-warning">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Key size={14} />
-                          <span>Password missing</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={retryKeychainAccess}
-                            className="p-1 hover:bg-mail-warning/20 rounded transition-colors"
-                            title="Retry"
-                          >
-                            <RefreshCw size={12} />
-                          </button>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => onOpenAccounts?.(account.id)}
-                        className="mt-1.5 w-full px-2 py-1 text-xs font-medium bg-mail-warning/20
-                                   hover:bg-mail-warning/30 rounded transition-colors text-center"
-                      >
-                        Re-enter Password in Settings
-                      </button>
-                    </div>
-                  ) : (
-                    <div className={`flex items-center justify-between text-xs ${
-                      connectionErrorType === 'passwordMissing' ? 'text-mail-warning' : 'text-mail-danger'
-                    }`}>
-                      <div className="flex items-center gap-2">
-                        {connectionErrorType === 'offline' ? (
-                          <><WifiOff size={14} /><span>No internet</span></>
-                        ) : connectionErrorType === 'outlookOAuth' ? (
-                          <><ServerOff size={14} /><span>Microsoft issue</span></>
-                        ) : connectionErrorType === 'oauthExpired' ? (
-                          <><Key size={14} /><span>OAuth2 expired</span></>
-                        ) : connectionErrorType === 'timeout' ? (
-                          <><RefreshCw size={14} /><span>Timed out</span></>
-                        ) : (
-                          <><ServerOff size={14} /><span>Server error</span></>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => setShowErrorModal(true)}
-                          className="p-1 hover:bg-mail-danger/20 rounded transition-colors"
-                          title="View error details"
-                        >
-                          <Info size={12} />
-                        </button>
-                        <button
-                          onClick={() => activateAccount(activeAccountId, activeMailbox)}
-                          className="p-1 hover:bg-mail-danger/20 rounded transition-colors"
-                          title="Retry connection"
-                        >
-                          <RefreshCw size={12} />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <ConnectionErrorCard
+                  account={account}
+                  connectionErrorType={connectionErrorType}
+                  activeMailbox={activeMailbox}
+                  activateAccount={activateAccount}
+                  retryKeychainAccess={retryKeychainAccess}
+                  setShowErrorModal={setShowErrorModal}
+                  onOpenAccounts={onOpenAccounts}
+                  wrapperClassName="mt-1 mb-1"
+                />
               )}
             </React.Fragment>
             );

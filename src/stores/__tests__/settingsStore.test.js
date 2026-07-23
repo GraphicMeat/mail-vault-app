@@ -36,3 +36,20 @@ describe('settingsStore defaults', () => {
     expect(useSettingsStore.getState().cacheLimitMB).toBe(128);
   });
 });
+
+describe('changeServer modal state', () => {
+  it('defaults changeServerAccountId to null', () => {
+    expect(useSettingsStore.getState().changeServerAccountId).toBe(null);
+  });
+
+  it('openChangeServer sets the account id', () => {
+    useSettingsStore.getState().openChangeServer('acct-1');
+    expect(useSettingsStore.getState().changeServerAccountId).toBe('acct-1');
+  });
+
+  it('closeChangeServer clears it back to null', () => {
+    useSettingsStore.getState().openChangeServer('acct-1');
+    useSettingsStore.getState().closeChangeServer();
+    expect(useSettingsStore.getState().changeServerAccountId).toBe(null);
+  });
+});

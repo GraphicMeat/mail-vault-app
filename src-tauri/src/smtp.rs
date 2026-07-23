@@ -212,14 +212,40 @@ pub fn build_mime(account: &ImapConfig, email: &OutgoingEmail) -> Result<BuiltMi
     Ok(BuiltMime { message, raw_rfc2822 })
 }
 
-/// Send a pre-built MIME message via SMTP. Returns the server response line as
-/// `message_id` (existing behavior preserved) and echoes the raw bytes so the
-/// caller can APPEND to Sent post-success.
-pub async fn send_built(
+/// Decide implicit-TLS (wrapper, typically port 465) vs STARTTLS (587).
+/// Explicit `smtp_secure` wins; when absent, infer from the port so a config
+/// missing the flag still picks the right handshake.
+fn use_implicit_tls(smtp_secure: Option<bool>, smtp_port: u16) -> bool {
+    match smtp_secure {
+        Some(v) => v,
+        None => smtp_port == 465,
+    }
+}
+
+/// Map a raw lettre SMTP error string to a human-readable message. Kept pure
+/// (takes the stringified error) so the classification is unit-testable.
+fn friendly_smtp_error(host: &str, port: u16, err_str: &str) -> String {
+    let lower = err_str.to_lowercase();
+    if lower.contains("auth") || lower.contains("535") || lower.contains("credential") {
+        format!(
+            "Authentication failed for {}:{} — check your email and password.",
+            host, port
+        )
+    } else if lower.contains("timed out") || lower.contains("timeout") {
+        format!("Connection to {}:{} timed out.", host, port)
+    } else if lower.contains("dns") || lower.contains("resolve") || lower.contains("lookup") {
+        format!("Could not resolve SMTP host {}.", host)
+    } else {
+        format!("SMTP connection to {}:{} failed: {}", host, port, err_str)
+    }
+}
+
+/// Build the lettre async SMTP transport (TLS mode by flag/port + credentials).
+/// Shared by send and the connectivity test so the two never drift.
+fn build_transport(
     account: &ImapConfig,
-    email: &OutgoingEmail,
-    built: BuiltMime,
-) -> Result<SendResult, String> {
+    io_timeout: Duration,
+) -> Result<AsyncSmtpTransport<Tokio1Executor>, String> {
     let smtp_host = account
         .smtp_host
         .as_deref()
@@ -230,14 +256,7 @@ pub async fn send_built(
         .build_rustls()
         .map_err(|e| format!("TLS params error: {}", e))?;
 
-    let attachment_bytes: usize = email
-        .attachments
-        .as_ref()
-        .map(|v| v.iter().map(|a| a.content.len()).sum())
-        .unwrap_or(0);
-    let io_timeout = Duration::from_secs(60 + (attachment_bytes / 50_000) as u64).min(Duration::from_secs(600));
-
-    let transport = if account.smtp_secure.unwrap_or(false) {
+    let transport = if use_implicit_tls(account.smtp_secure, smtp_port) {
         AsyncSmtpTransport::<Tokio1Executor>::relay(smtp_host)
             .map_err(|e| format!("SMTP relay error: {}", e))?
             .port(smtp_port)
@@ -266,12 +285,57 @@ pub async fn send_built(
             .as_deref()
             .ok_or_else(|| "Password missing for SMTP".to_string())?;
         transport
-            .credentials(Credentials::new(
-                account.email.clone(),
-                password.to_string(),
-            ))
+            .credentials(Credentials::new(account.email.clone(), password.to_string()))
             .build()
     };
+
+    Ok(transport)
+}
+
+/// Verify SMTP connectivity + auth handshake without sending mail. Uses
+/// lettre's `test_connection` (EHLO + handshake) on the built transport.
+pub async fn test_connection(account: &ImapConfig) -> Result<(), String> {
+    let smtp_host = account
+        .smtp_host
+        .as_deref()
+        .ok_or_else(|| "SMTP host not configured".to_string())?
+        .to_string();
+    let smtp_port = account.smtp_port.unwrap_or(587);
+
+    let transport = build_transport(account, Duration::from_secs(15))?;
+
+    match transport.test_connection().await {
+        Ok(true) => Ok(()),
+        Ok(false) => Err(format!(
+            "SMTP server {}:{} did not accept the connection.",
+            smtp_host, smtp_port
+        )),
+        Err(e) => Err(friendly_smtp_error(&smtp_host, smtp_port, &e.to_string())),
+    }
+}
+
+/// Send a pre-built MIME message via SMTP. Returns the server response line as
+/// `message_id` (existing behavior preserved) and echoes the raw bytes so the
+/// caller can APPEND to Sent post-success.
+pub async fn send_built(
+    account: &ImapConfig,
+    email: &OutgoingEmail,
+    built: BuiltMime,
+) -> Result<SendResult, String> {
+    let smtp_host = account
+        .smtp_host
+        .as_deref()
+        .ok_or_else(|| "SMTP host not configured".to_string())?;
+    let smtp_port = account.smtp_port.unwrap_or(587);
+
+    let attachment_bytes: usize = email
+        .attachments
+        .as_ref()
+        .map(|v| v.iter().map(|a| a.content.len()).sum())
+        .unwrap_or(0);
+    let io_timeout = Duration::from_secs(60 + (attachment_bytes / 50_000) as u64).min(Duration::from_secs(600));
+
+    let transport = build_transport(account, io_timeout)?;
 
     info!(
         "[smtp] Sending to {} via {}:{} (tls={}, oauth2={})",
@@ -303,4 +367,39 @@ pub async fn send_built(
 pub async fn send_email(account: &ImapConfig, email: &OutgoingEmail) -> Result<SendResult, String> {
     let built = build_mime(account, email)?;
     send_built(account, email, built).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn implicit_tls_explicit_flag_wins() {
+        assert!(use_implicit_tls(Some(true), 587)); // explicit true overrides port
+        assert!(!use_implicit_tls(Some(false), 465)); // explicit false overrides port
+    }
+
+    #[test]
+    fn implicit_tls_inferred_from_port_when_unset() {
+        assert!(use_implicit_tls(None, 465)); // 465 = implicit TLS
+        assert!(!use_implicit_tls(None, 587)); // 587 = STARTTLS
+        assert!(!use_implicit_tls(None, 25));
+    }
+
+    #[test]
+    fn error_mapping_classifies_auth_timeout_dns() {
+        assert!(friendly_smtp_error("smtp.x.com", 587, "535 Authentication failed")
+            .contains("Authentication failed"));
+        assert!(friendly_smtp_error("smtp.x.com", 587, "operation timed out")
+            .contains("timed out"));
+        assert!(friendly_smtp_error("smtp.x.com", 587, "failed to lookup address")
+            .contains("resolve"));
+    }
+
+    #[test]
+    fn error_mapping_falls_back_to_raw() {
+        let msg = friendly_smtp_error("smtp.x.com", 465, "some weird io error");
+        assert!(msg.contains("smtp.x.com:465"));
+        assert!(msg.contains("some weird io error"));
+    }
 }

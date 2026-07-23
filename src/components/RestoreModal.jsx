@@ -10,8 +10,11 @@ export default function RestoreModal() {
   const clearDetected = useSettingsStore((s) => s.clearRestoreDetected);
   const clearActive = useSettingsStore((s) => s.clearActiveRestore);
   const dismissRestore = useSettingsStore((s) => s.dismissRestore);
+  const changeServerAccountId = useSettingsStore((s) => s.changeServerAccountId);
 
-  const open = !!detected || (!!active && active.status === 'running');
+  // ChangeServerModal drives its own restore step — stay closed while it's open,
+  // even if detection/activeRestore state would otherwise open this modal.
+  const open = !changeServerAccountId && (!!detected || (!!active && active.status === 'running'));
   const localTotal = useMemo(
     () => (detected?.folders || []).reduce((n, f) => n + f.localCount, 0),
     [detected]

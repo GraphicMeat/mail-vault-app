@@ -300,6 +300,11 @@ export const useSettingsStore = create(
           : [...s.restoreDismissedIds, accountId],
       })),
 
+      // Change Server modal — global, opened via account id (sidebar/settings wire it up)
+      changeServerAccountId: null,
+      openChangeServer: (accountId) => set({ changeServerAccountId: accountId }),
+      closeChangeServer: () => set({ changeServerAccountId: null }),
+
       // Backup notification preferences
       backupNotifyOnSuccess: true,
       backupNotifyOnFailure: true,

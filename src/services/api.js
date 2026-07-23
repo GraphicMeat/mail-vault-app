@@ -87,6 +87,14 @@ export async function testConnection(account) {
   });
 }
 
+export async function smtpTestConnection(account) {
+  return tauriInvoke('smtp_test_connection', { account });
+}
+
+export async function storePassword(accountId, password) {
+  return tauriInvoke('store_password', { accountId, password });
+}
+
 export async function fetchMailboxes(account) {
   if (IS_TAURI) {
     const data = await tauriInvoke('imap_get_mailboxes', { account });
@@ -400,6 +408,13 @@ export async function resolveEmailSettings(domain) {
     return tauriInvoke('resolve_email_settings', { domain });
   }
   throw new ApiError('DNS resolution requires desktop app', 0);
+}
+
+export async function dnsMailHealth(domain, newImapHost) {
+  if (IS_TAURI) {
+    return tauriInvoke('dns_mail_health', { domain, newImapHost });
+  }
+  throw new ApiError('DNS health check requires desktop app', 0);
 }
 
 export async function verifyArchivedEmails(accountId, mailbox, uids) {
