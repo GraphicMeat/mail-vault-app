@@ -25,12 +25,7 @@ walkdir = "2"
 mailparse = "0.15"
 flate2 = "1"
 mailvault-core = { path = "../src-core" }
-async-imap = { version = "0.11", features = ["compress"] }
-imap-proto = "0.16"
-async-native-tls = "0.5"
-async-std = { version = "1", features = ["attributes"] }
 lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "smtp-transport", "builder"] }
-hickory-resolver = "0.26"
 hostname = "0.4"
 url = "2"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }

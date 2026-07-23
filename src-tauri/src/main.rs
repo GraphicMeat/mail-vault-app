@@ -19,16 +19,17 @@ use walkdir::WalkDir;
 mod archive;
 mod backup;
 mod commands;
-mod dns;
+mod dns; // keeps the DNS-health-probe layer; resolver core comes from mailvault_core
 mod external_location;
 mod github;
-pub mod graph;
+// graph/imap/oauth2 now live in mailvault_core (shared with src-daemon).
+pub use mailvault_core::graph;
 mod iap;
-mod imap;
+pub use mailvault_core::imap;
 mod migration;
 mod move_emails;
 mod restore;
-mod oauth2;
+pub use mailvault_core::oauth2;
 mod smtp;
 
 #[cfg(target_os = "macos")]

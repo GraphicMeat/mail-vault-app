@@ -212,8 +212,10 @@ impl GraphMessage {
 const GRAPH_BASE: &str = "https://graph.microsoft.com/v1.0";
 
 pub struct GraphClient {
-    pub(crate) client: Client,
-    pub(crate) access_token: String,
+    // pub (not pub(crate)) so src-tauri's migration.rs can issue custom
+    // authenticated Graph requests not covered by GraphClient's own methods.
+    pub client: Client,
+    pub access_token: String,
 }
 
 impl GraphClient {

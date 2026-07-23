@@ -45,7 +45,9 @@ fn conn_key(config: &ImapConfig) -> String {
 pub struct PooledSessionGuard {
     pub session: ImapSession,
     pub last_selected: Option<String>,
-    pub(crate) _permit: OwnedSemaphorePermit,
+    // pub (not pub(crate)) so both binaries can destructure/rebuild the guard
+    // to run IMAP ops on the session while holding the pool permit.
+    pub _permit: OwnedSemaphorePermit,
 }
 
 /// Get or create a semaphore for the given connection key.

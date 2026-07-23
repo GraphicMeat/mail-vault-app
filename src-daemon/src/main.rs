@@ -1,14 +1,15 @@
 mod auth;
 pub mod classification;
 pub mod contacts_index;
-mod dns;
-mod graph;
-pub mod imap;
+// imap/graph/oauth2/dns now live in mailvault_core (shared with src-tauri).
+pub use mailvault_core::dns;
+pub use mailvault_core::graph;
+pub use mailvault_core::imap;
 mod inference;
 mod ipc;
 mod learning;
 pub mod llm;
-mod oauth2;
+pub use mailvault_core::oauth2;
 mod server;
 mod smtp;
 mod snapshot;

@@ -1723,9 +1723,9 @@ fn parse_email_address_from_header(val: &str) -> Option<EmailAddress> {
     }
 }
 
-// Lenient RFC 2047 decoder lives in `mailvault_core::mime` so the daemon
-// shares the same implementation.
-use mailvault_core::mime::decode_rfc2047;
+// Lenient RFC 2047 decoder lives in `crate::mime` so both binaries
+// share the same implementation.
+use crate::mime::decode_rfc2047;
 
 fn imap_addr_to_email_address(addr: &imap_proto::types::Address) -> EmailAddress {
     let name = addr

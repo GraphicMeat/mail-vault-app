@@ -34,11 +34,8 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 tokio = { version = "1", features = ["sync", "net", "io-util", "time", "rt", "macros"] }
 async-imap = { version = "0.11", features = ["compress"] }
 imap-proto = "0.16"
-async-native-tls = "0.5"
-async-std = { version = "1", features = ["attributes"] }
 futures = "0.3"
 lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "smtp-transport", "builder"] }
-sha2 = "0.10"
 rand = "0.9"
 url = "2"
 hickory-resolver = "0.26"
