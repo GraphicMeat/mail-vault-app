@@ -453,7 +453,11 @@ export function buildThreads(emails) {
   }
 
   // Step 5: Subject-based fallback — merge single-email "threads" with matching subjects
-  // Scoped per account so emails from different accounts never merge by subject alone
+  // Scoped per account so emails from different accounts never merge by subject alone.
+  // Only reply-like orphans (subject carried a Re:/Fwd: prefix) may merge — bare-subject
+  // automated mail (digests, contact-form bots) reuses identical subjects across
+  // unrelated messages, and merging those built giant fake threads (JWZ/Gmail rule).
+  const REPLY_PREFIX = /^(re:|fwd:|fw:|re\[\d+\]:)/i;
   const subjectToThreadId = new Map(); // "accountId\0subject" → threadId
   const threadIdToSubjectKey = new Map(); // threadId → "accountId\0subject"
 
@@ -476,15 +480,16 @@ export function buildThreads(emails) {
   for (const [threadId, threadEmails] of threadGroups) {
     const email = threadEmails[0];
     const hasRfcHeaders = email.inReplyTo || (email.references && email.references.length > 0);
+    const isReplyLike = REPLY_PREFIX.test((email.subject || '').trim());
 
-    if (threadEmails.length === 1 && !hasRfcHeaders) {
+    if (threadEmails.length === 1 && !hasRfcHeaders && isReplyLike) {
       orphans.push([threadId, threadEmails]);
     } else {
       mergedGroups.set(threadId, [...threadEmails]);
     }
   }
 
-  // Second pass: merge orphans into canonical threads by subject (within same account)
+  // Second pass: merge reply-like orphans into canonical threads by subject (within same account)
   for (const [threadId, threadEmails] of orphans) {
     const key = threadIdToSubjectKey.get(threadId);
     const canonicalThreadId = subjectToThreadId.get(key);

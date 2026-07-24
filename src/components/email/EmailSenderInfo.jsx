@@ -11,6 +11,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { SenderVerificationBadge } from './EmailHeaderComponent';
+import { SenderInfoPopover } from './SenderInfoPopover';
 import { getSenderName } from '../../utils/emailParser';
 
 /**
@@ -33,6 +34,12 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
   onNameClick,
 }) {
   const [headerExpanded, setHeaderExpanded] = useState(false);
+  // Sender Details popover (parity with chat view) — anchored to the clicked element
+  const [detailsAnchor, setDetailsAnchor] = useState(null);
+  const openDetails = (e) => {
+    e.stopPropagation();
+    setDetailsAnchor(e.currentTarget.getBoundingClientRect());
+  };
 
   const senderName = getSenderName(email);
   const initial = senderName ? senderName[0].toUpperCase() : '?';
@@ -73,8 +80,12 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
       className="flex items-start gap-2 px-3 py-2.5 cursor-pointer"
       onClick={onToggle}
     >
-      {/* Avatar */}
-      <div className="w-8 h-8 bg-mail-accent rounded-full flex items-center justify-center flex-shrink-0">
+      {/* Avatar — click opens Sender Details (parity with chat view) */}
+      <div
+        className="w-8 h-8 bg-mail-accent rounded-full flex items-center justify-center flex-shrink-0 cursor-pointer"
+        onClick={openDetails}
+        title="Sender details"
+      >
         <span className="text-white font-semibold text-xs">{initial}</span>
       </div>
 
@@ -90,8 +101,11 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
               <Cloud size={12} className="flex-shrink-0" style={{ color: 'rgba(59, 130, 246, 0.5)' }} title="Server" />
             )}
 
-            {/* Sender name */}
-            <span className="text-sm font-semibold text-mail-text truncate">
+            {/* Sender name — click opens Sender Details (parity with chat view) */}
+            <span
+              className="text-sm font-semibold text-mail-text truncate cursor-pointer hover:underline"
+              onClick={openDetails}
+            >
               {senderName}
             </span>
 
@@ -187,6 +201,15 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
           </div>
         )}
       </div>
+
+      {detailsAnchor && (
+        <SenderInfoPopover
+          email={email}
+          anchorRect={detailsAnchor}
+          onClose={() => setDetailsAnchor(null)}
+          archivedEmailIds={archivedEmailIds}
+        />
+      )}
     </div>
   );
 });

@@ -15,7 +15,8 @@ pub use mailvault_core::dns::*;
 const DKIM_SELECTORS: &[&str] = &[
     "default", "google", "selector1", "selector2", "k1", "s1", "s2", "mail",
     "dkim", "zoho", "hostingermail1", "hostingermail2", "protonmail", "fm1",
-    "fm2", "fm3",
+    "fm2", "fm3", "purelymail1", "purelymail2", "purelymail3", "key1", "key2",
+    "mx", "smtp", "mandrill", "everlytickey1", "everlytickey2",
 ];
 
 #[derive(Debug, Serialize, Clone)]
@@ -121,8 +122,10 @@ fn build_warnings(
         w.push("No DMARC record found.".to_string());
     }
     if !dkim_found {
+        // Selector names are provider-specific and can't be enumerated from DNS,
+        // so a miss across the common list is inconclusive — phrase it that way.
         w.push(format!(
-            "No DKIM record found (checked {} common selectors) — outgoing mail may be marked as spam.",
+            "Couldn't verify DKIM ({} common selectors checked) — if your provider uses a custom selector this is a false alarm; otherwise outgoing mail may be marked as spam.",
             dkim_checked
         ));
     }
@@ -272,10 +275,10 @@ mod tests {
 
     #[test]
     fn warnings_all_missing() {
-        let w = build_warnings(Some(false), false, false, false, 16);
+        let w = build_warnings(Some(false), false, false, false, 26);
         assert_eq!(w.len(), 4);
         assert!(w[0].contains("MX records"));
-        assert!(w[3].contains("16 common selectors"));
+        assert!(w[3].contains("26 common selectors"));
     }
 
     #[test]

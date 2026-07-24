@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Server, Loader2, CheckCircle2, AlertTriangle, UploadCloud } from 'lucide-react';
+import { X, Server, Loader2, CheckCircle2, AlertTriangle, UploadCloud, Minus } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore.js';
 import { useMailStore } from '../stores/mailStore.js';
 import { restoreManager } from '../services/restoreManager.js';
@@ -36,10 +36,20 @@ export default function ChangeServerModal() {
     clearActiveRestore();
   };
 
+  // Minimize to the corner restore tray — keeps activeRestore so the upload
+  // continues in the background and the tray bubble can reopen this modal.
+  const handleMinimize = () => {
+    closeChangeServer();
+  };
+
   // Reset local state whenever the modal is (re)opened for an account.
+  // Reopening while this account's restore is in flight (minimized to the
+  // corner tray) resumes on step 2 instead of resetting.
   useEffect(() => {
     if (!account) return;
-    setStep(1);
+    const restore = useSettingsStore.getState().activeRestore;
+    const resuming = restore && restore.account_id === account.id;
+    setStep(resuming ? 2 : 1);
     setForm({
       imapHost: account.imapHost || '',
       imapPort: account.imapPort || 993,
@@ -54,7 +64,7 @@ export default function ChangeServerModal() {
     setDnsHealth({ loading: false, warnings: null, failed: false });
     // Stale progress from an earlier restore would make step 2 open on its
     // finished view instead of the upload prompt.
-    useSettingsStore.getState().clearActiveRestore();
+    if (!resuming) useSettingsStore.getState().clearActiveRestore();
   }, [account?.id]);
 
   // Detect cascade on mount (per account) — detectProvider → resolveEmailSettings DNS.
@@ -99,13 +109,14 @@ export default function ChangeServerModal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account?.id]);
 
-  // Escape closes the modal only in steps 1 and 3 — never mid-restore (step 2).
+  // Escape: steps 1/3 close; step 2 mid-restore minimizes to the corner tray.
   useEffect(() => {
     const handler = (e) => {
       if (e.key !== 'Escape') return;
       if (!account) return;
       // Not while verifying — changeServer may persist after the modal is gone.
       if ((step === 1 && !busyLeg) || step === 3) handleClose();
+      else if (step === 2 && useSettingsStore.getState().activeRestore) handleMinimize();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -170,6 +181,11 @@ export default function ChangeServerModal() {
           {showCloseButton && (
             <button onClick={handleClose} aria-label="Close" className="text-mail-text-muted hover:text-mail-text">
               <X size={18} />
+            </button>
+          )}
+          {step === 2 && activeRestore && (
+            <button onClick={handleMinimize} aria-label="Minimize" title="Minimize — restore continues in the background" className="text-mail-text-muted hover:text-mail-text">
+              <Minus size={18} />
             </button>
           )}
         </div>
@@ -289,12 +305,18 @@ export default function ChangeServerModal() {
                   {activeRestore.uploaded_emails} uploaded · {activeRestore.skipped_emails} skipped · {activeRestore.failed_emails} failed
                   {activeRestore.folder_progress ? ` · ${activeRestore.folder_progress}` : ''}
                 </div>
-                <div className="flex justify-end mt-4">
+                <div className="flex justify-end gap-2 mt-4">
                   <button
                     className="text-sm font-medium text-mail-text border border-mail-border rounded-lg px-4 py-2 hover:bg-mail-surface-hover transition-colors"
                     onClick={() => restoreManager.cancel()}
                   >
                     Cancel
+                  </button>
+                  <button
+                    className="bg-mail-accent text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent-hover transition-colors flex items-center gap-2"
+                    onClick={handleMinimize}
+                  >
+                    <Minus size={14} /> Minimize
                   </button>
                 </div>
               </div>

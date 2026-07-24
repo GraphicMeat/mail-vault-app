@@ -2,9 +2,11 @@
 
 ## [Unreleased]
 
-## [2.7.0] - 2026-07-23
+## [2.7.0] - 2026-07-24
 
 ### Added
+- Change-server restore can now be minimized to a corner bubble: the upload keeps running in the background, the bubble shows live progress, and clicking it reopens the modal (Escape mid-restore also minimizes instead of being blocked).
+- Thread view: clicking a sender's name or avatar now opens the same Sender Details popover as chat view (full address, To/CC, verification, mailing-list "via").
 - Restore-to-server: when an account's IMAP host is changed to a new, empty server, the app detects that the local Maildir still holds the account's mail and offers to re-upload it (all folders, flags preserved, dedup-safe re-runs).
 - **Guided Change Server flow**: dedicated 3-step modal replacing the old Settings-only server edit. Enter new IMAP/SMTP hosts and the new password in one form — hosts are pre-filled by DNS auto-detection (SRV/autoconfig/MX), with a warning when your domain's DNS still points at the current server. Both IMAP and SMTP are verified (new `smtp_test_connection` command) before anything is saved. After saving, the app offers to upload locally stored mail to the new server, then runs a DNS health check (MX/SPF/DKIM/DMARC, new `dns_mail_health` command) and warns if mail delivery would be affected.
 - **Mac App Store build target**: New `appstore` Cargo feature, `tauri.appstore.conf.json` overlay, and `Release (Mac App Store)` GitHub Actions workflow. Build locally with `npm run build:appstore`; CI builds + signs + uploads via App Store Connect API. See `BUILDING.md` for required secrets and gotchas.
@@ -16,6 +18,8 @@
 - Sidebar connection-error card: "Change server" now opens the guided flow directly; "Migrate mail" removed from the card (the migration wizard needs a working source server — it remains in Settings → Migration). The expanded-sidebar card variant now also offers "Change server" (it previously only appeared in the collapsed variant).
 
 ### Fixed
+- Unrelated automated emails with identical subjects (forum digests, contact-form notifications) are no longer merged into one giant thread. Subject-based thread merging now only applies to `Re:`/`Fwd:`-prefixed messages that lack threading headers; proper `References`/`In-Reply-To` chains still thread as before.
+- Post-server-change DNS health check no longer flags a missing DKIM record for domains using Purelymail (added `purelymail1-3` and other common selectors), and the warning now says the check is inconclusive rather than claiming DKIM is absent.
 - Changing servers when the stored password is missing or stale no longer dead-ends: the connection test now uses the newly entered password instead of the stored one.
 - Background-sync daemon now returns the same flat mailbox list as the app, fixing accounts on some providers (e.g. Hostinger) appearing to have only one folder in daemon-driven flows (fixed as part of consolidating the duplicated IMAP client — see Internal).
 

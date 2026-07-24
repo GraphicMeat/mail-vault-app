@@ -20,6 +20,7 @@ import { UpdateModal } from './components/UpdateModal';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { UndoSendToast } from './components/UndoSendToast';
 import { OutboxTray } from './components/OutboxTray';
+import { RestoreTray } from './components/RestoreTray';
 import { MoveToFolderDropdown } from './components/MoveToFolderDropdown';
 import { MigrationToast } from './components/MigrationToast';
 import { KeychainToast } from './components/KeychainToast';
@@ -755,6 +756,7 @@ function App() {
       />
       <UndoSendToast onUndo={(cs) => openCompose(cs)} />
       <OutboxTray onRestoreDraft={(cs) => openCompose(cs)} />
+      <RestoreTray />
       <ShareUnlockModal onSubscribe={() => { setSettingsInitialTab('billing'); setShowSettings(true); }} />
       <RestoreModal />
       <ChangeServerModal />
