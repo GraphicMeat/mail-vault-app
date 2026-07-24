@@ -79,7 +79,7 @@ app.use(helmet({
 
 // CORS - allow requests from your website
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
+  origin: (process.env.CORS_ORIGIN || '*').split(','),
   methods: ['GET', 'POST'],
   allowedHeaders: ['Content-Type']
 }));

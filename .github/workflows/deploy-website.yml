@@ -103,7 +103,7 @@ jobs:
           cat > /tmp/secrets.env <<EOF
           # CI-managed — overwritten by GitHub Actions on every deploy
           # DO NOT edit by hand
-          CORS_ORIGIN=https://mailvaultapp.com
+          CORS_ORIGIN=https://mailvaultapp.com,tauri://localhost,http://tauri.localhost,http://localhost:1420
           IP_SALT=${IP_SALT}
           ADMIN_KEY=${ADMIN_KEY}
           ANALYTICS_API_KEY=${ANALYTICS_API_KEY}
