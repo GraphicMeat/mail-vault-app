@@ -1021,26 +1021,39 @@ pub async fn delete_email(
             .collect::<Vec<_>>()
             .await;
     } else {
-        let trash_folders = ["Trash", "[Gmail]/Trash", "Deleted Items", "Deleted"];
-        let mut moved = false;
+        // Resolve the real Trash path via SPECIAL-USE/LIST — hardcoded names
+        // miss namespaced servers (Dovecot/Hostinger use INBOX.Trash), which
+        // left mail \Deleted-flagged but visible: delete looked like a no-op.
+        let trash = ensure_role_mailbox(
+            session,
+            "trash",
+            "Trash",
+            &["Trash", "Deleted Items", "Deleted", "[Gmail]/Trash"],
+        )
+        .await?;
 
-        for folder in &trash_folders {
-            match session.uid_mv(uid.to_string(), folder).await {
-                Ok(_) => {
-                    moved = true;
-                    break;
-                }
-                Err(_) => continue,
+        match session.uid_mv(uid.to_string(), &trash).await {
+            Ok(_) => {}
+            Err(e) => {
+                // No MOVE capability: COPY + \Deleted + UID EXPUNGE.
+                tracing::warn!("[delete_email] UID MOVE to '{}' failed ({}), falling back to COPY+EXPUNGE", trash, e);
+                session
+                    .uid_copy(uid.to_string(), &trash)
+                    .await
+                    .map_err(|e| format!("UID COPY to '{}' failed: {}", trash, e))?;
+                let _: Vec<_> = session
+                    .uid_store(uid.to_string(), "+FLAGS (\\Deleted)")
+                    .await
+                    .map_err(|e| format!("STORE \\Deleted failed: {}", e))?
+                    .collect::<Vec<_>>()
+                    .await;
+                let _: Vec<_> = session
+                    .uid_expunge(uid.to_string())
+                    .await
+                    .map_err(|e| format!("UID EXPUNGE failed: {}", e))?
+                    .collect::<Vec<_>>()
+                    .await;
             }
-        }
-
-        if !moved {
-            let _: Vec<_> = session
-                .uid_store(uid.to_string(), "+FLAGS (\\Deleted)")
-                .await
-                .map_err(|e| format!("STORE \\Deleted fallback failed: {}", e))?
-                .collect::<Vec<_>>()
-                .await;
         }
     }
 

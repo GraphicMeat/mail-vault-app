@@ -18,6 +18,7 @@
 - Sidebar connection-error card: "Change server" now opens the guided flow directly; "Migrate mail" removed from the card (the migration wizard needs a working source server — it remains in Settings → Migration). The expanded-sidebar card variant now also offers "Change server" (it previously only appeared in the collapsed variant).
 
 ### Fixed
+- Deleting emails (single or multi-select) did nothing on servers whose Trash folder lives in a namespace (e.g. Hostinger/Dovecot `INBOX.Trash`): the delete now resolves the real Trash mailbox via SPECIAL-USE/LIST (auto-creating one if missing) instead of guessing hardcoded names, and falls back to COPY + EXPUNGE on servers without MOVE. Previously the message was only flagged `\Deleted` and reappeared on reload.
 - Unrelated automated emails with identical subjects (forum digests, contact-form notifications) are no longer merged into one giant thread. Subject-based thread merging now only applies to `Re:`/`Fwd:`-prefixed messages that lack threading headers; proper `References`/`In-Reply-To` chains still thread as before.
 - Post-server-change DNS health check no longer flags a missing DKIM record for domains using Purelymail (added `purelymail1-3` and other common selectors), and the warning now says the check is inconclusive rather than claiming DKIM is absent.
 - Changing servers when the stored password is missing or stale no longer dead-ends: the connection test now uses the newly entered password instead of the stored one.
