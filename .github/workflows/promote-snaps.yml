@@ -1,6 +1,8 @@
 name: Promote Snaps
 
 on:
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       version:
@@ -20,6 +22,8 @@ on:
 
 jobs:
   promote:
+    # Auto-publish on release publish, but never for prereleases.
+    if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -29,30 +33,37 @@ jobs:
         run: sudo snap install snapcraft --classic
 
       - name: Download snaps from GitHub release
+        id: download
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_VERSION: ${{ inputs.version || github.event.release.tag_name }}
         run: |
-          INPUT_VERSION="${{ inputs.version }}"
           VERSION="v${INPUT_VERSION#v}"
 
           echo "Downloading snap artifacts from release ${VERSION}..."
-          gh release download "$VERSION" \
+          if ! gh release download "$VERSION" \
             --repo "${{ github.repository }}" \
             --pattern "*.snap" \
-            --dir snaps
+            --dir snaps; then
+            echo "No snap assets on release ${VERSION} — nothing to promote."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "found=true" >> "$GITHUB_OUTPUT"
 
           echo "Downloaded snaps:"
           ls -lh snaps/
 
       - name: Publish to Snap Store
+        if: steps.download.outputs.found == 'true'
         env:
           SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+          CHANNEL: ${{ inputs.channel || 'stable' }}
         run: |
           if [ -z "$SNAPCRAFT_STORE_CREDENTIALS" ]; then
             echo "::error::SNAPCRAFT_STORE_CREDENTIALS not set"
             exit 1
           fi
-          CHANNEL="${{ inputs.channel }}"
           for snap in snaps/*.snap; do
             echo "Publishing $(basename "$snap") to ${CHANNEL} channel..."
             snapcraft upload "$snap" --release="${CHANNEL}"

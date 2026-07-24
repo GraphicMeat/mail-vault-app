@@ -7,11 +7,6 @@ on:
         description: 'Release version (e.g. v1.0.2)'
         required: true
         type: string
-      publish_snaps:
-        description: 'Publish snaps to Snap Store (default: false — use Promote Snaps workflow instead)'
-        required: false
-        type: boolean
-        default: false
 
 jobs:
   # ── E2E Tests (disabled — uncomment to enable) ──
@@ -457,35 +452,8 @@ jobs:
           path: "*.snap"
           retention-days: 1
 
-  publish-snaps:
-    if: inputs.publish_snaps
-    needs: [build-snap-x86_64, build-snap-aarch64]
-    permissions:
-      contents: write
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Download snap artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: snaps
-          pattern: snap-*-artifact
-
-      - name: Install snapcraft
-        run: sudo snap install snapcraft --classic
-
-      - name: Publish to Snap Store
-        env:
-          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
-        run: |
-          if [ -z "$SNAPCRAFT_STORE_CREDENTIALS" ]; then
-            echo "SNAPCRAFT_STORE_CREDENTIALS not set — skipping Snap Store publish"
-            exit 0
-          fi
-          for snap in $(find snaps/ -name "*.snap"); do
-            echo "Publishing: $snap"
-            snapcraft upload "$snap" --release=stable
-          done
+  # Snap Store publishing happens in promote-snaps.yml, triggered when the
+  # GitHub release is published (or manually via workflow_dispatch).
 
   create-release:
     needs: [build-macos, build-linux-x86_64, build-linux-aarch64, build-snap-x86_64, build-snap-aarch64]
