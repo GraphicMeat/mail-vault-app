@@ -208,6 +208,26 @@
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Deleted emails no longer resurrect from the local header cache.</strong> Moving mail to Trash bumps the server's CONDSTORE modseq without changing UIDNEXT, and the flag-only fast sync path cannot see expunges — deleted emails kept reappearing on reload/restart even though the server delete succeeded. The fast path now verifies the server message count and falls through to full UID reconciliation when it changed.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span>Fixed an IMAP session desync that could blank an entire folder view: some servers' (e.g. Purelymail) ESEARCH responses fail to parse in our IMAP library, leaving the connection misaligned so every subsequent command read the previous command's reply — a delete followed by a sync then wrongly concluded the mailbox was empty. The ESEARCH fast path was removed (plain <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">UID SEARCH ALL</code> everywhere) and the app now refuses to prune the email list when a search claims "empty" while the server reports messages.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span>Deleted emails now disappear from the list instantly on confirm; the server deletion runs in the background and any email whose server delete fails is restored on the follow-up sync.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span>Deleted emails no longer flash back when switching accounts or folders while the server deletion is still in flight (session-scoped delete tombstones filter them out of every list render until the cache is reconciled).</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span>Thread view: the sender-details/verification popover is no longer clipped when opened on a collapsed message row.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
               <span>Unrelated automated emails with identical subjects (forum digests, contact-form notifications) are no longer merged into one giant thread. Subject-based thread merging now only applies to <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">Re:</code>/<code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">Fwd:</code>-prefixed messages that lack threading headers; proper <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">References</code>/<code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">In-Reply-To</code> chains still thread as before.</span>
             </li>
             <li class="flex items-start gap-3">

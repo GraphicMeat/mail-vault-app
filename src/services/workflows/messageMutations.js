@@ -492,6 +492,7 @@ export async function markSelectedAsUnread() {
 
 // ── deleteSelectedFromServer workflow ──
 
+
 export async function deleteSelectedFromServer() {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
@@ -502,11 +503,40 @@ export async function deleteSelectedFromServer() {
   if (selectedEmailIds.size === 0) return;
 
   const keys = Array.from(selectedEmailIds);
-  useMailStore.setState({ selectedEmailIds: new Set() });
 
   const sentPath = get().getSentMailboxPath();
   const allEmails = [...state.emails, ...state.sentEmails];
   const emailMap = new Map(allEmails.map(e => [isUnified ? _selKey(e) : e.uid, e]));
+
+  // Remove from the UI immediately — the server/maildir deletes below can take
+  // seconds (pool checkout + one round-trip per email). The post-loop
+  // loadEmails() reconcile restores anything whose server delete failed.
+  const deletedKeySet = new Set(keys);
+  const realUidSet = new Set(keys.map(k => (isUnified ? _resolveUnifiedContext(k, state)?.uid : k) ?? k));
+
+  // Tombstone helper — must match the composition in updateSortedEmails.
+  const tombstoneKey = (key) => {
+    const ctx = isUnified ? _resolveUnifiedContext(key, state) : null;
+    const realUid = ctx?.uid ?? key;
+    const accountId = ctx?.accountId || state.activeAccountId;
+    const emailObj = emailMap.get(key);
+    const rawMailbox = ctx?.mailbox || (emailObj?._fromSentFolder && sentPath ? sentPath : state.activeMailbox);
+    const mailbox = rawMailbox === 'UNIFIED' ? 'INBOX' : rawMailbox;
+    return `${accountId}|${mailbox}|${realUid}`;
+  };
+  const newTombstones = new Set(state.deleteTombstones);
+  for (const key of keys) newTombstones.add(tombstoneKey(key));
+
+  useMailStore.setState({
+    deleteTombstones: newTombstones,
+    selectedEmailIds: new Set(),
+    emails: state.emails.filter(e => !deletedKeySet.has(isUnified ? _selKey(e) : e.uid)),
+    sentEmails: state.sentEmails.filter(e => !deletedKeySet.has(isUnified ? _selKey(e) : e.uid)),
+    totalEmails: Math.max(0, (state.totalEmails || 0) - keys.length),
+    selectedEmailId: realUidSet.has(state.selectedEmailId) ? null : state.selectedEmailId,
+    selectedEmail: realUidSet.has(state.selectedEmailId) ? null : state.selectedEmail,
+  });
+  get().updateSortedEmails();
 
   const deletedRealUids = new Set();
 
@@ -556,27 +586,15 @@ export async function deleteSelectedFromServer() {
       deletedRealUids.add(realUid);
     } catch (e) {
       console.error(`Failed to delete email ${key}:`, e);
+      // Lift the tombstone so the reconcile below can restore this email.
+      const ts = new Set(get().deleteTombstones);
+      ts.delete(tombstoneKey(key));
+      useMailStore.setState({ deleteTombstones: ts });
     }
   }
 
-  const deletedKeySet = new Set(keys);
-  const filteredEmails = get().emails.filter(e => {
-    const k = isUnified ? _selKey(e) : e.uid;
-    return !deletedKeySet.has(k);
-  });
-  const filteredSent = get().sentEmails.filter(e => {
-    const k = isUnified ? _selKey(e) : e.uid;
-    return !deletedKeySet.has(k);
-  });
-  useMailStore.setState({
-    emails: filteredEmails,
-    sentEmails: filteredSent,
-    totalEmails: Math.max(0, (get().totalEmails || 0) - keys.length),
-    selectedEmailId: deletedRealUids.has(get().selectedEmailId) ? null : get().selectedEmailId,
-    selectedEmail: deletedRealUids.has(get().selectedEmailId) ? null : get().selectedEmail,
-  });
-  get().updateSortedEmails();
-
+  // Reconcile with the server: prunes the header cache and restores any email
+  // whose delete failed (resilient over silently wrong).
   if (!isUnified) get().loadEmails();
 }
 

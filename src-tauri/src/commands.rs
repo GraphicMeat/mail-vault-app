@@ -407,7 +407,10 @@ pub async fn imap_delete_email(
         imap::delete_email(&mut session, &mailbox, uid, permanent).await
             .map_err(|e| format!("Failed to delete email: {}", e))?;
         Ok(((), session, Some(mailbox)))
-    }).await?;
+    }).await.map_err(|e| {
+        tracing::error!("[delete_email] uid={} failed: {}", uid, e);
+        e
+    })?;
 
     Ok(serde_json::json!({ "success": true }))
 }

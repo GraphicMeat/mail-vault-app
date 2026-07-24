@@ -663,28 +663,20 @@ pub async fn fetch_changed_flags(
 
 /// UID SEARCH ALL — returns every UID in the mailbox (ascending order).
 /// Used for delta-sync: diff against cached UID set to find additions/deletions.
-/// Uses ESEARCH when supported for compact UID range responses.
+///
+/// Deliberately does NOT use ESEARCH: imap-proto fails to parse some servers'
+/// valid `* ESEARCH (TAG "...") UID ALL ...` responses (seen on Purelymail),
+/// and a read_response() parse failure leaves unconsumed bytes in the session
+/// buffer — every later command on that session then reads the previous
+/// command's reply (a same-session "fallback" search returned 0 UIDs and
+/// blanked the mailbox view). Plain `UID SEARCH ALL` parses everywhere and
+/// handles 15k+ mailboxes fine (backup/migration always used it).
 pub async fn search_all_uids(
     session: &mut ImapSession,
     mailbox: &str,
-    has_esearch: bool,
+    _has_esearch: bool,
 ) -> Result<Vec<u32>, String> {
     let _mbox = select_mailbox(session, mailbox).await?;
-
-    let mut esearch_failed = false;
-
-    if has_esearch {
-        match search_all_uids_esearch(session).await {
-            Ok(uids) => return Ok(uids),
-            Err(e) => {
-                warn!("[IMAP] ESEARCH failed, falling back to UID SEARCH ALL: {}", e);
-                esearch_failed = true;
-                // Re-select mailbox to reset session state after ESEARCH parse failure
-                // (the response buffer may contain partial ESEARCH data)
-                let _ = select_mailbox(session, mailbox).await;
-            }
-        }
-    }
 
     info!("[IMAP] Running UID SEARCH ALL for {}", mailbox);
     let uids = session
@@ -696,126 +688,6 @@ pub async fn search_all_uids(
     result.sort();
     info!("[IMAP] UID SEARCH ALL returned {} UIDs for {}", result.len(), mailbox);
 
-    // Verification pass: if ESEARCH failed and fallback returned 0 UIDs,
-    // re-select the mailbox and check EXISTS count before trusting the empty result.
-    // This prevents a single bad parse from blanking an account's email list.
-    if esearch_failed && result.is_empty() {
-        warn!("[IMAP] ESEARCH failed AND UID SEARCH ALL returned 0 for {} — running verification pass", mailbox);
-        let verify_mbox = select_mailbox(session, mailbox).await?;
-        info!(
-            "[IMAP] Verification: mailbox={} exists={} uid_validity={:?} uid_next={:?}",
-            mailbox, verify_mbox.exists, verify_mbox.uid_validity, verify_mbox.uid_next
-        );
-
-        if verify_mbox.exists > 0 {
-            // Server says mailbox has messages but UID SEARCH returned 0 — retry once
-            warn!(
-                "[IMAP] Verification mismatch: EXISTS={} but UID SEARCH returned 0 for {} — retrying UID SEARCH ALL",
-                verify_mbox.exists, mailbox
-            );
-            let retry_uids = session
-                .uid_search("ALL")
-                .await
-                .map_err(|e| format!("UID SEARCH ALL retry failed for {}: {}", mailbox, e))?;
-            let mut retry_result: Vec<u32> = retry_uids.into_iter().collect();
-            retry_result.sort();
-            info!(
-                "[IMAP] UID SEARCH ALL retry returned {} UIDs for {} (EXISTS={})",
-                retry_result.len(), mailbox, verify_mbox.exists
-            );
-            return Ok(retry_result);
-        }
-        // EXISTS is also 0 — genuinely empty mailbox
-        info!("[IMAP] Verification confirmed: mailbox {} is genuinely empty (EXISTS=0)", mailbox);
-    }
-
-    Ok(result)
-}
-
-/// ESEARCH-based UID enumeration: sends `UID SEARCH RETURN (ALL) ALL` and parses
-/// the compact `* ESEARCH ... UID ALL 1:500,502:1000` response.
-async fn search_all_uids_esearch(session: &mut ImapSession) -> Result<Vec<u32>, String> {
-    let tag = session.run_command("UID SEARCH RETURN (ALL) ALL").await
-        .map_err(|e| format!("ESEARCH command failed: {}", e))?;
-
-    let mut uid_ranges = String::new();
-    let mut found = false;
-
-    // Read responses until we get the tagged OK
-    // Note: read_response() can fail on very large ESEARCH results due to imap_proto parser limits.
-    // If parsing fails, return error to trigger the UID SEARCH ALL fallback.
-    loop {
-        let resp_data = match session.read_response().await {
-            Ok(Some(d)) => d,
-            Ok(None) => break,
-            Err(e) => {
-                return Err(format!("ESEARCH read response failed: {}", e));
-            }
-        };
-
-        // Check if this is the tagged completion
-        if resp_data.request_id() == Some(&tag) {
-            // Verify OK status
-            match resp_data.parsed() {
-                imap_proto::Response::Done { status, .. } => {
-                    if *status != imap_proto::Status::Ok {
-                        return Err("ESEARCH command returned non-OK status".to_string());
-                    }
-                }
-                _ => {}
-            }
-            break;
-        }
-
-        // Look for ESEARCH response in raw bytes
-        // Format: * ESEARCH (TAG "tagN") UID ALL <ranges>
-        let raw_bytes = resp_data.borrow_owner();
-        let raw_str = String::from_utf8_lossy(raw_bytes);
-        let upper = raw_str.to_uppercase();
-
-        if upper.contains("ESEARCH") {
-            // Extract the UID ALL part
-            if let Some(all_pos) = upper.find("ALL ") {
-                let after_all = &raw_str[all_pos + 4..];
-                // Trim trailing whitespace and CRLF
-                uid_ranges = after_all.trim().to_string();
-                found = true;
-            }
-        }
-    }
-
-    if !found || uid_ranges.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    // Expand UID ranges: "1:3,5:6,10" → [1,2,3,5,6,10]
-    expand_uid_ranges(&uid_ranges)
-}
-
-/// Expand IMAP UID range notation into a Vec of UIDs.
-/// e.g. "1:3,5:6,10" → [1,2,3,5,6,10]
-fn expand_uid_ranges(ranges: &str) -> Result<Vec<u32>, String> {
-    let mut result = Vec::new();
-    for part in ranges.split(',') {
-        let part = part.trim();
-        if part.is_empty() { continue; }
-
-        if let Some((start_str, end_str)) = part.split_once(':') {
-            let start: u32 = start_str.trim().parse()
-                .map_err(|_| format!("Invalid UID range start: {}", start_str))?;
-            let end: u32 = end_str.trim().parse()
-                .map_err(|_| format!("Invalid UID range end: {}", end_str))?;
-            for uid in start..=end {
-                result.push(uid);
-            }
-        } else {
-            let uid: u32 = part.parse()
-                .map_err(|_| format!("Invalid UID: {}", part))?;
-            result.push(uid);
-        }
-    }
-    result.sort();
-    info!("[IMAP] ESEARCH expanded {} UIDs (ranges: {})", result.len(), &ranges[..ranges.len().min(60)]);
     Ok(result)
 }
 
@@ -1004,6 +876,7 @@ pub async fn delete_email(
     uid: u32,
     permanent: bool,
 ) -> Result<(), String> {
+    info!("[delete_email] start uid={} mailbox={} permanent={}", uid, mailbox, permanent);
     let _mbox = select_mailbox(session, mailbox).await?;
 
     if permanent {
@@ -1031,9 +904,10 @@ pub async fn delete_email(
             &["Trash", "Deleted Items", "Deleted", "[Gmail]/Trash"],
         )
         .await?;
+        info!("[delete_email] uid={} resolved trash='{}'", uid, trash);
 
         match session.uid_mv(uid.to_string(), &trash).await {
-            Ok(_) => {}
+            Ok(_) => info!("[delete_email] uid={} moved to '{}'", uid, trash),
             Err(e) => {
                 // No MOVE capability: COPY + \Deleted + UID EXPUNGE.
                 tracing::warn!("[delete_email] UID MOVE to '{}' failed ({}), falling back to COPY+EXPUNGE", trash, e);
@@ -2078,63 +1952,10 @@ mod tests {
         assert_eq!(compress_uid_ranges(&[100, 101, 200, 201, 202]), "100:101,200:202");
     }
 
-    // ── expand_uid_ranges ───────────────────────────────────────────────
-
-    #[test]
-    fn expand_single_range() {
-        assert_eq!(expand_uid_ranges("1:5").unwrap(), vec![1, 2, 3, 4, 5]);
-    }
-
-    #[test]
-    fn expand_single_uid() {
-        assert_eq!(expand_uid_ranges("42").unwrap(), vec![42]);
-    }
-
-    #[test]
-    fn expand_mixed() {
-        assert_eq!(expand_uid_ranges("1:3,5:6,10").unwrap(), vec![1, 2, 3, 5, 6, 10]);
-    }
-
-    #[test]
-    fn expand_empty_parts() {
-        // Trailing comma or empty parts should be skipped
-        assert_eq!(expand_uid_ranges("1:3,,5").unwrap(), vec![1, 2, 3, 5]);
-    }
-
-    #[test]
-    fn expand_invalid_uid() {
-        assert!(expand_uid_ranges("abc").is_err());
-    }
-
-    #[test]
-    fn expand_invalid_range() {
-        assert!(expand_uid_ranges("1:abc").is_err());
-    }
-
-    // ── roundtrip: compress → expand ────────────────────────────────────
-
-    #[test]
-    fn roundtrip_compress_expand() {
-        let original = vec![1, 2, 3, 5, 6, 10, 100, 101, 102, 200];
-        let compressed = compress_uid_ranges(&original);
-        let expanded = expand_uid_ranges(&compressed).unwrap();
-        assert_eq!(expanded, original);
-    }
-
-    #[test]
-    fn roundtrip_single_element() {
-        let original = vec![999];
-        let compressed = compress_uid_ranges(&original);
-        let expanded = expand_uid_ranges(&compressed).unwrap();
-        assert_eq!(expanded, original);
-    }
-
     #[test]
     fn roundtrip_large_set() {
         let original: Vec<u32> = (500..=700).chain(800..=900).chain(std::iter::once(1000)).collect();
         let compressed = compress_uid_ranges(&original);
         assert_eq!(compressed, "500:700,800:900,1000");
-        let expanded = expand_uid_ranges(&compressed).unwrap();
-        assert_eq!(expanded, original);
     }
 }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatDateTime } from '../../utils/dateFormat';
 import {
@@ -16,7 +17,7 @@ import { getSenderName } from '../../utils/emailParser';
 
 // ── Auth Detail Popover ────────────────────────────────────────────────
 
-export function AuthDetailPopover({ email, onClose }) {
+export function AuthDetailPopover({ email, onClose, anchorRect }) {
   const popoverRef = useRef(null);
   const auth = useMemo(() => parseAuthResults(email?.authenticationResults), [email?.authenticationResults]);
   const verification = useMemo(() => checkSenderVerification(email), [email?.from, email?.replyTo, email?.returnPath, email?.authenticationResults]);
@@ -44,8 +45,26 @@ export function AuthDetailPopover({ email, onClose }) {
 
   const senderIssues = verification.issues?.filter(i => i.level === 'danger' || i.level === 'warning') || [];
 
-  return (
-    <div ref={popoverRef} className="absolute z-50 top-full left-0 mt-1 bg-mail-surface border border-mail-border rounded-lg shadow-lg p-3 min-w-[240px] max-w-[320px]"
+  // Fixed position from the anchor, with viewport edge detection. Rendered via
+  // portal — an inline absolute popover gets clipped/overlapped inside
+  // collapsed thread rows (row containers stack above it).
+  const position = useMemo(() => {
+    if (!anchorRect) return null;
+    const WIDTH = 320;
+    const HEIGHT = 260;
+    const MARGIN = 8;
+    let top = anchorRect.bottom + 4;
+    let left = anchorRect.left;
+    if (top + HEIGHT > window.innerHeight) top = Math.max(MARGIN, anchorRect.top - HEIGHT - 4);
+    if (left + WIDTH > window.innerWidth) left = window.innerWidth - WIDTH - MARGIN;
+    if (left < MARGIN) left = MARGIN;
+    return { top, left };
+  }, [anchorRect]);
+
+  const popover = (
+    <div ref={popoverRef}
+         className={`${position ? 'fixed' : 'absolute top-full left-0 mt-1'} z-50 bg-mail-surface border border-mail-border rounded-lg shadow-lg p-3 min-w-[240px] max-w-[320px]`}
+         style={position || undefined}
          onClick={(e) => e.stopPropagation()}>
       <div className="text-xs font-semibold text-mail-text mb-2">Sender Details</div>
 
@@ -109,12 +128,14 @@ export function AuthDetailPopover({ email, onClose }) {
       ) : null}
     </div>
   );
+
+  return position ? createPortal(popover, document.body) : popover;
 }
 
 // ── Sender Verification Badge ────────────────────────────────────────────────
 
 export function SenderVerificationBadge({ email, size = 14 }) {
-  const [showPopover, setShowPopover] = useState(false);
+  const [popoverAnchor, setPopoverAnchor] = useState(null);
   const { status, tooltip } = useMemo(
     () => checkSenderVerification(email),
     [email?.from, email?.replyTo, email?.returnPath, email?.authenticationResults]
@@ -128,14 +149,17 @@ export function SenderVerificationBadge({ email, size = 14 }) {
   return (
     <span className="relative inline-flex items-center flex-shrink-0">
       <button
-        onClick={(e) => { e.stopPropagation(); setShowPopover(!showPopover); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          setPopoverAnchor(popoverAnchor ? null : e.currentTarget.getBoundingClientRect());
+        }}
         className={`${colorClass} hover:opacity-80 transition-opacity`}
         title={tooltip}
       >
         <Icon size={size} />
       </button>
-      {showPopover && (
-        <AuthDetailPopover email={email} onClose={() => setShowPopover(false)} />
+      {popoverAnchor && (
+        <AuthDetailPopover email={email} anchorRect={popoverAnchor} onClose={() => setPopoverAnchor(null)} />
       )}
     </span>
   );

@@ -333,7 +333,12 @@ export async function loadEmails() {
         newHighestModseq != null && cachedHighestModseq != null &&
         newHighestModseq !== cachedHighestModseq &&
         newUidNext === cachedUidNext &&
-        status.exists >= existingEmails.length * 0.5
+        // Expunges (delete/move-to-Trash) bump modseq WITHOUT changing UIDNEXT,
+        // and CONDSTORE CHANGEDSINCE cannot report them — flag-only sync is only
+        // safe when the server message count still matches the last-synced total.
+        // Otherwise fall through to the UID-search delta sync so deleted emails
+        // get pruned instead of resurrecting from the header cache.
+        status.exists === (cachedHeaders?.totalEmails ?? existingEmails.length)
       ) {
         console.log('[loadEmails] CONDSTORE: flag-only sync (modseq %s -> %s)', cachedHighestModseq, newHighestModseq);
         try {
@@ -405,6 +410,14 @@ export async function loadEmails() {
       // UID search delta-sync
       if (mergedEmails == null && newUidValidity === cachedUidValidity) {
         const serverUids = await api.searchAllUids(account, activeMailbox);
+        // Sanity guard: an empty search result while the server reports a
+        // non-empty mailbox is a flaky/desynced response — pruning on it would
+        // blank the whole list. Keep current state and let the next sync retry.
+        if (serverUids.length === 0 && status.exists > 0) {
+          console.warn('[loadEmails] UID SEARCH returned 0 but EXISTS=%d — ignoring suspicious empty result', status.exists);
+          useMailStore.setState({ loading: false, loadingMore: false });
+          return;
+        }
         const serverUidSet = new Set(serverUids);
         useMailStore.setState({ serverUidSet });
         const storeUidSet = new Set(existingEmails.map(e => e.uid));

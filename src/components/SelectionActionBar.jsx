@@ -70,7 +70,7 @@ export function SelectionActionBar() {
 
   const confirmDelete = () => {
     setShowDeleteConfirm(false);
-    deleteSelectedFromServer();
+    handleAction(deleteSelectedFromServer);
   };
 
   const handleUnarchive = async () => {

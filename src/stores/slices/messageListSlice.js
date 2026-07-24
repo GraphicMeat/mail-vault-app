@@ -106,10 +106,10 @@ export const createMessageListSlice = (set, get) => ({
 
   // Update sorted emails (memoization for performance) — pure synchronous derivation
   updateSortedEmails: () => {
-    const { emails, localEmails, viewMode, savedEmailIds, archivedEmailIds, serverUidSet, unifiedInbox, activeAccountId, activeMailbox, _sortedEmailsFingerprint } = get();
+    const { emails, localEmails, viewMode, savedEmailIds, archivedEmailIds, serverUidSet, unifiedInbox, activeAccountId, activeMailbox, deleteTombstones, _sortedEmailsFingerprint } = get();
 
     // Fingerprint check: skip if the input set hasn't materially changed
-    const fp = `${activeAccountId}-${activeMailbox}-${viewMode}-${emails.length}-${emails[0]?.uid || 0}-${emails[emails.length - 1]?.uid || 0}-${localEmails.length}-${archivedEmailIds.size}-${savedEmailIds.size}-${serverUidSet.size}-${_flagChangeCounter}`;
+    const fp = `${activeAccountId}-${activeMailbox}-${viewMode}-${emails.length}-${emails[0]?.uid || 0}-${emails[emails.length - 1]?.uid || 0}-${localEmails.length}-${archivedEmailIds.size}-${savedEmailIds.size}-${serverUidSet.size}-${_flagChangeCounter}-${deleteTombstones?.size || 0}`;
     if (fp === _sortedEmailsFingerprint) return;
 
     // In unified inbox, UIDs collide across accounts — use compound key for dedup
@@ -153,6 +153,16 @@ export const createMessageListSlice = (set, get) => ({
           result.push(localEmail);
         }
       }
+    }
+
+    // Drop tombstoned (deleted-but-not-yet-reconciled) emails — stale cache
+    // hydration on account/folder switch must not resurrect them.
+    if (deleteTombstones?.size) {
+      result = result.filter(e => {
+        const acct = e._accountId || activeAccountId;
+        const mbox = activeMailbox === 'UNIFIED' ? (e._mailbox || 'INBOX') : activeMailbox;
+        return !deleteTombstones.has(`${acct}|${mbox}|${e.uid}`);
+      });
     }
 
     // Sort by date descending (newest first)

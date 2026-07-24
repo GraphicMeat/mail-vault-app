@@ -25,6 +25,12 @@ export const createSelectionSlice = (set, get) => ({
   // Selection for bulk actions
   selectedEmailIds: new Set(),
 
+  // Session tombstones for deleted emails: "accountId|mailbox|uid".
+  // Deleted emails are filtered out of every list render until the header
+  // cache is reconciled — otherwise switching account/folder and back
+  // rehydrates them from the stale cache while the server delete is in flight.
+  deleteTombstones: new Set(),
+
   // Select a thread (shows all emails in the thread in the viewer)
   selectThread: (thread) => {
     set({
