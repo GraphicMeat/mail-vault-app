@@ -153,7 +153,11 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: bash scripts/build-developer-id.sh
+        # Cached target/ can hold the previous release's .dmg; the upload glob
+        # would ship both.
+        run: |
+          rm -rf target/universal-apple-darwin/release/bundle
+          bash scripts/build-developer-id.sh
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
@@ -221,7 +225,12 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: npx tauri build --target x86_64-unknown-linux-gnu --bundles deb
+        # The Rust cache restores target/, which brings back the PREVIOUS release's
+        # bundle. The upload globs then ship both versions and the release job's
+        # `find | head -1` can pick the old one. Start from an empty bundle dir.
+        run: |
+          rm -rf target/x86_64-unknown-linux-gnu/release/bundle
+          npx tauri build --target x86_64-unknown-linux-gnu --bundles deb
 
       - name: Upload Linux x86_64 artifacts
         uses: actions/upload-artifact@v4
@@ -289,7 +298,12 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: npx tauri build --target aarch64-unknown-linux-gnu --bundles deb
+        # See the x86_64 job: the cached target/ carries the previous release's
+        # bundle, which is how v2.8.0's latest.json ended up pointing aarch64
+        # users at the 2.7.0 .deb.
+        run: |
+          rm -rf target/aarch64-unknown-linux-gnu/release/bundle
+          npx tauri build --target aarch64-unknown-linux-gnu --bundles deb
 
       - name: Upload Linux aarch64 artifacts
         uses: actions/upload-artifact@v4
@@ -493,14 +507,19 @@ jobs:
           fi
 
           # ── Linux x86_64 (.deb) ──
-          LX86_DEB=$(find artifacts/linux-x86_64-artifacts -name "*.deb" | head -1)
+          # Pin to this version: an unpinned `find | head -1` once picked a stale
+          # cached .deb and published a downgrade as if it were the new release.
+          # The .sig is derived from the chosen .deb, never matched separately.
+          LX86_DEB=$(find artifacts/linux-x86_64-artifacts -name "*_${VERSION_NUM}_*.deb" | head -1)
+          if [ -z "$LX86_DEB" ]; then echo "::error::No x86_64 .deb for ${VERSION_NUM}"; exit 1; fi
           LX86_DEB_NAME=$(basename "$LX86_DEB")
-          LX86_SIG=$(find artifacts/linux-x86_64-artifacts -name "*.deb.sig" 2>/dev/null | head -1 || true)
+          LX86_SIG=""; [ -f "${LX86_DEB}.sig" ] && LX86_SIG="${LX86_DEB}.sig"
 
           # ── Linux aarch64 (.deb) ──
-          LARM_DEB=$(find artifacts/linux-aarch64-artifacts -name "*.deb" | head -1)
+          LARM_DEB=$(find artifacts/linux-aarch64-artifacts -name "*_${VERSION_NUM}_*.deb" | head -1)
+          if [ -z "$LARM_DEB" ]; then echo "::error::No aarch64 .deb for ${VERSION_NUM}"; exit 1; fi
           LARM_DEB_NAME=$(basename "$LARM_DEB")
-          LARM_SIG=$(find artifacts/linux-aarch64-artifacts -name "*.deb.sig" 2>/dev/null | head -1 || true)
+          LARM_SIG=""; [ -f "${LARM_DEB}.sig" ] && LARM_SIG="${LARM_DEB}.sig"
 
           # ── Snap artifacts (may not exist if snap builds skipped) ──
           SNAP_X86=$(find artifacts/snap-x86_64-artifact -name "*.snap" 2>/dev/null | head -1 || true)
@@ -550,8 +569,19 @@ jobs:
             UPLOAD_FILES="$UPLOAD_FILES appcast.xml"
           fi
           for f in $(find artifacts/ -type f); do
+            BASE=$(basename "$f")
             # Skip appcast.xml from artifacts — already added from the copy above
-            if [ "$(basename "$f")" = "appcast.xml" ]; then continue; fi
+            if [ "$BASE" = "appcast.xml" ]; then continue; fi
+            # Never attach an installer from another version: a cached build dir
+            # can leave the previous release's .deb/.dmg/.snap behind.
+            case "$BASE" in
+              *.deb|*.deb.sig|*.dmg|*.snap)
+                if ! echo "$BASE" | grep -q "${VERSION_NUM}"; then
+                  echo "Skipping stale artifact: $BASE"
+                  continue
+                fi
+                ;;
+            esac
             UPLOAD_FILES="$UPLOAD_FILES $f"
           done
 
