@@ -61,6 +61,11 @@ export function computeDisplayEmails({ searchActive, searchResults, emails, loca
     result = combinedEmails;
   }
 
+  // Hide \Deleted-but-not-expunged messages (parity with updateSortedEmails).
+  // Archived copies stay: the local vault outranks the server's opinion about a
+  // message it hasn't actually removed.
+  result = result.filter(e => e.isArchived || !e.flags?.includes('\\Deleted'));
+
   // Sort by date descending (newest first)
   result.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
 

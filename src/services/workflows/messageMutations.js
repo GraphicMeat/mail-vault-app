@@ -318,7 +318,7 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
   get().updateSortedEmails();
 
   if (!isUnified) {
-    await db.saveEmailHeaders(accountId, mailbox, filteredEmails, newTotal);
+    await db.saveEmailHeaders(accountId, mailbox, filteredEmails, newTotal, { removedUids: [uid] });
   }
 
   if (!skipRefresh && !isUnified) get().loadEmails();
@@ -666,7 +666,9 @@ export async function moveEmails(uids, targetMailbox) {
   useMailStore.setState(updates);
 
   const { invalidateRestoreDescriptors: _invalidateRestore } = await import('../cacheManager');
-  await db.saveEmailHeaders(activeAccountId, activeMailbox, filteredEmails, newTotal);
+  // Unified keys aren't UIDs — only the per-account path can name removed UIDs.
+  await db.saveEmailHeaders(activeAccountId, activeMailbox, filteredEmails, newTotal,
+    isUnified ? undefined : { removedUids: uids });
 
   _invalidateRestore(activeAccountId);
 

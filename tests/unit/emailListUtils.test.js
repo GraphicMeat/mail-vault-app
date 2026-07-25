@@ -41,6 +41,37 @@ describe('computeDisplayEmails', () => {
   });
 
   // -----------------------------------------------------------------------
+  // \Deleted (flagged but not yet expunged)
+  // -----------------------------------------------------------------------
+  describe('\\Deleted messages', () => {
+    it('hides server messages flagged \\Deleted', () => {
+      const doomed = { ...serverEmail(2, 'deleted'), flags: ['\\Seen', '\\Deleted'] };
+      const result = computeDisplayEmails({
+        searchActive: false,
+        searchResults: [],
+        emails: [serverEmail(1, 'kept'), doomed],
+        localEmails: [],
+        archivedEmailIds: new Set(),
+        viewMode: 'all',
+      });
+      expect(result.map(e => e.uid)).toEqual([1]);
+    });
+
+    it('keeps a \\Deleted message that is archived locally', () => {
+      const doomed = { ...serverEmail(2, 'deleted but vaulted'), flags: ['\\Deleted'] };
+      const result = computeDisplayEmails({
+        searchActive: false,
+        searchResults: [],
+        emails: [serverEmail(1, 'kept'), doomed],
+        localEmails: [],
+        archivedEmailIds: new Set([2]),
+        viewMode: 'all',
+      });
+      expect(result.map(e => e.uid).sort()).toEqual([1, 2]);
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // Server mode
   // -----------------------------------------------------------------------
   describe('viewMode: server', () => {

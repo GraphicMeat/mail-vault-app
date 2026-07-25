@@ -274,6 +274,9 @@ export async function loadEmails() {
     const hasCachedSync = cachedUidValidity != null && cachedUidNext != null && existingEmails.length > 0;
 
     let mergedEmails;
+    // UIDs the delta-sync found gone server-side — the only thing allowed to
+    // delete sidecars, since the store is a window onto a larger cache.
+    let prunedUids = [];
     let serverTotal;
     let newUidValidity;
     let newUidNext;
@@ -294,6 +297,7 @@ export async function loadEmails() {
 
       if (newUidValidity !== cachedUidValidity) {
         console.log('[loadEmails] UIDVALIDITY changed (%d -> %d), full reload', cachedUidValidity, newUidValidity);
+        await db.clearMailboxCache(activeAccountId, activeMailbox);
         const serverResult = await api.fetchEmails(account, activeMailbox, 1);
         serverTotal = serverResult.total;
         mergedEmails = serverResult.emails.map((email, idx) => ({
@@ -426,6 +430,7 @@ export async function loadEmails() {
           ? serverUids.filter(uid => uid >= cachedUidNext)
           : serverUids.filter(uid => !storeUidSet.has(uid));
         const deletedUids = existingEmails.filter(e => !serverUidSet.has(e.uid)).map(e => e.uid);
+        prunedUids = deletedUids;
 
         let updatedEmails = existingEmails;
         if (deletedUids.length > 0) {
@@ -587,7 +592,8 @@ export async function loadEmails() {
       uidValidity: newUidValidity,
       uidNext: newUidNext,
       highestModseq: newHighestModseq ?? null,
-      serverUids: get().serverUidSet
+      serverUids: get().serverUidSet,
+      removedUids: prunedUids,
     }).catch(e => console.warn('[loadEmails] Failed to cache headers:', e));
 
     if (hasMoreEmails) {
@@ -672,6 +678,10 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
 
   useMailStore.setState({ loading: get().emails.length === 0, loadingMore: true, error: null });
 
+  // Snapshot before the fetch — diffed against the listing below to find
+  // messages deleted server-side.
+  const priorEmails = get().emails;
+
   try {
     const cachedMailboxEntry = await db.getCachedMailboxEntry(activeAccountId).catch(() => null);
     let mailboxes = cachedMailboxEntry?.mailboxes || get().mailboxes || [];
@@ -753,8 +763,18 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
       useSettingsStore.getState().setUnreadForAccount(activeAccountId, unread);
     }
 
+    // Graph has no UIDVALIDITY/UID SEARCH, so the only expunge signal is a
+    // message vanishing from this listing. Name the gone UIDs explicitly —
+    // nothing else prunes Graph sidecars, and a leftover one resurrects.
+    // Only the window this page covers is authoritative; below it, unknown.
+    const graphUids = new Set(mergedEmails.map(e => e.uid));
+    const lowestGraphUid = mergedEmails.reduce((min, e) => Math.min(min, e.uid), Infinity);
+    const removedUids = priorEmails
+      .filter(e => e.uid >= lowestGraphUid && !graphUids.has(e.uid))
+      .map(e => e.uid);
+
     // Descriptor saved on switch-away, not after every load
-    db.saveEmailHeaders(activeAccountId, activeMailbox, mergedEmails, serverTotal)
+    db.saveEmailHeaders(activeAccountId, activeMailbox, mergedEmails, serverTotal, { removedUids })
       .catch(e => console.warn('[loadEmailsViaGraph] Failed to cache headers:', e));
 
   } catch (error) {
@@ -849,7 +869,11 @@ export async function loadSentHeaders(accountId) {
           firstSubjects: sentHeaders.slice(0, 5).map(e => e.subject),
         });
         if (sentHeaders.length > 0) {
-          await db.saveEmailHeaders(accountId, sentPath, sentHeaders, sentHeaders.length);
+          // Only claim a total when this listing is the whole folder. With a
+          // nextLink it's one page, and writing its length as totalEmails
+          // capped the Sent list at 200 and made the delta gate see a phantom
+          // count mismatch on every sync. null = leave the cached total alone.
+          await db.saveEmailHeaders(accountId, sentPath, sentHeaders, result.nextLink ? null : sentHeaders.length);
           if (get().activeAccountId !== accountId) return;
           useMailStore.setState(s => ({
             sentEmails: _mergeOptimisticSent(sentHeaders, s.sentEmails, accountId),

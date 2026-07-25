@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### Fixed
+- **App restarts no longer re-download the mailbox.** Saving headers used to delete every cached message that wasn't in the on-screen window, so an ordinary save cut a 14,000-message cache down to 500 — and the rest was then re-fetched from the server page by page, roughly 70 IMAP round-trips on every launch. The cache is now treated as a superset of the loaded window and only drops messages that are actually gone.
+- **Read, unread and star changes now survive a restart.** Header cache writes skipped files that already existed, so a flag change updated the list but never reached disk and the old state came back on the next launch.
+- Background sync now fetches only what changed — the messages that arrived since the last sync, plus flag updates — instead of re-fetching the newest 500 headers every time. Sync metadata is also no longer wiped by routine cache saves, which had been silently forcing that full fetch.
+- Scrolling back through a large mailbox now reads from the local cache instead of re-fetching pages from the server.
+- Deleted emails are pruned from the local cache on a count mismatch and, as a backstop, on a periodic full reconciliation — so a message deleted from another device can no longer linger in the list.
+- Messages the server has flagged as deleted but not yet removed are now hidden from the list. Messages archived to your local vault stay visible either way.
+- Emails no longer reappear as duplicates or ghosts after a server rebuilds its message IDs (UIDVALIDITY change) — the stale generation is now cleared instead of merged with the new one.
+- Read and star state now refreshes on servers that don't support CONDSTORE, which previously left cached messages showing stale flags indefinitely.
+- Deletions made in Outlook/Microsoft 365 accounts are now removed from the local cache instead of reappearing on the next load.
+- The Sent folder for Outlook/Microsoft 365 accounts is no longer capped at 200 messages.
+- Loading more messages could skip about 100 emails when the list was seeded from the cache; pages now overlap and de-duplicate instead.
+
+### Internal
+- Removed a second, unused email cache implementation (`mailvault_core::cache`) and the 14 daemon RPCs that fronted it — nothing called them, and the app has always read the sidecar cache through Tauri.
+- A failed background sync no longer leaks its IMAP connection back into the pool.
+
 ## [2.7.0] - 2026-07-24
 
 ### Added

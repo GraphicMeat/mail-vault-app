@@ -230,100 +230,184 @@ impl SyncEngine {
         };
 
         let PooledSessionGuard { mut session, last_selected: _, _permit } = guard;
+        let has_condstore = self.pool.has_capability(config, "CONDSTORE").await;
 
-        // Check mailbox status — returns (exists, uid_validity, uid_next, highest_modseq)
-        let (total, uid_validity, server_uid_next, highest_modseq) =
-            match imap::check_mailbox_status(&mut session, mailbox, false).await {
-                Ok(s) => s,
-                Err(e) => {
-                    return SyncResult {
-                        account_id: account_id.clone(),
-                        mailbox: mailbox.to_string(),
-                        new_emails: 0, updated_flags: 0, total_emails: 0,
-                        success: false, error: Some(e),
-                    };
-                }
-            };
+        let outcome = self.sync_mailbox(&mut session, account, mailbox, has_condstore).await;
 
-        // Load cached metadata from Tauri's sidecar format to check if anything changed
-        let cached_uid_next = read_tauri_cache_uid_next(&self.data_dir, account_id, mailbox);
-
-        // Quick check: if uidNext hasn't changed AND cached email files exist, nothing new
-        let cache_dir = tauri_cache_dir(&self.data_dir, account_id, mailbox);
-        let sidecar_count = fs::read_dir(&cache_dir).ok()
-            .map(|entries| entries.flatten().filter(|e| {
-                let name = e.file_name().to_string_lossy().to_string();
-                name.ends_with(".json") && name != "_meta.json"
-            }).count())
-            .unwrap_or(0);
-
-        if let (Some(cached), Some(server)) = (cached_uid_next, server_uid_next) {
-            if cached == server && sidecar_count > 0 {
-                info!("[sync] No new emails for {} (uidNext unchanged: {}, {} cached files)", account.email, cached, sidecar_count);
-
-                // Return session to pool
-                let return_guard = PooledSessionGuard {
-                    session,
-                    last_selected: Some(mailbox.to_string()),
-                    _permit,
-                };
-                self.pool.return_background(config, return_guard).await;
-
-                return SyncResult {
-                    account_id: account_id.clone(),
-                    mailbox: mailbox.to_string(),
-                    new_emails: 0, updated_flags: 0, total_emails: total,
-                    success: true, error: None,
-                };
-            }
-        }
-
-        // Fetch first page of emails
-        let fetch_result = match imap::fetch_emails_page(&mut session, mailbox, 1, 500).await {
-            Ok(r) => r,
-            Err(e) => {
-                return SyncResult {
-                    account_id: account_id.clone(),
-                    mailbox: mailbox.to_string(),
-                    new_emails: 0, updated_flags: 0, total_emails: total,
-                    success: false, error: Some(e),
-                };
-            }
-        };
-
-        let (headers, _total_from_fetch, _has_more, _skipped) = fetch_result;
-
-        let new_count = headers.len();
-
-        // Write to Tauri's sidecar cache format so the app can read it directly:
-        // email_cache/{accountId}_{mailbox}/_meta.json + {uid}.json per email
-        if let Err(e) = write_tauri_cache(
-            &self.data_dir, account_id, mailbox, &headers,
-            total, uid_validity, server_uid_next, highest_modseq,
-        ) {
-            warn!("[sync] Failed to write cache for {}: {}", account.email, e);
-        }
-
-        // Feed headers into the daemon-owned contacts index.
-        self.contacts.observe_headers(account_id, mailbox, &headers);
-
-        // Return session to pool
-        let return_guard = PooledSessionGuard {
+        // Always return the session to the pool — including on error, which the
+        // old code leaked (every failed sync burned a pool slot).
+        self.pool.return_background(config, PooledSessionGuard {
             session,
             last_selected: Some(mailbox.to_string()),
             _permit,
-        };
-        self.pool.return_background(config, return_guard).await;
+        }).await;
 
-        SyncResult {
-            account_id: account_id.clone(),
-            mailbox: mailbox.to_string(),
-            new_emails: new_count,
-            updated_flags: 0,
-            total_emails: total,
-            success: true,
-            error: None,
+        match outcome {
+            Ok(delta) => SyncResult {
+                account_id: account_id.clone(),
+                mailbox: mailbox.to_string(),
+                new_emails: delta.new_emails,
+                updated_flags: delta.updated_flags,
+                total_emails: delta.total_emails,
+                success: true,
+                error: None,
+            },
+            Err(e) => SyncResult {
+                account_id: account_id.clone(),
+                mailbox: mailbox.to_string(),
+                new_emails: 0, updated_flags: 0, total_emails: 0,
+                success: false, error: Some(e),
+            },
         }
+    }
+
+    /// Delta sync for one mailbox.
+    ///
+    /// Cold cache (or UIDVALIDITY change) → one 500-header page fetch.
+    /// Warm cache → STATUS + only the UIDs above the cached UIDNEXT, plus a
+    /// CONDSTORE flag patch and an expunge prune when the counts disagree.
+    /// A typical restart is therefore a handful of headers, not 500.
+    async fn sync_mailbox(
+        &self,
+        session: &mut imap::ImapSession,
+        account: &SyncAccount,
+        mailbox: &str,
+        has_condstore: bool,
+    ) -> Result<SyncDelta, String> {
+        let account_id = &account.id;
+
+        let (total, uid_validity, server_uid_next, highest_modseq) =
+            imap::check_mailbox_status(session, mailbox, has_condstore).await?;
+
+        let cache_dir = tauri_cache_dir(&self.data_dir, account_id, mailbox);
+        let cached = read_tauri_cache_meta(&cache_dir);
+        let sidecar_count = count_sidecars(&cache_dir);
+
+        let uid_validity_ok = match (cached.as_ref().and_then(|c| c.uid_validity), uid_validity) {
+            (Some(a), Some(b)) => a == b,
+            _ => true, // unknown on either side — don't force a full reload over it
+        };
+
+        let cached_uid_next = cached.as_ref().and_then(|c| c.uid_next);
+        let can_delta = sidecar_count > 0 && uid_validity_ok && cached_uid_next.is_some();
+
+        // ── Cold path: no usable cache — fetch the first page ──
+        if !can_delta {
+            // A UIDVALIDITY change means the server re-issued its UID space:
+            // every cached UID now refers to a different message (or none).
+            // Drop the whole generation, or those ghosts outlive the reload.
+            if !uid_validity_ok {
+                warn!(
+                    "[sync] UIDVALIDITY changed for {} ({}) — clearing {} cached sidecars",
+                    account.email, mailbox, sidecar_count
+                );
+                let _ = fs::remove_dir_all(&cache_dir);
+            }
+            let (headers, _total, _has_more, _skipped) =
+                imap::fetch_emails_page(session, mailbox, 1, 500).await?;
+            let new_emails = headers.len();
+            write_cache_meta(&cache_dir, total, uid_validity, server_uid_next, highest_modseq)?;
+            write_headers(&cache_dir, &headers)?;
+            self.contacts.observe_headers(account_id, mailbox, &headers);
+            info!("[sync] Full page sync for {} ({}): {} headers", account.email, mailbox, new_emails);
+            return Ok(SyncDelta { new_emails, updated_flags: 0, total_emails: total });
+        }
+
+        // ── Delta path ──
+        let cached_uid_next = cached_uid_next.unwrap();
+        let cached_total = cached.as_ref().and_then(|c| c.total_emails).unwrap_or(0);
+        let cached_modseq = cached.as_ref().and_then(|c| c.highest_modseq);
+        let server_next = server_uid_next.unwrap_or(cached_uid_next);
+
+        // 1. New arrivals — UIDs at or above the last known UIDNEXT.
+        let mut new_headers = Vec::new();
+        if server_next > cached_uid_next {
+            let gap = server_next - cached_uid_next;
+            if gap > MAX_DELTA_UID_GAP {
+                // Too far behind for a range fetch to be cheaper than a page.
+                let (headers, _t, _h, _s) = imap::fetch_emails_page(session, mailbox, 1, 500).await?;
+                new_headers = headers;
+            } else {
+                let uids: Vec<u32> = (cached_uid_next..server_next).collect();
+                let (headers, _t) = imap::fetch_headers_by_uids(session, mailbox, &uids).await?;
+                new_headers = headers;
+            }
+        }
+
+        // 2. Flag changes — CONDSTORE tells us exactly which UIDs moved.
+        let mut updated_flags = 0;
+        match (cached_modseq, highest_modseq) {
+            (Some(cached_modseq), Some(server_modseq)) if server_modseq != cached_modseq => {
+                match imap::fetch_changed_flags(session, mailbox, cached_modseq).await {
+                    Ok(changes) => updated_flags = patch_sidecar_flags(&cache_dir, &changes),
+                    Err(e) => warn!("[sync] CHANGEDSINCE failed for {}: {}", account.email, e),
+                }
+            }
+            (Some(_), Some(_)) => {} // modseq unchanged — no flags moved
+            _ => {
+                // No CONDSTORE: nothing would ever refresh read/star state on
+                // already-cached messages. Re-read flags (no headers) for the
+                // recent window instead — one command, ~40 bytes per message.
+                let from_uid = cached_uid_next.saturating_sub(FLAG_REFRESH_WINDOW).max(1);
+                match imap::fetch_flags_from(session, mailbox, from_uid).await {
+                    Ok(flags) => updated_flags = patch_sidecar_flags(&cache_dir, &flags),
+                    Err(e) => warn!("[sync] Flag refresh failed for {}: {}", account.email, e),
+                }
+            }
+        }
+
+        // 3. Expunges — CONDSTORE cannot report them (CHANGEDSINCE reports flag
+        //    changes, never removals) and UIDNEXT does not move on delete, so the
+        //    only cheap signal is the message count: a delete anywhere in the
+        //    mailbox, oldest included, shifts EXISTS by -1 while new_headers
+        //    accounts for the arrivals.
+        //
+        //    That gate has one blind spot: if a fetch silently skips an arrival
+        //    AND the same number of messages were expunged, the counts cancel and
+        //    a deleted message would linger. So also reconcile on a timer — one
+        //    UID SEARCH ALL per RECONCILE_INTERVAL_MS bounds how long any missed
+        //    expunge can survive, at negligible cost.
+        let expected_total = cached_total + new_headers.len() as u32;
+        let counts_disagree = total != expected_total;
+        let reconcile_due = cached
+            .as_ref()
+            .and_then(|c| c.last_reconcile)
+            .map_or(true, |t| now_ms().saturating_sub(t) > RECONCILE_INTERVAL_MS);
+
+        let mut reconciled_at = cached.as_ref().and_then(|c| c.last_reconcile);
+        if counts_disagree || reconcile_due {
+            match imap::search_all_uids(session, mailbox, false).await {
+                Ok(uids) if uids.is_empty() && total > 0 => {
+                    warn!("[sync] UID SEARCH returned 0 but EXISTS={} — skipping prune", total);
+                }
+                Ok(uids) => {
+                    let pruned = prune_sidecars(&cache_dir, &uids);
+                    reconciled_at = Some(now_ms());
+                    info!(
+                        "[sync] Reconciled {} ({}): {} server UIDs, {} pruned (counts_disagree={}, due={})",
+                        account.email, mailbox, uids.len(), pruned, counts_disagree, reconcile_due
+                    );
+                }
+                Err(e) => warn!("[sync] UID SEARCH ALL failed for {}: {}", account.email, e),
+            }
+        }
+
+        write_cache_meta_full(&cache_dir, total, uid_validity, server_uid_next, highest_modseq, reconciled_at)?;
+        if !new_headers.is_empty() {
+            write_headers(&cache_dir, &new_headers)?;
+            self.contacts.observe_headers(account_id, mailbox, &new_headers);
+        }
+
+        info!(
+            "[sync] Delta sync for {} ({}): {} new, {} flag updates, {} total",
+            account.email, mailbox, new_headers.len(), updated_flags, total
+        );
+
+        Ok(SyncDelta {
+            new_emails: new_headers.len(),
+            updated_flags,
+            total_emails: total,
+        })
     }
 
     /// Get current sync state for all accounts.
@@ -352,59 +436,142 @@ fn tauri_cache_dir(data_dir: &Path, account_id: &str, mailbox: &str) -> PathBuf 
     data_dir.join("email_cache").join(cache_base_name(account_id, mailbox))
 }
 
-/// Read uidNext from Tauri's _meta.json sidecar cache.
-fn read_tauri_cache_uid_next(data_dir: &Path, account_id: &str, mailbox: &str) -> Option<u32> {
-    let meta_path = tauri_cache_dir(data_dir, account_id, mailbox).join("_meta.json");
-    let json = fs::read_to_string(&meta_path).ok()?;
-    let meta: serde_json::Value = serde_json::from_str(&json).ok()?;
-    meta.get("uidNext").and_then(|v| v.as_u64()).map(|v| v as u32)
+/// Sync metadata read back from the sidecar cache's _meta.json.
+struct CachedMeta {
+    uid_validity: Option<u32>,
+    uid_next: Option<u32>,
+    highest_modseq: Option<u64>,
+    total_emails: Option<u32>,
+    /// Epoch ms of the last UID SEARCH ALL reconcile. None = never (or the
+    /// Tauri-side cache writer overwrote _meta.json, which drops the field).
+    last_reconcile: Option<u64>,
 }
 
-/// Write email headers in Tauri's sidecar cache format.
-fn write_tauri_cache(
-    data_dir: &Path,
-    account_id: &str,
-    mailbox: &str,
-    headers: &[ImapEmailHeader],
+/// What one delta sync changed.
+struct SyncDelta {
+    new_emails: usize,
+    updated_flags: usize,
+    total_emails: u32,
+}
+
+/// A UIDNEXT jump larger than this is cheaper to resolve with a page fetch
+/// than with a sparse UID range fetch.
+const MAX_DELTA_UID_GAP: u32 = 500;
+
+/// Upper bound on how long an expunge missed by the count gate can survive.
+const RECONCILE_INTERVAL_MS: u64 = 6 * 60 * 60 * 1000; // 6h
+
+/// How far back from UIDNEXT to re-read flags on servers without CONDSTORE.
+/// Covers the window a user actually looks at without scanning the whole mailbox.
+const FLAG_REFRESH_WINDOW: u32 = 1000;
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn read_tauri_cache_meta(cache_dir: &Path) -> Option<CachedMeta> {
+    let json = fs::read_to_string(cache_dir.join("_meta.json")).ok()?;
+    let meta: serde_json::Value = serde_json::from_str(&json).ok()?;
+    Some(CachedMeta {
+        uid_validity: meta.get("uidValidity").and_then(|v| v.as_u64()).map(|v| v as u32),
+        uid_next: meta.get("uidNext").and_then(|v| v.as_u64()).map(|v| v as u32),
+        highest_modseq: meta.get("highestModseq").and_then(|v| v.as_u64()),
+        total_emails: meta.get("totalEmails").and_then(|v| v.as_u64()).map(|v| v as u32),
+        last_reconcile: meta.get("lastReconcile").and_then(|v| v.as_u64()),
+    })
+}
+
+fn count_sidecars(cache_dir: &Path) -> usize {
+    fs::read_dir(cache_dir).ok()
+        .map(|entries| entries.flatten().filter(|e| {
+            let name = e.file_name().to_string_lossy().to_string();
+            name.ends_with(".json") && name != "_meta.json"
+        }).count())
+        .unwrap_or(0)
+}
+
+fn write_cache_meta(
+    cache_dir: &Path,
     total_emails: u32,
     uid_validity: Option<u32>,
     uid_next: Option<u32>,
     highest_modseq: Option<u64>,
 ) -> Result<(), String> {
-    let dir = tauri_cache_dir(data_dir, account_id, mailbox);
-    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create cache dir: {}", e))?;
+    write_cache_meta_full(cache_dir, total_emails, uid_validity, uid_next, highest_modseq, None)
+}
 
-    // Write _meta.json
+fn write_cache_meta_full(
+    cache_dir: &Path,
+    total_emails: u32,
+    uid_validity: Option<u32>,
+    uid_next: Option<u32>,
+    highest_modseq: Option<u64>,
+    last_reconcile: Option<u64>,
+) -> Result<(), String> {
+    fs::create_dir_all(cache_dir).map_err(|e| format!("Failed to create cache dir: {}", e))?;
     let meta = serde_json::json!({
         "totalEmails": total_emails,
         "uidValidity": uid_validity,
         "uidNext": uid_next,
         "highestModseq": highest_modseq,
-        "lastSynced": chrono::Utc::now().to_rfc3339(),
+        "lastReconcile": last_reconcile,
+        // Epoch ms — matches what the Tauri-side save_email_cache writes.
+        "lastSynced": now_ms(),
     });
     let meta_json = serde_json::to_string(&meta).map_err(|e| format!("Serialize meta: {}", e))?;
-    fs::write(dir.join("_meta.json"), &meta_json).map_err(|e| format!("Write meta: {}", e))?;
+    fs::write(cache_dir.join("_meta.json"), &meta_json).map_err(|e| format!("Write meta: {}", e))
+}
 
-    // Write individual {uid}.json files (skip existing for performance)
-    let mut written = 0;
+/// Write per-UID header sidecars, overwriting existing ones — a freshly fetched
+/// header is authoritative, and on servers without CONDSTORE this is the only
+/// thing that refreshes flags on already-cached messages.
+fn write_headers(cache_dir: &Path, headers: &[ImapEmailHeader]) -> Result<(), String> {
+    fs::create_dir_all(cache_dir).map_err(|e| format!("Failed to create cache dir: {}", e))?;
     for header in headers {
-        let file_path = dir.join(format!("{}.json", header.uid));
-        if !file_path.exists() {
-            // Serialize the IMAP header as-is — it already has the right JSON shape
-            // (uid, messageId, subject, from, to, cc, date, flags, hasAttachments, etc.)
-            let email_json = serde_json::to_string(header).map_err(|e| format!("Serialize email {}: {}", header.uid, e))?;
-            fs::write(&file_path, &email_json).map_err(|e| format!("Write email {}: {}", header.uid, e))?;
-            written += 1;
+        let email_json = serde_json::to_string(header).map_err(|e| format!("Serialize email {}: {}", header.uid, e))?;
+        fs::write(cache_dir.join(format!("{}.json", header.uid)), &email_json)
+            .map_err(|e| format!("Write email {}: {}", header.uid, e))?;
+    }
+    info!("[sync] Cache written: {} headers", headers.len());
+    Ok(())
+}
+
+/// Patch the `flags` field of existing sidecars in place. Returns how many changed.
+/// UIDs without a sidecar are ignored — they arrive via the new-header fetch.
+fn patch_sidecar_flags(cache_dir: &Path, changes: &[(u32, Vec<String>)]) -> usize {
+    let mut patched = 0;
+    for (uid, flags) in changes {
+        let path = cache_dir.join(format!("{}.json", uid));
+        let Ok(data) = fs::read_to_string(&path) else { continue };
+        let Ok(mut email) = serde_json::from_str::<serde_json::Value>(&data) else { continue };
+        let new_flags = serde_json::json!(flags);
+        if email.get("flags") == Some(&new_flags) { continue }
+        let Some(obj) = email.as_object_mut() else { continue };
+        obj.insert("flags".to_string(), new_flags);
+        if let Ok(json) = serde_json::to_string(&email) {
+            if fs::write(&path, json).is_ok() { patched += 1; }
         }
     }
+    patched
+}
 
-    info!(
-        "[sync] Cache written: {} new files, {} total in {}",
-        written,
-        headers.len(),
-        cache_base_name(account_id, mailbox),
-    );
-    Ok(())
+/// Delete sidecars whose UID is no longer on the server. Returns how many.
+fn prune_sidecars(cache_dir: &Path, server_uids: &[u32]) -> usize {
+    let live: std::collections::HashSet<u32> = server_uids.iter().copied().collect();
+    let Ok(entries) = fs::read_dir(cache_dir) else { return 0 };
+    let mut pruned = 0;
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name == "_meta.json" { continue }
+        let Some(uid) = name.strip_suffix(".json").and_then(|u| u.parse::<u32>().ok()) else { continue };
+        if !live.contains(&uid) && fs::remove_file(entry.path()).is_ok() {
+            pruned += 1;
+        }
+    }
+    pruned
 }
 
 #[cfg(test)]
@@ -425,6 +592,57 @@ mod tests {
         let json = serde_json::to_string(&result).unwrap();
         assert!(json.contains("\"new_emails\":5"));
         assert!(json.contains("\"success\":true"));
+    }
+
+    fn scratch_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("mv_sync_test_{}", name));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn test_delta_cache_helpers() {
+        let dir = scratch_dir("delta");
+
+        // Meta round-trips, including highestModseq (the daemon used to drop it,
+        // which silently disabled the app's CONDSTORE fast path).
+        write_cache_meta(&dir, 42, Some(7), Some(101), Some(999)).unwrap();
+        let meta = read_tauri_cache_meta(&dir).unwrap();
+        assert_eq!(meta.total_emails, Some(42));
+        assert_eq!(meta.uid_validity, Some(7));
+        assert_eq!(meta.uid_next, Some(101));
+        assert_eq!(meta.highest_modseq, Some(999));
+        // Never reconciled → the timed reconcile must fire on the next delta.
+        assert_eq!(meta.last_reconcile, None);
+
+        write_cache_meta_full(&dir, 42, Some(7), Some(101), Some(999), Some(1_700_000_000_000)).unwrap();
+        assert_eq!(read_tauri_cache_meta(&dir).unwrap().last_reconcile, Some(1_700_000_000_000));
+
+        // Two sidecars, one seen and one unseen.
+        fs::write(dir.join("10.json"), r#"{"uid":10,"flags":["\\Seen"],"subject":"a"}"#).unwrap();
+        fs::write(dir.join("11.json"), r#"{"uid":11,"flags":[],"subject":"b"}"#).unwrap();
+        assert_eq!(count_sidecars(&dir), 2);
+
+        // Flag patch: uid 11 changes, uid 10 is already correct, uid 99 has no sidecar.
+        let patched = patch_sidecar_flags(&dir, &[
+            (10, vec!["\\Seen".to_string()]),
+            (11, vec!["\\Seen".to_string(), "\\Flagged".to_string()]),
+            (99, vec!["\\Seen".to_string()]),
+        ]);
+        assert_eq!(patched, 1);
+        let uid11: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(dir.join("11.json")).unwrap()).unwrap();
+        assert_eq!(uid11["flags"], serde_json::json!(["\\Seen", "\\Flagged"]));
+        assert_eq!(uid11["subject"], "b"); // patch must not clobber other fields
+
+        // Prune: uid 11 was expunged server-side, _meta.json must survive.
+        assert_eq!(prune_sidecars(&dir, &[10]), 1);
+        assert!(dir.join("10.json").exists());
+        assert!(!dir.join("11.json").exists());
+        assert!(dir.join("_meta.json").exists());
+
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

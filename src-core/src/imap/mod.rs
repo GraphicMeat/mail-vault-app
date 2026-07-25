@@ -661,6 +661,35 @@ pub async fn fetch_changed_flags(
     Ok(results)
 }
 
+/// Fetch flags (no headers) for every UID at or above `from_uid`.
+///
+/// The cheap fallback for servers without CONDSTORE, where `fetch_changed_flags`
+/// is unavailable and cached messages would otherwise keep stale read/star state
+/// forever. One command, ~40 bytes per message.
+pub async fn fetch_flags_from(
+    session: &mut ImapSession,
+    mailbox: &str,
+    from_uid: u32,
+) -> Result<Vec<(u32, Vec<String>)>, String> {
+    let _mbox = select_mailbox(session, mailbox).await?;
+
+    let fetch_stream = session
+        .uid_fetch(&format!("{}:*", from_uid), "(UID FLAGS)")
+        .await
+        .map_err(|e| format!("UID FETCH flags from {} failed: {}", from_uid, e))?;
+
+    let results: Vec<(u32, Vec<String>)> = fetch_stream
+        .collect::<Vec<_>>()
+        .await
+        .into_iter()
+        .filter_map(|r| r.ok())
+        .filter_map(|fetch| fetch.uid.map(|uid| (uid, extract_flags(&fetch))))
+        .collect();
+
+    info!("[IMAP] Fetched flags for {} UIDs from {}", results.len(), from_uid);
+    Ok(results)
+}
+
 /// UID SEARCH ALL — returns every UID in the mailbox (ascending order).
 /// Used for delta-sync: diff against cached UID set to find additions/deletions.
 ///

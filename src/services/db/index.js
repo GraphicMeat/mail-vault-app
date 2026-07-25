@@ -47,6 +47,7 @@ export {
   getCachedMailboxEntry,
   getCachedMailboxes,
   saveEmailHeaders,
+  clearMailboxCache,
   getEmailHeadersPartial,
   getEmailHeadersMeta,
   getEmailHeaders,

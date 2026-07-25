@@ -75,7 +75,14 @@ export async function getCachedMailboxes(accountId) {
 
 // ── Email header cache ───────────────────────────────────────────────────
 
-export async function saveEmailHeaders(accountId, mailbox, emails, totalEmails, { uidValidity, uidNext, highestModseq, serverUids } = {}) {
+/**
+ * Persist headers to the sidecar cache.
+ *
+ * The cache is a superset of `emails` — it holds the whole mailbox while the
+ * store holds a window of it. Omitted metadata is left untouched on disk, and
+ * nothing is deleted unless `removedUids` names it explicitly.
+ */
+export async function saveEmailHeaders(accountId, mailbox, emails, totalEmails, { uidValidity, uidNext, highestModseq, serverUids, removedUids } = {}) {
   const cacheEntry = {
     accountId,
     mailbox,
@@ -85,6 +92,7 @@ export async function saveEmailHeaders(accountId, mailbox, emails, totalEmails, 
     uidNext: uidNext ?? null,
     highestModseq: highestModseq ?? null,
     serverUids: serverUids ? Array.from(serverUids) : undefined,
+    removedUids: removedUids?.length ? Array.from(removedUids) : undefined,
     lastSynced: Date.now()
   };
 
@@ -115,6 +123,20 @@ export async function saveEmailHeaders(accountId, mailbox, emails, totalEmails, 
   }
 
   return cacheEntry;
+}
+
+/**
+ * Drop every cached header for one mailbox. Only for UIDVALIDITY changes —
+ * the server re-issued its UID space, so cached UIDs now point at other
+ * messages (or nothing) and merging would mix two generations.
+ */
+export async function clearMailboxCache(accountId, mailbox) {
+  if (!invoke) return;
+  try {
+    await invoke('clear_email_cache', { accountId, mailbox });
+  } catch (error) {
+    console.warn('[db.js] Failed to clear mailbox cache:', error);
+  }
 }
 
 export async function getEmailHeadersPartial(accountId, mailbox, limit = 200) {

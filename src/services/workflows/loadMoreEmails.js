@@ -14,6 +14,38 @@ import { mergeRanges, evictExcess } from './helpers/rangeLoading';
 const _rangeRetryDelays = new Map();
 
 
+const PAGE_SIZE = 200;
+
+/**
+ * Drain everything the sidecar cache holds beyond what's already in the store,
+ * in ONE read. Returns null when the cache has nothing left to give, so the
+ * caller falls back to server pagination for the remainder.
+ */
+async function _drainCache(accountId, mailbox, loadedCount) {
+  try {
+    const meta = await db.getEmailHeadersMeta(accountId, mailbox);
+    const totalCached = meta?.totalCached || 0;
+    if (totalCached <= loadedCount) return null;
+
+    const cached = await db.getEmailHeadersPartial(accountId, mailbox, totalCached);
+    const rest = cached?.emails?.slice(loadedCount);
+    if (!rest?.length) return null;
+
+    const loaded = loadedCount + rest.length;
+    const total = Math.max(meta?.totalEmails || 0, loaded);
+    return {
+      emails: rest.map(e => ({ ...e, source: e.source || 'cache' })),
+      total,
+      loaded,
+      hasMore: loaded < total,
+    };
+  } catch (e) {
+    console.warn('[loadMoreEmails] Cache drain failed, falling back to server:', e);
+    return null;
+  }
+}
+
+
 // ── loadMoreEmails workflow ──
 
 export async function loadMoreEmails() {
@@ -38,6 +70,46 @@ export async function loadMoreEmails() {
 
   try {
     const nextPage = currentPage + 1;
+
+    // Cache-first: the sidecar cache usually already holds the whole mailbox,
+    // so paginating from the server re-downloads headers we have on disk —
+    // on a 14k inbox that was ~70 IMAP round-trips (each re-saving the whole
+    // header list) after every launch.
+    const drained = await _drainCache(activeAccountId, activeMailbox, emails.length);
+    if (drained) {
+      const current = get();
+      if (current.activeAccountId !== activeAccountId || current.activeMailbox !== activeMailbox) {
+        useMailStore.setState({ loadingMore: false });
+        return;
+      }
+      // Dedupe against the live store — activateAccount may have committed
+      // headers while the cache read was in flight.
+      const loadedUids = new Set(current.emails.map(e => e.uid));
+      const freshCached = drained.emails.filter(e => !loadedUids.has(e.uid));
+      const updatedServerUidSet = new Set(current.serverUidSet);
+      for (const e of drained.emails) updatedServerUidSet.add(e.uid);
+      useMailStore.setState({
+        emails: [...current.emails, ...freshCached],
+        // floor, not ceil: a partial page must be re-requested from the server
+        // (overlap is deduped below) or the next page would skip messages.
+        currentPage: Math.floor(drained.loaded / PAGE_SIZE),
+        hasMoreEmails: drained.hasMore,
+        totalEmails: drained.total,
+        loadingMore: false,
+        serverUidSet: updatedServerUidSet,
+      });
+      get().updateSortedEmails();
+      // No saveEmailHeaders — these headers came from that very cache.
+      console.log('[loadMoreEmails] Drained %d headers from cache (%d/%d loaded)',
+        drained.emails.length, drained.loaded, drained.total);
+      if (drained.hasMore) {
+        const timer = getLoadMoreTimer();
+        if (timer) clearTimeout(timer);
+        setLoadMoreTimer(setTimeout(() => { setLoadMoreTimer(null); get().loadMoreEmails(); }, 200));
+      }
+      return;
+    }
+
     const serverResult = await api.fetchEmails(account, activeMailbox, nextPage);
 
     useMailStore.setState({ _loadMoreRetryDelay: 0 });
@@ -57,7 +129,11 @@ export async function loadMoreEmails() {
         return;
       }
 
-      const newEmails = [...current.emails, ...serverResult.emails];
+      // Dedupe: a page can overlap what's already loaded when the store was
+      // seeded from a cache whose size isn't a multiple of PAGE_SIZE.
+      const existingUids = new Set(current.emails.map(e => e.uid));
+      const freshEmails = serverResult.emails.filter(e => !existingUids.has(e.uid));
+      const newEmails = [...current.emails, ...freshEmails];
       const updatedServerUidSet = new Set(current.serverUidSet);
       for (const e of serverResult.emails) updatedServerUidSet.add(e.uid);
       useMailStore.setState({

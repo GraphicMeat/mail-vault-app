@@ -220,25 +220,11 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
         "maildir.set_flags" => handle_maildir_set_flags(&state.data_dir, req.params, id),
         "maildir.storage_stats" => handle_maildir_storage_stats(&state.data_dir, req.params, id),
 
-        // ── Cache operations ────────────────────────────────────────
-        "cache.save_headers" => handle_cache_save(&state.data_dir, req.params, id),
-        "cache.load_full" => handle_cache_load_full(&state.data_dir, req.params, id),
-        "cache.load_meta" => handle_cache_load_meta(&state.data_dir, req.params, id),
-        "cache.load_partial" => handle_cache_load_partial(&state.data_dir, req.params, id),
-        "cache.load_by_uids" => handle_cache_load_by_uids(&state.data_dir, req.params, id),
-        "cache.clear" => handle_cache_clear(&state.data_dir, req.params, id),
-        "cache.save_mailboxes" => handle_cache_save_mailboxes(&state.data_dir, req.params, id),
-        "cache.load_mailboxes" => handle_cache_load_mailboxes(&state.data_dir, req.params, id),
-        "cache.delete_mailboxes" => handle_cache_delete_mailboxes(&state.data_dir, req.params, id),
-
-        // ── Local index ─────────────────────────────────────────────
-        "local_index.read" => handle_local_index_read(&state.data_dir, req.params, id),
-        "local_index.append" => handle_local_index_append(&state.data_dir, req.params, id),
-        "local_index.remove" => handle_local_index_remove(&state.data_dir, req.params, id),
-
-        // ── Graph ID map ────────────────────────────────────────────
-        "graph_id_map.save" => handle_graph_id_map_save(&state.data_dir, req.params, id),
-        "graph_id_map.load" => handle_graph_id_map_load(&state.data_dir, req.params, id),
+        // Cache / local index / Graph ID map RPCs removed: they were backed by
+        // mailvault_core::cache, a second cache format at a different path that
+        // nothing ever read. transport.js routes every cache operation to the
+        // Tauri sidecar implementation, and the daemon writes that same format
+        // from sync_engine.
 
         "snapshot.create" => handle_snapshot_create(&state.data_dir, req.params, id),
         "snapshot.create_from_maildir" => handle_snapshot_create_from_maildir(&state.data_dir, req.params, id),
@@ -401,56 +387,6 @@ fn handle_maildir_storage_stats(data_dir: &Path, params: Value, id: Value) -> Rp
     RpcResponse::success(id, serde_json::to_value(stats).unwrap())
 }
 
-fn handle_cache_save(data_dir: &Path, params: Value, id: Value) -> RpcResponse {
-    let account_id = params.get("accountId").and_then(|v| v.as_str()).unwrap_or("");
-    let mailbox = params.get("mailbox").and_then(|v| v.as_str()).unwrap_or("INBOX");
-
-    let headers: Vec<mailvault_core::types::EmailHeader> = match params.get("headers").and_then(|v| serde_json::from_value(v.clone()).ok()) {
-        Some(h) => h,
-        None => return RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing headers"),
-    };
-
-    let meta: mailvault_core::cache::CacheMeta = params.get("meta")
-        .and_then(|v| serde_json::from_value(v.clone()).ok())
-        .unwrap_or_default();
-
-    match mailvault_core::cache::save_headers(data_dir, account_id, mailbox, &headers, meta) {
-        Ok(()) => RpcResponse::success(id, serde_json::json!({"saved": true})),
-        Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
-    }
-}
-
-fn handle_cache_load_meta(data_dir: &Path, params: Value, id: Value) -> RpcResponse {
-    let account_id = params.get("accountId").and_then(|v| v.as_str()).unwrap_or("");
-    let mailbox = params.get("mailbox").and_then(|v| v.as_str()).unwrap_or("INBOX");
-
-    match mailvault_core::cache::load_meta(data_dir, account_id, mailbox) {
-        Some(meta) => RpcResponse::success(id, serde_json::to_value(meta).unwrap()),
-        None => RpcResponse::success(id, Value::Null),
-    }
-}
-
-fn handle_cache_load_partial(data_dir: &Path, params: Value, id: Value) -> RpcResponse {
-    let account_id = params.get("accountId").and_then(|v| v.as_str()).unwrap_or("");
-    let mailbox = params.get("mailbox").and_then(|v| v.as_str()).unwrap_or("INBOX");
-    let limit = params.get("limit").and_then(|v| v.as_u64()).unwrap_or(500) as usize;
-
-    match mailvault_core::cache::load_partial(data_dir, account_id, mailbox, limit) {
-        Some(entry) => RpcResponse::success(id, serde_json::to_value(entry).unwrap()),
-        None => RpcResponse::success(id, Value::Null),
-    }
-}
-
-fn handle_cache_clear(data_dir: &Path, params: Value, id: Value) -> RpcResponse {
-    let account_id = params.get("accountId").and_then(|v| v.as_str()).unwrap_or("");
-    let mailbox = params.get("mailbox").and_then(|v| v.as_str()).unwrap_or("INBOX");
-
-    match mailvault_core::cache::clear(data_dir, account_id, mailbox) {
-        Ok(()) => RpcResponse::success(id, serde_json::json!({"cleared": true})),
-        Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
-    }
-}
-
 // ── New Maildir handlers (Phase 2) ──────────────────────────────────────────
 
 fn handle_maildir_read_full(data_dir: &Path, params: Value, id: Value) -> RpcResponse {
@@ -522,104 +458,6 @@ fn handle_maildir_set_flags(data_dir: &Path, params: Value, id: Value) -> RpcRes
     match mailvault_core::maildir::set_flags(data_dir, account_id, mailbox, uid, &flags) {
         Ok(()) => RpcResponse::success(id, serde_json::json!({"updated": true})),
         Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
-    }
-}
-
-// ── New Cache handlers (Phase 2) ────────────────────────────────────────────
-
-fn handle_cache_load_full(data_dir: &Path, params: Value, id: Value) -> RpcResponse {
-    let account_id = params.get("accountId").and_then(|v| v.as_str()).unwrap_or("");
-    let mailbox = params.get("mailbox").and_then(|v| v.as_str()).unwrap_or("INBOX");
-    match mailvault_core::cache::load_full(data_dir, account_id, mailbox) {
-        Some(entry) => RpcResponse::success(id, serde_json::to_value(entry).unwrap()),
-        None => RpcResponse::success(id, Value::Null),
-    }
-}
-
-fn handle_cache_load_by_uids(data_dir: &Path, params: Value, id: Value) -> RpcResponse {
-    let account_id = params.get("accountId").and_then(|v| v.as_str()).unwrap_or("");
-    let mailbox = params.get("mailbox").and_then(|v| v.as_str()).unwrap_or("INBOX");
-    let uids: Vec<u32> = params.get("uids")
-        .and_then(|v| serde_json::from_value(v.clone()).ok())
-        .unwrap_or_default();
-    let results = mailvault_core::cache::load_by_uids(data_dir, account_id, mailbox, &uids);
-    RpcResponse::success(id, serde_json::to_value(results).unwrap())
-}
-
-fn handle_cache_save_mailboxes(data_dir: &Path, params: Value, id: Value) -> RpcResponse {
-    let account_id = params.get("accountId").and_then(|v| v.as_str()).unwrap_or("");
-    let mailboxes = params.get("mailboxes").cloned().unwrap_or(Value::Null);
-    match mailvault_core::cache::save_mailboxes(data_dir, account_id, &mailboxes) {
-        Ok(()) => RpcResponse::success(id, serde_json::json!({"saved": true})),
-        Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
-    }
-}
-
-fn handle_cache_load_mailboxes(data_dir: &Path, params: Value, id: Value) -> RpcResponse {
-    let account_id = params.get("accountId").and_then(|v| v.as_str()).unwrap_or("");
-    match mailvault_core::cache::load_mailboxes(data_dir, account_id) {
-        Some(data) => RpcResponse::success(id, data),
-        None => RpcResponse::success(id, Value::Null),
-    }
-}
-
-fn handle_cache_delete_mailboxes(data_dir: &Path, params: Value, id: Value) -> RpcResponse {
-    let account_id = params.get("accountId").and_then(|v| v.as_str()).unwrap_or("");
-    match mailvault_core::cache::delete_mailbox_cache(data_dir, account_id) {
-        Ok(()) => RpcResponse::success(id, serde_json::json!({"deleted": true})),
-        Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
-    }
-}
-
-// ── Local index handlers ────────────────────────────────────────────────────
-
-fn handle_local_index_read(data_dir: &Path, params: Value, id: Value) -> RpcResponse {
-    let account_id = params.get("accountId").and_then(|v| v.as_str()).unwrap_or("");
-    let mailbox = params.get("mailbox").and_then(|v| v.as_str()).unwrap_or("INBOX");
-    match mailvault_core::cache::read_local_index(data_dir, account_id, mailbox) {
-        Some(data) => RpcResponse::success(id, data),
-        None => RpcResponse::success(id, Value::Null),
-    }
-}
-
-fn handle_local_index_append(data_dir: &Path, params: Value, id: Value) -> RpcResponse {
-    let account_id = params.get("accountId").and_then(|v| v.as_str()).unwrap_or("");
-    let mailbox = params.get("mailbox").and_then(|v| v.as_str()).unwrap_or("INBOX");
-    let entries = params.get("entries").cloned().unwrap_or(Value::Null);
-    match mailvault_core::cache::append_local_index(data_dir, account_id, mailbox, &entries) {
-        Ok(()) => RpcResponse::success(id, serde_json::json!({"appended": true})),
-        Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
-    }
-}
-
-fn handle_local_index_remove(data_dir: &Path, params: Value, id: Value) -> RpcResponse {
-    let account_id = params.get("accountId").and_then(|v| v.as_str()).unwrap_or("");
-    let mailbox = params.get("mailbox").and_then(|v| v.as_str()).unwrap_or("INBOX");
-    let uids: Vec<u32> = params.get("uids")
-        .and_then(|v| serde_json::from_value(v.clone()).ok())
-        .unwrap_or_default();
-    match mailvault_core::cache::remove_from_local_index(data_dir, account_id, mailbox, &uids) {
-        Ok(()) => RpcResponse::success(id, serde_json::json!({"removed": true})),
-        Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
-    }
-}
-
-// ── Graph ID map handlers ───────────────────────────────────────────────────
-
-fn handle_graph_id_map_save(data_dir: &Path, params: Value, id: Value) -> RpcResponse {
-    let account_id = params.get("accountId").and_then(|v| v.as_str()).unwrap_or("");
-    let map = params.get("map").cloned().unwrap_or(Value::Null);
-    match mailvault_core::cache::save_graph_id_map(data_dir, account_id, &map) {
-        Ok(()) => RpcResponse::success(id, serde_json::json!({"saved": true})),
-        Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
-    }
-}
-
-fn handle_graph_id_map_load(data_dir: &Path, params: Value, id: Value) -> RpcResponse {
-    let account_id = params.get("accountId").and_then(|v| v.as_str()).unwrap_or("");
-    match mailvault_core::cache::load_graph_id_map(data_dir, account_id) {
-        Some(data) => RpcResponse::success(id, data),
-        None => RpcResponse::success(id, Value::Null),
     }
 }
 

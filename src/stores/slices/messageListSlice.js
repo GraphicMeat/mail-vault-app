@@ -155,6 +155,12 @@ export const createMessageListSlice = (set, get) => ({
       }
     }
 
+    // Hide messages the server flagged \Deleted but hasn't expunged yet. They
+    // still count in EXISTS, so the list total can read one or two higher than
+    // the rows shown. Archived copies stay visible — the local vault outranks
+    // the server's opinion about a message it hasn't actually removed.
+    result = result.filter(e => e.isArchived || !e.flags?.includes('\\Deleted'));
+
     // Drop tombstoned (deleted-but-not-yet-reconciled) emails — stale cache
     // hydration on account/folder switch must not resurrect them.
     if (deleteTombstones?.size) {

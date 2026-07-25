@@ -744,50 +744,62 @@ async fn save_email_cache(app_handle: tauri::AppHandle, account_id: String, mail
     let parsed: serde_json::Value = serde_json::from_str(&data)
         .map_err(|e| format!("Failed to parse cache JSON: {}", e))?;
 
-    // Write _meta.json
-    let meta = serde_json::json!({
-        "totalEmails": parsed.get("totalEmails"),
-        "uidValidity": parsed.get("uidValidity"),
-        "uidNext": parsed.get("uidNext"),
-        "highestModseq": parsed.get("highestModseq"),
-        "lastSynced": parsed.get("lastSynced")
-    });
+    // Write _meta.json, preserving fields the caller didn't supply.
+    //
+    // Most callers pass only (emails, totalEmails) — writing their missing
+    // uidValidity/uidNext/highestModseq as null wiped the sync metadata the
+    // daemon and the delta-sync path depend on, forcing a full page fetch on
+    // the next sync. Null now means "unchanged", not "clear it".
+    let meta_path = sidecar_dir.join("_meta.json");
+    let mut meta = fs::read_to_string(&meta_path)
+        .ok()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+        .unwrap_or_else(|| serde_json::json!({}));
+    if let Some(obj) = meta.as_object_mut() {
+        for key in ["totalEmails", "uidValidity", "uidNext", "highestModseq", "lastSynced"] {
+            match parsed.get(key) {
+                Some(v) if !v.is_null() => { obj.insert(key.to_string(), v.clone()); }
+                _ => {}
+            }
+        }
+    }
     let meta_json = serde_json::to_string(&meta)
         .map_err(|e| format!("save_email_cache: failed to serialize _meta.json: {}", e))?;
-    fs::write(sidecar_dir.join("_meta.json"), meta_json)
+    fs::write(&meta_path, meta_json)
         .map_err(|e| format!("save_email_cache: failed to write _meta.json: {}", e))?;
 
-    // Write individual email files (skip existing for performance)
-    let mut valid_uids = std::collections::HashSet::new();
+    // Write individual email files. Overwrite: the caller's copy carries the
+    // current flags, and skipping existing files meant a read/star/unread
+    // change never reached disk.
     if let Some(emails) = parsed.get("emails").and_then(|e| e.as_array()) {
         let mut written = 0usize;
         for email in emails {
             if let Some(uid) = email.get("uid").and_then(|u| u.as_u64()) {
-                let uid_str = uid.to_string();
-                valid_uids.insert(uid_str.clone());
-                let file_path = sidecar_dir.join(format!("{}.json", uid_str));
-                if !file_path.exists() {
-                    let email_json = serde_json::to_string(email)
-                        .map_err(|e| format!("save_email_cache: failed to serialize email {}: {}", uid, e))?;
-                    fs::write(&file_path, email_json)
-                        .map_err(|e| format!("save_email_cache: failed to write email {}: {}", uid, e))?;
-                    written += 1;
-                }
+                let email_json = serde_json::to_string(email)
+                    .map_err(|e| format!("save_email_cache: failed to serialize email {}: {}", uid, e))?;
+                fs::write(sidecar_dir.join(format!("{}.json", uid)), email_json)
+                    .map_err(|e| format!("save_email_cache: failed to write email {}: {}", uid, e))?;
+                written += 1;
             }
         }
-        info!("Email cache saved: {} new files, {} total UIDs in {}", written, valid_uids.len(), base_name);
+        info!("Email cache saved: {} files in {}", written, base_name);
     }
 
-    // Clean up stale UID files (UIDs no longer in the list)
-    if let Ok(entries) = fs::read_dir(&sidecar_dir) {
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            if name == "_meta.json" { continue; }
-            if let Some(uid) = name.strip_suffix(".json") {
-                if !valid_uids.contains(uid) {
-                    let _ = fs::remove_file(entry.path());
-                }
+    // Remove only UIDs the caller explicitly says are gone.
+    //
+    // This used to delete every sidecar not present in `emails` — but the store
+    // holds ~500 headers while the cache holds the whole mailbox, so an ordinary
+    // save truncated a 14k-message cache to 500. The list was then re-downloaded
+    // from the server page by page, which is what made restarts slow.
+    if let Some(removed) = parsed.get("removedUids").and_then(|v| v.as_array()) {
+        let mut deleted = 0usize;
+        for uid in removed.iter().filter_map(|v| v.as_u64()) {
+            if fs::remove_file(sidecar_dir.join(format!("{}.json", uid))).is_ok() {
+                deleted += 1;
             }
+        }
+        if deleted > 0 {
+            info!("Email cache: removed {} expunged sidecars in {}", deleted, base_name);
         }
     }
 
@@ -1072,6 +1084,9 @@ fn load_from_sidecars(sidecar_dir: &Path, meta_file: &Path, limit: Option<usize>
         "totalCached": total_cached,
         "uidValidity": meta.get("uidValidity"),
         "uidNext": meta.get("uidNext"),
+        // Was omitted, so getEmailHeadersPartial().highestModseq always read null —
+        // any caller trusting it would silently lose the CONDSTORE fast path.
+        "highestModseq": meta.get("highestModseq"),
         "lastSynced": meta.get("lastSynced")
     });
 
@@ -1140,7 +1155,7 @@ fn load_email_cache_meta(app_handle: tauri::AppHandle, account_id: String, mailb
 }
 
 #[tauri::command]
-fn clear_email_cache(app_handle: tauri::AppHandle, account_id: Option<String>) -> Result<(), String> {
+fn clear_email_cache(app_handle: tauri::AppHandle, account_id: Option<String>, mailbox: Option<String>) -> Result<(), String> {
     let cache_dir = app_handle
         .path()
         .app_data_dir()
@@ -1148,6 +1163,18 @@ fn clear_email_cache(app_handle: tauri::AppHandle, account_id: Option<String>) -
         .join("email_cache");
 
     if !cache_dir.exists() {
+        return Ok(());
+    }
+
+    // Single mailbox — used when UIDVALIDITY changes and every cached UID in
+    // that mailbox now refers to a different message.
+    if let (Some(account_id), Some(mailbox)) = (account_id.as_ref(), mailbox.as_ref()) {
+        let dir = cache_dir.join(cache_base_name(account_id, mailbox));
+        if dir.exists() {
+            fs::remove_dir_all(&dir)
+                .map_err(|e| format!("Failed to clear mailbox cache: {}", e))?;
+            info!("Cleared cache for {}/{}", account_id, mailbox);
+        }
         return Ok(());
     }
 

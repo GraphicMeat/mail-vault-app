@@ -634,6 +634,22 @@ export async function activateAccount(accountId, mailbox, options = {}) {
                 isLocal: get().savedEmailIds.has(e.uid),
                 isArchived: get().archivedEmailIds.has(e.uid),
               }));
+
+              // Drop rows the daemon pruned as expunged. merge() alone can't do
+              // this — it never removes. Only prune within the UID range this
+              // read actually covers: below its lowest UID we have no evidence,
+              // and the read is capped at 500 while uidMap may hold far more.
+              const freshUids = new Set(freshCache.emails.map(e => e.uid));
+              const lowestFresh = freshCache.emails.reduce((min, e) => Math.min(min, e.uid), Infinity);
+              let pruned = 0;
+              for (const email of uidMap.toSortedArray()) {
+                if (email.uid >= lowestFresh && !freshUids.has(email.uid)) {
+                  uidMap.delete(email.uid);
+                  pruned++;
+                }
+              }
+              if (pruned > 0) console.log('[activateAccount] Dropped %d expunged rows after daemon sync', pruned);
+
               uidMap.merge(headersWithSource);
               if (freshCache.uidValidity != null) uidMap.checkUidValidity(freshCache.uidValidity);
 
@@ -662,8 +678,9 @@ export async function activateAccount(accountId, mailbox, options = {}) {
                 }
               }
 
-              db.saveEmailHeaders(accountId, effectiveMailbox, uidMap.toSortedArray(), freshCache.totalEmails || freshCache.emails.length)
-                .catch(e => console.warn('[activateAccount] Failed to persist headers:', e));
+              // No saveEmailHeaders here — uidMap holds exactly what the daemon
+              // just wrote to the sidecar cache, so re-persisting it is pure
+              // write amplification.
             }
 
             serverTrace.end('daemon-sync-done', { emailCount: freshCache?.emails?.length || 0 });
@@ -722,6 +739,9 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       let newUidValidity;
       let newUidNext;
       let newHighestModseq;
+      // UIDs the delta-sync found gone server-side — the only thing allowed to
+      // delete sidecars, since the store is a window onto a larger cache.
+      let prunedUids = [];
       const savedEmailIds = get().savedEmailIds;
 
       if (hasCachedSync) {
@@ -742,6 +762,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
           console.log('[activateAccount] UIDVALIDITY changed (%d -> %d), full reload', cachedUidValidity, newUidValidity);
           uidMap.invalidate();
           uidMap.checkUidValidity(newUidValidity);
+          await db.clearMailboxCache(accountId, effectiveMailbox);
           const serverResult = await api.fetchEmails(account, effectiveMailbox, 1);
           if (signal.aborted) return;
           serverTotal = serverResult.total;
@@ -836,6 +857,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
           for (const email of existingEmails) {
             if (!serverUidSet.has(email.uid)) {
               uidMap.delete(email.uid);
+              prunedUids.push(email.uid);
             }
           }
 
@@ -911,6 +933,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
         uidNext: newUidNext,
         highestModseq: newHighestModseq ?? null,
         serverUids: get().serverUidSet,
+        removedUids: prunedUids,
       }).catch(e => console.warn('[activateAccount] Failed to cache headers:', e));
 
       if (sorted.length < serverTotal) {
