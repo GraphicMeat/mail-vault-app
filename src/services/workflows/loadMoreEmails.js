@@ -3,6 +3,7 @@
 import * as db from '../db';
 import * as api from '../api';
 import { ensureFreshToken, resolveServerAccount } from '../authUtils';
+import { getSyncStatus } from '../syncService';
 import { saveRestoreDescriptor as _saveRestore } from '../cacheManager';
 import { _buildRestoreDescriptor } from '../../stores/slices/unifiedHelpers';
 import {
@@ -42,6 +43,23 @@ async function _drainCache(accountId, mailbox, loadedCount) {
   } catch (e) {
     console.warn('[loadMoreEmails] Cache drain failed, falling back to server:', e);
     return null;
+  }
+}
+
+
+/**
+ * True while the daemon is still filling this mailbox's cache from the server.
+ * Checks the cheap local signal first — a cache that already covers the mailbox
+ * can't be mid-backfill, so healthy mailboxes never pay for an RPC.
+ */
+async function _daemonIsBackfilling(accountId, mailbox) {
+  try {
+    const meta = await db.getEmailHeadersMeta(accountId, mailbox);
+    if (!meta?.totalEmails || (meta.totalCached || 0) >= meta.totalEmails) return false;
+    const status = await getSyncStatus(accountId);
+    return !!status?.backfilling;
+  } catch {
+    return false; // daemon down or RPC failed — fall through to server pagination
   }
 }
 
@@ -110,6 +128,18 @@ export async function loadMoreEmails() {
       return;
     }
 
+    // The cache has nothing left, but is it actually complete? A restored or
+    // migrated mailbox can hold 500 sidecars out of 15,000 — the daemon fills
+    // the rest in the background, and paginating the server in parallel would
+    // just re-download what it is already writing.
+    if (await _daemonIsBackfilling(activeAccountId, activeMailbox)) {
+      useMailStore.setState({ loadingMore: false });
+      const timer = getLoadMoreTimer();
+      if (timer) clearTimeout(timer);
+      setLoadMoreTimer(setTimeout(() => { setLoadMoreTimer(null); get().loadMoreEmails(); }, 1000));
+      return;
+    }
+
     const serverResult = await api.fetchEmails(account, activeMailbox, nextPage);
 
     useMailStore.setState({ _loadMoreRetryDelay: 0 });
@@ -147,9 +177,14 @@ export async function loadMoreEmails() {
 
       get().updateSortedEmails();
 
-      // Descriptor saved on switch-away, not on every page load
-      db.saveEmailHeaders(activeAccountId, activeMailbox, newEmails, serverResult.total)
-        .catch(e => console.warn('[loadMoreEmails] Failed to cache headers:', e));
+      // Persist only this page. The cache is per-UID sidecars and a superset of
+      // the store, so re-writing the whole accumulated list every page made the
+      // save quadratic — page N rewrote N×200 files (~540k writes for a 15k
+      // mailbox), which is most of what made a cold backfill feel endless.
+      if (freshEmails.length) {
+        db.saveEmailHeaders(activeAccountId, activeMailbox, freshEmails, serverResult.total)
+          .catch(e => console.warn('[loadMoreEmails] Failed to cache headers:', e));
+      }
 
       if (serverResult.skippedUids && serverResult.skippedUids.length > 0) {
         console.warn(`[loadMoreEmails] ${serverResult.skippedUids.length} messages skipped on page ${nextPage}, will re-request`);
@@ -266,8 +301,11 @@ export async function loadEmailRange(startIndex, endIndex) {
 
       get().updateSortedEmails();
 
-      db.saveEmailHeaders(activeAccountId, activeMailbox, finalEmails, result.total)
-        .catch(e => console.warn('[loadEmailRange] Failed to cache headers:', e));
+      // Only the range just fetched — see the note in loadMoreEmails.
+      if (newEntries.length) {
+        db.saveEmailHeaders(activeAccountId, activeMailbox, newEntries, result.total)
+          .catch(e => console.warn('[loadEmailRange] Failed to cache headers:', e));
+      }
 
       if (result.skippedUids && result.skippedUids.length > 0) {
         console.warn(`[loadEmailRange] ${result.skippedUids.length} messages skipped, scheduling retry for range ${startIndex}-${endIndex}`);

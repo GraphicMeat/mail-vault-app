@@ -35,3 +35,14 @@ export async function waitForSync(accountId, timeoutMs = 30000) {
   return daemonCall('sync.wait', { accountId, timeoutMs });
 }
 
+/**
+ * Current sync state for an account, including `backfilling` — true while the
+ * daemon is still filling a partly-cached mailbox from the server.
+ *
+ * @param {string} accountId
+ * @returns {Promise<{ status, backfilling: boolean, total_emails?: number }>}
+ */
+export async function getSyncStatus(accountId) {
+  return daemonCall('sync.status', { accountId });
+}
+

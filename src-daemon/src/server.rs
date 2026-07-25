@@ -778,6 +778,16 @@ async fn handle_sync_now(state: Arc<DaemonState>, params: Value, id: Value) -> R
             info!("[sync] Enqueuing post-sync classification for {}", account_id);
             enqueue_for_classification(Arc::clone(&state), &account_id, classification::QueueTier::New).await;
         }
+
+        // Cold or partly-filled cache (a restored/migrated mailbox, or one the
+        // app only ever paginated part of) — fill it here, once, instead of
+        // letting the app re-page the whole mailbox off the server every launch.
+        if result.success {
+            let short = state.sync_engine.sidecar_shortfall(&account_id, &mailbox_clone, result.total_emails);
+            if short > 0 {
+                state.sync_engine.backfill_mailbox(&account, &mailbox_clone).await;
+            }
+        }
     });
 
     RpcResponse::success(id, serde_json::json!({"started": true, "accountId": response_account_id, "mailbox": mailbox}))
@@ -798,9 +808,16 @@ async fn handle_sync_wait(engine: Arc<sync_engine::SyncEngine>, params: Value, i
 
 async fn handle_sync_status(engine: &sync_engine::SyncEngine, params: Value, id: Value) -> RpcResponse {
     if let Some(account_id) = params.get("accountId").and_then(|v| v.as_str()) {
+        let backfilling = engine.is_backfilling(account_id).await;
         match engine.get_state(account_id).await {
-            Some(state) => RpcResponse::success(id, serde_json::to_value(state).unwrap()),
-            None => RpcResponse::success(id, serde_json::json!({"status": "unknown"})),
+            Some(state) => {
+                let mut value = serde_json::to_value(state).unwrap();
+                if let Some(obj) = value.as_object_mut() {
+                    obj.insert("backfilling".to_string(), serde_json::json!(backfilling));
+                }
+                RpcResponse::success(id, value)
+            }
+            None => RpcResponse::success(id, serde_json::json!({"status": "unknown", "backfilling": backfilling})),
         }
     } else {
         let states = engine.get_states().await;

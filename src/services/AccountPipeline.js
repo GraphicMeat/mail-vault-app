@@ -1,6 +1,8 @@
 import * as api from './api';
 import * as db from './db';
 import { hasValidCredentials, ensureFreshToken } from './authUtils';
+import { syncNow, waitForSync } from './syncService';
+import { getDaemonHealth } from './transport';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { isGraphAccount, GRAPH_FOLDER_NAME_MAP, normalizeGraphFolderName } from './graphConfig';
@@ -77,8 +79,10 @@ export class AccountPipeline {
     }
   }
 
-  /** IMAP header loading — paginated via fetchEmails */
+  /** IMAP header loading — daemon delta sync, falling back to server pagination. */
   async _loadHeadersImap(mailbox) {
+    if (await this._loadHeadersViaDaemon(mailbox)) return;
+
     console.log(`[Pipeline:${this.account.email}] Loading headers for ${mailbox}...`);
     const allEmails = [];
     let page = 1;
@@ -99,6 +103,61 @@ export class AccountPipeline {
       await db.saveEmailHeaders(this.accountId, mailbox, allEmails, total);
       this._lastLoadedEmails = allEmails;
       console.log(`[Pipeline:${this.account.email}] Cached ${allEmails.length}/${total} headers`);
+    }
+  }
+
+  /**
+   * Delta-sync this mailbox through the daemon and read back what it cached.
+   *
+   * The pagination path below downloads EVERY page of the mailbox from the
+   * server, with no cache or delta awareness — and it runs for every non-active
+   * account at launch (INBOX + Sent), plus the active account's Sent folder. On
+   * a 15k mailbox that is the whole mailbox re-fetched on every app start. The
+   * daemon already knows how to sync incrementally and fills a partly-cached
+   * mailbox in the background, so ask it instead and read the sidecars.
+   *
+   * Returns false when the daemon can't serve this (not running, no cache
+   * written) so the caller falls back to pagination.
+   */
+  async _loadHeadersViaDaemon(mailbox) {
+    if (!getDaemonHealth().alive || this._destroyed) return false;
+
+    try {
+      const account = await ensureFreshToken(this.account);
+      this.account = account;
+
+      await syncNow({
+        id: this.accountId,
+        email: account.email,
+        imapConfig: {
+          email: account.email, password: account.password,
+          imapHost: account.imapHost, imapPort: account.imapPort,
+          imapSecure: account.imapSecure, authType: account.authType,
+          oauth2AccessToken: account.oauth2AccessToken,
+          smtpHost: account.smtpHost, smtpPort: account.smtpPort,
+          smtpSecure: account.smtpSecure, name: account.name,
+          oauth2Transport: account.oauth2Transport,
+        },
+      }, mailbox);
+      // May return a previous sync's result immediately — background accounts
+      // only need a warm cache, and activateAccount re-syncs on switch.
+      await waitForSync(this.accountId, 30000);
+      if (this._destroyed) return false;
+
+      const meta = await db.getEmailHeadersMeta(this.accountId, mailbox);
+      const cached = meta?.totalCached
+        ? await db.getEmailHeadersPartial(this.accountId, mailbox, meta.totalCached)
+        : null;
+      if (!cached?.emails?.length) return false;
+
+      this._lastLoadedEmails = cached.emails;
+      console.log(
+        `[Pipeline:${this.account.email}] ${mailbox}: ${cached.emails.length}/${meta.totalEmails ?? '?'} headers from daemon cache`
+      );
+      return true;
+    } catch (e) {
+      console.warn(`[Pipeline:${this.account.email}] Daemon header sync failed for ${mailbox}:`, e.message);
+      return false;
     }
   }
 

@@ -8,7 +8,7 @@ use crate::contacts_index::ContactsState;
 use crate::imap::{self, ImapConfig, EmailHeader as ImapEmailHeader};
 use crate::imap::pool::{ImapPool, PooledSessionGuard};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -63,6 +63,9 @@ pub struct SyncEngine {
     /// `sync.wait` RPC handler subscribes to these for efficient blocking.
     watchers: Mutex<HashMap<String, tokio::sync::watch::Sender<Option<SyncResult>>>>,
     contacts: Arc<ContactsState>,
+    /// `account_id\x01mailbox` keys with a backfill in flight — or one that ran
+    /// and made no progress, which stays keyed so it can't retry in a loop.
+    backfilling: Mutex<HashSet<String>>,
 }
 
 impl SyncEngine {
@@ -73,6 +76,7 @@ impl SyncEngine {
             states: Mutex::new(HashMap::new()),
             watchers: Mutex::new(HashMap::new()),
             contacts,
+            backfilling: Mutex::new(HashSet::new()),
         }
     }
 
@@ -419,6 +423,108 @@ impl SyncEngine {
     pub async fn get_state(&self, account_id: &str) -> Option<SyncState> {
         self.states.lock().await.get(account_id).cloned()
     }
+
+    /// Is a cold-cache backfill in flight for this account (any mailbox)?
+    ///
+    /// The app asks before falling back to its own server pagination — without
+    /// this the two would race, each re-downloading what the other just wrote.
+    pub async fn is_backfilling(&self, account_id: &str) -> bool {
+        let prefix = format!("{}\u{1}", account_id);
+        self.backfilling.lock().await.iter().any(|k| k.starts_with(&prefix))
+    }
+
+    /// How many messages the server has that the sidecar cache does not.
+    ///
+    /// The delta gate can't see this: it compares the server's EXISTS against
+    /// `_meta.json.totalEmails`, which is the count the server reported LAST
+    /// time — so a mailbox holding 503 sidecars out of 15,060 looks perfectly
+    /// in sync, and nothing ever fills it in.
+    pub fn sidecar_shortfall(&self, account_id: &str, mailbox: &str, total: u32) -> usize {
+        let cache_dir = tauri_cache_dir(&self.data_dir, account_id, mailbox);
+        (total as usize).saturating_sub(count_sidecars(&cache_dir))
+    }
+
+    /// Fill the sidecar cache up to the server's full message list.
+    ///
+    /// Runs after the delta sync has already answered the client, so it never
+    /// delays `sync.wait`. Writes headers chunk by chunk rather than at the end,
+    /// so the app's cache-drain sees progress while this is still running.
+    pub async fn backfill_mailbox(&self, account: &SyncAccount, mailbox: &str) {
+        let key = format!("{}\u{1}{}", account.id, mailbox);
+        if !self.backfilling.lock().await.insert(key.clone()) {
+            return; // already in flight, or a previous attempt made no progress
+        }
+
+        let fetched = self.run_backfill(account, mailbox).await;
+
+        // Keep the key on failure/no-progress: a mailbox whose missing UIDs
+        // cannot be fetched would otherwise re-scan on every single sync.
+        match fetched {
+            Ok(n) if n > 0 => { self.backfilling.lock().await.remove(&key); }
+            Ok(_) => info!("[backfill] Nothing fetched for {} ({}) — not retrying this session", account.email, mailbox),
+            Err(e) => warn!("[backfill] Failed for {} ({}): {}", account.email, mailbox, e),
+        }
+    }
+
+    async fn run_backfill(&self, account: &SyncAccount, mailbox: &str) -> Result<usize, String> {
+        let config = &account.imap_config;
+        let guard = self.pool.get_background(config).await?;
+        let PooledSessionGuard { mut session, last_selected: _, _permit } = guard;
+
+        let outcome = self.backfill_with_session(&mut session, account, mailbox).await;
+
+        self.pool.return_background(config, PooledSessionGuard {
+            session,
+            last_selected: Some(mailbox.to_string()),
+            _permit,
+        }).await;
+
+        outcome
+    }
+
+    async fn backfill_with_session(
+        &self,
+        session: &mut imap::ImapSession,
+        account: &SyncAccount,
+        mailbox: &str,
+    ) -> Result<usize, String> {
+        let cache_dir = tauri_cache_dir(&self.data_dir, account.id.as_str(), mailbox);
+        let server_uids = imap::search_all_uids(session, mailbox, false).await?;
+        if server_uids.is_empty() {
+            return Ok(0);
+        }
+
+        let have = cached_uids(&cache_dir);
+        // Newest first — the user is looking at the top of the list.
+        let mut missing: Vec<u32> = server_uids.into_iter().filter(|u| !have.contains(u)).collect();
+        missing.sort_unstable_by(|a, b| b.cmp(a));
+        if missing.is_empty() {
+            return Ok(0);
+        }
+
+        info!(
+            "[backfill] {} ({}): {} headers missing from cache",
+            account.email, mailbox, missing.len()
+        );
+
+        let mut written = 0usize;
+        for chunk in missing.chunks(BACKFILL_CHUNK) {
+            let (headers, _total) = imap::fetch_headers_by_uids(session, mailbox, chunk).await?;
+            if headers.is_empty() {
+                warn!("[backfill] Empty response for a {}-UID chunk — stopping", chunk.len());
+                break;
+            }
+            write_headers(&cache_dir, &headers)?;
+            self.contacts.observe_headers(account.id.as_str(), mailbox, &headers);
+            written += headers.len();
+            info!(
+                "[backfill] {} ({}): {}/{} headers cached",
+                account.email, mailbox, written, missing.len()
+            );
+        }
+
+        Ok(written)
+    }
 }
 
 // ── Tauri-compatible cache format ────────────────────────────────────────────
@@ -465,6 +571,10 @@ const RECONCILE_INTERVAL_MS: u64 = 6 * 60 * 60 * 1000; // 6h
 /// Covers the window a user actually looks at without scanning the whole mailbox.
 const FLAG_REFRESH_WINDOW: u32 = 1000;
 
+/// UIDs per backfill fetch. Sidecars are written after each chunk so the app's
+/// cache-drain can consume them while the rest is still downloading.
+const BACKFILL_CHUNK: usize = 1000;
+
 fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -491,6 +601,17 @@ fn count_sidecars(cache_dir: &Path) -> usize {
             name.ends_with(".json") && name != "_meta.json"
         }).count())
         .unwrap_or(0)
+}
+
+/// UIDs that already have a sidecar on disk.
+fn cached_uids(cache_dir: &Path) -> HashSet<u32> {
+    let Ok(entries) = fs::read_dir(cache_dir) else { return HashSet::new() };
+    entries.flatten()
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().to_string();
+            name.strip_suffix(".json").and_then(|u| u.parse::<u32>().ok())
+        })
+        .collect()
 }
 
 fn write_cache_meta(
@@ -635,6 +756,15 @@ mod tests {
             serde_json::from_str(&fs::read_to_string(dir.join("11.json")).unwrap()).unwrap();
         assert_eq!(uid11["flags"], serde_json::json!(["\\Seen", "\\Flagged"]));
         assert_eq!(uid11["subject"], "b"); // patch must not clobber other fields
+
+        // Backfill diff: the cache knows which UIDs it holds, and _meta.json is
+        // never mistaken for one. A mailbox whose sidecar count trails the
+        // server's EXISTS is exactly the case the delta gate cannot see.
+        let have = cached_uids(&dir);
+        assert_eq!(have.len(), 2);
+        assert!(have.contains(&10) && have.contains(&11));
+        let missing: Vec<u32> = [9u32, 10, 11, 12].into_iter().filter(|u| !have.contains(u)).collect();
+        assert_eq!(missing, vec![9, 12]);
 
         // Prune: uid 11 was expunged server-side, _meta.json must survive.
         assert_eq!(prune_sidecars(&dir, &[10]), 1);
