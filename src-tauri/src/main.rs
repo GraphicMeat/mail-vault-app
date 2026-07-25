@@ -4067,13 +4067,15 @@ async fn daemon_rpc(
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     use tokio::net::UnixStream;
 
-    let data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not get app data directory: {}", e))?;
+    // Must match src-daemon's ipc_dir(): $HOME/.mailvault (the sandbox container
+    // home when sandboxed). NOT app_data_dir — the path there is too long for
+    // SUN_LEN and the daemon never binds it.
+    let ipc_dir = dirs::home_dir()
+        .ok_or_else(|| "Could not resolve home directory".to_string())?
+        .join(".mailvault");
 
-    let socket_path = data_dir.join("daemon.sock");
-    let token_path = data_dir.join("daemon.token");
+    let socket_path = ipc_dir.join("mv.sock");
+    let token_path = ipc_dir.join("mv.token");
 
     // Auto-spawn daemon if not running (on-demand mode)
     ensure_daemon_running(&app_handle, &socket_path)?;

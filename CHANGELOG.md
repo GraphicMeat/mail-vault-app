@@ -5,6 +5,7 @@
 ## [2.8.0] - 2026-07-25
 
 ### Fixed
+- **The background helper is reachable again.** The app was looking for the helper's connection socket in the wrong folder, so every request to it failed and Settings always reported "Helper Not Running" — even while the helper was running normally. Affected contact indexing, AI classification, snapshots and background sync since 2.7.0.
 - **App restarts no longer re-download the mailbox.** Saving headers used to delete every cached message that wasn't in the on-screen window, so an ordinary save cut a 14,000-message cache down to 500 — and the rest was then re-fetched from the server page by page, roughly 70 IMAP round-trips on every launch. The cache is now treated as a superset of the loaded window and only drops messages that are actually gone.
 - **Read, unread and star changes now survive a restart.** Header cache writes skipped files that already existed, so a flag change updated the list but never reached disk and the old state came back on the next launch.
 - Background sync now fetches only what changed — the messages that arrived since the last sync, plus flag updates — instead of re-fetching the newest 500 headers every time. Sync metadata is also no longer wiped by routine cache saves, which had been silently forcing that full fetch.

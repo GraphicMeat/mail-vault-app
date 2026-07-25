@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { isDaemonAvailable, getDaemonStatus } from '../../services/daemonClient';
 import {
   Server, CheckCircle2, XCircle, Loader,
@@ -9,7 +8,6 @@ export function DaemonSettings() {
   const [status, setStatus] = useState(null);
   const [checking, setChecking] = useState(false);
   const [connected, setConnected] = useState(null);
-  const [helperStatus, setHelperStatus] = useState(null);
 
   const checkConnection = async () => {
     setChecking(true);
@@ -23,10 +21,6 @@ export function DaemonSettings() {
     } catch {
       setConnected(false);
     }
-    try {
-      const hs = await invoke('helper_status', { daemonMode: 'on-demand' });
-      setHelperStatus(hs);
-    } catch { /* ignore */ }
     setChecking(false);
   };
 
@@ -62,9 +56,7 @@ export function DaemonSettings() {
 
         {connected === false && (
           <p className="text-xs text-mail-text-muted mb-3">
-            {helperStatus?.last_error
-              ? helperStatus.last_error
-              : 'The background helper is not currently reachable. In on-demand mode it starts when the app opens. In always-on mode, check that it is enabled below.'}
+            The background helper is not currently reachable. It starts automatically when the app opens — use Test Connection to retry.
           </p>
         )}
 
