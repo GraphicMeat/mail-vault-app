@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-07-25
+
 ### Fixed
 - **App restarts no longer re-download the mailbox.** Saving headers used to delete every cached message that wasn't in the on-screen window, so an ordinary save cut a 14,000-message cache down to 500 — and the rest was then re-fetched from the server page by page, roughly 70 IMAP round-trips on every launch. The cache is now treated as a superset of the loaded window and only drops messages that are actually gone.
 - **Read, unread and star changes now survive a restart.** Header cache writes skipped files that already existed, so a flag change updated the list but never reached disk and the old state came back on the next launch.
