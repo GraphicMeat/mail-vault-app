@@ -9,6 +9,16 @@ const DATE_PRESETS = {
 };
 
 /**
+ * Locale for Intl, or undefined to let the runtime pick its default — which is
+ * what we want anyway when there's no browser locale to read.
+ *
+ * `navigator` is a browser global. Node exposes it from 21 onwards, so touching
+ * it directly passed on a new local Node and threw `navigator is not defined`
+ * on CI's Node 20.
+ */
+const _locale = () => (typeof navigator !== 'undefined' ? navigator.language : undefined);
+
+/**
  * Build Intl.DateTimeFormat options for time based on the timeFormat setting.
  * Returns { hour12 } or {} (auto = let the locale decide).
  */
@@ -34,7 +44,7 @@ export function formatTime(dateInput) {
   if (timeFormat === '12h') return format(date, 'h:mm a');
 
   // 'auto' — use Intl with the browser locale
-  return new Intl.DateTimeFormat(navigator.language, {
+  return new Intl.DateTimeFormat(_locale(), {
     hour: 'numeric',
     minute: '2-digit',
   }).format(date);
@@ -56,7 +66,7 @@ export function formatDateTime(dateInput) {
   } else if (dateFormat !== 'auto' && DATE_PRESETS[dateFormat]) {
     datePart = format(date, DATE_PRESETS[dateFormat].withYear);
   } else {
-    datePart = new Intl.DateTimeFormat(navigator.language, { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
+    datePart = new Intl.DateTimeFormat(_locale(), { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
   }
 
   return `${datePart}, ${formatTime(date)}`;
@@ -88,7 +98,7 @@ export function formatDateOnly(dateInput, { alwaysShowYear = false } = {}) {
   const options = showYear
     ? { year: 'numeric', month: 'short', day: 'numeric' }
     : { month: 'short', day: 'numeric' };
-  return new Intl.DateTimeFormat(navigator.language, options).format(date);
+  return new Intl.DateTimeFormat(_locale(), options).format(date);
 }
 
 /**
@@ -109,7 +119,7 @@ export function formatDateLong(dateInput) {
     return format(date, DATE_PRESETS[dateFormat].withYear);
   }
 
-  return new Intl.DateTimeFormat(navigator.language, { year: 'numeric', month: 'long', day: 'numeric' }).format(date);
+  return new Intl.DateTimeFormat(_locale(), { year: 'numeric', month: 'long', day: 'numeric' }).format(date);
 }
 
 export function formatEmailDate(dateStr) {
@@ -128,7 +138,7 @@ export function formatEmailDate(dateStr) {
     const options = isPreviousYear
       ? { month: 'short', day: 'numeric', year: 'numeric' }
       : { month: 'short', day: 'numeric' };
-    return new Intl.DateTimeFormat(navigator.language, options).format(date);
+    return new Intl.DateTimeFormat(_locale(), options).format(date);
   }
 
   if (dateFormat === 'custom' && customDateFormat) {
