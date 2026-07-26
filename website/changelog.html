@@ -132,7 +132,7 @@
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
           <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.8.0</span>
-          <span class="text-slate-500 dark:text-slate-400 text-sm">July 25, 2026</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">July 26, 2026</span>
           <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
         </div>
 
@@ -144,6 +144,66 @@
             Fixed
           </h3>
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Switching back to an account is instant now.</strong> The message list restarted at “500 of 15,065” and counted up again on every switch, because the app rebuilt the list by reading one file per message off disk — fifteen thousand of them — even though it had just had them all in memory. It now keeps the last few mailboxes it showed you, and when mail has arrived while you were away it re-reads only the messages that actually changed rather than starting the whole list over.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The email counter no longer counts backwards.</strong> The “x / y emails” indicator measured how much of the list was on screen, which drops every time you switch accounts, so a switch looked like a fresh download. It now shows how much of the mailbox has been downloaded — a number that only goes up — and stops spinning when nothing is actually downloading.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Switching accounts no longer restarts the whole load.</strong> Every switch ran a full server sync and waited on it, even for an account you had opened moments earlier, and it restarted the background download of every other account's mail from the beginning. The app now asks the server whether anything actually changed — one quick check instead of a full sync — and picks up background work where it left off rather than starting over.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A backup that succeeded is no longer reported as failed.</strong> The prompt shown after a backup finishes could error and drag the completed backup down with it, marking it failed and quietly re-running it up to three more times.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A dropped connection can no longer wipe cached mail.</strong> If the server closed the connection while listing a mailbox's messages, the list came back empty with no error — and the empty list was treated as "everything was deleted". The listing is now checked against the server's own message count and refuses to report a partial result.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Changing only the port of an account's mail server no longer reuses the old connection.</strong> Connections were pooled by address alone, so a config that differed only by port was handed a connection to the previous server.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Large mailboxes no longer get stuck loading forever on some servers.</strong> Listing the messages in a mailbox used one very long server reply, and on a 15,000-message mailbox some servers (Purelymail among them) interrupt that reply with a keep-alive line, which made it unreadable. The listing now arrives one message per line, so an interruption can't corrupt it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A failed lookup can no longer blank your cached mail.</strong> When that reply failed to parse, the leftovers stayed in the connection and the next command read the wrong answer — reporting an empty mailbox and deleting hundreds of cached messages. Connections are now dropped after a failed command instead of being reused.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A mailbox whose background fill fails now loads normally instead of spinning.</strong> The app waits while the helper fills a partly cached mailbox; if that fill failed, the wait never ended and the list kept loading with nothing actually downloading. The app now falls back to loading pages itself.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Mail connections are closed properly when you quit.</strong> The app and the background helper now log out of every open server connection on exit, instead of leaving them for the server to time out.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Email light/dark switching works again in installed builds.</strong> The app's security policy was tightened at build time in a way that blocked the script that darkens email content, so the Light/Dark button and the email theme setting did nothing — the button changed state, the email stayed light. Opening the same email in its own window was unaffected, which is why it looked intermittent.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A mailbox that is only partly cached now fills itself in, once.</strong> After a restore or a server migration the local cache could hold a few hundred messages of a 15,000-message mailbox while still looking fully in sync — so every launch dragged the missing thousands off the server, a few hundred at a time, and rarely got to the end before the app was closed. The background helper now notices the shortfall and downloads only the missing headers, newest first, while you keep using the app.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Loading a large mailbox no longer slows down the further it gets.</strong> Each batch of messages used to re-save every message loaded so far, so a full 15,000-message load performed well over half a million file writes. Only the new batch is written now.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Your other accounts no longer re-download their whole mailbox at startup.</strong> Background loading for non-active accounts (and the Sent folder of the active one) fetched every page from the server on every launch, ignoring the cache entirely. It now syncs the same incremental way the active mailbox does.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The background helper is reachable again.</strong> The app was looking for the helper's connection socket in the wrong folder, so every request to it failed and Settings always reported "Helper Not Running" — even while the helper was running normally. Affected contact indexing, AI classification, snapshots and background sync since 2.7.0.</span>
+            </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
               <span><strong>App restarts no longer re-download the mailbox.</strong> Saving headers used to delete every cached message that wasn't in the on-screen window, so an ordinary save cut a 14,000-message cache down to 500 — and the rest was then re-fetched from the server page by page, roughly 70 IMAP round-trips on every launch. The cache is now treated as a superset of the loaded window and only drops messages that are actually gone.</span>
