@@ -29,6 +29,11 @@ const mockSettingsState = {
   backupNotifyOnFailure: false,
   updateBackupState: vi.fn(),
   addBackupHistoryEntry: vi.fn(),
+  // Share-to-unlock: hasPremiumAccess is mocked false below, so a successful
+  // backup always reaches this branch.
+  shareGrant: null,
+  shareUnlockLastShownAt: 0,
+  markShareUnlockShown: vi.fn(),
 };
 vi.mock('../../src/stores/settingsStore', () => ({
   useSettingsStore: { getState: () => mockSettingsState },
@@ -43,6 +48,7 @@ vi.mock('../../src/stores/backupStore', () => ({
       ...mockBackupState,
       setActiveBackup: vi.fn((v) => { mockBackupState.activeBackup = v; }),
       clearActiveBackup: vi.fn(() => { mockBackupState.activeBackup = null; }),
+      setShareUnlock: vi.fn(),
     }),
   },
 }));

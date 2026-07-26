@@ -364,14 +364,23 @@ class BackupCoordinator {
 
       // Share-to-unlock: prompt non-premium users to star/share for free
       // premium. Non-MAS only (MAS gates backups via StoreKit + review rules).
-      if (!IS_APPSTORE_BUILD && entry.success && !externalDegraded
-          && !hasPremiumAccess(storeNow.billingProfile)) {
-        const grantActive = !!(storeNow.shareGrant?.expiresAt && storeNow.shareGrant.expiresAt > Date.now());
-        const sinceLast = Date.now() - (storeNow.shareUnlockLastShownAt || 0);
-        if (!grantActive && sinceLast > SHARE_UNLOCK_COOLDOWN_MS) {
-          storeNow.markShareUnlockShown();
-          useBackupStore.getState().setShareUnlock({ emailsBackedUp: entry.emailsBackedUp });
+      //
+      // Wrapped: this is a cosmetic prompt raised AFTER the backup already
+      // succeeded. Letting it throw drops into the catch below, which reports
+      // a completed backup as failed and — for automatic backups — re-queues
+      // up to three more runs of work that was already done.
+      try {
+        if (!IS_APPSTORE_BUILD && entry.success && !externalDegraded
+            && !hasPremiumAccess(storeNow.billingProfile)) {
+          const grantActive = !!(storeNow.shareGrant?.expiresAt && storeNow.shareGrant.expiresAt > Date.now());
+          const sinceLast = Date.now() - (storeNow.shareUnlockLastShownAt || 0);
+          if (!grantActive && sinceLast > SHARE_UNLOCK_COOLDOWN_MS) {
+            storeNow.markShareUnlockShown();
+            useBackupStore.getState().setShareUnlock({ emailsBackedUp: entry.emailsBackedUp });
+          }
         }
+      } catch (e) {
+        console.warn('[backup] Share-unlock prompt failed (backup itself was fine):', e);
       }
 
       this._retryCount.delete(accountId);
