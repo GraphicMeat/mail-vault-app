@@ -8,6 +8,7 @@ import { buildThreads } from '../../utils/emailParser';
 import { UidMap } from '../UidMap';
 import { getDaemonHealth } from '../transport';
 import { syncNow, waitForSync } from '../syncService';
+import { mailboxIsUnchanged, markVerified } from '../syncProbe';
 import { checkRestoreNeeded } from '../restoreDetection';
 import { isGraphAccount, GRAPH_FOLDER_NAME_MAP, graphFoldersToMailboxes, inferSpecialUse, graphMessageToEmail } from '../graphConfig';
 import { saveRestoreDescriptor as _saveRestore, getRestoreDescriptor as _getRestore, setGraphIdMap as _setGraphIdMap, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap } from '../cacheManager';
@@ -606,6 +607,30 @@ export async function activateAccount(accountId, mailbox, options = {}) {
             },
           };
 
+          // Ask the cheap question first: has anything actually changed since
+          // the cache was written? One SELECT beats `sync.now` plus a blocking
+          // 30s `sync.wait`, and switching between accounts hits this path on
+          // every single switch. Anything but a clean "unchanged" syncs.
+          const probe = await mailboxIsUnchanged(account, accountId, effectiveMailbox);
+          if (probe.unchanged) {
+            console.log('[activateAccount] %s/%s unchanged (%s) — skipping sync',
+              accountId, effectiveMailbox, probe.reason);
+            markVerified(accountId, effectiveMailbox);
+            if (!signal.aborted) {
+              useMailStore.setState({
+                connectionStatus: 'connected',
+                connectionError: null,
+                connectionErrorType: null,
+                loading: false,
+                loadingMore: false,
+              });
+            }
+            serverTrace.end('probe-unchanged', { reason: probe.reason });
+            return;
+          }
+          console.log('[activateAccount] %s/%s needs sync (%s)',
+            accountId, effectiveMailbox, probe.reason);
+
           serverTrace.mark('daemon-sync-start');
           console.log('[activateAccount] Triggering daemon sync for', accountId, effectiveMailbox);
           await syncNow(syncAccount, effectiveMailbox);
@@ -622,6 +647,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
           });
 
           if (syncResult?.success) {
+            markVerified(accountId, effectiveMailbox);
             console.log('[activateAccount] Re-reading cache after daemon sync...');
             const freshCache = await db.getEmailHeadersPartial(accountId, effectiveMailbox, 500);
             console.log('[activateAccount] Cache read:', freshCache?.emails?.length, 'emails, total:', freshCache?.totalEmails);

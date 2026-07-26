@@ -24,6 +24,10 @@ class EmailPipelineManager {
     this._activeAccountId = null;
     this._backgroundHeadersRunning = false;
     this._backgroundContentRunning = false;
+    // Accounts whose background content cascade already finished this launch.
+    // Without this the cascade restarts from the first account on every switch
+    // and re-walks every other account's bodies.
+    this._contentCascadeDone = new Set();
     this._destroyed = false;
   }
 
@@ -39,19 +43,33 @@ class EmailPipelineManager {
     this._activeAccountId = accountId;
     this._destroyed = false; // Reset so background pipelines can run after destroyAll()
 
-    // Destroy previous pipeline for this account if any
-    if (this.pipelines.has(accountId)) {
-      this.pipelines.get(accountId).destroy();
+    // Reuse a live pipeline for this account — switching away and back used to
+    // destroy it and rebuild from scratch, throwing away its queue and the
+    // headers it had already loaded. Callbacks are plain fields, so a pipeline
+    // built as a background one is re-pointed here rather than replaced.
+    // Only when it is idle, though: startContentCaching() resets _activeSlots
+    // to 0, so reusing one with live workers would launch a second full set of
+    // slots and let the drainers decrement past zero.
+    const existing = this.pipelines.get(accountId);
+    let pipeline;
+    if (existing && !existing._destroyed && existing._activeSlots === 0) {
+      pipeline = existing;
+      pipeline.account = account; // credentials/token may have been refreshed
+      pipeline.concurrency = 3;   // promote from background concurrency
+      pipeline.onProgress = (state) => this._onProgress(accountId, state);
+      pipeline.onComplete = () => this._onActiveComplete(accountId);
+      pipeline.onError = (err) => console.warn(`[PipelineManager] Active pipeline error:`, err.message);
+      pipeline.resume?.(activeMailbox);
+    } else {
+      if (existing) existing.destroy();
+      pipeline = new AccountPipeline(account, {
+        concurrency: 3,
+        onProgress: (state) => this._onProgress(accountId, state),
+        onComplete: () => this._onActiveComplete(accountId),
+        onError: (err) => console.warn(`[PipelineManager] Active pipeline error:`, err.message)
+      });
+      this.pipelines.set(accountId, pipeline);
     }
-
-    const pipeline = new AccountPipeline(account, {
-      concurrency: 3,
-      onProgress: (state) => this._onProgress(accountId, state),
-      onComplete: () => this._onActiveComplete(accountId),
-      onError: (err) => console.warn(`[PipelineManager] Active pipeline error:`, err.message)
-    });
-
-    this.pipelines.set(accountId, pipeline);
 
     // Load Sent folder headers in parallel (for chat view)
     this._loadSentHeaders(account, pipeline);
@@ -181,6 +199,9 @@ class EmailPipelineManager {
     for (const account of otherAccounts) {
       if (this._destroyed) break;
 
+      // Already walked this launch — a later switch must not re-download it.
+      if (this._contentCascadeDone.has(account.id)) continue;
+
       const pipeline = this.pipelines.get(account.id);
       if (!pipeline || pipeline._destroyed) continue;
 
@@ -197,6 +218,11 @@ class EmailPipelineManager {
           await pipeline.waitForComplete();
         }
       }
+      // Mark done only if we got through it — a destroy mid-flight should be
+      // retried on the next cascade rather than silently skipped forever.
+      if (!this._destroyed && !pipeline._destroyed) {
+        this._contentCascadeDone.add(account.id);
+      }
     }
 
     this._backgroundContentRunning = false;
@@ -207,7 +233,11 @@ class EmailPipelineManager {
    */
   onAccountSwitch(newActiveAccountId) {
     this._activeAccountId = newActiveAccountId;
-    this._backgroundContentRunning = false; // allow background cascade to restart for new account context
+    // Deliberately NOT clearing _backgroundContentRunning. It guards against a
+    // second cascade running concurrently with the first; clearing it here let
+    // every switch start another full walk of every other account's bodies on
+    // top of the one already in flight. Per-account progress lives in
+    // _contentCascadeDone, so a later cascade resumes instead of restarting.
 
     // Pause all non-active pipelines
     for (const [id, pipeline] of this.pipelines) {

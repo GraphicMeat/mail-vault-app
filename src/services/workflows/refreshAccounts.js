@@ -6,6 +6,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { hasValidCredentials, ensureFreshToken } from '../authUtils';
 import { isGraphAccount, APP_TO_GRAPH_FOLDER_MAP, normalizeGraphFolderName } from '../graphConfig';
 import { invalidateRestoreDescriptors as _invalidateRestore, getAccountCacheMailboxes as _getAccountMailboxes } from '../cacheManager';
+import { invalidate as _invalidateProbe } from '../syncProbe';
 import { _resolveMailboxPath } from '../../stores/slices/unifiedHelpers';
 
 
@@ -28,6 +29,11 @@ export async function refreshCurrentView() {
   }
 
   if (activeAccountId && activeMailbox) {
+    // An explicit refresh must reach the server. Without this the probe's
+    // short TTL would answer "checked moments ago" and the button would look
+    // broken. The probe itself still runs — if nothing changed there is
+    // genuinely nothing to show, and it costs one round trip instead of a sync.
+    _invalidateProbe(activeAccountId, activeMailbox);
     await get().activateAccount(activeAccountId, activeMailbox);
   }
 }
@@ -46,6 +52,7 @@ export async function refreshAllAccounts(options = {}) {
 
   for (const account of accounts) {
     _invalidateRestore(account.id);
+    _invalidateProbe(account.id);
   }
 
   console.log('[mailStore] Refreshing all accounts...');
