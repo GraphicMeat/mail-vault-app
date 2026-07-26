@@ -2,13 +2,13 @@
 
 ## [Unreleased]
 
-### Fixed
-- **A dropped connection can no longer wipe cached mail.** If the server closed the connection while listing a mailbox's messages, the list came back empty with no error — and the empty list was treated as "everything was deleted". The listing is now checked against the server's own message count and refuses to report a partial result.
-- **Changing only the port of an account's mail server no longer reuses the old connection.** Connections were pooled by address alone, so a config that differed only by port was handed a connection to the previous server.
-
 ## [2.8.0] - 2026-07-26
 
 ### Fixed
+- **Switching accounts no longer restarts the whole load.** Every switch ran a full server sync and waited on it, even for an account you had opened moments earlier, and it restarted the background download of every other account's mail from the beginning. The app now asks the server whether anything actually changed — one quick check instead of a full sync — and picks up background work where it left off rather than starting over.
+- **A backup that succeeded is no longer reported as failed.** The prompt shown after a backup finishes could error and drag the completed backup down with it, marking it failed and quietly re-running it up to three more times.
+- **A dropped connection can no longer wipe cached mail.** If the server closed the connection while listing a mailbox's messages, the list came back empty with no error — and the empty list was treated as "everything was deleted". The listing is now checked against the server's own message count and refuses to report a partial result.
+- **Changing only the port of an account's mail server no longer reuses the old connection.** Connections were pooled by address alone, so a config that differed only by port was handed a connection to the previous server.
 - **Large mailboxes no longer get stuck loading forever on some servers.** Listing the messages in a mailbox used one very long server reply, and on a 15,000-message mailbox some servers (Purelymail among them) interrupt that reply with a keep-alive line, which made it unreadable. The listing now arrives one message per line, so an interruption can't corrupt it.
 - **A failed lookup can no longer blank your cached mail.** When that reply failed to parse, the leftovers stayed in the connection and the next command read the wrong answer — reporting an empty mailbox and deleting hundreds of cached messages. Connections are now dropped after a failed command instead of being reused.
 - **A mailbox whose background fill fails now loads normally instead of spinning.** The app waits while the helper fills a partly cached mailbox; if that fill failed, the wait never ended and the list kept loading with nothing actually downloading. The app now falls back to loading pages itself.
