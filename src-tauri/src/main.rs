@@ -4046,11 +4046,37 @@ fn ensure_daemon_running(app_handle: &tauri::AppHandle, socket_path: &Path) -> R
     Err("Daemon spawned but socket did not appear within 3 seconds".into())
 }
 
-/// Kill the on-demand daemon child process (called on app exit).
+/// How long the app waits for a SIGTERM'd daemon to exit on its own before
+/// escalating to SIGKILL. Must exceed the daemon's own shutdown budget (2s of
+/// IMAP logout in src-daemon/src/main.rs) or we kill it mid-cleanup — and it
+/// blocks app quit, so it can't be generous.
+#[cfg(unix)]
+const DAEMON_STOP_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// Stop the on-demand daemon child process (called on app exit).
+///
+/// SIGTERM first, so the daemon runs its own cleanup — LOGOUT of every pooled
+/// IMAP session, socket and PID file removal. SIGKILL only if it won't go.
 pub fn shutdown_daemon_child() {
     if let Ok(mut guard) = DAEMON_CHILD.lock() {
         if let Some(ref mut child) = *guard {
             info!("Shutting down on-demand daemon (PID {})", child.id());
+
+            #[cfg(unix)]
+            {
+                // Safe from PID reuse: we have never reaped this child, so it
+                // stays a zombie holding its PID until the wait() below.
+                unsafe { libc::kill(child.id() as libc::pid_t, libc::SIGTERM) };
+
+                let deadline = std::time::Instant::now() + DAEMON_STOP_GRACE;
+                while std::time::Instant::now() < deadline {
+                    if matches!(child.try_wait(), Ok(Some(_))) {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+            }
+
             let _ = child.kill();
             let _ = child.wait();
             *guard = None;
@@ -4619,7 +4645,18 @@ fn main() {
                     }
                 }
                 tauri::RunEvent::Exit => {
-                    info!("Application exiting — cleaning up daemon child if on-demand");
+                    info!("Application exiting — logging out IMAP sessions, cleaning up daemon child if on-demand");
+                    // Runs on the main thread and blocks the quit, so keep the
+                    // budget tight: an unreachable server must cost the user a
+                    // beachball, not a hang. Worst case here plus
+                    // DAEMON_STOP_GRACE below.
+                    let pool = app_handle.state::<imap::ImapPool>().inner().clone();
+                    tauri::async_runtime::block_on(async move {
+                        let _ = tokio::time::timeout(
+                            std::time::Duration::from_secs(2),
+                            pool.shutdown(),
+                        ).await;
+                    });
                     shutdown_daemon_child();
                 }
                 #[cfg(target_os = "linux")]

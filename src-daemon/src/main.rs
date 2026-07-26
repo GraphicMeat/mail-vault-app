@@ -217,6 +217,7 @@ async fn main() {
     // Handle graceful shutdown on SIGINT (ctrl_c) and SIGTERM (service stop / kill)
     let data_dir_cleanup = data_dir.clone();
     let socket_cleanup = socket_path.clone();
+    let pool_cleanup = Arc::clone(&state.imap_pool);
     tokio::spawn(async move {
         let ctrl_c = tokio::signal::ctrl_c();
 
@@ -236,6 +237,15 @@ async fn main() {
             ctrl_c.await.ok();
             info!("Received shutdown signal");
         }
+
+        // LOGOUT every pooled IMAP session so servers drop them now instead of
+        // holding them open until their idle timeout. Bounded — a hung server
+        // must not stop us from exiting, and the app that spawned us only waits
+        // DAEMON_STOP_GRACE (3s) before escalating to SIGKILL, so stay under it.
+        let _ = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            pool_cleanup.shutdown(),
+        ).await;
 
         cleanup_pid_file(&data_dir_cleanup);
         let _ = std::fs::remove_file(&socket_cleanup);

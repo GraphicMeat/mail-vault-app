@@ -276,7 +276,11 @@ async fn get_imap_backup_status(
             let server_uids = {
                 let mut guard = pool.get_background(account).await.unwrap_or_else(|_| panic!("pool"));
                 let r = imap::search_all_uids(&mut guard.session, &mbox.path, false).await;
-                pool.return_background(account, guard).await;
+                // A failed command can leave unread bytes on the session — never re-pool it.
+                match &r {
+                    Ok(_) => pool.return_background(account, guard).await,
+                    Err(_) => pool.discard(account, guard).await,
+                }
                 r.unwrap_or_default()
             };
             let sc = server_uids.len();
@@ -561,13 +565,18 @@ async fn run_imap_backup_inner(
             info!("backup: cleared pool sessions at folder {} to refresh auth", folder_idx);
         }
 
-        // Get server UIDs — always use plain UID SEARCH ALL for backup reliability.
-        // ESEARCH can corrupt the session buffer on large mailboxes (imap_proto parser limit),
-        // and the corrupted session makes all subsequent commands return 0 results.
+        // Get server UIDs. Neither SEARCH variant is safe here: ESEARCH and the
+        // one-long-line `* SEARCH` reply both hit parser limits on large
+        // mailboxes, and a corrupted session makes every later command return 0
+        // results — search_all_uids uses UID FETCH instead. Still discard the
+        // session if it fails, so nothing inherits a dirty read buffer.
         let server_uids = {
             let mut guard = pool.get_background(&account).await?;
             let result = imap::search_all_uids(&mut guard.session, mailbox_path, false).await;
-            pool.return_background(&account, guard).await;
+            match &result {
+                Ok(_) => pool.return_background(&account, guard).await,
+                Err(_) => pool.discard(&account, guard).await,
+            }
             result?
         };
 

@@ -63,9 +63,14 @@ pub struct SyncEngine {
     /// `sync.wait` RPC handler subscribes to these for efficient blocking.
     watchers: Mutex<HashMap<String, tokio::sync::watch::Sender<Option<SyncResult>>>>,
     contacts: Arc<ContactsState>,
-    /// `account_id\x01mailbox` keys with a backfill in flight — or one that ran
-    /// and made no progress, which stays keyed so it can't retry in a loop.
+    /// `account_id\x01mailbox` keys with a backfill IN FLIGHT right now.
+    /// The app pauses its own pagination while this is set, so it must clear
+    /// the moment the backfill stops — success or failure.
     backfilling: Mutex<HashSet<String>>,
+    /// Keys whose backfill ran and got nowhere. Kept for the life of the
+    /// process so an unfetchable mailbox can't retry in a loop — but NOT
+    /// reported as `backfilling`, or the app would wait on it forever.
+    backfill_gave_up: Mutex<HashSet<String>>,
 }
 
 impl SyncEngine {
@@ -77,6 +82,7 @@ impl SyncEngine {
             watchers: Mutex::new(HashMap::new()),
             contacts,
             backfilling: Mutex::new(HashSet::new()),
+            backfill_gave_up: Mutex::new(HashSet::new()),
         }
     }
 
@@ -238,13 +244,18 @@ impl SyncEngine {
 
         let outcome = self.sync_mailbox(&mut session, account, mailbox, has_condstore).await;
 
-        // Always return the session to the pool — including on error, which the
-        // old code leaked (every failed sync burned a pool slot).
-        self.pool.return_background(config, PooledSessionGuard {
+        let guard = PooledSessionGuard {
             session,
             last_selected: Some(mailbox.to_string()),
             _permit,
-        }).await;
+        };
+        // Hand the session back on success; on error discard it — a failed
+        // command can leave unread bytes that desync every later command on it.
+        // Either way the permit is released (a failed sync used to leak a slot).
+        match &outcome {
+            Ok(d) if !d.session_dirty => self.pool.return_background(config, guard).await,
+            _ => self.pool.discard(config, guard).await,
+        }
 
         match outcome {
             Ok(delta) => SyncResult {
@@ -314,7 +325,7 @@ impl SyncEngine {
             write_headers(&cache_dir, &headers)?;
             self.contacts.observe_headers(account_id, mailbox, &headers);
             info!("[sync] Full page sync for {} ({}): {} headers", account.email, mailbox, new_emails);
-            return Ok(SyncDelta { new_emails, updated_flags: 0, total_emails: total });
+            return Ok(SyncDelta { new_emails, updated_flags: 0, total_emails: total, session_dirty: false });
         }
 
         // ── Delta path ──
@@ -379,6 +390,7 @@ impl SyncEngine {
             .map_or(true, |t| now_ms().saturating_sub(t) > RECONCILE_INTERVAL_MS);
 
         let mut reconciled_at = cached.as_ref().and_then(|c| c.last_reconcile);
+        let mut session_dirty = false;
         if counts_disagree || reconcile_due {
             match imap::search_all_uids(session, mailbox, false).await {
                 Ok(uids) if uids.is_empty() && total > 0 => {
@@ -392,7 +404,10 @@ impl SyncEngine {
                         account.email, mailbox, uids.len(), pruned, counts_disagree, reconcile_due
                     );
                 }
-                Err(e) => warn!("[sync] UID SEARCH ALL failed for {}: {}", account.email, e),
+                Err(e) => {
+                    warn!("[sync] UID listing failed for {}: {}", account.email, e);
+                    session_dirty = true;
+                }
             }
         }
 
@@ -411,6 +426,7 @@ impl SyncEngine {
             new_emails: new_headers.len(),
             updated_flags,
             total_emails: total,
+            session_dirty,
         })
     }
 
@@ -451,18 +467,30 @@ impl SyncEngine {
     /// so the app's cache-drain sees progress while this is still running.
     pub async fn backfill_mailbox(&self, account: &SyncAccount, mailbox: &str) {
         let key = format!("{}\u{1}{}", account.id, mailbox);
+        if self.backfill_gave_up.lock().await.contains(&key) {
+            return; // a previous attempt got nowhere — don't re-scan every sync
+        }
         if !self.backfilling.lock().await.insert(key.clone()) {
-            return; // already in flight, or a previous attempt made no progress
+            return; // already in flight
         }
 
         let fetched = self.run_backfill(account, mailbox).await;
 
-        // Keep the key on failure/no-progress: a mailbox whose missing UIDs
-        // cannot be fetched would otherwise re-scan on every single sync.
+        // Always clear in-flight first: the app pauses its own pagination while
+        // this is set, so leaving it on a failure strands the mailbox loading
+        // forever with nothing actually fetching.
+        self.backfilling.lock().await.remove(&key);
+
         match fetched {
-            Ok(n) if n > 0 => { self.backfilling.lock().await.remove(&key); }
-            Ok(_) => info!("[backfill] Nothing fetched for {} ({}) — not retrying this session", account.email, mailbox),
-            Err(e) => warn!("[backfill] Failed for {} ({}): {}", account.email, mailbox, e),
+            Ok(n) if n > 0 => {}
+            Ok(_) => {
+                info!("[backfill] Nothing fetched for {} ({}) — not retrying this session", account.email, mailbox);
+                self.backfill_gave_up.lock().await.insert(key);
+            }
+            Err(e) => {
+                warn!("[backfill] Failed for {} ({}): {}", account.email, mailbox, e);
+                self.backfill_gave_up.lock().await.insert(key);
+            }
         }
     }
 
@@ -473,11 +501,17 @@ impl SyncEngine {
 
         let outcome = self.backfill_with_session(&mut session, account, mailbox).await;
 
-        self.pool.return_background(config, PooledSessionGuard {
+        let guard = PooledSessionGuard {
             session,
             last_selected: Some(mailbox.to_string()),
             _permit,
-        }).await;
+        };
+        // A failed command may have left unread bytes in the session buffer —
+        // re-pooling it hands the next caller the wrong reply.
+        match &outcome {
+            Ok(_) => self.pool.return_background(config, guard).await,
+            Err(_) => self.pool.discard(config, guard).await,
+        }
 
         outcome
     }
@@ -558,6 +592,10 @@ struct SyncDelta {
     new_emails: usize,
     updated_flags: usize,
     total_emails: u32,
+    /// A command failed mid-sync without aborting it (the reconcile SEARCH is
+    /// best-effort). The session may hold unread bytes, so it must be dropped
+    /// rather than pooled.
+    session_dirty: bool,
 }
 
 /// A UIDNEXT jump larger than this is cheaper to resolve with a page fetch
@@ -771,6 +809,30 @@ mod tests {
         assert!(dir.join("10.json").exists());
         assert!(!dir.join("11.json").exists());
         assert!(dir.join("_meta.json").exists());
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A backfill that gave up must NOT keep reporting as in-flight: the app
+    /// pauses its own pagination while `backfilling` is true, so a stuck key
+    /// leaves the mailbox spinning forever with nothing fetching it.
+    #[tokio::test]
+    async fn test_gave_up_backfill_does_not_report_as_in_flight() {
+        let dir = scratch_dir("backfill_flag");
+        let engine = SyncEngine::new(
+            Arc::new(imap::ImapPool::new()),
+            dir.clone(),
+            ContactsState::new(dir.clone()),
+        );
+        let key = format!("acc1\u{1}INBOX");
+
+        assert!(!engine.is_backfilling("acc1").await);
+
+        engine.backfill_gave_up.lock().await.insert(key.clone());
+        assert!(!engine.is_backfilling("acc1").await, "gave-up key must not read as in-flight");
+
+        engine.backfilling.lock().await.insert(key);
+        assert!(engine.is_backfilling("acc1").await, "in-flight key must read as in-flight");
 
         fs::remove_dir_all(&dir).unwrap();
     }

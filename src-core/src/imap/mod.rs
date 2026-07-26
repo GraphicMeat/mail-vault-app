@@ -690,16 +690,23 @@ pub async fn fetch_flags_from(
     Ok(results)
 }
 
-/// UID SEARCH ALL — returns every UID in the mailbox (ascending order).
+/// Every UID in the mailbox, ascending.
 /// Used for delta-sync: diff against cached UID set to find additions/deletions.
 ///
-/// Deliberately does NOT use ESEARCH: imap-proto fails to parse some servers'
-/// valid `* ESEARCH (TAG "...") UID ALL ...` responses (seen on Purelymail),
-/// and a read_response() parse failure leaves unconsumed bytes in the session
-/// buffer — every later command on that session then reads the previous
-/// command's reply (a same-session "fallback" search returned 0 UIDs and
-/// blanked the mailbox view). Plain `UID SEARCH ALL` parses everywhere and
-/// handles 15k+ mailboxes fine (backup/migration always used it).
+/// Uses `UID FETCH 1:* (UID)`, not SEARCH, and neither variant of SEARCH works
+/// here:
+/// - ESEARCH: imap-proto fails to parse some servers' valid
+///   `* ESEARCH (TAG "...") UID ALL ...` responses (seen on Purelymail).
+/// - Plain `UID SEARCH ALL`: the whole UID list is ONE untagged line, and on a
+///   15k mailbox Purelymail splices its `* OK Still here` keepalive into the
+///   middle of it (`... 2268 2269* OK Still here\r\n`) — unparseable.
+///
+/// FETCH returns one untagged line per message, so a keepalive lands *between*
+/// lines instead of inside one. Costs a few bytes per message over DEFLATE.
+///
+/// A parse failure would leave unconsumed bytes in the session buffer, making
+/// every later command on that session read the previous command's reply — so
+/// callers must discard the session on error, never re-pool it.
 pub async fn search_all_uids(
     session: &mut ImapSession,
     mailbox: &str,
@@ -707,15 +714,24 @@ pub async fn search_all_uids(
 ) -> Result<Vec<u32>, String> {
     let _mbox = select_mailbox(session, mailbox).await?;
 
-    info!("[IMAP] Running UID SEARCH ALL for {}", mailbox);
-    let uids = session
-        .uid_search("ALL")
+    info!("[IMAP] Listing UIDs via UID FETCH 1:* for {}", mailbox);
+    let fetch_stream = session
+        .uid_fetch("1:*", "(UID)")
         .await
-        .map_err(|e| format!("UID SEARCH ALL failed for {}: {}", mailbox, e))?;
+        .map_err(|e| format!("UID FETCH 1:* failed for {}: {}", mailbox, e))?;
 
-    let mut result: Vec<u32> = uids.into_iter().collect();
-    result.sort();
-    info!("[IMAP] UID SEARCH ALL returned {} UIDs for {}", result.len(), mailbox);
+    // A mid-stream error means the list is TRUNCATED, and callers prune the
+    // cache against it — so fail loudly rather than returning a short list.
+    let mut result = Vec::new();
+    for item in fetch_stream.collect::<Vec<_>>().await {
+        let fetch = item.map_err(|e| format!("UID FETCH 1:* failed for {}: {}", mailbox, e))?;
+        if let Some(uid) = fetch.uid {
+            result.push(uid);
+        }
+    }
+
+    result.sort_unstable();
+    info!("[IMAP] UID FETCH 1:* returned {} UIDs for {}", result.len(), mailbox);
 
     Ok(result)
 }

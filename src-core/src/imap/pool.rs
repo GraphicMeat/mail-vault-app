@@ -139,6 +139,18 @@ impl ImapPool {
         self.return_to_pool(&self.priority, config, session, last_selected).await;
     }
 
+    /// Log a session out instead of pooling it — for sessions whose last command
+    /// failed. A parse failure leaves unconsumed bytes in the read buffer, so
+    /// every later command on that session reads the *previous* command's reply:
+    /// a reused session once answered a UID SEARCH with 0 UIDs and the caller
+    /// pruned the whole mailbox cache. Never re-pool after an error.
+    pub async fn discard(&self, config: &ImapConfig, guard: PooledSessionGuard) {
+        let PooledSessionGuard { mut session, .. } = guard;
+        warn!("[IMAP pool] Discarding session for {} after a failed command", config.email);
+        let _ = session.logout().await;
+        // _permit drops here — the slot frees for a fresh connection
+    }
+
     /// Clear all background sessions for an account (force re-auth on next use).
     /// Used during long backups to prevent OAuth2 token expiry.
     pub async fn clear_background(&self, config: &ImapConfig) {
@@ -185,6 +197,25 @@ impl ImapPool {
         // Logout outside any lock — network I/O can be slow
         logout_sessions(to_logout).await;
         info!("Disconnected IMAP for {}", config.email);
+    }
+
+    /// Log out every pooled session across all accounts. Called on app quit and
+    /// daemon shutdown so servers see a clean LOGOUT instead of holding the
+    /// connection open until their idle timeout fires.
+    pub async fn shutdown(&self) {
+        let mut to_logout = Vec::new();
+        for pool in [&self.background, &self.priority] {
+            for (_, sessions) in pool.lock().await.drain() {
+                to_logout.extend(sessions.into_iter().map(|ps| ps.session));
+            }
+        }
+        self.capabilities.lock().await.clear();
+
+        if to_logout.is_empty() {
+            return;
+        }
+        info!("[IMAP pool] Logging out {} pooled sessions on shutdown", to_logout.len());
+        logout_sessions(to_logout).await;
     }
 
     async fn get_from_pool(

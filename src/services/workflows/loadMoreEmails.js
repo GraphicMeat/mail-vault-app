@@ -14,6 +14,12 @@ import { mergeRanges, evictExcess } from './helpers/rangeLoading';
 // Module-level range retry state
 const _rangeRetryDelays = new Map();
 
+// How many 1s waits we'll grant a daemon backfill before paginating ourselves.
+// The daemon is meant to clear `backfilling` when it stops, but a daemon that
+// wedges must never leave the list spinning with nothing fetching.
+const MAX_BACKFILL_WAITS = 60;
+const _backfillWaits = new Map();
+
 
 const PAGE_SIZE = 200;
 
@@ -47,18 +53,36 @@ async function _drainCache(accountId, mailbox, loadedCount) {
 }
 
 
+const _waitKey = (accountId, mailbox) => `${accountId}${mailbox}`;
+
 /**
  * True while the daemon is still filling this mailbox's cache from the server.
  * Checks the cheap local signal first — a cache that already covers the mailbox
  * can't be mid-backfill, so healthy mailboxes never pay for an RPC.
  */
 async function _daemonIsBackfilling(accountId, mailbox) {
+  const key = _waitKey(accountId, mailbox);
   try {
     const meta = await db.getEmailHeadersMeta(accountId, mailbox);
-    if (!meta?.totalEmails || (meta.totalCached || 0) >= meta.totalEmails) return false;
+    if (!meta?.totalEmails || (meta.totalCached || 0) >= meta.totalEmails) {
+      _backfillWaits.delete(key);
+      return false;
+    }
     const status = await getSyncStatus(accountId);
-    return !!status?.backfilling;
+    if (!status?.backfilling) {
+      _backfillWaits.delete(key);
+      return false;
+    }
+
+    const waits = (_backfillWaits.get(key) || 0) + 1;
+    _backfillWaits.set(key, waits);
+    if (waits > MAX_BACKFILL_WAITS) {
+      console.warn(`[loadMoreEmails] Daemon still reports backfilling after ${waits}s — paginating anyway`);
+      return false;
+    }
+    return true;
   } catch {
+    _backfillWaits.delete(key);
     return false; // daemon down or RPC failed — fall through to server pagination
   }
 }
@@ -117,6 +141,8 @@ export async function loadMoreEmails() {
         serverUidSet: updatedServerUidSet,
       });
       get().updateSortedEmails();
+      // Progress — the backfill is alive, so it gets a fresh wait budget.
+      _backfillWaits.delete(_waitKey(activeAccountId, activeMailbox));
       // No saveEmailHeaders — these headers came from that very cache.
       console.log('[loadMoreEmails] Drained %d headers from cache (%d/%d loaded)',
         drained.emails.length, drained.loaded, drained.total);

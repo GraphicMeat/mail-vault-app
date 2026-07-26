@@ -2,9 +2,13 @@
 
 ## [Unreleased]
 
-## [2.8.0] - 2026-07-25
+## [2.8.0] - 2026-07-26
 
 ### Fixed
+- **Large mailboxes no longer get stuck loading forever on some servers.** Listing the messages in a mailbox used one very long server reply, and on a 15,000-message mailbox some servers (Purelymail among them) interrupt that reply with a keep-alive line, which made it unreadable. The listing now arrives one message per line, so an interruption can't corrupt it.
+- **A failed lookup can no longer blank your cached mail.** When that reply failed to parse, the leftovers stayed in the connection and the next command read the wrong answer — reporting an empty mailbox and deleting hundreds of cached messages. Connections are now dropped after a failed command instead of being reused.
+- **A mailbox whose background fill fails now loads normally instead of spinning.** The app waits while the helper fills a partly cached mailbox; if that fill failed, the wait never ended and the list kept loading with nothing actually downloading. The app now falls back to loading pages itself.
+- **Mail connections are closed properly when you quit.** The app and the background helper now log out of every open server connection on exit, instead of leaving them for the server to time out.
 - **Email light/dark switching works again in installed builds.** The app's security policy was being tightened at build time in a way that blocked every stylesheet inside the email preview — so the Light/Dark button (and the email theme setting) did nothing, and email bodies also lost their base styling. Development builds were unaffected, which is why it went unnoticed.
 - **A mailbox that is only partly cached now fills itself in, once.** After a restore or a server migration the local cache could hold a few hundred messages of a 15,000-message mailbox while still looking fully in sync — so every launch dragged the missing thousands off the server, a few hundred at a time, and rarely got to the end before the app was closed. The background helper now notices the shortfall and downloads only the missing headers, newest first, while you keep using the app.
 - **Loading a large mailbox no longer slows down the further it gets.** Each batch of messages used to re-save every message loaded so far, so a full 15,000-message load performed well over half a million file writes. Only the new batch is written now.
