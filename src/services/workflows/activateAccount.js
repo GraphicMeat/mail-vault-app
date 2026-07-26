@@ -464,6 +464,9 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       hasMoreEmails: false,
       loadedRanges: [{ start: 0, end: painted.length }],
       cachedCount: 0,
+      // The outgoing account's drain may still be in flight holding this true;
+      // leaving it set would block pagination for the incoming one.
+      loadingMore: false,
       savedEmailIds: restoredSavedIds,
       archivedEmailIds: restoredArchivedIds,
       mailboxes: restoredMailboxes,
@@ -604,9 +607,13 @@ export async function activateAccount(accountId, mailbox, options = {}) {
         const cachedHasMore = cachedHeaders.emails.length < cachedTotal;
         commitToStore(uidMap, signal, accountId, useMailStoreRef, {
           loading: false,
-          // Was unconditionally true, which spun the indicator even when the
-          // whole mailbox had just been handed over in one go.
-          loadingMore: cachedHasMore,
+          // Deliberately does NOT touch `loadingMore`. This is the first paint,
+          // not pagination — and it raced `loadServerEmails`, whose `finally`
+          // clears the flag on every exit. Since the sync probe made the server
+          // half return in ~100ms, it finished FIRST and the disk half's `true`
+          // became the permanent value, so `loadMoreEmails` (which returns early
+          // on `loadingMore`) never ran again: the list stuck at 500 of 9,065
+          // with nothing loading. Only loadMoreEmails owns this flag now.
           totalEmails: cachedTotal,
           hasMoreEmails: cachedHasMore,
           currentPage: Math.ceil(cachedHeaders.emails.length / 200) || 1,

@@ -32,11 +32,22 @@ describe('headerMemo', () => {
     expect(await recall(id, 'INBOX', META)).toEqual(EMAILS);
   });
 
-  // A partial set recalled as if complete would leave the rest never loaded.
-  it('refuses to memoize a partial set', async () => {
+  // Completeness is the caller's call, from _meta.json — a short set still
+  // yields hasMoreEmails and the drain carries on. Refusing partials meant a
+  // mailbox that never finished loading could never be memoized at all, so every
+  // switch rebuilt it from disk.
+  it('memoizes a partial set', async () => {
     const id = nextId();
-    remember(id, 'INBOX', EMAILS.slice(0, 2), { ...META, totalEmails: 3 });
-    expect(await recall(id, 'INBOX', META)).toBeNull();
+    const partial = EMAILS.slice(0, 2);
+    remember(id, 'INBOX', partial, META);
+    expect(await recall(id, 'INBOX', META)).toBe(partial);
+  });
+
+  it('does not let a smaller snapshot of the same state replace a bigger one', async () => {
+    const id = nextId();
+    remember(id, 'INBOX', EMAILS, META);
+    remember(id, 'INBOX', EMAILS.slice(0, 1), META);
+    expect(await recall(id, 'INBOX', META)).toEqual(EMAILS);
   });
 
   // The daemon writes sidecars on its own schedule; an in-memory copy must not
@@ -171,6 +182,23 @@ describe('headerMemo', () => {
       const io2 = fakeIo({ uids: [4, 3, 2, 1] });
       expect(await recall(id, 'INBOX', GREW, io2)).toHaveLength(4);
       expect(io2.listCachedUids).not.toHaveBeenCalled();
+    });
+
+    // A partial memo is the TOP N UIDs of a bigger cache. Everything below its
+    // ceiling belongs to the pagination drain — pulling it in here would be the
+    // full re-read the memo exists to avoid.
+    it('ignores cached UIDs below a partial memo, and takes arrivals above it', async () => {
+      const id = nextId();
+      remember(id, 'INBOX', [{ uid: 9 }, { uid: 8 }], { ...META, totalEmails: 40 });
+      const io = fakeIo({
+        uids: [10, 9, 8, 7, 6, 5],   // 7,6,5 are older, never held
+        changed: [10],
+        rows: [{ uid: 10 }],
+      });
+
+      const out = await recall(id, 'INBOX', { ...META, totalEmails: 40, totalCached: 6 }, io);
+      expect(out).toEqual([{ uid: 10 }, { uid: 9 }, { uid: 8 }]);
+      expect(io.getEmailHeadersByUids.mock.calls[0][2]).toEqual([10]);
     });
 
     // Past half the mailbox, N single reads lose to the one bulk read the caller

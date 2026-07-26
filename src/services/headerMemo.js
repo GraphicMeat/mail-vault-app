@@ -62,13 +62,23 @@ const _sameStamp = (a, b) =>
   && a.uidValidity === b.uidValidity;
 
 /**
- * Memoize a header set. Ignored unless it covers the whole mailbox — a partial
- * set would later be recalled as if it were complete and the rest would never
- * be loaded.
+ * Memoize a header set — the top N UIDs of the mailbox, complete or not.
+ *
+ * Partial sets used to be refused, on the grounds that one recalled as complete
+ * would leave the rest unloaded. But completeness is decided by the CALLER, from
+ * `_meta.json`, not from the memo's length: a short set still yields
+ * `hasMoreEmails` and the drain carries on from where it stops. Refusing them
+ * meant a mailbox that never finished loading could never be memoized at all —
+ * so every switch back rebuilt it from disk, which is the case this whole module
+ * exists for.
  */
 export function remember(accountId, mailbox, emails, meta) {
-  const total = meta?.totalEmails ?? 0;
-  if (!emails?.length || !total || emails.length < total) return;
+  if (!emails?.length || !meta) return;
+
+  // A smaller snapshot of the same disk state is a downgrade — that's the store
+  // mid-paint, not new information.
+  const prev = _memo.get(_key(accountId, mailbox));
+  if (prev && prev.emails.length > emails.length && _sameStamp(prev.stamp, _stampOf(meta))) return;
 
   _touch(_key(accountId, mailbox), {
     emails,
@@ -145,12 +155,17 @@ async function _reconcile(accountId, mailbox, hit, io) {
 
   const onDisk = new Set(listing.uids);
   const have = new Set(hit.emails.map(e => e.uid));
-  const needed = [...new Set([
-    ...listing.uids.filter(uid => !have.has(uid)),      // arrived since the snapshot
-    ...listing.changed.filter(uid => have.has(uid)),    // rewritten since the snapshot
-  ])];
 
-  if (needed.length > onDisk.size * RECONCILE_CEILING) return null;
+  // The memo is the top N UIDs of the mailbox and N may be short of the cache.
+  // Everything below its highest-held UID that we don't already have is the
+  // pagination drain's job, so only mail that arrived ABOVE it counts as new
+  // here — pulling in the rest would be the full re-read this exists to avoid.
+  const highestHeld = hit.emails.reduce((max, e) => Math.max(max, e.uid), 0);
+  const arrivals = listing.uids.filter(uid => uid > highestHeld && !have.has(uid));
+  const rewritten = listing.changed.filter(uid => have.has(uid));
+  const needed = [...new Set([...arrivals, ...rewritten])];
+
+  if (needed.length > have.size * RECONCILE_CEILING) return null;
 
   const fresh = needed.length
     ? await io.getEmailHeadersByUids(accountId, mailbox, needed)
@@ -160,17 +175,13 @@ async function _reconcile(accountId, mailbox, hit, io) {
   const kept = hit.emails
     .filter(e => onDisk.has(e.uid))       // a sidecar that's gone was expunged
     .map(e => byUid.get(e.uid) || e);
-  const added = needed
-    .filter(uid => !have.has(uid))
-    .map(uid => byUid.get(uid))
-    .filter(Boolean);
+  const added = arrivals.map(uid => byUid.get(uid)).filter(Boolean);
 
-  // Must end up covering the directory exactly. A short read here would restamp
-  // an incomplete set as current, and nothing downstream would ever fetch the
-  // remainder. Newest UIDs first — display re-sorts by date anyway.
-  const merged = [...added, ...kept];
-  if (merged.length !== onDisk.size) return null;
-  return merged;
+  // Every arrival must have actually been read. A short read would restamp a set
+  // with a hole in it as current, and nothing downstream fetches above the
+  // memo's own ceiling. `kept` shrinking is fine — that's an expunge.
+  if (added.length !== arrivals.length) return null;
+  return [...added, ...kept]; // newest first; display re-sorts by date anyway
 }
 
 /** Drop a mailbox, or every mailbox of an account when `mailbox` is omitted. */
