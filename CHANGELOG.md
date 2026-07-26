@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Fixed
+- **Images embedded in an email show up again.** Logos and signature images that a message carries inside itself rendered as empty boxes: the app fetches messages without their attachment data to keep things fast, so there was nothing to put in the image. It now loads just the embedded images from the message's local copy when you open it.
 - **The message list header now says how much of the mailbox is actually in the list.** It always showed the mailbox's total on the server, so a list that was still filling looked exactly like a finished one. It now reads "741 of 15,067 emails" until everything is loaded.
 
 ## [2.8.0] - 2026-07-26

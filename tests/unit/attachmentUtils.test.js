@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getRealAttachments, hasRealAttachments } from '../../src/services/attachmentUtils';
+import { getRealAttachments, hasRealAttachments, hydrateInlineImages, replaceCidUrls } from '../../src/services/attachmentUtils';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -189,5 +189,52 @@ describe('hasRealAttachments', () => {
       attachments: [img, pdfAttachment],
       html: '<img src="cid:logo">',
     })).toBe(true);
+  });
+});
+
+describe('hydrateInlineImages', () => {
+  const email = {
+    uid: 42,
+    html: '<img src="cid:logo"><img src="cid:unused">',
+    attachments: [pdfAttachment, inlineImage('logo'), inlineImage('other')],
+  };
+
+  it('loads content only for cid-referenced attachments, by original index', async () => {
+    const calls = [];
+    globalThis.window = {
+      __TAURI__: {
+        core: {
+          invoke: async (cmd, args) => {
+            calls.push(args);
+            return 'BASE64';
+          },
+        },
+      },
+    };
+
+    const result = await hydrateInlineImages(email, 'acct', 'INBOX');
+
+    expect(calls).toEqual([
+      { accountId: 'acct', mailbox: 'INBOX', uid: 42, attachmentIndex: 1 },
+    ]);
+    expect(result.attachments[1].content).toBe('BASE64');
+    expect(result.attachments[0].content).toBeUndefined();
+    expect(result.attachments[2].content).toBeUndefined();
+    expect(replaceCidUrls(result.html, result.attachments))
+      .toBe('<img src="data:image/png;base64,BASE64"><img src="cid:unused">');
+  });
+
+  it('returns the same object when nothing is hydratable', async () => {
+    globalThis.window = { __TAURI__: { core: { invoke: async () => 'X' } } };
+    const plain = { uid: 1, html: '<p>hi</p>', attachments: [pdfAttachment] };
+    expect(await hydrateInlineImages(plain, 'a', 'INBOX')).toBe(plain);
+  });
+
+  it('keeps the placeholder when the .eml read fails', async () => {
+    globalThis.window = {
+      __TAURI__: { core: { invoke: async () => { throw new Error('not found'); } } },
+    };
+    const result = await hydrateInlineImages(email, 'acct', 'INBOX');
+    expect(result).toBe(email);
   });
 });

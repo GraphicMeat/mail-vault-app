@@ -4,7 +4,7 @@ import * as db from '../db';
 import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ensureFreshToken } from '../authUtils';
-import { hasRealAttachments } from '../attachmentUtils';
+import { hasRealAttachments, hydrateInlineImages } from '../attachmentUtils';
 import { isGraphAccount, normalizeGraphFolderName, graphMessageToEmail } from '../graphConfig';
 import { setGraphIdMap as _setGraphIdMap, getGraphMessageId } from '../cacheManager';
 import { _resolveUnifiedContext } from '../../stores/slices/unifiedHelpers';
@@ -99,7 +99,9 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
     // 1. Check in-memory cache first
     const cachedEmail = get().getFromCache(cacheKey);
     if (cachedEmail) {
-      useMailStore.setState({ selectedEmail: cachedEmail, selectedEmailSource: source, loadingEmail: false });
+      const hydrated = await hydrateInlineImages(cachedEmail, accountId, mailbox);
+      if (hydrated !== cachedEmail) get().addToCache(cacheKey, hydrated, cacheLimitMB);
+      useMailStore.setState({ selectedEmail: hydrated, selectedEmailSource: source, loadingEmail: false });
       return;
     }
 
@@ -219,6 +221,13 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
           email = { ...email, flags: [...(email.flags || []), '\\Seen'] };
         }
       }
+    }
+
+    // Inline images live in the .eml the light fetch just cached — pull them in
+    const withInline = await hydrateInlineImages(email, accountId, mailbox);
+    if (withInline !== email) {
+      email = withInline;
+      get().addToCache(cacheKey, email, cacheLimitMB);
     }
 
     // Update hasAttachments on the list item

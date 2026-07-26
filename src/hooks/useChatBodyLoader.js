@@ -4,6 +4,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import * as db from '../services/db';
 import * as api from '../services/api';
 import { ensureFreshToken } from '../services/authUtils';
+import { hydrateInlineImages } from '../services/attachmentUtils';
 
 const CONCURRENCY = 3;
 
@@ -151,6 +152,7 @@ export function useChatBodyLoader(topicEmails) {
         if (cancelled) return;
 
         if (emailBody) {
+          emailBody = await hydrateInlineImages(emailBody, resolvedAccountId, resolvedMailbox);
           store.addToCache(cacheKey, emailBody, cacheLimitMB);
           bodiesMap.set(key, { status: 'loaded', email: emailBody });
         } else if (retryCount < MAX_RETRIES) {
