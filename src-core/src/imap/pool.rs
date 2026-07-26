@@ -33,9 +33,12 @@ const MAX_POOL_SIZE: usize = 3;
 /// Sessions used within this window skip the NOOP health check.
 const NOOP_SKIP_SECS: u64 = 60;
 
-/// Connection key: "email@host"
+/// Connection key: "email-host:port".
+///
+/// The port matters: two configs differing only by port are two different
+/// servers, and pooling them together hands a session for one to the other.
 fn conn_key(config: &ImapConfig) -> String {
-    format!("{}-{}", config.email, config.host)
+    format!("{}-{}:{}", config.email, config.host, config.effective_port())
 }
 
 /// A session checked out from the pool, guarded by a semaphore permit.

@@ -37,6 +37,9 @@ tokenizers = "0.21"
 hf-hub = "0.4"
 uuid = { version = "1", features = ["v4"] }
 
+[dev-dependencies]
+mock-imap = { path = "../src-mock-imap" }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 candle-core = { version = "0.8", features = ["metal"] }
 keyring = { version = "3", features = ["apple-native"] }

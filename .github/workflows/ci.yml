@@ -9,10 +9,14 @@ on:
     branches: [main]
     paths:
       - 'src/**'
+      - 'src-core/**'
+      - 'src-daemon/**'
+      - 'src-mock-imap/**'
       - 'src-tauri/**'
       - 'tests/**'
       - 'package.json'
       - 'package-lock.json'
+      - 'Cargo.lock'
       - 'vite.config.*'
       - 'vitest.config.*'
       - '.github/workflows/ci.yml'
@@ -20,10 +24,14 @@ on:
     branches: [main]
     paths:
       - 'src/**'
+      - 'src-core/**'
+      - 'src-daemon/**'
+      - 'src-mock-imap/**'
       - 'src-tauri/**'
       - 'tests/**'
       - 'package.json'
       - 'package-lock.json'
+      - 'Cargo.lock'
       - 'vite.config.*'
       - 'vitest.config.*'
       - '.github/workflows/ci.yml'
@@ -39,21 +47,31 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Check version consistency
         run: bash scripts/check-version-consistency.sh
-      - name: Write .env.test from secrets
-        env:
-          TEST_EMAIL: ${{ secrets.TEST_EMAIL }}
-          TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
-          IMAP_HOST: ${{ secrets.IMAP_HOST }}
-          IMAP_PORT: ${{ secrets.IMAP_PORT }}
-          SMTP_HOST: ${{ secrets.SMTP_HOST }}
-          SMTP_PORT: ${{ secrets.SMTP_PORT }}
-          TEST_EMAIL2: ${{ secrets.TEST_EMAIL2 }}
-          TEST_PASSWORD2: ${{ secrets.TEST_PASSWORD2 }}
-        run: |
-          printf 'TEST_EMAIL=%s\nTEST_PASSWORD=%s\nIMAP_HOST=%s\nIMAP_PORT=%s\nSMTP_HOST=%s\nSMTP_PORT=%s\nTEST_EMAIL2=%s\nTEST_PASSWORD2=%s\n' \
-            "$TEST_EMAIL" "$TEST_PASSWORD" "$IMAP_HOST" "$IMAP_PORT" "$SMTP_HOST" "$SMTP_PORT" "$TEST_EMAIL2" "$TEST_PASSWORD2" \
-            > .env.test
+      # No .env.test here any more: the live suite moved to the `live-conformance`
+      # workflow. `npm test` is now hermetic — no network, no credentials.
       - run: npm test
+
+  # IMAP client behavior against the scriptable mock server. Deterministic and
+  # offline — this is the suite that gates every push.
+  imap-mock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cache Rust artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-imap-${{ hashFiles('Cargo.lock') }}
+          restore-keys: rust-imap-
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev pkg-config
+      - run: cargo test -p mailvault-core -p mailvault-daemon -p mock-imap
 
   e2e:
     runs-on: ubuntu-22.04

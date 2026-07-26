@@ -850,4 +850,267 @@ mod tests {
         let json = serde_json::to_string(&state).unwrap();
         assert!(json.contains("\"Syncing\""));
     }
+
+    // ── End-to-end sync against a mock IMAP server ──────────────────────────
+    //
+    // These drive the real sync engine against a scriptable server and assert on
+    // what lands on disk. The failures they cover are the ones users actually
+    // saw: a poisoned session pruning 505 cached headers, and a cold mailbox
+    // re-paging from zero on every launch.
+
+    use mock_imap::state::{synthetic_mailbox, Mailbox};
+    use mock_imap::{Action, MockImap, Scenario, Trigger};
+
+    fn engine_for(dir: &Path) -> SyncEngine {
+        SyncEngine::new(
+            Arc::new(imap::ImapPool::new()),
+            dir.to_path_buf(),
+            ContactsState::new(dir.to_path_buf()),
+        )
+    }
+
+    fn account_for(server: &MockImap) -> SyncAccount {
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        serde_json::from_value(serde_json::json!({
+            "id": "acc1",
+            "email": "user@example.com",
+            "imapConfig": {
+                "email": "user@example.com",
+                "password": "hunter2",
+                "imapHost": server.host(),
+                "imapPort": server.port(),
+            }
+        }))
+        .expect("build SyncAccount")
+    }
+
+    fn cache_dir_for(dir: &Path) -> PathBuf {
+        tauri_cache_dir(dir, "acc1", "INBOX")
+    }
+
+    #[tokio::test]
+    async fn cold_cache_writes_sidecars_and_meta() {
+        let dir = scratch_dir("cold_cache");
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 30)));
+        let engine = engine_for(&dir);
+
+        let result = engine.sync_account(&account_for(&server), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+        assert_eq!(result.new_emails, 30);
+
+        let cache = cache_dir_for(&dir);
+        assert_eq!(count_sidecars(&cache), 30);
+        let meta = read_tauri_cache_meta(&cache).expect("meta written");
+        assert_eq!(meta.total_emails, Some(30));
+        assert_eq!(meta.uid_next, Some(31));
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A warm cache must fetch only the arrivals — not re-page the mailbox.
+    /// Re-paging on every launch is what made restarts slow.
+    #[tokio::test]
+    async fn warm_cache_fetches_only_new_uids() {
+        let dir = scratch_dir("warm_cache");
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 20)));
+        let account = account_for(&server);
+        let engine = engine_for(&dir);
+
+        engine.sync_account(&account, "INBOX").await;
+
+        let before = server.commands().len();
+        let result = engine.sync_account(&account, "INBOX").await;
+        assert!(result.success, "second sync failed: {:?}", result.error);
+
+        let second_pass: Vec<String> = server.commands().into_iter().skip(before).collect();
+        let joined = second_pass.join("\n").to_uppercase();
+        // A cheap `UID FETCH 1:* (UID)` reconcile is fine — it is UID-only. What
+        // must not happen is re-downloading headers for the whole mailbox.
+        assert!(
+            !joined.contains("ENVELOPE"),
+            "a warm cache must not re-fetch headers it already has:\n{joined}"
+        );
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// THE regression. Purelymail splices `* OK Still here` into a long untagged
+    /// line; the reconcile's UID listing fails; the session holds unread bytes.
+    /// Before the fix, that pruned 505 cached headers off disk. The sync may
+    /// report the failure — it must never delete cached mail because of it.
+    #[tokio::test]
+    async fn a_poisoned_reconcile_never_prunes_the_cache() {
+        let dir = scratch_dir("poisoned_reconcile");
+        let account_server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 40)));
+        let engine = engine_for(&dir);
+        engine.sync_account(&account_for(&account_server), "INBOX").await;
+
+        let cache = cache_dir_for(&dir);
+        let before = count_sidecars(&cache);
+        assert_eq!(before, 40, "precondition: a warm cache to lose");
+        drop(account_server);
+
+        // Same mailbox, now with the keepalive splice armed on every FETCH, and
+        // a count mismatch to force the reconcile path.
+        let poisoned = MockImap::start(
+            Scenario::new()
+                .mailbox(synthetic_mailbox("INBOX", 41))
+                .fault(
+                    Trigger::on("FETCH"),
+                    Action::InjectMidLine("* OK Still here\r\n".into()),
+                ),
+        );
+        let _ = engine.sync_account(&account_for(&poisoned), "INBOX").await;
+
+        assert!(
+            poisoned.count_commands("UID FETCH 1:*") > 0,
+            "the reconcile must actually have run — otherwise this test proves nothing"
+        );
+        assert_eq!(
+            count_sidecars(&cache),
+            before,
+            "a failed UID listing must not delete cached headers"
+        );
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The quieter version of the same bug: the listing parses fine but is
+    /// short. Pruning against it deletes real mail. EXISTS is the guard.
+    #[tokio::test]
+    async fn a_truncated_uid_listing_never_prunes_the_cache() {
+        let dir = scratch_dir("truncated_listing");
+        let warm = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 40)));
+        let engine = engine_for(&dir);
+        engine.sync_account(&account_for(&warm), "INBOX").await;
+        let cache = cache_dir_for(&dir);
+        assert_eq!(count_sidecars(&cache), 40);
+        drop(warm);
+
+        // Server returns a quarter of the UIDs but still reports EXISTS=41.
+        let truncating = MockImap::start(
+            Scenario::new()
+                .mailbox(synthetic_mailbox("INBOX", 41))
+                .fault(Trigger::on("FETCH"), Action::PartialSearchResult(0.25)),
+        );
+        let _ = engine.sync_account(&account_for(&truncating), "INBOX").await;
+
+        assert!(
+            truncating.count_commands("UID FETCH 1:*") > 0,
+            "the reconcile must actually have run — otherwise this test proves nothing"
+        );
+        assert_eq!(
+            count_sidecars(&cache),
+            40,
+            "a partial UID list must not be mistaken for server-side deletions"
+        );
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Positive control: real server-side deletions DO get pruned. Without this,
+    /// the two tests above could pass by never pruning at all.
+    #[tokio::test]
+    async fn genuine_server_side_deletions_are_pruned() {
+        let dir = scratch_dir("real_prune");
+        let warm = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 20)));
+        let engine = engine_for(&dir);
+        engine.sync_account(&account_for(&warm), "INBOX").await;
+        let cache = cache_dir_for(&dir);
+        assert_eq!(count_sidecars(&cache), 20);
+        drop(warm);
+
+        // Three messages really are gone — EXISTS agrees with the UID list.
+        let mut smaller = synthetic_mailbox("INBOX", 20);
+        smaller.messages.retain(|m| ![5u32, 6, 7].contains(&m.uid));
+        let shrunk = MockImap::start(Scenario::new().mailbox(smaller));
+        let result = engine.sync_account(&account_for(&shrunk), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+
+        assert_eq!(count_sidecars(&cache), 17, "expunged messages should be pruned");
+        assert!(!cache.join("6.json").exists());
+        assert!(cache.join("8.json").exists());
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A UIDVALIDITY change re-issues the whole UID space: every cached UID now
+    /// points at a different message. The old generation has to go.
+    #[tokio::test]
+    async fn uidvalidity_change_clears_the_stale_generation() {
+        let dir = scratch_dir("uidvalidity");
+        let first = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 15)));
+        let engine = engine_for(&dir);
+        engine.sync_account(&account_for(&first), "INBOX").await;
+        let cache = cache_dir_for(&dir);
+        assert_eq!(count_sidecars(&cache), 15);
+        drop(first);
+
+        let reissued = MockImap::start(
+            Scenario::new().mailbox(synthetic_mailbox("INBOX", 4).with_uid_validity(99)),
+        );
+        let result = engine.sync_account(&account_for(&reissued), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+
+        assert_eq!(
+            count_sidecars(&cache),
+            4,
+            "stale UID generation must be dropped, not merged"
+        );
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A mailbox whose cache holds only part of the mailbox is invisible to the
+    /// delta gate (UIDNEXT matches, so "nothing new"). Backfill is what fills
+    /// the hole — and it must fetch only the missing UIDs.
+    #[tokio::test]
+    async fn backfill_fetches_only_the_uids_the_cache_is_missing() {
+        let dir = scratch_dir("backfill_partial");
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 50)));
+        let account = account_for(&server);
+        let engine = engine_for(&dir);
+        let cache = cache_dir_for(&dir);
+
+        // A cache holding 10 of 50 — the partly-cached state after an aborted load.
+        fs::create_dir_all(&cache).unwrap();
+        for uid in 41..=50u32 {
+            fs::write(
+                cache.join(format!("{uid}.json")),
+                format!(r#"{{"uid":{uid},"flags":[],"subject":"Message {uid}"}}"#),
+            )
+            .unwrap();
+        }
+        write_cache_meta(&cache, 50, Some(1), Some(51), None).unwrap();
+
+        engine.backfill_mailbox(&account, "INBOX").await;
+
+        assert_eq!(count_sidecars(&cache), 50, "backfill should complete the mailbox");
+        assert!(!engine.is_backfilling("acc1").await, "in-flight flag must clear");
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A failed backfill must clear its in-flight flag. The app pauses its own
+    /// pagination while `backfilling` is set — a stuck flag left the mailbox
+    /// polling once a second forever with nothing downloading.
+    #[tokio::test]
+    async fn a_failed_backfill_clears_the_in_flight_flag() {
+        let dir = scratch_dir("backfill_failed");
+        let server = MockImap::start(
+            Scenario::new()
+                .mailbox(synthetic_mailbox("INBOX", 30))
+                .fault(Trigger::on("FETCH"), Action::DropConnection),
+        );
+        let engine = engine_for(&dir);
+
+        engine.backfill_mailbox(&account_for(&server), "INBOX").await;
+
+        assert!(
+            !engine.is_backfilling("acc1").await,
+            "a failed backfill that keeps reporting in-flight strands the mailbox"
+        );
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
 }

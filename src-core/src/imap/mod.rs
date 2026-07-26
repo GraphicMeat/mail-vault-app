@@ -193,14 +193,11 @@ pub struct LightFullEmail {
 
 // ── Connection creation ─────────────────────────────────────────────────────
 
-pub async fn create_imap_session(config: &ImapConfig, pool: &ImapPool) -> Result<ImapSession, String> {
-    let port = config.effective_port();
-    let addr = format!("{}:{}", config.host, port);
-
-    info!("[IMAP] Connecting to {} (oauth2={})", addr, config.is_oauth2());
-
-    // Resolve to IPv4 only — avoids IPv6 hangs (especially with Outlook)
+/// Resolve the config's host:port to IPv4 addresses.
+/// IPv4-only avoids IPv6 connect hangs (especially with Outlook).
+async fn resolve_addrs(config: &ImapConfig) -> Result<Vec<std::net::SocketAddr>, String> {
     use async_std::net::ToSocketAddrs;
+    let addr = format!("{}:{}", config.host, config.effective_port());
     let addrs: Vec<std::net::SocketAddr> = addr
         .to_socket_addrs()
         .await
@@ -211,38 +208,59 @@ pub async fn create_imap_session(config: &ImapConfig, pool: &ImapPool) -> Result
     if addrs.is_empty() {
         return Err(format!("No IPv4 address found for {}", config.host));
     }
+    Ok(addrs)
+}
 
-    info!("[IMAP] DNS resolved to {:?}", addrs);
-
+/// TCP connect + TLS wrap, returning a type-erased transport.
+///
+/// `MAILVAULT_IMAP_PLAINTEXT=1` skips the TLS wrap so tests can point the client
+/// at a plaintext mock server. Honored ONLY for loopback addresses — otherwise the
+/// env var would be a TLS-downgrade vector in a shipped binary.
+async fn connect_transport(
+    config: &ImapConfig,
+    addrs: &[std::net::SocketAddr],
+) -> Result<Box<dyn ImapTransport>, String> {
     let tcp = async_std::io::timeout(
         std::time::Duration::from_secs(15),
-        TcpStream::connect(&addrs[..]),
+        TcpStream::connect(addrs),
     )
     .await
-    .map_err(|e| format!("TCP connect to {} failed: {}", addr, e))?;
+    .map_err(|e| format!("TCP connect to {}:{} failed: {}", config.host, config.effective_port(), e))?;
 
-    info!("[IMAP] TCP connected, starting TLS handshake...");
+    let plaintext_requested = std::env::var("MAILVAULT_IMAP_PLAINTEXT").as_deref() == Ok("1");
+    let all_loopback = addrs.iter().all(|a| a.ip().is_loopback());
 
-    let tls = TlsConnector::new();
-    let tls_stream = tls
+    if plaintext_requested && all_loopback {
+        warn!("[IMAP] MAILVAULT_IMAP_PLAINTEXT=1 — TLS DISABLED for loopback {:?}", addrs);
+        return Ok(Box::new(tcp));
+    }
+    if plaintext_requested {
+        warn!("[IMAP] MAILVAULT_IMAP_PLAINTEXT=1 ignored — {} is not loopback", config.host);
+    }
+
+    let tls_stream = TlsConnector::new()
         .connect(&config.host, tcp)
         .await
         .map_err(|e| format!("TLS handshake with {} failed: {}", config.host, e))?;
 
-    info!("[IMAP] TLS established, authenticating...");
+    Ok(Box::new(tls_stream))
+}
 
-    // Box the TLS stream for type-erased session (allows COMPRESS=DEFLATE upgrade later)
-    let boxed_stream: Box<dyn ImapTransport> = Box::new(tls_stream);
-    let mut client = async_imap::Client::new(boxed_stream);
-
-    // Consume the server greeting (e.g. "* OK Gimap ready") before auth.
-    // Without this, authenticate() reads the greeting instead of the "+"
-    // continuation, causing a deadlock. login() handles it internally but
-    // authenticate()'s handshake loop does not.
-    let _greeting = client.read_response().await
+/// Read the greeting, then authenticate with XOAUTH2 or LOGIN.
+///
+/// The greeting must be consumed explicitly: `authenticate()`'s handshake loop
+/// would otherwise read it instead of the `+` continuation and deadlock.
+/// `login()` handles it internally, but we do it uniformly.
+async fn authenticate_client(
+    mut client: async_imap::Client<Box<dyn ImapTransport>>,
+    config: &ImapConfig,
+) -> Result<ImapSession, String> {
+    let _greeting = client
+        .read_response()
+        .await
         .map_err(|e| format!("Failed to read server greeting: {}", e))?;
 
-    let mut session = if config.is_oauth2() {
+    if config.is_oauth2() {
         let token = config
             .access_token
             .as_deref()
@@ -252,7 +270,7 @@ pub async fn create_imap_session(config: &ImapConfig, pool: &ImapPool) -> Result
         client
             .authenticate("XOAUTH2", XOAuth2Authenticator::new(xoauth2.into_bytes()))
             .await
-            .map_err(|(e, _)| format!("XOAUTH2 auth failed for {}: {}", config.email, e))?
+            .map_err(|(e, _)| format!("XOAUTH2 auth failed for {}: {}", config.email, e))
     } else {
         let password = config
             .password
@@ -261,8 +279,32 @@ pub async fn create_imap_session(config: &ImapConfig, pool: &ImapPool) -> Result
         client
             .login(&config.email, password)
             .await
-            .map_err(|(e, _)| format!("Login failed for {}: {}", config.email, e))?
-    };
+            .map_err(|(e, _)| format!("Login failed for {}: {}", config.email, e))
+    }
+}
+
+/// Connect + authenticate, no capability caching or COMPRESS negotiation.
+async fn connect_and_auth(config: &ImapConfig) -> Result<ImapSession, String> {
+    let addrs = resolve_addrs(config).await?;
+    let transport = connect_transport(config, &addrs).await?;
+    authenticate_client(async_imap::Client::new(transport), config).await
+}
+
+pub async fn create_imap_session(config: &ImapConfig, pool: &ImapPool) -> Result<ImapSession, String> {
+    info!(
+        "[IMAP] Connecting to {}:{} (oauth2={})",
+        config.host,
+        config.effective_port(),
+        config.is_oauth2()
+    );
+
+    let addrs = resolve_addrs(config).await?;
+    info!("[IMAP] DNS resolved to {:?}", addrs);
+
+    let transport = connect_transport(config, &addrs).await?;
+    info!("[IMAP] Transport established, authenticating...");
+
+    let mut session = authenticate_client(async_imap::Client::new(transport), config).await?;
 
     // ── Cache capabilities ──────────────────────────────────────────────
     let caps = session.capabilities().await
@@ -291,28 +333,9 @@ pub async fn create_imap_session(config: &ImapConfig, pool: &ImapPool) -> Result
             Err(e) => {
                 warn!("[IMAP] COMPRESS=DEFLATE failed for {}: {}, reconnecting without compression", config.email, e);
                 // Session was consumed by compress() — create a new uncompressed session
-                let boxed: Box<dyn ImapTransport> = Box::new(
-                    TlsConnector::new()
-                        .connect(&config.host, async_std::io::timeout(
-                            std::time::Duration::from_secs(15),
-                            TcpStream::connect(&addrs[..]),
-                        ).await.map_err(|e| format!("Reconnect TCP failed: {}", e))?)
-                        .await
-                        .map_err(|e| format!("Reconnect TLS failed: {}", e))?
-                );
-                let mut client = async_imap::Client::new(boxed);
-                let _greeting = client.read_response().await
-                    .map_err(|e| format!("Reconnect greeting failed: {}", e))?;
-                let session = if config.is_oauth2() {
-                    let token = config.access_token.as_deref().unwrap();
-                    let xoauth2 = build_xoauth2(&config.email, token);
-                    client.authenticate("XOAUTH2", XOAuth2Authenticator::new(xoauth2.into_bytes()))
-                        .await.map_err(|(e, _)| format!("Reconnect XOAUTH2 failed: {}", e))?
-                } else {
-                    let password = config.password.as_deref().unwrap();
-                    client.login(&config.email, password)
-                        .await.map_err(|(e, _)| format!("Reconnect login failed: {}", e))?
-                };
+                let session = connect_and_auth(config)
+                    .await
+                    .map_err(|e| format!("Reconnect after COMPRESS failure: {}", e))?;
                 info!("[IMAP] Session established for {} (no compression)", config.email);
                 return Ok(session);
             }
@@ -712,7 +735,8 @@ pub async fn search_all_uids(
     mailbox: &str,
     _has_esearch: bool,
 ) -> Result<Vec<u32>, String> {
-    let _mbox = select_mailbox(session, mailbox).await?;
+    let mbox = select_mailbox(session, mailbox).await?;
+    let expected = mbox.exists;
 
     info!("[IMAP] Listing UIDs via UID FETCH 1:* for {}", mailbox);
     let fetch_stream = session
@@ -731,6 +755,21 @@ pub async fn search_all_uids(
     }
 
     result.sort_unstable();
+
+    // A connection dropped mid-response ends the stream with NO error, so a
+    // short — or empty — list otherwise looks like a legitimate "mailbox is
+    // smaller now" and callers delete the difference off disk. EXISTS from the
+    // SELECT above is the authoritative count; anything less is a truncated
+    // read, not a real deletion. Better a failed sync than deleted mail.
+    if (result.len() as u32) < expected {
+        return Err(format!(
+            "UID FETCH 1:* for {} returned {} UIDs but SELECT reported EXISTS={} — truncated response, refusing to report a partial list",
+            mailbox,
+            result.len(),
+            expected
+        ));
+    }
+
     info!("[IMAP] UID FETCH 1:* returned {} UIDs for {}", result.len(), mailbox);
 
     Ok(result)
@@ -1071,53 +1110,13 @@ pub async fn append_email(
 /// APPEND literal upload. Sent-folder APPEND uses this helper instead of the
 /// pool-cached (compressed) session.
 pub async fn create_imap_session_no_compress(config: &ImapConfig) -> Result<ImapSession, String> {
-    let port = config.effective_port();
-    let addr = format!("{}:{}", config.host, port);
-
-    tracing::info!("[imap_no_compress:connect_start] addr={} oauth2={}", addr, config.is_oauth2());
-    use async_std::net::ToSocketAddrs;
-    let addrs: Vec<std::net::SocketAddr> = addr
-        .to_socket_addrs()
-        .await
-        .map_err(|e| format!("DNS resolve failed for {}: {}", addr, e))?
-        .filter(|a| a.is_ipv4())
-        .collect();
-    if addrs.is_empty() {
-        return Err(format!("No IPv4 address found for {}", config.host));
-    }
-
-    let tcp = async_std::io::timeout(
-        std::time::Duration::from_secs(15),
-        TcpStream::connect(&addrs[..]),
-    )
-    .await
-    .map_err(|e| format!("TCP connect to {} failed: {}", addr, e))?;
-
-    let tls = TlsConnector::new();
-    let tls_stream = tls
-        .connect(&config.host, tcp)
-        .await
-        .map_err(|e| format!("TLS handshake with {} failed: {}", config.host, e))?;
-    let boxed_stream: Box<dyn ImapTransport> = Box::new(tls_stream);
-    let mut client = async_imap::Client::new(boxed_stream);
-    let _greeting = client.read_response().await
-        .map_err(|e| format!("Failed to read server greeting: {}", e))?;
-    let session = if config.is_oauth2() {
-        let token = config.access_token.as_deref()
-            .ok_or_else(|| "OAuth2 access token missing".to_string())?;
-        let xoauth2 = build_xoauth2(&config.email, token);
-        client
-            .authenticate("XOAUTH2", XOAuth2Authenticator::new(xoauth2.into_bytes()))
-            .await
-            .map_err(|(e, _)| format!("XOAUTH2 auth failed for {}: {}", config.email, e))?
-    } else {
-        let password = config.password.as_deref()
-            .ok_or_else(|| "Password missing".to_string())?;
-        client
-            .login(&config.email, password)
-            .await
-            .map_err(|(e, _)| format!("Login failed for {}: {}", config.email, e))?
-    };
+    tracing::info!(
+        "[imap_no_compress:connect_start] addr={}:{} oauth2={}",
+        config.host,
+        config.effective_port(),
+        config.is_oauth2()
+    );
+    let session = connect_and_auth(config).await?;
     tracing::info!("[imap_no_compress:session_established] account={}", config.email);
     Ok(session)
 }
@@ -1324,59 +1323,9 @@ pub async fn search_emails(
     Ok((emails, total_matches))
 }
 
-/// Create a plain IMAP session without pool (for test_connection only).
-async fn create_imap_session_plain(config: &ImapConfig) -> Result<async_imap::Session<async_native_tls::TlsStream<async_std::net::TcpStream>>, String> {
-    let port = config.effective_port();
-    let addr = format!("{}:{}", config.host, port);
-
-    use async_std::net::ToSocketAddrs;
-    let addrs: Vec<std::net::SocketAddr> = addr
-        .to_socket_addrs()
-        .await
-        .map_err(|e| format!("DNS resolve failed for {}: {}", addr, e))?
-        .filter(|a| a.is_ipv4())
-        .collect();
-
-    if addrs.is_empty() {
-        return Err(format!("No IPv4 address found for {}", config.host));
-    }
-
-    let tcp = async_std::io::timeout(
-        std::time::Duration::from_secs(15),
-        TcpStream::connect(&addrs[..]),
-    )
-    .await
-    .map_err(|e| format!("TCP connect to {} failed: {}", addr, e))?;
-
-    let tls = TlsConnector::new();
-    let tls_stream = tls
-        .connect(&config.host, tcp)
-        .await
-        .map_err(|e| format!("TLS handshake with {} failed: {}", config.host, e))?;
-
-    let mut client = async_imap::Client::new(tls_stream);
-    let _greeting = client.read_response().await
-        .map_err(|e| format!("Failed to read server greeting: {}", e))?;
-
-    let session = if config.is_oauth2() {
-        let token = config.access_token.as_deref()
-            .ok_or_else(|| "OAuth2 access token missing".to_string())?;
-        let xoauth2 = build_xoauth2(&config.email, token);
-        client.authenticate("XOAUTH2", XOAuth2Authenticator::new(xoauth2.into_bytes()))
-            .await.map_err(|(e, _)| format!("XOAUTH2 auth failed: {}", e))?
-    } else {
-        let password = config.password.as_deref()
-            .ok_or_else(|| "Password missing".to_string())?;
-        client.login(&config.email, password)
-            .await.map_err(|(e, _)| format!("Login failed: {}", e))?
-    };
-
-    Ok(session)
-}
-
 /// Test IMAP connection
 pub async fn test_connection(config: &ImapConfig) -> Result<(), String> {
-    let mut session = create_imap_session_plain(config).await
+    let mut session = connect_and_auth(config).await
         .map_err(|e| format!("Connection test failed: {}", e))?;
 
     session

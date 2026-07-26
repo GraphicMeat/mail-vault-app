@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+- **A dropped connection can no longer wipe cached mail.** If the server closed the connection while listing a mailbox's messages, the list came back empty with no error — and the empty list was treated as "everything was deleted". The listing is now checked against the server's own message count and refuses to report a partial result.
+- **Changing only the port of an account's mail server no longer reuses the old connection.** Connections were pooled by address alone, so a config that differed only by port was handed a connection to the previous server.
+
 ## [2.8.0] - 2026-07-26
 
 ### Fixed

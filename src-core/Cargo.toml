@@ -28,3 +28,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 hickory-resolver = "0.26"
 rand = "0.9"
 url = "2"
+
+[dev-dependencies]
+mock-imap = { path = "../src-mock-imap" }
+tempfile = "3"
