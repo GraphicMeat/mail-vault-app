@@ -5,6 +5,7 @@
 ## [2.8.0] - 2026-07-26
 
 ### Fixed
+- **Switching back to an account is instant now.** The message list restarted at “500 of 15,065” and counted up again on every switch, because the app rebuilt the list by reading one file per message off disk — fifteen thousand of them — even though it had just had them all in memory. It now keeps the last few mailboxes it showed you.
 - **Switching accounts no longer restarts the whole load.** Every switch ran a full server sync and waited on it, even for an account you had opened moments earlier, and it restarted the background download of every other account's mail from the beginning. The app now asks the server whether anything actually changed — one quick check instead of a full sync — and picks up background work where it left off rather than starting over.
 - **A backup that succeeded is no longer reported as failed.** The prompt shown after a backup finishes could error and drag the completed backup down with it, marking it failed and quietly re-running it up to three more times.
 - **A dropped connection can no longer wipe cached mail.** If the server closed the connection while listing a mailbox's messages, the list came back empty with no error — and the empty list was treated as "everything was deleted". The listing is now checked against the server's own message count and refuses to report a partial result.
