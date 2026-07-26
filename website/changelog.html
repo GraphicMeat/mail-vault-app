@@ -150,6 +150,10 @@
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The message list no longer stops partway through loading and sits there.</strong> After switching accounts it could stick at a few hundred messages — spinner showing, nothing actually downloading — until you hit refresh. Two parts of the load raced over the same "still loading" flag, and the quick server check added in this release made the wrong one win.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
               <span><strong>The email counter no longer counts backwards.</strong> The “x / y emails” indicator measured how much of the list was on screen, which drops every time you switch accounts, so a switch looked like a fresh download. It now shows how much of the mailbox has been downloaded — a number that only goes up — and stops spinning when nothing is actually downloading.</span>
             </li>
             <li class="flex items-start gap-3">
