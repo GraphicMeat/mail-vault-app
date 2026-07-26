@@ -668,7 +668,14 @@ function EmailListComponent() {
                 {activeMailbox === 'UNIFIED' ? 'All Inboxes' : (activeMailbox.includes('.') ? activeMailbox.split('.').pop() : activeMailbox.includes('/') ? activeMailbox.split('/').pop() : activeMailbox)}
               </h2>
               <div className="text-xs text-mail-text-muted mt-0.5 flex items-center gap-1.5">
-                <span>{totalEmails.toLocaleString()} emails</span>
+                {/* ponytail: the header used to always show the server total, so a
+                    half-loaded window looked identical to a full one. Say what the
+                    list actually holds whenever it's short of the total. */}
+                <span>
+                  {displayEmails.length < totalEmails
+                    ? `${displayEmails.length.toLocaleString()} of ${totalEmails.toLocaleString()} emails`
+                    : `${totalEmails.toLocaleString()} emails`}
+                </span>
                 <span>·</span>
                 <span className="capitalize">{viewMode}</span>
                 {dateRange && (

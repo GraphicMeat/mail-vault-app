@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **The message list header now says how much of the mailbox is actually in the list.** It always showed the mailbox's total on the server, so a list that was still filling looked exactly like a finished one. It now reads "741 of 15,067 emails" until everything is loaded.
+
 ## [2.8.0] - 2026-07-26
 
 ### Fixed
