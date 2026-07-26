@@ -2,6 +2,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Archive, ArchiveRestore, Trash2, ArrowRight, ArrowLeft, AlertTriangle, HardDrive, Calendar } from 'lucide-react';
 import { useMessageListStore } from '../stores/messageListStore';
+import { useMailStore } from '../stores/mailStore';
+import * as db from '../services/db';
 
 const ACTION_STYLES = {
   archive: {
@@ -41,11 +43,72 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
   const sortedEmails = useMessageListStore(s => s.sortedEmails);
   const totalEmails = useMessageListStore(s => s.totalEmails);
   const archivedEmailIds = useMessageListStore(s => s.archivedEmailIds);
+  const activeAccountId = useMessageListStore(s => s.activeAccountId);
+  const activeMailbox = useMessageListStore(s => s.activeMailbox);
+  const viewMode = useMessageListStore(s => s.viewMode);
+  const unifiedInbox = useMessageListStore(s => s.unifiedInbox);
 
-  // Compute available years from loaded emails
+  // `sortedEmails` is the paginated render window, not the mailbox — on a 15k
+  // INBOX it holds whatever pagination has drained so far, so selecting "All"
+  // used to mean "all 741 currently on screen". The sidecar cache already has
+  // the whole mailbox, so read uid+date straight from it instead.
+  const [cachedRows, setCachedRows] = useState(null);
+  const [loadingPool, setLoadingPool] = useState(false);
+
+  useEffect(() => {
+    // Local view shows archived-only, and unified spans accounts — neither maps
+    // to one mailbox's cache, so both keep using the window.
+    if (!isOpen || !activeAccountId || unifiedInbox || viewMode === 'local') {
+      setCachedRows(null);
+      setLoadingPool(false);
+      return;
+    }
+    let cancelled = false;
+    setLoadingPool(true);
+    (async () => {
+      try {
+        const listing = await db.listCachedUids(activeAccountId, activeMailbox);
+        if (cancelled || !listing?.uids?.length) return;
+        // ponytail: one call for the whole mailbox — 15k sidecar reads and a
+        // ~13MB reply. Same shape the cache drain already runs; chunk it if a
+        // bigger mailbox ever makes the modal stall on open.
+        const rows = await db.getEmailHeadersByUids(activeAccountId, activeMailbox, listing.uids);
+        if (cancelled || !rows.length) return;
+        // The cache outlives the list's own filtering, so re-apply it here:
+        // messages the user deleted (tombstoned, awaiting reconcile) or the
+        // server flagged \Deleted are hidden from the list and must not be
+        // silently re-archived or re-deleted by a bulk run.
+        const { deleteTombstones, archivedEmailIds: archived } = useMailStore.getState();
+        const mbox = activeMailbox === 'UNIFIED' ? 'INBOX' : activeMailbox;
+        // Newest first, same order the list renders and the drain reads in —
+        // bulk progress then works down from the most recent message.
+        setCachedRows(rows
+          .filter(e => !deleteTombstones?.has(`${activeAccountId}|${mbox}|${e.uid}`))
+          .filter(e => archived.has(e.uid) || !e.flags?.includes('\\Deleted'))
+          .map(e => ({ uid: e.uid, date: e.date || e.internalDate }))
+          .sort((a, b) => b.uid - a.uid));
+      } catch (e) {
+        console.warn('[BulkOperationsModal] Cache read failed, using loaded window:', e);
+      } finally {
+        if (!cancelled) setLoadingPool(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isOpen, activeAccountId, activeMailbox, unifiedInbox, viewMode]);
+
+  // Messages archived locally after being deleted from the server have no
+  // sidecar, so they only exist in the window — keep them selectable.
+  const emailPool = useMemo(() => {
+    if (!cachedRows) return sortedEmails;
+    const cachedUids = new Set(cachedRows.map(e => e.uid));
+    const localOnly = sortedEmails.filter(e => !cachedUids.has(e.uid));
+    return localOnly.length ? [...cachedRows, ...localOnly] : cachedRows;
+  }, [cachedRows, sortedEmails]);
+
+  // Compute available years from the selectable pool
   const emailYears = useMemo(() => {
     const years = new Map(); // year -> count
-    for (const email of sortedEmails) {
+    for (const email of emailPool) {
       const date = email.date ? new Date(email.date) : null;
       if (date && !isNaN(date)) {
         const y = date.getFullYear();
@@ -53,14 +116,14 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
       }
     }
     return [...years.entries()].sort((a, b) => b[0] - a[0]);
-  }, [sortedEmails]);
+  }, [emailPool]);
 
   // Filter emails by selected range
   const selectedEmails = useMemo(() => {
     if (!selectedRange) return [];
     const now = new Date();
 
-    return sortedEmails.filter(email => {
+    return emailPool.filter(email => {
       const date = email.date ? new Date(email.date) : null;
       if (!date || isNaN(date)) return false;
 
@@ -97,10 +160,10 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
           return false;
       }
     });
-  }, [selectedRange, sortedEmails, customFrom, customTo]);
+  }, [selectedRange, emailPool, customFrom, customTo]);
 
   const selectedCount = selectedEmails.length;
-  const isPartialLoad = sortedEmails.length < totalEmails;
+  const isPartialLoad = !loadingPool && emailPool.length < totalEmails;
 
   const handleConfirm = () => {
     if (selectedAction === 'delete' || selectedAction === 'archive_and_delete') {
@@ -201,11 +264,17 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
           ) : step === 1 ? (
             /* Step 1: Date Range */
             <div className="p-5">
+              {loadingPool && (
+                <div className="flex items-start gap-2 p-3 bg-mail-surface border border-mail-border rounded-lg mb-4">
+                  <p className="text-xs text-mail-text-muted">Reading all {totalEmails.toLocaleString()} emails…</p>
+                </div>
+              )}
+
               {isPartialLoad && (
                 <div className="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg mb-4">
                   <AlertTriangle size={16} className="text-yellow-500 flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-mail-text-muted">
-                    {sortedEmails.length.toLocaleString()} of {totalEmails.toLocaleString()} total emails are loaded. Only loaded emails will be selected.
+                    {emailPool.length.toLocaleString()} of {totalEmails.toLocaleString()} total emails are available locally. Only those will be selected.
                   </p>
                 </div>
               )}
@@ -313,7 +382,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                   </button>
                   <button
                     onClick={() => setStep(2)}
-                    disabled={selectedCount === 0}
+                    disabled={selectedCount === 0 || loadingPool}
                     className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-mail-accent text-white
                               rounded-lg hover:bg-mail-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >

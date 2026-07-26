@@ -594,8 +594,11 @@ function EmailListComponent() {
 
     // Handle unarchive separately — not a bulk operation manager action
     if (action === 'unarchive') {
-      const removeLocalEmail = useMailStore.getState().removeLocalEmail;
-      for (const uid of uids) {
+      const { removeLocalEmail, archivedEmailIds } = useMailStore.getState();
+      // Only archived messages have anything to remove, and each call re-reads
+      // the whole local index — running it over a 15k selection to unarchive a
+      // handful would hang the app.
+      for (const uid of uids.filter(u => archivedEmailIds.has(u))) {
         try { await removeLocalEmail(uid); } catch (e) { console.error(`Failed to unarchive ${uid}:`, e); }
       }
       useMailStore.getState().updateSortedEmails();

@@ -5,6 +5,7 @@
 ## [2.8.0] - 2026-07-26
 
 ### Fixed
+- **Bulk operations can now select the whole mailbox, not just what's on screen.** Picking "All" in Bulk Email Operations only covered the messages the list had scrolled in so far — on a 15,000-message inbox that was a few hundred — even though the app already held every message locally. It now selects from the full local copy of the mailbox, and skips messages you have already deleted.
 - **Switching back to an account is instant now.** The message list restarted at “500 of 15,065” and counted up again on every switch, because the app rebuilt the list by reading one file per message off disk — fifteen thousand of them — even though it had just had them all in memory. It now keeps the last few mailboxes it showed you, and when mail has arrived while you were away it re-reads only the messages that actually changed rather than starting the whole list over.
 - **Loading a large mailbox no longer crawls.** Filling the list read every message file in the mailbox over again on each step — fifteen thousand of them, several times a second — so the count climbed a little at a time with long pauses and looked stuck. It now reads only the messages it doesn't already have.
 - **The message list no longer stops partway through loading and sits there.** After switching accounts it could stick at a few hundred messages — spinner showing, nothing actually downloading — until you hit refresh. Two parts of the load raced over the same "still loading" flag, and the quick server check added in this release made the wrong one win.
