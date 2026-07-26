@@ -150,6 +150,10 @@
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Loading a large mailbox no longer crawls.</strong> Filling the list read every message file in the mailbox over again on each step — fifteen thousand of them, several times a second — so the count climbed a little at a time with long pauses and looked stuck. It now reads only the messages it doesn't already have.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
               <span><strong>The message list no longer stops partway through loading and sits there.</strong> After switching accounts it could stick at a few hundred messages — spinner showing, nothing actually downloading — until you hit refresh. Two parts of the load raced over the same "still loading" flag, and the quick server check added in this release made the wrong one win.</span>
             </li>
             <li class="flex items-start gap-3">
