@@ -67,10 +67,13 @@ jobs:
             target
           key: rust-imap-${{ hashFiles('Cargo.lock') }}
           restore-keys: rust-imap-
+      # mailvault-daemon pulls keyring -> libdbus-sys (sync-secret-service on
+      # Linux), which needs dbus headers at build time even though no test
+      # touches the keychain.
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libssl-dev pkg-config
+          sudo apt-get install -y pkg-config libssl-dev libdbus-1-dev libsecret-1-dev libglib2.0-dev
       - run: cargo test -p mailvault-core -p mailvault-daemon -p mock-imap
 
   e2e:
