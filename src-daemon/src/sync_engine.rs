@@ -950,11 +950,18 @@ mod tests {
         assert_eq!(before, 40, "precondition: a warm cache to lose");
         drop(account_server);
 
-        // Same mailbox, now with the keepalive splice armed on every FETCH, and
-        // a count mismatch to force the reconcile path.
+        // Same mailbox, SAME SIZE, with the keepalive splice armed on FETCH.
+        //
+        // Size matters: a larger mailbox would make the delta path fetch the new
+        // arrival's headers first, and that FETCH is poisoned too — whether it
+        // survives depends on where the splice lands in a one-message response,
+        // which made this test pass locally and fail on CI. Equal size means the
+        // only FETCH issued is the reconcile's `UID FETCH 1:*`, which is the
+        // command under test. The reconcile still fires because a cold sync
+        // leaves `lastReconcile` unset, so the timed reconcile is due.
         let poisoned = MockImap::start(
             Scenario::new()
-                .mailbox(synthetic_mailbox("INBOX", 41))
+                .mailbox(synthetic_mailbox("INBOX", 40))
                 .fault(
                     Trigger::on("FETCH"),
                     Action::InjectMidLine("* OK Still here\r\n".into()),
@@ -962,9 +969,13 @@ mod tests {
         );
         let _ = engine.sync_account(&account_for(&poisoned), "INBOX").await;
 
-        assert!(
-            poisoned.count_commands("UID FETCH 1:*") > 0,
-            "the reconcile must actually have run — otherwise this test proves nothing"
+        assert_eq!(
+            poisoned.count_commands("UID FETCH"),
+            1,
+            "the reconcile's `UID FETCH 1:*` must be the ONLY fetch this sync issues — \
+             if a header fetch creeps in, it eats the injected fault and this test \
+             silently stops testing anything: {:?}",
+            poisoned.commands()
         );
         assert_eq!(
             count_sidecars(&cache),
@@ -987,17 +998,21 @@ mod tests {
         assert_eq!(count_sidecars(&cache), 40);
         drop(warm);
 
-        // Server returns a quarter of the UIDs but still reports EXISTS=41.
+        // Server returns a quarter of the UIDs but still reports EXISTS=40.
+        // Equal size for the same reason as the poisoned-reconcile test above:
+        // the reconcile must be the only FETCH, or the assertion is timing-dependent.
         let truncating = MockImap::start(
             Scenario::new()
-                .mailbox(synthetic_mailbox("INBOX", 41))
+                .mailbox(synthetic_mailbox("INBOX", 40))
                 .fault(Trigger::on("FETCH"), Action::PartialSearchResult(0.25)),
         );
         let _ = engine.sync_account(&account_for(&truncating), "INBOX").await;
 
-        assert!(
-            truncating.count_commands("UID FETCH 1:*") > 0,
-            "the reconcile must actually have run — otherwise this test proves nothing"
+        assert_eq!(
+            truncating.count_commands("UID FETCH"),
+            1,
+            "the reconcile's `UID FETCH 1:*` must be the ONLY fetch this sync issues: {:?}",
+            truncating.commands()
         );
         assert_eq!(
             count_sidecars(&cache),
