@@ -24,24 +24,45 @@ const _backfillWaits = new Map();
 const PAGE_SIZE = 200;
 
 /**
- * Drain everything the sidecar cache holds beyond what's already in the store,
- * in ONE read. Returns null when the cache has nothing left to give, so the
- * caller falls back to server pagination for the remainder.
+ * Pull whatever the sidecar cache holds that the store doesn't, reading ONLY the
+ * missing UIDs.
+ *
+ * This used to re-read the entire mailbox on every call — `load_email_cache_partial`
+ * with limit = totalCached, which is one file read plus one JSON parse per
+ * message — and then `slice(loadedCount)` off the front. While the daemon
+ * backfills, that runs every 200ms: the backfill lands 100 new sidecars, the
+ * drain reads 13,796 files to find them, and the next tick reads 13,896. The
+ * counter crawls because each small step costs a full-mailbox disk walk.
+ *
+ * Now: one readdir for the UID list, then a read per message actually missing.
+ * On a cold start that's the same work as before; on the incremental steps that
+ * make up a backfill it's ~100 reads instead of ~14,000.
+ *
+ * Taking the UIDs the store holds rather than a count also drops the old
+ * assumption that the store was exactly the top N of the cache by UID — the
+ * slice silently skipped messages whenever it wasn't.
  */
-async function _drainCache(accountId, mailbox, loadedCount) {
+async function _drainCache(accountId, mailbox, loadedUids) {
   try {
     const meta = await db.getEmailHeadersMeta(accountId, mailbox);
     const totalCached = meta?.totalCached || 0;
-    if (totalCached <= loadedCount) return null;
+    if (totalCached <= loadedUids.size) return null;
 
-    const cached = await db.getEmailHeadersPartial(accountId, mailbox, totalCached);
-    const rest = cached?.emails?.slice(loadedCount);
-    if (!rest?.length) return null;
+    const listing = await db.listCachedUids(accountId, mailbox);
+    if (!listing?.uids?.length) return null;
 
-    const loaded = loadedCount + rest.length;
+    const missing = listing.uids
+      .filter(uid => !loadedUids.has(uid))
+      .sort((a, b) => b - a); // newest first, same order the list renders in
+    if (!missing.length) return null;
+
+    const rows = await db.getEmailHeadersByUids(accountId, mailbox, missing);
+    if (!rows.length) return null;
+
+    const loaded = loadedUids.size + rows.length;
     const total = Math.max(meta?.totalEmails || 0, loaded);
     return {
-      emails: rest.map(e => ({ ...e, source: e.source || 'cache' })),
+      emails: rows.map(e => ({ ...e, source: e.source || 'cache' })),
       total,
       loaded,
       cached: totalCached,
@@ -118,7 +139,9 @@ export async function loadMoreEmails() {
     // so paginating from the server re-downloads headers we have on disk —
     // on a 14k inbox that was ~70 IMAP round-trips (each re-saving the whole
     // header list) after every launch.
-    const drained = await _drainCache(activeAccountId, activeMailbox, emails.length);
+    const drained = await _drainCache(
+      activeAccountId, activeMailbox, new Set(emails.map(e => e.uid))
+    );
     if (drained) {
       const current = get();
       if (current.activeAccountId !== activeAccountId || current.activeMailbox !== activeMailbox) {
