@@ -465,16 +465,21 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const connectionError = useAccountStore(s => s.connectionError);
   const connectionErrorType = useAccountStore(s => s.connectionErrorType);
   const suspectEmptyServerData = useSyncStore(s => s.suspectEmptyServerData);
-  const emails = useMessageListStore(s => s.emails);
   const totalEmails = useMessageListStore(s => s.totalEmails);
+  const cachedCount = useMessageListStore(s => s.cachedCount);
   const loading = useSyncStore(s => s.loading);
   const loadingMore = useSyncStore(s => s.loadingMore);
   const manualRefreshSpinning = useAccountStore(s => s.manualRefreshSpinning);
-  const hasMoreEmails = useMessageListStore(s => s.hasMoreEmails);
   const activateAccount = useAccountStore(s => s.activateAccount);
   const setViewMode = useUiStore(s => s.setViewMode);
   const retryKeychainAccess = useAccountStore(s => s.retryKeychainAccess);
   const unreadPerAccount = useSettingsStore(s => s.unreadPerAccount);
+
+  // Only the local cache lagging the mailbox is real, user-visible progress.
+  // This used to read `emails.length / totalEmails` — the store window, which
+  // legitimately drops to a first-window paint on every account switch, so the
+  // count fell back and climbed again and looked like a reload each time.
+  const cacheFilling = totalEmails > 0 && cachedCount > 0 && cachedCount < totalEmails;
 
   const { theme, toggleTheme } = useThemeStore();
   const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
@@ -751,11 +756,11 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           {totalEmails > 0 && (
             <div
               className="p-2"
-              title={loading || loadingMore || hasMoreEmails
-                ? `${emails.length.toLocaleString()} / ${totalEmails.toLocaleString()} emails`
+              title={cacheFilling
+                ? `${cachedCount.toLocaleString()} / ${totalEmails.toLocaleString()} emails downloaded`
                 : `${totalEmails.toLocaleString()} emails`}
             >
-              {(loading || loadingMore || hasMoreEmails) ? (
+              {(loading || cacheFilling) ? (
                 <RefreshCw size={14} className="animate-spin text-mail-accent" />
               ) : (
                 <HardDrive size={14} className="text-mail-text-muted" />
@@ -1189,12 +1194,12 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         {totalEmails > 0 && (
           <div className="flex items-center gap-1.5 px-2 mt-1 text-xs text-mail-text-muted">
             <HardDrive size={12} />
-            {loading || loadingMore || hasMoreEmails ? (
-              <span>{emails.length.toLocaleString()} / {totalEmails.toLocaleString()} emails</span>
+            {cacheFilling ? (
+              <span>{cachedCount.toLocaleString()} / {totalEmails.toLocaleString()} emails</span>
             ) : (
               <span>{totalEmails.toLocaleString()} emails</span>
             )}
-            {(loading || loadingMore || hasMoreEmails) && (
+            {(loading || cacheFilling) && (
               <RefreshCw size={10} className="animate-spin text-mail-accent" />
             )}
           </div>

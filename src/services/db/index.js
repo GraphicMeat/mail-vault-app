@@ -50,6 +50,8 @@ export {
   clearMailboxCache,
   getEmailHeadersPartial,
   getEmailHeadersMeta,
+  listCachedUids,
+  getEmailHeadersByUids,
   getEmailHeaders,
   saveGraphIdMap,
   loadGraphIdMap,

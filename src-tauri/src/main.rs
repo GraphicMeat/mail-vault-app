@@ -1034,6 +1034,70 @@ async fn load_email_cache_by_uids(
     }).await.map_err(|e| format!("Task join error: {}", e))?
 }
 
+/// List the UIDs a mailbox has sidecars for, plus which of them were written
+/// after `since_ms`.
+///
+/// Readdir only — no file is opened and nothing is parsed, so this costs one
+/// directory scan regardless of mailbox size. That's what lets a caller holding
+/// a stale in-memory header set re-read only the handful of messages that moved
+/// instead of all 15,000 (`load_from_sidecars` is one read + one parse PER
+/// message).
+#[tauri::command]
+async fn list_cached_uids(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    mailbox: String,
+    since_ms: Option<f64>,
+) -> Result<serde_json::Value, String> {
+    tokio::task::spawn_blocking(move || {
+        let base_dir = app_handle
+            .path()
+            .app_data_dir()
+            .map_err(|e| format!("Could not get app data directory: {}", e))?
+            .join("email_cache");
+
+        let sidecar_dir = base_dir.join(cache_base_name(&account_id, &mailbox));
+        if !sidecar_dir.exists() {
+            return Ok(serde_json::json!({ "uids": [], "changed": [] }));
+        }
+
+        let mut uids: Vec<u64> = Vec::new();
+        let mut changed: Vec<u64> = Vec::new();
+
+        if let Ok(entries) = fs::read_dir(&sidecar_dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name == "_meta.json" { continue; }
+                let Some(uid) = name.strip_suffix(".json").and_then(|s| s.parse::<u64>().ok())
+                else { continue };
+                uids.push(uid);
+
+                // `DirEntry::metadata` is a stat the readdir usually already
+                // primed — cheap next to opening the file.
+                if let Some(since) = since_ms {
+                    let mtime_ms = entry
+                        .metadata()
+                        .ok()
+                        .and_then(|m| m.modified().ok())
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_millis() as f64);
+                    // Unreadable mtime counts as changed — an extra read is
+                    // always safer than serving a header we can't vouch for.
+                    if mtime_ms.map_or(true, |m| m > since) {
+                        changed.push(uid);
+                    }
+                }
+            }
+        }
+
+        info!(
+            "list_cached_uids: {} sidecars, {} changed since {:?}",
+            uids.len(), changed.len(), since_ms
+        );
+        Ok(serde_json::json!({ "uids": uids, "changed": changed }))
+    }).await.map_err(|e| format!("Task join error: {}", e))?
+}
+
 /// Read emails from sidecar directory. If limit is Some(n), only read the N most recent (highest UIDs).
 fn load_from_sidecars(sidecar_dir: &Path, meta_file: &Path, limit: Option<usize>) -> Result<Option<String>, String> {
     // Read metadata
@@ -4295,6 +4359,7 @@ fn main() {
             load_email_cache_partial,
             load_email_cache_meta,
             load_email_cache_by_uids,
+            list_cached_uids,
             clear_email_cache,
             save_mailbox_cache,
             load_mailbox_cache,

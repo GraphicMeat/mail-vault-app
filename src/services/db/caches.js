@@ -165,6 +165,37 @@ export async function getEmailHeadersPartial(accountId, mailbox, limit = 200) {
   return null;
 }
 
+/**
+ * The UIDs this mailbox has sidecars for, plus which of them were written after
+ * `sinceMs`. Readdir only — nothing is opened or parsed, so the cost is one
+ * directory scan no matter how big the mailbox is. Lets a caller holding a stale
+ * header set re-read just the messages that moved.
+ */
+export async function listCachedUids(accountId, mailbox, sinceMs = null) {
+  if (invoke) {
+    try {
+      const res = safeParse(await invoke('list_cached_uids', { accountId, mailbox, sinceMs }));
+      if (res) return { uids: res.uids || [], changed: res.changed || [] };
+    } catch (error) {
+      console.warn('[db.js] Failed to list cached UIDs:', error);
+    }
+  }
+  return null;
+}
+
+/** Headers for specific UIDs — one sidecar read each, so keep the list short. */
+export async function getEmailHeadersByUids(accountId, mailbox, uids) {
+  if (invoke && uids?.length) {
+    try {
+      const rows = await invoke('load_email_cache_by_uids', { accountId, mailbox, uids });
+      if (Array.isArray(rows)) return rows;
+    } catch (error) {
+      console.warn('[db.js] Failed to load headers by UID:', error);
+    }
+  }
+  return [];
+}
+
 export async function getEmailHeadersMeta(accountId, mailbox) {
   if (invoke) {
     try {

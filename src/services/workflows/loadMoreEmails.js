@@ -44,6 +44,7 @@ async function _drainCache(accountId, mailbox, loadedCount) {
       emails: rest.map(e => ({ ...e, source: e.source || 'cache' })),
       total,
       loaded,
+      cached: totalCached,
       hasMore: loaded < total,
     };
   } catch (e) {
@@ -137,6 +138,7 @@ export async function loadMoreEmails() {
         currentPage: Math.floor(drained.loaded / PAGE_SIZE),
         hasMoreEmails: drained.hasMore,
         totalEmails: drained.total,
+        cachedCount: drained.cached,
         loadingMore: false,
         serverUidSet: updatedServerUidSet,
       });

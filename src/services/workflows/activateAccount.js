@@ -9,7 +9,7 @@ import { UidMap } from '../UidMap';
 import { getDaemonHealth } from '../transport';
 import { syncNow, waitForSync } from '../syncService';
 import { mailboxIsUnchanged, markVerified } from '../syncProbe';
-import { recall as memoRecall, remember as memoRemember } from '../headerMemo';
+import { recall as memoRecall, remember as memoRemember, peek as memoPeek } from '../headerMemo';
 import { checkRestoreNeeded } from '../restoreDetection';
 import { isGraphAccount, GRAPH_FOLDER_NAME_MAP, graphFoldersToMailboxes, inferSpecialUse, graphMessageToEmail } from '../graphConfig';
 import { saveRestoreDescriptor as _saveRestore, getRestoreDescriptor as _getRestore, setGraphIdMap as _setGraphIdMap, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap } from '../cacheManager';
@@ -405,8 +405,31 @@ export async function activateAccount(accountId, mailbox, options = {}) {
   if (restored) {
     const isAccountSwitch = !isMailboxSwitch;
     const label = isAccountSwitch ? 'Account' : 'Mailbox';
-    console.log('[activateAccount] %s restore HIT for %s:%s — rendering %d first-window headers',
-      label, accountId, restored.mailbox, restored.firstWindow.length);
+
+    // The descriptor holds a 50-row window, but the complete set for this
+    // mailbox is usually still in memory from the last visit — paint that.
+    // Painting 50 rows against a totalEmails of 9,065 is what made the counter
+    // drop and climb again on every switch, and the memo was only consulted
+    // afterwards, by which point a background sync had often invalidated it.
+    // Freshness is the background refresh's job either way.
+    const memoPainted = memoPeek(accountId, restored.mailbox || mailbox);
+    // Optimistic sent rows are excluded from the memo (they aren't on disk yet)
+    // but the descriptor window carries them. Painting the memo alone would make
+    // a send still waiting on IMAP APPEND vanish from Sent on a switch away and
+    // back — the store is where `commitToStore` looks to preserve them, and this
+    // setState replaces it.
+    const optimistic = memoPainted
+      ? restored.firstWindow.filter(e => e._optimistic)
+      : [];
+    const painted = !memoPainted
+      ? restored.firstWindow
+      : optimistic.length
+        ? [...optimistic, ...memoPainted]
+        : memoPainted;
+
+    console.log('[activateAccount] %s restore HIT for %s:%s — rendering %d headers (%s)',
+      label, accountId, restored.mailbox, painted.length,
+      memoPainted ? 'in-memory set' : 'first window');
     invalidateChatAndThreadCaches();
 
     let restoredMailboxes = restored.mailboxes;
@@ -417,13 +440,30 @@ export async function activateAccount(accountId, mailbox, options = {}) {
 
     const restoredSavedIds = new Set(restored.firstWindowSavedUids || []);
     const restoredArchivedIds = new Set(restored.firstWindowArchivedUids || []);
+    // The descriptor only lists saved/archived UIDs for its own window; past it,
+    // recover them from the rows, which carry the flags.
+    for (const e of painted) {
+      if (e.isLocal) restoredSavedIds.add(e.uid);
+      if (e.isArchived) restoredArchivedIds.add(e.uid);
+    }
 
     useMailStore.setState({
       activeAccountId: accountId,
       activeMailbox: restored.mailbox || mailbox,
       unifiedInbox: false,
-      emails: restored.firstWindow,
+      emails: painted,
       totalEmails: restored.totalEmails,
+      // All three were previously left at the OUTGOING account's values, so
+      // pagination and range loading ran against a window that no longer
+      // existed. `hasMoreEmails` is false rather than `painted.length <
+      // totalEmails` on purpose: this paint is a placeholder, and a placeholder
+      // must not arm pagination. On a 50-row window it would immediately fire
+      // `loadMoreEmails`, whose `_drainCache` slices by UID order the window
+      // doesn't follow — racing the background refresh that is about to set the
+      // real value a few milliseconds later.
+      hasMoreEmails: false,
+      loadedRanges: [{ start: 0, end: painted.length }],
+      cachedCount: 0,
       savedEmailIds: restoredSavedIds,
       archivedEmailIds: restoredArchivedIds,
       mailboxes: restoredMailboxes,
@@ -440,7 +480,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       restoring: true,
     });
     get().updateSortedEmails();
-    activationTrace.mark('descriptor-restored', { firstWindowCount: restored.firstWindow.length });
+    activationTrace.mark('descriptor-restored', { paintedCount: painted.length });
 
     get().activateAccount(accountId, restored.mailbox || mailbox, { _backgroundRefresh: true }).catch(() => {});
     setTimeout(() => get().loadSentHeaders(accountId), 150);
@@ -466,6 +506,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       savedEmailIds: new Set(),
       archivedEmailIds: new Set(),
       serverUidSet: new Set(),
+      cachedCount: 0,
       hasMoreEmails: true,
       currentPage: 1,
       loading: true,
@@ -509,7 +550,14 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       ]);
       if (signal.aborted) return;
 
-      const memoized = memoRecall(accountId, effectiveMailbox, memoMeta);
+      // On a stamp mismatch this re-reads only the sidecars that moved (readdir
+      // + mtime, then one read per changed UID) instead of discarding the set —
+      // a single new message used to cost a full re-read of the mailbox.
+      const memoized = await memoRecall(accountId, effectiveMailbox, memoMeta, {
+        listCachedUids: db.listCachedUids,
+        getEmailHeadersByUids: db.getEmailHeadersByUids,
+      });
+      if (signal.aborted) return;
       const cachedHeaders = memoized
         ? {
             emails: memoized,
@@ -530,7 +578,14 @@ export async function activateAccount(accountId, mailbox, options = {}) {
         savedCount: savedEmailIds.size,
       });
 
-      useMailStore.setState({ savedEmailIds, archivedEmailIds });
+      // How much of the mailbox the sidecar cache holds. The progress indicator
+      // reads this instead of the store window, which is a view onto the cache
+      // and can legitimately shrink.
+      useMailStore.setState({
+        savedEmailIds,
+        archivedEmailIds,
+        cachedCount: memoMeta?.totalCached ?? 0,
+      });
 
       if (cachedHeaders && cachedHeaders.emails.length > 0) {
         const headersWithSource = cachedHeaders.emails.map(e => ({
@@ -545,11 +600,15 @@ export async function activateAccount(accountId, mailbox, options = {}) {
           uidMap.checkUidValidity(cachedHeaders.uidValidity);
         }
 
+        const cachedTotal = cachedHeaders.totalEmails || cachedHeaders.emails.length;
+        const cachedHasMore = cachedHeaders.emails.length < cachedTotal;
         commitToStore(uidMap, signal, accountId, useMailStoreRef, {
           loading: false,
-          loadingMore: true,
-          totalEmails: cachedHeaders.totalEmails || cachedHeaders.emails.length,
-          hasMoreEmails: cachedHeaders.emails.length < (cachedHeaders.totalEmails || cachedHeaders.emails.length),
+          // Was unconditionally true, which spun the indicator even when the
+          // whole mailbox had just been handed over in one go.
+          loadingMore: cachedHasMore,
+          totalEmails: cachedTotal,
+          hasMoreEmails: cachedHasMore,
           currentPage: Math.ceil(cachedHeaders.emails.length / 200) || 1,
           ...(cachedHeaders.serverUids ? { serverUidSet: cachedHeaders.serverUids } : {}),
         });
@@ -733,6 +792,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
                 loading: false,
                 loadingMore: false,
                 totalEmails: freshCache.totalEmails || freshCache.emails.length,
+                cachedCount: freshCache.totalCached ?? freshCache.emails.length,
                 hasMoreEmails: freshCache.emails.length < (freshCache.totalEmails || freshCache.emails.length),
                 currentPage: Math.ceil(freshCache.emails.length / 200) || 1,
                 ...(freshCache.serverUids ? { serverUidSet: freshCache.serverUids } : {}),

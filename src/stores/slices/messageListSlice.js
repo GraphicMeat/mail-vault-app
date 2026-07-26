@@ -99,6 +99,11 @@ export const createMessageListSlice = (set, get) => ({
   hasMoreEmails: true,
   totalEmails: 0,
 
+  // How many of `totalEmails` the local sidecar cache holds. Only grows for a
+  // given mailbox, which is what makes it safe to show as progress — `emails`
+  // is a window onto the cache and moves in both directions.
+  cachedCount: 0,
+
   // Track which ranges have been loaded
   loadedRanges: [], // Array of {start, end} objects
   // Loading state for specific ranges
