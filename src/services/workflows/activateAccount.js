@@ -9,6 +9,7 @@ import { UidMap } from '../UidMap';
 import { getDaemonHealth } from '../transport';
 import { syncNow, waitForSync } from '../syncService';
 import { mailboxIsUnchanged, markVerified } from '../syncProbe';
+import { recall as memoRecall, remember as memoRemember } from '../headerMemo';
 import { checkRestoreNeeded } from '../restoreDetection';
 import { isGraphAccount, GRAPH_FOLDER_NAME_MAP, graphFoldersToMailboxes, inferSpecialUse, graphMessageToEmail } from '../graphConfig';
 import { saveRestoreDescriptor as _saveRestore, getRestoreDescriptor as _getRestore, setGraphIdMap as _setGraphIdMap, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap } from '../cacheManager';
@@ -297,6 +298,27 @@ async function _loadServerEmailsViaGraph(account, accountId, activeMailbox, uidM
   trace.end('graph-done', { count: sorted.length });
 }
 
+/**
+ * Keep the mailbox we're leaving in memory so switching back doesn't re-read
+ * every sidecar off disk (one file per message — 15k for a large mailbox).
+ *
+ * Snapshots the STORE, not the disk read that seeded it: flag changes made
+ * during the visit (mark read, star) are written to sidecars without moving
+ * `_meta.json`, so a disk-time snapshot would fail to look stale and would
+ * serve pre-read flags back on return.
+ *
+ * Fire-and-forget — a failure here only costs the next switch a disk walk.
+ */
+function _memoizeOutgoing(accountId, mailbox, emails) {
+  if (!accountId || !mailbox || mailbox === 'UNIFIED' || !emails?.length) return;
+  // Optimistic sent rows aren't on disk yet; counting them could let a partial
+  // set clear the completeness bar and be recalled as if whole.
+  const settled = emails.filter(e => !e._optimistic);
+  db.getEmailHeadersMeta(accountId, mailbox)
+    .then(meta => memoRemember(accountId, mailbox, settled, meta))
+    .catch(() => {});
+}
+
 function commitToStore(uidMap, signal, accountId, useMailStoreRef, extras = {}) {
   if (signal.aborted) return;
   const store = useMailStoreRef.getState();
@@ -363,10 +385,12 @@ export async function activateAccount(accountId, mailbox, options = {}) {
 
   if (currentAccountId && currentAccountId !== accountId && (currentEmails.length > 0 || currentTotalEmails > 0)) {
     _saveRestore(_buildRestoreDescriptor(get()));
+    _memoizeOutgoing(currentAccountId, get().activeMailbox, currentEmails);
   }
   const previousMailbox = get().activeMailbox;
   if (isMailboxSwitch && previousMailbox && previousMailbox !== mailbox && previousMailbox !== 'UNIFIED') {
     _saveRestore(_buildRestoreDescriptor(get(), previousMailbox));
+    _memoizeOutgoing(currentAccountId, previousMailbox, currentEmails);
   }
 
   // Skip descriptor restore on background refresh — it must do a full load,
@@ -472,12 +496,34 @@ export async function activateAccount(accountId, mailbox, options = {}) {
     try {
       const effectiveMailbox = resolvedMailbox;
 
-      const [cachedHeaders, archivedEmailIds, savedEmailIds] = await Promise.all([
-        db.getEmailHeadersPartial(accountId, effectiveMailbox, 500),
+      // Prefer the headers still in memory from the last time this mailbox was
+      // open. Reading them back off disk means one file per message — 15,000
+      // reads and parses for a large mailbox — and it ran on every switch,
+      // which is why the list restarted at "500 of 15,065" and climbed each
+      // time. `_meta.json` is read either way and doubles as the staleness
+      // check, so a hit costs nothing extra and a miss costs nothing either.
+      const [memoMeta, archivedEmailIds, savedEmailIds] = await Promise.all([
+        db.getEmailHeadersMeta(accountId, effectiveMailbox),
         db.getArchivedEmailIds(accountId, effectiveMailbox),
         db.getSavedEmailIds(accountId, effectiveMailbox),
       ]);
       if (signal.aborted) return;
+
+      const memoized = memoRecall(accountId, effectiveMailbox, memoMeta);
+      const cachedHeaders = memoized
+        ? {
+            emails: memoized,
+            totalEmails: memoMeta?.totalEmails ?? memoized.length,
+            totalCached: memoMeta?.totalCached ?? memoized.length,
+            uidValidity: memoMeta?.uidValidity ?? null,
+            serverUids: null,
+          }
+        : await db.getEmailHeadersPartial(accountId, effectiveMailbox, 500);
+      if (signal.aborted) return;
+      if (memoized) {
+        console.log('[activateAccount] Reused %d in-memory headers for %s/%s — no disk walk',
+          memoized.length, accountId, effectiveMailbox);
+      }
       localTrace.mark('cache-loaded', {
         cachedCount: cachedHeaders?.emails?.length || 0,
         archivedCount: archivedEmailIds.size,
