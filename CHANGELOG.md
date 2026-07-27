@@ -2,12 +2,10 @@
 
 ## [Unreleased]
 
-### Fixed
-- **Scrolling to the bottom of the list loads more mail again.** If the background load ever stopped quietly — a network blip at launch was enough — the list froze at whatever it had (say 741 of 15,083) and scrolling did nothing: the scroll position was never actually watched, so reaching the end couldn't restart the load. Scrolling near the bottom now kicks it off directly.
-
 ## [2.8.0] - 2026-07-26
 
 ### Fixed
+- **Scrolling to the bottom of the list loads more mail again.** If the background load ever stopped quietly — a network blip at launch was enough — the list froze at whatever it had (say 741 of 15,083) and scrolling did nothing: the scroll position was never actually watched, so reaching the end couldn't restart the load. Scrolling near the bottom now kicks it off directly.
 - **Images embedded in an email show up again.** Logos and signature images that a message carries inside itself rendered as empty boxes: the app fetches messages without their attachment data to keep things fast, so there was nothing to put in the image. It now loads just the embedded images from the message's local copy when you open it.
 - **The message list header now says how much of the mailbox is actually in the list.** It always showed the mailbox's total on the server, so a list that was still filling looked exactly like a finished one. It now reads "741 of 15,067 emails" until everything is loaded.
 - **Adding an account with a non-standard mail-server port works again.** Typing anything into the IMAP or SMTP port field made the connection test fail before it dialled — the port was sent as text where a number was expected — so only accounts on the default ports could be added.
