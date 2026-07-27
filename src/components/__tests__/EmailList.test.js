@@ -127,16 +127,16 @@ vi.mock('../../stores/mailStore', () => {
   return { useMailStore: hook };
 });
 
-vi.mock('../../stores/searchStore', () => ({
-  useSearchStore: vi.fn((selector) => {
-    const state = {
-      searchActive: false,
-      searchResults: [],
-      clearSearch: vi.fn(),
-    };
-    return selector(state);
-  }),
-}));
+vi.mock('../../stores/searchStore', () => {
+  const state = {
+    searchActive: false,
+    searchResults: [],
+    clearSearch: vi.fn(),
+  };
+  const hook = vi.fn((selector) => selector(state));
+  hook.getState = () => state;
+  return { useSearchStore: hook };
+});
 
 vi.mock('../../stores/settingsStore', () => ({
   useSettingsStore: vi.fn((selector) => {
@@ -256,5 +256,32 @@ describe('EmailList virtualization', () => {
     });
 
     expect(objectSelectorCalls.length).toBe(0);
+  });
+
+  it('scrolling near the bottom re-arms loadMoreEmails when the auto chain is dead (741-stuck regression)', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const state = useMailStore.getState();
+    state.loadMoreEmails.mockClear();
+    useMailStore.setState({ hasMoreEmails: true, loadingMore: false });
+
+    const { EmailList } = await import('../EmailList.jsx');
+    const { container } = render(React.createElement(EmailList));
+    const scroller = container.querySelector('.overflow-y-auto');
+    expect(scroller).not.toBeNull();
+
+    Object.defineProperty(scroller, 'scrollHeight', { value: 28000, configurable: true });
+    Object.defineProperty(scroller, 'clientHeight', { value: 800, configurable: true });
+
+    // Far from the bottom — must NOT fire
+    scroller.scrollTop = 100;
+    scroller.dispatchEvent(new Event('scroll'));
+    expect(state.loadMoreEmails).not.toHaveBeenCalled();
+
+    // Within 20 rows of the bottom — must fire even though no data changed
+    scroller.scrollTop = 27100;
+    scroller.dispatchEvent(new Event('scroll'));
+    expect(state.loadMoreEmails).toHaveBeenCalled();
+
+    useMailStore.setState({ hasMoreEmails: false });
   });
 });

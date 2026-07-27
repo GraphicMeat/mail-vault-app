@@ -532,6 +532,19 @@ function EmailListComponent() {
     const container = scrollContainerRef.current;
     if (!container) return;
     const handleScroll = () => {
+      // Re-arm pagination from the real scroll position. The auto-load effect
+      // above cannot fire on scroll — the virtualizer instance is referentially
+      // stable, so that effect's deps only change when the DATA changes. It
+      // keeps a running load chain going but can never restart a dead one,
+      // which left the list permanently stuck when the chain died silently
+      // (offline blip, aborted probe). loadMoreEmails self-guards against
+      // double-entry via `loadingMore`.
+      if (container.scrollTop + container.clientHeight >= container.scrollHeight - 20 * ROW_HEIGHT_DEFAULT) {
+        const { hasMoreEmails, loadingMore, viewMode, loadMoreEmails } = useMailStore.getState();
+        if (hasMoreEmails && !loadingMore && viewMode !== 'local' && !useSearchStore.getState().searchActive) {
+          loadMoreEmails();
+        }
+      }
       if (scrollIdleTimerRef.current) clearTimeout(scrollIdleTimerRef.current);
       scrollIdleTimerRef.current = setTimeout(() => {
         if (!shouldPrefetch()) {
