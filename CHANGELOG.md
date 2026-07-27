@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Scrolling to the bottom of the list loads more mail again.** If the background load ever stopped quietly — a network blip at launch was enough — the list froze at whatever it had (say 741 of 15,083) and scrolling did nothing: the scroll position was never actually watched, so reaching the end couldn't restart the load. Scrolling near the bottom now kicks it off directly.
+
 ## [2.8.0] - 2026-07-26
 
 ### Fixed
