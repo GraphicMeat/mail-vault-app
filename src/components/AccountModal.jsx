@@ -224,9 +224,17 @@ export function AccountModal({ onClose }) {
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
+    // Ports must stay numbers: the Rust side takes u16, so a typed-in port
+    // arriving as a string fails the connection test before it ever dials.
+    // An empty field falls back to the provider default rather than 0.
+    const parse = () => {
+      if (type === 'checkbox') return checked;
+      if (type === 'number') return value === '' ? undefined : Number(value);
+      return value;
+    };
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value
+      [name]: parse()
     }));
     setError(null);
 

@@ -2,13 +2,12 @@
 
 ## [Unreleased]
 
-### Fixed
-- **Images embedded in an email show up again.** Logos and signature images that a message carries inside itself rendered as empty boxes: the app fetches messages without their attachment data to keep things fast, so there was nothing to put in the image. It now loads just the embedded images from the message's local copy when you open it.
-- **The message list header now says how much of the mailbox is actually in the list.** It always showed the mailbox's total on the server, so a list that was still filling looked exactly like a finished one. It now reads "741 of 15,067 emails" until everything is loaded.
-
 ## [2.8.0] - 2026-07-26
 
 ### Fixed
+- **Images embedded in an email show up again.** Logos and signature images that a message carries inside itself rendered as empty boxes: the app fetches messages without their attachment data to keep things fast, so there was nothing to put in the image. It now loads just the embedded images from the message's local copy when you open it.
+- **The message list header now says how much of the mailbox is actually in the list.** It always showed the mailbox's total on the server, so a list that was still filling looked exactly like a finished one. It now reads "741 of 15,067 emails" until everything is loaded.
+- **Adding an account with a non-standard mail-server port works again.** Typing anything into the IMAP or SMTP port field made the connection test fail before it dialled — the port was sent as text where a number was expected — so only accounts on the default ports could be added.
 - **Bulk operations can now select the whole mailbox, not just what's on screen.** Picking "All" in Bulk Email Operations only covered the messages the list had scrolled in so far — on a 15,000-message inbox that was a few hundred — even though the app already held every message locally. It now selects from the full local copy of the mailbox, and skips messages you have already deleted.
 - **Switching back to an account is instant now.** The message list restarted at “500 of 15,065” and counted up again on every switch, because the app rebuilt the list by reading one file per message off disk — fifteen thousand of them — even though it had just had them all in memory. It now keeps the last few mailboxes it showed you, and when mail has arrived while you were away it re-reads only the messages that actually changed rather than starting the whole list over.
 - **Loading a large mailbox no longer crawls.** Filling the list read every message file in the mailbox over again on each step — fifteen thousand of them, several times a second — so the count climbed a little at a time with long pauses and looked stuck. It now reads only the messages it doesn't already have.
