@@ -860,6 +860,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             )}
             <button
               onClick={confirmClose}
+              title="Close"
               className="p-1.5 hover:bg-mail-border rounded transition-colors"
             >
               <X size={16} className="text-mail-text-muted" />

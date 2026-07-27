@@ -128,6 +128,7 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
 
             {/* Insights button */}
             <button
+              data-testid="sender-insights-toggle"
               onClick={(e) => { e.stopPropagation(); onToggleInsights?.(); }}
               className={`p-0.5 rounded transition-colors flex-shrink-0 ${showInsights ? 'text-mail-accent' : 'text-mail-text-muted hover:text-mail-text'}`}
               title="Sender insights"

@@ -134,15 +134,15 @@ describe('Email List Selection & Action Bar', function () {
     });
 
     expect(clicked).toBe(true);
-    await browser.pause(300);
 
-    // Verify action bar is gone (no "selected" text visible from the action bar)
-    const actionBarGone = await browser.execute(() => {
-      // Check that the selection action bar buttons are gone
-      return document.querySelector('button[title="Clear selection"]') === null &&
-             document.querySelector('button[title="Archive selected"]') === null;
-    });
-
-    expect(actionBarGone).toBe(true);
+    // The bar animates out (AnimatePresence), so its nodes outlive the click —
+    // wait for them to leave the DOM instead of guessing at the duration.
+    await browser.waitUntil(
+      async () => browser.execute(() => (
+        document.querySelector('button[title="Clear selection"]') === null &&
+        document.querySelector('button[title="Archive selected"]') === null
+      )),
+      { timeout: 5000, interval: 200, timeoutMsg: 'Selection action bar still present after clearing selection' },
+    );
   });
 });

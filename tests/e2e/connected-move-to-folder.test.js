@@ -190,11 +190,10 @@ describe('Move to Folder', function () {
         btn.click();
         return true;
       }
-      // Fallback
-      const buttons = document.querySelectorAll('button');
-      for (const b of buttons) {
+      // Fallback: the action bar is icon-only and its move button is titled "Move".
+      for (const b of document.querySelectorAll('button')) {
         const title = (b.getAttribute('title') || '').toLowerCase();
-        if (title.includes('move to folder') && b.offsetHeight > 0) {
+        if (title.startsWith('move') && b.offsetHeight > 0) {
           b.click();
           return true;
         }

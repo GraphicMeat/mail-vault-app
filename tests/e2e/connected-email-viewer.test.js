@@ -48,17 +48,13 @@ describe('Email Viewer', function () {
 
     expect(clicked).toBe(true);
 
-    // Wait for the email viewer to load (Reply/Forward buttons indicate body is loaded)
+    // Wait for the email viewer to load. The action bar is icon-only, so the
+    // buttons are identified by their title, not their text.
     await browser.waitUntil(
       async () => {
         return browser.execute(() => {
-          const buttons = document.querySelectorAll('button');
-          for (const btn of buttons) {
-            if ((btn.textContent || '').trim() === 'Reply' && btn.offsetHeight > 0) {
-              return true;
-            }
-          }
-          return false;
+          const btn = document.querySelector('button[title="Reply"]');
+          return btn !== null && btn.offsetHeight > 0;
         });
       },
       {
@@ -71,13 +67,8 @@ describe('Email Viewer', function () {
 
   it('should have Reply button', async function () {
     const hasReply = await browser.execute(() => {
-      const buttons = document.querySelectorAll('button');
-      for (const btn of buttons) {
-        if ((btn.textContent || '').trim() === 'Reply' && btn.offsetHeight > 0) {
-          return true;
-        }
-      }
-      return false;
+      const btn = document.querySelector('button[title="Reply"]');
+      return btn !== null && btn.offsetHeight > 0;
     });
 
     expect(hasReply).toBe(true);
@@ -86,14 +77,10 @@ describe('Email Viewer', function () {
   it('should open compose in Reply mode with Re: subject', async function () {
     // Click Reply button
     const clicked = await browser.execute(() => {
-      const buttons = document.querySelectorAll('button');
-      for (const btn of buttons) {
-        if ((btn.textContent || '').trim() === 'Reply' && btn.offsetHeight > 0) {
-          btn.click();
-          return true;
-        }
-      }
-      return false;
+      const btn = document.querySelector('button[title="Reply"]');
+      if (!btn || btn.offsetHeight === 0) return false;
+      btn.click();
+      return true;
     });
 
     expect(clicked).toBe(true);
@@ -122,13 +109,8 @@ describe('Email Viewer', function () {
 
   it('should have Forward button', async function () {
     const hasForward = await browser.execute(() => {
-      const buttons = document.querySelectorAll('button');
-      for (const btn of buttons) {
-        if ((btn.textContent || '').trim() === 'Forward' && btn.offsetHeight > 0) {
-          return true;
-        }
-      }
-      return false;
+      const btn = document.querySelector('button[title="Forward"]');
+      return btn !== null && btn.offsetHeight > 0;
     });
 
     expect(hasForward).toBe(true);
@@ -137,14 +119,10 @@ describe('Email Viewer', function () {
   it('should open compose in Forward mode with Fwd: subject', async function () {
     // Click Forward button
     const clicked = await browser.execute(() => {
-      const buttons = document.querySelectorAll('button');
-      for (const btn of buttons) {
-        if ((btn.textContent || '').trim() === 'Forward' && btn.offsetHeight > 0) {
-          btn.click();
-          return true;
-        }
-      }
-      return false;
+      const btn = document.querySelector('button[title="Forward"]');
+      if (!btn || btn.offsetHeight === 0) return false;
+      btn.click();
+      return true;
     });
 
     expect(clicked).toBe(true);
@@ -173,17 +151,13 @@ describe('Email Viewer', function () {
 
   it('should have Reply All button', async function () {
     const hasReplyAll = await browser.execute(() => {
-      const buttons = document.querySelectorAll('button');
-      for (const btn of buttons) {
-        if ((btn.textContent || '').trim() === 'Reply All' && btn.offsetHeight > 0) {
-          return true;
-        }
-      }
-      return false;
+      const btn = document.querySelector('button[title="Reply All"]');
+      return btn !== null && btn.offsetHeight > 0;
     });
 
+    // Reply All is hidden for single-recipient mail, which the mock fixtures are.
     if (!hasReplyAll) {
-      console.warn('[email-viewer] Reply All button not found — email may be single-recipient');
+      console.warn('[email-viewer] Reply All button not found — email is single-recipient');
     }
   });
 });

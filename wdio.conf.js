@@ -1,38 +1,56 @@
 import { resolve, join } from 'path';
-import { readFileSync, existsSync, mkdtempSync } from 'fs';
+import { mkdtempSync } from 'fs';
 import { tmpdir } from 'os';
-import { spawn } from 'child_process';
+import { spawn, execFileSync } from 'child_process';
+import {
+  buildMockServer,
+  startMockImap,
+  scenario,
+  mockAccount,
+  seedAccounts,
+  resetAppState,
+  stopDaemon,
+  MOCK_PASSWORD,
+} from './tests/e2e/mockImap.js';
 
-// Load test credentials from .env.test (optional — UI-only suites don't need it)
-let env = {};
-const envPath = resolve(import.meta.dirname, '.env.test');
-if (existsSync(envPath)) {
-  try {
-    const envContent = readFileSync(envPath, 'utf-8');
-    env = Object.fromEntries(
-      envContent
-        .split('\n')
-        .filter((line) => line.trim() && !line.startsWith('#'))
-        .map((line) => {
-          const [key, ...rest] = line.split('=');
-          return [key.trim(), rest.join('=').trim()];
-        })
-    );
-  } catch { /* non-fatal — credentials just won't be available */ }
-}
-
-const hasCredentials = !!(env.TEST_EMAIL && env.TEST_PASSWORD);
-
-// App binary path (debug build with webdriver feature)
+// App binary path (debug build with webdriver feature). Cargo builds into the
+// workspace target dir, not src-tauri/target — the old path pointed at a binary
+// nothing writes any more.
 const appBinary = process.env.TAURI_APP_BINARY || resolve(
   import.meta.dirname,
-  'src-tauri/target/debug/MailVault'
+  'target/debug/mailvault'
 );
 
-// Isolated test data directory — prevents test runs from affecting real app state
+// Isolated HOME for the app under test. Everything the app and its daemon touch
+// — app_data_dir(), the Maildir, ~/.mailvault/mv.sock — hangs off HOME, so
+// overriding it here is what actually keeps a run away from real app state.
+// (The old MAILVAULT_DATA_DIR was read by nothing.)
 const testDataDir = process.env.E2E_DATA_DIR || mkdtempSync(join(tmpdir(), 'mailvault-e2e-'));
 
+// Two mock IMAP accounts: connected-* specs cover account switching and the
+// unified inbox, which need more than one, and separate servers keep their
+// mailboxes distinguishable.
+// Account 2's INBOX is deliberately larger than both load windows — the 500 the
+// app paints from cache and the 200 it pages off the server — so specs have a
+// mailbox that is genuinely partially loaded until something scrolls it.
+// No FETCH delay: a fault here is paid by all eleven specs, and at 700 messages
+// it starved the webview badly enough to stall unrelated suites.
+const BIG_INBOX = 700;
+
+const MOCK_ACCOUNTS = [
+  { id: 'e2e-mock-account-1', email: 'luke@mock.test', subjectPrefix: 'Luke message' },
+  {
+    id: 'e2e-mock-account-2',
+    email: 'vader@mock.test',
+    subjectPrefix: 'Vader message',
+    inbox: BIG_INBOX,
+  },
+];
+
 let tauriWd;
+let mockServers = [];
+let credentialsPath;
+let seededAccounts = [];
 
 export const config = {
   runner: 'local',
@@ -40,7 +58,7 @@ export const config = {
   suites: {
     // CI-safe: no accounts needed, works from empty/welcome state
     'ui-headless': ['./tests/e2e/ui-*.test.js'],
-    // Needs real IMAP credentials + secrets
+    // CI-safe: seeded mock-IMAP accounts, no real credentials or network
     'connected-ci': ['./tests/e2e/connected-*.test.js'],
     // Developer-only: backup, migration, visual, archive
     'local-manual': [
@@ -75,18 +93,50 @@ export const config = {
   specFileRetriesDelay: 5,
   specFileRetriesDeferred: true,
 
-  // Start tauri-wd before tests
-  onPrepare: function () {
-    console.log(`[wdio] Test data dir: ${testDataDir}`);
-    console.log(`[wdio] Credentials available: ${hasCredentials}`);
+  // Start the mock IMAP servers and tauri-wd before tests
+  onPrepare: async function () {
+    console.log(`[wdio] Test HOME: ${testDataDir}`);
+
+    // A tauri-wd left behind by an aborted run still owns port 4444, and every
+    // session then fails with "App did not report plugin port in time". Mock
+    // servers from an aborted run just squat on memory. Both names are ours alone.
+    for (const name of ['tauri-wd', 'mock-imap-server']) {
+      try { execFileSync('pkill', ['-x', name]); } catch { /* none running */ }
+    }
+
+    buildMockServer();
+    mockServers = await Promise.all(
+      MOCK_ACCOUNTS.map((a) => startMockImap(scenario({
+        owner: a.email,
+        subjectPrefix: a.subjectPrefix,
+        inbox: a.inbox,
+        faults: a.faults,
+      }))),
+    );
+    seededAccounts = MOCK_ACCOUNTS.map((a, i) => mockAccount({ ...a, port: mockServers[i].port }));
+    credentialsPath = seedAccounts(testDataDir, seededAccounts);
+
+    // onPrepare runs in the launcher, before() runs in each worker — module state
+    // does not cross that boundary, but the environment workers are spawned with does.
+    process.env.E2E_MOCK_ACCOUNTS = JSON.stringify(seededAccounts);
+    process.env.E2E_MOCK_SERVERS = JSON.stringify(mockServers.map(({ host, port }) => ({ host, port })));
+    process.env.E2E_MOCK_INBOX_SIZES = JSON.stringify(MOCK_ACCOUNTS.map((a) => a.inbox || 40));
+
+    mockServers.forEach((s, i) => console.log(`[wdio] Mock IMAP for ${MOCK_ACCOUNTS[i].email}: ${s.host}:${s.port}`));
 
     return new Promise((resolve) => {
       tauriWd = spawn('tauri-wd', ['--port', '4444'], {
         stdio: ['ignore', 'pipe', 'pipe'],
+        // Own process group: killing it takes the app (and its daemon) with it.
+        detached: true,
         env: {
           ...process.env,
-          // Tell the app to use isolated test data directory
-          MAILVAULT_DATA_DIR: testDataDir,
+          // Isolated app data + daemon socket (both derive from HOME)
+          HOME: testDataDir,
+          // Credentials come from a file, so the run never touches the real keychain
+          MAILVAULT_TEST_CREDENTIALS: credentialsPath,
+          // Mock IMAP is plaintext; the app honors this for loopback only
+          MAILVAULT_IMAP_PLAINTEXT: '1',
         },
       });
 
@@ -109,18 +159,41 @@ export const config = {
   },
 
   onComplete: function () {
+    mockServers.forEach((s) => s.stop());
+
     if (tauriWd) {
-      tauriWd.kill('SIGTERM');
+      // Negative pid = whole group: tauri-wd plus the app it launched. Killing
+      // only tauri-wd leaves the app (and the daemon it spawned) running, which
+      // then blocks the next run's session.
+      try { process.kill(-tauriWd.pid, 'SIGTERM'); } catch (_) { /* already dead */ }
       setTimeout(() => {
-        try { tauriWd.kill('SIGKILL'); } catch (_) { /* already dead */ }
+        try { process.kill(-tauriWd.pid, 'SIGKILL'); } catch (_) { /* already dead */ }
       }, 2000);
     }
+
+    // The daemon detaches from the app, so it needs its own goodbye.
+    stopDaemon(testDataDir);
   },
 
-  // Make env and config available to all tests
+  // Each spec file gets a fresh app state — see resetAppState().
+  beforeSession: function () {
+    const accounts = JSON.parse(process.env.E2E_MOCK_ACCOUNTS || '[]');
+    if (accounts.length) resetAppState(testDataDir, accounts);
+  },
+
+  // Make the mock accounts available to all tests. TEST_EMAIL* keeps the shape
+  // specs already read; they just point at mock servers now.
   before: function () {
-    browser.testEnv = env;
-    browser.hasCredentials = hasCredentials;
+    const accounts = JSON.parse(process.env.E2E_MOCK_ACCOUNTS || '[]');
+    browser.testEnv = {
+      TEST_EMAIL: accounts[0]?.email,
+      TEST_EMAIL2: accounts[1]?.email,
+      TEST_PASSWORD: MOCK_PASSWORD,
+    };
+    browser.mockAccounts = accounts;
+    browser.mockImap = JSON.parse(process.env.E2E_MOCK_SERVERS || '[]');
+    browser.mockInboxSizes = JSON.parse(process.env.E2E_MOCK_INBOX_SIZES || '[]');
+    browser.hasCredentials = true;
     browser.testDataDir = testDataDir;
   },
 

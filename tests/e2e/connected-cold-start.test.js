@@ -4,8 +4,8 @@
  * Clears all app cache (headers + Maildir bodies), then measures how long
  * it takes for every account to fully load from scratch.
  *
- * IMPORTANT: The test clears the cache via Tauri invoke, then waits for
- * the user to enter the macOS Keychain password before proceeding.
+ * Runs against the seeded mock-IMAP accounts, so "cold IMAP load" here measures
+ * the app's own load path with the server cost held constant.
  * Once the app is ready, it benchmarks:
  *   1. Time from cache-clear to first emails visible (cold IMAP load)
  *   2. Per-account switching (all cold — no cache hits)
@@ -153,11 +153,11 @@ describe('Cold Start Benchmark', function () {
   let cacheCleared = false;
 
   before(async function () {
-    // Step 1: Wait for the app to fully load first (user enters keychain password here)
+    // Step 1: Wait for the app to fully load. Credentials come from the seeded
+    // file, not the keychain, so there is no prompt to wait on.
     console.log('\n[cold-start] Waiting for app to load...');
-    console.log('[cold-start] ⏳ Enter your Keychain password when prompted\n');
 
-    await waitForApp(120_000); // 2 min timeout for keychain prompt
+    await waitForApp(120_000);
     await waitForEmails(120_000); // Wait for initial emails to load
     await browser.pause(5000); // Let background sync settle
 

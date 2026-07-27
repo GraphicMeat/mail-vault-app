@@ -671,7 +671,7 @@ function EmailListComponent() {
                 {/* ponytail: the header used to always show the server total, so a
                     half-loaded window looked identical to a full one. Say what the
                     list actually holds whenever it's short of the total. */}
-                <span>
+                <span data-testid="email-list-count">
                   {displayEmails.length < totalEmails
                     ? `${displayEmails.length.toLocaleString()} of ${totalEmails.toLocaleString()} emails`
                     : `${totalEmails.toLocaleString()} emails`}

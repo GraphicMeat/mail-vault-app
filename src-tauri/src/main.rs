@@ -287,6 +287,20 @@ fn write_settings_json(app_handle: tauri::AppHandle, data: String) -> Result<(),
 const KEYRING_SERVICE: &str = "com.mailvault.app";
 const CREDENTIALS_KEY: &str = "credentials";
 
+/// E2E hatch: with `MAILVAULT_TEST_CREDENTIALS=<path>` the credential blob lives in
+/// that file instead of the OS keychain. Tests get an isolated account set with no
+/// keychain prompt, and — more importantly — cannot write mock accounts into the
+/// developer's real credential entry. Debug builds only: a shipped binary ignores it.
+#[cfg(debug_assertions)]
+fn test_credentials_path() -> Option<std::path::PathBuf> {
+    std::env::var_os("MAILVAULT_TEST_CREDENTIALS").map(std::path::PathBuf::from)
+}
+
+#[cfg(not(debug_assertions))]
+fn test_credentials_path() -> Option<std::path::PathBuf> {
+    None
+}
+
 // Store all credentials as a single JSON object in keychain
 // This triggers the keychain modal only once instead of per-account
 // Async: runs on background thread so macOS keychain dialog can appear without blocking main thread
@@ -294,6 +308,14 @@ const CREDENTIALS_KEY: &str = "credentials";
 async fn store_credentials(credentials: std::collections::HashMap<String, String>) -> Result<(), String> {
     info!("=== STORE CREDENTIALS START ===");
     info!("Storing credentials for {} account(s)", credentials.len());
+
+    if let Some(path) = test_credentials_path() {
+        warn!("MAILVAULT_TEST_CREDENTIALS set — writing credentials to {:?}, NOT the keychain", path);
+        let json = serde_json::to_string(&credentials)
+            .map_err(|e| format!("Failed to serialize credentials: {}", e))?;
+        return std::fs::write(&path, json)
+            .map_err(|e| format!("Failed to write test credentials: {}", e));
+    }
 
     tokio::task::spawn_blocking(move || {
         let json = serde_json::to_string(&credentials)
@@ -318,6 +340,19 @@ async fn store_credentials(credentials: std::collections::HashMap<String, String
 #[tauri::command]
 async fn get_credentials() -> Result<serde_json::Value, String> {
     info!("=== GET CREDENTIALS START ===");
+
+    if let Some(path) = test_credentials_path() {
+        warn!("MAILVAULT_TEST_CREDENTIALS set — reading credentials from {:?}, NOT the keychain", path);
+        let credentials: std::collections::HashMap<String, String> = match std::fs::read_to_string(&path) {
+            Ok(json) => serde_json::from_str(&json)
+                .map_err(|e| format!("Failed to parse test credentials: {}", e))?,
+            // No file yet is the first-launch case, same as an empty keychain.
+            Err(_) => std::collections::HashMap::new(),
+        };
+        let status = if credentials.is_empty() { "empty" } else { "granted" };
+        info!("=== GET CREDENTIALS END (test file, status: {}) ===", status);
+        return Ok(serde_json::json!({ "status": status, "credentials": credentials }));
+    }
 
     let keychain_future = tokio::task::spawn_blocking(move || -> Result<(String, std::collections::HashMap<String, String>), String> {
         let entry = Entry::new(KEYRING_SERVICE, CREDENTIALS_KEY)

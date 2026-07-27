@@ -22,7 +22,7 @@
     "test:watch": "vitest",
     "test:live": "vitest run --config vitest.live.config.js",
     "test:imap": "cargo test -p mailvault-core -p mailvault-daemon",
-    "test:e2e": "cd src-tauri && cargo build --features webdriver && cd .. && wdio run wdio.conf.js",
+    "test:e2e": "npm run build && SPARKLE_FRAMEWORK_PATH=$PWD/src-tauri cargo build -p mailvault --features webdriver && wdio run wdio.conf.js",
     "test:e2e:ui": "wdio run wdio.conf.js --suite ui-headless",
     "test:e2e:connected": "wdio run wdio.conf.js --suite connected-ci",
     "test:e2e:local": "wdio run wdio.conf.js --suite local-manual"
