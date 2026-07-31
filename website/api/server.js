@@ -26,8 +26,6 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-let nodemailer;
-try { nodemailer = require('nodemailer'); } catch { nodemailer = null; }
 let stripe;
 try { stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null; } catch { stripe = null; }
 const path = require('path');
@@ -56,16 +54,47 @@ app.use(analytics({
   peers: analyticsPeers,
 }));
 
-// Email transporter (configured via env vars)
-const transporter = (nodemailer && process.env.SMTP_HOST) ? nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: parseInt(process.env.SMTP_PORT) || 465,
-  secure: (parseInt(process.env.SMTP_PORT) || 465) === 465,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS
+// ---- GraphicMeat partner API ----
+//
+// This site used to build its own nodemailer transport here. It never worked:
+// `nodemailer` was not installed in the deployed tree, the require threw, and
+// every sendMail call sat behind a null check — no contact notification or
+// welcome mail ever went out. Rather than install the dependency and keep a
+// second copy of the Purelymail credentials on this host, all mail now goes
+// through graphicmeat.com, which already had a working sender.
+//
+// This site therefore needs NO SMTP_* variables at all.
+//
+// graphicmeat.com owns the Purelymail credentials and the shared subscriber
+// table; this site holds neither. One mail path, one credential to rotate.
+// Rows land there tagged source='mailvault' so they can never be swept into a
+// GraphicMeat newsletter send — those addresses did not consent to that.
+const GM_URL = (process.env.GRAPHICMEAT_PARTNER_URL || '').replace(/\/$/, '');
+const GM_KEY = process.env.GRAPHICMEAT_PARTNER_KEY;
+const gmConfigured = () => Boolean(GM_URL && GM_KEY);
+
+if (!gmConfigured()) {
+  console.warn('GRAPHICMEAT_PARTNER_URL/KEY not set — contact and subscribe mail will not be sent.');
+}
+
+async function sendViaGraphicMeat(endpoint, payload) {
+  if (!gmConfigured()) throw new Error('graphicmeat partner API not configured');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 10000); // never hang a form submit on it
+  try {
+    const res = await fetch(`${GM_URL}/api/partner/${endpoint}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-partner-key': GM_KEY },
+      body: JSON.stringify({ source: 'mailvault', ...payload }),
+      signal: ctrl.signal,
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `partner ${endpoint} failed: ${res.status}`);
+    return body;
+  } finally {
+    clearTimeout(timer);
   }
-}) : null;
+}
 
 // ===========================================
 // Middleware
@@ -279,24 +308,16 @@ app.post('/api/subscribe', async (req, res) => {
       [email.toLowerCase(), hashIP(getClientIP(req))]
     );
 
-    // Send emails
-    if (transporter && process.env.SMTP_USER) {
-      if (process.env.NOTIFY_EMAIL) {
-        transporter.sendMail({
-          from: `"MailVault" <${process.env.SMTP_USER}>`,
-          to: process.env.NOTIFY_EMAIL,
-          subject: '[MailVault] New subscriber',
-          text: `New newsletter subscriber: ${email}`,
-          html: `<p>New newsletter subscriber: <strong>${email}</strong></p><p>Subscribed at: ${new Date().toISOString()}</p>`
-        }).catch(err => console.error('Failed to send subscriber notification:', err));
-      }
-
-      transporter.sendMail({
-        from: `"MailVault" <${process.env.SMTP_USER}>`,
-        to: email.toLowerCase(),
-        subject: 'Welcome to MailVault updates!',
-        text: `Thanks for subscribing to MailVault updates!\n\nYou'll be the first to know about new releases, features, and tips.\n\nIn the meantime:\n- Download MailVault: https://mailvaultapp.com\n- Source code: https://github.com/GraphicMeat/mail-vault-app\n- Join the discussion: https://github.com/GraphicMeat/mail-vault-app/discussions\n\n— The MailVault Team`,
-        html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto;">
+    // Mirror the subscriber into GraphicMeat's table (tagged source='mailvault')
+    // and let it send the welcome mail — it holds the only SMTP credentials.
+    // The local row above is this site's own record and stands on its own, so a
+    // partner failure is logged, not surfaced: the visitor did subscribe here.
+    sendViaGraphicMeat('subscribe', {
+      email: email.toLowerCase(),
+      fromName: 'MailVault',
+      subject: 'Welcome to MailVault updates!',
+      text: `Thanks for subscribing to MailVault updates!\n\nYou'll be the first to know about new releases, features, and tips.\n\nIn the meantime:\n- Download MailVault: https://mailvaultapp.com\n- Source code: https://github.com/GraphicMeat/mail-vault-app\n- Join the discussion: https://github.com/GraphicMeat/mail-vault-app/discussions\n\n— The MailVault Team`,
+      html: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto;">
   <h2 style="color: #6366f1;">Welcome to MailVault!</h2>
   <p>Thanks for subscribing. You'll be the first to know about new releases, features, and tips.</p>
   <p>In the meantime:</p>
@@ -306,9 +327,8 @@ app.post('/api/subscribe', async (req, res) => {
     <li><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" style="color: #6366f1;">Join the discussion</a></li>
   </ul>
   <p style="color: #94a3b8; font-size: 14px;">— The MailVault Team</p>
-</div>`
-      }).catch(err => console.error('Failed to send welcome email:', err));
-    }
+</div>`,
+    }).catch(err => console.error('Failed to mirror subscriber to GraphicMeat:', err.message));
 
     res.json({ success: true, message: 'Subscribed successfully' });
   } catch (error) {
@@ -351,21 +371,15 @@ app.post('/api/contact', contactLimiter, async (req, res) => {
       [name, email.toLowerCase(), category || 'other', message, hashIP(getClientIP(req))]
     );
 
-    // Send email notification
-    if (transporter && process.env.NOTIFY_EMAIL) {
-      transporter.sendMail({
-        from: `"MailVault Contact" <${process.env.SMTP_USER}>`,
-        to: process.env.NOTIFY_EMAIL,
-        replyTo: email,
-        subject: `[MailVault] ${category || 'general'}: New message from ${name}`,
-        text: `Name: ${name}\nEmail: ${email}\nCategory: ${category || 'general'}\n\nMessage:\n${message}`,
-        html: `<p><strong>Name:</strong> ${name}</p>
-<p><strong>Email:</strong> ${email}</p>
-<p><strong>Category:</strong> ${category || 'general'}</p>
-<hr>
-<p>${message.replace(/\n/g, '<br>')}</p>`
-      }).catch(err => console.error('Failed to send notification email:', err));
-    }
+    // Notification goes out through GraphicMeat, which holds the SMTP creds.
+    // The message is already stored above, so a mail failure is logged and
+    // swallowed rather than losing the submission the user just made.
+    sendViaGraphicMeat('contact', {
+      name,
+      email: email.toLowerCase(),
+      category: category || 'general',
+      message,
+    }).catch(err => console.error('Failed to send contact notification:', err.message));
 
     res.json({ success: true, message: 'Message sent successfully' });
   } catch (error) {
