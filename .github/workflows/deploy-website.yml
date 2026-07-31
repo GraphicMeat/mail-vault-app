@@ -17,13 +17,15 @@ name: Deploy Website
 #   STRIPE_WEBHOOK_SECRET
 #   STRIPE_PRICE_MONTHLY_EUR
 #   STRIPE_PRICE_YEARLY_EUR
-#   SMTP_HOST
-#   SMTP_PORT
-#   SMTP_USER
-#   SMTP_PASS
-#   NOTIFY_EMAIL
+#   GRAPHICMEAT_PARTNER_URL   https://graphicmeat.com
+#   GRAPHICMEAT_PARTNER_KEY   Must equal PARTNER_API_KEY in graphicmeat.com
 #   IP_SALT                   Random 32+ char string
 #   ADMIN_KEY                 Random 32+ char string
+#
+# SMTP_HOST/PORT/USER/PASS and NOTIFY_EMAIL are gone: this site sends no mail
+# itself. Contact and newsletter mail go through graphicmeat.com's partner API,
+# which holds the only Purelymail credentials. Those five repo secrets can be
+# deleted — SMTP_PASS especially, it was exposed by a world-readable .env.
 
 on:
   push:
@@ -88,11 +90,11 @@ jobs:
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           STRIPE_PRICE_MONTHLY_EUR: ${{ secrets.STRIPE_PRICE_MONTHLY_EUR }}
           STRIPE_PRICE_YEARLY_EUR: ${{ secrets.STRIPE_PRICE_YEARLY_EUR }}
-          SMTP_HOST: ${{ secrets.SMTP_HOST }}
-          SMTP_PORT: ${{ secrets.SMTP_PORT }}
-          SMTP_USER: ${{ secrets.SMTP_USER }}
-          SMTP_PASS: ${{ secrets.SMTP_PASS }}
-          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+          # No SMTP_* here on purpose: this site sends no mail of its own.
+          # Contact and newsletter mail go through graphicmeat.com's partner API,
+          # which holds the only Purelymail credentials.
+          GRAPHICMEAT_PARTNER_URL: ${{ secrets.GRAPHICMEAT_PARTNER_URL }}
+          GRAPHICMEAT_PARTNER_KEY: ${{ secrets.GRAPHICMEAT_PARTNER_KEY }}
           IP_SALT: ${{ secrets.IP_SALT }}
           ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
           ANALYTICS_API_KEY: ${{ secrets.ANALYTICS_API_KEY }}
@@ -109,11 +111,8 @@ jobs:
           ANALYTICS_API_KEY=${ANALYTICS_API_KEY}
           GRAPHICMEAT_ANALYTICS_URL=${GRAPHICMEAT_ANALYTICS_URL}
           GRAPHICMEAT_ANALYTICS_KEY=${GRAPHICMEAT_ANALYTICS_KEY}
-          NOTIFY_EMAIL=${NOTIFY_EMAIL}
-          SMTP_HOST=${SMTP_HOST}
-          SMTP_PORT=${SMTP_PORT}
-          SMTP_USER=${SMTP_USER}
-          SMTP_PASS=${SMTP_PASS}
+          GRAPHICMEAT_PARTNER_URL=${GRAPHICMEAT_PARTNER_URL}
+          GRAPHICMEAT_PARTNER_KEY=${GRAPHICMEAT_PARTNER_KEY}
           STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
           STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
           STRIPE_PRICE_MONTHLY_EUR=${STRIPE_PRICE_MONTHLY_EUR}
