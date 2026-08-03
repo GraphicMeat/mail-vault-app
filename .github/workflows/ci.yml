@@ -112,7 +112,7 @@ jobs:
             libwebkit2gtk-4.1-dev libgtk-3-dev \
             libayatana-appindicator3-dev librsvg2-dev \
             libssl-dev libglib2.0-dev libdbus-1-dev \
-            libsecret-1-dev patchelf xvfb dbus xdotool
+            libsecret-1-dev patchelf xvfb dbus
       - run: npm ci
       - name: Build Vite frontend
         run: npx vite build
@@ -130,48 +130,15 @@ jobs:
         run: cargo install tauri-webdriver-automation --locked --force
       - name: Create empty .env.test for UI-only suite
         run: touch .env.test
-      # TEMPORARY diagnostics: launch the app bare under xvfb and log when (if
-      # ever) its window maps, with and without the WebKit DMABUF renderer.
-      # Remove once the e2e job is stably green.
-      - name: Probe app startup under xvfb
-        env:
-          TAURI_WEBVIEW_AUTOMATION: "true"
-        run: |
-          echo "DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-unset}"
-          ls -la /dev/dri 2>/dev/null || echo "no /dev/dri"
-          probe() {
-            local label="$1"
-            export HOME="$(mktemp -d)"
-            echo "=== probe: $label (HOME=$HOME, start $(date +%T.%3N)) ==="
-            xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" bash -c '
-              timeout 90 "$GITHUB_WORKSPACE/target/debug/mailvault" 2>&1 \
-                | while IFS= read -r line; do printf "app %s: %s\n" "$(date +%T.%3N)" "$line"; done &
-              found=""
-              for i in $(seq 1 45); do
-                sleep 2
-                win=$(xdotool search --name MailVault 2>/dev/null | head -1)
-                if [ -n "$win" ]; then
-                  echo "window mapped at +$((i*2))s (id $win, $(date +%T.%3N))"
-                  found=1
-                  break
-                fi
-              done
-              [ -n "$found" ] || echo "window NEVER mapped within 90s"
-              pkill -x mailvault || true
-              wait
-            '
-          }
-          probe "default env"
-          export WEBKIT_DISABLE_DMABUF_RENDERER=1
-          probe "WEBKIT_DISABLE_DMABUF_RENDERER=1"
       - name: Run E2E tests (ui-headless suite)
         env:
           TAURI_APP_BINARY: ${{ github.workspace }}/target/debug/mailvault
           CI: "true"
           # Fixed app HOME so the log-dump step below can find app/daemon logs.
           E2E_DATA_DIR: ${{ runner.temp }}/e2e-home
-          # GH runners have no GPU/render node; WebKitGTK's default DMABUF
-          # renderer misbehaves under Xvfb (Tauri's documented CI workaround).
+          # Defensive: Tauri's documented CI setting for GPU-less runners.
+          # Probing showed the webview renders fine either way on today's
+          # runner image, but the software path is the stable one to pin.
           WEBKIT_DISABLE_DMABUF_RENDERER: "1"
           # No a11y bus in CI — skip the AT-SPI bridge instead of probing for it.
           NO_AT_BRIDGE: "1"

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **The app no longer crashes at launch on Linux systems without a configured locale.** On a system where the language environment is unset (LANG empty, common on minimal installs and servers), the browser engine reports the raw "C" locale, and every date formatter rejected it — taking the whole window down to a "Something went wrong" screen before anything loaded. Date formatting now falls back to the system default when the reported locale isn't usable.
+
 ## [2.8.0] - 2026-07-26
 
 ### Fixed
