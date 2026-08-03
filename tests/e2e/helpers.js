@@ -207,6 +207,27 @@ export async function pressSequence(key1, key2) {
  * match hits ordinary sidebar chrome, so it reports "open" over the mail view and
  * every later click lands on the wrong element.
  */
+/**
+ * Click a settings navigation button by its exact visible label. Works for
+ * top-level tabs ('Templates', 'Storage', 'Accounts', 'General') and the
+ * General tab's sub-tabs ('Appearance', 'Behavior', 'Notifications',
+ * 'Keyboard Shortcuts') — the settings restructure moved sections off the
+ * old flat General page onto these.
+ */
+export async function clickSettingsNav(label) {
+  const clicked = await browser.execute((wanted) => {
+    for (const btn of document.querySelectorAll('button')) {
+      if (btn.offsetHeight > 0 && btn.textContent.trim() === wanted) {
+        btn.click();
+        return true;
+      }
+    }
+    return false;
+  }, label);
+  await browser.pause(400);
+  return clicked;
+}
+
 export async function openSettings() {
   const isOpen = () => browser.execute(() => {
     const el = document.querySelector('[data-testid="settings-page"]');

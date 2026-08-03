@@ -9,7 +9,7 @@
  * - Storage tab with Auto-Cleanup and Pro badge
  */
 
-import { waitForApp, openSettings, closeSettings, pressKey } from './helpers.js';
+import { waitForApp, openSettings, closeSettings, clickSettingsNav, pressKey } from './helpers.js';
 
 describe('Settings Page', function () {
   this.timeout(30000);
@@ -32,11 +32,13 @@ describe('Settings Page', function () {
     await closeSettings();
   });
 
-  describe('General Tab — Undo Send', function () {
+  describe('Behavior — Undo Send', function () {
     before(async function () {
       if (!settingsAccessible) this.skip();
       await openSettings();
       await browser.pause(300);
+      // Undo Send lives on the General tab's Behavior sub-tab now
+      await clickSettingsNav('Behavior');
     });
 
     after(async function () {
@@ -104,11 +106,13 @@ describe('Settings Page', function () {
     });
   });
 
-  describe('General Tab — Email Templates', function () {
+  describe('Templates Tab — Email Templates', function () {
     before(async function () {
       if (!settingsAccessible) this.skip();
       await openSettings();
       await browser.pause(300);
+      // Templates moved to their own top-level tab
+      await clickSettingsNav('Templates');
     });
 
     after(async function () {
@@ -230,11 +234,13 @@ describe('Settings Page', function () {
     });
   });
 
-  describe('General Tab — Notifications', function () {
+  describe('Notifications — master toggle and preview', function () {
     before(async function () {
       if (!settingsAccessible) this.skip();
       await openSettings();
       await browser.pause(300);
+      await clickSettingsNav('General');
+      await clickSettingsNav('Notifications');
     });
 
     after(async function () {
@@ -262,11 +268,13 @@ describe('Settings Page', function () {
     });
   });
 
-  describe('General Tab — Keyboard Shortcuts', function () {
+  describe('Keyboard Shortcuts', function () {
     before(async function () {
       if (!settingsAccessible) this.skip();
       await openSettings();
       await browser.pause(300);
+      await clickSettingsNav('General');
+      await clickSettingsNav('Keyboard Shortcuts');
     });
 
     after(async function () {
@@ -342,16 +350,16 @@ describe('Settings Page', function () {
       expect(found).toBe(true);
     });
 
-    it('should show Pro badge on Auto-Cleanup for non-paid users', async function () {
+    it('should show Premium badge on Auto-Cleanup for non-paid users', async function () {
       const hasBadge = await browser.execute(() => {
         const section = document.querySelector('[data-testid="settings-auto-cleanup"]');
         if (section) {
-          return section.innerText.includes('Pro');
+          return section.innerText.includes('Premium');
         }
         const headings = document.querySelectorAll('h4');
         for (const h of headings) {
           if (h.textContent.includes('Auto-Cleanup')) {
-            return h.textContent.includes('Pro');
+            return h.textContent.includes('Premium');
           }
         }
         return false;

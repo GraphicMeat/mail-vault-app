@@ -10,7 +10,7 @@
  * 6. Clean up by deleting the template
  */
 
-import { waitForApp, openSettings, closeSettings, pressKey } from './helpers.js';
+import { waitForApp, openSettings, closeSettings, clickSettingsNav, pressKey } from './helpers.js';
 
 const TEST_TEMPLATE_NAME = 'E2E Compose Template';
 const TEST_TEMPLATE_BODY = 'Hello, this is a test template inserted by E2E automation.';
@@ -31,6 +31,8 @@ describe('Compose Modal & Templates', function () {
     it('should create a test template', async function () {
       await openSettings();
       await browser.pause(400);
+      // Templates moved to their own top-level tab
+      await clickSettingsNav('Templates');
 
       // Click "Add Template"
       const clickedAdd = await browser.execute(() => {
@@ -225,6 +227,8 @@ describe('Compose Modal & Templates', function () {
     it('should remove the test template from settings', async function () {
       await openSettings();
       await browser.pause(400);
+      // Templates moved to their own top-level tab
+      await clickSettingsNav('Templates');
 
       // Find and delete the template
       const deleted = await browser.execute((name) => {

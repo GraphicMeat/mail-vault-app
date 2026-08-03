@@ -9,7 +9,7 @@
  * - Accounts Tab (display name, signature, avatar color picker)
  */
 
-import { waitForApp, openSettings, closeSettings, pressKey } from './helpers.js';
+import { waitForApp, openSettings, closeSettings, clickSettingsNav, pressKey } from './helpers.js';
 
 describe('Settings Page — Extended', function () {
   this.timeout(30000);
@@ -156,11 +156,13 @@ describe('Settings Page — Extended', function () {
   // -----------------------------------------------------------------------
   // General Tab — Search & History
   // -----------------------------------------------------------------------
-  describe('General Tab — Search & History', function () {
+  describe('Behavior — Search & History', function () {
     before(async function () {
       if (appState !== 'ready') this.skip();
       await openSettings();
       await browser.pause(300);
+      // Search/filter history moved to the General tab's Behavior sub-tab
+      await clickSettingsNav('Behavior');
       // Scroll down to find Search & History section
       await browser.execute(() => {
         const allText = document.querySelectorAll('h4, h3, div');
@@ -228,20 +230,10 @@ describe('Settings Page — Extended', function () {
   // -----------------------------------------------------------------------
   // General Tab — Notifications Details
   // -----------------------------------------------------------------------
-  describe('General Tab — Notifications Details', function () {
+  describe('Notifications & Behavior — details', function () {
     before(async function () {
       if (appState !== 'ready') this.skip();
       await openSettings();
-      await browser.pause(300);
-      // Scroll to notifications section
-      await browser.execute(() => {
-        const section = document.querySelector('[data-testid="settings-notifications"]');
-        if (section) {
-          section.scrollIntoView({ behavior: 'instant' });
-          return true;
-        }
-        return false;
-      });
       await browser.pause(300);
     });
 
@@ -250,6 +242,8 @@ describe('Settings Page — Extended', function () {
     });
 
     it('should have badge count toggle', async function () {
+      // Badge settings live on the Notifications sub-tab
+      await clickSettingsNav('Notifications');
       const found = await browser.execute(() => {
         const text = document.body.innerText.toLowerCase();
         return text.includes('badge');
@@ -258,11 +252,12 @@ describe('Settings Page — Extended', function () {
     });
 
     it('should have mark as read mode dropdown', async function () {
+      // Mark as Read moved to the Behavior sub-tab
+      await clickSettingsNav('Behavior');
       const options = await browser.execute(() => {
-        // Scope to the notifications section to avoid matching the date-format dropdown
-        const section = document.querySelector('[data-testid="settings-notifications"]');
-        const container = section || document;
-        const selects = container.querySelectorAll('select');
+        // The date-format dropdown lives on the Appearance sub-tab, so it is
+        // not mounted here — document scope is unambiguous.
+        const selects = document.querySelectorAll('select');
         for (const select of selects) {
           const opts = Array.from(select.options).map(o => o.value);
           if (opts.includes('auto') && opts.includes('manual')) {
