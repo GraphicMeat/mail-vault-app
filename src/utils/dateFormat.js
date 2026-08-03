@@ -16,7 +16,18 @@ const DATE_PRESETS = {
  * it directly passed on a new local Node and threw `navigator is not defined`
  * on CI's Node 20.
  */
-const _locale = () => (typeof navigator !== 'undefined' ? navigator.language : undefined);
+const _locale = () => {
+  const lang = typeof navigator !== 'undefined' ? navigator.language : undefined;
+  if (!lang) return undefined;
+  // WebKitGTK reports the raw POSIX locale — "C" on systems without LANG set —
+  // which is not a BCP 47 tag and makes every Intl constructor throw RangeError,
+  // crashing the app into the error boundary. Fall back to the runtime default.
+  try {
+    return Intl.DateTimeFormat.supportedLocalesOf([lang]).length ? lang : undefined;
+  } catch {
+    return undefined;
+  }
+};
 
 /**
  * Build Intl.DateTimeFormat options for time based on the timeFormat setting.

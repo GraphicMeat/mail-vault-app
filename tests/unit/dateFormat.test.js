@@ -46,4 +46,17 @@ describe('dateFormat without a navigator global', () => {
     // en-GB is 24-hour, so 15:09 UTC must not come back with an am/pm marker.
     expect(formatTime(DATE)).not.toMatch(/[ap]m/i);
   });
+
+  // WebKitGTK reports the raw POSIX locale: navigator.language === "C" on any
+  // Linux without LANG set (headless CI, minimal desktops). "C" is not a BCP 47
+  // tag — passing it to Intl throws RangeError and crashed the whole app into
+  // its error boundary. The formatters must fall back to the runtime default.
+  for (const [name, call] of cases) {
+    it(`${name} survives a POSIX "C" locale`, () => {
+      vi.stubGlobal('navigator', { language: 'C' });
+      const out = call();
+      expect(out).toBeTruthy();
+      expect(out).toEqual(expect.any(String));
+    });
+  }
 });
