@@ -49,60 +49,46 @@ describe('Settings Page', function () {
       const found = await browser.execute(() => {
         const section = document.querySelector('[data-testid="settings-undo-send"]');
         if (section && section.offsetHeight > 0) return true;
-        return document.body.innerText.includes('Enable Undo Send');
+        return document.body.innerText.includes('Send Delay');
       });
       expect(found).toBe(true);
     });
 
-    it('should show delay dropdown when undo send is toggled on', async function () {
-      // First, check if undo send is already on (state persists between sessions)
-      const alreadyOn = await browser.execute(() => {
-        return document.body.innerText.includes('Undo send delay');
-      });
+    it('should offer send delay options and warn when a delay is set', async function () {
+      // Undo Send is a single "Send Delay" select now (0 = off) in the Sending
+      // section — the old Enable toggle + delay dropdown pair is gone.
+      const setDelay = (value) => browser.execute((v) => {
+        const select = document.querySelector('[data-testid="settings-undo-send"] select');
+        if (!select) return false;
+        const setter = Object.getOwnPropertyDescriptor(
+          window.HTMLSelectElement.prototype, 'value'
+        ).set;
+        setter.call(select, v);
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      }, value);
 
-      if (!alreadyOn) {
-        // Toggle it ON
-        await browser.execute(() => {
-          const labels = document.querySelectorAll('div');
-          for (const label of labels) {
-            if (label.textContent.trim() === 'Enable Undo Send') {
-              const container = label.closest('.flex') || label.parentElement?.parentElement;
-              if (!container) continue;
-              const toggle = container.querySelector('.toggle-switch');
-              if (toggle) {
-                toggle.click();
-                return true;
-              }
-            }
-          }
-          return false;
-        });
-        await browser.pause(400);
-      }
-
-      // Check if delay dropdown is visible
-      const hasDropdown = await browser.execute(() => {
-        return document.body.innerText.includes('Undo send delay');
+      const options = await browser.execute(() => {
+        const section = document.querySelector('[data-testid="settings-undo-send"]');
+        const select = section && section.querySelector('select');
+        return select ? Array.from(select.options).map(o => o.value) : null;
       });
-      expect(hasDropdown).toBe(true);
+      expect(options).not.toBe(null);
+      expect(options).toContain('0');
+      expect(options).toContain('30');
 
-      // Toggle back off to restore state
-      await browser.execute(() => {
-        const labels = document.querySelectorAll('div');
-        for (const label of labels) {
-          if (label.textContent.trim() === 'Enable Undo Send') {
-            const container = label.closest('.flex') || label.parentElement?.parentElement;
-            if (!container) continue;
-            const toggle = container.querySelector('.toggle-switch');
-            if (toggle) {
-              toggle.click();
-              return true;
-            }
-          }
-        }
-        return false;
-      });
+      // Selecting a delay surfaces the stay-awake warning
+      expect(await setDelay('30')).toBe(true);
       await browser.pause(300);
+      const hasWarning = await browser.execute(() => {
+        const section = document.querySelector('[data-testid="settings-undo-send"]');
+        return (section?.innerText || '').includes('stay awake');
+      });
+      expect(hasWarning).toBe(true);
+
+      // Restore Off
+      await setDelay('0');
+      await browser.pause(200);
     });
   });
 

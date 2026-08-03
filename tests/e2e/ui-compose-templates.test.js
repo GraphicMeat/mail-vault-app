@@ -176,9 +176,12 @@ describe('Compose Modal & Templates', function () {
       }, TEST_TEMPLATE_NAME);
       await browser.pause(500);
 
-      // Verify the compose body textarea contains the template text
+      // Verify the compose body contains the template text. The body is a
+      // rich-text (contentEditable) editor now, so check innerText first;
+      // keep the textarea paths for older layouts.
       const bodyContainsTemplate = await browser.execute((expectedText) => {
         const body = document.querySelector('[data-testid="compose-body"]');
+        if (body && (body.innerText || '').includes(expectedText)) return true;
         if (body && body.value && body.value.includes(expectedText)) return true;
         const textareas = document.querySelectorAll('textarea');
         for (const ta of textareas) {
