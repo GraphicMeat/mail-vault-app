@@ -168,9 +168,28 @@ jobs:
         env:
           TAURI_APP_BINARY: ${{ github.workspace }}/target/debug/mailvault
           CI: "true"
+          # Fixed app HOME so the log-dump step below can find app/daemon logs.
+          E2E_DATA_DIR: ${{ runner.temp }}/e2e-home
           # GH runners have no GPU/render node; WebKitGTK's default DMABUF
           # renderer misbehaves under Xvfb (Tauri's documented CI workaround).
           WEBKIT_DISABLE_DMABUF_RENDERER: "1"
           # No a11y bus in CI — skip the AT-SPI bridge instead of probing for it.
           NO_AT_BRIDGE: "1"
-        run: dbus-run-session -- xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npx wdio run wdio.conf.js --suite ui-headless
+        run: |
+          mkdir -p "$E2E_DATA_DIR"
+          dbus-run-session -- xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" npx wdio run wdio.conf.js --suite ui-headless
+      - name: Dump app/daemon logs
+        if: always()
+        run: |
+          echo "=== e2e-home tree ==="
+          find "$RUNNER_TEMP/e2e-home" -maxdepth 5 | head -80
+          find "$RUNNER_TEMP/e2e-home" -name "*.log" -type f | while read -r f; do
+            echo "=== $f ==="; tail -n 200 "$f"
+          done
+      - name: Upload e2e screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-diagnostics
+          path: ${{ runner.temp }}/e2e-home/*.png
+          if-no-files-found: ignore

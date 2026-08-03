@@ -130,7 +130,10 @@ export const config = {
     mockServers.forEach((s, i) => console.log(`[wdio] Mock IMAP for ${MOCK_ACCOUNTS[i].email}: ${s.host}:${s.port}`));
 
     return new Promise((resolve) => {
-      tauriWd = spawn('tauri-wd', ['--port', '4444'], {
+      // Trace level in CI: tauri-wd relays the app's stdout lines at
+      // debug/trace, which is the only place frontend/daemon boot output
+      // is visible on a headless runner.
+      tauriWd = spawn('tauri-wd', ['--port', '4444', ...(process.env.CI ? ['--log-level', 'trace'] : [])], {
         stdio: ['ignore', 'pipe', 'pipe'],
         // Own process group: killing it takes the app (and its daemon) with it.
         detached: true,

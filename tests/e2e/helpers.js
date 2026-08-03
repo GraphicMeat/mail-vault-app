@@ -22,20 +22,45 @@
  */
 export async function waitForApp(timeout = 30_000) {
   // First, wait for *any* content to render (onboarding, welcome, or sidebar)
-  await browser.waitUntil(
-    async () => {
-      return browser.execute(() => {
-        return document.querySelector('[data-testid="sidebar"]') !== null ||
-          (document.body?.textContent || '').includes('Get Started') ||
-          (document.body?.textContent || '').includes('Add Your First Account');
-      });
-    },
-    {
-      timeout,
-      timeoutMsg: `App did not render any content within ${timeout}ms`,
-      interval: 500,
-    },
-  );
+  try {
+    await browser.waitUntil(
+      async () => {
+        return browser.execute(() => {
+          return document.querySelector('[data-testid="sidebar"]') !== null ||
+            (document.body?.textContent || '').includes('Get Started') ||
+            (document.body?.textContent || '').includes('Add Your First Account');
+        });
+      },
+      {
+        timeout,
+        timeoutMsg: `App did not render any content within ${timeout}ms`,
+        interval: 500,
+      },
+    );
+  } catch (err) {
+    // Diagnostics for headless CI: what is the webview actually showing?
+    try {
+      const dom = await browser.execute(() => ({
+        readyState: document.readyState,
+        href: location.href,
+        title: document.title,
+        rootPresent: document.querySelector('#root') !== null,
+        bodyLength: document.body?.innerHTML?.length ?? -1,
+        bodyHead: (document.body?.innerHTML || '').slice(0, 1500),
+      }));
+      console.log('[waitForApp] DOM at timeout:', JSON.stringify(dom));
+    } catch (e) {
+      console.log('[waitForApp] DOM dump failed:', e.message);
+    }
+    try {
+      if (browser.testDataDir) {
+        await browser.saveScreenshot(`${browser.testDataDir}/waitforapp-${Date.now()}.png`);
+      }
+    } catch (e) {
+      console.log('[waitForApp] screenshot failed:', e.message);
+    }
+    throw err;
+  }
 
   // Auto-dismiss onboarding if present
   const dismissedOnboarding = await browser.execute(() => {
