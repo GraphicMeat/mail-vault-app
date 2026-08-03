@@ -183,8 +183,13 @@ jobs:
         run: |
           echo "=== e2e-home tree ==="
           find "$RUNNER_TEMP/e2e-home" -maxdepth 5 | head -80
-          find "$RUNNER_TEMP/e2e-home" -name "*.log" -type f | while read -r f; do
-            echo "=== $f ==="; tail -n 200 "$f"
+          # Dated rotation: mailvault.log.2026-08-03 — match *.log* not *.log
+          find "$RUNNER_TEMP/e2e-home" -name "*.log*" -type f | while read -r f; do
+            echo "=== $f ==="; tail -n 300 "$f"
+          done
+          for f in accounts.json frontend-settings.json; do
+            p="$RUNNER_TEMP/e2e-home/.local/share/com.mailvault.app/$f"
+            [ -f "$p" ] && { echo "=== $f ==="; cat "$p"; } || true
           done
       - name: Upload e2e screenshots
         if: always()

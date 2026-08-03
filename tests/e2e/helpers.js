@@ -20,6 +20,35 @@
  *
  * @returns {'ready' | 'welcome'}
  */
+// Diagnostics for headless CI: what is the webview actually showing?
+async function dumpAppState(label) {
+  try {
+    const dom = await browser.execute(() => ({
+      readyState: document.readyState,
+      href: location.href,
+      title: document.title,
+      rootPresent: document.querySelector('#root') !== null,
+      sidebar: (() => {
+        const s = document.querySelector('[data-testid="sidebar"]');
+        return s ? { offsetHeight: s.offsetHeight, rect: s.getBoundingClientRect() } : null;
+      })(),
+      bodyText: (document.body?.textContent || '').slice(0, 500),
+      bodyLength: document.body?.innerHTML?.length ?? -1,
+      bodyHead: (document.body?.innerHTML || '').slice(0, 1500),
+    }));
+    console.log(`[waitForApp] DOM at ${label}:`, JSON.stringify(dom));
+  } catch (e) {
+    console.log(`[waitForApp] DOM dump failed (${label}):`, e.message);
+  }
+  try {
+    if (browser.testDataDir) {
+      await browser.saveScreenshot(`${browser.testDataDir}/waitforapp-${label}-${Date.now()}.png`);
+    }
+  } catch (e) {
+    console.log(`[waitForApp] screenshot failed (${label}):`, e.message);
+  }
+}
+
 export async function waitForApp(timeout = 30_000) {
   // First, wait for *any* content to render (onboarding, welcome, or sidebar)
   try {
@@ -38,27 +67,7 @@ export async function waitForApp(timeout = 30_000) {
       },
     );
   } catch (err) {
-    // Diagnostics for headless CI: what is the webview actually showing?
-    try {
-      const dom = await browser.execute(() => ({
-        readyState: document.readyState,
-        href: location.href,
-        title: document.title,
-        rootPresent: document.querySelector('#root') !== null,
-        bodyLength: document.body?.innerHTML?.length ?? -1,
-        bodyHead: (document.body?.innerHTML || '').slice(0, 1500),
-      }));
-      console.log('[waitForApp] DOM at timeout:', JSON.stringify(dom));
-    } catch (e) {
-      console.log('[waitForApp] DOM dump failed:', e.message);
-    }
-    try {
-      if (browser.testDataDir) {
-        await browser.saveScreenshot(`${browser.testDataDir}/waitforapp-${Date.now()}.png`);
-      }
-    } catch (e) {
-      console.log('[waitForApp] screenshot failed:', e.message);
-    }
+    await dumpAppState('no-content');
     throw err;
   }
 
@@ -80,22 +89,28 @@ export async function waitForApp(timeout = 30_000) {
   }
 
   // Now check if we land on sidebar (has accounts) or welcome screen (no accounts)
-  const state = await browser.waitUntil(
-    async () => {
-      return browser.execute(() => {
-        const sidebar = document.querySelector('[data-testid="sidebar"]');
-        if (sidebar && sidebar.offsetHeight > 0) return 'ready';
-        if (document.body.textContent.includes('Add Your First Account')) return 'welcome';
-        // Still loading (keychain prompt, etc.)
-        return null;
-      });
-    },
-    {
-      timeout: timeout - 5000,
-      timeoutMsg: `App stuck after onboarding — neither sidebar nor welcome screen appeared`,
-      interval: 500,
-    },
-  );
+  let state;
+  try {
+    state = await browser.waitUntil(
+      async () => {
+        return browser.execute(() => {
+          const sidebar = document.querySelector('[data-testid="sidebar"]');
+          if (sidebar && sidebar.offsetHeight > 0) return 'ready';
+          if (document.body.textContent.includes('Add Your First Account')) return 'welcome';
+          // Still loading (keychain prompt, etc.)
+          return null;
+        });
+      },
+      {
+        timeout: timeout - 5000,
+        timeoutMsg: `App stuck after onboarding — neither sidebar nor welcome screen appeared`,
+        interval: 500,
+      },
+    );
+  } catch (err) {
+    await dumpAppState('stuck-after-onboarding');
+    throw err;
+  }
 
   return state;
 }
