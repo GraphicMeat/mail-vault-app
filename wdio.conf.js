@@ -89,6 +89,11 @@ export const config = {
     ui: 'bdd',
     timeout: 120000,
   },
+  // Session init issues getWindowHandle immediately after tauri-wd reports the
+  // plugin port, but the app (debug build, cold CI runner) can need tens of
+  // seconds more before the main window exists. The default 3 retries give up
+  // after ~1.5s; 15 retries back off to ~50s total, which covers the boot gap.
+  connectionRetryCount: process.env.CI ? 15 : 3,
   specFileRetries: process.env.CI ? 1 : 0,
   specFileRetriesDelay: 5,
   specFileRetriesDeferred: true,

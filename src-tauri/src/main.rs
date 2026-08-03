@@ -4281,6 +4281,12 @@ fn main() {
         eprintln!("PANIC at {}: {}", location, payload);
     }));
 
+    // Under WebDriver automation (tauri-wd sets this), single-instance protection is an
+    // anti-feature: each spec launches a fresh app instance, and a leftover instance from a
+    // failed session would make every subsequent launch exit(0) immediately — the harness
+    // then reports "App did not report plugin port in time" for the rest of the suite.
+    let automation = std::env::var_os("TAURI_WEBVIEW_AUTOMATION").is_some();
+
     // Linux fallback: flock-based lock to prevent multiple instances.
     // The tauri-plugin-single-instance uses D-Bus which may not work in all Linux environments
     // (AppImage, Snap, restricted D-Bus sessions). flock is kernel-managed: automatically
@@ -4289,7 +4295,7 @@ fn main() {
     // When a second instance detects the lock, it sends SIGUSR1 to the running instance
     // which triggers window show+focus (handles clicking the app icon while already running).
     #[cfg(target_os = "linux")]
-    let _lock_file = {
+    let _lock_file = if automation { None } else {
         use std::io::{Read as _, Write as _};
         use std::os::unix::io::AsRawFd;
 
@@ -4328,8 +4334,13 @@ fn main() {
         }
     };
 
-    let builder = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+    let builder = tauri::Builder::default();
+    // Same automation carve-out as the flock above: the D-Bus single-instance plugin
+    // would make a second test-launched instance forward-and-exit instead of starting.
+    let builder = if automation {
+        builder
+    } else {
+        builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             // When a second instance is launched, focus the main window
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_focus();
@@ -4337,6 +4348,8 @@ fn main() {
                 let _ = window.show();
             }
         }))
+    };
+    let builder = builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
