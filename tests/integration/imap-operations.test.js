@@ -1,71 +1,25 @@
-import { describe, it, expect, beforeAll } from 'vitest';
-import { ImapFlow } from 'imapflow';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
-
-// Load .env.test
-const envPath = resolve(import.meta.dirname, '../../.env.test');
-const envContent = readFileSync(envPath, 'utf-8');
-const env = Object.fromEntries(
-  envContent
-    .split('\n')
-    .filter((line) => line.trim() && !line.startsWith('#'))
-    .map((line) => {
-      const [key, ...rest] = line.split('=');
-      return [key.trim(), rest.join('=').trim()];
-    })
-);
-
-const TEST_EMAIL = env.TEST_EMAIL;
-const TEST_PASSWORD = env.TEST_PASSWORD;
-const IMAP_HOST = env.IMAP_HOST;
-const IMAP_PORT = Number(env.IMAP_PORT) || 993;
-
-function createImapClient() {
-  return new ImapFlow({
-    host: IMAP_HOST,
-    port: IMAP_PORT,
-    secure: true,
-    auth: { user: TEST_EMAIL, pass: TEST_PASSWORD },
-    logger: false,
-    connectTimeout: 30000,
-    greetingTimeout: 30000,
-    socketTimeout: 30000,
-  });
-}
-
-function buildTestEml(subject) {
-  return [
-    `From: test@example.com`,
-    `To: ${TEST_EMAIL}`,
-    `Subject: ${subject}`,
-    `Date: ${new Date().toUTCString()}`,
-    `Message-ID: <test-${Date.now()}-${Math.random().toString(36).slice(2)}@test>`,
-    '',
-    'Test body for integration test.',
-  ].join('\r\n');
-}
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { startSeededServer, createClient, deliver } from './mockHarness.js';
 
 describe('IMAP Operations Integration Tests', { timeout: 30000 }, () => {
-  beforeAll(() => {
-    if (!TEST_EMAIL || !TEST_PASSWORD || TEST_EMAIL === 'your-email@example.com') {
-      throw new Error(
-        'Missing test credentials. Fill in .env.test with real email/password before running tests.'
-      );
-    }
+  let server;
+
+  beforeAll(async () => {
+    server = await startSeededServer();
+  });
+
+  afterAll(async () => {
+    server?.stop();
   });
 
   it('should CREATE a mailbox folder', async () => {
     const folder = `TestOps-Create-${Date.now()}`;
-    const client = createImapClient();
+    const client = createClient(server);
     await client.connect();
     try {
       await client.mailboxCreate(folder);
       const mailboxes = await client.list();
-      // Some servers prefix with INBOX. namespace (e.g. INBOX.TestOps-...)
-      const found = mailboxes.find(
-        (m) => m.path === folder || m.path === `INBOX.${folder}`
-      );
+      const found = mailboxes.find((m) => m.path === folder);
       expect(found).toBeDefined();
     } finally {
       try {
@@ -80,12 +34,11 @@ describe('IMAP Operations Integration Tests', { timeout: 30000 }, () => {
   it('should APPEND an email to a folder', async () => {
     const folder = `TestOps-Append-${Date.now()}`;
     const subject = `APPEND Test ${Date.now()}`;
-    const client = createImapClient();
+    const client = createClient(server);
     await client.connect();
     try {
       await client.mailboxCreate(folder);
-      const emlContent = buildTestEml(subject);
-      await client.append(folder, emlContent, ['\\Seen']);
+      await deliver(server, { subject, mailbox: folder });
 
       const lock = await client.getMailboxLock(folder);
       try {
@@ -107,11 +60,11 @@ describe('IMAP Operations Integration Tests', { timeout: 30000 }, () => {
   it('should set and clear flags on a message', async () => {
     const folder = `TestOps-Flags-${Date.now()}`;
     const subject = `Flag Test ${Date.now()}`;
-    const client = createImapClient();
+    const client = createClient(server);
     await client.connect();
     try {
       await client.mailboxCreate(folder);
-      await client.append(folder, buildTestEml(subject), []);
+      await deliver(server, { subject, mailbox: folder });
 
       const lock = await client.getMailboxLock(folder);
       try {
@@ -143,14 +96,14 @@ describe('IMAP Operations Integration Tests', { timeout: 30000 }, () => {
 
   it('should UID EXPUNGE a message (permanent delete)', async () => {
     const folder = `TestOps-Expunge-${Date.now()}`;
-    const client = createImapClient();
+    const client = createClient(server);
     await client.connect();
     try {
       await client.mailboxCreate(folder);
 
       // Append two test emails
-      await client.append(folder, buildTestEml(`Expunge-A ${Date.now()}`), []);
-      await client.append(folder, buildTestEml(`Expunge-B ${Date.now()}`), []);
+      await deliver(server, { subject: `Expunge-A ${Date.now()}`, mailbox: folder });
+      await deliver(server, { subject: `Expunge-B ${Date.now()}`, mailbox: folder });
 
       const lock = await client.getMailboxLock(folder);
       try {
@@ -182,11 +135,11 @@ describe('IMAP Operations Integration Tests', { timeout: 30000 }, () => {
   it('should SEARCH emails by subject', async () => {
     const folder = `TestOps-Search-${Date.now()}`;
     const uniqueSubject = `SearchTarget ${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const client = createImapClient();
+    const client = createClient(server);
     await client.connect();
     try {
       await client.mailboxCreate(folder);
-      await client.append(folder, buildTestEml(uniqueSubject), []);
+      await deliver(server, { subject: uniqueSubject, mailbox: folder });
 
       const lock = await client.getMailboxLock(folder);
       try {

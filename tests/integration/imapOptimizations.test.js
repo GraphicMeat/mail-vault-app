@@ -1,38 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { ImapFlow } from 'imapflow';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
-
-// Load .env.test
-const envPath = resolve(import.meta.dirname, '../../.env.test');
-const envContent = readFileSync(envPath, 'utf-8');
-const env = Object.fromEntries(
-  envContent
-    .split('\n')
-    .filter((line) => line.trim() && !line.startsWith('#'))
-    .map((line) => {
-      const [key, ...rest] = line.split('=');
-      return [key.trim(), rest.join('=').trim()];
-    })
-);
-
-const TEST_EMAIL = env.TEST_EMAIL;
-const TEST_PASSWORD = env.TEST_PASSWORD;
-const IMAP_HOST = env.IMAP_HOST;
-const IMAP_PORT = Number(env.IMAP_PORT) || 993;
-
-function createImapClient() {
-  return new ImapFlow({
-    host: IMAP_HOST,
-    port: IMAP_PORT,
-    secure: true,
-    auth: { user: TEST_EMAIL, pass: TEST_PASSWORD },
-    logger: false,
-    connectTimeout: 30000,
-    greetingTimeout: 30000,
-    socketTimeout: 30000,
-  });
-}
+import { startSeededServer, createClient } from './mockHarness.js';
 
 // Helper: compress UID ranges (mirrors Rust compress_uid_ranges)
 function compressUidRanges(uids) {
@@ -54,19 +21,21 @@ function compressUidRanges(uids) {
   return ranges.join(',');
 }
 
-beforeAll(() => {
-  if (!TEST_EMAIL || !TEST_PASSWORD || TEST_EMAIL === 'your-email@example.com') {
-    throw new Error(
-      'Missing test credentials. Fill in .env.test with real email/password before running tests.'
-    );
-  }
-});
+describe('IMAP Optimization Tests', () => {
+  let server;
 
-describe('IMAP Optimization Live Tests', () => {
+  beforeAll(async () => {
+    server = await startSeededServer({ inbox: 30 });
+  });
+
+  afterAll(async () => {
+    server?.stop();
+  });
+
   // ── 1. UID SEARCH ALL returns UIDs ────────────────────────────────
 
   it('should fetch all UIDs via UID SEARCH ALL', async () => {
-    const client = createImapClient();
+    const client = createClient(server);
     await client.connect();
     const lock = await client.getMailboxLock('INBOX');
     try {
@@ -87,7 +56,7 @@ describe('IMAP Optimization Live Tests', () => {
   // ── 2. UID range compression produces valid IMAP set ──────────────
 
   it('should fetch headers using compressed UID ranges', async () => {
-    const client = createImapClient();
+    const client = createClient(server);
     await client.connect();
     const lock = await client.getMailboxLock('INBOX');
     try {
@@ -125,7 +94,7 @@ describe('IMAP Optimization Live Tests', () => {
   // ── 3. Lean fetch spec (no BODYSTRUCTURE) works ───────────────────
 
   it('should fetch headers without BODYSTRUCTURE or RFC822.SIZE', async () => {
-    const client = createImapClient();
+    const client = createClient(server);
     await client.connect();
     const lock = await client.getMailboxLock('INBOX');
     try {
@@ -161,7 +130,7 @@ describe('IMAP Optimization Live Tests', () => {
   // ── 4. Mailbox STATUS returns uidValidity and uidNext ─────────────
 
   it('should get mailbox status with uidValidity and uidNext', async () => {
-    const client = createImapClient();
+    const client = createClient(server);
     await client.connect();
     try {
       const status = await client.status('INBOX', {
@@ -182,7 +151,7 @@ describe('IMAP Optimization Live Tests', () => {
   // ── 5. Server capabilities detection ──────────────────────────────
 
   it('should detect server capabilities on connect', async () => {
-    const client = createImapClient();
+    const client = createClient(server);
     await client.connect();
     try {
       // ImapFlow doesn't expose raw capabilities easily, but we can check
@@ -200,7 +169,7 @@ describe('IMAP Optimization Live Tests', () => {
   // ── 6. Chunked fetch works correctly ──────────────────────────────
 
   it('should handle chunked UID fetches (simulated)', async () => {
-    const client = createImapClient();
+    const client = createClient(server);
     await client.connect();
     const lock = await client.getMailboxLock('INBOX');
     try {
@@ -237,7 +206,7 @@ describe('IMAP Optimization Live Tests', () => {
   // ── 7. Newest-first ordering ──────────────────────────────────────
 
   it('should return emails sorted newest-first when UIDs are sorted descending', async () => {
-    const client = createImapClient();
+    const client = createClient(server);
     await client.connect();
     const lock = await client.getMailboxLock('INBOX');
     try {
@@ -267,7 +236,7 @@ describe('IMAP Optimization Live Tests', () => {
   // ── 8. Double SELECT same mailbox is idempotent ───────────────────
 
   it('should handle selecting the same mailbox twice', async () => {
-    const client = createImapClient();
+    const client = createClient(server);
     await client.connect();
     const lock1 = await client.getMailboxLock('INBOX');
     const total1 = client.mailbox.exists;
@@ -286,7 +255,7 @@ describe('IMAP Optimization Live Tests', () => {
   // ── 9. Delta-sync: status check + selective fetch ─────────────────
 
   it('should detect no changes via STATUS comparison', async () => {
-    const client = createImapClient();
+    const client = createClient(server);
     await client.connect();
     try {
       // First check

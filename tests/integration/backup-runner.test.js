@@ -1,61 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { ImapFlow } from 'imapflow';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
-
-// Load .env.test
-const envPath = resolve(import.meta.dirname, '../../.env.test');
-const envContent = readFileSync(envPath, 'utf-8');
-const env = Object.fromEntries(
-  envContent
-    .split('\n')
-    .filter((line) => line.trim() && !line.startsWith('#'))
-    .map((line) => {
-      const [key, ...rest] = line.split('=');
-      return [key.trim(), rest.join('=').trim()];
-    })
-);
-
-const TEST_EMAIL = env.TEST_EMAIL;
-const TEST_PASSWORD = env.TEST_PASSWORD;
-const IMAP_HOST = env.IMAP_HOST;
-const IMAP_PORT = Number(env.IMAP_PORT) || 993;
-
-function createImapClient() {
-  return new ImapFlow({
-    host: IMAP_HOST,
-    port: IMAP_PORT,
-    secure: true,
-    auth: { user: TEST_EMAIL, pass: TEST_PASSWORD },
-    logger: false,
-    connectTimeout: 30000,
-    greetingTimeout: 30000,
-    socketTimeout: 30000,
-  });
-}
-
-function buildTestEml(subject) {
-  return [
-    `From: test@example.com`,
-    `To: ${TEST_EMAIL}`,
-    `Subject: ${subject}`,
-    `Date: ${new Date().toUTCString()}`,
-    `Message-ID: <backup-test-${Date.now()}-${Math.random().toString(36).slice(2)}@test>`,
-    '',
-    'Test body for backup runner integration test.',
-  ].join('\r\n');
-}
+import { startSeededServer, createClient, deliver } from './mockHarness.js';
 
 describe('Backup Runner Integration Tests', { timeout: 30000 }, () => {
+  let server;
   let client;
 
   beforeAll(async () => {
-    if (!TEST_EMAIL || !TEST_PASSWORD || TEST_EMAIL === 'your-email@example.com') {
-      throw new Error(
-        'Missing test credentials. Fill in .env.test with real email/password before running tests.'
-      );
-    }
-    client = createImapClient();
+    server = await startSeededServer();
+    client = createClient(server);
     await client.connect();
   });
 
@@ -67,6 +19,7 @@ describe('Backup Runner Integration Tests', { timeout: 30000 }, () => {
         // best-effort
       }
     }
+    server?.stop();
   });
 
   it('should fetch all UIDs from INBOX', async () => {
@@ -109,14 +62,14 @@ describe('Backup Runner Integration Tests', { timeout: 30000 }, () => {
     const folder = `TestBackup-Delta-${Date.now()}`;
 
     // Use a separate client for folder operations to avoid lock conflicts
-    const deltaClient = createImapClient();
+    const deltaClient = createClient(server);
     await deltaClient.connect();
 
     try {
       await deltaClient.mailboxCreate(folder);
 
       // Append an initial email
-      await deltaClient.append(folder, buildTestEml(`Delta-Initial ${Date.now()}`), []);
+      await deliver(server, { subject: `Delta-Initial ${Date.now()}`, mailbox: folder });
 
       // Get initial UID count
       let lock = await deltaClient.getMailboxLock(folder);
@@ -130,7 +83,7 @@ describe('Backup Runner Integration Tests', { timeout: 30000 }, () => {
       expect(initialCount).toBe(1);
 
       // Append a new email (simulates new mail arriving)
-      await deltaClient.append(folder, buildTestEml(`Delta-New ${Date.now()}`), []);
+      await deliver(server, { subject: `Delta-New ${Date.now()}`, mailbox: folder });
 
       // Fetch UIDs again -- count should increase by 1
       lock = await deltaClient.getMailboxLock(folder);

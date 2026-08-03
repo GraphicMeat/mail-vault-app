@@ -1,87 +1,24 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { ImapFlow } from 'imapflow';
-import nodemailer from 'nodemailer';
 import { simpleParser } from 'mailparser';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
-
-// Load .env.test
-const envPath = resolve(import.meta.dirname, '../../.env.test');
-const envContent = readFileSync(envPath, 'utf-8');
-const env = Object.fromEntries(
-  envContent
-    .split('\n')
-    .filter((line) => line.trim() && !line.startsWith('#'))
-    .map((line) => {
-      const [key, ...rest] = line.split('=');
-      return [key.trim(), rest.join('=').trim()];
-    })
-);
-
-const TEST_EMAIL = env.TEST_EMAIL;
-const TEST_PASSWORD = env.TEST_PASSWORD;
-const IMAP_HOST = env.IMAP_HOST;
-const IMAP_PORT = Number(env.IMAP_PORT) || 993;
-const SMTP_HOST = env.SMTP_HOST;
-const SMTP_PORT = Number(env.SMTP_PORT) || 587;
-
-const account = {
-  email: TEST_EMAIL,
-  password: TEST_PASSWORD,
-  imapHost: IMAP_HOST,
-  imapPort: IMAP_PORT,
-  smtpHost: SMTP_HOST,
-  smtpPort: SMTP_PORT,
-};
-
-function createImapClient() {
-  return new ImapFlow({
-    host: IMAP_HOST,
-    port: IMAP_PORT,
-    secure: true,
-    auth: { user: TEST_EMAIL, pass: TEST_PASSWORD },
-    logger: false,
-    connectTimeout: 30000,
-    greetingTimeout: 30000,
-    socketTimeout: 30000,
-  });
-}
+import { startSeededServer, createClient, deliver } from './mockHarness.js';
 
 describe('Email Integration Tests', () => {
+  let server;
   let client;
   const testSubject = `Integration Test ${Date.now()}`;
   let sentEmailUid;
 
-  beforeAll(() => {
-    if (!TEST_EMAIL || !TEST_PASSWORD || TEST_EMAIL === 'your-email@example.com') {
-      throw new Error(
-        'Missing test credentials. Fill in .env.test with real email/password before running tests.'
-      );
-    }
+  beforeAll(async () => {
+    server = await startSeededServer();
   });
 
   afterAll(async () => {
-    // Clean up: delete the test email if we found it
-    if (sentEmailUid) {
-      const cleanup = createImapClient();
-      try {
-        await cleanup.connect();
-        const lock = await cleanup.getMailboxLock('INBOX');
-        try {
-          await cleanup.messageDelete(sentEmailUid, { uid: true });
-        } finally {
-          lock.release();
-        }
-        await cleanup.logout();
-      } catch {
-        // best-effort cleanup
-      }
-    }
+    server?.stop();
   });
 
   // 1. IMAP Connection
   it('should connect and disconnect via IMAP', async () => {
-    client = createImapClient();
+    client = createClient(server);
     await client.connect();
     expect(client.usable).toBe(true);
     await client.logout();
@@ -89,7 +26,7 @@ describe('Email Integration Tests', () => {
 
   // 2. List Mailboxes
   it('should list mailboxes and find INBOX', async () => {
-    client = createImapClient();
+    client = createClient(server);
     await client.connect();
     try {
       const mailboxes = await client.list();
@@ -109,7 +46,7 @@ describe('Email Integration Tests', () => {
 
   // 3. Fetch Emails
   it('should fetch emails from INBOX', async () => {
-    client = createImapClient();
+    client = createClient(server);
     await client.connect();
     const lock = await client.getMailboxLock('INBOX');
     try {
@@ -141,7 +78,7 @@ describe('Email Integration Tests', () => {
 
   // 4. Fetch Single Email
   it('should fetch and parse a full email', async () => {
-    client = createImapClient();
+    client = createClient(server);
     await client.connect();
     const lock = await client.getMailboxLock('INBOX');
     try {
@@ -176,78 +113,32 @@ describe('Email Integration Tests', () => {
     }
   });
 
-  // 5. SMTP Verify
-  it('should verify SMTP connection', async () => {
-    const transporter = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: false,
-      auth: { user: TEST_EMAIL, pass: TEST_PASSWORD },
-      connectionTimeout: 30000,
-      greetingTimeout: 30000,
-    });
-
-    const verified = await transporter.verify();
-    expect(verified).toBe(true);
-  });
-
-  // 6. Send Email
-  it('should send a test email to self', async () => {
-    const transporter = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: false,
-      auth: { user: TEST_EMAIL, pass: TEST_PASSWORD },
-      connectionTimeout: 30000,
-      greetingTimeout: 30000,
-    });
-
-    const result = await transporter.sendMail({
-      from: TEST_EMAIL,
-      to: TEST_EMAIL,
+  // 5. Deliver + search (was: SMTP verify + send-to-self + polling search)
+  it('should deliver a test email and find it via SEARCH', async () => {
+    sentEmailUid = await deliver(server, {
       subject: testSubject,
       text: `This is an automated integration test email sent at ${new Date().toISOString()}.`,
     });
+    expect(sentEmailUid).toBeGreaterThan(0);
 
-    expect(result).toBeDefined();
-    expect(result.messageId).toBeDefined();
-    expect(result.accepted).toContain(TEST_EMAIL);
+    client = createClient(server);
+    await client.connect();
+    const lock = await client.getMailboxLock('INBOX');
+    try {
+      const uids = await client.search({ subject: testSubject }, { uid: true });
+      expect(uids.length).toBeGreaterThan(0);
+      expect(uids).toContain(sentEmailUid);
+    } finally {
+      lock.release();
+      await client.logout();
+    }
   });
 
-  // 7. Search Emails
-  it('should search for the test email', async () => {
-    // Retry search — CI mail delivery can be slow
-    const maxAttempts = 6;
-    const delayMs = 5000;
-    let uids = [];
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      await new Promise((r) => setTimeout(r, delayMs));
-
-      client = createImapClient();
-      await client.connect();
-      const lock = await client.getMailboxLock('INBOX');
-      try {
-        uids = await client.search({ subject: testSubject }, { uid: true });
-      } finally {
-        lock.release();
-        await client.logout();
-      }
-
-      if (uids.length > 0) break;
-    }
-
-    expect(uids).toBeDefined();
-    expect(uids.length).toBeGreaterThan(0);
-
-    sentEmailUid = uids[uids.length - 1]; // save for cleanup & flag test
-  }, 60000);
-
-  // 8. Flag Email
+  // 6. Flag Email
   it('should flag an email as read then unread', async () => {
     expect(sentEmailUid).toBeDefined();
 
-    client = createImapClient();
+    client = createClient(server);
     await client.connect();
     const lock = await client.getMailboxLock('INBOX');
     try {

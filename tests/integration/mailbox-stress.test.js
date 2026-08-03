@@ -1,54 +1,20 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import { startSeededServer, createClient } from './mockHarness.js';
 
 // ---------------------------------------------------------------------------
-// Env
+// Config
 // ---------------------------------------------------------------------------
-const envPath = resolve(import.meta.dirname, '../../.env.test');
-const envContent = readFileSync(envPath, 'utf-8');
-const env = Object.fromEntries(
-  envContent
-    .split('\n')
-    .filter((l) => l.trim() && !l.startsWith('#'))
-    .map((l) => {
-      const [key, ...rest] = l.split('=');
-      return [key.trim(), rest.join('=').trim()];
-    })
-);
-
-const ACCOUNT = {
-  email: env.TEST_EMAIL2, // Use Vader's mailbox as the test target
-  password: env.TEST_PASSWORD2,
-};
-const IMAP_HOST = env.IMAP_HOST;
-const IMAP_PORT = Number(env.IMAP_PORT) || 993;
-
 const EMAIL_COUNT = 500;
-const MIN_EMAIL_COUNT = Math.floor(EMAIL_COUNT * 0.7); // Allow up to 30% append failures from server rate limiting
 const RUN_ID = Date.now();
 const SUBJECT_PREFIX = `[Stress-${RUN_ID}]`;
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-function createImap() {
-  return new ImapFlow({
-    host: IMAP_HOST,
-    port: IMAP_PORT,
-    secure: true,
-    auth: { user: ACCOUNT.email, pass: ACCOUNT.password },
-    logger: false,
-    connectTimeout: 30000,
-    greetingTimeout: 30000,
-    socketTimeout: 60000,
-  });
-}
 
 // Build a raw RFC 2822 message — much faster than SMTP for bulk injection
-function buildRawMessage(index) {
+function buildRawMessage(index, owner) {
   const types = ['plain', 'html', 'multipart', 'attachment', 'multi-attachment'];
   const type = types[index % types.length];
   const subject = `${SUBJECT_PREFIX} #${String(index).padStart(4, '0')} (${type})`;
@@ -56,8 +22,8 @@ function buildRawMessage(index) {
   const boundary = `----boundary-${RUN_ID}-${index}`;
 
   const headers = [
-    `From: "Test Sender" <${ACCOUNT.email}>`,
-    `To: ${ACCOUNT.email}`,
+    `From: "Test Sender" <${owner}>`,
+    `To: ${owner}`,
     `Subject: ${subject}`,
     `Date: ${date}`,
     `Message-ID: <stress-${RUN_ID}-${index}@forceunwrap.com>`,
@@ -165,51 +131,26 @@ function randomText() {
 // ---------------------------------------------------------------------------
 // Suite
 // ---------------------------------------------------------------------------
-describe('Mailbox Stress Test (500 emails → local storage → server delete → verify)', { timeout: 600000 }, () => {
+describe('Mailbox Stress Test (500 emails → local storage → server delete → verify)', { timeout: 120000 }, () => {
+  let server;
+  const OWNER = 'vader@example.test';
   const testUids = [];
   // Simulated local storage — mirrors what IndexedDB does in the app
   const localStorage = new Map();
 
-  beforeAll(() => {
-    if (!ACCOUNT.email || !ACCOUNT.password) {
-      throw new Error('Missing test credentials in .env.test (TEST_EMAIL2 / TEST_PASSWORD2)');
-    }
+  beforeAll(async () => {
+    server = await startSeededServer({ owner: OWNER, inbox: 0 });
   });
 
-  // Clean up at the end regardless of pass/fail
   afterAll(async () => {
-    if (testUids.length === 0) return;
-    console.log(`\n[Cleanup] Deleting ${testUids.length} test emails from server...`);
-    const client = createImap();
-    try {
-      await client.connect();
-      const lock = await client.getMailboxLock('INBOX');
-      try {
-        // Delete in chunks to avoid command-length limits
-        const chunkSize = 100;
-        for (let i = 0; i < testUids.length; i += chunkSize) {
-          const chunk = testUids.slice(i, i + chunkSize);
-          try {
-            await client.messageDelete(chunk, { uid: true });
-          } catch (e) {
-            console.warn(`[Cleanup] Chunk delete failed: ${e.message}`);
-          }
-        }
-      } finally {
-        lock.release();
-      }
-      await client.logout();
-    } catch (e) {
-      console.error(`[Cleanup] Failed: ${e.message}`);
-    }
-    console.log('[Cleanup] Done.');
+    server?.stop();
   });
 
   // -----------------------------------------------------------------------
   // Phase 1: Inject 500 emails via IMAP APPEND
   // -----------------------------------------------------------------------
   it(`should inject ${EMAIL_COUNT} emails into the mailbox`, async () => {
-    const client = createImap();
+    const client = createClient(server);
     await client.connect();
 
     const batchSize = 50;
@@ -219,36 +160,29 @@ describe('Mailbox Stress Test (500 emails → local storage → server delete �
       const end = Math.min(batch + batchSize, EMAIL_COUNT);
       const promises = [];
       for (let i = batch; i < end; i++) {
-        const raw = buildRawMessage(i);
-        promises.push(
-          client.append('INBOX', raw, ['\\Seen'], new Date()).catch((e) => {
-            console.error(`[Append] Failed for message #${i}: ${e.message}`);
-            return null;
-          })
-        );
+        const raw = buildRawMessage(i, OWNER);
+        promises.push(client.append('INBOX', raw, ['\\Seen']));
       }
       const results = await Promise.all(promises);
-      appended += results.filter(Boolean).length;
-      if ((batch + batchSize) % 100 === 0 || end === EMAIL_COUNT) {
-        console.log(`[Inject] ${appended}/${EMAIL_COUNT} appended`);
-      }
+      appended += results.length;
     }
 
     await client.logout();
-    expect(appended).toBeGreaterThanOrEqual(MIN_EMAIL_COUNT);
+    // Loopback appends don't fail — no rate-limit tolerance needed.
+    expect(appended).toBe(EMAIL_COUNT);
   });
 
   // -----------------------------------------------------------------------
   // Phase 2: Verify all 500 exist and collect UIDs
   // -----------------------------------------------------------------------
   it('should find all 500 test emails in the mailbox', async () => {
-    const client = createImap();
+    const client = createClient(server);
     await client.connect();
     const lock = await client.getMailboxLock('INBOX');
     try {
       const uids = await client.search({ subject: SUBJECT_PREFIX }, { uid: true });
       testUids.push(...uids);
-      expect(uids.length).toBeGreaterThanOrEqual(MIN_EMAIL_COUNT);
+      expect(uids.length).toBe(EMAIL_COUNT);
     } finally {
       lock.release();
       await client.logout();
@@ -260,11 +194,10 @@ describe('Mailbox Stress Test (500 emails → local storage → server delete �
   // -----------------------------------------------------------------------
   it('should fetch and save all 500 emails to local storage', async () => {
     const chunkSize = 25;
-    let fetched = 0;
 
     for (let i = 0; i < testUids.length; i += chunkSize) {
       const chunk = testUids.slice(i, i + chunkSize);
-      const client = createImap();
+      const client = createClient(server);
       await client.connect();
       const lock = await client.getMailboxLock('INBOX');
       try {
@@ -295,14 +228,10 @@ describe('Mailbox Stress Test (500 emails → local storage → server delete �
             })) || [],
             savedAt: new Date().toISOString(),
           });
-          fetched++;
         }
       } finally {
         lock.release();
         await client.logout();
-      }
-      if (fetched % 100 === 0 || fetched === testUids.length) {
-        console.log(`[Fetch+Save] ${fetched}/${testUids.length} saved locally`);
       }
     }
 
@@ -357,14 +286,13 @@ describe('Mailbox Stress Test (500 emails → local storage → server delete �
     expect(multipart).toBeGreaterThan(0);
     expect(attachment).toBeGreaterThan(0);
     expect(multiAtt).toBeGreaterThan(0);
-    console.log(`[Verify] Type distribution: plain=${plain} html=${html} multipart=${multipart} attachment=${attachment} multi-attachment=${multiAtt}`);
   });
 
   // -----------------------------------------------------------------------
   // Phase 5: Delete all test emails from the server
   // -----------------------------------------------------------------------
   it('should delete all 500 emails from the server', async () => {
-    const client = createImap();
+    const client = createClient(server);
     await client.connect();
     const lock = await client.getMailboxLock('INBOX');
     try {
@@ -372,7 +300,6 @@ describe('Mailbox Stress Test (500 emails → local storage → server delete �
       for (let i = 0; i < testUids.length; i += chunkSize) {
         const chunk = testUids.slice(i, i + chunkSize);
         await client.messageDelete(chunk, { uid: true });
-        console.log(`[Delete] ${Math.min(i + chunkSize, testUids.length)}/${testUids.length} deleted from server`);
       }
     } finally {
       lock.release();
@@ -384,7 +311,7 @@ describe('Mailbox Stress Test (500 emails → local storage → server delete �
   // Phase 6: Confirm server has zero test emails
   // -----------------------------------------------------------------------
   it('should confirm test emails are gone from the server', async () => {
-    const client = createImap();
+    const client = createClient(server);
     await client.connect();
     const lock = await client.getMailboxLock('INBOX');
     try {
@@ -431,7 +358,7 @@ describe('Mailbox Stress Test (500 emails → local storage → server delete �
 
     // Search by sender
     const bySender = [...localStorage.values()].filter(
-      (e) => e.from?.address === ACCOUNT.email
+      (e) => e.from?.address === OWNER
     );
     expect(bySender.length).toBe(localStorage.size);
 
@@ -488,7 +415,7 @@ describe('Mailbox Stress Test (500 emails → local storage → server delete �
     localStorage.clear();
     expect(localStorage.size).toBe(0);
 
-    // Clear testUids so afterAll doesn't try to delete already-deleted emails
+    // Clear testUids so nothing tries to act on already-deleted emails
     testUids.length = 0;
   });
 });

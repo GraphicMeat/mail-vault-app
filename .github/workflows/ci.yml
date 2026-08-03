@@ -47,8 +47,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Check version consistency
         run: bash scripts/check-version-consistency.sh
-      # No .env.test here any more: the live suite moved to the `live-conformance`
-      # workflow. `npm test` is now hermetic — no network, no credentials.
+      # Hermetic — no network, no credentials.
       - run: npm test
 
   # IMAP client behavior against the scriptable mock server. Deterministic and
@@ -75,6 +74,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y pkg-config libssl-dev libdbus-1-dev libsecret-1-dev libglib2.0-dev
       - run: cargo test -p mailvault-core -p mailvault-daemon -p mock-imap
+      # JS integration suite drives the same mock server through imapflow — an
+      # independent client implementation cross-checking the mock. Replaced the
+      # credential-gated live-conformance workflow.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run test:integration
 
   e2e:
     runs-on: ubuntu-22.04

@@ -174,10 +174,11 @@ pub fn dispatch(
         "LOGIN" => do_login(cmd, state, sess),
         "AUTHENTICATE" => Response::bad("AUTHENTICATE handled inline"),
         _ if !sess.authenticated => Response::no("Not authenticated"),
-        "LIST" | "LSUB" => do_list(state),
+        "LIST" | "LSUB" => do_list(cmd, state),
         "SELECT" | "EXAMINE" => do_select(cmd, state, sess, faults),
         "STATUS" => do_status(cmd, state),
         "CREATE" => do_create(cmd, state),
+        "DELETE" => do_delete(cmd, state),
         "SEARCH" => do_search(cmd, state, sess, faults),
         "FETCH" => do_fetch(cmd, state, sess, faults),
         "STORE" => do_store(cmd, state, sess),
@@ -205,7 +206,20 @@ fn do_login(cmd: &Command, state: &ServerState, sess: &mut Session) -> Response 
     }
 }
 
-fn do_list(state: &ServerState) -> Response {
+fn do_list(cmd: &Command, state: &ServerState) -> Response {
+    // `LIST "" ""` is RFC 3501 root discovery: return only the hierarchy
+    // delimiter, not the mailbox list. ImapFlow uses it to derive a namespace
+    // prefix when NAMESPACE isn't advertised; dumping real mailboxes here makes
+    // it adopt one of them as the prefix and corrupt every non-INBOX path.
+    let mut args = cmd.args.as_str();
+    let _reference = next_arg(&mut args);
+    if next_arg(&mut args).is_some_and(|p| p.is_empty()) {
+        return Response::ok("LIST completed").line(format!(
+            "* LIST (\\Noselect) {} \"\"",
+            quoted(&state.delimiter)
+        ));
+    }
+
     let mut r = Response::ok("LIST completed");
     for mb in &state.mailboxes {
         r = r.line(format!(
@@ -306,6 +320,17 @@ fn do_create(cmd: &Command, state: &mut ServerState) -> Response {
     Response::ok("CREATE completed")
 }
 
+fn do_delete(cmd: &Command, state: &mut ServerState) -> Response {
+    let mut args = cmd.args.as_str();
+    let name = next_arg(&mut args).unwrap_or_default();
+    let before = state.mailboxes.len();
+    state.mailboxes.retain(|m| !m.name.eq_ignore_ascii_case(&name));
+    if state.mailboxes.len() == before {
+        return Response::no("[NONEXISTENT] Mailbox does not exist");
+    }
+    Response::ok("DELETE completed")
+}
+
 fn selected<'a>(state: &'a ServerState, sess: &Session) -> Option<&'a Mailbox> {
     sess.selected.as_ref().and_then(|n| state.find(n))
 }
@@ -336,6 +361,13 @@ fn matches_criteria(msg: &Message, criteria: &str) -> bool {
         let Some(key) = next_arg(&mut s) else { break };
         let ok = match key.to_uppercase().as_str() {
             "ALL" => true,
+            // Clients prepend `CHARSET <name>` for non-ASCII values; matching is
+            // byte-oriented here, so consume and ignore it rather than silently
+            // matching nothing.
+            "CHARSET" => {
+                next_arg(&mut s);
+                true
+            }
             "UNSEEN" => !msg.has_flag("\\Seen"),
             "SEEN" => msg.has_flag("\\Seen"),
             "HEADER" => {
