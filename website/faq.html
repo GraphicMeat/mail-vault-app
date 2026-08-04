@@ -71,7 +71,7 @@
       border: 1px solid rgba(255, 255, 255, 0.05);
     }
     .faq-answer { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; }
-    .faq-answer.open { max-height: 1200px; }
+    .faq-answer.open { max-height: 3000px; }
     .faq-chevron { transition: transform 0.3s ease; }
     .faq-chevron.open { transform: rotate(180deg); }
   </style>
@@ -232,6 +232,30 @@
         "acceptedAnswer": {
           "@type": "Answer",
           "text": "MailVault exports your emails as a ZIP archive containing all .eml files plus a manifest.json that maps emails to accounts by email address, making backups portable across installations. You can export all emails or archived only. Importing is idempotent — duplicates are skipped. If a backup contains emails for an unrecognized account, MailVault creates it automatically."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What are Gmail's bandwidth limits, and what happens when a backup hits them?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Google caps how much mail data one Gmail or Google Workspace account can move per day. Over IMAP the limits are 2500 MB downloaded per day and 500 MB uploaded per day. POP downloads are capped at 1250 MB per day. The Gmail web client has its own limits: 750 MB per hour and 1250 MB per day down, 300 MB per hour and 1500 MB per day up (uploads include SMTP). All of a user's clients share the same daily budget, so Apple Mail, your phone and MailVault draw from one pool. Exceeding a limit temporarily suspends the account — typically for 1 hour, but up to 24 hours. These limits apply to every Google Workspace edition and Google can change them without notice. A large first backup of a mailbox over 2.5 GB will therefore take more than one day. MailVault detects the limit response, stops the run cleanly instead of hammering the server, and tells you what happened. Run the backup again after the suspension clears and it resumes where it stopped, because messages already saved locally are skipped."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What is the external backup location (second copy)?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "MailVault always keeps a working copy of your mail in the app's own storage — that is what you read, search and open. An external backup location adds a second, independent copy on a drive you choose: an external SSD, a NAS share, or a synced folder. It is written during backup runs at the same time as the working copy, in the same .eml and Maildir layout, so any mail client can read it. The app never reads it day to day, and it is cold storage: emails deleted on the server, or removed inside MailVault, stay in the external copy. Set it in Settings under Backup, in 'Second copy — external cold storage'. On macOS, MailVault stores a security-scoped bookmark for the folder so access survives restarts and app updates; the status badge shows Ready, Needs reauthorization, Unavailable, or Access denied, and reauthorizing is a single click. If the drive is unplugged during a backup, the working copy still succeeds and MailVault reports how many messages failed to reach the external copy; the next run copies them across."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I store my mail somewhere other than the default application folder?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. MailVault can move its mail store — messages, header caches, attachment cache and folder lists — to any folder on any drive, so a large archive can live on an external SSD or a second internal disk instead of your startup volume. Only mail data moves: accounts, settings and logs stay in the app's own folder so the app can always start and tell you if the drive is missing. Moving is done safely: MailVault copies everything to the new folder, verifies every file arrived at the correct size, switches over, and only then deletes the originals. An interrupted move can be run again and picks up where it left off. The new folder is stamped with a marker file so MailVault can recognise it later and refuse a folder belonging to a different store. If the drive is not connected at launch, MailVault reports the folder as missing rather than silently starting a second, divergent archive in the default location — reconnect the drive, or point the app at the folder again. This is separate from the external backup location: the moved folder is the live store, an external backup location is an extra cold copy."
         }
       }
     ]
@@ -595,6 +619,121 @@
           </div>
         </div>
 
+        <!-- FAQ: Gmail bandwidth limits -->
+        <div id="gmail-bandwidth-limits" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">What are Gmail's bandwidth limits, and what happens when a backup hits them?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                Google caps how much mail data a single Gmail or Google Workspace account can move per day. The caps apply to the account, not to the app — Apple Mail, your phone and MailVault all draw from the same daily budget.
+              </p>
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg">
+                  <thead class="bg-slate-50 dark:bg-slate-900/50">
+                    <tr>
+                      <th class="text-left font-semibold px-3 py-2 border-b border-slate-200 dark:border-slate-700">Access method</th>
+                      <th class="text-left font-semibold px-3 py-2 border-b border-slate-200 dark:border-slate-700">Download</th>
+                      <th class="text-left font-semibold px-3 py-2 border-b border-slate-200 dark:border-slate-700">Upload</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50"><strong>IMAP</strong> (what MailVault uses)</td>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">2500 MB / day</td>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">500 MB / day</td>
+                    </tr>
+                    <tr>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">POP</td>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">1250 MB / day</td>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">—</td>
+                    </tr>
+                    <tr>
+                      <td class="px-3 py-2">Gmail web client</td>
+                      <td class="px-3 py-2">750 MB / hour, 1250 MB / day</td>
+                      <td class="px-3 py-2">300 MB / hour, 1500 MB / day</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p>
+                Go over a limit and Google temporarily suspends the account: <strong>usually about 1 hour, but it can last up to 24 hours</strong>. The limits are the same on every Google Workspace edition, and Google can change them without notice — see <a href="https://knowledge.workspace.google.com/admin/gmail/gmail-bandwidth-limits" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Google's bandwidth limits documentation</a> for the current numbers.
+              </p>
+              <p>
+                <strong>What this means for a first backup.</strong> A mailbox larger than about 2.5 GB cannot be downloaded in one day over IMAP — no client can do it, that is a server-side cap. Expect a large archive to take several days.
+              </p>
+              <p>
+                <strong>What MailVault does.</strong> It recognises the limit response, stops the run cleanly instead of retrying into a longer lockout, and tells you the daily limit was reached. Start the backup again once the suspension clears and it continues where it stopped — messages already saved locally are skipped, so nothing is downloaded twice. Everything already on disk stays readable and searchable while you wait.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- FAQ: External backup location -->
+        <div id="external-backup-location" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">What is the external backup location (second copy)?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                MailVault always keeps a <strong>working copy</strong> of your mail in the app's own storage — that is what you read, search and open. An external backup location adds a <strong>second, independent copy</strong> on a drive you control: an external SSD, a NAS share, or a synced folder.
+              </p>
+              <ul class="list-disc pl-5 space-y-2">
+                <li><strong>Written alongside the working copy.</strong> During a backup run each message is saved to both places, in the same <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code> + Maildir layout — so the second copy opens in Apple Mail, Thunderbird or any other client without MailVault.</li>
+                <li><strong>Cold storage, not a mirror.</strong> The app never reads it day to day. Emails deleted on the server, or removed inside MailVault, stay in the external copy.</li>
+                <li><strong>Read and write flags survive both directions.</strong> The copies are reconciled before a run, so a message you read stays read.</li>
+                <li><strong>Independent of the app.</strong> If your Mac dies or you uninstall MailVault, the external folder is still a complete, self-describing mail archive.</li>
+              </ul>
+              <p>
+                Set it in <strong>Settings → Backup → “Second copy — external cold storage”</strong> and pick any folder. On macOS, MailVault saves a security-scoped bookmark for that folder, so access survives restarts and app updates — a raw path would not. A status badge shows <strong>Ready</strong>, <strong>Needs reauthorization</strong>, <strong>Unavailable</strong> or <strong>Access denied</strong>, and reauthorizing is one click.
+              </p>
+              <p>
+                If the drive is unplugged mid-backup, the working copy still completes and MailVault reports how many messages did not reach the external copy. The next run copies them across — nothing is lost, and the failure is never silent.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- FAQ: Custom mail storage folder -->
+        <div id="change-mail-storage-folder" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">Can I store my mail somewhere other than the default application folder?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                Yes. By default MailVault keeps its mail store inside the app's own Application Support folder on your startup disk. You can move that store to any folder on any drive — an external SSD, a second internal disk — which matters once an archive grows to tens of gigabytes.
+              </p>
+              <p>
+                <strong>Only mail data moves:</strong> the messages, header caches, attachment cache and folder lists. Accounts, settings and logs stay in the app's own folder, so MailVault can always start far enough to tell you a drive is missing and ask for the folder again.
+              </p>
+              <p>
+                <strong>The move is verified before anything is deleted.</strong> MailVault copies everything to the new folder, checks that every file arrived at the correct size, switches over, and only then removes the originals. A move interrupted by a disconnect or a crash leaves the current store intact; run it again and it resumes rather than recopying what is already there.
+              </p>
+              <p>
+                <strong>The folder is stamped and recognised.</strong> A small marker file identifies the store, so if you later reconnect the drive or move the folder by hand you can point MailVault back at it, and MailVault will refuse a folder that belongs to a different store or that holds no mail.
+              </p>
+              <p>
+                <strong>If the drive is not connected</strong>, MailVault reports the mail store as unavailable instead of quietly starting a second archive in the default location and leaving you with two half-complete copies. Reconnect the drive, or select the folder again. You can also switch back to the default location at any time — the mail stays where it is until you move it.
+              </p>
+              <p class="text-sm">
+                <strong>Not the same as a second copy.</strong> This changes where the <em>live</em> store lives. An <a href="#external-backup-location" class="text-primary-500 hover:underline">external backup location</a> adds an extra cold copy on top of it. Using both — mail store on a fast external SSD, cold copy on a NAS — is a reasonable setup.
+              </p>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       <!-- CTA -->
@@ -685,13 +824,15 @@
         const isOpen = answer.classList.contains('open');
 
         // Close all others
-        document.querySelectorAll('.faq-answer.open').forEach(a => a.classList.remove('open'));
+        document.querySelectorAll('.faq-answer.open').forEach(a => { a.classList.remove('open'); a.style.maxHeight = ''; });
         document.querySelectorAll('.faq-chevron.open').forEach(c => c.classList.remove('open'));
         document.querySelectorAll('.faq-toggle[aria-expanded="true"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
 
         // Toggle current
         if (!isOpen) {
           answer.classList.add('open');
+          // Measured height, so tall answers (tables, lists) never clip.
+          answer.style.maxHeight = answer.scrollHeight + 'px';
           chevron.classList.add('open');
           button.setAttribute('aria-expanded', 'true');
         }
@@ -707,6 +848,7 @@
         const chevron = target.querySelector('.faq-chevron');
         if (button && answer) {
           answer.classList.add('open');
+          answer.style.maxHeight = answer.scrollHeight + 'px';
           if (chevron) chevron.classList.add('open');
           button.setAttribute('aria-expanded', 'true');
           target.scrollIntoView({ behavior: 'smooth', block: 'start' });
