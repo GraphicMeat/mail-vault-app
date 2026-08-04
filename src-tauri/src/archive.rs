@@ -24,6 +24,10 @@ pub struct ArchiveProgress {
     /// Number of emails where local write succeeded but external copy failed
     #[serde(default)]
     pub external_copy_failures: usize,
+    /// True when the run stopped because the provider reported a daily
+    /// bandwidth suspension (e.g. Gmail's 2500 MB/day IMAP download cap)
+    #[serde(default)]
+    pub bandwidth_limited: bool,
 }
 
 // ── Cancellation token (shared app state) ─────────────────────────────────────
@@ -67,12 +71,13 @@ pub async fn run_with_backup(
         .map_err(|e| format!("Bad account JSON: {}", e))?;
 
     let _ = app_handle.emit("archive-progress", ArchiveProgress {
-        total, completed: 0, errors: 0, active: true, last_error: None, last_uid: None, external_copy_failures: 0,
+        total, completed: 0, errors: 0, active: true, last_error: None, last_uid: None, external_copy_failures: 0, bandwidth_limited: false,
     });
 
     let sem = Arc::new(Semaphore::new(5));
     let completed = Arc::new(AtomicUsize::new(0));
     let errors = Arc::new(AtomicUsize::new(0));
+    let bw_limited = Arc::new(AtomicBool::new(false));
     let ext_failures = Arc::new(AtomicUsize::new(0));
     let mut set: JoinSet<Option<serde_json::Value>> = JoinSet::new();
 
@@ -93,6 +98,7 @@ pub async fn run_with_backup(
         let completed = Arc::clone(&completed);
         let errors = Arc::clone(&errors);
         let cancel = Arc::clone(&cancel);
+        let bw_limited = Arc::clone(&bw_limited);
         let pool = pool.inner().clone();
         let bp = backup_path.clone();
         let ae = account_email.clone();
@@ -125,12 +131,24 @@ pub async fn run_with_backup(
                         last_error: None,
                         last_uid: Some(uid),
                         external_copy_failures: ext_failures.load(Ordering::Relaxed),
+                        bandwidth_limited: false,
                     });
                     Some(index_entry)
                 }
                 Err(last_error) => {
                     errors.fetch_add(1, Ordering::Relaxed);
                     warn!("archive_emails: UID {} failed: {:?}", uid, last_error);
+                    let is_bw = imap::is_bandwidth_limited(&last_error);
+                    let last_error = if is_bw {
+                        // Account is suspended server-side — stop the run instead of
+                        // failing every remaining UID against a locked account.
+                        cancel.store(true, Ordering::Relaxed);
+                        bw_limited.store(true, Ordering::Relaxed);
+                        warn!("archive_emails: bandwidth limit hit — stopping run");
+                        "Daily download limit reached for this provider. Archiving stopped — run it again after the limit resets (usually within 1 hour, up to 24 hours). Already-archived emails are kept.".to_string()
+                    } else {
+                        last_error
+                    };
                     let c = completed.load(Ordering::Relaxed);
                     let e = errors.load(Ordering::Relaxed);
                     let is_cancelled = cancel.load(Ordering::Relaxed);
@@ -142,6 +160,9 @@ pub async fn run_with_backup(
                         last_error: Some(last_error),
                         last_uid: None,
                         external_copy_failures: ext_failures.load(Ordering::Relaxed),
+                        // Per-event flag: true only for the error that hit the limit,
+                        // so late in-flight failures can't overwrite the friendly message
+                        bandwidth_limited: is_bw,
                     });
                     None
                 }
@@ -198,14 +219,20 @@ pub async fn run_with_backup(
         final_completed, total, final_errors, final_ext_failures
     );
 
+    let bandwidth_limited = bw_limited.load(Ordering::Relaxed);
     let result = ArchiveProgress {
         total,
         completed: final_completed,
         errors: final_errors,
         active: false,
-        last_error: None,
+        last_error: if bandwidth_limited {
+            Some("Daily download limit reached for this provider. Backup stopped — it will pick up where it left off after the limit resets (usually within 1 hour, up to 24 hours).".to_string())
+        } else {
+            None
+        },
         last_uid: None,
         external_copy_failures: final_ext_failures,
+        bandwidth_limited,
     };
 
     let _ = app_handle.emit("archive-progress", result.clone());
@@ -446,6 +473,7 @@ pub async fn bulk_delete(
         last_error: None,
         last_uid: None,
         external_copy_failures: 0,
+        bandwidth_limited: false,
     })
 }
 

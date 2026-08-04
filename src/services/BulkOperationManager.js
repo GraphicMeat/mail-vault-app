@@ -199,6 +199,8 @@ class BulkOperationManager {
         const p = event.payload;
         this._operation.completed = p.completed;
         this._operation.errors = p.errors;
+        // Only surface the provider bandwidth-limit stop — per-email errors stay a count
+        if (p.bandwidth_limited && p.last_error) this._operation.lastError = p.last_error;
         this._emitProgress();
       });
 

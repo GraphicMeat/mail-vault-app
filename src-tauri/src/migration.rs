@@ -633,6 +633,11 @@ pub async fn run_migration(
 
     let sem = Arc::new(Semaphore::new(3));
 
+    // Set when the IMAP server reports a daily bandwidth suspension (Gmail:
+    // 2500 MB/day down, 500 MB/day APPEND up) — abort the run instead of
+    // failing every remaining email against a suspended account.
+    let mut bandwidth_hit = false;
+
     for folder_idx in 0..folder_mappings.len() {
         info!("[migration] Folder loop iteration {}/{}, cancel={}, pause={}", folder_idx + 1, folder_mappings.len(), cancel.load(Ordering::Relaxed), pause.load(Ordering::Relaxed));
         if cancel.load(Ordering::Relaxed) {
@@ -1166,6 +1171,15 @@ pub async fn run_migration(
                         migrated_total += 1;
                         email_status = "ok";
                     }
+                    Err(ref first_err) if imap::is_bandwidth_limited(first_err) => {
+                        // Account suspended server-side — retrying is pointless
+                        warn!("[migration] Email UID {} hit provider bandwidth limit, aborting run: {}", uid, first_err);
+                        folder_failed += 1;
+                        failed_total += 1;
+                        email_status = "failed";
+                        folder_mappings[folder_idx].failed_uids.push(uid);
+                        bandwidth_hit = true;
+                    }
                     Err(ref first_err) => {
                         // Retry once after 2-second delay
                         warn!(
@@ -1237,6 +1251,10 @@ pub async fn run_migration(
                                 failed_total += 1;
                                 email_status = "failed";
                                 folder_mappings[folder_idx].failed_uids.push(uid);
+                                if imap::is_bandwidth_limited(&e) {
+                                    warn!("[migration] Email UID {} hit provider bandwidth limit, aborting run", uid);
+                                    bandwidth_hit = true;
+                                }
                             }
                         }
                     }
@@ -1265,6 +1283,12 @@ pub async fn run_migration(
                     Some(log_entry),
                     None,
                 );
+                if bandwidth_hit {
+                    break;
+                }
+            }
+            if bandwidth_hit {
+                break;
             }
         }
 
@@ -1274,7 +1298,7 @@ pub async fn run_migration(
         folder_mappings[folder_idx].failed = folder_failed;
         folder_mappings[folder_idx].status = if cancel.load(Ordering::Relaxed) {
             "cancelled".to_string()
-        } else if folder_failed > 0 && folder_migrated == 0 {
+        } else if bandwidth_hit || (folder_failed > 0 && folder_migrated == 0) {
             "failed".to_string()
         } else {
             "completed".to_string()
@@ -1300,11 +1324,15 @@ pub async fn run_migration(
         };
         let _ = save_migration_state(&app_handle, &checkpoint_state);
         info!("migration: folder '{}' completed, saved checkpoint", src_path);
+        if bandwidth_hit {
+            warn!("[migration] Provider bandwidth limit reached — stopping run; re-run after the limit resets (usually within 1 hour, up to 24 hours)");
+            break;
+        }
     }
 
     let final_status = if cancel.load(Ordering::Relaxed) {
         "cancelled"
-    } else if failed_total > 0 && migrated_total == 0 {
+    } else if bandwidth_hit || (failed_total > 0 && migrated_total == 0) {
         "failed"
     } else {
         "completed"

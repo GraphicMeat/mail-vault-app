@@ -542,6 +542,7 @@ async fn run_imap_backup_inner(
     );
 
     let mut cancelled = false;
+    let mut bandwidth_limited = false;
 
     for (folder_idx, mbox) in selectable.iter().enumerate() {
         if cancel.load(Ordering::Relaxed) {
@@ -650,6 +651,11 @@ async fn run_imap_backup_inner(
             total_backed_up += archive_result.completed;
             total_errors += archive_result.errors;
             total_ext_failures += archive_result.external_copy_failures;
+            if archive_result.bandwidth_limited {
+                // archive already set the shared cancel flag — the folder loop
+                // breaks on the next iteration and the checkpoint allows resume
+                bandwidth_limited = true;
+            }
         }
 
         completed_folders += 1;
@@ -689,7 +695,11 @@ async fn run_imap_backup_inner(
         errors: total_errors,
         duration_secs: duration,
         success: !cancelled && total_errors == 0,
-        error_message: None,
+        error_message: if bandwidth_limited {
+            Some("Daily download limit reached for this provider. Backup stopped — it will pick up where it left off after the limit resets (usually within 1 hour, up to 24 hours).".to_string())
+        } else {
+            None
+        },
         cancelled,
         completed_folders,
         external_copy_ok: total_ext_failures == 0,

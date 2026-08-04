@@ -196,7 +196,7 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
 
             {errors > 0 && (
               <div className="mt-2 text-xs text-mail-danger">
-                {errors} email(s) failed
+                {operation?.lastError || `${errors} email(s) failed`}
               </div>
             )}
           </div>

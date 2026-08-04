@@ -383,6 +383,15 @@ const HEADER_FETCH_SPEC: &str = "(UID FLAGS ENVELOPE INTERNALDATE BODY.PEEK[HEAD
 // Full spec: includes BODYSTRUCTURE + RFC822.SIZE — used for search results (smaller sets, full info)
 const HEADER_FETCH_SPEC_FULL: &str = "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (References Authentication-Results Return-Path Reply-To List-Unsubscribe List-Id Precedence)])";
 
+/// Gmail suspends accounts that exceed daily IMAP bandwidth caps (2500 MB down,
+/// 500 MB up) — the suspension can last up to 24h and locks webmail sign-in too.
+/// Bulk operations must stop at the first such error instead of grinding through
+/// thousands of doomed fetches against a suspended account.
+pub fn is_bandwidth_limited(error: &str) -> bool {
+    let e = error.to_ascii_lowercase();
+    e.contains("exceeded bandwidth") || e.contains("throttled")
+}
+
 // ── UID helpers ─────────────────────────────────────────────────────────────
 
 /// Compress a sorted list of UIDs into IMAP range notation.
@@ -1951,5 +1960,26 @@ mod tests {
         let original: Vec<u32> = (500..=700).chain(800..=900).chain(std::iter::once(1000)).collect();
         let compressed = compress_uid_ranges(&original);
         assert_eq!(compressed, "500:700,800:900,1000");
+    }
+
+    // ── is_bandwidth_limited ────────────────────────────────────────────
+
+    #[test]
+    fn bandwidth_limited_gmail_message() {
+        assert!(is_bandwidth_limited(
+            "UID FETCH 42 failed: NO Account exceeded bandwidth limits. (Failure)"
+        ));
+    }
+
+    #[test]
+    fn bandwidth_limited_throttled_response_code() {
+        assert!(is_bandwidth_limited("BYE [THROTTLED] Too much traffic"));
+    }
+
+    #[test]
+    fn bandwidth_limited_negative() {
+        assert!(!is_bandwidth_limited("UID FETCH 42 failed: connection reset by peer"));
+        assert!(!is_bandwidth_limited("Email UID 42 not found"));
+        assert!(!is_bandwidth_limited(""));
     }
 }

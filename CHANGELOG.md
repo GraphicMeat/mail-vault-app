@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Fixed
+- **Hitting a provider's daily download limit no longer grinds through thousands of doomed fetches.** Gmail caps IMAP traffic per day (2,500 MB down, 500 MB up) and temporarily suspends accounts that exceed it — for up to 24 hours, webmail included. Archiving and migration now recognize the server's "bandwidth exceeded" response, stop the run immediately, and say when to retry; everything already downloaded is kept.
 - **The app no longer crashes at launch on Linux systems without a configured locale.** On a system where the language environment is unset (LANG empty, common on minimal installs and servers), the browser engine reports the raw "C" locale, and every date formatter rejected it — taking the whole window down to a "Something went wrong" screen before anything loaded. Date formatting now falls back to the system default when the reported locale isn't usable.
 
 ## [2.8.0] - 2026-07-26

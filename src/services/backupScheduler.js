@@ -297,6 +297,13 @@ class BackupCoordinator {
       if (result.cancelled) {
         this._checkpoints.set(accountId, result.completed_folders || 0);
         console.log(`[backup] Cancelled ${account.email} at folder ${result.completed_folders} — checkpoint saved`);
+        // Server-initiated stop (e.g. Gmail daily bandwidth limit) — tell the user why
+        if (result.error_message) {
+          useSettingsStore.getState().updateBackupState(accountId, {
+            lastStatus: 'failed',
+            lastError: result.error_message,
+          });
+        }
         this._running.set(accountId, false);
         this._resolveManual(accountId, { status: 'cancelled' });
         return;
