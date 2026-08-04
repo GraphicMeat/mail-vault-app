@@ -208,6 +208,23 @@ jobs:
               || { echo "::error::pricing endpoint returned no $plan plan"; exit 1; }
           done
 
+          # End-to-end: actually create a session for both products. This is the call that
+          # failed for weeks; health and pricing alone never touched it.
+          # ALWAYS this address — every distinct email mints a permanent Stripe customer
+          # plus a billing_customers row, so a fixed probe keeps that to exactly one
+          # (cus_V0eMOTms28hpiN) instead of one per deploy. It owns no subscription.
+          PROBE_EMAIL=probe-nonexistent-9f2a@example.com
+          for plan in monthly yearly; do
+            body=$(curl -sS --max-time 20 -X POST https://mailvaultapp.com/api/billing/checkout-session \
+              -H 'Content-Type: application/json' \
+              -d "{\"email\":\"$PROBE_EMAIL\",\"planId\":\"$plan\"}")
+            url=$(echo "$body" | jq -r '.url // empty')
+            case "$url" in
+              https://checkout.stripe.com/*) echo "$plan checkout: ok" ;;
+              *) echo "::error::$plan checkout failed: $(echo "$body" | jq -c '{error, code}')"; exit 1 ;;
+            esac
+          done
+
       - name: Clean up SSH key
         if: always()
         run: |
