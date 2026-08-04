@@ -31,6 +31,7 @@ mod move_emails;
 mod restore;
 pub use mailvault_core::oauth2;
 mod smtp;
+mod vault;
 
 #[cfg(target_os = "macos")]
 use cocoa::appkit::NSApplication;
@@ -764,10 +765,7 @@ fn cache_base_name(account_id: &str, mailbox: &str) -> String {
 #[tauri::command]
 async fn save_email_cache(app_handle: tauri::AppHandle, account_id: String, mailbox: String, data: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
-    let base_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not get app data directory: {}", e))?
+    let base_dir = vault::root(&app_handle)?
         .join("email_cache");
 
     let base_name = cache_base_name(&account_id, &mailbox);
@@ -853,10 +851,7 @@ async fn save_email_cache(app_handle: tauri::AppHandle, account_id: String, mail
 
 #[tauri::command]
 fn save_mailbox_cache(app_handle: tauri::AppHandle, account_id: String, data: String) -> Result<(), String> {
-    let dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not get app data directory: {}", e))?
+    let dir = vault::root(&app_handle)?
         .join("mailboxes")
         .join(&account_id);
 
@@ -871,10 +866,7 @@ fn save_mailbox_cache(app_handle: tauri::AppHandle, account_id: String, data: St
 
 #[tauri::command]
 fn load_mailbox_cache(app_handle: tauri::AppHandle, account_id: String) -> Result<Option<String>, String> {
-    let file = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not get app data directory: {}", e))?
+    let file = vault::root(&app_handle)?
         .join("mailboxes")
         .join(&account_id)
         .join("mailboxes.json");
@@ -891,10 +883,7 @@ fn load_mailbox_cache(app_handle: tauri::AppHandle, account_id: String) -> Resul
 
 #[tauri::command]
 fn delete_mailbox_cache(app_handle: tauri::AppHandle, account_id: String) -> Result<(), String> {
-    let dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not get app data directory: {}", e))?
+    let dir = vault::root(&app_handle)?
         .join("mailboxes")
         .join(&account_id);
 
@@ -911,10 +900,7 @@ fn delete_mailbox_cache(app_handle: tauri::AppHandle, account_id: String) -> Res
 #[tauri::command]
 fn save_graph_id_map(app_handle: tauri::AppHandle, account_id: String, mailbox: String, data: String) -> Result<(), String> {
     let base_name = cache_base_name(&account_id, &mailbox);
-    let dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("save_graph_id_map: could not get app data dir: {}", e))?
+    let dir = vault::root(&app_handle)?
         .join("email_cache")
         .join(&base_name);
 
@@ -930,10 +916,7 @@ fn save_graph_id_map(app_handle: tauri::AppHandle, account_id: String, mailbox: 
 #[tauri::command]
 fn load_graph_id_map(app_handle: tauri::AppHandle, account_id: String, mailbox: String) -> Result<Option<String>, String> {
     let base_name = cache_base_name(&account_id, &mailbox);
-    let file = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("load_graph_id_map: could not get app data dir: {}", e))?
+    let file = vault::root(&app_handle)?
         .join("email_cache")
         .join(&base_name)
         .join("graph_id_map.json");
@@ -952,10 +935,7 @@ fn load_graph_id_map(app_handle: tauri::AppHandle, account_id: String, mailbox: 
 
 #[tauri::command]
 fn load_email_cache(app_handle: tauri::AppHandle, account_id: String, mailbox: String) -> Result<Option<String>, String> {
-    let base_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not get app data directory: {}", e))?
+    let base_dir = vault::root(&app_handle)?
         .join("email_cache");
 
     let base_name = cache_base_name(&account_id, &mailbox);
@@ -983,10 +963,7 @@ fn load_email_cache(app_handle: tauri::AppHandle, account_id: String, mailbox: S
 #[tauri::command]
 async fn load_email_cache_partial(app_handle: tauri::AppHandle, account_id: String, mailbox: String, limit: usize) -> Result<Option<String>, String> {
     tokio::task::spawn_blocking(move || {
-        let base_dir = app_handle
-            .path()
-            .app_data_dir()
-            .map_err(|e| format!("Could not get app data directory: {}", e))?
+        let base_dir = vault::root(&app_handle)?
             .join("email_cache");
 
         let base_name = cache_base_name(&account_id, &mailbox);
@@ -1038,10 +1015,7 @@ async fn load_email_cache_by_uids(
     uids: Vec<u32>,
 ) -> Result<Vec<serde_json::Value>, String> {
     tokio::task::spawn_blocking(move || {
-        let base_dir = app_handle
-            .path()
-            .app_data_dir()
-            .map_err(|e| format!("Could not get app data directory: {}", e))?
+        let base_dir = vault::root(&app_handle)?
             .join("email_cache");
 
         let base_name = cache_base_name(&account_id, &mailbox);
@@ -1085,10 +1059,7 @@ async fn list_cached_uids(
     since_ms: Option<f64>,
 ) -> Result<serde_json::Value, String> {
     tokio::task::spawn_blocking(move || {
-        let base_dir = app_handle
-            .path()
-            .app_data_dir()
-            .map_err(|e| format!("Could not get app data directory: {}", e))?
+        let base_dir = vault::root(&app_handle)?
             .join("email_cache");
 
         let sidecar_dir = base_dir.join(cache_base_name(&account_id, &mailbox));
@@ -1197,10 +1168,7 @@ fn load_from_sidecars(sidecar_dir: &Path, meta_file: &Path, limit: Option<usize>
 /// Load only cache metadata (no emails) — fast, for delta-sync parameters
 #[tauri::command]
 fn load_email_cache_meta(app_handle: tauri::AppHandle, account_id: String, mailbox: String) -> Result<Option<String>, String> {
-    let base_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not get app data directory: {}", e))?
+    let base_dir = vault::root(&app_handle)?
         .join("email_cache");
 
     let base_name = cache_base_name(&account_id, &mailbox);
@@ -1255,10 +1223,7 @@ fn load_email_cache_meta(app_handle: tauri::AppHandle, account_id: String, mailb
 
 #[tauri::command]
 fn clear_email_cache(app_handle: tauri::AppHandle, account_id: Option<String>, mailbox: Option<String>) -> Result<(), String> {
-    let cache_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not get app data directory: {}", e))?
+    let cache_dir = vault::root(&app_handle)?
         .join("email_cache");
 
     if !cache_dir.exists() {
@@ -1391,10 +1356,7 @@ fn save_attachment(
 
     info!("save_attachment called for: {}", filename);
 
-    let cache_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not get app data directory: {}", e))?
+    let cache_dir = vault::root(&app_handle)?
         .join("attachment_cache");
 
     fs::create_dir_all(&cache_dir)
@@ -1702,18 +1664,65 @@ struct MaildirClearCacheResult {
     skipped_archived: u32,
 }
 
+// ── Mail storage location ───────────────────────────────────────────────────
+
+#[tauri::command]
+fn vault_get_status(app_handle: tauri::AppHandle) -> vault::VaultStatus {
+    vault::status(&app_handle)
+}
+
+#[tauri::command]
+fn vault_inspect_folder(app_handle: tauri::AppHandle, path: String) -> Result<vault::FolderInspection, String> {
+    vault::inspect_folder(&app_handle, &path)
+}
+
+/// Point the app at a folder that already holds the mail (drive reconnected at
+/// a new path, or the folder was moved by hand).
+#[tauri::command]
+fn vault_adopt(app_handle: tauri::AppHandle, path: String) -> Result<vault::VaultStatus, String> {
+    let status = vault::adopt(&app_handle, &path)?;
+    // The daemon reads the storage location once at startup — restart it so it
+    // does not keep syncing into the old folder.
+    shutdown_daemon_child();
+    let _ = app_handle.emit("vault-status", status.clone());
+    Ok(status)
+}
+
+/// Copy the mail data to `path`, verify it, delete the originals, switch over.
+#[tauri::command]
+async fn vault_move_to(app_handle: tauri::AppHandle, path: String) -> Result<vault::MoveResult, String> {
+    let handle = app_handle.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let emitter = handle.clone();
+        vault::move_to(&handle, &path, move |p| {
+            let _ = emitter.emit("vault-move-progress", p);
+        })
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?;
+    shutdown_daemon_child();
+    let _ = app_handle.emit("vault-status", vault::status(&app_handle));
+    result
+}
+
+/// Go back to storing mail in the app data dir. Does not move anything.
+#[tauri::command]
+fn vault_reset(app_handle: tauri::AppHandle) -> Result<vault::VaultStatus, String> {
+    let status = vault::reset(&app_handle)?;
+    shutdown_daemon_child();
+    let _ = app_handle.emit("vault-status", status.clone());
+    Ok(status)
+}
+
 pub fn maildir_cur_path(app_handle: &tauri::AppHandle, account_id: &str, mailbox: &str) -> Result<PathBuf, String> {
     let safe_mailbox = mailbox.chars().map(|c| {
         if c.is_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' }
     }).collect::<String>();
-    let base = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not get app data directory: {}", e))?;
+    let base = vault::root(app_handle)?;
     Ok(base.join("Maildir").join(account_id).join(&safe_mailbox).join("cur"))
 }
 
-fn parse_flags_from_filename(filename: &str) -> Vec<String> {
+pub(crate) fn parse_flags_from_filename(filename: &str) -> Vec<String> {
     if let Some(flags_part) = filename.split(":2,").nth(1) {
         let mut flags = Vec::new();
         for c in flags_part.chars() {
@@ -1750,6 +1759,22 @@ pub fn build_maildir_filename(uid: u32, flags: &[String]) -> String {
     flag_chars.dedup();
     let flag_str: String = flag_chars.into_iter().collect();
     format!("{}:2,{}", uid, flag_str)
+}
+
+/// Find a message file for `uid` in a directory that may use either naming
+/// scheme: Maildir (`<uid>:2,<flags>[.eml]`) or the legacy flagless external
+/// backup name (`<uid>.eml`). Used for the external backup location, which
+/// holds both after the flag-preserving rename.
+pub fn find_msg_file_by_uid(dir: &Path, uid: u32) -> Option<PathBuf> {
+    let entries = fs::read_dir(dir).ok()?;
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let head = name.split(|c: char| c == ':' || c == '.' || c == '_').next().unwrap_or("");
+        if head.parse::<u32>().ok() == Some(uid) {
+            return Some(entry.path());
+        }
+    }
+    None
 }
 
 pub fn find_file_by_uid(dir: &Path, uid: u32) -> Option<PathBuf> {
@@ -2153,8 +2178,7 @@ async fn local_index_read(
     account_id: String,
     mailbox: String,
 ) -> Result<Option<String>, String> {
-    let data_dir = app_handle.path().app_data_dir()
-        .map_err(|e| format!("No app data dir: {}", e))?;
+    let data_dir = vault::root(&app_handle)?;
     let index_path = data_dir.join("maildir").join(&account_id).join(&mailbox).join("local-index.json");
 
     if !index_path.exists() {
@@ -2173,8 +2197,7 @@ async fn local_index_append(
     mailbox: String,
     entries_json: String,
 ) -> Result<(), String> {
-    let data_dir = app_handle.path().app_data_dir()
-        .map_err(|e| format!("No app data dir: {}", e))?;
+    let data_dir = vault::root(&app_handle)?;
     let dir_path = data_dir.join("maildir").join(&account_id).join(&mailbox);
     tokio::fs::create_dir_all(&dir_path).await
         .map_err(|e| format!("Failed to create dir: {}", e))?;
@@ -2216,8 +2239,7 @@ async fn local_index_remove(
     mailbox: String,
     uid: u32,
 ) -> Result<(), String> {
-    let data_dir = app_handle.path().app_data_dir()
-        .map_err(|e| format!("No app data dir: {}", e))?;
+    let data_dir = vault::root(&app_handle)?;
     let index_path = data_dir.join("maildir").join(&account_id).join(&mailbox).join("local-index.json");
 
     if !index_path.exists() {
@@ -2707,10 +2729,7 @@ fn maildir_storage_stats(
     app_handle: tauri::AppHandle,
     account_id: Option<String>,
 ) -> Result<MaildirStorageStats, String> {
-    let base = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not get app data directory: {}", e))?
+    let base = vault::root(&app_handle)?
         .join("Maildir");
 
     let scan_dir = match account_id {
@@ -2748,10 +2767,7 @@ fn maildir_storage_stats(
 fn maildir_clear_cache(
     app_handle: tauri::AppHandle,
 ) -> Result<MaildirClearCacheResult, String> {
-    let base = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not get app data directory: {}", e))?
+    let base = vault::root(&app_handle)?
         .join("Maildir");
 
     if !base.exists() {
@@ -2789,10 +2805,7 @@ fn maildir_migrate_json_to_eml(
 ) -> Result<String, String> {
     use base64::Engine;
 
-    let base = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not get app data directory: {}", e))?
+    let base = vault::root(&app_handle)?
         .join("Maildir");
 
     if !base.exists() {
@@ -2891,10 +2904,7 @@ fn maildir_migrate_email_dirs(
     app_handle: tauri::AppHandle,
     account_map: std::collections::HashMap<String, String>,
 ) -> Result<serde_json::Value, String> {
-    let base = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not get app data directory: {}", e))?;
+    let base = vault::root(&app_handle)?;
     let maildir_base = base.join("Maildir");
 
     if !maildir_base.exists() {
@@ -3067,10 +3077,7 @@ async fn export_backup(
         }
     }
 
-    let base = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not get app data directory: {}", e))?;
+    let base = vault::root(&app_handle)?;
     let maildir_base = base.join("Maildir");
 
     let file = fs::File::create(&dest_path)
@@ -3290,10 +3297,7 @@ async fn import_backup(
     // Save updated accounts.json
     write_accounts_json(&app_handle, &existing_accounts)?;
 
-    let base = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not get app data directory: {}", e))?;
+    let base = vault::root(&app_handle)?;
     let maildir_base = base.join("Maildir");
 
     // Extract .eml files
@@ -3500,10 +3504,7 @@ async fn export_mbox(
     info!("export_mbox called: dest={}, account={}, mailbox={}, archived_only={}",
         dest_path, account_id, mailbox, archived_only);
 
-    let base = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not get app data directory: {}", e))?;
+    let base = vault::root(&app_handle)?;
 
     let safe_mailbox = sanitize_mailbox_name(&mailbox);
     let cur_dir = base.join("Maildir").join(&account_id).join(&safe_mailbox).join("cur");
@@ -3588,10 +3589,7 @@ async fn export_mbox_all(
 
     info!("export_mbox_all called: dest={}, archived_only={}", dest_path, archived_only);
 
-    let base = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not get app data directory: {}", e))?;
+    let base = vault::root(&app_handle)?;
     let maildir_base = base.join("Maildir");
 
     if !maildir_base.exists() {
@@ -3689,10 +3687,7 @@ async fn import_mbox(
     let data = fs::read(&source_path)
         .map_err(|e| format!("Failed to read mbox file: {}", e))?;
 
-    let base = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not get app data directory: {}", e))?;
+    let base = vault::root(&app_handle)?;
 
     let safe_mailbox = sanitize_mailbox_name(&mailbox);
     let cur_dir = base.join("Maildir").join(&account_id).join(&safe_mailbox).join("cur");
@@ -4376,7 +4371,8 @@ fn main() {
         .manage(imap::ImapPool::new())
         .manage(oauth2::OAuth2Manager::new())
         .manage(iap::IapState::new())
-        .manage(UpdateCheckGuard::default());
+        .manage(UpdateCheckGuard::default())
+        .manage(vault::VaultState::default());
 
     #[cfg(target_os = "linux")]
     let builder = builder.manage(PendingUpdate::default());
@@ -4509,7 +4505,8 @@ fn main() {
             github::github_device_start,
             github::github_device_poll,
             github::github_check_star,
-            daemon_rpc
+            daemon_rpc,
+            vault_get_status, vault_inspect_folder, vault_adopt, vault_move_to, vault_reset
         ])
         .setup(|app| {
             // Set up logging to app log directory
@@ -4538,6 +4535,17 @@ fn main() {
 
             info!("MailVault application starting");
             info!("App version: {}", env!("CARGO_PKG_VERSION"));
+
+            // Resolve the mail storage location once, before anything reads
+            // mail. On macOS this starts security-scoped access and holds it for
+            // the process lifetime. A missing drive is not fatal — the frontend
+            // shows the banner and asks for the folder.
+            let vault_status = vault::resolve(&app.handle());
+            info!(
+                "Mail storage: {} ({})",
+                if vault_status.display_path.is_empty() { "app data dir" } else { &vault_status.display_path },
+                vault_status.status
+            );
 
             // --- Set up app menu ---
             // No "Check for Updates" on MAS builds — the App Store handles updates.

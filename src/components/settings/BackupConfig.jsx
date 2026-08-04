@@ -8,6 +8,7 @@ import {
   RefreshCcw,
 } from 'lucide-react';
 import { IS_APPSTORE_BUILD, IAP_PRODUCT_BACKUPS } from '../../utils/buildFlags';
+import MailStorageLocation from './MailStorageLocation';
 
 const selectClass = 'w-full px-4 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent';
 
@@ -178,6 +179,11 @@ export default function BackupConfig() {
 
   return (
     <div className="space-y-6">
+      {/* Moving the store off the app container needs the sidecar daemon to hold
+          its own security-scoped access — unverified under the App Store sandbox,
+          so this is Developer ID / Linux only for now. */}
+      {!IS_APPSTORE_BUILD && <MailStorageLocation />}
+
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5 space-y-4">
         <h4 className="font-semibold text-mail-text flex items-center gap-2">
           <HardDrive size={18} className="text-mail-accent" />
@@ -211,7 +217,13 @@ export default function BackupConfig() {
 
         {/* External backup location */}
         <div>
-          <label className="text-xs text-mail-text-muted mb-1 block">External backup location</label>
+          <label className="text-xs text-mail-text-muted mb-1 block">Second copy — external cold storage</label>
+          <p className="text-xs text-mail-text-muted mb-2">
+            MailVault always keeps its working copy in the app's own storage — that is what you read,
+            search and open in the app. An external folder adds a <strong>second, independent copy</strong> on
+            a drive you control. It is written at the same time as the working copy, never read by the app
+            day to day, and kept for the long term: emails deleted on the server or in MailVault stay there.
+          </p>
           <div className="flex items-center gap-2">
             <div className="flex-1 text-xs text-mail-text font-mono bg-mail-bg rounded-lg px-3 py-2 truncate border border-mail-border">
               {externalBackupLocation?.displayPath || (defaultBackupPath ? `${defaultBackupPath}/Maildir (app only)` : 'Loading...')}
@@ -273,17 +285,24 @@ export default function BackupConfig() {
           {externalBackupLocation?.status === 'ready' ? (
             <div className="mt-2 space-y-1">
               <p className="text-xs text-mail-success">
-                Emails are saved as .eml files during each backup, organized by account and folder. Safe from app uninstalls.
+                Second copy active. Plain .eml files, organized by account and folder, readable by any mail
+                app — and untouched if you uninstall MailVault or lose the app's data folder.
               </p>
               <p className="text-xs text-mail-text-muted">
-                Structure: <code className="text-mail-text">{externalBackupLocation.displayPath}/email@address/INBOX/cur/1234.eml</code>
+                Structure: <code className="text-mail-text">{externalBackupLocation.displayPath}/email@address/INBOX/cur/1234:2,S.eml</code>
+              </p>
+              <p className="text-xs text-mail-text-muted">
+                If the drive is disconnected, backups keep running into the app's working copy alone and
+                the second copy catches up — in both directions — the next time the drive is back.
               </p>
             </div>
           ) : !externalBackupLocation ? (
             <div className="mt-2 flex items-start gap-2 bg-mail-warning/10 border border-mail-warning/30 rounded-lg p-2">
               <AlertCircle size={14} className="text-mail-warning flex-shrink-0 mt-0.5" />
               <p className="text-xs text-mail-warning">
-                Backups are only stored inside the app's data folder. If you uninstall MailVault or clear app data, your backups will be lost. Choose an external folder to keep a safe copy.
+                One copy only. Everything lives in the app's data folder — uninstall MailVault, clear app
+                data or lose this Mac and the archive goes with it. Choose an external folder to add a
+                second copy on a drive you control.
               </p>
             </div>
           ) : null}

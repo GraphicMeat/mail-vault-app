@@ -180,7 +180,7 @@ pub async fn run_with_backup(
 
     // Write to local-index.json if any entries were archived
     if !index_entries.is_empty() {
-        if let Ok(data_dir) = app_handle.path().app_data_dir() {
+        if let Ok(data_dir) = crate::vault::root(&app_handle) {
             let dir_path = data_dir.join("maildir").join(&account_id).join(&mailbox);
             let index_path = dir_path.join("local-index.json");
 
@@ -303,9 +303,11 @@ async fn fetch_and_store(
             .join("cur");
         match fs::create_dir_all(&backup_dir) {
             Ok(()) => {
-                let eml_name = format!("{}.eml", uid);
+                // Same Maildir name as the app copy (+ .eml) so flags survive a
+                // restore from the external location back into the app store.
+                let eml_name = format!("{}.eml", filename);
                 let dst = backup_dir.join(&eml_name);
-                if !dst.exists() {
+                if super::find_msg_file_by_uid(&backup_dir, uid).is_none() {
                     if let Err(e) = fs::write(&dst, &raw_bytes) {
                         warn!("archive_emails: external copy failed for UID {}: {}", uid, e);
                         external_copy_failed = true;

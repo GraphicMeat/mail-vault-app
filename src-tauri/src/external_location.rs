@@ -24,12 +24,19 @@ pub struct ExternalLocation {
     pub last_error: Option<String>,
 }
 
-fn bookmark_file(app_data_dir: &std::path::Path) -> PathBuf {
-    app_data_dir.join("external-backup-bookmark")
+/// Storage slot for a persisted user-selected folder. Each slot is an
+/// independent bookmark + metadata pair under the app data dir.
+/// `"external-backup"` = the cold-storage second copy, `"vault"` = the working
+/// mail store when the user moved it off the app data dir.
+pub const SLOT_EXTERNAL_BACKUP: &str = "external-backup";
+pub const SLOT_VAULT: &str = "vault";
+
+fn bookmark_file(app_data_dir: &std::path::Path, slot: &str) -> PathBuf {
+    app_data_dir.join(format!("{}-bookmark", slot))
 }
 
-fn meta_file(app_data_dir: &std::path::Path) -> PathBuf {
-    app_data_dir.join("external-backup-meta.json")
+fn meta_file(app_data_dir: &std::path::Path, slot: &str) -> PathBuf {
+    app_data_dir.join(format!("{}-meta.json", slot))
 }
 
 fn now_millis() -> u64 {
@@ -224,14 +231,14 @@ mod macos {
 /// On macOS: creates and persists a security-scoped bookmark.
 /// On Linux: persists the path string.
 /// Does NOT call validate — returns the save result directly to avoid chaining into crash-prone resolution.
-pub fn save_external_location(app_data_dir: &std::path::Path, path: &str) -> Result<ExternalLocation, String> {
+pub fn save_external_location(app_data_dir: &std::path::Path, slot: &str, path: &str) -> Result<ExternalLocation, String> {
     fs::create_dir_all(app_data_dir).map_err(|e| format!("Cannot create app data dir: {}", e))?;
 
     #[cfg(target_os = "macos")]
     {
         match macos::create_bookmark(path) {
             Ok(bookmark) => {
-                fs::write(bookmark_file(app_data_dir), &bookmark)
+                fs::write(bookmark_file(app_data_dir, slot), &bookmark)
                     .map_err(|e| format!("Failed to save bookmark: {}", e))?;
                 info!("[external_location] Saved macOS security-scoped bookmark for {}", path);
             }
@@ -243,7 +250,7 @@ pub fn save_external_location(app_data_dir: &std::path::Path, path: &str) -> Res
                     "platform": "macos",
                     "savedAt": now_millis(),
                 });
-                let _ = fs::write(meta_file(app_data_dir), meta.to_string());
+                let _ = fs::write(meta_file(app_data_dir, slot), meta.to_string());
                 return Ok(needs_reauth_location(path.to_string(), e));
             }
         }
@@ -251,7 +258,7 @@ pub fn save_external_location(app_data_dir: &std::path::Path, path: &str) -> Res
 
     #[cfg(not(target_os = "macos"))]
     {
-        fs::write(bookmark_file(app_data_dir), path.as_bytes())
+        fs::write(bookmark_file(app_data_dir, slot), path.as_bytes())
             .map_err(|e| format!("Failed to save path: {}", e))?;
         info!("[external_location] Saved path for {}", path);
     }
@@ -261,7 +268,7 @@ pub fn save_external_location(app_data_dir: &std::path::Path, path: &str) -> Res
         "platform": std::env::consts::OS,
         "savedAt": now_millis(),
     });
-    let _ = fs::write(meta_file(app_data_dir), meta.to_string());
+    let _ = fs::write(meta_file(app_data_dir, slot), meta.to_string());
 
     // Return success without full validation to avoid crash-prone resolution chain
     Ok(ExternalLocation {
@@ -276,13 +283,13 @@ pub fn save_external_location(app_data_dir: &std::path::Path, path: &str) -> Res
 /// Resolve the saved external location and start security-scoped access.
 /// On macOS: resolves the bookmark, starts access. Failures become needs_reauth.
 /// Returns (resolved_path, location_status).
-pub fn resolve_external_location(app_data_dir: &std::path::Path) -> Result<(String, ExternalLocation), String> {
-    let bf = bookmark_file(app_data_dir);
+pub fn resolve_external_location(app_data_dir: &std::path::Path, slot: &str) -> Result<(String, ExternalLocation), String> {
+    let bf = bookmark_file(app_data_dir, slot);
     if !bf.exists() {
         return Err("No external backup location configured".to_string());
     }
 
-    let meta: serde_json::Value = fs::read_to_string(meta_file(app_data_dir))
+    let meta: serde_json::Value = fs::read_to_string(meta_file(app_data_dir, slot))
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default();
@@ -405,8 +412,8 @@ pub fn release_external_access(path: &str) {
 }
 
 /// Validate the saved external location by resolving + testing write access.
-pub fn validate_external_location(app_data_dir: &std::path::Path) -> Result<ExternalLocation, String> {
-    match resolve_external_location(app_data_dir) {
+pub fn validate_external_location(app_data_dir: &std::path::Path, slot: &str) -> Result<ExternalLocation, String> {
+    match resolve_external_location(app_data_dir, slot) {
         Ok((resolved_path, mut loc)) => {
             let test_file = PathBuf::from(&resolved_path).join(".mailvault-access-test");
             match fs::write(&test_file, b"test") {
@@ -443,8 +450,8 @@ pub fn validate_external_location(app_data_dir: &std::path::Path) -> Result<Exte
 }
 
 /// Get the current external location status without starting access.
-pub fn get_external_location(app_data_dir: &std::path::Path) -> ExternalLocation {
-    let bf = bookmark_file(app_data_dir);
+pub fn get_external_location(app_data_dir: &std::path::Path, slot: &str) -> ExternalLocation {
+    let bf = bookmark_file(app_data_dir, slot);
     if !bf.exists() {
         return ExternalLocation {
             display_path: String::new(),
@@ -455,7 +462,7 @@ pub fn get_external_location(app_data_dir: &std::path::Path) -> ExternalLocation
         };
     }
 
-    let meta: serde_json::Value = fs::read_to_string(meta_file(app_data_dir))
+    let meta: serde_json::Value = fs::read_to_string(meta_file(app_data_dir, slot))
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_default();
@@ -478,9 +485,9 @@ fn is_snap_confined() -> bool {
 }
 
 /// Clear the saved external location.
-pub fn clear_external_location(app_data_dir: &std::path::Path) -> Result<(), String> {
-    let _ = fs::remove_file(bookmark_file(app_data_dir));
-    let _ = fs::remove_file(meta_file(app_data_dir));
+pub fn clear_external_location(app_data_dir: &std::path::Path, slot: &str) -> Result<(), String> {
+    let _ = fs::remove_file(bookmark_file(app_data_dir, slot));
+    let _ = fs::remove_file(meta_file(app_data_dir, slot));
     info!("[external_location] Cleared external backup location");
     Ok(())
 }
@@ -491,8 +498,8 @@ pub fn migrate_legacy_path(app_data_dir: &std::path::Path, legacy_path: &str) ->
         return Err("No legacy path to migrate".to_string());
     }
 
-    if bookmark_file(app_data_dir).exists() {
-        return validate_external_location(app_data_dir);
+    if bookmark_file(app_data_dir, SLOT_EXTERNAL_BACKUP).exists() {
+        return validate_external_location(app_data_dir, SLOT_EXTERNAL_BACKUP);
     }
 
     #[cfg(target_os = "macos")]
@@ -503,7 +510,7 @@ pub fn migrate_legacy_path(app_data_dir: &std::path::Path, legacy_path: &str) ->
             "savedAt": now_millis(),
             "legacy": true,
         });
-        let _ = fs::write(meta_file(app_data_dir), meta.to_string());
+        let _ = fs::write(meta_file(app_data_dir, SLOT_EXTERNAL_BACKUP), meta.to_string());
 
         warn!("[external_location] Legacy path {} needs reauthorization on macOS", legacy_path);
         return Ok(ExternalLocation {
@@ -517,6 +524,6 @@ pub fn migrate_legacy_path(app_data_dir: &std::path::Path, legacy_path: &str) ->
 
     #[cfg(not(target_os = "macos"))]
     {
-        save_external_location(app_data_dir, legacy_path)
+        save_external_location(app_data_dir, SLOT_EXTERNAL_BACKUP, legacy_path)
     }
 }

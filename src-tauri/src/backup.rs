@@ -81,7 +81,7 @@ fn resolve_backup_path(
         }
     };
 
-    match external_location::resolve_external_location(&data_dir) {
+    match external_location::resolve_external_location(&data_dir, external_location::SLOT_EXTERNAL_BACKUP) {
         Ok((resolved, _loc)) => {
             info!("backup: resolved external location via bookmark: {}", resolved);
             (Some(resolved), true) // needs_release on macOS
@@ -180,12 +180,12 @@ pub async fn get_backup_status(
         // Check if there's a configured but unresolvable external location
         let data_dir = app_handle.path().app_data_dir().ok();
         if let Some(ref dd) = data_dir {
-            let loc = external_location::get_external_location(dd);
+            let loc = external_location::get_external_location(dd, external_location::SLOT_EXTERNAL_BACKUP);
             if loc.status == "not_configured" {
                 ("not_configured".to_string(), None)
             } else {
                 // There IS a configured location but it failed to resolve
-                let err = external_location::validate_external_location(dd)
+                let err = external_location::validate_external_location(dd, external_location::SLOT_EXTERNAL_BACKUP)
                     .map(|l| l.last_error)
                     .unwrap_or(None);
                 ("needs_reauth".to_string(), err)
@@ -711,8 +711,10 @@ async fn run_imap_backup_inner(
 }
 
 /// Sync files between app Maildir and backup location (bidirectional).
-/// - App dir files missing from backup → copy to backup as <uid>.eml
-/// - Backup .eml files missing from app dir → copy to app dir
+/// - App dir files missing from backup → copy to backup keeping the Maildir
+///   name (`<uid>:2,<flags>.eml`) so flags survive the round trip
+/// - Backup files missing from app dir → copy to app dir, restoring the flags
+///   encoded in the backup filename (legacy `<uid>.eml` copies have none)
 /// Returns total files synced.
 fn sync_locations(app_dir: &std::path::Path, backup_dir: &std::path::Path) -> usize {
     use std::fs;
@@ -724,35 +726,33 @@ fn sync_locations(app_dir: &std::path::Path, backup_dir: &std::path::Path) -> us
         return 0; // Backup location not available — skip sync, backup to app dir only
     }
 
-    // App → Backup: copy app files that don't exist in backup
+    // App → Backup: copy app files that don't exist in backup, keeping the
+    // Maildir name so the flag suffix travels with the message.
     if let Ok(entries) = fs::read_dir(app_dir) {
         for entry in entries.flatten() {
             if entry.path().is_dir() { continue; }
             let name = entry.file_name().to_string_lossy().to_string();
             let uid_str = name.split(|c: char| c == ':' || c == '.' || c == '_').next().unwrap_or(&name);
-            if uid_str.parse::<u32>().is_err() { continue; }
-            let dst = backup_dir.join(format!("{}.eml", uid_str));
-            if !dst.exists() {
-                if fs::copy(entry.path(), &dst).is_ok() { synced += 1; }
-            }
+            let uid: u32 = match uid_str.parse() { Ok(u) => u, Err(_) => continue };
+            if super::find_msg_file_by_uid(backup_dir, uid).is_some() { continue; }
+            let dst_name = if name.ends_with(".eml") { name.clone() } else { format!("{}.eml", name) };
+            if fs::copy(entry.path(), backup_dir.join(&dst_name)).is_ok() { synced += 1; }
         }
     }
 
-    // Backup → App: copy backup .eml files that don't exist in app dir
+    // Backup → App: copy backup .eml files that don't exist in app dir,
+    // restoring flags from the backup filename (legacy `<uid>.eml` has none).
     if let Ok(entries) = fs::read_dir(backup_dir) {
         for entry in entries.flatten() {
             if entry.path().is_dir() { continue; }
             let name = entry.file_name().to_string_lossy().to_string();
             if !name.ends_with(".eml") { continue; }
-            let uid_str = name.trim_end_matches(".eml");
-            if uid_str.parse::<u32>().is_err() { continue; }
-            // Check if app dir already has this UID (any filename starting with uid)
-            let uid: u32 = uid_str.parse().unwrap();
-            let exists_in_app = super::find_file_by_uid(app_dir, uid).is_some();
-            if !exists_in_app {
-                let dst = app_dir.join(format!("{}:2,", uid));
-                if fs::copy(entry.path(), &dst).is_ok() { synced += 1; }
-            }
+            let uid_str = name.split(|c: char| c == ':' || c == '.' || c == '_').next().unwrap_or(&name);
+            let uid: u32 = match uid_str.parse() { Ok(u) => u, Err(_) => continue };
+            if super::find_file_by_uid(app_dir, uid).is_some() { continue; }
+            let flags = super::parse_flags_from_filename(&name);
+            let dst = app_dir.join(format!("{}.eml", super::build_maildir_filename(uid, &flags)));
+            if fs::copy(entry.path(), &dst).is_ok() { synced += 1; }
         }
     }
 
@@ -872,8 +872,8 @@ async fn run_graph_backup(
                                     .join("cur");
                                 match std::fs::create_dir_all(&backup_dir) {
                                     Ok(()) => {
-                                        let dst = backup_dir.join(format!("{}.eml", uid_counter));
-                                        if !dst.exists() {
+                                        let dst = backup_dir.join(format!("{}.eml", filename));
+                                        if crate::find_msg_file_by_uid(&backup_dir, uid_counter).is_none() {
                                             if let Err(e) = std::fs::write(&dst, &raw_bytes) {
                                                 warn!("backup(graph): external write failed: {}", e);
                                                 total_ext_failures += 1;
@@ -973,5 +973,38 @@ fn normalize_graph_folder_name(name: &str) -> String {
         "junk email" => "Junk".to_string(),
         "archive" => "Archive".to_string(),
         _ => name.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sync_locations;
+    use std::fs;
+
+    /// Flags must survive both directions of the app ↔ external sync, and
+    /// legacy flagless `<uid>.eml` backups must still restore.
+    #[test]
+    fn sync_locations_preserves_flags() {
+        let base = std::env::temp_dir().join("mv-sync-flags-test");
+        let _ = fs::remove_dir_all(&base);
+        let app = base.join("app");
+        let ext = base.join("ext");
+        fs::create_dir_all(&app).unwrap();
+        fs::create_dir_all(&ext).unwrap();
+
+        fs::write(app.join("101:2,SF.eml"), b"seen+flagged").unwrap();
+        fs::write(ext.join("202:2,S.eml"), b"seen").unwrap();
+        fs::write(ext.join("303.eml"), b"legacy").unwrap();
+
+        assert_eq!(sync_locations(&app, &ext), 3);
+
+        assert!(ext.join("101:2,SF.eml").exists(), "flags lost app → external");
+        assert!(app.join("202:2,S.eml").exists(), "flags lost external → app");
+        assert!(app.join("303:2,.eml").exists(), "legacy backup did not restore");
+
+        // Second pass must be a no-op — no duplicates under either naming scheme.
+        assert_eq!(sync_locations(&app, &ext), 0);
+
+        let _ = fs::remove_dir_all(&base);
     }
 }

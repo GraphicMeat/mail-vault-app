@@ -2,7 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+- **Your mail can now live wherever you want it — an external drive, a NAS mount, any folder.** Settings → Backup shows where the working copy is stored and can move it: MailVault copies everything across, checks every file arrived, and only then removes the originals. If the drive is later disconnected, the app says so at the top of the main view and pauses syncing instead of quietly starting a second archive in its own storage; if the drive comes back at a different path, pick the folder again and MailVault verifies it is yours before carrying on. (Developer ID and Linux builds for now.)
+
 ### Fixed
+- **Read, flagged and replied marks now survive a restore from the external backup.** Backup copies were saved under a name that carried no message flags, so anything restored from them came back looking unread and unflagged. Backups now keep the full message name, and older flagless copies still restore as before.
 - **Hitting a provider's daily download limit no longer grinds through thousands of doomed fetches.** Gmail caps IMAP traffic per day (2,500 MB down, 500 MB up) and temporarily suspends accounts that exceed it — for up to 24 hours, webmail included. Archiving and migration now recognize the server's "bandwidth exceeded" response, stop the run immediately, and say when to retry; everything already downloaded is kept.
 - **The app no longer crashes at launch on Linux systems without a configured locale.** On a system where the language environment is unset (LANG empty, common on minimal installs and servers), the browser engine reports the raw "C" locale, and every date formatter rejected it — taking the whole window down to a "Something went wrong" screen before anything loaded. Date formatting now falls back to the system default when the reported locale isn't usable.
 

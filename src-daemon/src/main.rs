@@ -21,7 +21,7 @@ pub mod sync_engine;
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use tracing::{info, error, Level};
+use tracing::{info, warn, error, Level};
 use tracing_subscriber::fmt::writer::MakeWriterExt;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 
@@ -33,6 +33,36 @@ fn get_data_dir() -> PathBuf {
     dirs::data_local_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("com.mailvault.app")
+}
+
+/// Where the mail itself lives. Defaults to the app data dir; follows the
+/// user-selected vault folder when the app has configured one (written by the
+/// app as `<app_data_dir>/vault-meta.json`).
+///
+/// If the folder is not reachable — drive unplugged — the daemon falls back to
+/// the app data dir for its own bookkeeping but must not sync into it, so the
+/// caller logs loudly and the app surfaces the banner.
+/// Returns (mail_dir, ok). `ok` is false when a custom folder is configured but
+/// unreachable — the daemon then refuses every mail operation instead of
+/// syncing into the app data dir and forking the archive.
+fn resolve_mail_dir(app_dir: &PathBuf) -> (PathBuf, bool) {
+    let meta = match std::fs::read_to_string(app_dir.join("vault-meta.json")) {
+        Ok(m) => m,
+        Err(_) => return (app_dir.clone(), true),
+    };
+    let path = match serde_json::from_str::<serde_json::Value>(&meta) {
+        Ok(v) => v["displayPath"].as_str().unwrap_or("").to_string(),
+        Err(_) => return (app_dir.clone(), true),
+    };
+    if path.is_empty() {
+        return (app_dir.clone(), true);
+    }
+    let dir = PathBuf::from(&path);
+    if dir.join(".mailvault-vault.json").exists() || dir.join("Maildir").exists() {
+        return (dir, true);
+    }
+    warn!("Configured mail storage {} is not reachable — mail operations disabled until it is back", path);
+    (app_dir.clone(), false)
 }
 
 /// IPC directory for socket and token.
@@ -132,6 +162,8 @@ async fn main() {
     let data_dir = get_data_dir();
     let _ = std::fs::create_dir_all(&data_dir);
     let _log_guard = setup_logging(&data_dir);
+    // Mail may live outside the app data dir; bookkeeping never does.
+    let (mail_dir, mail_dir_ok) = resolve_mail_dir(&data_dir);
 
     info!(
         "mailvault-daemon v{} starting (pid: {})",
@@ -139,6 +171,7 @@ async fn main() {
         std::process::id()
     );
     info!("Data directory: {:?}", data_dir);
+    info!("Mail directory: {:?} (available: {})", mail_dir, mail_dir_ok);
 
     // Singleton guard — exit immediately if another daemon owns the lock
     let _lock_file = match acquire_singleton_lock(&data_dir) {
@@ -153,7 +186,7 @@ async fn main() {
 
     // One-time Maildir filename migration: append `.eml` to message files that
     // pre-date the extension change. Idempotent; version-guarded.
-    let mig = mailvault_core::maildir::migrate_add_eml_extension(&data_dir);
+    let mig = mailvault_core::maildir::migrate_add_eml_extension(&mail_dir);
     if mig.renamed > 0 || mig.errors > 0 {
         info!(
             "Maildir .eml migration: renamed={} already_ok={} skipped={} errors={}",
@@ -176,16 +209,18 @@ async fn main() {
     let inference_engine = Arc::new(inference::InferenceEngine::new());
 
     let imap_pool = Arc::new(imap::ImapPool::new());
-    let contacts = contacts_index::ContactsState::new(data_dir.clone());
+    let contacts = contacts_index::ContactsState::new(mail_dir.clone());
     let sync_eng = Arc::new(sync_engine::SyncEngine::new(
         Arc::clone(&imap_pool),
-        data_dir.clone(),
+        mail_dir.clone(),
         Arc::clone(&contacts),
     ));
 
     let state = Arc::new(server::DaemonState {
         token,
-        data_dir: data_dir.clone(),
+        data_dir: mail_dir.clone(),
+        app_dir: data_dir.clone(),
+        mail_dir_ok,
         started_at: std::time::Instant::now(),
         llm: llm_state,
         inference: inference_engine,

@@ -228,6 +228,8 @@ export const useSettingsStore = create(
       // Native-backed external backup location (resolved via Rust bookmark/path commands)
       // Shape: { displayPath, status, platform, lastValidatedAt, lastError } | null
       externalBackupLocation: null,
+      // Where the working copy of the mail is stored. null until the app reports it.
+      vaultStatus: null,
 
       // Per-account backup configuration (used when backupGlobalEnabled=false, or as overrides)
       backupSchedules: {},
@@ -327,6 +329,7 @@ export const useSettingsStore = create(
       setBackupScope: (scope) => set({ backupScope: scope }),
       setBackupCustomPath: (path) => set({ backupCustomPath: path }),
       setExternalBackupLocation: (loc) => set({ externalBackupLocation: loc }),
+      setVaultStatus: (status) => set({ vaultStatus: status }),
 
       // Per-account backup actions
       setBackupSchedule: (accountId, config) => set(state => ({

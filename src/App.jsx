@@ -24,6 +24,7 @@ import { RestoreTray } from './components/RestoreTray';
 import { MoveToFolderDropdown } from './components/MoveToFolderDropdown';
 import { MigrationToast } from './components/MigrationToast';
 import { KeychainToast } from './components/KeychainToast';
+import { VaultAlertBanner } from './components/VaultAlertBanner';
 import ShareUnlockModal from './components/ShareUnlockModal';
 import RestoreModal from './components/RestoreModal.jsx';
 import ChangeServerModal from './components/ChangeServerModal.jsx';
@@ -613,7 +614,10 @@ function App() {
   }
   
   return (
-    <div className="h-screen bg-mail-bg flex overflow-hidden">
+    <div className="h-screen bg-mail-bg flex flex-col overflow-hidden">
+      {/* Storage folder unreachable — blocks sync, so it sits above everything */}
+      <VaultAlertBanner />
+      <div className="flex-1 flex min-h-0 overflow-hidden">
       <div data-testid="sidebar">
         <Sidebar
           onAddAccount={() => setShowAccountModal(true)}
@@ -825,6 +829,7 @@ function App() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

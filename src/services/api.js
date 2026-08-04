@@ -435,6 +435,31 @@ export async function removeFromLocalIndex(accountId, mailbox, uid) {
   }
 }
 
+// ── Mail storage location (vault) ─────────────────────────────────────────────
+
+export async function vaultGetStatus() {
+  return tauriInvoke('vault_get_status', {});
+}
+
+/// Classify a folder the user picked, before committing to it.
+export async function vaultInspectFolder(path) {
+  return tauriInvoke('vault_inspect_folder', { path });
+}
+
+/// Point the app at a folder that already holds the mail.
+export async function vaultAdopt(path) {
+  return tauriInvoke('vault_adopt', { path });
+}
+
+/// Copy the mail to `path`, verify, delete the originals, switch over.
+export async function vaultMoveTo(path) {
+  return tauriInvoke('vault_move_to', { path });
+}
+
+export async function vaultReset() {
+  return tauriInvoke('vault_reset', {});
+}
+
 // ── Backup ────────────────────────────────────────────────────────────────────
 
 export async function backupRunAccount(accountId, accountJson, backupPath = null, skipFolders = 0) {

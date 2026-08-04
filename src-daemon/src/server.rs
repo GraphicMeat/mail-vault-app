@@ -20,7 +20,12 @@ use tracing::{error, info, warn};
 /// Daemon server state shared across connections.
 pub struct DaemonState {
     pub token: String,
+    /// Where the mail lives — the user-selected vault folder when set.
     pub data_dir: PathBuf,
+    /// App data dir: models, logs, daemon bookkeeping. Never on a removable drive.
+    pub app_dir: PathBuf,
+    /// False when a custom mail folder is configured but unreachable.
+    pub mail_dir_ok: bool,
     pub started_at: std::time::Instant,
     pub llm: Arc<llm::LlmState>,
     pub inference: Arc<inference::InferenceEngine>,
@@ -143,6 +148,22 @@ async fn handle_connection(
 async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcResponse {
     let id = req.id.unwrap_or(Value::Null);
 
+    // The user moved the mail off the app data dir and that folder is not
+    // reachable. Anything that touches mail must fail loudly — writing into the
+    // app data dir instead would silently start a second, divergent archive.
+    if !state.mail_dir_ok
+        && (req.method.starts_with("maildir.")
+            || req.method.starts_with("sync.")
+            || req.method.starts_with("snapshot.")
+            || req.method.starts_with("contacts."))
+    {
+        return RpcResponse::error(
+            id,
+            ipc::INTERNAL_ERROR,
+            "Mail storage folder is not available. Reconnect the drive or choose the folder again in Settings.",
+        );
+    }
+
     match req.method.as_str() {
         "ping" => RpcResponse::success(id, serde_json::json!({"pong": true})),
 
@@ -237,20 +258,20 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
         "llm.download" => handle_llm_download(Arc::clone(&state.llm), req.params, id).await,
         "llm.cancel_download" => handle_llm_cancel_download(&state.llm, id).await,
         "llm.delete_model" => handle_llm_delete_model(&state.llm, req.params, id),
-        "llm.load" => handle_llm_load(&state.data_dir, &state.llm, &state.inference, req.params, id).await,
+        "llm.load" => handle_llm_load(&state.app_dir, &state.llm, &state.inference, req.params, id).await,
         "llm.unload" => handle_llm_unload(&state.inference, id).await,
         "llm.classify" => handle_llm_classify(&state.inference, req.params, id).await,
 
         "classification.run" => handle_classification_run(Arc::clone(state), req.params, id).await,
         "classification.reclassify_all" => handle_reclassify_all(Arc::clone(state), req.params, id).await,
         "classification.cancel" => handle_classification_cancel(&state.classification, id).await,
-        "classification.summary" => handle_classification_summary(&state.data_dir, req.params, id),
-        "classification.results" => handle_classification_results(&state.data_dir, req.params, id),
-        "classification.override" => handle_classification_override(&state.data_dir, req.params, id),
+        "classification.summary" => handle_classification_summary(&state.app_dir, req.params, id),
+        "classification.results" => handle_classification_results(&state.app_dir, req.params, id),
+        "classification.override" => handle_classification_override(&state.app_dir, req.params, id),
         "classification.status" => handle_classification_status(&state.classification, id).await,
 
-        "learning.load" => handle_learning_load(&state.data_dir, req.params, id),
-        "learning.save" => handle_learning_save(&state.data_dir, req.params, id),
+        "learning.load" => handle_learning_load(&state.app_dir, req.params, id),
+        "learning.save" => handle_learning_save(&state.app_dir, req.params, id),
 
         "contacts_index.get" => handle_contacts_index_get(Arc::clone(&state.contacts), req.params, id),
         "contacts_index.flush" => handle_contacts_index_flush(Arc::clone(&state.contacts), id),
@@ -1413,7 +1434,8 @@ fn load_emails_for_classification(
 
 /// Start the background classification worker. Call once after DaemonState is created.
 pub fn start_classification_worker(state: Arc<DaemonState>) {
-    let data_dir = state.data_dir.clone();
+    // Learned rules, models and classification results are app state, not mail.
+    let data_dir = state.app_dir.clone();
     let state_clone = Arc::clone(&state);
 
     let load_rules: Arc<dyn Fn(&str) -> Vec<classification::LearnedRule> + Send + Sync> = {
@@ -1487,7 +1509,7 @@ async fn run_classification_worker(
         }
 
         // Check if already classified (race between enqueue and processing)
-        let existing = classification::load_classifications(&state.data_dir, &item.account_id);
+        let existing = classification::load_classifications(&state.app_dir, &item.account_id);
         if existing.contains_key(&item.message_id) {
             let mut progress = state.classification.progress.lock().await;
             progress.classified += 1;
@@ -1495,12 +1517,12 @@ async fn run_classification_worker(
         }
 
         let rules = load_rules(&item.account_id);
-        let model = classification::load_model(&state.data_dir, &item.account_id);
+        let model = classification::load_model(&state.app_dir, &item.account_id);
         let result = classification::classify_single_with_model(&item.email, &rules, model.as_ref());
         let was_rule = result.source == classification::ClassificationSource::LocalRule;
 
         if let Err(e) = classification::save_single_classification(
-            &state.data_dir,
+            &state.app_dir,
             &item.account_id,
             &item.message_id,
             &result,

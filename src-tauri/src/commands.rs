@@ -1003,7 +1003,7 @@ pub async fn backup_save_external_location(
         return Err("Cloud Backups requires a one-time in-app purchase. Open Settings → Backups to unlock.".to_string());
     }
     let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
-    crate::external_location::save_external_location(&data_dir, &path)
+    crate::external_location::save_external_location(&data_dir, crate::external_location::SLOT_EXTERNAL_BACKUP, &path)
 }
 
 #[tauri::command]
@@ -1011,7 +1011,7 @@ pub async fn backup_get_external_location(
     app_handle: tauri::AppHandle,
 ) -> Result<crate::external_location::ExternalLocation, String> {
     let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
-    Ok(crate::external_location::get_external_location(&data_dir))
+    Ok(crate::external_location::get_external_location(&data_dir, crate::external_location::SLOT_EXTERNAL_BACKUP))
 }
 
 #[tauri::command]
@@ -1019,7 +1019,7 @@ pub async fn backup_validate_external_location(
     app_handle: tauri::AppHandle,
 ) -> Result<crate::external_location::ExternalLocation, String> {
     let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
-    crate::external_location::validate_external_location(&data_dir)
+    crate::external_location::validate_external_location(&data_dir, crate::external_location::SLOT_EXTERNAL_BACKUP)
 }
 
 #[tauri::command]
@@ -1027,7 +1027,7 @@ pub async fn backup_clear_external_location(
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
     let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
-    crate::external_location::clear_external_location(&data_dir)
+    crate::external_location::clear_external_location(&data_dir, crate::external_location::SLOT_EXTERNAL_BACKUP)
 }
 
 // ── In-app purchase (StoreKit on MAS, no-op stub elsewhere) ──────────────
@@ -1056,7 +1056,7 @@ pub async fn backup_resolve_external_location(
     app_handle: tauri::AppHandle,
 ) -> Result<serde_json::Value, String> {
     let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
-    match crate::external_location::resolve_external_location(&data_dir) {
+    match crate::external_location::resolve_external_location(&data_dir, crate::external_location::SLOT_EXTERNAL_BACKUP) {
         Ok((resolved_path, loc)) => Ok(serde_json::json!({
             "resolvedPath": resolved_path,
             "location": loc,
