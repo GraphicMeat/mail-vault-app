@@ -170,7 +170,7 @@ app.use(express.static(path.join(__dirname, '..'), {
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), prices: pricesOk });
 });
 
 // -------------------------------------------
@@ -453,6 +453,22 @@ const BASE_CURRENCY = 'eur';
 const PRICE_MONTHLY = process.env.STRIPE_PRICE_MONTHLY_EUR || process.env.STRIPE_PRICE_MONTHLY;
 const PRICE_YEARLY = process.env.STRIPE_PRICE_YEARLY_EUR || process.env.STRIPE_PRICE_YEARLY;
 
+// Price IDs are only exercised at checkout, and /pricing serves MANUAL_AMOUNTS without
+// asking Stripe — so a price belonging to another account ("No such price") advertises a
+// plan nobody can buy, silently. Retrieve both once at boot and refuse to sell if they're
+// unusable. null = not checked yet.
+let pricesOk = null;
+async function validatePrices() {
+  if (!stripe || !PRICE_MONTHLY || !PRICE_YEARLY) { pricesOk = false; return; }
+  try {
+    await Promise.all([stripe.prices.retrieve(PRICE_MONTHLY), stripe.prices.retrieve(PRICE_YEARLY)]);
+    pricesOk = true;
+  } catch (error) {
+    pricesOk = false;
+    console.error('[billing] configured price IDs unusable — checkout will fail:', error.message);
+  }
+}
+
 // Manual currency_options amounts (in minor units). These match what's set on the Stripe price.
 const MANUAL_AMOUNTS = {
   eur: { monthly: 300, yearly: 2500 },
@@ -540,7 +556,7 @@ async function hasCustomerEverSubscribed(db, billingCustomerId) {
 // GET /api/billing/pricing — returns plans for the customer's resolved currency
 // Optional: ?email=...&customerId=... to check trial eligibility
 app.get('/api/billing/pricing', statusLimiter, async (req, res) => {
-  if (!PRICE_MONTHLY || !PRICE_YEARLY) return res.status(503).json({ error: 'pricing_unavailable' });
+  if (!PRICE_MONTHLY || !PRICE_YEARLY || pricesOk === false) return res.status(503).json({ error: 'pricing_unavailable' });
 
   const { currency: reqCurrency, country, email, customerId } = req.query;
   const cfCountry = req.headers['cf-ipcountry'];
@@ -661,7 +677,9 @@ app.post('/api/billing/checkout-session', checkoutLimiter, requireBilling, async
     res.json({ url: session.url, customerId, trialApplied: applyTrial });
   } catch (error) {
     console.error('[billing/checkout-session]', error.message);
-    res.status(500).json({ error: 'checkout_failed', message: 'Could not create checkout session. Please try again.' });
+    // Echo Stripe's error code (never the message — it can carry ids): enough to tell a
+    // config rot from a card/customer problem without shelling into journalctl.
+    res.status(500).json({ error: 'checkout_failed', code: error.code || null, message: 'Could not create checkout session. Please try again.' });
   }
 });
 
@@ -1160,6 +1178,8 @@ function isValidEmail(email) {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server listening on port ${PORT}`);
+
+  validatePrices();
 
   // Initialize database after server is listening
   initDatabase().then(() => {
