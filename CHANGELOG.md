@@ -5,7 +5,7 @@
 ## [2.9.0] - 2026-08-04
 
 ### Added
-- **Your mail can now live wherever you want it — an external drive, a NAS mount, any folder.** Settings → Backup shows where the working copy is stored and can move it: MailVault copies everything across, checks every file arrived, and only then removes the originals. If the drive is later disconnected, the app says so at the top of the main view and pauses syncing instead of quietly starting a second archive in its own storage; if the drive comes back at a different path, pick the folder again and MailVault verifies it is yours before carrying on. (Developer ID and Linux builds for now.)
+- **Your mail can now live wherever you want it — an external drive, a NAS mount, any folder.** Settings → Backup shows where the working copy is stored and can move it: MailVault copies everything across, checks every file arrived, and only then removes the originals. If the drive is later disconnected, the app says so at the top of the main view and pauses syncing instead of quietly starting a second archive in its own storage; if the drive comes back at a different path, pick the folder again and MailVault verifies it is yours before carrying on. Going back to the default location asks whether to bring the mail with you — move it back with the same copy-check-then-delete steps, or leave it in the folder and start fresh. (Developer ID and Linux builds for now.)
 
 ### Fixed
 - **Read, flagged and replied marks now survive a restore from the external backup.** Backup copies were saved under a name that carried no message flags, so anything restored from them came back looking unread and unflagged. Backups now keep the full message name, and older flagless copies still restore as before.

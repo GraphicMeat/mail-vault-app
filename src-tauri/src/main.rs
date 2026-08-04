@@ -1705,6 +1705,23 @@ async fn vault_move_to(app_handle: tauri::AppHandle, path: String) -> Result<vau
     result
 }
 
+/// Bring the mail back into the app data dir, then stop using the custom folder.
+#[tauri::command]
+async fn vault_move_to_default(app_handle: tauri::AppHandle) -> Result<vault::MoveResult, String> {
+    let handle = app_handle.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let emitter = handle.clone();
+        vault::move_to_default(&handle, move |p| {
+            let _ = emitter.emit("vault-move-progress", p);
+        })
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?;
+    shutdown_daemon_child();
+    let _ = app_handle.emit("vault-status", vault::status(&app_handle));
+    result
+}
+
 /// Go back to storing mail in the app data dir. Does not move anything.
 #[tauri::command]
 fn vault_reset(app_handle: tauri::AppHandle) -> Result<vault::VaultStatus, String> {
@@ -4506,7 +4523,7 @@ fn main() {
             github::github_device_poll,
             github::github_check_star,
             daemon_rpc,
-            vault_get_status, vault_inspect_folder, vault_adopt, vault_move_to, vault_reset
+            vault_get_status, vault_inspect_folder, vault_adopt, vault_move_to, vault_move_to_default, vault_reset
         ])
         .setup(|app| {
             // Set up logging to app log directory

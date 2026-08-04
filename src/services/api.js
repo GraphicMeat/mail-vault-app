@@ -456,6 +456,11 @@ export async function vaultMoveTo(path) {
   return tauriInvoke('vault_move_to', { path });
 }
 
+/// Copy the mail back into the app's own storage, then drop the custom folder.
+export async function vaultMoveToDefault() {
+  return tauriInvoke('vault_move_to_default', {});
+}
+
 export async function vaultReset() {
   return tauriInvoke('vault_reset', {});
 }

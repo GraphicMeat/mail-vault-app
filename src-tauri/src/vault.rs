@@ -385,6 +385,44 @@ fn verify_tree(src: &Path, dst: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Copy every vault dir present in `src_root` into `dst_root` and check it all
+/// arrived. Nothing is deleted here — the caller switches over first.
+/// Returns (dirs copied, files copied, bytes copied).
+fn copy_and_verify<F: Fn(MoveProgress)>(
+    src_root: &Path,
+    dst_root: &Path,
+    on_progress: &F,
+) -> Result<(Vec<&'static str>, usize, u64), String> {
+    let present: Vec<&'static str> = VAULT_DIRS.iter().copied().filter(|d| src_root.join(d).exists()).collect();
+    let total: usize = present.iter().map(|d| count_files(&src_root.join(d))).sum();
+
+    let mut copied = 0usize;
+    let mut bytes = 0u64;
+    for dir in &present {
+        on_progress(MoveProgress { phase: "copying".into(), copied, total, current_dir: dir.to_string() });
+        copy_tree(&src_root.join(dir), &dst_root.join(dir), &mut copied, &mut bytes)?;
+    }
+
+    on_progress(MoveProgress { phase: "verifying".into(), copied, total, current_dir: String::new() });
+    for dir in &present {
+        verify_tree(&src_root.join(dir), &dst_root.join(dir))?;
+    }
+
+    Ok((present, copied, bytes))
+}
+
+/// Delete the copied-from dirs. Only ever called once the destination is live.
+fn remove_sources(src_root: &Path, present: &[&str]) -> bool {
+    let mut removed = true;
+    for dir in present {
+        if let Err(e) = std::fs::remove_dir_all(src_root.join(dir)) {
+            warn!("[vault] could not remove {} after offload: {}", dir, e);
+            removed = false;
+        }
+    }
+    removed
+}
+
 /// Move the mail data to `path`: copy everything, verify it byte-count for
 /// byte-count, only then delete the originals, and finally switch over.
 /// A failure at any point before the switch leaves the current store intact.
@@ -410,20 +448,7 @@ pub fn move_to<F: Fn(MoveProgress)>(
         return Err("That folder already holds a different MailVault store. Pick an empty folder, or select it as your existing storage instead.".to_string());
     }
 
-    let present: Vec<&str> = VAULT_DIRS.iter().copied().filter(|d| src_root.join(d).exists()).collect();
-    let total: usize = present.iter().map(|d| count_files(&src_root.join(d))).sum();
-
-    let mut copied = 0usize;
-    let mut bytes = 0u64;
-    for dir in &present {
-        on_progress(MoveProgress { phase: "copying".into(), copied, total, current_dir: dir.to_string() });
-        copy_tree(&src_root.join(dir), &dst_root.join(dir), &mut copied, &mut bytes)?;
-    }
-
-    on_progress(MoveProgress { phase: "verifying".into(), copied, total, current_dir: String::new() });
-    for dir in &present {
-        verify_tree(&src_root.join(dir), &dst_root.join(dir))?;
-    }
+    let (present, copied, bytes) = copy_and_verify(&src_root, &dst_root, &on_progress)?;
 
     // Everything is safely on the other side — stamp, switch, then clean up.
     let marker = read_marker(&dst_root).unwrap_or(VaultMarker {
@@ -444,16 +469,10 @@ pub fn move_to<F: Fn(MoveProgress)>(
         return Err(new_status.last_error.unwrap_or_else(|| "New mail storage folder could not be opened".into()));
     }
 
-    on_progress(MoveProgress { phase: "cleaning".into(), copied, total, current_dir: String::new() });
-    let mut source_removed = true;
-    for dir in &present {
-        if let Err(e) = std::fs::remove_dir_all(src_root.join(dir)) {
-            warn!("[vault] could not remove {} after offload: {}", dir, e);
-            source_removed = false;
-        }
-    }
+    on_progress(MoveProgress { phase: "cleaning".into(), copied, total: copied, current_dir: String::new() });
+    let source_removed = remove_sources(&src_root, &present);
 
-    on_progress(MoveProgress { phase: "done".into(), copied, total, current_dir: String::new() });
+    on_progress(MoveProgress { phase: "done".into(), copied, total: copied, current_dir: String::new() });
     info!("[vault] offloaded {} files ({} bytes) to {}", copied, bytes, path);
 
     Ok(MoveResult {
@@ -461,6 +480,43 @@ pub fn move_to<F: Fn(MoveProgress)>(
         bytes_copied: bytes,
         source_removed,
         display_path: path.to_string(),
+    })
+}
+
+/// Bring the mail back into the app data dir and stop using the custom folder.
+/// Same ordering as [`move_to`]: copy, verify, switch, only then delete.
+pub fn move_to_default<F: Fn(MoveProgress)>(
+    app_handle: &tauri::AppHandle,
+    on_progress: F,
+) -> Result<MoveResult, String> {
+    let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    // Errors when the custom folder is unreachable — there is nothing to move
+    // back and clearing the setting is the other button's job.
+    let src_root = root(app_handle)?;
+    if src_root == data_dir {
+        return Err("Mail is already stored in the default location".to_string());
+    }
+
+    let (present, copied, bytes) = copy_and_verify(&src_root, &data_dir, &on_progress)?;
+
+    external_location::clear_external_location(&data_dir, SLOT_VAULT)?;
+    let new_status = resolve(app_handle);
+    if new_status.status != "default" {
+        // Leave the source alone while the app is not actually reading the default dir.
+        return Err(new_status.last_error.unwrap_or_else(|| "Could not switch back to the default location".into()));
+    }
+
+    on_progress(MoveProgress { phase: "cleaning".into(), copied, total: copied, current_dir: String::new() });
+    let source_removed = remove_sources(&src_root, &present);
+
+    on_progress(MoveProgress { phase: "done".into(), copied, total: copied, current_dir: String::new() });
+    info!("[vault] moved {} files ({} bytes) back to the default location", copied, bytes);
+
+    Ok(MoveResult {
+        files_copied: copied,
+        bytes_copied: bytes,
+        source_removed,
+        display_path: data_dir.to_string_lossy().into(),
     })
 }
 

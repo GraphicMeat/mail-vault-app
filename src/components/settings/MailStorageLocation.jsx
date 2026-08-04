@@ -17,6 +17,7 @@ export default function MailStorageLocation() {
   const [progress, setProgress] = useState(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [confirmReset, setConfirmReset] = useState(false);
 
   useEffect(() => {
     api.vaultGetStatus().then(setVaultStatus).catch(() => {});
@@ -83,16 +84,30 @@ export default function MailStorageLocation() {
     }
   };
 
-  const handleReset = async () => {
-    setError(''); setNotice('');
+  // Two ways back to the default location: bring the mail along, or leave it
+  // in the custom folder and start reading whatever the app's own storage holds.
+  const handleReset = async (moveBack) => {
+    setError(''); setNotice(''); setConfirmReset(false);
     setBusy('reset');
+    if (moveBack) setProgress({ phase: 'copying', copied: 0, total: 0, currentDir: '' });
     try {
-      setVaultStatus(await api.vaultReset());
-      setNotice('Back to the default storage location. Mail already moved to the other folder stays there.');
+      if (moveBack) {
+        const result = await api.vaultMoveToDefault();
+        setVaultStatus(await api.vaultGetStatus());
+        setNotice(
+          result.sourceRemoved
+            ? `Moved ${result.filesCopied.toLocaleString()} files back to the default location. The copy in the old folder has been removed.`
+            : `Copied ${result.filesCopied.toLocaleString()} files back to the default location. Some of the old files could not be deleted — remove them by hand once you have checked.`
+        );
+      } else {
+        setVaultStatus(await api.vaultReset());
+        setNotice('Back to the default storage location. Mail already moved to the other folder stays there.');
+      }
     } catch (e) {
       setError(typeof e === 'string' ? e : e.message || 'Reset failed');
     } finally {
       setBusy(null);
+      setProgress(null);
     }
   };
 
@@ -126,7 +141,7 @@ export default function MailStorageLocation() {
         </span>
       </div>
 
-      {busy === 'move' && (
+      {(busy === 'move' || (busy === 'reset' && progress)) && (
         <div className="space-y-1">
           <div className="flex items-center justify-between text-xs text-mail-text-muted">
             <span>
@@ -164,15 +179,47 @@ export default function MailStorageLocation() {
         </button>
         {isCustom && (
           <button
-            onClick={handleReset}
+            onClick={() => (missing ? handleReset(false) : setConfirmReset(true))}
             disabled={busy !== null}
             className="text-xs text-mail-text-muted hover:text-mail-text px-2 py-2 disabled:opacity-50"
-            title="Go back to the default location without moving anything"
+            title="Go back to storing mail in the app's own storage"
           >
             Reset to default
           </button>
         )}
       </div>
+
+      {confirmReset && (
+        <div className="bg-mail-bg border border-mail-border rounded-lg p-3 space-y-2">
+          <p className="text-xs text-mail-text">
+            Bring your mail back to the default location, or leave it in the current folder?
+          </p>
+          <p className="text-xs text-mail-text-muted">
+            Leaving it there means MailVault reads whatever is in its own storage — usually nothing —
+            and re-downloads your mail. The folder you leave behind is not touched.
+          </p>
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <button
+              onClick={() => handleReset(true)}
+              className="text-xs font-medium px-3 py-2 rounded-lg bg-mail-accent text-white hover:opacity-90"
+            >
+              Move mail back
+            </button>
+            <button
+              onClick={() => handleReset(false)}
+              className="text-xs font-medium px-3 py-2 rounded-lg border border-mail-border text-mail-text hover:bg-mail-surface-hover"
+            >
+              Leave it there
+            </button>
+            <button
+              onClick={() => setConfirmReset(false)}
+              className="text-xs text-mail-text-muted hover:text-mail-text px-2 py-2"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {missing && (
         <div className="flex items-start gap-2 bg-mail-warning/10 border border-mail-warning/30 rounded-lg p-2">
