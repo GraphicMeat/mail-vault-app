@@ -185,6 +185,29 @@ jobs:
           curl -sS -f --max-time 15 https://mailvaultapp.com/api/health
           curl -sS -f --max-time 15 -o /dev/null -w "homepage: %{http_code}\n" https://mailvaultapp.com/
 
+      - name: Verify both subscription prices are sellable
+        run: |
+          # STRIPE_PRICE_*_EUR once pointed at another Stripe account: checkout 500'd with
+          # "No such price" for weeks while health, pricing and this workflow stayed green.
+          # /api/health prices is the server's boot-time stripe.prices.retrieve of BOTH ids.
+          for i in 1 2 3 4 5; do
+            prices=$(curl -sS --max-time 15 https://mailvaultapp.com/api/health | jq -r '.prices')
+            [ "$prices" = "null" ] || break   # null = boot check still in flight
+            sleep 3
+          done
+          if [ "$prices" != "true" ]; then
+            echo "::error::Stripe price IDs are not usable by STRIPE_SECRET_KEY (health prices=$prices). Check STRIPE_PRICE_MONTHLY_EUR / STRIPE_PRICE_YEARLY_EUR against the key's Stripe account."
+            exit 1
+          fi
+
+          # And the plans the app actually renders — both intervals must come back.
+          plans=$(curl -sS -f --max-time 15 'https://mailvaultapp.com/api/billing/pricing?currency=EUR&country=LT')
+          echo "$plans"
+          for plan in monthly yearly; do
+            echo "$plans" | jq -e --arg p "$plan" '.plans[] | select(.planId == $p) | .formattedAmount' > /dev/null \
+              || { echo "::error::pricing endpoint returned no $plan plan"; exit 1; }
+          done
+
       - name: Clean up SSH key
         if: always()
         run: |
