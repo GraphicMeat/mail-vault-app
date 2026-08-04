@@ -666,7 +666,12 @@ app.post('/api/billing/checkout-session', checkoutLimiter, requireBilling, async
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: process.env.BILLING_SUCCESS_URL || 'https://mailvaultapp.com/billing-success.html',
       cancel_url: process.env.BILLING_CANCEL_URL || 'https://mailvaultapp.com/billing-cancel.html',
-      allow_promotion_codes: true,
+      // Monthly only. A repeating coupon discounts whole invoices, and the yearly invoice
+      // covers 12 months — so "100% off for 3 months" redeemed on the yearly plan is a
+      // free year, not a free quarter. Both prices share one Stripe product, so the coupon
+      // itself can't be fenced (applies_to is per-product); withholding the promo field
+      // from yearly sessions is the enforcement.
+      allow_promotion_codes: interval === 'monthly',
     };
     if (applyTrial) {
       sessionParams.subscription_data = { trial_period_days: YEARLY_TRIAL_DAYS };
