@@ -131,9 +131,24 @@
 
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.8.0</span>
-          <span class="text-slate-500 dark:text-slate-400 text-sm">July 26, 2026</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.9.0</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">August 4, 2026</span>
           <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            </span>
+            Added
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Your mail can now live wherever you want it — an external drive, a NAS mount, any folder.</strong> Settings → Backup shows where the working copy is stored and can move it: MailVault copies everything across, checks every file arrived, and only then removes the originals. If the drive is later disconnected, the app says so at the top of the main view and pauses syncing instead of quietly starting a second archive in its own storage; if the drive comes back at a different path, pick the folder again and MailVault verifies it is yours before carrying on. (Developer ID and Linux builds for now.)</span>
+            </li>
+          </ul>
         </div>
 
         <div class="mb-8">
@@ -144,6 +159,56 @@
             Fixed
           </h3>
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Read, flagged and replied marks now survive a restore from the external backup.</strong> Backup copies were saved under a name that carried no message flags, so anything restored from them came back looking unread and unflagged. Backups now keep the full message name, and older flagless copies still restore as before.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Hitting a provider's daily download limit no longer grinds through thousands of doomed fetches.</strong> Gmail caps IMAP traffic per day (2,500 MB down, 500 MB up) and temporarily suspends accounts that exceed it — for up to 24 hours, webmail included. Archiving and migration now recognize the server's "bandwidth exceeded" response, stop the run immediately, and say when to retry; everything already downloaded is kept.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The app no longer crashes at launch on Linux systems without a configured locale.</strong> On a system where the language environment is unset (LANG empty, common on minimal installs and servers), the browser engine reports the raw "C" locale, and every date formatter rejected it — taking the whole window down to a "Something went wrong" screen before anything loaded. Date formatting now falls back to the system default when the reported locale isn't usable.</span>
+            </li>
+          </ul>
+        </div>
+
+      </article>
+      <article class="mb-16">
+        <div class="flex items-center gap-3 mb-6">
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.8.0</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">July 26, 2026</span>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            </span>
+            Fixed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Scrolling to the bottom of the list loads more mail again.</strong> If the background load ever stopped quietly — a network blip at launch was enough — the list froze at whatever it had (say 741 of 15,083) and scrolling did nothing: the scroll position was never actually watched, so reaching the end couldn't restart the load. Scrolling near the bottom now kicks it off directly.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Images embedded in an email show up again.</strong> Logos and signature images that a message carries inside itself rendered as empty boxes: the app fetches messages without their attachment data to keep things fast, so there was nothing to put in the image. It now loads just the embedded images from the message's local copy when you open it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The message list header now says how much of the mailbox is actually in the list.</strong> It always showed the mailbox's total on the server, so a list that was still filling looked exactly like a finished one. It now reads "741 of 15,067 emails" until everything is loaded.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Adding an account with a non-standard mail-server port works again.</strong> Typing anything into the IMAP or SMTP port field made the connection test fail before it dialled — the port was sent as text where a number was expected — so only accounts on the default ports could be added.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Bulk operations can now select the whole mailbox, not just what's on screen.</strong> Picking "All" in Bulk Email Operations only covered the messages the list had scrolled in so far — on a 15,000-message inbox that was a few hundred — even though the app already held every message locally. It now selects from the full local copy of the mailbox, and skips messages you have already deleted.</span>
+            </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
               <span><strong>Switching back to an account is instant now.</strong> The message list restarted at “500 of 15,065” and counted up again on every switch, because the app rebuilt the list by reading one file per message off disk — fifteen thousand of them — even though it had just had them all in memory. It now keeps the last few mailboxes it showed you, and when mail has arrived while you were away it re-reads only the messages that actually changed rather than starting the whole list over.</span>
