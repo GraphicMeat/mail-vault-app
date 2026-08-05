@@ -4,7 +4,6 @@ import { useSelectionStore } from '../stores/selectionStore';
 import { useMessageListStore } from '../stores/messageListStore';
 import { useAccountStore } from '../stores/accountStore';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ComposeModal } from './ComposeModal';
 import {
   Paperclip,
   Download,
@@ -36,7 +35,7 @@ export { AttachmentItem } from './email/AttachmentBar';
 
 // ── Single Email Viewer ─────────────────────────────────────────────────────
 
-function EmailViewerComponent() {
+function EmailViewerComponent({ onComposeReply }) {
   const selectedEmail = useSelectionStore(s => s.selectedEmail);
   const selectedEmailSource = useSelectionStore(s => s.selectedEmailSource);
   const selectedThread = useSelectionStore(s => s.selectedThread);
@@ -61,7 +60,6 @@ function EmailViewerComponent() {
   const [linkSafetyAlert, setLinkSafetyAlert] = useState(null);
   const [headerExpanded, setHeaderExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [composeMode, setComposeMode] = useState(null);
   const [togglingRead, setTogglingRead] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -332,7 +330,7 @@ function EmailViewerComponent() {
 
   // Thread view — show all emails in the thread
   if (selectedThread) {
-    return <ThreadView thread={selectedThread} />;
+    return <ThreadView thread={selectedThread} onComposeReply={onComposeReply} />;
   }
 
   if (!selectedEmail && !loadingEmail) {
@@ -439,9 +437,9 @@ function EmailViewerComponent() {
         <EmailActionBar
             email={selectedEmail}
             variant="single"
-            onReply={() => setComposeMode('reply')}
-            onReplyAll={() => setComposeMode('replyAll')}
-            onForward={() => setComposeMode('forward')}
+            onReply={(email) => onComposeReply?.('reply', email)}
+            onReplyAll={(email) => onComposeReply?.('replyAll', email)}
+            onForward={(email) => onComposeReply?.('forward', email)}
             onArchive={isArchived ? handleRemoveLocal : handleSave}
             onDelete={isLocalOnly ? handleRemoveLocal : handleDelete}
             onMove={() => setShowMoveDropdown(v => !v)}
@@ -572,17 +570,6 @@ function EmailViewerComponent() {
           );
         })()}
       </div>
-
-      {/* Compose Modal */}
-      <AnimatePresence>
-        {composeMode && (
-          <ComposeModal
-            mode={composeMode}
-            replyTo={selectedEmail}
-            onClose={() => setComposeMode(null)}
-          />
-        )}
-      </AnimatePresence>
 
       {/* Delete Confirmation */}
       <AnimatePresence>

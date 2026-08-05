@@ -8,9 +8,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChatSenderList } from './ChatSenderList';
 import { ChatTopicsList } from './ChatTopicsList';
 import { ChatBubbleView } from './ChatBubbleView';
-import { ComposeModal } from './ComposeModal';
 
-function ChatViewWrapperComponent() {
+function ChatViewWrapperComponent({ onComposeReply }) {
   const { accounts, activeAccountId, getChatEmails } = useAccountStore(
     useShallow(s => ({ accounts: s.accounts, activeAccountId: s.activeAccountId, getChatEmails: s.getChatEmails }))
   );
@@ -22,11 +21,6 @@ function ChatViewWrapperComponent() {
   // Per-account navigation state: only store identifiers, not full objects
   // { accountId: { correspondentEmail: string, threadId: string } }
   const [accountNavState, setAccountNavState] = useState({});
-
-  // Compose modal state
-  const [showCompose, setShowCompose] = useState(false);
-  const [replyEmail, setReplyEmail] = useState(null);
-  const [replyMode, setReplyMode] = useState('reply');
 
   // Get current user's email
   const userEmail = useMemo(() => {
@@ -122,15 +116,7 @@ function ChatViewWrapperComponent() {
   };
 
   const handleReply = (email, mode = 'reply') => {
-    setReplyEmail(email);
-    setReplyMode(mode);
-    setShowCompose(true);
-  };
-
-  const handleCloseCompose = () => {
-    setShowCompose(false);
-    setReplyEmail(null);
-    setReplyMode('reply');
+    onComposeReply?.(mode, email);
   };
 
   // Determine current view
@@ -192,17 +178,6 @@ function ChatViewWrapperComponent() {
               onReply={handleReply}
             />
           </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Compose Modal */}
-      <AnimatePresence>
-        {showCompose && (
-          <ComposeModal
-            mode={replyMode}
-            replyTo={replyEmail}
-            onClose={handleCloseCompose}
-          />
         )}
       </AnimatePresence>
     </div>

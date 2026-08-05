@@ -5,7 +5,6 @@ import { useMessageListStore } from '../../stores/messageListStore';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { AnimatePresence } from 'framer-motion';
-import { ComposeModal } from '../ComposeModal';
 import { useChatBodyLoader, emailKey } from '../../hooks/useChatBodyLoader';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../../utils/iframeQuoteFolding';
 import { splitQuotedContent } from '../../utils/quoteFolding';
@@ -263,10 +262,9 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
 
 // ── Thread Email Item (one email in a thread conversation view) ──────────────
 
-function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, activeAccountId, activeMailbox, archivedEmailIds, signatureDisplay, shouldShowSignature }) {
+function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, activeAccountId, activeMailbox, archivedEmailIds, signatureDisplay, shouldShowSignature, onComposeReply }) {
   const [expanded, setExpanded] = useState(isNewest);
   const [, forceUpdate] = useState(0);
-  const [composeMode, setComposeMode] = useState(null);
   const [headerExpanded, setHeaderExpanded] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
   const [rawSource, setRawSource] = useState(null);
@@ -343,9 +341,9 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, acti
           <EmailActionBar
             email={email}
             variant="thread"
-            onReply={() => setComposeMode('reply')}
-            onReplyAll={() => setComposeMode('replyAll')}
-            onForward={() => setComposeMode('forward')}
+            onReply={() => onComposeReply?.('reply', loadedEmail || email)}
+            onReplyAll={() => onComposeReply?.('replyAll', loadedEmail || email)}
+            onForward={() => onComposeReply?.('forward', loadedEmail || email)}
             onArchive={null}
             onDelete={null}
             onMove={null}
@@ -444,23 +442,13 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, acti
         </div>
       )}
 
-      {/* Compose Modal for this email */}
-      <AnimatePresence>
-        {composeMode && (
-          <ComposeModal
-            mode={composeMode}
-            replyTo={loadedEmail || email}
-            onClose={() => setComposeMode(null)}
-          />
-        )}
-      </AnimatePresence>
     </div>
   );
 }
 
 // ── Thread View (shows all emails in a thread) ──────────────────────────────
 
-export function ThreadView({ thread }) {
+export function ThreadView({ thread, onComposeReply }) {
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   const activeMailbox = useAccountStore(s => s.activeMailbox);
   const savedEmailIds = useMessageListStore(s => s.savedEmailIds);
@@ -607,6 +595,7 @@ export function ThreadView({ thread }) {
                   archivedEmailIds={archivedEmailIds}
                   signatureDisplay={signatureDisplay}
                   shouldShowSignature={sigVisMap[email.uid] !== false}
+                  onComposeReply={onComposeReply}
                 />
               </div>
             );
