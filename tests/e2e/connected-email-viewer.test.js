@@ -5,26 +5,43 @@
  * Requires emails to be loaded in the inbox.
  */
 
-import { waitForApp, waitForEmails, pressKey } from './helpers.js';
+import { waitForApp, waitForEmails } from './helpers.js';
 
 /**
- * Close the compose modal by pressing Escape and dismissing any discard confirmation.
+ * Close every open compose modal via its own Close button, dismissing any
+ * discard confirmation.
+ *
+ * Not Escape: tauri-wd does not deliver it to the webview, so the old
+ * Escape-based close was a no-op. That went unnoticed while the viewer owned a
+ * single ComposeModal instance and swapped its `mode` in place; now compose is
+ * mounted once at App level and each Reply/Forward opens its own window, so a
+ * modal left behind stacks under the next one and `querySelector` reads the
+ * stale subject.
  */
 async function closeCompose() {
-  await pressKey('Escape');
-  await browser.pause(500);
+  for (let i = 0; i < 4; i++) {
+    const closed = await browser.execute(() => {
+      const btn = document.querySelector('[data-testid="compose-modal"] button[title="Close"]');
+      if (!btn) return false;
+      btn.click();
+      return true;
+    });
+    if (!closed) return;
+    await browser.pause(300);
 
-  // If a discard confirmation appears, click Discard
-  await browser.execute(() => {
-    const buttons = document.querySelectorAll('button');
-    for (const btn of buttons) {
-      if ((btn.textContent || '').trim() === 'Discard' && btn.offsetHeight > 0) {
-        btn.click();
-        return;
+    // Confirm the discard dialog. Scoped to the dialog on purpose: the compose
+    // footer has its own "Discard" button that re-opens this very dialog, and it
+    // comes first in document order.
+    await browser.execute(() => {
+      const heading = [...document.querySelectorAll('h3')]
+        .find(h => (h.textContent || '').includes('Discard message?'));
+      if (!heading) return;
+      for (const btn of heading.parentElement.querySelectorAll('button')) {
+        if ((btn.textContent || '').trim() === 'Discard') { btn.click(); return; }
       }
-    }
-  });
-  await browser.pause(300);
+    });
+    await browser.pause(300);
+  }
 }
 
 describe('Email Viewer', function () {

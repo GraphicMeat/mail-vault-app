@@ -25,7 +25,6 @@ import { MoveToFolderDropdown } from './components/MoveToFolderDropdown';
 import { MigrationToast } from './components/MigrationToast';
 import { KeychainToast } from './components/KeychainToast';
 import { VaultAlertBanner } from './components/VaultAlertBanner';
-import { TransferLimitBanner } from './components/TransferLimitBanner';
 import ShareUnlockModal from './components/ShareUnlockModal';
 import RestoreModal from './components/RestoreModal.jsx';
 import ChangeServerModal from './components/ChangeServerModal.jsx';
@@ -321,7 +320,7 @@ function App() {
 
     setComposeState({
       initialData: {
-        to: 'prime@graphicmeat.com',
+        to: 'hello@mailvaultapp.com',
         subject: `[Bug Report] MailVault v${version}`,
         body: `## System Info (auto-collected)\n- App Version: ${version}\n- Platform: ${os}\n- Accounts: ${accountCount}\n- Active Provider: ${activeProvider}\n\n## Description\n[What happened?]\n\n## Steps to Reproduce\n1. \n2. \n3. \n\n## Expected Behavior\n[What should have happened?]\n\n## Actual Behavior\n[What actually happened?]\n`
       }
@@ -618,7 +617,6 @@ function App() {
     <div className="h-screen bg-mail-bg flex flex-col overflow-hidden">
       {/* Storage folder unreachable — blocks sync, so it sits above everything */}
       <VaultAlertBanner />
-      <TransferLimitBanner onOpenDataUsage={(accountId) => { setSettingsInitialTab('data-usage'); setSettingsInitialAccountId(accountId || null); setShowSettings(true); }} />
       <div className="flex-1 flex min-h-0 overflow-hidden">
       <div data-testid="sidebar">
         <Sidebar
@@ -627,8 +625,6 @@ function App() {
           onOpenSettings={(tab) => { if (typeof tab === 'string') setSettingsInitialTab(tab); setShowSettings(true); }}
           onOpenBackup={(accountId) => { setSettingsInitialTab('backup'); setSettingsInitialAccountId(accountId || null); setShowSettings(true); }}
           onOpenAccounts={(accountId) => { setSettingsInitialTab('accounts'); setSettingsInitialAccountId(accountId || null); setShowSettings(true); }}
-          onOpenDataUsage={(accountId) => { setSettingsInitialTab('data-usage'); setSettingsInitialAccountId(accountId || null); setShowSettings(true); }}
-          onReportBug={handleReportBug}
         />
       </div>
 
