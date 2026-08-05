@@ -401,7 +401,11 @@ describe('Performance Benchmark', function () {
       await openSettings();
       await browser.pause(200);
       const start1 = Date.now();
-      await clickSettingsButton('Chat');
+      // "Chat View"/"List View", not "Chat"/"List": clickSettingsButton matches on
+      // startsWith, and Appearance's density option "List — One row per item"
+      // sorts ahead of "List View", so the bare label clicked density and left the
+      // app stuck in chat view — which persists into every following spec.
+      await clickSettingsButton('Chat View');
       await closeSettings();
       const ms1 = await waitForEmailsStable().catch(() => Date.now() - start1);
       record('View: → Chat', typeof ms1 === 'number' ? ms1 : Date.now() - start1);
@@ -415,7 +419,7 @@ describe('Performance Benchmark', function () {
       await openSettings();
       await browser.pause(200);
       const start2 = Date.now();
-      await clickSettingsButton('List');
+      await clickSettingsButton('List View');
       await closeSettings();
       const ms2 = await waitForEmailsStable().catch(() => Date.now() - start2);
       record('View: → List', typeof ms2 === 'number' ? ms2 : Date.now() - start2);
