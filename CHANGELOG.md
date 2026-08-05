@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+- **Proton Mail works now — pick "Proton Mail Bridge" in the provider list.** MailVault connects through the locally-running Proton Mail Bridge app (127.0.0.1:1143), including its STARTTLS handshake and self-signed certificate, which are handled automatically for local connections. A setup guide is linked right from the provider screen.
+- **Custom IMAP accounts can choose their connection security.** A new Security selector (SSL/TLS, STARTTLS, or None) appears when adding a custom account and when changing an existing account's server — previously MailVault always assumed SSL/TLS, so servers on STARTTLS ports couldn't connect. The IMAP port follows the chosen mode's default (993 or 143) until you type your own.
+- The provider list now shows every supported provider, including Zoho, Proton Mail Bridge, and Fastmail, in a two-column layout.
+
 ## [2.9.0] - 2026-08-04
 
 ### Added

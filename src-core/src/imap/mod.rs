@@ -7,6 +7,8 @@ use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
+use crate::transfer_stats::CountingStream;
+
 pub use pool::{ImapPool, ImapSession, ImapTransport};
 
 // ── Config ──────────────────────────────────────────────────────────────────
@@ -21,6 +23,8 @@ pub struct ImapConfig {
     pub port: Option<u16>,
     #[serde(rename = "imapSecure")]
     pub secure: Option<bool>,
+    #[serde(rename = "imapSecurity", skip_serializing_if = "Option::is_none", default)]
+    pub security: Option<String>,
     #[serde(rename = "authType")]
     pub auth_type: Option<String>,
     #[serde(rename = "oauth2AccessToken")]
@@ -44,6 +48,37 @@ impl ImapConfig {
     pub fn is_oauth2(&self) -> bool {
         self.auth_type.as_deref() == Some("oauth2")
     }
+
+    /// Resolve the transport security mode. `imapSecurity` wins when set
+    /// (case-insensitive "ssl"/"starttls"/"none"; an unrecognized string falls
+    /// back to Ssl). When absent, fall back to the legacy `imapSecure` bool:
+    /// `secure == Some(false)` means plaintext, anything else means Ssl.
+    pub fn effective_security(&self) -> ImapSecurity {
+        if let Some(s) = self.security.as_deref() {
+            return match s.to_lowercase().as_str() {
+                "ssl" => ImapSecurity::Ssl,
+                "starttls" => ImapSecurity::StartTls,
+                "none" => ImapSecurity::None,
+                _ => ImapSecurity::Ssl,
+            };
+        }
+        if self.secure == Some(false) {
+            ImapSecurity::None
+        } else {
+            ImapSecurity::Ssl
+        }
+    }
+}
+
+/// Resolved IMAP transport security mode (see `ImapConfig::effective_security`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImapSecurity {
+    /// Implicit TLS on connect (the historical default).
+    Ssl,
+    /// Plaintext connect, then upgrade in-band via the STARTTLS command.
+    StartTls,
+    /// No TLS at all.
+    None,
 }
 
 // ── Response types ──────────────────────────────────────────────────────────
@@ -216,10 +251,13 @@ async fn resolve_addrs(config: &ImapConfig) -> Result<Vec<std::net::SocketAddr>,
 /// `MAILVAULT_IMAP_PLAINTEXT=1` skips the TLS wrap so tests can point the client
 /// at a plaintext mock server. Honored ONLY for loopback addresses — otherwise the
 /// env var would be a TLS-downgrade vector in a shipped binary.
+/// Returns the transport plus whether the server greeting was already consumed
+/// (STARTTLS must eat it before upgrading; no second greeting follows the TLS
+/// handshake, so the auth step must not wait for one).
 async fn connect_transport(
     config: &ImapConfig,
     addrs: &[std::net::SocketAddr],
-) -> Result<Box<dyn ImapTransport>, String> {
+) -> Result<(Box<dyn ImapTransport>, bool), String> {
     let tcp = async_std::io::timeout(
         std::time::Duration::from_secs(15),
         TcpStream::connect(addrs),
@@ -227,21 +265,106 @@ async fn connect_transport(
     .await
     .map_err(|e| format!("TCP connect to {}:{} failed: {}", config.host, config.effective_port(), e))?;
 
+    // Byte counting sits on the raw stream: COMPRESS=DEFLATE wraps the boxed
+    // transport later, so what we count here is what crossed the wire.
+    let counters = crate::transfer_stats::global().counters(&config.email);
+
     let plaintext_requested = std::env::var("MAILVAULT_IMAP_PLAINTEXT").as_deref() == Ok("1");
     let all_loopback = addrs.iter().all(|a| a.ip().is_loopback());
 
     if plaintext_requested && all_loopback {
         warn!("[IMAP] MAILVAULT_IMAP_PLAINTEXT=1 — TLS DISABLED for loopback {:?}", addrs);
-        return Ok(Box::new(tcp));
+        return Ok((Box::new(CountingStream::new(tcp, counters)), false));
     }
     if plaintext_requested {
         warn!("[IMAP] MAILVAULT_IMAP_PLAINTEXT=1 ignored — {} is not loopback", config.host);
     }
 
-    let tls_stream = TlsConnector::new()
-        .connect(&config.host, tcp)
+    let stream = CountingStream::new(tcp, counters);
+    match config.effective_security() {
+        ImapSecurity::None => {
+            info!("[IMAP] imapSecurity=none — connecting to {} without TLS", config.host);
+            Ok((Box::new(stream), false))
+        }
+        ImapSecurity::Ssl => {
+            let tls_stream = build_tls_connector(all_loopback)
+                .connect(&config.host, stream)
+                .await
+                .map_err(|e| format!("TLS handshake with {} failed: {}", config.host, e))?;
+            Ok((Box::new(tls_stream), false))
+        }
+        ImapSecurity::StartTls => Ok((starttls_upgrade(config, stream, all_loopback).await?, true)),
+    }
+}
+
+/// Build a TLS connector, relaxing certificate validation for loopback
+/// addresses — needed for Proton Mail Bridge's self-signed cert on 127.0.0.1.
+/// Non-loopback hosts always get full validation.
+fn build_tls_connector(all_loopback: bool) -> TlsConnector {
+    let connector = TlsConnector::new();
+    if all_loopback {
+        connector
+            .danger_accept_invalid_certs(true)
+            .danger_accept_invalid_hostnames(true)
+    } else {
+        connector
+    }
+}
+
+/// Upgrade a plaintext connection to TLS via STARTTLS (RFC 3501 6.2.1):
+/// consume the greeting, send the command, wait for the tagged response, then
+/// wrap the same TCP stream in TLS.
+///
+/// The tag `MV0` is fixed rather than generated because this runs once per
+/// connection, before any other command is pipelined.
+async fn starttls_upgrade(
+    config: &ImapConfig,
+    stream: CountingStream<TcpStream>,
+    all_loopback: bool,
+) -> Result<Box<dyn ImapTransport>, String> {
+    use async_std::io::{BufReadExt, WriteExt};
+
+    let mut reader = async_std::io::BufReader::new(stream);
+
+    // Consume the greeting (`* OK ...`) — otherwise it would be mistaken for
+    // the STARTTLS response.
+    let mut greeting = String::new();
+    reader
+        .read_line(&mut greeting)
         .await
-        .map_err(|e| format!("TLS handshake with {} failed: {}", config.host, e))?;
+        .map_err(|e| format!("STARTTLS: failed to read greeting from {}: {}", config.host, e))?;
+
+    reader
+        .get_mut()
+        .write_all(b"MV0 STARTTLS\r\n")
+        .await
+        .map_err(|e| format!("STARTTLS: failed to send command to {}: {}", config.host, e))?;
+
+    loop {
+        let mut line = String::new();
+        let n = reader
+            .read_line(&mut line)
+            .await
+            .map_err(|e| format!("STARTTLS: failed to read response from {}: {}", config.host, e))?;
+        if n == 0 {
+            return Err(format!(
+                "STARTTLS: connection to {} closed before a tagged response",
+                config.host
+            ));
+        }
+        if line.starts_with("MV0 OK") {
+            break;
+        }
+        if line.starts_with("MV0 NO") || line.starts_with("MV0 BAD") {
+            return Err(format!("STARTTLS rejected by {}: {}", config.host, line.trim()));
+        }
+        // Untagged response (e.g. a CAPABILITY line) — keep reading.
+    }
+
+    let tls_stream = build_tls_connector(all_loopback)
+        .connect(&config.host, reader.into_inner())
+        .await
+        .map_err(|e| format!("STARTTLS TLS handshake with {} failed: {}", config.host, e))?;
 
     Ok(Box::new(tls_stream))
 }
@@ -254,11 +377,14 @@ async fn connect_transport(
 async fn authenticate_client(
     mut client: async_imap::Client<Box<dyn ImapTransport>>,
     config: &ImapConfig,
+    greeting_consumed: bool,
 ) -> Result<ImapSession, String> {
-    let _greeting = client
-        .read_response()
-        .await
-        .map_err(|e| format!("Failed to read server greeting: {}", e))?;
+    if !greeting_consumed {
+        let _greeting = client
+            .read_response()
+            .await
+            .map_err(|e| format!("Failed to read server greeting: {}", e))?;
+    }
 
     if config.is_oauth2() {
         let token = config
@@ -286,8 +412,8 @@ async fn authenticate_client(
 /// Connect + authenticate, no capability caching or COMPRESS negotiation.
 async fn connect_and_auth(config: &ImapConfig) -> Result<ImapSession, String> {
     let addrs = resolve_addrs(config).await?;
-    let transport = connect_transport(config, &addrs).await?;
-    authenticate_client(async_imap::Client::new(transport), config).await
+    let (transport, greeting_consumed) = connect_transport(config, &addrs).await?;
+    authenticate_client(async_imap::Client::new(transport), config, greeting_consumed).await
 }
 
 pub async fn create_imap_session(config: &ImapConfig, pool: &ImapPool) -> Result<ImapSession, String> {
@@ -301,10 +427,11 @@ pub async fn create_imap_session(config: &ImapConfig, pool: &ImapPool) -> Result
     let addrs = resolve_addrs(config).await?;
     info!("[IMAP] DNS resolved to {:?}", addrs);
 
-    let transport = connect_transport(config, &addrs).await?;
+    let (transport, greeting_consumed) = connect_transport(config, &addrs).await?;
     info!("[IMAP] Transport established, authenticating...");
 
-    let mut session = authenticate_client(async_imap::Client::new(transport), config).await?;
+    let mut session =
+        authenticate_client(async_imap::Client::new(transport), config, greeting_consumed).await?;
 
     // ── Cache capabilities ──────────────────────────────────────────────
     let caps = session.capabilities().await
@@ -1981,5 +2108,67 @@ mod tests {
         assert!(!is_bandwidth_limited("UID FETCH 42 failed: connection reset by peer"));
         assert!(!is_bandwidth_limited("Email UID 42 not found"));
         assert!(!is_bandwidth_limited(""));
+    }
+
+    // ── ImapConfig::effective_security ───────────────────────────────────
+
+    fn config_with(security: Option<&str>, secure: Option<bool>) -> ImapConfig {
+        ImapConfig {
+            email: "test@example.com".to_string(),
+            password: None,
+            host: "imap.example.com".to_string(),
+            port: None,
+            secure,
+            security: security.map(String::from),
+            auth_type: None,
+            access_token: None,
+            smtp_host: None,
+            smtp_port: None,
+            smtp_secure: None,
+            name: None,
+            oauth2_transport: None,
+        }
+    }
+
+    #[test]
+    fn security_explicit_ssl() {
+        assert_eq!(config_with(Some("ssl"), None).effective_security(), ImapSecurity::Ssl);
+    }
+
+    #[test]
+    fn security_explicit_starttls() {
+        assert_eq!(config_with(Some("starttls"), None).effective_security(), ImapSecurity::StartTls);
+    }
+
+    #[test]
+    fn security_explicit_none() {
+        assert_eq!(config_with(Some("none"), None).effective_security(), ImapSecurity::None);
+    }
+
+    #[test]
+    fn security_case_insensitive() {
+        assert_eq!(config_with(Some("StartTLS"), None).effective_security(), ImapSecurity::StartTls);
+        assert_eq!(config_with(Some("SSL"), None).effective_security(), ImapSecurity::Ssl);
+        assert_eq!(config_with(Some("NONE"), None).effective_security(), ImapSecurity::None);
+    }
+
+    #[test]
+    fn security_unknown_string_falls_back_to_ssl() {
+        assert_eq!(config_with(Some("garbage"), None).effective_security(), ImapSecurity::Ssl);
+    }
+
+    #[test]
+    fn security_absent_legacy_secure_false_is_none() {
+        assert_eq!(config_with(None, Some(false)).effective_security(), ImapSecurity::None);
+    }
+
+    #[test]
+    fn security_absent_legacy_secure_absent_is_ssl() {
+        assert_eq!(config_with(None, None).effective_security(), ImapSecurity::Ssl);
+    }
+
+    #[test]
+    fn security_absent_legacy_secure_true_is_ssl() {
+        assert_eq!(config_with(None, Some(true)).effective_security(), ImapSecurity::Ssl);
     }
 }

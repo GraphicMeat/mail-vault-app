@@ -222,6 +222,18 @@ fn use_implicit_tls(smtp_secure: Option<bool>, smtp_port: u16) -> bool {
     }
 }
 
+/// True if `host` is a loopback literal (127.0.0.1/::1/localhost). Used to allow
+/// self-signed TLS certs for local bridges (e.g. Proton Mail Bridge on
+/// 127.0.0.1:1025) without weakening TLS validation for real remote hosts.
+/// Literal check only — no DNS resolution.
+fn is_loopback_host(host: &str) -> bool {
+    host.eq_ignore_ascii_case("localhost")
+        || host
+            .parse::<std::net::IpAddr>()
+            .map(|ip| ip.is_loopback())
+            .unwrap_or(false)
+}
+
 /// Map a raw lettre SMTP error string to a human-readable message. Kept pure
 /// (takes the stringified error) so the classification is unit-testable.
 fn friendly_smtp_error(host: &str, port: u16, err_str: &str) -> String {
@@ -252,7 +264,12 @@ fn build_transport(
         .ok_or_else(|| "SMTP host not configured".to_string())?;
     let smtp_port = account.smtp_port.unwrap_or(587);
 
-    let tls_params = TlsParameters::builder(smtp_host.to_string())
+    let mut tls_builder = TlsParameters::builder(smtp_host.to_string());
+    if is_loopback_host(smtp_host) {
+        // ponytail: local bridges (Proton Mail Bridge) use self-signed certs; loopback-only.
+        tls_builder = tls_builder.dangerous_accept_invalid_certs(true);
+    }
+    let tls_params = tls_builder
         .build_rustls()
         .map_err(|e| format!("TLS params error: {}", e))?;
 
@@ -384,6 +401,15 @@ mod tests {
         assert!(use_implicit_tls(None, 465)); // 465 = implicit TLS
         assert!(!use_implicit_tls(None, 587)); // 587 = STARTTLS
         assert!(!use_implicit_tls(None, 25));
+    }
+
+    #[test]
+    fn loopback_host_detection() {
+        assert!(is_loopback_host("127.0.0.1"));
+        assert!(is_loopback_host("::1"));
+        assert!(is_loopback_host("localhost"));
+        assert!(is_loopback_host("LOCALHOST"));
+        assert!(!is_loopback_host("smtp.gmail.com"));
     }
 
     #[test]

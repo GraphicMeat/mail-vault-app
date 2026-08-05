@@ -191,7 +191,7 @@
         "name": "How do I use MailVault with Proton Mail?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Proton Mail uses end-to-end encryption, so it doesn't expose standard IMAP access directly. To use MailVault with Proton Mail, you need Proton Mail Bridge — a free desktop app from Proton that runs locally and provides IMAP/SMTP access to your encrypted mailbox. Install Proton Mail Bridge, sign in with your Proton account, then copy the IMAP/SMTP credentials from Bridge. In MailVault, add a Custom account with IMAP host 127.0.0.1 port 1143, SMTP host 127.0.0.1 port 1025, STARTTLS security, and use the Bridge-generated password (not your Proton account password). Bridge must be running in the background whenever you sync."
+          "text": "Proton Mail encrypts your mail end-to-end, so it doesn't expose IMAP directly. Connecting it to MailVault requires Proton Mail Bridge, a desktop app from Proton that runs locally and exposes your encrypted mailbox as standard IMAP/SMTP on 127.0.0.1. Bridge requires a paid Proton Mail plan. Install Bridge, sign in with your Proton account, then copy the Bridge-generated IMAP/SMTP credentials (not your Proton account password). In MailVault, choose Proton Mail Bridge in the provider list (or Custom IMAP) with server 127.0.0.1, IMAP port 1143 with STARTTLS, SMTP port 1025, your Proton email as the username, and the Bridge password. Bridge must be running for MailVault to sync, though archived mail stays readable in MailVault even when Bridge is off. Bridge's self-signed certificate is handled automatically by MailVault for local connections."
         }
       },
       {
@@ -522,24 +522,24 @@
           </button>
           <div class="faq-answer">
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">Proton Mail uses end-to-end encryption, so it doesn't expose standard IMAP access directly. To use MailVault with Proton Mail, you need <a href="https://proton.me/mail/bridge" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton Mail Bridge</a> — a free desktop app from Proton that runs locally and provides IMAP/SMTP access to your encrypted mailbox.</p>
+              <p class="mb-4">Proton Mail encrypts your mail end-to-end, so it doesn't expose IMAP directly. Connecting it to MailVault (or any third-party mail client) requires <a href="https://proton.me/mail/bridge" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton Mail Bridge</a> — a desktop app from Proton that runs locally on your Mac and exposes your encrypted mailbox as standard IMAP/SMTP on <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code>. Bridge requires a paid Proton Mail plan; it isn't available on Proton's free tier.</p>
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Setup steps:</p>
               <ol class="list-decimal list-inside space-y-2 mb-4">
-                <li>Download and install <a href="https://proton.me/mail/bridge" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton Mail Bridge</a> from Proton's website</li>
-                <li>Sign in to Bridge with your Proton Mail account</li>
-                <li>In Bridge, go to your account settings and copy the <strong>IMAP/SMTP credentials</strong> (Bridge generates a unique password for each account)</li>
-                <li>In MailVault, add a new account with the <strong>Custom</strong> provider and enter the following settings:
+                <li>Install <a href="https://proton.me/mail/bridge" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton Mail Bridge</a> from Proton's website</li>
+                <li>Sign in to Bridge with your Proton account</li>
+                <li>Bridge displays per-account <strong>IMAP/SMTP credentials</strong> — the password shown is a Bridge-generated app password, <strong>not</strong> your regular Proton account password</li>
+                <li>In MailVault, choose <strong>Proton Mail Bridge</strong> in the provider list (or <strong>Custom IMAP</strong> if it isn't listed) and enter:
                   <ul class="list-disc list-inside ml-4 mt-2 space-y-1">
-                    <li>IMAP Host: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code></li>
-                    <li>IMAP Port: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">1143</code></li>
-                    <li>SMTP Host: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code></li>
+                    <li>Server: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code></li>
+                    <li>IMAP Port: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">1143</code>, Security: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">STARTTLS</code></li>
                     <li>SMTP Port: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">1025</code></li>
-                    <li>Security: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">STARTTLS</code></li>
+                    <li>Username: your Proton email address</li>
+                    <li>Password: the Bridge-generated password from step 3</li>
                   </ul>
                 </li>
-                <li>Use your Proton email address and the <strong>Bridge-generated password</strong> (not your Proton account password)</li>
               </ol>
-              <p>Proton Mail Bridge must be running in the background whenever you use MailVault to sync your Proton emails. For more details, see <a href="https://proton.me/support/protonmail-bridge-configure-client" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton's official guide for configuring email clients</a>.</p>
+              <p class="mb-4">Proton Mail Bridge must be running in the background whenever MailVault syncs — if Bridge is closed, MailVault can't reach the mailbox. Mail you've already archived stays fully readable and searchable in MailVault even while Bridge is closed, since MailVault is local-first and reads from its own <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code> store rather than live from Bridge.</p>
+              <p>Bridge secures its local IMAP/SMTP server with a self-signed TLS certificate. MailVault handles this automatically for local (<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code>) connections, so no manual certificate installation is required.</p>
             </div>
           </div>
         </div>

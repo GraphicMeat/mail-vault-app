@@ -38,6 +38,18 @@ fn parse_address_list(raw: &str) -> Result<Vec<Mailbox>, String> {
     Ok(out)
 }
 
+/// True if `host` is a loopback literal (127.0.0.1/::1/localhost). Used to allow
+/// self-signed TLS certs for local bridges (e.g. Proton Mail Bridge on
+/// 127.0.0.1:1025) without weakening TLS validation for real remote hosts.
+/// Literal check only — no DNS resolution.
+fn is_loopback_host(host: &str) -> bool {
+    host.eq_ignore_ascii_case("localhost")
+        || host
+            .parse::<std::net::IpAddr>()
+            .map(|ip| ip.is_loopback())
+            .unwrap_or(false)
+}
+
 pub async fn send_email(account: &ImapConfig, email: &OutgoingEmail) -> Result<String, String> {
     let smtp_host = account
         .smtp_host
@@ -125,7 +137,12 @@ pub async fn send_email(account: &ImapConfig, email: &OutgoingEmail) -> Result<S
     };
 
     // Build SMTP transport
-    let tls_params = TlsParameters::builder(smtp_host.to_string())
+    let mut tls_builder = TlsParameters::builder(smtp_host.to_string());
+    if is_loopback_host(smtp_host) {
+        // ponytail: local bridges (Proton Mail Bridge) use self-signed certs; loopback-only.
+        tls_builder = tls_builder.dangerous_accept_invalid_certs(true);
+    }
+    let tls_params = tls_builder
         .build_rustls()
         .map_err(|e| format!("TLS params error: {}", e))?;
 
@@ -186,4 +203,18 @@ pub async fn send_email(account: &ImapConfig, email: &OutgoingEmail) -> Result<S
 
     info!("Email sent via SMTP to {}: {}", email.to, message_id);
     Ok(message_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn loopback_host_detection() {
+        assert!(is_loopback_host("127.0.0.1"));
+        assert!(is_loopback_host("::1"));
+        assert!(is_loopback_host("localhost"));
+        assert!(is_loopback_host("LOCALHOST"));
+        assert!(!is_loopback_host("smtp.gmail.com"));
+    }
 }

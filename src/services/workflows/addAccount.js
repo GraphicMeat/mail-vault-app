@@ -24,6 +24,7 @@ export async function addAccount(accountData) {
   const account = {
     id: crypto.randomUUID(),
     ...accountData,
+    imapSecurity: accountData.imapSecurity || 'ssl',
     createdAt: new Date().toISOString()
   };
   console.log('[mailStore] Created account object with id:', account.id);

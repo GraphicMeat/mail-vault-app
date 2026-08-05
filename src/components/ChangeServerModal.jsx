@@ -22,7 +22,7 @@ export default function ChangeServerModal() {
   const account = accounts.find((a) => a.id === accountId);
 
   const [step, setStep] = useState(1);
-  const [form, setForm] = useState({ imapHost: '', imapPort: 993, smtpHost: '', smtpPort: 587, password: '' });
+  const [form, setForm] = useState({ imapHost: '', imapPort: 993, imapSecurity: 'ssl', smtpHost: '', smtpPort: 587, password: '' });
   const [suggestionNote, setSuggestionNote] = useState(null); // { type: 'info'|'warning', text }
   const [busyLeg, setBusyLeg] = useState(null); // null | 'imap' | 'smtp'
   const [verifyError, setVerifyError] = useState(null); // { leg, text }
@@ -53,6 +53,7 @@ export default function ChangeServerModal() {
     setForm({
       imapHost: account.imapHost || '',
       imapPort: account.imapPort || 993,
+      imapSecurity: account.imapSecurity || 'ssl',
       smtpHost: account.smtpHost || '',
       smtpPort: account.smtpPort || 587,
       password: '',
@@ -137,6 +138,22 @@ export default function ChangeServerModal() {
 
   if (!account || account.authType === 'oauth2') return null;
 
+  // ssl -> starttls/none moves the default IMAP port from 993 to 143 (and back).
+  // Only follow that default if the user hasn't typed a custom port already.
+  const SECURITY_DEFAULT_PORTS = { ssl: 993, starttls: 143, none: 143 };
+  const handleSecurityChange = (e) => {
+    const nextSecurity = e.target.value;
+    setForm((f) => {
+      const prevDefaultPort = SECURITY_DEFAULT_PORTS[f.imapSecurity] ?? 993;
+      const portIsDefault = Number(f.imapPort) === prevDefaultPort;
+      return {
+        ...f,
+        imapSecurity: nextSecurity,
+        imapPort: portIsDefault ? SECURITY_DEFAULT_PORTS[nextSecurity] : f.imapPort,
+      };
+    });
+  };
+
   const handleVerifySave = async () => {
     setVerifyError(null);
     setBusyLeg('imap');
@@ -215,6 +232,14 @@ export default function ChangeServerModal() {
               <div>
                 <label className="block text-xs text-mail-text-muted mb-1">SMTP port</label>
                 <input type="number" className={inputClass} value={form.smtpPort} onChange={(e) => setForm((f) => ({ ...f, smtpPort: Number(e.target.value) }))} />
+              </div>
+              <div>
+                <label className="block text-xs text-mail-text-muted mb-1">Security</label>
+                <select className={inputClass} value={form.imapSecurity} onChange={handleSecurityChange}>
+                  <option value="ssl">SSL/TLS</option>
+                  <option value="starttls">STARTTLS</option>
+                  <option value="none">None</option>
+                </select>
               </div>
             </div>
 

@@ -72,13 +72,16 @@ export const PROVIDER_CONFIGS = {
     note: 'Enable IMAP in Zoho settings'
   },
   protonmail: {
-    name: 'ProtonMail',
+    name: 'Proton Mail Bridge',
     domains: ['protonmail.com', 'proton.me', 'pm.me'],
     imapHost: '127.0.0.1',
     imapPort: 1143,
+    imapSecurity: 'starttls',
     smtpHost: '127.0.0.1',
     smtpPort: 1025,
-    note: 'Requires ProtonMail Bridge app'
+    note: 'MailVault connects through the Proton Mail Bridge app running locally on your machine — install and sign in to Bridge first.',
+    helpUrl: 'https://mailvaultapp.com/faq.html#proton-mail-bridge',
+    helpLabel: 'Setup guide'
   },
   fastmail: {
     name: 'Fastmail',
@@ -151,6 +154,7 @@ export function AccountModal({ onClose }) {
     imapHost: '',
     imapPort: 993,
     imapSecure: true,
+    imapSecurity: 'ssl',
     smtpHost: '',
     smtpPort: 587,
     smtpSecure: false,
@@ -204,6 +208,7 @@ export function AccountModal({ onClose }) {
       ...prev,
       imapHost: config.imapHost,
       imapPort: config.imapPort,
+      imapSecurity: config.imapSecurity || 'ssl',
       smtpHost: config.smtpHost,
       smtpPort: config.smtpPort
     }));
@@ -243,6 +248,22 @@ export function AccountModal({ onClose }) {
       const detected = detectProvider(value);
       setDetectedProvider(detected);
     }
+  };
+
+  // ssl -> starttls/none moves the default IMAP port from 993 to 143 (and back).
+  // Only follow that default if the user hasn't typed a custom port already.
+  const SECURITY_DEFAULT_PORTS = { ssl: 993, starttls: 143, none: 143 };
+  const handleSecurityChange = (e) => {
+    const nextSecurity = e.target.value;
+    setFormData(prev => {
+      const prevDefaultPort = SECURITY_DEFAULT_PORTS[prev.imapSecurity] ?? 993;
+      const portIsDefault = Number(prev.imapPort) === prevDefaultPort;
+      return {
+        ...prev,
+        imapSecurity: nextSecurity,
+        imapPort: portIsDefault ? SECURITY_DEFAULT_PORTS[nextSecurity] : prev.imapPort
+      };
+    });
   };
 
   const handleAutoDetect = async () => {
@@ -486,7 +507,7 @@ export function AccountModal({ onClose }) {
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         className="bg-mail-surface border border-mail-border rounded-2xl shadow-2xl
-                   w-full max-w-md overflow-hidden max-h-[90vh] flex flex-col relative"
+                   w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col relative"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -505,39 +526,39 @@ export function AccountModal({ onClose }) {
         {/* Content */}
         <div className="p-6 overflow-y-auto">
           {step === 1 ? (
-            <div className="space-y-2">
-              {Object.entries(PROVIDER_CONFIGS).slice(0, 6).map(([key, config]) => (
+            <div className="grid grid-cols-2 gap-2">
+              {Object.entries(PROVIDER_CONFIGS).map(([key, config]) => (
                 <button
                   key={key}
                   onClick={() => handleProviderSelect(key)}
-                  className="w-full flex items-center gap-4 p-4 rounded-xl border border-mail-border
+                  className="flex items-center gap-3 p-3 rounded-xl border border-mail-border
                             hover:border-mail-accent/50 hover:bg-mail-surface-hover
                             transition-all text-left group"
                 >
-                  <div className="w-10 h-10 bg-mail-accent/10 rounded-lg flex items-center
+                  <div className="w-9 h-9 flex-shrink-0 bg-mail-accent/10 rounded-lg flex items-center
                                 justify-center group-hover:bg-mail-accent/20 transition-colors">
-                    <Mail size={20} className="text-mail-accent" />
+                    <Mail size={18} className="text-mail-accent" />
                   </div>
-                  <div>
-                    <div className="font-medium text-mail-text">{config.name}</div>
-                    <div className="text-sm text-mail-text-muted">{config.imapHost}</div>
+                  <div className="min-w-0">
+                    <div className="font-medium text-mail-text text-sm truncate">{config.name}</div>
+                    <div className="text-xs text-mail-text-muted truncate">{config.imapHost}</div>
                   </div>
                 </button>
               ))}
 
               <button
                 onClick={() => handleProviderSelect('custom')}
-                className="w-full flex items-center gap-4 p-4 rounded-xl border border-mail-border
+                className="flex items-center gap-3 p-3 rounded-xl border border-mail-border
                           hover:border-mail-accent/50 hover:bg-mail-surface-hover
                           transition-all text-left group"
               >
-                <div className="w-10 h-10 bg-mail-accent/10 rounded-lg flex items-center
+                <div className="w-9 h-9 flex-shrink-0 bg-mail-accent/10 rounded-lg flex items-center
                               justify-center group-hover:bg-mail-accent/20 transition-colors">
-                  <Server size={20} className="text-mail-accent" />
+                  <Server size={18} className="text-mail-accent" />
                 </div>
-                <div>
-                  <div className="font-medium text-mail-text">Other / Custom</div>
-                  <div className="text-sm text-mail-text-muted">Auto-detect or manual config</div>
+                <div className="min-w-0">
+                  <div className="font-medium text-mail-text text-sm truncate">Other / Custom</div>
+                  <div className="text-xs text-mail-text-muted truncate">Auto-detect or manual config</div>
                 </div>
               </button>
             </div>
@@ -829,6 +850,23 @@ export function AccountModal({ onClose }) {
                                   text-mail-text text-sm focus:border-mail-accent transition-all"
                       />
                     </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-mail-text-muted mb-1.5">
+                      Security
+                    </label>
+                    <select
+                      name="imapSecurity"
+                      value={formData.imapSecurity}
+                      onChange={handleSecurityChange}
+                      className="w-full px-3 py-2 bg-mail-bg border border-mail-border rounded-lg
+                                text-mail-text text-sm focus:border-mail-accent transition-all"
+                    >
+                      <option value="ssl">SSL/TLS</option>
+                      <option value="starttls">STARTTLS</option>
+                      <option value="none">None</option>
+                    </select>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">

@@ -10,7 +10,7 @@ import * as api from '../api';
 // possibly gone — password), this verifies IMAP and SMTP with the NEW password
 // first and persists nothing unless both legs succeed. Password/IMAP accounts
 // only — OAuth accounts don't have a server password to re-verify.
-export async function changeServer(accountId, { imapHost, imapPort, smtpHost, smtpPort, password }) {
+export async function changeServer(accountId, { imapHost, imapPort, imapSecurity, smtpHost, smtpPort, password }) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
 
@@ -24,6 +24,7 @@ export async function changeServer(accountId, { imapHost, imapPort, smtpHost, sm
   const candidate = {
     ...existing,
     imapHost, imapPort, smtpHost, smtpPort, password,
+    imapSecurity: imapSecurity || 'ssl',
     id: accountId,
     updatedAt: new Date().toISOString(),
   };

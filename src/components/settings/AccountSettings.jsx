@@ -634,7 +634,12 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
 
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-mail-text-muted space-y-0.5">
-                    <div>IMAP: <code className="text-mail-text">{selectedAccount.imapHost || '—'}:{selectedAccount.imapPort || 993}</code></div>
+                    <div>
+                      IMAP: <code className="text-mail-text">{selectedAccount.imapHost || '—'}:{selectedAccount.imapPort || 993}</code>
+                      {selectedAccount.imapSecurity && selectedAccount.imapSecurity !== 'ssl' && (
+                        <span className="ml-1">({selectedAccount.imapSecurity.toUpperCase()})</span>
+                      )}
+                    </div>
                     <div>SMTP: <code className="text-mail-text">{selectedAccount.smtpHost || '—'}:{selectedAccount.smtpPort || 587}</code></div>
                   </div>
                   <button
