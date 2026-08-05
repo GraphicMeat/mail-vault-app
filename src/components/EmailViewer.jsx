@@ -29,6 +29,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useThemeStore } from '../stores/themeStore';
 import { buildEmailIframeHtml, getEmailBodyContent, getContextMenuColors } from '../utils/emailIframeTemplate';
 import { getDarkReaderInlineScripts } from '../utils/darkReaderInject';
+import { getQuoteFoldingScript, getSignatureFoldingScript } from '../utils/iframeQuoteFolding';
 
 // Re-export AttachmentItem for any external consumers
 export { AttachmentItem } from './email/AttachmentBar';
@@ -53,6 +54,7 @@ function EmailViewerComponent() {
   const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
   const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
   const emailViewerTheme = useSettingsStore(s => s.emailViewerTheme);
+  const signatureDisplay = useSettingsStore(s => s.signatureDisplay);
   const appTheme = useThemeStore(s => s.theme);
   // Default email theme: user preference ('light'|'dark') or follow app theme.
   const theme = emailViewerTheme === 'system' ? appTheme : emailViewerTheme;
@@ -189,9 +191,10 @@ function EmailViewerComponent() {
       bodyHtml: renderedBody,
       themeTag: effectiveEmailTheme,
       extraHead,
+      extraBody: `${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}`,
     });
     return { iframeContent: html, scanAlertLevel: alertLevel };
-  }, [selectedEmail?.html, selectedEmail?.uid, linkSafetyEnabled, effectiveEmailTheme]);
+  }, [selectedEmail?.html, selectedEmail?.uid, linkSafetyEnabled, effectiveEmailTheme, signatureDisplay]);
 
   // Persist link alert to store + settings (outside render, in useEffect)
   useEffect(() => {
