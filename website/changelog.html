@@ -131,8 +131,8 @@
 
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.9.0</span>
-          <span class="text-slate-500 dark:text-slate-400 text-sm">August 4, 2026</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.9.1</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">August 6, 2026</span>
           <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
         </div>
 
@@ -146,7 +146,64 @@
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
-              <span><strong>Your mail can now live wherever you want it — an external drive, a NAS mount, any folder.</strong> Settings → Backup shows where the working copy is stored and can move it: MailVault copies everything across, checks every file arrived, and only then removes the originals. If the drive is later disconnected, the app says so at the top of the main view and pauses syncing instead of quietly starting a second archive in its own storage; if the drive comes back at a different path, pick the folder again and MailVault verifies it is yours before carrying on. (Developer ID and Linux builds for now.)</span>
+              <span><strong>Proton Mail works now — pick "Proton Mail Bridge" in the provider list.</strong> MailVault connects through the locally-running Proton Mail Bridge app (127.0.0.1:1143), including its STARTTLS handshake and self-signed certificate, which are handled automatically for local connections. A setup guide is linked right from the provider screen.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Custom IMAP accounts can choose their connection security.</strong> A new Security selector (SSL/TLS, STARTTLS, or None) appears when adding a custom account and when changing an existing account's server — previously MailVault always assumed SSL/TLS, so servers on STARTTLS ports couldn't connect. The IMAP port follows the chosen mode's default (993 or 143) until you type your own.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span>The provider list now shows every supported provider, including Zoho, Proton Mail Bridge, and Fastmail, in a two-column layout.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>See exactly how much mail data each account transfers.</strong> Hover an account in the sidebar for today's and this month's totals, or open the new Settings → Data Usage page for daily, weekly, monthly and yearly breakdowns of downloaded and uploaded bytes. Useful for keeping an eye on provider limits — Gmail suspends IMAP access for up to 24 hours past 2,500 MB down / 500 MB up in a day.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>MailVault can warn you before a provider cuts you off — or stop itself in time.</strong> A banner appears when an account passes 80% of its daily transfer limit, and an optional cap pauses syncing for the rest of the day before the limit is hit. Both are configurable per account in Settings → Data Usage; Gmail accounts come with the known limits prefilled.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span>A Report a Bug button now sits next to Settings in the sidebar — it opens a compose window with version and system details already filled in.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            </span>
+            Fixed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Clicking outside a reply no longer throws away what you typed.</strong> Replying or forwarding from an opened email, a thread, or chat view mounted its own compose window that couldn't minimize — clicking outside closed it and discarded the draft. All reply and forward paths now use the same compose window, which minimizes to a bubble when you click away with unsent text.</span>
+            </li>
+          </ul>
+        </div>
+
+      </article>
+      <article class="mb-16">
+        <div class="flex items-center gap-3 mb-6">
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.9.0</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">August 4, 2026</span>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            </span>
+            Added
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Your mail can now live wherever you want it — an external drive, a NAS mount, any folder.</strong> Settings → Backup shows where the working copy is stored and can move it: MailVault copies everything across, checks every file arrived, and only then removes the originals. If the drive is later disconnected, the app says so at the top of the main view and pauses syncing instead of quietly starting a second archive in its own storage; if the drive comes back at a different path, pick the folder again and MailVault verifies it is yours before carrying on. Going back to the default location asks whether to bring the mail with you — move it back with the same copy-check-then-delete steps, or leave it in the folder and start fresh. (Developer ID and Linux builds for now.)</span>
             </li>
           </ul>
         </div>
