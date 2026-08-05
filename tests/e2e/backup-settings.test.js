@@ -1,11 +1,32 @@
 /**
  * E2E Test: Backup Settings Tab
  *
- * Verifies backup tab navigation, premium gate (Coming Soon overlay),
- * premium-enabled backup controls, and settings tab navigation stability.
+ * The settings restructure (e305123) renamed the tab to "Backup & Restore",
+ * split it into three sub-tabs, and dropped the old Developer/"Coming Soon"
+ * premium toggle — premium now comes from the billing profile, which a test
+ * HOME has no way to set. So this covers navigation and rendering only.
  */
 
-import { waitForApp, openSettings, closeSettings } from './helpers.js';
+import { waitForApp, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
+
+const BACKUP_TAB = 'Backup & Restore';
+
+/**
+ * Click a backup sub-tab. "Backup & Restore" names both the sidebar tab and the
+ * first sub-tab, and the sub-tab bar renders after the sidebar — so the last
+ * match is the sub-tab, the first would be the sidebar entry.
+ */
+async function clickBackupSubTab(label) {
+  const clicked = await browser.execute((wanted) => {
+    const matches = [...document.querySelectorAll('button')]
+      .filter(b => b.offsetHeight > 0 && b.textContent.trim() === wanted);
+    if (!matches.length) return false;
+    matches[matches.length - 1].click();
+    return true;
+  }, label);
+  await browser.pause(400);
+  return clicked;
+}
 
 describe('Backup Settings', function () {
   this.timeout(60000);
@@ -18,129 +39,50 @@ describe('Backup Settings', function () {
     await closeSettings();
   });
 
-  it('should navigate to Backup tab', async function () {
+  it('should navigate to Backup & Restore tab', async function () {
     await openSettings();
     await browser.pause(300);
 
-    const clicked = await browser.execute(() => {
-      const buttons = document.querySelectorAll('button');
-      for (const btn of buttons) {
-        if (btn.textContent.trim() === 'Backup' && btn.offsetHeight > 0) {
-          btn.click();
-          return true;
-        }
-      }
-      return false;
-    });
-    expect(clicked).toBe(true);
-    await browser.pause(400);
+    expect(await clickSettingsNav(BACKUP_TAB)).toBe(true);
 
     const hasContent = await browser.execute(() => {
       const text = document.body.innerText;
-      return text.includes('Backup') && (
-        text.includes('Coming Soon') ||
-        text.includes('Backup Schedule') ||
-        text.includes('Backup Health') ||
-        text.includes('Developer')
-      );
+      return text.includes('Backup Schedule') && text.includes('Backup Settings');
     });
     expect(hasContent).toBe(true);
   });
 
-  it('should show premium overlay when not paid', async function () {
-    // Ensure we are on the Backup tab and use the Developer toggle to set isPaidUser to false
-    await browser.execute(() => {
-      // Click Backup tab first
-      const buttons = document.querySelectorAll('button');
-      for (const btn of buttons) {
-        if (btn.textContent.trim() === 'Backup' && btn.offsetHeight > 0) {
-          btn.click();
-          break;
-        }
-      }
-    });
-    await browser.pause(300);
-
-    // Find and ensure isPaidUser is false via the Developer toggle
-    await browser.execute(() => {
-      // Look for the Developer section toggle — if it shows the toggle is ON, click to turn OFF
-      const headings = document.querySelectorAll('h4');
-      for (const h of headings) {
-        if (h.textContent.includes('Developer')) {
-          const section = h.closest('.bg-mail-surface') || h.parentElement;
-          if (section) {
-            const toggle = section.querySelector('.toggle-switch');
-            if (toggle) {
-              // Check if toggle is currently active (premium enabled)
-              const isActive = toggle.classList.contains('active') ||
-                toggle.getAttribute('aria-checked') === 'true' ||
-                toggle.querySelector('.translate-x-5, .translate-x-4') !== null;
-              if (isActive) {
-                toggle.click(); // Turn OFF to show premium overlay
-              }
-            }
-          }
-        }
-      }
-    });
-    await browser.pause(400);
-
-    const hasOverlay = await browser.execute(() => {
-      return document.body.innerText.includes('Coming Soon');
-    });
-    expect(hasOverlay).toBe(true);
-  });
-
-  it('should show backup settings when premium enabled', async function () {
-    // Enable premium via the Developer toggle
-    await browser.execute(() => {
-      const headings = document.querySelectorAll('h4');
-      for (const h of headings) {
-        if (h.textContent.includes('Developer')) {
-          const section = h.closest('.bg-mail-surface') || h.parentElement;
-          if (section) {
-            const toggle = section.querySelector('.toggle-switch');
-            if (toggle) {
-              const isActive = toggle.classList.contains('active') ||
-                toggle.getAttribute('aria-checked') === 'true' ||
-                toggle.querySelector('.translate-x-5, .translate-x-4') !== null;
-              if (!isActive) {
-                toggle.click(); // Turn ON to show backup controls
-              }
-            }
-          }
-        }
-      }
-    });
-    await browser.pause(400);
+  it('should show backup schedule controls on the Schedule sub-tab', async function () {
+    expect(await clickBackupSubTab('Backup Schedule')).toBe(true);
 
     const hasScheduleControls = await browser.execute(() => {
       const text = document.body.innerText;
-      return text.includes('Daily') || text.includes('Weekly') ||
-        text.includes('Backup Schedule') || text.includes('Schedule');
+      return text.includes('Automatic Backup') || text.includes('Backup frequency');
     });
     expect(hasScheduleControls).toBe(true);
   });
 
+  it('should navigate all backup sub-tabs without errors', async function () {
+    for (const sub of ['Backup & Restore', 'Backup Settings', 'Backup Schedule']) {
+      expect(await clickBackupSubTab(sub)).toBe(true);
+
+      const hasError = await browser.execute(() => {
+        const text = document.body.innerText.toLowerCase();
+        return text.includes('something went wrong') ||
+          text.includes('error boundary') ||
+          text.includes('unexpected error');
+      });
+      expect(hasError).toBe(false);
+    }
+  });
+
   it('should navigate to all settings tabs without errors', async function () {
-    const tabs = ['Accounts', 'Storage', 'Backup', 'Migration', 'Security', 'Appearance'];
+    // Appearance is no longer top level — it is a sub-tab of General.
+    const tabs = ['Accounts', 'Storage', BACKUP_TAB, 'Migration', 'Security', 'General', 'Appearance'];
 
     for (const tabName of tabs) {
-      const clicked = await browser.execute((name) => {
-        const buttons = document.querySelectorAll('button');
-        for (const btn of buttons) {
-          if (btn.textContent.trim() === name && btn.offsetHeight > 0) {
-            btn.click();
-            return true;
-          }
-        }
-        return false;
-      }, tabName);
+      expect(await clickSettingsNav(tabName)).toBe(true);
 
-      expect(clicked).toBe(true);
-      await browser.pause(300);
-
-      // Verify no error overlay appeared
       const hasError = await browser.execute(() => {
         const text = document.body.innerText.toLowerCase();
         return text.includes('something went wrong') ||

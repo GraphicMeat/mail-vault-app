@@ -16,37 +16,34 @@ describe('Email List Selection & Action Bar', function () {
     await waitForEmails();
   });
 
-  it('should select an email by clicking its checkbox', async function () {
-    const selected = await browser.execute(() => {
-      const row = document.querySelector('[data-testid="email-row"]');
-      if (!row) return false;
-      // Find checkbox inside the row
-      const checkbox = row.querySelector('input[type="checkbox"], .custom-checkbox');
-      if (checkbox) {
+/**
+ * Select the first row that is still unarchived. SelectionActionBar renders
+ * Archive only when the selection holds an unarchived message, and background
+ * sync archives rows as a run warms up — picking "the first row" made the
+ * Archive assertion a race. A row's own hover Archive button is the marker:
+ * EmailRow renders it only while `!email.isArchived`.
+ */
+  async function selectUnarchivedRow() {
+    return browser.execute(() => {
+      for (const row of document.querySelectorAll('[data-testid="email-row"]')) {
+        if (!row.querySelector('button[title="Archive"]')) continue;
+        const checkbox = row.querySelector('input[type="checkbox"], .custom-checkbox');
+        if (!checkbox) continue;
         checkbox.click();
         return true;
       }
       return false;
     });
+  }
 
-    expect(selected).toBe(true);
+  it('should select an unarchived email by clicking its checkbox', async function () {
+    expect(await selectUnarchivedRow()).toBe(true);
     await browser.pause(300);
 
-    // Verify the checkbox is now checked
-    const isChecked = await browser.execute(() => {
-      const row = document.querySelector('[data-testid="email-row"]');
-      if (!row) return false;
-      const checkbox = row.querySelector('input[type="checkbox"]');
-      if (checkbox) return checkbox.checked;
-      // For custom checkbox, check for a checked/active class
-      const custom = row.querySelector('.custom-checkbox');
-      if (custom) {
-        return custom.classList.contains('checked') ||
-               custom.classList.contains('active') ||
-               custom.querySelector('svg') !== null;
-      }
-      return false;
-    });
+    // Verify a checkbox is now checked
+    const isChecked = await browser.execute(() =>
+      [...document.querySelectorAll('[data-testid="email-row"] input[type="checkbox"]')]
+        .some(cb => cb.checked));
 
     expect(isChecked).toBe(true);
   });
@@ -70,11 +67,19 @@ describe('Email List Selection & Action Bar', function () {
   });
 
   it('should have archive button in action bar', async function () {
-    const hasButton = await browser.execute(() => {
-      return document.querySelector('button[title="Archive selected"]') !== null;
+    // Background sync can archive the selected message mid-run, which drops the
+    // Archive button. Re-select another unarchived row instead of failing.
+    await browser.waitUntil(async () => {
+      const present = await browser.execute(() =>
+        document.querySelector('button[title="Archive selected"]') !== null);
+      if (present) return true;
+      await selectUnarchivedRow();
+      return false;
+    }, {
+      timeout: 15_000,
+      interval: 500,
+      timeoutMsg: 'Archive button never appeared for a selection holding an unarchived email',
     });
-
-    expect(hasButton).toBe(true);
   });
 
   it('should have delete button in action bar', async function () {

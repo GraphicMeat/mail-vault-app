@@ -96,9 +96,14 @@ describe('Message List Header Count', function () {
       await browser.pause(100);
     }
 
-    expect(samples.length).toBeGreaterThan(5);
+    // The sample count is only a positive control for the *failure* case: a spec
+    // that never read the header must not pass vacuously. Finding the partial on
+    // sample 2 is a pass, not a shortfall.
     // expect() takes exactly one argument — the sample trail goes in the log.
-    if (!partial) console.log('[list-header] samples:', samples.slice(-10).join(' | '));
+    if (!partial) {
+      console.log('[list-header] samples:', samples.slice(-10).join(' | '));
+      expect(samples.length).toBeGreaterThan(5);
+    }
     expect(partial).not.toBe(null);
     expect(num(partial[1])).toBeLessThan(bigInbox);
     expect(num(partial[2])).toBe(bigInbox);

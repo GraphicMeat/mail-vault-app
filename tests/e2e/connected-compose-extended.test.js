@@ -10,8 +10,9 @@ import {
 } from './helpers.js';
 
 /**
- * Close compose modal cleanly: press Escape, dismiss discard confirmation
- * if shown, and close any minimized bar.
+ * Close compose cleanly. Escape on a modal with content minimizes it to a
+ * top-right bubble (the modal itself unmounts), so a close has to sweep the
+ * bubbles too — each carries its own close button.
  */
 async function closeCompose() {
   await pressKey('Escape');
@@ -28,40 +29,43 @@ async function closeCompose() {
   });
   await browser.pause(300);
 
-  // Close any minimized compose bar at bottom of screen
-  const hasMinimized = await browser.execute(() => {
-    const modal = document.querySelector('[data-testid="compose-modal"]');
-    if (modal && modal.offsetHeight > 0) return false;
-    // Look for a small fixed bar at bottom that may contain compose subject
-    const allEls = document.querySelectorAll('div[style*="fixed"], div[class*="minim"]');
-    for (const el of allEls) {
-      if (el.offsetHeight > 0 && el.offsetHeight < 80) {
-        // Try to find close button inside
-        const closeBtn = el.querySelector('button');
-        if (closeBtn) {
-          closeBtn.click();
-          return true;
-        }
-      }
-    }
-    return false;
-  });
+  await closeAllBubbles();
+}
 
-  if (hasMinimized) {
-    await browser.pause(300);
-    // Now the full modal may have opened — press Escape again
-    await pressKey('Escape');
-    await browser.pause(500);
-    await browser.execute(() => {
-      const buttons = document.querySelectorAll('button');
-      for (const btn of buttons) {
-        if ((btn.textContent || '').trim() === 'Discard' && btn.offsetHeight > 0) {
-          btn.click();
-        }
-      }
-    });
-    await browser.pause(300);
-  }
+/** Dismiss every minimized compose bubble. */
+async function closeAllBubbles() {
+  await browser.execute(() => {
+    for (const bubble of document.querySelectorAll('[data-testid="compose-bubble"]')) {
+      const closeBtn = bubble.querySelector('button');
+      if (closeBtn) closeBtn.click();
+    }
+  });
+  await browser.pause(300);
+}
+
+/** Open compose, set a subject, and minimize it to a bubble. */
+async function minimizeWithSubject(subject) {
+  await openCompose();
+  await browser.pause(300);
+
+  await browser.execute((value) => {
+    const input = document.querySelector('[data-testid="compose-subject"]');
+    if (!input) return;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, subject);
+  await browser.pause(300);
+
+  const clicked = await browser.execute(() => {
+    const btn = document.querySelector('[data-testid="compose-modal"] button[title="Minimize"]');
+    if (!btn || btn.offsetHeight === 0) return false;
+    btn.click();
+    return true;
+  });
+  await browser.pause(500);
+  return clicked;
 }
 
 describe('Connected Compose Extended', function () {
@@ -183,93 +187,37 @@ describe('Connected Compose Extended', function () {
   // Minimize and Maximize
   // ---------------------------------------------------------------------------
   describe('Minimize and Maximize', function () {
-    it('should minimize compose modal', async function () {
-      await openCompose();
-      await browser.pause(300);
+    it('should minimize compose modal to a bubble', async function () {
+      expect(await minimizeWithSubject('E2E Minimize Test')).toBe(true);
 
-      // Fill in subject so we can verify it in the minimized bar
-      await browser.execute(() => {
-        const input = document.querySelector('[data-testid="compose-subject"]');
-        if (input) {
-          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-          setter.call(input, 'E2E Minimize Test');
-          input.dispatchEvent(new Event('input', { bubbles: true }));
-          input.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-      });
-      await browser.pause(300);
-
-      // Click the minimize button (has title="Minimize")
-      const clickedMinimize = await browser.execute(() => {
-        const btn = document.querySelector('[data-testid="compose-modal"] button[title="Minimize"]');
-        if (btn && btn.offsetHeight > 0) {
-          btn.click();
-          return true;
-        }
-        return false;
-      });
-
-      expect(clickedMinimize).toBe(true);
-      await browser.pause(500);
-
-      // Verify: full modal should be gone but subject text visible in minimized bar
+      // The modal unmounts on minimize; the bubble carries the subject.
       const minimized = await browser.execute(() => {
         const modal = document.querySelector('[data-testid="compose-modal"]');
-        const modalVisible = modal && modal.offsetHeight > 200;
-        // Subject text should still be visible somewhere on screen
-        const bodyText = document.body.innerText;
-        const hasSubject = bodyText.includes('E2E Minimize Test');
-        return { modalVisible, hasSubject };
+        const bubbles = [...document.querySelectorAll('[data-testid="compose-bubble"]')];
+        return {
+          modalVisible: !!modal && modal.offsetHeight > 200,
+          hasSubject: bubbles.some(b => (b.textContent || '').includes('E2E Minimize Test')),
+        };
       });
 
       expect(minimized.modalVisible).toBe(false);
       expect(minimized.hasSubject).toBe(true);
     });
 
-    it('should maximize compose modal from minimized state', async function () {
-      // The previous test left the modal minimized with "E2E Minimize Test" subject.
-      // Open compose and minimize it first to ensure consistent state.
-      await openCompose();
-      await browser.pause(300);
+    it('should maximize compose modal from a bubble', async function () {
+      expect(await minimizeWithSubject('E2E Minimize Test')).toBe(true);
 
-      await browser.execute(() => {
-        const input = document.querySelector('[data-testid="compose-subject"]');
-        if (input) {
-          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-          setter.call(input, 'E2E Minimize Test');
-          input.dispatchEvent(new Event('input', { bubbles: true }));
-          input.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-      });
-      await browser.pause(300);
-
-      // Minimize
-      await browser.execute(() => {
-        const btn = document.querySelector('[data-testid="compose-modal"] button[title="Minimize"]');
-        if (btn) btn.click();
-      });
-      await browser.pause(500);
-
-      // Now click the minimized bar to maximize
-      const clickedBar = await browser.execute(() => {
-        // Find the minimized bar containing the subject text
-        const allEls = document.querySelectorAll('div');
-        for (const el of allEls) {
-          if (el.offsetHeight > 0 && el.offsetHeight < 80 &&
-              (el.textContent || '').includes('E2E Minimize Test')) {
-            // Check if this is a small bar-like element (fixed position or at bottom)
-            const rect = el.getBoundingClientRect();
-            const viewportHeight = window.innerHeight;
-            if (rect.bottom > viewportHeight - 100) {
-              el.click();
-              return true;
-            }
+      const clickedBubble = await browser.execute(() => {
+        for (const bubble of document.querySelectorAll('[data-testid="compose-bubble"]')) {
+          if ((bubble.textContent || '').includes('E2E Minimize Test')) {
+            bubble.click();
+            return true;
           }
         }
         return false;
       });
 
-      expect(clickedBar).toBe(true);
+      expect(clickedBubble).toBe(true);
       await browser.pause(500);
 
       // Verify full compose modal reappears with height > 200

@@ -699,6 +699,7 @@ function App() {
             return (
               <motion.div
                 key={w.id}
+                data-testid="compose-bubble"
                 initial={{ x: 100, opacity: 0 }}
                 animate={{ x: 0, opacity: 1 }}
                 exit={{ x: 100, opacity: 0 }}
