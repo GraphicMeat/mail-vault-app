@@ -7,6 +7,7 @@
 use crate::contacts_index::ContactsState;
 use crate::imap::{self, ImapConfig, EmailHeader as ImapEmailHeader};
 use crate::imap::pool::{ImapPool, PooledSessionGuard};
+use mailvault_core::transfer_stats;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -58,6 +59,9 @@ pub enum SyncStatus {
 pub struct SyncEngine {
     pool: Arc<ImapPool>,
     data_dir: PathBuf,
+    /// App data dir (settings + transfer stats). Distinct from `data_dir`,
+    /// which follows the — possibly relocated — mail vault.
+    app_dir: PathBuf,
     states: Mutex<HashMap<String, SyncState>>,
     /// Watch channels per account — notified when sync completes.
     /// `sync.wait` RPC handler subscribes to these for efficient blocking.
@@ -71,19 +75,59 @@ pub struct SyncEngine {
     /// process so an unfetchable mailbox can't retry in a loop — but NOT
     /// reported as `backfilling`, or the app would wait on it forever.
     backfill_gave_up: Mutex<HashSet<String>>,
+    /// `account_id` → UTC day whose cap we already logged, so a capped account
+    /// costs one log line a day instead of one per sync tick.
+    cap_logged: Mutex<HashMap<String, String>>,
 }
 
 impl SyncEngine {
-    pub fn new(pool: Arc<ImapPool>, data_dir: PathBuf, contacts: Arc<ContactsState>) -> Self {
+    pub fn new(
+        pool: Arc<ImapPool>,
+        data_dir: PathBuf,
+        app_dir: PathBuf,
+        contacts: Arc<ContactsState>,
+    ) -> Self {
         Self {
             pool,
             data_dir,
+            app_dir,
             states: Mutex::new(HashMap::new()),
             watchers: Mutex::new(HashMap::new()),
             contacts,
             backfilling: Mutex::new(HashSet::new()),
             backfill_gave_up: Mutex::new(HashSet::new()),
+            cap_logged: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// `Some(reason)` when this account has spent its daily transfer allowance
+    /// and must not sync again until the next UTC day. `None` = go ahead.
+    async fn transfer_cap_reached(&self, account: &SyncAccount) -> Option<String> {
+        let limits = read_transfer_limits(&self.app_dir, &account.id)?;
+        if !limits.cap_enabled {
+            return None;
+        }
+        let (default_down, default_up) = default_limits(&account.imap_config.host);
+        let down_limit = limits.daily_down_limit_bytes.or(default_down);
+        let up_limit = limits.daily_up_limit_bytes.or(default_up);
+
+        let used = transfer_stats::usage_today(&self.app_dir, &account.id);
+        let over_down = down_limit.is_some_and(|l| used.down >= l);
+        let over_up = up_limit.is_some_and(|l| used.up >= l);
+        if !over_down && !over_up {
+            return None;
+        }
+
+        let reason = format!(
+            "Daily transfer cap reached ({} MB down / {} MB up today) — sync paused until the next UTC day",
+            used.down / MB,
+            used.up / MB,
+        );
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        if self.cap_logged.lock().await.insert(account.id.clone(), today.clone()) != Some(today) {
+            warn!("[sync] {} for {}", reason, account.email);
+        }
+        Some(reason)
     }
 
     /// Get or create a watch channel for an account.
@@ -163,6 +207,17 @@ impl SyncEngine {
         mailbox: &str,
     ) -> SyncResult {
         let account_id = &account.id;
+
+        // Soft daily cap: skip the account entirely rather than spend the
+        // remaining allowance. Resets on its own at the next UTC day.
+        if let Some(reason) = self.transfer_cap_reached(account).await {
+            return SyncResult {
+                account_id: account_id.clone(),
+                mailbox: mailbox.to_string(),
+                new_emails: 0, updated_flags: 0, total_emails: 0,
+                success: false, error: Some(reason),
+            };
+        }
 
         // Update state to syncing
         {
@@ -561,6 +616,49 @@ impl SyncEngine {
     }
 }
 
+// ── Soft daily transfer cap ─────────────────────────────────────────────────
+
+const MB: u64 = 1024 * 1024;
+
+/// Per-account transfer settings, read straight out of the app's persisted
+/// settings blob (`<app_data_dir>/frontend-settings.json`) at
+/// `["mailvault-settings"].state.transferLimits[accountId]`. The app already
+/// writes that file on every settings change — no new sync mechanism needed.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TransferLimits {
+    #[serde(default)]
+    cap_enabled: bool,
+    #[serde(default)]
+    daily_down_limit_bytes: Option<u64>,
+    #[serde(default)]
+    daily_up_limit_bytes: Option<u64>,
+}
+
+/// Gmail suspends accounts that pass 2500 MB down / 500 MB up in a day. No
+/// other provider publishes a number, so everyone else defaults to unlimited.
+fn default_limits(host: &str) -> (Option<u64>, Option<u64>) {
+    let host = host.to_ascii_lowercase();
+    if host.contains("gmail") || host.contains("googlemail") {
+        (Some(2500 * MB), Some(500 * MB))
+    } else {
+        (None, None)
+    }
+}
+
+/// `None` when the settings file, the map, or this account's entry is missing —
+/// i.e. the cap is off, which is the default.
+fn read_transfer_limits(app_dir: &Path, account_id: &str) -> Option<TransferLimits> {
+    let raw = fs::read_to_string(app_dir.join("frontend-settings.json")).ok()?;
+    let settings: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    let entry = settings
+        .get("mailvault-settings")?
+        .get("state")?
+        .get("transferLimits")?
+        .get(account_id)?;
+    serde_json::from_value(entry.clone()).ok()
+}
+
 // ── Tauri-compatible cache format ────────────────────────────────────────────
 // Matches the sidecar format used by save_email_cache / load_email_cache_partial
 // in src-tauri/src/main.rs so the app reads daemon-written cache natively.
@@ -822,6 +920,7 @@ mod tests {
         let engine = SyncEngine::new(
             Arc::new(imap::ImapPool::new()),
             dir.clone(),
+            dir.clone(),
             ContactsState::new(dir.clone()),
         );
         let key = format!("acc1\u{1}INBOX");
@@ -835,6 +934,71 @@ mod tests {
         assert!(engine.is_backfilling("acc1").await, "in-flight key must read as in-flight");
 
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The cap must read both the settings blob the app writes and the stat
+    /// files, and must stay out of the way until it is switched on and spent.
+    #[tokio::test]
+    async fn transfer_cap_skips_the_account_only_once_the_limit_is_spent() {
+        let dir = scratch_dir("transfer_cap");
+        let engine = engine_for(&dir);
+        let account: SyncAccount = serde_json::from_value(serde_json::json!({
+            "id": "acc1",
+            "email": "user@example.com",
+            "imapConfig": { "email": "user@example.com", "imapHost": "imap.example.com" }
+        }))
+        .unwrap();
+
+        // No settings file at all → cap off.
+        assert!(engine.transfer_cap_reached(&account).await.is_none());
+
+        // 200 MB down already spent today, per the daemon's own stat file.
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        fs::create_dir_all(dir.join("transfer_stats")).unwrap();
+        fs::write(
+            dir.join("transfer_stats").join("acc1.daemon.json"),
+            format!(r#"{{"days":{{"{}":{{"down":209715200,"up":0}}}}}}"#, today),
+        )
+        .unwrap();
+
+        let settings = |cap_enabled: bool, limit_mb: u64| {
+            serde_json::json!({
+                "mailvault-settings": { "state": { "transferLimits": { "acc1": {
+                    "capEnabled": cap_enabled,
+                    "dailyDownLimitBytes": limit_mb * MB,
+                }}}}
+            })
+            .to_string()
+        };
+
+        fs::write(dir.join("frontend-settings.json"), settings(false, 100)).unwrap();
+        assert!(
+            engine.transfer_cap_reached(&account).await.is_none(),
+            "usage over the limit must not matter while the cap is disabled"
+        );
+
+        fs::write(dir.join("frontend-settings.json"), settings(true, 500)).unwrap();
+        assert!(
+            engine.transfer_cap_reached(&account).await.is_none(),
+            "200 MB used is under a 500 MB cap"
+        );
+
+        fs::write(dir.join("frontend-settings.json"), settings(true, 100)).unwrap();
+        assert!(engine.transfer_cap_reached(&account).await.is_some());
+
+        // The gate must actually stop the sync — no IMAP server is running here,
+        // so the error proves it returned before connecting.
+        let result = engine.sync_account(&account, "INBOX").await;
+        assert!(!result.success);
+        assert!(result.error.unwrap().contains("Daily transfer cap reached"));
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn gmail_gets_a_default_daily_limit_and_nobody_else_does() {
+        assert_eq!(default_limits("imap.gmail.com"), (Some(2500 * MB), Some(500 * MB)));
+        assert_eq!(default_limits("imap.hostinger.com"), (None, None));
     }
 
     #[test]
@@ -864,6 +1028,7 @@ mod tests {
     fn engine_for(dir: &Path) -> SyncEngine {
         SyncEngine::new(
             Arc::new(imap::ImapPool::new()),
+            dir.to_path_buf(),
             dir.to_path_buf(),
             ContactsState::new(dir.to_path_buf()),
         )

@@ -4518,6 +4518,7 @@ fn main() {
             commands::get_folder_mappings,
             commands::start_restore,
             commands::cancel_restore,
+            commands::get_transfer_stats,
             commands::count_local_folder,
             github::github_device_start,
             github::github_device_poll,
@@ -4546,6 +4547,19 @@ fn main() {
 
             // Store log directory for later use
             app.manage(LogDir(log_dir));
+
+            // Per-account transfer counters → `<app_data_dir>/transfer_stats/*.app.json`.
+            // The daemon writes its own file; neither process locks the other's.
+            if let Ok(stats_dir) = app.path().app_data_dir() {
+                tauri::async_runtime::spawn(async move {
+                    let mut ticker = tokio::time::interval(std::time::Duration::from_secs(30));
+                    ticker.tick().await;
+                    loop {
+                        ticker.tick().await;
+                        mailvault_core::transfer_stats::global().flush(&stats_dir, "app");
+                    }
+                });
+            }
 
             // Install the StoreKit transaction observer (no-op on non-MAS builds)
             iap::install_observer(&app.state::<iap::IapState>());
@@ -4788,6 +4802,9 @@ fn main() {
                     // budget tight: an unreachable server must cost the user a
                     // beachball, not a hang. Worst case here plus
                     // DAEMON_STOP_GRACE below.
+                    if let Ok(dir) = app_handle.path().app_data_dir() {
+                        mailvault_core::transfer_stats::global().flush(&dir, "app");
+                    }
                     let pool = app_handle.state::<imap::ImapPool>().inner().clone();
                     tauri::async_runtime::block_on(async move {
                         let _ = tokio::time::timeout(

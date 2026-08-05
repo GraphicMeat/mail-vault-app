@@ -17,11 +17,13 @@ import {
   Server,
   Settings,
   ChevronLeft,
+  Gauge,
 } from 'lucide-react';
 import { GeneralSettings } from './settings/GeneralSettings';
 import { AccountSettings } from './settings/AccountSettings';
 import { TemplateSettings } from './settings/TemplateSettings';
 import { StorageSettings } from './settings/StorageSettings';
+import DataUsageSettings from './settings/DataUsageSettings';
 import { SecuritySettings } from './settings/SecuritySettings';
 import { LogsSettings } from './settings/LogsSettings';
 import { HelpSettings } from './settings/HelpSettings';
@@ -46,6 +48,7 @@ const settingsTabs = [
   { id: 'accounts', label: 'Accounts', icon: User },
   { id: 'templates', label: 'Templates', icon: FileText },
   { id: 'storage', label: 'Storage', icon: HardDrive },
+  { id: 'data-usage', label: 'Data Usage', icon: Gauge },
   { id: 'security', label: 'Security', icon: Shield },
   { id: 'billing', label: 'Billing', icon: CreditCard },
 ];
@@ -234,6 +237,10 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
 
             {activeTab === 'storage' && (
               <StorageSettings accounts={accounts} onUpgrade={() => handleTabChange('billing')} />
+            )}
+
+            {activeTab === 'data-usage' && (
+              <DataUsageSettings initialAccountId={initialAccountId} />
             )}
 
             {activeTab === 'backup' && (

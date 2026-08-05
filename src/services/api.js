@@ -465,6 +465,13 @@ export async function vaultReset() {
   return tauriInvoke('vault_reset', {});
 }
 
+// ── Data transfer stats ─────────────────────────────────────────────────────
+
+/// Per-account (or all-accounts, when accountId is omitted) up/down byte totals.
+export async function getTransferStats(accountId = null) {
+  return tauriInvoke('get_transfer_stats', accountId ? { accountId } : {});
+}
+
 // ── Backup ────────────────────────────────────────────────────────────────────
 
 export async function backupRunAccount(accountId, accountJson, backupPath = null, skipFolders = 0) {

@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect, memo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef, memo } from 'react';
+import { createPortal } from 'react-dom';
 import { version } from '../../package.json';
 import { useMailStore } from '../stores/mailStore';
 import { useAccountStore } from '../stores/accountStore';
@@ -9,6 +10,8 @@ import { useThemeStore } from '../stores/themeStore';
 import { useSettingsStore, getAccountInitial, getAccountColor, hasPremiumAccess } from '../stores/settingsStore';
 import { useBackupStore } from '../stores/backupStore';
 import { motion, AnimatePresence } from 'framer-motion';
+import * as api from '../services/api';
+import { formatBytes } from '../utils/formatBytes';
 import {
   Inbox,
   Send,
@@ -23,6 +26,7 @@ import {
   ChevronDown,
   ChevronRight,
   Settings,
+  Bug,
   HardDrive,
   Cloud,
   Layers,
@@ -455,7 +459,45 @@ const TagCloudAccountBubble = memo(function TagCloudAccountBubble({
   );
 });
 
-export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup, onOpenAccounts }) {
+// Module-level so the 30s cache survives re-renders (but not app reloads — that's fine).
+const transferStatsHoverCache = new Map(); // accountId -> { data, ts }
+const HOVER_DELAY_MS = 400;
+const HOVER_CACHE_MS = 30_000;
+
+/** Portaled hover bubble: today + this month up/down for one account, click opens Settings > Data Usage. */
+function TransferStatsHoverBubble({ pos, stats, onClick, onMouseEnter, onMouseLeave }) {
+  return createPortal(
+    <div
+      className="fixed z-[80] w-56 bg-mail-surface border border-mail-border rounded-lg shadow-lg p-3 text-xs cursor-pointer"
+      style={{ top: pos.top, left: pos.left }}
+      onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      {stats ? (
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-mail-text-muted">Today</span>
+            <span className="text-mail-text font-medium">
+              {formatBytes(stats.today?.down)} down / {formatBytes(stats.today?.up)} up
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-mail-text-muted">This month</span>
+            <span className="text-mail-text font-medium">
+              {formatBytes(stats.month?.down)} down / {formatBytes(stats.month?.up)} up
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div className="text-mail-text-muted">Loading...</div>
+      )}
+    </div>,
+    document.body
+  );
+}
+
+export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup, onOpenAccounts, onOpenDataUsage, onReportBug }) {
   const accounts = useAccountStore(s => s.accounts);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   const mailboxes = useAccountStore(s => s.mailboxes);
@@ -499,6 +541,56 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const [expandedFolders, setExpandedFolders] = useState(new Set(['INBOX']));
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [showError, setShowError] = useState(false);
+
+  // Account hover bubble: today/month transfer stats, shown after a short delay
+  const [hoverAccountId, setHoverAccountId] = useState(null);
+  const [hoverStats, setHoverStats] = useState(null);
+  const [hoverPos, setHoverPos] = useState(null);
+  const hoverTimerRef = useRef(null);
+  const hoverRowRefs = useRef({});
+
+  const clearHoverTimer = useCallback(() => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = null;
+  }, []);
+
+  const handleAccountHoverEnd = useCallback(() => {
+    clearHoverTimer();
+    setHoverAccountId(null);
+    setHoverStats(null);
+    setHoverPos(null);
+  }, [clearHoverTimer]);
+
+  const handleAccountHoverStart = useCallback((accountId) => {
+    clearHoverTimer();
+    hoverTimerRef.current = setTimeout(async () => {
+      const el = hoverRowRefs.current[accountId];
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      setHoverPos({ top: rect.top, left: rect.right + 8 });
+      setHoverAccountId(accountId);
+
+      const cached = transferStatsHoverCache.get(accountId);
+      if (cached && Date.now() - cached.ts < HOVER_CACHE_MS) {
+        setHoverStats(cached.data);
+        return;
+      }
+      setHoverStats(null); // show "Loading..." while the fetch is in flight
+      try {
+        const res = await api.getTransferStats(accountId);
+        const data = res?.accounts?.[accountId] || null;
+        transferStatsHoverCache.set(accountId, { data, ts: Date.now() });
+        setHoverStats(data);
+      } catch (e) {
+        console.warn('[Sidebar] transfer stats fetch failed:', e);
+      }
+    }, HOVER_DELAY_MS);
+  }, [clearHoverTimer]);
+
+  const openHoveredAccountUsage = useCallback(() => {
+    if (hoverAccountId) onOpenDataUsage?.(hoverAccountId);
+    handleAccountHoverEnd();
+  }, [hoverAccountId, onOpenDataUsage, handleAccountHoverEnd]);
 
   // Delay showing connection errors by 3 seconds — transient errors on launch resolve quickly
   useEffect(() => {
@@ -545,6 +637,17 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
       return next;
     });
   };
+
+  // Shared hover bubble (rendered in both collapsed and expanded views)
+  const hoverBubble = hoverAccountId && hoverPos && (
+    <TransferStatsHoverBubble
+      pos={hoverPos}
+      stats={hoverStats}
+      onClick={openHoveredAccountUsage}
+      onMouseEnter={clearHoverTimer}
+      onMouseLeave={handleAccountHoverEnd}
+    />
+  );
 
   // Shared error modal (rendered in both collapsed and expanded views)
   const errorModal = (
@@ -646,22 +749,28 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         {/* Account icons */}
         <div className="w-full py-2 border-b border-mail-border flex flex-col items-center gap-1">
           {orderedAccounts.map(account => (
-            <CollapsedAccountButton
+            <div
               key={account.id}
-              account={account}
-              isActive={account.id === activeAccountId}
-              color={getAccountColor(accountColors, account)}
-              initial={getAccountInitial(account, getDisplayName(account.id))}
-              unifiedInbox={unifiedInbox}
-              connectionStatus={connectionStatus}
-              connectionError={connectionError}
-              unreadCount={unreadPerAccount[account.id] || 0}
-              onActivate={() => {
-                const lastMailbox = useSettingsStore.getState().getLastMailbox(account.id);
-                activateAccount(account.id, lastMailbox || 'INBOX');
-              }}
-              onOpenBackup={onOpenBackup}
-            />
+              ref={el => { hoverRowRefs.current[account.id] = el; }}
+              onMouseEnter={() => handleAccountHoverStart(account.id)}
+              onMouseLeave={handleAccountHoverEnd}
+            >
+              <CollapsedAccountButton
+                account={account}
+                isActive={account.id === activeAccountId}
+                color={getAccountColor(accountColors, account)}
+                initial={getAccountInitial(account, getDisplayName(account.id))}
+                unifiedInbox={unifiedInbox}
+                connectionStatus={connectionStatus}
+                connectionError={connectionError}
+                unreadCount={unreadPerAccount[account.id] || 0}
+                onActivate={() => {
+                  const lastMailbox = useSettingsStore.getState().getLastMailbox(account.id);
+                  activateAccount(account.id, lastMailbox || 'INBOX');
+                }}
+                onOpenBackup={onOpenBackup}
+              />
+            </div>
           ))}
           {orderedAccounts.length === 0 && (
             <button
@@ -753,6 +862,13 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           >
             <Settings size={16} className="text-mail-text-muted" />
           </button>
+          <button
+            onClick={onReportBug}
+            className="p-2 hover:bg-mail-surface-hover rounded-lg transition-colors"
+            title="Report a bug"
+          >
+            <Bug size={16} className="text-mail-text-muted" />
+          </button>
           {totalEmails > 0 && (
             <div
               className="p-2"
@@ -770,6 +886,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         </div>
 
         {errorModal}
+        {hoverBubble}
       </div>
     );
   }
@@ -846,21 +963,27 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                   </button>
                 )}
                 {orderedAccounts.map(account => (
-                  <TagCloudAccountBubble
+                  <div
                     key={account.id}
-                    account={account}
-                    isActive={account.id === activeAccountId}
-                    color={getAccountColor(accountColors, account)}
-                    initial={getAccountInitial(account, getDisplayName(account.id))}
-                    label={getDisplayName(account.id) || account.name || account.email}
-                    unifiedInbox={unifiedInbox}
-                    connectionStatus={connectionStatus}
-                    unreadCount={unreadPerAccount[account.id] || 0}
-                    onActivate={() => {
-                      const lastMailbox = useSettingsStore.getState().getLastMailbox(account.id);
-                      activateAccount(account.id, lastMailbox || 'INBOX');
-                    }}
-                  />
+                    ref={el => { hoverRowRefs.current[account.id] = el; }}
+                    onMouseEnter={() => handleAccountHoverStart(account.id)}
+                    onMouseLeave={handleAccountHoverEnd}
+                  >
+                    <TagCloudAccountBubble
+                      account={account}
+                      isActive={account.id === activeAccountId}
+                      color={getAccountColor(accountColors, account)}
+                      initial={getAccountInitial(account, getDisplayName(account.id))}
+                      label={getDisplayName(account.id) || account.name || account.email}
+                      unifiedInbox={unifiedInbox}
+                      connectionStatus={connectionStatus}
+                      unreadCount={unreadPerAccount[account.id] || 0}
+                      onActivate={() => {
+                        const lastMailbox = useSettingsStore.getState().getLastMailbox(account.id);
+                        activateAccount(account.id, lastMailbox || 'INBOX');
+                      }}
+                    />
+                  </div>
                 ))}
               </div>
 
@@ -922,21 +1045,27 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             const initial = getAccountInitial(account, getDisplayName(account.id));
             return (
             <React.Fragment key={account.id}>
-              <ExpandedAccountRow
-                account={account}
-                isActive={account.id === activeAccountId}
-                color={color}
-                initial={initial}
-                unifiedInbox={unifiedInbox}
-                connectionStatus={connectionStatus}
-                connectionError={connectionError}
-                unreadCount={unreadPerAccount[account.id] || 0}
-                onActivate={() => {
-                  const lastMailbox = useSettingsStore.getState().getLastMailbox(account.id);
-                  activateAccount(account.id, lastMailbox || 'INBOX');
-                }}
-                onOpenBackup={onOpenBackup}
-              />
+              <div
+                ref={el => { hoverRowRefs.current[account.id] = el; }}
+                onMouseEnter={() => handleAccountHoverStart(account.id)}
+                onMouseLeave={handleAccountHoverEnd}
+              >
+                <ExpandedAccountRow
+                  account={account}
+                  isActive={account.id === activeAccountId}
+                  color={color}
+                  initial={initial}
+                  unifiedInbox={unifiedInbox}
+                  connectionStatus={connectionStatus}
+                  connectionError={connectionError}
+                  unreadCount={unreadPerAccount[account.id] || 0}
+                  onActivate={() => {
+                    const lastMailbox = useSettingsStore.getState().getLastMailbox(account.id);
+                    activateAccount(account.id, lastMailbox || 'INBOX');
+                  }}
+                  onOpenBackup={onOpenBackup}
+                />
+              </div>
 
               {/* Suspect empty data warning — server returned empty but cache had data */}
               {account.id === activeAccountId && suspectEmptyServerData?.accountId === account.id && (
@@ -1191,6 +1320,15 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           <Settings size={16} />
           Settings
         </button>
+        <button
+          onClick={onReportBug}
+          className="w-full flex items-center gap-2 p-2 text-sm text-mail-text-muted
+                    hover:text-mail-text hover:bg-mail-surface-hover rounded-lg transition-all"
+          title="Report a bug"
+        >
+          <Bug size={16} />
+          Report a bug
+        </button>
         {totalEmails > 0 && (
           <div className="flex items-center gap-1.5 px-2 mt-1 text-xs text-mail-text-muted">
             <HardDrive size={12} />
@@ -1210,6 +1348,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
       </div>
 
       {errorModal}
+      {hoverBubble}
     </div>
   );
 }

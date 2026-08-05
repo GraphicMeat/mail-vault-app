@@ -213,6 +213,7 @@ async fn main() {
     let sync_eng = Arc::new(sync_engine::SyncEngine::new(
         Arc::clone(&imap_pool),
         mail_dir.clone(),
+        data_dir.clone(),
         Arc::clone(&contacts),
     ));
 
@@ -243,6 +244,20 @@ async fn main() {
             loop {
                 ticker.tick().await;
                 contacts.flush_dirty();
+            }
+        });
+    }
+
+    // Per-account transfer counters → `<app_data_dir>/transfer_stats/*.daemon.json`.
+    // The app writes the `*.app.json` half; neither process locks the other's.
+    {
+        let app_dir = data_dir.clone();
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(std::time::Duration::from_secs(30));
+            ticker.tick().await;
+            loop {
+                ticker.tick().await;
+                mailvault_core::transfer_stats::global().flush(&app_dir, "daemon");
             }
         });
     }
@@ -282,6 +297,7 @@ async fn main() {
             pool_cleanup.shutdown(),
         ).await;
 
+        mailvault_core::transfer_stats::global().flush(&data_dir_cleanup, "daemon");
         cleanup_pid_file(&data_dir_cleanup);
         let _ = std::fs::remove_file(&socket_cleanup);
         info!("Cleanup complete, exiting");

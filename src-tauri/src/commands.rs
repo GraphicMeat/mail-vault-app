@@ -1414,3 +1414,26 @@ pub async fn cancel_restore(
     guard.store(true, Ordering::SeqCst);
     Ok(())
 }
+
+// ── Transfer stats ──────────────────────────────────────────────────────────
+
+/// Per-account wire bytes: the app's and the daemon's own stat files merged,
+/// plus this process's not-yet-flushed counters. Optional `accountId` narrows
+/// the result to one account.
+#[tauri::command]
+pub fn get_transfer_stats(
+    app_handle: tauri::AppHandle,
+    account_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let app_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("No app data dir: {}", e))?;
+
+    let mut accounts = mailvault_core::transfer_stats::read_all(&app_dir);
+    if let Some(id) = account_id {
+        accounts.retain(|k, _| *k == id);
+    }
+    serde_json::to_value(serde_json::json!({ "accounts": accounts }))
+        .map_err(|e| format!("Serialization error: {}", e))
+}

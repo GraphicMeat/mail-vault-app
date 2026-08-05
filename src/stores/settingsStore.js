@@ -236,6 +236,11 @@ export const useSettingsStore = create(
       // Shape: { [accountId]: { enabled: bool, interval: 'hourly'|'daily'|'weekly', hourlyInterval: 2, timeOfDay: '03:00', dayOfWeek: 1, folders: string[]|null } }
       // folders: null = all folders, string[] = specific folder paths
 
+      // Per-account daily transfer limits — read by the daemon from disk to decide
+      // whether to warn or pause sync. Missing entry = cap off, warn on.
+      transferLimits: {},
+      // Shape: { [accountId]: { capEnabled: bool, warnEnabled: bool, dailyDownLimitBytes: number|null, dailyUpLimitBytes: number|null } }
+
       // Backup runtime state (persisted for display across restarts)
       backupState: {},
       // Shape: { [accountId]: { lastBackupTime: number|null, lastStatus: 'success'|'failed'|null, lastError: string|null, emailsBackedUp: number, nextRunTime: number|null } }
@@ -334,6 +339,14 @@ export const useSettingsStore = create(
       // Per-account backup actions
       setBackupSchedule: (accountId, config) => set(state => ({
         backupSchedules: { ...state.backupSchedules, [accountId]: config }
+      })),
+
+      // Per-account transfer limit actions
+      setTransferLimit: (accountId, patch) => set(state => ({
+        transferLimits: {
+          ...state.transferLimits,
+          [accountId]: { ...(state.transferLimits[accountId] || {}), ...patch },
+        }
       })),
 
       removeBackupSchedule: (accountId) => set(state => {

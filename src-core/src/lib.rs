@@ -11,3 +11,4 @@ pub mod imap;
 pub mod graph;
 pub mod oauth2;
 pub mod dns;
+pub mod transfer_stats;
