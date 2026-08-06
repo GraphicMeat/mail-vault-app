@@ -318,11 +318,26 @@ function App() {
     const activeAccount = accounts.find(a => a.id === activeAccountId);
     const activeProvider = activeAccount?.oauth2Provider || 'password';
 
+    // The compose editor renders this as HTML, so the template has to be HTML —
+    // a \n-separated string collapses into one unreadable line.
+    const esc = (v) => String(v).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+    const section = (title, ...lines) =>
+      `<p><strong>${title}</strong></p><p>${lines.join('<br>')}</p>`;
+
     setComposeState({
       initialData: {
         to: 'hello@mailvaultapp.com',
         subject: `[Bug Report] MailVault v${version}`,
-        body: `## System Info (auto-collected)\n- App Version: ${version}\n- Platform: ${os}\n- Accounts: ${accountCount}\n- Active Provider: ${activeProvider}\n\n## Description\n[What happened?]\n\n## Steps to Reproduce\n1. \n2. \n3. \n\n## Expected Behavior\n[What should have happened?]\n\n## Actual Behavior\n[What actually happened?]\n`
+        body: [
+          section('System info (auto-collected)',
+            `App version: ${esc(version)}`,
+            `Platform: ${esc(os)}`,
+            `Accounts: ${accountCount}`,
+            `Active provider: ${esc(activeProvider)}`),
+          section('What happened?', '&nbsp;'),
+          section('Steps to reproduce', '1.', '2.', '3.'),
+          section('What you expected instead', '&nbsp;'),
+        ].join('')
       }
     });
   }, [accounts, activeAccountId]);

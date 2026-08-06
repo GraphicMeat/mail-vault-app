@@ -569,6 +569,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const setViewMode = useUiStore(s => s.setViewMode);
   const retryKeychainAccess = useAccountStore(s => s.retryKeychainAccess);
   const unreadPerAccount = useSettingsStore(s => s.unreadPerAccount);
+  const transferHoverEnabled = useSettingsStore(s => s.transferHoverEnabled);
 
   // Only the local cache lagging the mailbox is real, user-visible progress.
   // This used to read `emails.length / totalEmails` — the store window, which
@@ -633,6 +634,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const handleAccountHoverStart = useCallback((accountId) => {
     clearHoverTimer();
     cancelHoverClose();
+    if (!transferHoverEnabled) return;
     hoverTimerRef.current = setTimeout(async () => {
       const el = hoverRowRefs.current[accountId];
       if (!el) return;
@@ -656,7 +658,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         console.warn('[Sidebar] transfer stats fetch failed:', e);
       }
     }, HOVER_DELAY_MS);
-  }, [clearHoverTimer, cancelHoverClose]);
+  }, [clearHoverTimer, cancelHoverClose, transferHoverEnabled]);
 
   // Timers outlive the component otherwise — a close firing after unmount is a
   // setState on a dead tree.

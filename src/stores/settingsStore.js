@@ -241,6 +241,9 @@ export const useSettingsStore = create(
       transferLimits: {},
       // Shape: { [accountId]: { capEnabled: bool, warnEnabled: bool, dailyDownLimitBytes: number|null, dailyUpLimitBytes: number|null } }
 
+      // Show the transfer-stats bubble when hovering an account in the sidebar.
+      transferHoverEnabled: true,
+
       // Backup runtime state (persisted for display across restarts)
       backupState: {},
       // Shape: { [accountId]: { lastBackupTime: number|null, lastStatus: 'success'|'failed'|null, lastError: string|null, emailsBackedUp: number, nextRunTime: number|null } }
@@ -340,6 +343,8 @@ export const useSettingsStore = create(
       setBackupSchedule: (accountId, config) => set(state => ({
         backupSchedules: { ...state.backupSchedules, [accountId]: config }
       })),
+
+      setTransferHoverEnabled: (enabled) => set({ transferHoverEnabled: !!enabled }),
 
       // Per-account transfer limit actions
       setTransferLimit: (accountId, patch) => set(state => ({

@@ -3,6 +3,7 @@ import { useAccountStore } from '../../stores/accountStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import * as api from '../../services/api';
 import DataUsageAccountCard from './DataUsageAccountCard';
+import { ToggleSwitch } from './ToggleSwitch';
 
 const REFRESH_MS = 30_000;
 
@@ -15,6 +16,8 @@ export default function DataUsageSettings({ initialAccountId }) {
 
   const accounts = useAccountStore(s => s.accounts);
   const hiddenAccounts = useSettingsStore(s => s.hiddenAccounts);
+  const transferHoverEnabled = useSettingsStore(s => s.transferHoverEnabled);
+  const setTransferHoverEnabled = useSettingsStore(s => s.setTransferHoverEnabled);
   const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
   const visibleAccounts = getOrderedAccounts(accounts || []).filter(a => !hiddenAccounts?.[a.id]);
 
@@ -53,6 +56,16 @@ export default function DataUsageSettings({ initialAccountId }) {
           {error}
         </div>
       )}
+      <div className="bg-mail-surface border border-mail-border rounded-xl p-5 flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <div className="text-sm font-medium text-mail-text">Show usage on hover</div>
+          <div className="text-xs text-mail-text-muted mt-0.5">
+            Hovering an account in the sidebar shows its last seven days of transfer. Turn this off to keep the sidebar quiet — the breakdowns below stay available either way.
+          </div>
+        </div>
+        <ToggleSwitch active={transferHoverEnabled !== false} onClick={() => setTransferHoverEnabled(transferHoverEnabled === false)} />
+      </div>
+
       {visibleAccounts.length > 0 ? (
         visibleAccounts.map(account => (
           <DataUsageAccountCard
