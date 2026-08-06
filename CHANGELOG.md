@@ -10,7 +10,8 @@
 - The provider list now shows every supported provider, including Zoho, Proton Mail Bridge, and Fastmail, in a two-column layout.
 - **See exactly how much mail data each account transfers.** Hover an account in the sidebar for a seven-day chart of what it downloaded and uploaded, with today's, this week's and this month's totals — click it for the new Settings → Data Usage page and its daily, weekly, monthly and yearly breakdowns. Useful for keeping an eye on provider limits — Gmail suspends IMAP access for up to 24 hours past 2,500 MB down / 500 MB up in a day.
 - **MailVault can warn you before a provider cuts you off — or stop itself in time.** A banner appears when an account passes 80% of its daily transfer limit, and an optional cap pauses syncing for the rest of the day before the limit is hit. Both are configurable per account in Settings → Data Usage; Gmail accounts come with the known limits prefilled.
-- A Report a Bug button now sits next to Settings in the sidebar — it opens a compose window with version and system details already filled in.
+- A Report a Bug button now sits next to Settings in the sidebar — it opens a compose window with version and system details already filled in, under headed sections for what happened, how to reproduce it, and what you expected.
+- The sidebar's hover usage bubble can be switched off in Settings → Data Usage, for anyone who would rather the sidebar stay quiet. The page's own breakdowns stay available.
 
 ### Fixed
 - **Quoted replies and signatures fold away in the single-email view too.** Opening a reply showed the entire "Original Message" block with no way to collapse it — the fold controls were only ever added to thread and chat view.
