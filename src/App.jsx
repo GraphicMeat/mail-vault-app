@@ -625,6 +625,8 @@ function App() {
           onOpenSettings={(tab) => { if (typeof tab === 'string') setSettingsInitialTab(tab); setShowSettings(true); }}
           onOpenBackup={(accountId) => { setSettingsInitialTab('backup'); setSettingsInitialAccountId(accountId || null); setShowSettings(true); }}
           onOpenAccounts={(accountId) => { setSettingsInitialTab('accounts'); setSettingsInitialAccountId(accountId || null); setShowSettings(true); }}
+          onOpenDataUsage={(accountId) => { setSettingsInitialTab('data-usage'); setSettingsInitialAccountId(accountId || null); setShowSettings(true); }}
+          onReportBug={handleReportBug}
         />
       </div>
 

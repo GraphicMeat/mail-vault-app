@@ -12,6 +12,7 @@ import { useBackupStore } from '../stores/backupStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as api from '../services/api';
 import { formatBytes } from '../utils/formatBytes';
+import { lastDaysSeries } from '../utils/transferLimits';
 import {
   Inbox,
   Send,
@@ -464,31 +465,83 @@ const transferStatsHoverCache = new Map(); // accountId -> { data, ts }
 const HOVER_DELAY_MS = 400;
 const HOVER_CACHE_MS = 30_000;
 
-/** Portaled hover bubble: today + this month up/down for one account, click opens Settings > Data Usage. */
+const HOVER_CLOSE_MS = 220;
+const HOVER_BUBBLE_HEIGHT = 230; // approximate, only used to keep the bubble on screen
+
+function StatRow({ label, bucket }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-mail-text-muted">{label}</span>
+      <span className="text-mail-text font-medium">
+        {formatBytes(bucket?.down)} down / {formatBytes(bucket?.up)} up
+      </span>
+    </div>
+  );
+}
+
+/** Portaled hover bubble: 7-day bar chart + totals, click opens Settings > Data Usage. */
 function TransferStatsHoverBubble({ pos, stats, onClick, onMouseEnter, onMouseLeave }) {
+  const week = stats ? lastDaysSeries(stats.days, 7) : [];
+  const peak = Math.max(1, ...week.map(d => d.down + d.up));
+
   return createPortal(
     <div
-      className="fixed z-[80] w-56 bg-mail-surface border border-mail-border rounded-lg shadow-lg p-3 text-xs cursor-pointer"
+      className="fixed z-[80] w-64 bg-mail-surface border border-mail-border rounded-lg shadow-lg p-3 text-xs cursor-pointer"
       style={{ top: pos.top, left: pos.left }}
       onClick={onClick}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
       {stats ? (
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <span className="text-mail-text-muted">Today</span>
-            <span className="text-mail-text font-medium">
-              {formatBytes(stats.today?.down)} down / {formatBytes(stats.today?.up)} up
+        <>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-mail-text-muted">Last 7 days</span>
+            <span className="flex items-center gap-2 text-[10px] text-mail-text-muted">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-mail-accent" />down</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-mail-accent/45" />up</span>
             </span>
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-mail-text-muted">This month</span>
-            <span className="text-mail-text font-medium">
-              {formatBytes(stats.month?.down)} down / {formatBytes(stats.month?.up)} up
-            </span>
+
+          <div className="flex items-end gap-1 h-16">
+            {week.map(d => {
+              const total = d.down + d.up;
+              return (
+                <div
+                  key={d.key}
+                  className="flex-1 h-full flex flex-col justify-end"
+                  title={`${d.key}: ${formatBytes(d.down)} down / ${formatBytes(d.up)} up`}
+                >
+                  <div
+                    className="w-full flex flex-col justify-end rounded-t-sm overflow-hidden"
+                    style={{ height: total > 0 ? `${Math.max(6, (total / peak) * 100)}%` : '2px' }}
+                  >
+                    {total > 0 ? (
+                      <>
+                        <div className="w-full bg-mail-accent/45" style={{ flexGrow: d.up }} />
+                        <div className="w-full bg-mail-accent" style={{ flexGrow: d.down }} />
+                      </>
+                    ) : (
+                      <div className="w-full h-full bg-mail-border" />
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </div>
+          <div className="flex gap-1 mt-1 mb-2 text-[10px] text-mail-text-muted">
+            {week.map(d => <div key={d.key} className="flex-1 text-center">{d.label}</div>)}
+          </div>
+
+          <div className="space-y-1.5 pt-2 border-t border-mail-border">
+            <StatRow label="Today" bucket={stats.today} />
+            <StatRow label="This week" bucket={stats.week} />
+            <StatRow label="This month" bucket={stats.month} />
+          </div>
+
+          <div className="mt-2 pt-2 border-t border-mail-border text-mail-accent">
+            Click to see more →
+          </div>
+        </>
       ) : (
         <div className="text-mail-text-muted">Loading...</div>
       )}
@@ -547,6 +600,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const [hoverStats, setHoverStats] = useState(null);
   const [hoverPos, setHoverPos] = useState(null);
   const hoverTimerRef = useRef(null);
+  const hoverCloseTimerRef = useRef(null);
   const hoverRowRefs = useRef({});
 
   const clearHoverTimer = useCallback(() => {
@@ -554,20 +608,37 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
     hoverTimerRef.current = null;
   }, []);
 
+  // Cancels a pending dismissal — this is what lets the pointer cross the gap
+  // between the row and the bubble without the bubble unmounting underneath it.
+  const cancelHoverClose = useCallback(() => {
+    if (hoverCloseTimerRef.current) clearTimeout(hoverCloseTimerRef.current);
+    hoverCloseTimerRef.current = null;
+  }, []);
+
   const handleAccountHoverEnd = useCallback(() => {
     clearHoverTimer();
+    cancelHoverClose();
     setHoverAccountId(null);
     setHoverStats(null);
     setHoverPos(null);
-  }, [clearHoverTimer]);
+  }, [clearHoverTimer, cancelHoverClose]);
+
+  /** Leaving the row only schedules the close; entering the bubble cancels it. */
+  const scheduleHoverClose = useCallback(() => {
+    clearHoverTimer();
+    cancelHoverClose();
+    hoverCloseTimerRef.current = setTimeout(handleAccountHoverEnd, HOVER_CLOSE_MS);
+  }, [clearHoverTimer, cancelHoverClose, handleAccountHoverEnd]);
 
   const handleAccountHoverStart = useCallback((accountId) => {
     clearHoverTimer();
+    cancelHoverClose();
     hoverTimerRef.current = setTimeout(async () => {
       const el = hoverRowRefs.current[accountId];
       if (!el) return;
       const rect = el.getBoundingClientRect();
-      setHoverPos({ top: rect.top, left: rect.right + 8 });
+      const top = Math.max(8, Math.min(rect.top, window.innerHeight - HOVER_BUBBLE_HEIGHT));
+      setHoverPos({ top, left: rect.right + 8 });
       setHoverAccountId(accountId);
 
       const cached = transferStatsHoverCache.get(accountId);
@@ -585,7 +656,11 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         console.warn('[Sidebar] transfer stats fetch failed:', e);
       }
     }, HOVER_DELAY_MS);
-  }, [clearHoverTimer]);
+  }, [clearHoverTimer, cancelHoverClose]);
+
+  // Timers outlive the component otherwise — a close firing after unmount is a
+  // setState on a dead tree.
+  useEffect(() => () => { clearHoverTimer(); cancelHoverClose(); }, [clearHoverTimer, cancelHoverClose]);
 
   const openHoveredAccountUsage = useCallback(() => {
     if (hoverAccountId) onOpenDataUsage?.(hoverAccountId);
@@ -644,8 +719,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
       pos={hoverPos}
       stats={hoverStats}
       onClick={openHoveredAccountUsage}
-      onMouseEnter={clearHoverTimer}
-      onMouseLeave={handleAccountHoverEnd}
+      onMouseEnter={cancelHoverClose}
+      onMouseLeave={scheduleHoverClose}
     />
   );
 
@@ -753,7 +828,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
               key={account.id}
               ref={el => { hoverRowRefs.current[account.id] = el; }}
               onMouseEnter={() => handleAccountHoverStart(account.id)}
-              onMouseLeave={handleAccountHoverEnd}
+              onMouseLeave={scheduleHoverClose}
             >
               <CollapsedAccountButton
                 account={account}
@@ -967,7 +1042,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                     key={account.id}
                     ref={el => { hoverRowRefs.current[account.id] = el; }}
                     onMouseEnter={() => handleAccountHoverStart(account.id)}
-                    onMouseLeave={handleAccountHoverEnd}
+                    onMouseLeave={scheduleHoverClose}
                   >
                     <TagCloudAccountBubble
                       account={account}
@@ -1048,7 +1123,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
               <div
                 ref={el => { hoverRowRefs.current[account.id] = el; }}
                 onMouseEnter={() => handleAccountHoverStart(account.id)}
-                onMouseLeave={handleAccountHoverEnd}
+                onMouseLeave={scheduleHoverClose}
               >
                 <ExpandedAccountRow
                   account={account}
