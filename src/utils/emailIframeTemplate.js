@@ -8,9 +8,16 @@
 //
 // Kept separate from ChatBubbleView's iframe (transparent bg, per-bubble tint).
 
+// Only unwrap when the string really is a whole document. A reply that quotes
+// another mail carries the quoted message's <html><body> *inside* a blockquote —
+// unwrapping that returns the quote and drops what the sender actually wrote.
+// Greedy match so a nested </body> can't truncate a genuine document either.
+const DOC_START = /^\s*(?:<!doctype[^>]*>|<\?xml[^>]*\?>|<!--[\s\S]*?-->|\s)*<(?:html|head|body)[\s>]/i;
+
 export function getEmailBodyContent(html) {
   if (!html) return '';
-  const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  if (!DOC_START.test(html)) return html;
+  const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
   return bodyMatch ? bodyMatch[1] : html;
 }
 

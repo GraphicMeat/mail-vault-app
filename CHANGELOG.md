@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Your own reply no longer renders as a copy of the message you replied to.** When the quoted message carried a complete HTML document inside it (Proton Mail does this), MailVault displayed only the quote and hid everything you wrote. The email itself was always sent and stored correctly — this was a display bug in the thread and single-email views.
+
 ## [2.9.1] - 2026-08-06
 
 ### Added
