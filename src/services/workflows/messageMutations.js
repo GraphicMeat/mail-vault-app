@@ -333,7 +333,7 @@ const _withSeen = (flags, read) => read
 
 // One message's \Seen change on the server. Graph accounts have no IMAP flags —
 // the bulk path used to skip this branch, so mark-as-read silently failed there.
-async function _setSeenOnServer(account, accountId, mailbox, uid, read) {
+export async function _setSeenOnServer(account, accountId, mailbox, uid, read) {
   if (isGraphAccount(account)) {
     const graphId = getGraphMessageId(accountId, mailbox, uid);
     if (!graphId) {
@@ -363,6 +363,29 @@ function _syncUnreadBadge(useMailStore, accountId, mailbox) {
   useSettingsStore.getState().setUnreadForAccount(accountId, unread);
 }
 
+// Land one message's \Seen change on every surface that renders read state:
+// the list row, the open viewer copy, the cached body, the derived lists and
+// the sidebar badge. The body cache is the easy one to miss — it freezes the
+// flags the message had when it was fetched, so skipping it makes the next
+// open of that message show the stale state and offer the wrong next action.
+export function applySeenLocally(useMailStore, { accountId, mailbox, uid, read, isUnified = false }) {
+  useMailStore.setState(state => ({
+    emails: state.emails.map(e => {
+      const match = isUnified ? (e._accountId === accountId && e.uid === uid) : (e.uid === uid);
+      return match ? { ...e, flags: _withSeen(e.flags, read) } : e;
+    }),
+    selectedEmail: state.selectedEmail?.uid === uid
+      ? { ...state.selectedEmail, flags: _withSeen(state.selectedEmail.flags, read) }
+      : state.selectedEmail,
+  }));
+
+  const entry = useMailStore.getState().emailCache.get(`${accountId}-${mailbox}-${uid}`);
+  if (entry) entry.email = { ...entry.email, flags: _withSeen(entry.email.flags, read) };
+
+  _refreshAfterFlagChange(useMailStore);
+  _syncUnreadBadge(useMailStore, accountId, mailbox);
+}
+
 
 // ── markEmailReadStatus workflow ──
 
@@ -383,19 +406,18 @@ export async function markEmailReadStatus(uid, read) {
   try {
     await _setSeenOnServer(account, accountId, mailbox, realUid, read);
 
-    useMailStore.setState(state => ({
-      emails: state.emails.map(e => {
-        const match = isUnified
-          ? (e._accountId === accountId && e.uid === realUid)
-          : (e.uid === uid);
-        return match ? { ...e, flags: _withSeen(e.flags, read) } : e;
-      }),
-      selectedEmail: state.selectedEmail?.uid === realUid
-        ? { ...state.selectedEmail, flags: _withSeen(state.selectedEmail.flags, read) }
-        : state.selectedEmail,
-    }));
-    _refreshAfterFlagChange(useMailStore);
-    _syncUnreadBadge(useMailStore, accountId, mailbox);
+    applySeenLocally(useMailStore, { accountId, mailbox, uid: realUid, read, isUnified });
+
+    // Marking the open email unread means "not dealt with yet" — keeping it on
+    // screen contradicts that, and the next open would just mark it read again.
+    if (!read && useMailStore.getState().selectedEmail?.uid === realUid) {
+      useMailStore.setState({
+        selectedEmailId: null,
+        selectedEmail: null,
+        selectedEmailSource: null,
+        selectedThread: null,
+      });
+    }
   } catch (error) {
     useMailStore.setState({ error: `Failed to update read status: ${error.message}` });
   }

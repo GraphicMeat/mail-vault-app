@@ -9,9 +9,41 @@ import { isGraphAccount, normalizeGraphFolderName, graphMessageToEmail } from '.
 import { setGraphIdMap as _setGraphIdMap, getGraphMessageId } from '../cacheManager';
 import { _resolveUnifiedContext } from '../../stores/slices/unifiedHelpers';
 import { _shouldPrefetch, getCacheCurrentSizeMB } from '../../stores/slices/cacheSlice';
+import { applySeenLocally, _setSeenOnServer } from './messageMutations';
 
 // Module-level mark-as-read timer
 let _markAsReadTimer = null;
+
+
+// ── auto mark-as-read on open ──
+//
+// Runs for every path that opens a message, including the in-memory cache hit —
+// that one used to skip it, so an email marked unread stayed unread forever
+// once its body was cached, and the action bar kept offering "Mark read".
+// Returns the email with \Seen applied when it marked right away, so the
+// caller's copy matches what the list now holds.
+async function _autoMarkRead(useMailStore, { email, accountId, mailbox, uid, isUnified, markOnServer }) {
+  const { markAsReadMode, markAsReadDelay } = useSettingsStore.getState();
+  if (markAsReadMode === 'manual' || email?.flags?.includes('\\Seen')) return email;
+
+  const doMark = async () => {
+    try {
+      await markOnServer();
+      applySeenLocally(useMailStore, { accountId, mailbox, uid, read: true, isUnified });
+    } catch (e) {
+      console.warn('[selectEmail] Mark as read failed:', e);
+    }
+  };
+
+  if (markAsReadMode === 'delay') {
+    if (_markAsReadTimer) clearTimeout(_markAsReadTimer);
+    _markAsReadTimer = setTimeout(doMark, (markAsReadDelay || 3) * 1000);
+    return email;
+  }
+
+  await doMark();
+  return { ...email, flags: [...(email.flags || []), '\\Seen'] };
+}
 
 
 // ── _prefetchAdjacentEmails workflow ──
@@ -101,7 +133,15 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
     if (cachedEmail) {
       const hydrated = await hydrateInlineImages(cachedEmail, accountId, mailbox);
       if (hydrated !== cachedEmail) get().addToCache(cacheKey, hydrated, cacheLimitMB);
-      useMailStore.setState({ selectedEmail: hydrated, selectedEmailSource: source, loadingEmail: false });
+      // The cached body is frozen at fetch time, but flags keep moving (mark
+      // read/unread, sync, another client). The list row is the current copy.
+      const row = get().emails.find(e => isUnified ? (e._accountId === accountId && e.uid === uid) : e.uid === uid);
+      const fresh = row?.flags ? { ...hydrated, flags: row.flags } : hydrated;
+      useMailStore.setState({ selectedEmail: fresh, selectedEmailSource: source, loadingEmail: false });
+      await _autoMarkRead(useMailStore, {
+        email: fresh, accountId, mailbox, uid, isUnified,
+        markOnServer: () => _setSeenOnServer(account, accountId, mailbox, uid, true),
+      });
       return;
     }
 
@@ -155,31 +195,10 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
         api.graphCacheMime(token, graphId, accountId, mailbox, uid)
           .catch(e => console.warn('[selectEmail] Background MIME cache failed:', e));
 
-        const markAsReadMode = useSettingsStore.getState().markAsReadMode;
-        if (markAsReadMode !== 'manual' && !email.flags?.includes('\\Seen')) {
-          const doMark = async () => {
-            try {
-              await api.graphSetRead(token, graphId, true);
-              useMailStore.setState(state => {
-                const sel = state.selectedEmail;
-                if (sel && sel.uid === uid && !sel.flags?.includes('\\Seen')) {
-                  return { selectedEmail: { ...sel, flags: [...(sel.flags || []), '\\Seen'] } };
-                }
-                return {};
-              });
-            } catch (e) {
-              console.warn('[selectEmail] Graph mark as read failed:', e);
-            }
-          };
-          if (markAsReadMode === 'delay') {
-            const delay = useSettingsStore.getState().markAsReadDelay || 3;
-            if (_markAsReadTimer) clearTimeout(_markAsReadTimer);
-            _markAsReadTimer = setTimeout(doMark, delay * 1000);
-          } else {
-            await doMark();
-            email = { ...email, flags: [...(email.flags || []), '\\Seen'] };
-          }
-        }
+        email = await _autoMarkRead(useMailStore, {
+          email, accountId, mailbox, uid, isUnified,
+          markOnServer: () => api.graphSetRead(token, graphId, true),
+        });
       } else {
         console.warn('[selectEmail] No Graph message ID found for UID', uid);
       }
@@ -196,31 +215,10 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
         console.warn('[selectEmail] Failed to update saved IDs:', e);
       }
 
-      const markAsReadMode = useSettingsStore.getState().markAsReadMode;
-      if (markAsReadMode !== 'manual' && !email.flags?.includes('\\Seen')) {
-        const doMark = async () => {
-          try {
-            await api.updateEmailFlags(account, uid, ['\\Seen'], 'add', mailbox);
-            useMailStore.setState(state => {
-              const sel = state.selectedEmail;
-              if (sel && sel.uid === uid && !sel.flags?.includes('\\Seen')) {
-                return { selectedEmail: { ...sel, flags: [...(sel.flags || []), '\\Seen'] } };
-              }
-              return {};
-            });
-          } catch (e) {
-            console.warn('Failed to mark as read:', e);
-          }
-        };
-        if (markAsReadMode === 'delay') {
-          const delay = useSettingsStore.getState().markAsReadDelay || 3;
-          if (_markAsReadTimer) clearTimeout(_markAsReadTimer);
-          _markAsReadTimer = setTimeout(doMark, delay * 1000);
-        } else {
-          await doMark();
-          email = { ...email, flags: [...(email.flags || []), '\\Seen'] };
-        }
-      }
+      email = await _autoMarkRead(useMailStore, {
+        email, accountId, mailbox, uid, isUnified,
+        markOnServer: () => api.updateEmailFlags(account, uid, ['\\Seen'], 'add', mailbox),
+      });
     }
 
     // Inline images live in the .eml the light fetch just cached — pull them in

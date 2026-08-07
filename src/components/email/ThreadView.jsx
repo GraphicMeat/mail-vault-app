@@ -386,7 +386,7 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, arch
             onToggleEmailTheme={() => setEmailThemeOverride(emailDarkMode ? 'light' : 'dark')}
             emailThemeDark={emailDarkMode}
             isArchived={archivedEmailIds?.has(email.uid)}
-            isRead={!email.flags?.includes('\\Unseen')}
+            isRead={!!email.flags?.includes('\\Seen')}
             isLocalOnly={email.source === 'local-only'}
             isSentEmail={false}
             singleRecipient={(email.to || []).length <= 1 && !(email.cc?.length > 0)}

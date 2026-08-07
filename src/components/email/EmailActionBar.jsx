@@ -52,10 +52,13 @@ export const EmailActionBar = memo(function EmailActionBar({
   const isThread = variant === 'thread';
   const compact = isChat;
 
+  // Every button is gated on its own handler: the thread and chat variants pass
+  // null for the actions they don't support, and a button that renders without
+  // a handler is a button that lies — it looks live and does nothing on click.
   const buttons = (
     <>
       {/* Reply */}
-      {!isSentEmail && (
+      {!isSentEmail && onReply && (
         <ActionButton
           icon={Reply}
           label="Reply"
@@ -65,7 +68,7 @@ export const EmailActionBar = memo(function EmailActionBar({
       )}
 
       {/* Reply All */}
-      {!isSentEmail && !singleRecipient && (
+      {!isSentEmail && !singleRecipient && onReplyAll && (
         <ActionButton
           icon={ReplyAll}
           label="Reply All"
@@ -75,15 +78,17 @@ export const EmailActionBar = memo(function EmailActionBar({
       )}
 
       {/* Forward */}
-      <ActionButton
-        icon={Forward}
-        label="Forward"
-        onClick={() => onForward?.(email)}
-        compact={compact}
-      />
+      {onForward && (
+        <ActionButton
+          icon={Forward}
+          label="Forward"
+          onClick={() => onForward(email)}
+          compact={compact}
+        />
+      )}
 
       {/* Archive */}
-      {(!isLocalOnly || isArchived) && (
+      {(!isLocalOnly || isArchived) && onArchive && (
         <ActionButton
           icon={Archive}
           label={isArchived ? 'Unarchive' : 'Archive'}
@@ -94,17 +99,19 @@ export const EmailActionBar = memo(function EmailActionBar({
       )}
 
       {/* Delete */}
-      <ActionButton
-        icon={Trash2}
-        label="Delete"
-        onClick={() => onDelete?.(email)}
-        disabled={disabled.delete}
-        isDestructive
-        compact={compact}
-      />
+      {onDelete && (
+        <ActionButton
+          icon={Trash2}
+          label="Delete"
+          onClick={() => onDelete(email)}
+          disabled={disabled.delete}
+          isDestructive
+          compact={compact}
+        />
+      )}
 
       {/* Move */}
-      {!isLocalOnly && (
+      {!isLocalOnly && onMove && (
         <ActionButton
           icon={FolderInput}
           label="Move"
@@ -115,7 +122,7 @@ export const EmailActionBar = memo(function EmailActionBar({
       )}
 
       {/* Toggle read */}
-      {!isLocalOnly && (
+      {!isLocalOnly && onToggleRead && (
         <ActionButton
           icon={isRead ? Mail : MailOpen}
           label={isRead ? 'Mark unread' : 'Mark read'}
@@ -126,20 +133,24 @@ export const EmailActionBar = memo(function EmailActionBar({
       )}
 
       {/* Open in window */}
-      <ActionButton
-        icon={ExternalLink}
-        label="Open"
-        onClick={() => onOpenInWindow?.(email)}
-        compact={compact}
-      />
+      {onOpenInWindow && (
+        <ActionButton
+          icon={ExternalLink}
+          label="Open"
+          onClick={() => onOpenInWindow(email)}
+          compact={compact}
+        />
+      )}
 
       {/* View source */}
-      <ActionButton
-        icon={Code}
-        label="Source"
-        onClick={() => onViewSource?.(email)}
-        compact={compact}
-      />
+      {onViewSource && (
+        <ActionButton
+          icon={Code}
+          label="Source"
+          onClick={() => onViewSource(email)}
+          compact={compact}
+        />
+      )}
 
       {/* Toggle email light/dark rendering */}
       {onToggleEmailTheme && (
