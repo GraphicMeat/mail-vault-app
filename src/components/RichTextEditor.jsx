@@ -153,10 +153,13 @@ export function textToHtml(text) {
     .join('');
 }
 
-// Strip HTML to plain text (for text/ part of multipart emails)
+// Strip HTML to plain text (for text/ part of multipart emails).
+// Block-level tags become newlines so paragraphs don't collapse into one line.
 export function htmlToText(html) {
   if (!html) return '';
   const div = document.createElement('div');
-  div.innerHTML = html;
-  return div.textContent || div.innerText || '';
+  div.innerHTML = html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|h[1-6]|blockquote|pre|tr)>/gi, '\n');
+  return (div.textContent || div.innerText || '').replace(/\n{3,}/g, '\n\n').trim();
 }

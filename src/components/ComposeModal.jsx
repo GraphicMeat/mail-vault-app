@@ -152,8 +152,9 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
 
     // Add signature if enabled
     const signature = getSignature(selectedAccountId);
-    if (signature.enabled && signature.text) {
-      signatureHtml = '<p></p><p>--</p>' + textToHtml(signature.text);
+    const sigBody = signature.html || textToHtml(signature.text || '');
+    if (signature.enabled && sigBody) {
+      signatureHtml = '<p></p><p>--</p>' + sigBody;
     }
 
     if (!replyTo) {

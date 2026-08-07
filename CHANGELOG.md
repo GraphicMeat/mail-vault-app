@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+- **Email signatures are now formatted, not plain text.** Settings → Accounts gives the signature the same editor as compose: bold, italic, underline, links, lists and quotes, all carried into the messages you send. Existing plain-text signatures are kept as they are.
+- **Signature and display name save as you type.** The "Save Changes" button is gone — edits are stored automatically, with a brief "Saved" mark next to the section title.
+
 ### Fixed
 - **Your own reply no longer renders as a copy of the message you replied to.** When the quoted message carried a complete HTML document inside it (Proton Mail does this), MailVault displayed only the quote and hid everything you wrote. The email itself was always sent and stored correctly — this was a display bug in the thread and single-email views.
 

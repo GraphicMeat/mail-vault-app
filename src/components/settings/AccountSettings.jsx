@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useMailStore } from '../../stores/mailStore';
 import { useAccountStore } from '../../stores/accountStore';
 import { useSettingsStore, AVATAR_COLORS, getAccountInitial, getAccountColor, hasPremiumAccess } from '../../stores/settingsStore';
@@ -7,6 +7,7 @@ import { getOAuth2AuthUrl, exchangeOAuth2Code, ensureSentMailbox, fetchMailboxes
 import { findSentMailboxPath } from '../../utils/sentFolder';
 import { Send } from 'lucide-react';
 import { ToggleSwitch } from './ToggleSwitch';
+import { RichTextEditor, textToHtml, htmlToText } from '../RichTextEditor';
 import { Toast } from '../Toast';
 import {
   User,
@@ -26,9 +27,26 @@ import {
   Plus,
   Eye,
   EyeOff,
-  Save,
   Server,
 } from 'lucide-react';
+
+function SavedBadge({ visible }) {
+  return (
+    <AnimatePresence>
+      {visible && (
+        <motion.span
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="ml-auto flex items-center gap-1 text-xs font-normal text-mail-text-muted"
+        >
+          <Check size={13} />
+          Saved
+        </motion.span>
+      )}
+    </AnimatePresence>
+  );
+}
 
 export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
   const { removeAccount } = useAccountStore();
@@ -52,9 +70,12 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
   } = useSettingsStore();
 
   const [selectedAccountId, setSelectedAccountId] = useState(initialAccountId || accounts[0]?.id || null);
-  const [signatureText, setSignatureText] = useState('');
+  const [signatureHtml, setSignatureHtml] = useState('');
   const [accountDisplayName, setAccountDisplayName] = useState('');
   const [saved, setSaved] = useState(false);
+  const [autoSaved, setAutoSaved] = useState(false);
+  const autoSaveTimer = useRef(null);
+  const autoSavedTimer = useRef(null);
   const [editingPassword, setEditingPassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [oauthReconnecting, setOauthReconnecting] = useState(false);
@@ -83,11 +104,61 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
   useEffect(() => {
     if (selectedAccountId) {
       const sig = getSignature(selectedAccountId);
-      setSignatureText(sig.text || '');
+      setSignatureHtml(sig.html || textToHtml(sig.text || ''));
       setAccountDisplayName(getDisplayName(selectedAccountId) || '');
       setShowRemoveConfirm(false);
     }
   }, [selectedAccountId]);
+
+  // Autosave display name + signature — no Save button
+  const pendingEdits = useRef({ html: '', name: '' });
+  pendingEdits.current = { html: signatureHtml, name: accountDisplayName };
+
+  const persistAccountSettings = (accountId, rawHtml, name) => {
+    if (!accountId) return;
+    const sig = getSignature(accountId);
+    const text = htmlToText(rawHtml);
+    const html = text ? rawHtml : '';
+    const nameChanged = (getDisplayName(accountId) || '') !== name;
+    const sigChanged = (sig.html || '') !== html || (sig.text || '') !== text;
+    if (!nameChanged && !sigChanged) return;
+
+    if (nameChanged) setDisplayName(accountId, name);
+    if (sigChanged) {
+      setSignature(accountId, {
+        ...sig,
+        html,
+        text,
+        // first content on a never-configured signature turns it on
+        enabled: sig.enabled || (!sig.html && !sig.text && !!text),
+      });
+    }
+    setAutoSaved(true);
+    clearTimeout(autoSavedTimer.current);
+    autoSavedTimer.current = setTimeout(() => setAutoSaved(false), 1500);
+  };
+
+  useEffect(() => {
+    if (!selectedAccountId) return;
+    const accountId = selectedAccountId;
+    clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(
+      () => persistAccountSettings(accountId, signatureHtml, accountDisplayName),
+      400
+    );
+    return () => clearTimeout(autoSaveTimer.current);
+  }, [signatureHtml, accountDisplayName, selectedAccountId]);
+
+  // Flush pending edits when switching accounts or leaving Settings
+  useEffect(() => {
+    const accountId = selectedAccountId;
+    return () => {
+      clearTimeout(autoSaveTimer.current);
+      persistAccountSettings(accountId, pendingEdits.current.html, pendingEdits.current.name);
+    };
+  }, [selectedAccountId]);
+
+  useEffect(() => () => clearTimeout(autoSavedTimer.current), []);
 
   // Load mailbox tree + current Sent override for the selected account
   useEffect(() => {
@@ -175,19 +246,6 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
       alert('Could not auto-detect or create a Sent folder: ' + (err.message || err));
     } finally {
       setAutoCreatingSent(false);
-    }
-  };
-
-  const handleSaveAccountSettings = () => {
-    if (selectedAccountId) {
-      setDisplayName(selectedAccountId, accountDisplayName);
-      setSignature(selectedAccountId, {
-        text: signatureText,
-        html: signatureText.replace(/\n/g, '<br>'),
-        enabled: !!signatureText.trim()
-      });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
     }
   };
 
@@ -370,6 +428,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
               <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
                 <User size={18} className="text-mail-accent" />
                 Account Settings
+                <SavedBadge visible={autoSaved} />
               </h4>
 
               <div className="space-y-4">
@@ -523,6 +582,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
               <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
                 <FileText size={18} className="text-mail-accent" />
                 Email Signature
+                <SavedBadge visible={autoSaved} />
               </h4>
 
               <div className="space-y-4">
@@ -546,15 +606,16 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                   <label className="block text-sm font-medium text-mail-text mb-2">
                     Signature Content
                   </label>
-                  <textarea
-                    value={signatureText}
-                    onChange={(e) => setSignatureText(e.target.value)}
-                    placeholder="Best regards,&#10;John Doe&#10;john@example.com"
-                    rows={5}
-                    className="w-full px-4 py-3 bg-mail-bg border border-mail-border rounded-lg
-                              text-mail-text placeholder-mail-text-muted resize-none
-                              font-mono text-sm focus:border-mail-accent transition-all"
-                  />
+                  <div className="flex h-52 rounded-lg border border-mail-border overflow-hidden">
+                    <RichTextEditor
+                      content={signatureHtml}
+                      onUpdate={(html) => setSignatureHtml(html)}
+                      placeholder="Best regards, John Doe"
+                    />
+                  </div>
+                  <p className="text-xs text-mail-text-muted mt-2">
+                    Bold, italic, links and lists are supported. Changes save automatically.
+                  </p>
                 </div>
               </div>
             </div>
@@ -564,6 +625,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
               <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
                 <Send size={18} className="text-mail-accent" />
                 Sent Folder
+                <SavedBadge visible={saved} />
               </h4>
 
               <p className="text-sm text-mail-text-muted mb-4">
@@ -784,19 +846,6 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                   )}
                 </>
               )}
-            </div>
-
-            {/* Save Button */}
-            <div className="flex justify-end">
-              <button
-                onClick={handleSaveAccountSettings}
-                className="flex items-center gap-2 px-5 py-2.5 bg-mail-accent
-                          hover:bg-mail-accent-hover text-white rounded-lg
-                          font-medium transition-all"
-              >
-                {saved ? <Check size={18} /> : <Save size={18} />}
-                {saved ? 'Saved!' : 'Save Changes'}
-              </button>
             </div>
 
             {/* Remove Account */}
