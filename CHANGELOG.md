@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Fixed
+- **Conversations show your own replies on a first run too.** On a freshly installed or freshly reset account, the Sent folder was looked up a moment before the folder list came back from the server, found nothing, and never looked again — so INBOX threads were missing every message you had sent, for the rest of the session. Switching accounts and back was the only way to get them. The lookup now waits for the folder list.
 - **A message in a conversation no longer shows the contents of a completely different email.** Opening a thread could render an unrelated message — sometimes from another folder or even another account — under the right sender and subject. A message is identified by a number that is only unique inside one folder, and the thread view worked out which folder to read from by looking at whichever mailbox happened to be on screen; when that guess was off, the same number pointed at a real but unrelated email. Each message now carries its own account and folder, and when its identity can't be confirmed MailVault shows nothing rather than someone else's mail. The same guess is gone from attachment downloads, "View source", and "Delete thread from server", which could previously act on the wrong message.
 
 ## [2.9.2] - 2026-08-07

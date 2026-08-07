@@ -99,37 +99,14 @@ async function readThreadBodies() {
   return (await bodies()).texts;
 }
 
-/** Click an account in the sidebar by its address. */
-async function clickAccount(email) {
-  return browser.execute((mail) => {
-    const sidebar = document.querySelector('[data-testid="sidebar"]');
-    if (!sidebar) return false;
-    for (const el of sidebar.querySelectorAll('div, button')) {
-      const text = (el.textContent || '').trim();
-      const title = el.getAttribute('title') || '';
-      if ((text === mail || title.includes(mail)) && el.offsetHeight > 0) {
-        (el.closest('div[class*="cursor-pointer"]') || el).click();
-        return true;
-      }
-    }
-    return false;
-  }, email);
-}
-
 describe('Thread bodies resolve to their own mailbox', function () {
   this.timeout(240_000);
 
   before(async function () {
     await waitForApp();
     await waitForEmails();
-
-    // The INBOX list only merges Sent once the Sent headers are in the store,
-    // and on a cold profile that happens on an account switch, not at boot.
-    // Round-trip through the second account to get there the way a user would.
-    await clickAccount(browser.testEnv.TEST_EMAIL2);
-    await browser.pause(8000);
-    await clickAccount(browser.testEnv.TEST_EMAIL);
-    await browser.pause(8000);
+    // No account round-trip: Sent headers now load on a cold profile too, and
+    // openThread() polls until the merged thread row shows up.
   });
 
   it('shows the Sent reply\'s own body in a thread opened from INBOX', async function () {

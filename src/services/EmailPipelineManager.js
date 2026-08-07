@@ -4,6 +4,7 @@ import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import * as db from './db';
 import { GRAPH_FOLDER_NAME_MAP, normalizeGraphFolderName as _normalizeGraphFolderName } from './graphConfig';
+import { waitForSentMailboxPath } from '../utils/sentFolder';
 
 /** Check if an account is hidden in settings */
 function isHidden(accountId) {
@@ -337,8 +338,13 @@ class EmailPipelineManager {
    * Caches to disk and populates store for the active account.
    */
   async _loadSentHeaders(account, pipeline) {
-    const store = useMailStore.getState();
-    const sentPath = store.getSentMailboxPath();
+    // The pipeline starts ~200ms after the list paints, which on a cold
+    // profile is before the server folder list lands — read once and the Sent
+    // path is still unknown. Wait for it rather than skipping the folder.
+    let sentPath = useMailStore.getState().getSentMailboxPath();
+    if (!sentPath && !pipeline._destroyed) {
+      sentPath = await waitForSentMailboxPath(useMailStore);
+    }
     if (!sentPath || pipeline._destroyed) return;
 
     try {

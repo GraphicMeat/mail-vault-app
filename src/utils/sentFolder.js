@@ -33,3 +33,41 @@ export function findSentMailboxPath(mailboxes, override = null) {
   };
   return bySpecial(mailboxes) || byName(mailboxes);
 }
+
+/**
+ * Resolve the Sent path once the real folder list is known.
+ *
+ * On a cold profile `mailboxes` starts as the INBOX placeholder and the server
+ * list lands a beat later. Callers that read the path once at boot got null and
+ * never looked again, so Sent never merged into the INBOX threads for the whole
+ * session. Resolves with the path, or null once the folder list has arrived
+ * without a Sent folder (or on timeout).
+ *
+ * `store` is the zustand mail store (getState + subscribe).
+ */
+export function waitForSentMailboxPath(store, timeoutMs = 20000) {
+  const read = () => {
+    const state = store.getState();
+    const path = state.getSentMailboxPath();
+    if (path) return { done: true, path };
+    // Folder list already fetched and it has no Sent folder — don't wait.
+    return state.mailboxesFetchedAt ? { done: true, path: null } : { done: false };
+  };
+
+  const now = read();
+  if (now.done) return Promise.resolve(now.path);
+
+  return new Promise((resolve) => {
+    let unsub = null;
+    const finish = (path) => {
+      clearTimeout(timer);
+      unsub?.();
+      resolve(path);
+    };
+    const timer = setTimeout(() => finish(null), timeoutMs);
+    unsub = store.subscribe(() => {
+      const next = read();
+      if (next.done) finish(next.path);
+    });
+  });
+}

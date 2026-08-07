@@ -8,6 +8,7 @@ import { isGraphAccount, normalizeGraphFolderName, graphFoldersToMailboxes, grap
 import { saveRestoreDescriptor as _saveRestore, setGraphIdMap as _setGraphIdMap, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap } from '../cacheManager';
 import { _buildRestoreDescriptor } from '../../stores/slices/unifiedHelpers';
 import { createPerfTrace } from '../../utils/perfTrace';
+import { waitForSentMailboxPath } from '../../utils/sentFolder';
 import {
   _resetNetworkRetry, _scheduleNetworkRetry,
   getLoadAbortController, setLoadAbortController,
@@ -823,7 +824,14 @@ export async function loadSentHeaders(accountId) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
 
-  const sentPath = get().getSentMailboxPath();
+  // On a cold profile this runs while `mailboxes` is still the INBOX
+  // placeholder. Bailing here left Sent unmerged for the whole session, so
+  // wait for the real folder list instead of reading the path once.
+  let sentPath = get().getSentMailboxPath();
+  if (!sentPath) {
+    sentPath = await waitForSentMailboxPath(useMailStore);
+    if (get().activeAccountId !== accountId) return;
+  }
   console.log('[loadSentHeaders:start]', { accountId, sentPath });
   if (!sentPath) {
     console.warn('[loadSentHeaders:no_sent_path] accountId=%s — getSentMailboxPath returned null', accountId);
