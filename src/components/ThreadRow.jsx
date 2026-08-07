@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { useMailStore } from '../stores/mailStore';
+import { resolveEmailLocation } from '../stores/slices/unifiedHelpers';
 import { getSenderName } from '../utils/emailParser';
 import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
 import { LinkAlertIcon } from './LinkAlertIcon';
@@ -56,10 +57,15 @@ export const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onS
     const serverEmails = thread.emails.filter(em => em.source !== 'local-only');
     onRequestDelete(
       async () => {
-        const activeMailbox = useMailStore.getState().activeMailbox;
-        const sentPath = useMailStore.getState().getSentMailboxPath();
+        const state = useMailStore.getState();
         for (const email of serverEmails) {
-          const mailbox = email._fromSentFolder && sentPath ? sentPath : activeMailbox;
+          // Delete needs the message's real folder — the same UID in another
+          // folder is a different message, and this delete is irreversible.
+          const mailbox = resolveEmailLocation(email, state)?.mailbox;
+          if (!mailbox) {
+            console.error(`[deleteThread] Unknown mailbox for email ${email.uid} — skipped`);
+            continue;
+          }
           try {
             await deleteEmailFromServer(email.uid, { skipRefresh: true, mailboxOverride: mailbox });
           } catch (err) {
@@ -75,6 +81,7 @@ export const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onS
   return (
     <div
       data-testid="email-row"
+      data-thread-count={thread.messageCount}
       style={style}
       className={`virtual-row group relative flex items-center gap-3 px-4 border-b border-mail-border
                  cursor-pointer
@@ -191,10 +198,15 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ thread, i
     const serverEmails = thread.emails.filter(em => em.source !== 'local-only');
     onRequestDelete(
       async () => {
-        const activeMailbox = useMailStore.getState().activeMailbox;
-        const sentPath = useMailStore.getState().getSentMailboxPath();
+        const state = useMailStore.getState();
         for (const email of serverEmails) {
-          const mailbox = email._fromSentFolder && sentPath ? sentPath : activeMailbox;
+          // Delete needs the message's real folder — the same UID in another
+          // folder is a different message, and this delete is irreversible.
+          const mailbox = resolveEmailLocation(email, state)?.mailbox;
+          if (!mailbox) {
+            console.error(`[deleteThread] Unknown mailbox for email ${email.uid} — skipped`);
+            continue;
+          }
           try {
             await deleteEmailFromServer(email.uid, { skipRefresh: true, mailboxOverride: mailbox });
           } catch (err) {
@@ -210,6 +222,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ thread, i
   return (
     <div
       data-testid="email-row"
+      data-thread-count={thread.messageCount}
       style={style}
       className={`virtual-row group relative flex items-center gap-2 px-4 border-b border-mail-border
                  cursor-pointer

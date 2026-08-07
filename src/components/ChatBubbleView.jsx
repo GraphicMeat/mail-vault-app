@@ -14,6 +14,7 @@ import {
   isFromUser
 } from '../utils/emailParser';
 import { useChatBodyLoader, emailKey } from '../hooks/useChatBodyLoader';
+import { resolveEmailLocation } from '../stores/slices/unifiedHelpers';
 import {
   ChevronLeft,
   Paperclip,
@@ -261,7 +262,6 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
   const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   const activeMailbox = useAccountStore(s => s.activeMailbox);
-  const getSentMailboxPath = useAccountStore(s => s.getSentMailboxPath);
 
   // Subscribe to body load updates for this specific email
   const [, forceUpdate] = useState(0);
@@ -302,7 +302,9 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     () => mergedEmail.attachments ? getRealAttachments(mergedEmail.attachments, mergedEmail.html) : [],
     [mergedEmail.attachments, mergedEmail.html]
   );
-  const emailMailbox = email._fromSentFolder ? getSentMailboxPath() : activeMailbox;
+  // Attachments are read by (account, mailbox, uid) — resolve the message's
+  // own folder, not the active view's.
+  const emailMailbox = resolveEmailLocation(email, useMailStore.getState())?.mailbox;
   const hasHtml = !!mergedEmail.html;
   const wasStripped = !hasHtml && strippedBody.length < (mergedEmail.text?.length || 0) * 0.8;
 

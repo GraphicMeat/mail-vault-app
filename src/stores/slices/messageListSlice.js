@@ -274,6 +274,22 @@ export const createMessageListSlice = (set, get) => ({
     const fp = `${activeAccountId}-${activeMailbox}-${viewMode}-${sortedEmails.length}-${sortedEmails[0]?.uid || 0}-${sortedEmails[sortedEmails.length - 1]?.uid || 0}-${sentEmails.length}-${sentEmails[0]?.uid || 0}-${_flagChangeCounter}-${archivedEmailIds.size}`;
     if (fp === _chatEmailsFingerprint && _chatEmailsCache.length > 0) return _chatEmailsCache;
 
+    // Stamp the folder each message came from. This list mixes two mailboxes,
+    // and UIDs only identify a message within one — without the tag, readers
+    // downstream (body loader, delete, attachments) have to guess from the
+    // active view and can land on a different message with the same UID.
+    // `_srcAccountId` (not `_accountId`) because the UI treats `_accountId` as
+    // "came from the unified list" and paints an account dot for it.
+    // Unified lists span accounts and already carry `_accountId`/`_mailbox`;
+    // stamping the active account over them would be a lie.
+    const sentPath = get().getSentMailboxPath();
+    if (activeMailbox && activeMailbox !== 'UNIFIED') {
+      for (const email of sortedEmails) {
+        if (!email._mailbox) email._mailbox = activeMailbox;
+        if (activeAccountId && !email._srcAccountId) email._srcAccountId = activeAccountId;
+      }
+    }
+
     if (sentEmails.length === 0) {
       _chatEmailsCache = sortedEmails;
       _chatEmailsFingerprint = fp;
@@ -294,6 +310,7 @@ export const createMessageListSlice = (set, get) => ({
       if (email.messageId && seen.has(email.messageId)) continue;
       if (email.messageId) seen.add(email.messageId);
       email._fromSentFolder = true;
+      if (!email._mailbox && sentPath) email._mailbox = sentPath;
       merged.push(email);
     }
 

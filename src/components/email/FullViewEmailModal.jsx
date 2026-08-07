@@ -1,5 +1,7 @@
 import React, { useMemo, useRef, useEffect, useState } from 'react';
 import { useAccountStore } from '../../stores/accountStore';
+import { useMailStore } from '../../stores/mailStore';
+import { resolveEmailLocation } from '../../stores/slices/unifiedHelpers';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { motion } from 'framer-motion';
@@ -17,7 +19,6 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
   const loadingEmail = useSelectionStore(s => s.loadingEmail);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   const activeMailbox = useAccountStore(s => s.activeMailbox);
-  const getSentMailboxPath = useAccountStore(s => s.getSentMailboxPath);
   const iframeRef = useRef(null);
   const [fetchedEmail, setFetchedEmail] = useState(null);
   const [linkSafetyAlert, setLinkSafetyAlert] = useState(null);
@@ -235,7 +236,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
         {/* Attachments */}
         {(() => {
           const modalAttachments = getRealAttachments(email.attachments, email.html);
-          const modalMailbox = initialEmail._fromSentFolder ? getSentMailboxPath() : activeMailbox;
+          const modalMailbox = resolveEmailLocation(initialEmail, useMailStore.getState())?.mailbox;
           return modalAttachments.length > 0 ? (
             <div className="px-4 py-3 border-t border-mail-border bg-mail-bg">
               <div className="grid grid-cols-2 gap-2">

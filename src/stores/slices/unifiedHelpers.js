@@ -65,6 +65,49 @@ export function _resolveUnifiedContext(key, state) {
   return { account, accountId: email._accountId, mailbox, uid: email.uid };
 }
 
+// ── Message location ───────────────────────────────────────────────────────
+// A UID identifies a message only within one (account, mailbox) pair — the same
+// number is a different message in every other folder and account. Resolve a
+// message's location from the message itself, never from the active view: the
+// view drifts during account/folder switches, and a wrong guess does not fail,
+// it silently reads a real but unrelated message (someone else's mail rendered
+// under this header). Unknown location returns null — no body beats wrong body.
+export function resolveEmailLocation(email, state) {
+  if (!email || !state) return null;
+  const accountId = email._accountId || email._srcAccountId || state.activeAccountId;
+  if (!accountId) return null;
+
+  let mailbox = email._mailbox;
+  // Only the active account's folder paths are known from view state; a foreign
+  // account's untagged message stays unresolved rather than guessing 'INBOX'.
+  if (!mailbox && accountId === state.activeAccountId) {
+    mailbox = email._fromSentFolder ? state.getSentMailboxPath?.() : state.activeMailbox;
+  }
+  if (!mailbox || mailbox === 'UNIFIED') return null;
+
+  return { accountId, mailbox };
+}
+
+/**
+ * Unique key for a message across accounts and mailboxes. A bare UID is not a
+ * key: the same number is a different message in every other folder/account,
+ * so keying by UID alone lets one view's loaded body be served to another's.
+ */
+export function emailKey(email) {
+  const account = email._accountId || email._srcAccountId || '';
+  const mailbox = email._mailbox || (email._fromSentFolder ? 'sent' : '');
+  return `${account}|${mailbox}|${email.uid}`;
+}
+
+// A body whose Message-ID contradicts the header's is not this message: the
+// lookup landed in the wrong mailbox. Missing on either side → can't tell, allow.
+export function bodyMatchesHeader(header, body) {
+  const headerId = header?.messageId || header?.message_id;
+  const bodyId = body?.messageId || body?.message_id;
+  if (!headerId || !bodyId) return true;
+  return headerId === bodyId;
+}
+
 // ── Unified selection key helpers ──────────────────────────────────────────
 // In unified mode, prefix selection keys with accountId to avoid cross-account UID collisions
 export function _selKey(email) {

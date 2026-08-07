@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useMailStore } from '../../stores/mailStore';
-import { useAccountStore } from '../../stores/accountStore';
 import { useMessageListStore } from '../../stores/messageListStore';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { AnimatePresence } from 'framer-motion';
 import { useChatBodyLoader, emailKey } from '../../hooks/useChatBodyLoader';
+import { resolveEmailLocation } from '../../stores/slices/unifiedHelpers';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../../utils/iframeQuoteFolding';
 import { splitQuotedContent } from '../../utils/quoteFolding';
 import { splitSignature, hashSignature } from '../../utils/signatureFolding';
@@ -255,7 +255,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
 
 // ── Thread Email Item (one email in a thread conversation view) ──────────────
 
-function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, activeAccountId, activeMailbox, archivedEmailIds, signatureDisplay, shouldShowSignature, onComposeReply }) {
+function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, archivedEmailIds, signatureDisplay, shouldShowSignature, onComposeReply }) {
   const [expanded, setExpanded] = useState(isNewest);
   const [, forceUpdate] = useState(0);
   const [headerExpanded, setHeaderExpanded] = useState(false);
@@ -271,6 +271,10 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, acti
   const effectiveTheme = emailThemeOverride ?? defaultEmailTheme;
   const emailDarkMode = effectiveTheme === 'dark';
   const key = emailKey(email);
+  // Where this message actually lives. A thread mixes INBOX and Sent, so the
+  // active view is not it — reading a UID from the wrong folder returns a
+  // different message (raw source, attachments).
+  const location = resolveEmailLocation(email, useMailStore.getState());
 
   // Register for body load notifications
   useEffect(() => {
@@ -286,7 +290,7 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, acti
   return (
     <div className={`border-b border-mail-border overflow-hidden ${expanded ? '' : 'hover:bg-mail-surface-hover'}`} style={{ contain: 'inline-size' }}>
       {/* Header — always visible */}
-      <div onClick={() => setExpanded(!expanded)}>
+      <div data-testid="thread-email-header" onClick={() => setExpanded(!expanded)}>
         <EmailSenderInfo
           email={email}
           variant="thread"
@@ -295,15 +299,15 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, acti
           showRaw={showRaw}
           onToggleRaw={async () => {
             if (showRaw) { setShowRaw(false); return; }
-            if (!rawSource) {
+            if (!rawSource && location) {
               setLoadingRaw(true);
               try {
                 const isTauri = !!window.__TAURI__;
                 if (isTauri) {
                   const { invoke } = window.__TAURI__.core;
                   const b64 = await invoke('maildir_read_raw_source', {
-                    accountId: activeAccountId,
-                    mailbox: activeMailbox,
+                    accountId: location.accountId,
+                    mailbox: location.mailbox,
                     uid: email.uid,
                   });
                   setRawSource(b64);
@@ -358,15 +362,15 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, acti
             }}
             onViewSource={async () => {
               if (showRaw) { setShowRaw(false); return; }
-              if (!rawSource) {
+              if (!rawSource && location) {
                 setLoadingRaw(true);
                 try {
                   const isTauri = !!window.__TAURI__;
                   if (isTauri) {
                     const { invoke } = window.__TAURI__.core;
                     const b64 = await invoke('maildir_read_raw_source', {
-                      accountId: activeAccountId,
-                      mailbox: activeMailbox,
+                      accountId: location.accountId,
+                      mailbox: location.mailbox,
                       uid: email.uid,
                     });
                     setRawSource(b64);
@@ -425,8 +429,8 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, acti
                     attachment={attachment}
                     attachmentIndex={attachment._originalIndex}
                     emailUid={email.uid}
-                    account={activeAccountId}
-                    folder={activeMailbox}
+                    account={location?.accountId}
+                    folder={location?.mailbox}
                   />
                 ))}
               </div>
@@ -442,8 +446,6 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, acti
 // ── Thread View (shows all emails in a thread) ──────────────────────────────
 
 export function ThreadView({ thread, onComposeReply }) {
-  const activeAccountId = useAccountStore(s => s.activeAccountId);
-  const activeMailbox = useAccountStore(s => s.activeMailbox);
   const savedEmailIds = useMessageListStore(s => s.savedEmailIds);
   const archivedEmailIds = useMessageListStore(s => s.archivedEmailIds);
   const saveEmailsLocally = useSelectionStore(s => s.saveEmailsLocally);
@@ -583,8 +585,6 @@ export function ThreadView({ thread, onComposeReply }) {
                   bodiesMapRef={bodiesMapRef}
                   registerListener={registerListener}
                   isNewest={isNewest}
-                  activeAccountId={activeAccountId}
-                  activeMailbox={activeMailbox}
                   archivedEmailIds={archivedEmailIds}
                   signatureDisplay={signatureDisplay}
                   shouldShowSignature={sigVisMap[email.uid] !== false}

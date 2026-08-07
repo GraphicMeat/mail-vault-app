@@ -5,11 +5,12 @@ import * as db from '../services/db';
 import * as api from '../services/api';
 import { ensureFreshToken } from '../services/authUtils';
 import { hydrateInlineImages } from '../services/attachmentUtils';
+import { resolveEmailLocation, bodyMatchesHeader, emailKey } from '../stores/slices/unifiedHelpers';
 
 const CONCURRENCY = 3;
 
-/** Unique key for an email across mailboxes (UIDs are per-mailbox) */
-export const emailKey = (email) => email._fromSentFolder ? `sent-${email.uid}` : `${email.uid}`;
+// Re-exported for the views that key their body listeners with it.
+export { emailKey };
 
 /**
  * Progressively loads email bodies for a list of header-only emails.
@@ -50,18 +51,17 @@ export function useChatBodyLoader(topicEmails) {
     bodiesMapRef.current.clear();
     if (topicEmails && topicEmails.length > 0) {
       const store = useMailStore.getState();
-      const accountId = store.activeAccountId;
-      const inboxMailbox = store.activeMailbox;
-      const sentMailbox = store.getSentMailboxPath();
       for (const email of topicEmails) {
         const key = emailKey(email);
-        // Resolve real account/mailbox (handles unified inbox)
-        const emailAccountId = email._accountId || accountId;
-        let mailbox = email._fromSentFolder && sentMailbox ? sentMailbox : inboxMailbox;
-        if (mailbox === 'UNIFIED') mailbox = email._fromSentFolder ? 'Sent' : 'INBOX';
-        const cacheKey = `${emailAccountId}-${mailbox}-${email.uid}`;
-        const cached = store.getFromCache(cacheKey);
-        if (cached) {
+        const loc = resolveEmailLocation(email, store);
+        if (!loc) {
+          // Location unknown — reading a UID out of a guessed mailbox returns
+          // a different message, so show nothing instead.
+          bodiesMapRef.current.set(key, { status: 'error', email: null });
+          continue;
+        }
+        const cached = store.getFromCache(`${loc.accountId}-${loc.mailbox}-${email.uid}`);
+        if (cached && bodyMatchesHeader(email, cached)) {
           bodiesMapRef.current.set(key, { status: 'loaded', email: cached });
         } else {
           bodiesMapRef.current.set(key, { status: 'loading', email: null });
@@ -78,13 +78,6 @@ export function useChatBodyLoader(topicEmails) {
 
     const store = useMailStore.getState();
     const cacheLimitMB = useSettingsStore.getState().cacheLimitMB;
-    const account = store.accounts.find(a => a.id === store.activeAccountId);
-    const accountId = store.activeAccountId;
-    const inboxMailbox = store.activeMailbox;
-    const sentMailbox = store.getSentMailboxPath();
-
-    // Helper: resolve the correct mailbox for an email
-    const getMailbox = (email) => email._fromSentFolder && sentMailbox ? sentMailbox : inboxMailbox;
 
     // Collect emails still needing fetch — newest first so the latest messages load first
     const pendingEmails = topicEmails
@@ -96,33 +89,20 @@ export function useChatBodyLoader(topicEmails) {
     let activeCount = 0;
     let queueIndex = 0;
 
-    // Resolve real account/mailbox for an email (handles unified inbox)
-    const resolveContext = (email) => {
-      let resolvedAccount = account;
-      let resolvedAccountId = accountId;
-      let resolvedMailbox = getMailbox(email);
-
-      // In unified inbox, resolve the real account from email metadata
-      if (email._accountId && email._accountId !== accountId) {
-        resolvedAccountId = email._accountId;
-        resolvedAccount = store.accounts.find(a => a.id === email._accountId) || account;
-        resolvedMailbox = email._fromSentFolder ? 'Sent' : 'INBOX';
-      }
-      // Never use virtual 'UNIFIED' as a real mailbox
-      if (resolvedMailbox === 'UNIFIED') {
-        resolvedMailbox = email._fromSentFolder ? 'Sent' : 'INBOX';
-      }
-
-      return { resolvedAccount, resolvedAccountId, resolvedMailbox };
-    };
-
     const MAX_RETRIES = 2;
 
     const fetchOne = async (email, retryCount = 0) => {
       if (cancelled) return;
       const key = emailKey(email);
       const uid = email.uid;
-      const { resolvedAccount, resolvedAccountId, resolvedMailbox } = resolveContext(email);
+      const loc = resolveEmailLocation(email, store);
+      if (!loc) {
+        bodiesMap.set(key, { status: 'error', email: null });
+        notifyBubble(key);
+        return;
+      }
+      const { accountId: resolvedAccountId, mailbox: resolvedMailbox } = loc;
+      const resolvedAccount = store.accounts.find(a => a.id === resolvedAccountId) || null;
       const cacheKey = `${resolvedAccountId}-${resolvedMailbox}-${uid}`;
 
       try {
@@ -150,6 +130,16 @@ export function useChatBodyLoader(topicEmails) {
         }
 
         if (cancelled) return;
+
+        // Last line of defence: a body whose Message-ID contradicts the header
+        // belongs to another message. Drop it rather than render it.
+        if (emailBody && !bodyMatchesHeader(email, emailBody)) {
+          console.warn('[useChatBodyLoader] Body/header Message-ID mismatch — discarding', {
+            uid, mailbox: resolvedMailbox, account: resolvedAccountId,
+          });
+          emailBody = null;
+          retryCount = MAX_RETRIES; // a retry reads the same wrong location
+        }
 
         if (emailBody) {
           emailBody = await hydrateInlineImages(emailBody, resolvedAccountId, resolvedMailbox);

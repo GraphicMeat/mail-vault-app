@@ -212,16 +212,101 @@ export function mailbox(name, count, { owner = 'user@example.com', attrs, subjec
 /** Subject of the HTML-quoted message, so specs can find its row. */
 export const HTML_QUOTED_SUBJECT = 'HTML render check';
 
+// ── Threaded messages for the wrong-mailbox regression ──────────────────────
+// A UID identifies a message only inside one mailbox: Sent UID 6 and INBOX UID
+// 6 are different messages. These conversations put a message in a folder that
+// is not the one on screen, so a body resolved against the active view instead
+// of the message's own folder renders visibly wrong content.
+
+export const SENT_THREAD_SUBJECT = 'Sent folder thread check';
+export const SENT_THREAD_BODY = 'Sent folder thread body';
+export const CROSS_FOLDER_SUBJECT = 'Cross folder thread check';
+export const CROSS_FOLDER_INBOX_BODY = 'Cross folder inbox body';
+export const CROSS_FOLDER_SENT_BODY = 'Cross folder sent reply body';
+
+/** One message with an explicit Message-ID / In-Reply-To, so threads form. */
+function threadMessage({ uid, owner, from, subject, body, messageId, inReplyTo, day }) {
+  const { internalDate, header } = stamp(day);
+  const lines = [
+    `From: ${from}`,
+    `To: ${owner}`,
+    `Subject: ${subject}`,
+    `Date: ${header}`,
+    `Message-ID: <${messageId}>`,
+  ];
+  if (inReplyTo) {
+    lines.push(`In-Reply-To: <${inReplyTo}>`, `References: <${inReplyTo}>`);
+  }
+  lines.push('MIME-Version: 1.0', 'Content-Type: text/plain; charset=UTF-8', '', body, '');
+  return {
+    uid,
+    flags: ['\\Seen'],
+    internal_date: internalDate,
+    modseq: uid,
+    raw: lines.join('\n'),
+  };
+}
+
+/** Append messages to a mailbox and keep its UID/MODSEQ bookkeeping honest. */
+function append(box, messages) {
+  box.messages.push(...messages);
+  const maxUid = box.messages.reduce((max, m) => Math.max(max, m.uid), 0);
+  box.uid_next = maxUid + 1;
+  box.highest_modseq = maxUid + 1;
+  return box;
+}
+
 /**
  * Default account mailbox set: INBOX plus the special-use folders the
  * archive / move-to-folder / compose specs expect to find.
  */
-export function scenario({ owner, inbox = 40, subjectPrefix, htmlQuoted = false, faults = [] } = {}) {
+export function scenario({ owner, inbox = 40, subjectPrefix, htmlQuoted = false, crossFolderThread = true, faults = [] } = {}) {
+  const inboxBox = mailbox('INBOX', inbox, { owner, subjectPrefix, htmlQuoted });
+  const sentBox = mailbox('Sent', 5, { owner, attrs: ['\\HasNoChildren', '\\Sent'], subjectPrefix: 'Sent message' });
+
+  // `inbox: 0` means an empty INBOX to the integration harness — leave it alone.
+  if (inbox > 0) {
+    // A conversation living entirely in Sent. Its UIDs (6, 7) also exist in
+    // INBOX and hold unrelated messages.
+    append(sentBox, [
+      threadMessage({
+        uid: 6, owner, from: owner, subject: SENT_THREAD_SUBJECT,
+        body: `${SENT_THREAD_BODY} one.`, messageId: `sent-thread-root@${owner}`, day: 60,
+      }),
+      threadMessage({
+        uid: 7, owner, from: owner, subject: `Re: ${SENT_THREAD_SUBJECT}`,
+        body: `${SENT_THREAD_BODY} two.`, messageId: `sent-thread-reply@${owner}`,
+        inReplyTo: `sent-thread-root@${owner}`, day: 61,
+      }),
+    ]);
+
+    // A conversation split across folders: the incoming message in INBOX, the
+    // reply in Sent — what the INBOX list shows once Sent is merged in. Skipped
+    // for the big mailbox, whose exact total is a fixture for other specs.
+    if (crossFolderThread) {
+      const rootUid = inboxBox.messages.reduce((max, m) => Math.max(max, m.uid), 0) + 1;
+      append(inboxBox, [
+        threadMessage({
+          uid: rootUid, owner, from: 'Partner <partner@example.com>',
+          subject: CROSS_FOLDER_SUBJECT, body: `${CROSS_FOLDER_INBOX_BODY}.`,
+          messageId: `cross-folder-root@${owner}`, day: 62,
+        }),
+      ]);
+      append(sentBox, [
+        threadMessage({
+          uid: 8, owner, from: owner, subject: `Re: ${CROSS_FOLDER_SUBJECT}`,
+          body: `${CROSS_FOLDER_SENT_BODY}.`, messageId: `cross-folder-reply@${owner}`,
+          inReplyTo: `cross-folder-root@${owner}`, day: 63,
+        }),
+      ]);
+    }
+  }
+
   return {
     state: {
       mailboxes: [
-        mailbox('INBOX', inbox, { owner, subjectPrefix, htmlQuoted }),
-        mailbox('Sent', 5, { owner, attrs: ['\\HasNoChildren', '\\Sent'], subjectPrefix: 'Sent message' }),
+        inboxBox,
+        sentBox,
         mailbox('Archive', 3, { owner, attrs: ['\\HasNoChildren', '\\Archive'], subjectPrefix: 'Archived message' }),
         mailbox('Drafts', 0, { owner, attrs: ['\\HasNoChildren', '\\Drafts'] }),
         mailbox('Trash', 0, { owner, attrs: ['\\HasNoChildren', '\\Trash'] }),
@@ -230,7 +315,6 @@ export function scenario({ owner, inbox = 40, subjectPrefix, htmlQuoted = false,
     faults,
   };
 }
-
 /**
  * Slow every FETCH by `ms`. Used to hold a large mailbox in its partially
  * loaded state long enough for a spec to observe it — a loopback mock answers

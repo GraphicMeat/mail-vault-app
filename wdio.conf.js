@@ -51,6 +51,8 @@ const MOCK_ACCOUNTS = [
     email: 'vader@mock.test',
     subjectPrefix: 'Vader message',
     inbox: BIG_INBOX,
+    // Its INBOX total is asserted verbatim by connected-list-header.
+    crossFolderThread: false,
   },
 ];
 
@@ -123,6 +125,7 @@ export const config = {
         subjectPrefix: a.subjectPrefix,
         inbox: a.inbox,
         htmlQuoted: a.htmlQuoted,
+        crossFolderThread: a.crossFolderThread,
         faults: a.faults,
       }))),
     );

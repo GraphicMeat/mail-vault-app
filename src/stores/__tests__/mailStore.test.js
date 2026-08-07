@@ -416,3 +416,34 @@ describe('network recovery (STAB-02)', () => {
     expect(typeof store.activateAccount).toBe('function');
   });
 });
+
+describe('getChatEmails provenance stamping', () => {
+  // The merged list mixes INBOX and Sent, whose UIDs overlap. Readers
+  // downstream (body loader, attachments, delete) need each message's own
+  // folder — guessing from the active view returns a different message.
+  it('tags every merged email with the account and folder it came from', () => {
+    const inbox = { uid: 2, messageId: '<inbox-2@x>', date: '2026-01-02T00:00:00Z' };
+    const sent = { uid: 2, messageId: '<sent-2@x>', date: '2026-01-03T00:00:00Z', _accountId: 'acct-1' };
+
+    useMailStore.setState({
+      activeAccountId: 'acct-1',
+      activeMailbox: 'INBOX',
+      mailboxes: [
+        { path: 'INBOX', name: 'INBOX' },
+        { path: 'Sent', name: 'Sent', specialUse: '\\Sent' },
+      ],
+      accounts: [{ id: 'acct-1', email: 'user@example.com' }],
+      sortedEmails: [inbox],
+      sentEmails: [sent],
+      archivedEmailIds: new Set(),
+      viewMode: 'all',
+    });
+
+    const merged = useMailStore.getState().getChatEmails();
+    expect(merged).toHaveLength(2);
+    expect(inbox._mailbox).toBe('INBOX');
+    expect(inbox._srcAccountId).toBe('acct-1');
+    expect(sent._mailbox).toBe('Sent');
+    expect(sent._fromSentFolder).toBe(true);
+  });
+});
