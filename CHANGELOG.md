@@ -2,10 +2,6 @@
 
 ## [Unreleased]
 
-### Fixed
-- **Conversations show your own replies on a first run too.** On a freshly installed or freshly reset account, the Sent folder was looked up a moment before the folder list came back from the server, found nothing, and never looked again — so INBOX threads were missing every message you had sent, for the rest of the session. Switching accounts and back was the only way to get them. The lookup now waits for the folder list.
-- **A message in a conversation no longer shows the contents of a completely different email.** Opening a thread could render an unrelated message — sometimes from another folder or even another account — under the right sender and subject. A message is identified by a number that is only unique inside one folder, and the thread view worked out which folder to read from by looking at whichever mailbox happened to be on screen; when that guess was off, the same number pointed at a real but unrelated email. Each message now carries its own account and folder, and when its identity can't be confirmed MailVault shows nothing rather than someone else's mail. The same guess is gone from attachment downloads, "View source", and "Delete thread from server", which could previously act on the wrong message.
-
 ## [2.9.2] - 2026-08-07
 
 ### Added
@@ -13,6 +9,8 @@
 - **Signature and display name save as you type.** The "Save Changes" button is gone — edits are stored automatically, with a brief "Saved" mark next to the section title.
 
 ### Fixed
+- **A message in a conversation no longer shows the contents of a completely different email.** Opening a thread could render an unrelated message — sometimes from another folder or even another account — under the right sender and subject. A message is identified by a number that is only unique inside one folder, and the thread view worked out which folder to read from by looking at whichever mailbox happened to be on screen; when that guess was off, the same number pointed at a real but unrelated email. Each message now carries its own account and folder, and when its identity can't be confirmed MailVault shows nothing rather than someone else's mail. The same guess is gone from attachment downloads, "View source", and "Delete thread from server", which could previously act on the wrong message.
+- **Conversations show your own replies on a first run too.** On a freshly installed or freshly reset account, the Sent folder was looked up a moment before the folder list came back from the server, found nothing, and never looked again — so INBOX threads were missing every message you had sent, for the rest of the session. Switching accounts and back was the only way to get them. The lookup now waits for the folder list.
 - **Your folders no longer go missing, leaving only INBOX in the sidebar.** If the very first folder lookup of a session ran a moment before the account's password was ready, it failed and was never tried again — the account showed a single INBOX until the app was restarted, and "Move to folder" had nothing to offer. The lookup now retries, and switching accounts no longer paints the old one-folder placeholder back over a list that had already loaded.
 - **Marking a selection as read or unread now updates the list right away.** Selecting messages and using the selection bar's read/unread buttons changed the messages but left the rows looking exactly as before — the unread highlight, the bold subject and the thread's unread count only caught up after switching folders. The sidebar's unread badge now follows too, and the buttons work for Outlook/Microsoft accounts, where they previously did nothing.
 - **Moving a selection to another folder empties the rows immediately** instead of leaving them in the list until the next refresh finished.
