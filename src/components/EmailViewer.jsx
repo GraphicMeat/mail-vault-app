@@ -26,7 +26,7 @@ import { ReplyToAlertIcon } from './ReplyToAlertIcon';
 import { getCachedAlerts } from '../utils/linkSafety';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useThemeStore } from '../stores/themeStore';
-import { buildEmailIframeHtml, getEmailBodyContent, getContextMenuColors } from '../utils/emailIframeTemplate';
+import { buildEmailIframeHtml, getEmailBodyContent, getContextMenuColors, measureEmailIframeHeight } from '../utils/emailIframeTemplate';
 import { getDarkReaderInlineScripts } from '../utils/darkReaderInject';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../utils/iframeQuoteFolding';
 
@@ -216,15 +216,8 @@ function EmailViewerComponent({ onComposeReply }) {
     const resizeIframe = () => {
       try {
         const doc = iframe.contentDocument || iframe.contentWindow?.document;
-        if (doc && doc.body) {
-          const height = Math.max(
-            doc.body.scrollHeight,
-            doc.body.offsetHeight,
-            doc.documentElement?.scrollHeight || 0,
-            doc.documentElement?.offsetHeight || 0
-          );
-          iframe.style.height = Math.max(height + 32, 300) + 'px';
-        }
+        const height = measureEmailIframeHeight(doc);
+        if (height) iframe.style.height = Math.max(height + 8, 300) + 'px';
       } catch (e) {
         console.error('Failed to resize iframe:', e);
       }
@@ -309,11 +302,20 @@ function EmailViewerComponent({ onComposeReply }) {
       resizeTimers.push(setTimeout(resizeIframe, 1000));
     };
 
+    // Quote/signature toggles inside the iframe post their new height.
+    const handleMessage = (e) => {
+      if (e.data?.type === 'iframe-resize' && e.data.height && iframeRef.current) {
+        iframeRef.current.style.height = Math.max(e.data.height + 8, 300) + 'px';
+      }
+    };
+    window.addEventListener('message', handleMessage);
+
     iframe.addEventListener('load', onLoad);
     resizeTimers.push(setTimeout(resizeIframe, 100));
 
     return () => {
       iframe.removeEventListener('load', onLoad);
+      window.removeEventListener('message', handleMessage);
       resizeTimers.forEach(t => clearTimeout(t));
       if (currentDoc) {
         try {

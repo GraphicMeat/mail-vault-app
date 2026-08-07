@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getEmailBodyContent } from '../emailIframeTemplate';
+import { getEmailBodyContent, measureEmailIframeHeight } from '../emailIframeTemplate';
 
 describe('getEmailBodyContent', () => {
   it('unwraps a real document', () => {
@@ -23,5 +23,38 @@ describe('getEmailBodyContent', () => {
   it('passes fragments through', () => {
     expect(getEmailBodyContent('<p>plain</p>')).toBe('<p>plain</p>');
     expect(getEmailBodyContent('')).toBe('');
+  });
+});
+
+describe('measureEmailIframeHeight', () => {
+  // Fake doc: body height is content-driven, documentElement never reports
+  // less than the frame viewport — the old max() over both ratcheted.
+  const fakeDoc = (contentHeight, frameHeight) => ({
+    body: {
+      scrollHeight: contentHeight,
+      offsetHeight: contentHeight,
+      getBoundingClientRect: () => ({ height: contentHeight }),
+    },
+    documentElement: {
+      scrollHeight: Math.max(contentHeight, frameHeight),
+      offsetHeight: Math.max(contentHeight, frameHeight),
+    },
+  });
+
+  it('ignores the frame viewport so re-measuring is stable', () => {
+    const doc = fakeDoc(220, 150);
+    const first = measureEmailIframeHeight(doc);
+    expect(first).toBe(220);
+    // Frame is now taller than the content; a second pass must not grow.
+    expect(measureEmailIframeHeight(fakeDoc(220, first + 8))).toBe(220);
+  });
+
+  it('shrinks when content collapses (quote fold)', () => {
+    expect(measureEmailIframeHeight(fakeDoc(120, 800))).toBe(120);
+  });
+
+  it('returns 0 for a missing document or body', () => {
+    expect(measureEmailIframeHeight(null)).toBe(0);
+    expect(measureEmailIframeHeight({})).toBe(0);
   });
 });

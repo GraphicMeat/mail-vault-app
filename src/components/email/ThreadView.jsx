@@ -11,7 +11,7 @@ import { splitQuotedContent } from '../../utils/quoteFolding';
 import { splitSignature, hashSignature } from '../../utils/signatureFolding';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useThemeStore } from '../../stores/themeStore';
-import { buildEmailIframeHtml, getEmailBodyContent } from '../../utils/emailIframeTemplate';
+import { buildEmailIframeHtml, getEmailBodyContent, measureEmailIframeHeight } from '../../utils/emailIframeTemplate';
 import { getDarkReaderInlineScripts } from '../../utils/darkReaderInject';
 import {
   Paperclip,
@@ -104,15 +104,8 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
     const resizeIframe = () => {
       try {
         const doc = iframe.contentDocument || iframe.contentWindow?.document;
-        if (doc && doc.body) {
-          const height = Math.max(
-            doc.body.scrollHeight,
-            doc.body.offsetHeight,
-            doc.documentElement?.scrollHeight || 0,
-            doc.documentElement?.offsetHeight || 0
-          );
-          iframe.style.height = Math.max(height + 32, 100) + 'px';
-        }
+        const height = measureEmailIframeHeight(doc);
+        if (height) iframe.style.height = Math.max(height + 8, 100) + 'px';
       } catch (e) {
         console.error('Failed to resize thread iframe:', e);
       }
@@ -149,7 +142,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
 
     const handleMessage = (e) => {
       if (e.data?.type === 'iframe-resize' && e.data.height && iframeRef.current) {
-        iframeRef.current.style.height = Math.max(e.data.height + 32, 100) + 'px';
+        iframeRef.current.style.height = Math.max(e.data.height + 8, 100) + 'px';
       }
     };
     window.addEventListener('message', handleMessage);

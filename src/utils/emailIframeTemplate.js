@@ -21,6 +21,23 @@ export function getEmailBodyContent(html) {
   return bodyMatch ? bodyMatch[1] : html;
 }
 
+// Content height of an email iframe document, for auto-sizing the frame.
+//
+// Measure the BODY box only. `documentElement.scrollHeight` is never smaller
+// than the frame's own viewport, so feeding it back into the frame height
+// ratchets: every re-measure returns the current height and the caller's
+// padding is added again. Body height stays content-driven (the template gives
+// html/body no height), so re-measuring after a quote fold can shrink the frame.
+export function measureEmailIframeHeight(doc) {
+  const body = doc?.body;
+  if (!body) return 0;
+  return Math.ceil(Math.max(
+    body.scrollHeight || 0,
+    body.offsetHeight || 0,
+    body.getBoundingClientRect?.().height || 0
+  ));
+}
+
 // Build a complete HTML document for an email iframe.
 //
 // opts:

@@ -11,8 +11,11 @@
 //   add later (context menus, etc.) also get inverted.
 //
 // Tuning notes for email content:
-// - brightness/contrast at 100/90 keeps email text readable without
-//   over-darkening. Sepia 0 — we want neutral, not warm.
+// - brightness/contrast stay neutral at 100/100. Sepia 0 — neutral, not warm.
+//   Contrast below 100 pulls every color toward mid-grey, including the
+//   background: at 90 the #0a0a0f below came out ~#16161a, so every HTML mail
+//   rendered as a visibly lighter box against the app chrome while plain-text
+//   mails (styled directly with #0a0a0f) did not.
 // - darkSchemeBackgroundColor matches our app's --mail-bg (#0a0a0f) so the
 //   iframe blends into the surrounding chrome.
 
@@ -21,7 +24,7 @@ import darkReaderSource from 'darkreader/darkreader.js?raw';
 
 const DEFAULT_OPTIONS = {
   brightness: 100,
-  contrast: 90,
+  contrast: 100,
   sepia: 0,
   darkSchemeBackgroundColor: '#0a0a0f',
   darkSchemeTextColor: '#e4e4e7',

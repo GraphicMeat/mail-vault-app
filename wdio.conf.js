@@ -42,7 +42,10 @@ const BIG_INBOX = 700;
 // prefix and silently no-ops when it doesn't match. Short readable ids made
 // every local-Maildir delete (unarchive, export) a no-op in the suite only.
 const MOCK_ACCOUNTS = [
-  { id: '11111111-1111-4111-8111-111111111111', email: 'luke@mock.test', subjectPrefix: 'Luke message' },
+  // Account 1 carries the one HTML message in the suite (newest in its INBOX):
+  // plain-text bodies never reach the iframe render path that connected-html-render
+  // asserts on.
+  { id: '11111111-1111-4111-8111-111111111111', email: 'luke@mock.test', subjectPrefix: 'Luke message', htmlQuoted: true },
   {
     id: '22222222-2222-4222-8222-222222222222',
     email: 'vader@mock.test',
@@ -119,6 +122,7 @@ export const config = {
         owner: a.email,
         subjectPrefix: a.subjectPrefix,
         inbox: a.inbox,
+        htmlQuoted: a.htmlQuoted,
         faults: a.faults,
       }))),
     );

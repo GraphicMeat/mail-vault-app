@@ -9,6 +9,8 @@
 ### Fixed
 - **Marking a selection as read or unread now updates the list right away.** Selecting messages and using the selection bar's read/unread buttons changed the messages but left the rows looking exactly as before — the unread highlight, the bold subject and the thread's unread count only caught up after switching folders. The sidebar's unread badge now follows too, and the buttons work for Outlook/Microsoft accounts, where they previously did nothing.
 - **Moving a selection to another folder empties the rows immediately** instead of leaving them in the list until the next refresh finished.
+- **Formatted emails no longer sit in a lighter grey box in dark mode.** HTML messages — which includes every reply you write — were shaded slightly lighter than the app behind them, so your own replies looked boxed next to plain-text mail in the same thread.
+- **No more empty space under an email with a folded quote.** The message area grew a little on every measurement instead of settling on the content's real height, leaving a gap below the "…" button. Expanding or collapsing a quote in the single-email view now resizes the message too, as it already did in thread view.
 - **Your own reply no longer renders as a copy of the message you replied to.** When the quoted message carried a complete HTML document inside it (Proton Mail does this), MailVault displayed only the quote and hid everything you wrote. The email itself was always sent and stored correctly — this was a display bug in the thread and single-email views.
 
 ## [2.9.1] - 2026-08-06

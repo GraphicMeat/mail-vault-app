@@ -113,10 +113,56 @@ function rfc822({ uid, to, from, subject, body, date }) {
 }
 
 /**
+ * An HTML message quoting an earlier one — the shape MailVault's own replies
+ * take (multipart/alternative, quote wrapped in <blockquote>). Every other mock
+ * message is text/plain, which the app renders as React text; only an HTML body
+ * reaches the iframe path, so the render spec needs one of these to exist.
+ *
+ * The quote is deliberately long: a folded quote has to shorten the frame by
+ * more than any measurement slack for the height assertions to mean anything.
+ * No In-Reply-To — this one stands alone so it opens in the single-email
+ * viewer regardless of the threading setting.
+ */
+export function htmlQuotedMessage({ uid, to, from, subject, date }) {
+  const boundary = 'MockMvBoundary';
+  const quoteLines = Array.from(
+    { length: 24 },
+    (_, i) => `<p>Quoted line ${i + 1} of the message being answered.</p>`,
+  ).join('');
+  return [
+    `From: ${from}`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    `Date: ${date}`,
+    `Message-ID: <mock-html-${uid}-${to}>`,
+    'MIME-Version: 1.0',
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/plain; charset=UTF-8',
+    '',
+    'Short answer above the quote.',
+    '',
+    `--${boundary}`,
+    'Content-Type: text/html; charset=UTF-8',
+    '',
+    '<p>Short answer above the quote.</p>'
+      + '<hr>'
+      + `<blockquote><p><strong>Original Message</strong></p>${quoteLines}</blockquote>`,
+    '',
+    `--${boundary}--`,
+    '',
+  ].join('\n');
+}
+
+/**
  * A mailbox holding `count` synthetic messages.
  * Every other message is unread so read/unread affordances have something to show.
+ *
+ * `htmlQuoted` appends one HTML message with a folded quote (see
+ * `htmlQuotedMessage`) as the newest entry.
  */
-export function mailbox(name, count, { owner = 'user@example.com', attrs, subjectPrefix = 'Mock message' } = {}) {
+export function mailbox(name, count, { owner = 'user@example.com', attrs, subjectPrefix = 'Mock message', htmlQuoted = false } = {}) {
   const messages = [];
   for (let uid = 1; uid <= count; uid++) {
     // Highest UID is newest, so the list has a stable, meaningful sort order.
@@ -136,25 +182,45 @@ export function mailbox(name, count, { owner = 'user@example.com', attrs, subjec
       }),
     });
   }
+  if (htmlQuoted) {
+    const uid = count + 1;
+    const { internalDate, header } = stamp(uid);
+    messages.push({
+      uid,
+      flags: [],
+      internal_date: internalDate,
+      modseq: uid,
+      raw: htmlQuotedMessage({
+        uid,
+        to: owner,
+        from: `Quoting Sender <quoted@example.com>`,
+        subject: HTML_QUOTED_SUBJECT,
+        date: header,
+      }),
+    });
+  }
   return {
     name,
     attrs: attrs || ['\\HasNoChildren'],
     uid_validity: 1,
-    uid_next: count + 1,
-    highest_modseq: count + 1,
+    uid_next: messages.length + 1,
+    highest_modseq: messages.length + 1,
     messages,
   };
 }
+
+/** Subject of the HTML-quoted message, so specs can find its row. */
+export const HTML_QUOTED_SUBJECT = 'HTML render check';
 
 /**
  * Default account mailbox set: INBOX plus the special-use folders the
  * archive / move-to-folder / compose specs expect to find.
  */
-export function scenario({ owner, inbox = 40, subjectPrefix, faults = [] } = {}) {
+export function scenario({ owner, inbox = 40, subjectPrefix, htmlQuoted = false, faults = [] } = {}) {
   return {
     state: {
       mailboxes: [
-        mailbox('INBOX', inbox, { owner, subjectPrefix }),
+        mailbox('INBOX', inbox, { owner, subjectPrefix, htmlQuoted }),
         mailbox('Sent', 5, { owner, attrs: ['\\HasNoChildren', '\\Sent'], subjectPrefix: 'Sent message' }),
         mailbox('Archive', 3, { owner, attrs: ['\\HasNoChildren', '\\Archive'], subjectPrefix: 'Archived message' }),
         mailbox('Drafts', 0, { owner, attrs: ['\\HasNoChildren', '\\Drafts'] }),
