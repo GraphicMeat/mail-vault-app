@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.9.2] - 2026-08-07
+
 ### Added
 - **Email signatures are now formatted, not plain text.** Settings → Accounts gives the signature the same editor as compose: bold, italic, underline, links, lists and quotes, all carried into the messages you send. Existing plain-text signatures are kept as they are.
 - **Signature and display name save as you type.** The "Save Changes" button is gone — edits are stored automatically, with a brief "Saved" mark next to the section title.
