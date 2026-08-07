@@ -325,6 +325,45 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
 }
 
 
+// ── read-flag helpers (shared by the single-email and bulk paths) ──
+
+const _withSeen = (flags, read) => read
+  ? [...(flags || []), '\\Seen'].filter((f, i, a) => a.indexOf(f) === i)
+  : (flags || []).filter(f => f !== '\\Seen');
+
+// One message's \Seen change on the server. Graph accounts have no IMAP flags —
+// the bulk path used to skip this branch, so mark-as-read silently failed there.
+async function _setSeenOnServer(account, accountId, mailbox, uid, read) {
+  if (isGraphAccount(account)) {
+    const graphId = getGraphMessageId(accountId, mailbox, uid);
+    if (!graphId) {
+      console.warn('[setSeenOnServer] No Graph message ID for UID', uid);
+      return;
+    }
+    await api.graphSetRead(account.oauth2AccessToken, graphId, read);
+    return;
+  }
+  await api.updateEmailFlags(account, uid, ['\\Seen'], read ? 'add' : 'remove', mailbox);
+}
+
+// Re-derive everything the list renders from after a flag-only change.
+// A flag change moves no message in or out of the list, so it is invisible to
+// the fingerprints in updateSortedEmails/getChatEmails/getThreads unless the
+// flag counter is bumped first, and EmailList only rebuilds its threads when
+// _flagSeq changes. Skip any of the three and the rows keep the old flags.
+function _refreshAfterFlagChange(useMailStore) {
+  bumpFlagChangeCounter();
+  useMailStore.setState(state => ({ _flagSeq: state._flagSeq + 1 }));
+  useMailStore.getState().updateSortedEmails();
+}
+
+function _syncUnreadBadge(useMailStore, accountId, mailbox) {
+  if (mailbox !== 'INBOX') return;
+  const unread = useMailStore.getState().emails.filter(e => !e.flags?.includes('\\Seen')).length;
+  useSettingsStore.getState().setUnreadForAccount(accountId, unread);
+}
+
+
 // ── markEmailReadStatus workflow ──
 
 export async function markEmailReadStatus(uid, read) {
@@ -342,54 +381,21 @@ export async function markEmailReadStatus(uid, read) {
   account = await ensureFreshToken(account);
 
   try {
-    if (isGraphAccount(account)) {
-      const graphId = getGraphMessageId(accountId, mailbox, realUid);
-      if (graphId) {
-        await api.graphSetRead(account.oauth2AccessToken, graphId, read);
-      } else {
-        console.warn('[markEmailReadStatus] No Graph message ID for UID', realUid);
-      }
-    } else {
-      await api.updateEmailFlags(
-        account,
-        realUid,
-        ['\\Seen'],
-        read ? 'add' : 'remove',
-        mailbox
-      );
-    }
+    await _setSeenOnServer(account, accountId, mailbox, realUid, read);
 
-    bumpFlagChangeCounter();
-
-    useMailStore.setState(state => {
-      const emails = state.emails.map(e => {
+    useMailStore.setState(state => ({
+      emails: state.emails.map(e => {
         const match = isUnified
           ? (e._accountId === accountId && e.uid === realUid)
           : (e.uid === uid);
-        if (match) {
-          const newFlags = read
-            ? [...(e.flags || []), '\\Seen'].filter((f, i, a) => a.indexOf(f) === i)
-            : (e.flags || []).filter(f => f !== '\\Seen');
-          return { ...e, flags: newFlags };
-        }
-        return e;
-      });
-
-      let updatedSelectedEmail = state.selectedEmail;
-      if (state.selectedEmail?.uid === realUid) {
-        const newFlags = read
-          ? [...(state.selectedEmail.flags || []), '\\Seen'].filter((f, i, a) => a.indexOf(f) === i)
-          : (state.selectedEmail.flags || []).filter(f => f !== '\\Seen');
-        updatedSelectedEmail = { ...state.selectedEmail, flags: newFlags };
-      }
-
-      return { emails, selectedEmail: updatedSelectedEmail, _flagSeq: state._flagSeq + 1 };
-    });
-    get().updateSortedEmails();
-    if (mailbox === 'INBOX') {
-      const unread = get().emails.filter(e => !e.flags?.includes('\\Seen')).length;
-      useSettingsStore.getState().setUnreadForAccount(accountId, unread);
-    }
+        return match ? { ...e, flags: _withSeen(e.flags, read) } : e;
+      }),
+      selectedEmail: state.selectedEmail?.uid === realUid
+        ? { ...state.selectedEmail, flags: _withSeen(state.selectedEmail.flags, read) }
+        : state.selectedEmail,
+    }));
+    _refreshAfterFlagChange(useMailStore);
+    _syncUnreadBadge(useMailStore, accountId, mailbox);
   } catch (error) {
     useMailStore.setState({ error: `Failed to update read status: ${error.message}` });
   }
@@ -412,9 +418,9 @@ export async function exportEmail(uid) {
 }
 
 
-// ── markSelectedAsRead workflow ──
+// ── bulk mark read/unread workflow ──
 
-export async function markSelectedAsRead() {
+async function _markSelected(read) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
 
@@ -424,15 +430,30 @@ export async function markSelectedAsRead() {
   if (selectedEmailIds.size === 0) return;
 
   const keys = Array.from(selectedEmailIds);
-  useMailStore.setState(state => ({
-    emails: state.emails.map(e => {
-      const key = isUnified ? _selKey(e) : e.uid;
-      return selectedEmailIds.has(key)
-        ? { ...e, flags: [...(e.flags || []), '\\Seen'].filter((f, i, a) => a.indexOf(f) === i) }
-        : e;
-    }),
-    selectedEmailIds: new Set()
+  const keySet = new Set(keys);
+  const selKeyOf = (e) => (isUnified ? _selKey(e) : e.uid);
+
+  useMailStore.setState(s => ({
+    emails: s.emails.map(e => keySet.has(selKeyOf(e)) ? { ...e, flags: _withSeen(e.flags, read) } : e),
+    selectedEmail: s.selectedEmail && keySet.has(selKeyOf(s.selectedEmail))
+      ? { ...s.selectedEmail, flags: _withSeen(s.selectedEmail.flags, read) }
+      : s.selectedEmail,
+    selectedEmailIds: new Set(),
   }));
+  _refreshAfterFlagChange(useMailStore);
+
+  if (isUnified) {
+    // Unified rows span accounts, so the sidebar badges have to be counted per
+    // account. The unified list is INBOX-only, so no mailbox check here.
+    const byAccount = new Map();
+    for (const e of get().emails) {
+      if (!e._accountId) continue;
+      byAccount.set(e._accountId, (byAccount.get(e._accountId) || 0) + (e.flags?.includes('\\Seen') ? 0 : 1));
+    }
+    for (const [id, unread] of byAccount) useSettingsStore.getState().setUnreadForAccount(id, unread);
+  } else {
+    _syncUnreadBadge(useMailStore, state.activeAccountId, state.activeMailbox);
+  }
 
   for (const key of keys) {
     try {
@@ -443,51 +464,15 @@ export async function markSelectedAsRead() {
       const mailbox = rawMailbox === 'UNIFIED' ? 'INBOX' : rawMailbox;
       let account = ctx?.account || accounts.find(a => a.id === accountId);
       account = await ensureFreshToken(account);
-      await api.updateEmailFlags(account, realUid, ['\\Seen'], 'add', mailbox);
+      await _setSeenOnServer(account, accountId, mailbox, realUid, read);
     } catch (e) {
-      console.error(`Failed to mark email ${key} as read:`, e);
+      console.error(`Failed to mark email ${key} as ${read ? 'read' : 'unread'}:`, e);
     }
   }
 }
 
-
-// ── markSelectedAsUnread workflow ──
-
-export async function markSelectedAsUnread() {
-  const { useMailStore } = await import('../../stores/mailStore');
-  const get = () => useMailStore.getState();
-
-  const state = get();
-  const { selectedEmailIds, accounts } = state;
-  const isUnified = state.activeMailbox === 'UNIFIED';
-  if (selectedEmailIds.size === 0) return;
-
-  const keys = Array.from(selectedEmailIds);
-  useMailStore.setState(state => ({
-    emails: state.emails.map(e => {
-      const key = isUnified ? _selKey(e) : e.uid;
-      return selectedEmailIds.has(key)
-        ? { ...e, flags: (e.flags || []).filter(f => f !== '\\Seen') }
-        : e;
-    }),
-    selectedEmailIds: new Set()
-  }));
-
-  for (const key of keys) {
-    try {
-      const ctx = isUnified ? _resolveUnifiedContext(key, state) : null;
-      const realUid = ctx?.uid ?? key;
-      const accountId = ctx?.accountId || state.activeAccountId;
-      const rawMailbox = ctx?.mailbox || state.activeMailbox;
-      const mailbox = rawMailbox === 'UNIFIED' ? 'INBOX' : rawMailbox;
-      let account = ctx?.account || accounts.find(a => a.id === accountId);
-      account = await ensureFreshToken(account);
-      await api.updateEmailFlags(account, realUid, ['\\Seen'], 'remove', mailbox);
-    } catch (e) {
-      console.error(`Failed to mark email ${key} as unread:`, e);
-    }
-  }
-}
+export const markSelectedAsRead = () => _markSelected(true);
+export const markSelectedAsUnread = () => _markSelected(false);
 
 
 // ── deleteSelectedFromServer workflow ──
@@ -664,6 +649,9 @@ export async function moveEmails(uids, targetMailbox) {
     updates.selectedThread = null;
   }
   useMailStore.setState(updates);
+  // Drop the moved rows now — loadEmails() below is a server round-trip, and
+  // until it returns the list still renders what was moved away.
+  get().updateSortedEmails();
 
   const { invalidateRestoreDescriptors: _invalidateRestore } = await import('../cacheManager');
   // Unified keys aren't UIDs — only the per-account path can name removed UIDs.

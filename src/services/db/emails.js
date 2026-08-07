@@ -279,7 +279,12 @@ export async function getAllLocalEmails(accountId) {
 export async function deleteLocalEmail(localId) {
   await initDB();
   const parsed = parseLocalId(localId);
-  if (!parsed || !invoke) return;
+  if (!parsed) {
+    // Silent no-op here reads as "delete succeeded" all the way up to the row.
+    console.warn('[db.js] deleteLocalEmail: unparseable local id', localId);
+    return;
+  }
+  if (!invoke) return;
 
   try {
     await invoke('maildir_delete', {

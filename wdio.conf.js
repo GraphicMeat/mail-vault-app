@@ -37,10 +37,14 @@ const testDataDir = process.env.E2E_DATA_DIR || mkdtempSync(join(tmpdir(), 'mail
 // it starved the webview badly enough to stall unrelated suites.
 const BIG_INBOX = 700;
 
+// Account ids must be 36-char UUIDs, as the app's own `crypto.randomUUID()` ids
+// are: db/emails.js parses the `accountId-mailbox-uid` local id with a 36-char
+// prefix and silently no-ops when it doesn't match. Short readable ids made
+// every local-Maildir delete (unarchive, export) a no-op in the suite only.
 const MOCK_ACCOUNTS = [
-  { id: 'e2e-mock-account-1', email: 'luke@mock.test', subjectPrefix: 'Luke message' },
+  { id: '11111111-1111-4111-8111-111111111111', email: 'luke@mock.test', subjectPrefix: 'Luke message' },
   {
-    id: 'e2e-mock-account-2',
+    id: '22222222-2222-4222-8222-222222222222',
     email: 'vader@mock.test',
     subjectPrefix: 'Vader message',
     inbox: BIG_INBOX,
