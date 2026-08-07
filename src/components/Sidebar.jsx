@@ -1065,7 +1065,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
               </div>
 
               {activeAccount && suspectEmptyServerData?.accountId === activeAccount.id && (
-                <div className="mt-2 p-2 rounded-lg border bg-mail-warning/10 border-mail-warning/20">
+                <div data-testid="cached-data-banner" className="mt-2 p-2 rounded-lg border bg-mail-warning/10 border-mail-warning/20">
                   <div className="flex items-center justify-between text-xs text-mail-warning">
                     <div className="flex items-center gap-2">
                       <AlertTriangle size={14} />
@@ -1146,7 +1146,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
 
               {/* Suspect empty data warning — server returned empty but cache had data */}
               {account.id === activeAccountId && suspectEmptyServerData?.accountId === account.id && (
-                <div className="mt-1 mb-1 p-2 rounded-lg border bg-mail-warning/10 border-mail-warning/20">
+                <div data-testid="cached-data-banner" className="mt-1 mb-1 p-2 rounded-lg border bg-mail-warning/10 border-mail-warning/20">
                   <div className="flex items-center justify-between text-xs text-mail-warning">
                     <div className="flex items-center gap-2">
                       <AlertTriangle size={14} />

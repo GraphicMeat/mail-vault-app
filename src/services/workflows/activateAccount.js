@@ -16,6 +16,7 @@ import { saveRestoreDescriptor as _saveRestore, getRestoreDescriptor as _getRest
 import { createPerfTrace } from '../../utils/perfTrace';
 import { countMailboxes, isMailboxTreeComplete, pickMailboxList, INBOX_PLACEHOLDER, retryOnce } from './mailboxTree';
 import { _buildRestoreDescriptor, _resolveUnifiedContext, _selKey, _parseSelKey } from '../../stores/slices/unifiedHelpers';
+import { serverVerifiedPatch } from '../../stores/slices/syncSlice';
 import {
   _resetNetworkRetry, _scheduleNetworkRetry,
   getLoadAbortController, setLoadAbortController,
@@ -261,17 +262,12 @@ async function _loadServerEmailsViaGraph(account, accountId, activeMailbox, uidM
 
   if (signal.aborted) return;
 
-  commitToStore(uidMap, signal, accountId, useMailStoreRef, {
-    connectionStatus: 'connected',
-    connectionError: null,
-    connectionErrorType: null,
-    loading: false,
-    loadingMore: false,
+  commitToStore(uidMap, signal, accountId, useMailStoreRef, serverVerifiedPatch({
     totalEmails: serverTotal,
     hasMoreEmails: !!result.nextLink,
     currentPage: 1,
     serverUidSet: new Set(sorted.map(e => e.uid)),
-  });
+  }));
 
   if (!useMailStoreRef.getState().unifiedInbox) {
     _saveRestore(_buildRestoreDescriptor(useMailStoreRef.getState()));
@@ -628,19 +624,14 @@ export async function activateAccount(accountId, mailbox, options = {}) {
           useSettingsStore.getState().setUnreadForAccount(accountId, unread);
         }
       } else if (savedEmailIds.size > 0 && !isBackgroundRefresh) {
+        // Expected recovery, not an anomaly: the sync that follows repopulates
+        // the cache. No suspectEmptyServerData here — the disk walk can finish
+        // after the server half's clear, leaving the banner stuck all session.
         console.warn(
-          '[activateAccount] Cache empty but Maildir has %d saved emails for %s/%s — treating as corrupted cache, showing local recovery data',
+          '[activateAccount] Cache empty but Maildir has %d saved emails for %s/%s — rebuilding silently',
           savedEmailIds.size, accountId, effectiveMailbox
         );
-        useMailStore.setState({
-          loading: true,
-          suspectEmptyServerData: {
-            accountId,
-            type: 'emails',
-            message: 'Email cache was empty but local data exists. Rebuilding from local copies while syncing with server.',
-            timestamp: Date.now(),
-          },
-        });
+        useMailStore.setState({ loading: true });
       } else if (!isBackgroundRefresh) {
         useMailStore.setState({ loading: true });
       }
@@ -718,13 +709,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
               accountId, effectiveMailbox, probe.reason);
             markVerified(accountId, effectiveMailbox);
             if (!signal.aborted) {
-              useMailStore.setState({
-                connectionStatus: 'connected',
-                connectionError: null,
-                connectionErrorType: null,
-                loading: false,
-                loadingMore: false,
-              });
+              useMailStore.setState(serverVerifiedPatch());
             }
             serverTrace.end('probe-unchanged', { reason: probe.reason });
             return;
@@ -780,19 +765,13 @@ export async function activateAccount(accountId, mailbox, options = {}) {
               uidMap.merge(headersWithSource);
               if (freshCache.uidValidity != null) uidMap.checkUidValidity(freshCache.uidValidity);
 
-              commitToStore(uidMap, signal, accountId, useMailStoreRef, {
-                connectionStatus: 'connected',
-                connectionError: null,
-                connectionErrorType: null,
-                suspectEmptyServerData: null,
-                loading: false,
-                loadingMore: false,
+              commitToStore(uidMap, signal, accountId, useMailStoreRef, serverVerifiedPatch({
                 totalEmails: freshCache.totalEmails || freshCache.emails.length,
                 cachedCount: freshCache.totalCached ?? freshCache.emails.length,
                 hasMoreEmails: freshCache.emails.length < (freshCache.totalEmails || freshCache.emails.length),
                 currentPage: Math.ceil(freshCache.emails.length / 200) || 1,
                 ...(freshCache.serverUids ? { serverUidSet: freshCache.serverUids } : {}),
-              });
+              }));
 
               // Save an in-memory restore descriptor for this mailbox so the
               // next activation restores instantly. Without this, first-time
@@ -906,15 +885,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
           newUidNext === cachedUidNext
         ) {
           console.log('[activateAccount] CONDSTORE: nothing changed');
-          useMailStore.setState({
-            connectionStatus: 'connected',
-            connectionError: null,
-            connectionErrorType: null,
-            suspectEmptyServerData: null,
-            loading: false,
-            loadingMore: false,
-            totalEmails: serverTotal,
-          });
+          useMailStore.setState(serverVerifiedPatch({ totalEmails: serverTotal }));
           get().updateSortedEmails();
 
           if (uidMap.size < serverTotal) {
@@ -929,14 +900,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
           serverTrace.end('condstore-noop');
           return;
         } else if (newUidNext === cachedUidNext && serverTotal <= (cachedMeta?.totalCached ?? uidMap.size)) {
-          useMailStore.setState({
-            connectionStatus: 'connected',
-            connectionError: null,
-            connectionErrorType: null,
-            loading: false,
-            loadingMore: false,
-            totalEmails: serverTotal,
-          });
+          useMailStore.setState(serverVerifiedPatch({ totalEmails: serverTotal }));
           get().updateSortedEmails();
 
           if (uidMap.size < serverTotal) {
@@ -1040,18 +1004,12 @@ export async function activateAccount(accountId, mailbox, options = {}) {
         : new Set(sorted.map(e => e.uid));
 
       setLoadEmailsRetried(false);
-      commitToStore(uidMap, signal, accountId, useMailStoreRef, {
-        connectionStatus: 'connected',
-        connectionError: null,
-        connectionErrorType: null,
-        suspectEmptyServerData: null,
-        loading: false,
-        loadingMore: false,
+      commitToStore(uidMap, signal, accountId, useMailStoreRef, serverVerifiedPatch({
         totalEmails: serverTotal,
         hasMoreEmails: sorted.length < serverTotal,
         currentPage: Math.ceil(sorted.length / 200) || 1,
         serverUidSet: mergedServerUidSet,
-      });
+      }));
       serverTrace.mark('server-merged', { count: sorted.length, serverTotal });
 
       // Descriptor saved on switch-away, not during load

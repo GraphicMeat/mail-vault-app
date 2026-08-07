@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Fixed
+- **The "Showing cached data" warning no longer appears — or refuses to leave — when MailVault rebuilds its email list from your saved copies.** If the fast email index was missing while the saved mail itself was intact, opening the account raised a warning banner even though this rebuild is routine and heals itself within moments. Worse, once anything raised that banner, the quick "has anything changed on the server?" checks that run on every account switch skipped the code that removes it — so the warning sat there for the rest of the session, and its reload button appeared to do nothing. The rebuild is now silent, and every check that confirms your mail matches the server also clears the warning, so the one remaining genuine warning (the server unexpectedly claiming a mailbox is empty when you have mail in it) disappears by itself as soon as the server checks out.
 - **Headings and text in newsletters stay readable in dark mode.** Some senders pin a text colour in a way that overrode MailVault's dark conversion, so headings kept their original black and disappeared into the dark background while the rest of the message converted normally. Those colours are now converted like everything else, and brand colours that convert correctly are left as they were.
 
 ## [2.9.2] - 2026-08-07
