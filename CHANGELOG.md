@@ -7,6 +7,7 @@
 - **Signature and display name save as you type.** The "Save Changes" button is gone — edits are stored automatically, with a brief "Saved" mark next to the section title.
 
 ### Fixed
+- **Your folders no longer go missing, leaving only INBOX in the sidebar.** If the very first folder lookup of a session ran a moment before the account's password was ready, it failed and was never tried again — the account showed a single INBOX until the app was restarted, and "Move to folder" had nothing to offer. The lookup now retries, and switching accounts no longer paints the old one-folder placeholder back over a list that had already loaded.
 - **Marking a selection as read or unread now updates the list right away.** Selecting messages and using the selection bar's read/unread buttons changed the messages but left the rows looking exactly as before — the unread highlight, the bold subject and the thread's unread count only caught up after switching folders. The sidebar's unread badge now follows too, and the buttons work for Outlook/Microsoft accounts, where they previously did nothing.
 - **Moving a selection to another folder empties the rows immediately** instead of leaving them in the list until the next refresh finished.
 - **Formatted emails no longer sit in a lighter grey box in dark mode.** HTML messages — which includes every reply you write — were shaded slightly lighter than the app behind them, so your own replies looked boxed next to plain-text mail in the same thread.

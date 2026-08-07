@@ -14,6 +14,7 @@ import { checkRestoreNeeded } from '../restoreDetection';
 import { isGraphAccount, GRAPH_FOLDER_NAME_MAP, graphFoldersToMailboxes, inferSpecialUse, graphMessageToEmail } from '../graphConfig';
 import { saveRestoreDescriptor as _saveRestore, getRestoreDescriptor as _getRestore, setGraphIdMap as _setGraphIdMap, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap } from '../cacheManager';
 import { createPerfTrace } from '../../utils/perfTrace';
+import { countMailboxes, isMailboxTreeComplete, pickMailboxList, INBOX_PLACEHOLDER, retryOnce } from './mailboxTree';
 import { _buildRestoreDescriptor, _resolveUnifiedContext, _selKey, _parseSelKey } from '../../stores/slices/unifiedHelpers';
 import {
   _resetNetworkRetry, _scheduleNetworkRetry,
@@ -33,28 +34,6 @@ const MAILBOX_PREFETCH_LIMIT = 2;
 
 function isMailboxCacheFresh(fetchedAt) {
   return !!fetchedAt && (Date.now() - fetchedAt) < MAILBOX_CACHE_FRESH_MS;
-}
-
-function countMailboxes(mailboxes = []) {
-  let count = 0;
-  const visit = (nodes) => {
-    for (const node of nodes || []) {
-      count += 1;
-      if (node.children?.length) visit(node.children);
-    }
-  };
-  visit(mailboxes);
-  return count;
-}
-
-function isMailboxTreeComplete(mailboxes = []) {
-  const total = countMailboxes(mailboxes);
-  if (total === 0) return false;
-  // If any mailbox has nested children, the cache uses the old tree format — force refresh
-  if (mailboxes.some(m => m.children?.length > 0)) return false;
-  if (total > 1) return true;
-  const only = mailboxes[0];
-  return !!only && only.path !== 'INBOX';
 }
 
 function shouldUseFreshMailboxCache(entry) {
@@ -83,7 +62,7 @@ async function loadMailboxes(accountId, account, requestedMailbox, signal, useMa
       console.warn('[loadMailboxes] Current mailbox cache empty, using last-known-good for', accountId);
       localMailboxes = cachedEntry.lastKnownGoodMailboxes;
     } else {
-      localMailboxes = [{ name: 'INBOX', path: 'INBOX', specialUse: null, children: [] }];
+      localMailboxes = INBOX_PLACEHOLDER;
     }
   }
 
@@ -116,8 +95,13 @@ async function loadMailboxes(accountId, account, requestedMailbox, signal, useMa
   const isFresh = shouldUseFreshMailboxCache(cachedEntry);
   const serverMailboxesPromise = isFresh
     ? Promise.resolve(null)
-    : fetchAccountMailboxes(account)
+    // One retry: the first fetch of a session races credential loading and
+    // fails with "Password missing". The IMAP pool recovers milliseconds
+    // later, but nothing re-ran this — and the background prefetch skips the
+    // active account — so that account kept the INBOX placeholder all session.
+    : retryOnce(() => fetchAccountMailboxes(account), { isAborted: () => signal.aborted })
         .then(freshMailboxes => {
+          if (!freshMailboxes) return null;
           if (signal.aborted) return null;
           if (useMailStoreRef.getState().activeAccountId !== accountId) return null;
 
@@ -432,10 +416,15 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       memoPainted ? 'in-memory set' : 'first window');
     invalidateChatAndThreadCaches();
 
+    // The descriptor snapshots whatever the store held, so it can carry the
+    // INBOX placeholder from a session whose folder fetch failed. Painting that
+    // over a cache that has since been filled is what left the sidebar (and the
+    // Move dropdown) showing one folder for good — the background refresh that
+    // follows sees a fresh cache, fetches nothing, and writes nothing.
     let restoredMailboxes = restored.mailboxes;
-    if (!restoredMailboxes || restoredMailboxes.length === 0) {
+    if (!isMailboxTreeComplete(restoredMailboxes)) {
       const cachedMailboxEntry = await db.getCachedMailboxEntry(accountId);
-      restoredMailboxes = cachedMailboxEntry?.mailboxes || [{ name: 'INBOX', path: 'INBOX', specialUse: null, children: [] }];
+      restoredMailboxes = pickMailboxList(restored.mailboxes, cachedMailboxEntry?.mailboxes);
     }
 
     const restoredSavedIds = new Set(restored.firstWindowSavedUids || []);
