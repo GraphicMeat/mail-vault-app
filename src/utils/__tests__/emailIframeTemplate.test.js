@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { getEmailBodyContent, measureEmailIframeHeight } from '../emailIframeTemplate';
+import {
+  getEmailBodyContent,
+  measureEmailIframeHeight,
+  stripInlineColorImportant,
+  buildEmailIframeHtml,
+} from '../emailIframeTemplate';
 
 describe('getEmailBodyContent', () => {
   it('unwraps a real document', () => {
@@ -23,6 +28,52 @@ describe('getEmailBodyContent', () => {
   it('passes fragments through', () => {
     expect(getEmailBodyContent('<p>plain</p>')).toBe('<p>plain</p>');
     expect(getEmailBodyContent('')).toBe('');
+  });
+});
+
+describe('stripInlineColorImportant', () => {
+  it('drops the priority from colour declarations', () => {
+    // The newsletter shape that rendered black-on-black in dark mode.
+    const html = '<h2 style="color:hsl(0, 0%, 0%) !important; font-size:1.3em !important;">Hi</h2>';
+    const out = stripInlineColorImportant(html);
+    expect(out).toContain('color:hsl(0, 0%, 0%);');
+    expect(out).toContain('font-size:1.3em !important;');
+  });
+
+  it('covers the other colour properties Dark Reader overrides', () => {
+    const html = '<td style="background-color:#fff !important;border-top-color:#ccc !important;'
+      + 'background:#eee !important;fill:#000 !important;outline-color:red !important">x</td>';
+    const out = stripInlineColorImportant(html);
+    expect(out).not.toContain('!important');
+  });
+
+  it('leaves layout and typography priorities alone', () => {
+    const html = '<div style="width:100% !important;padding:0 !important;display:block !important">x</div>';
+    expect(stripInlineColorImportant(html)).toBe(html);
+  });
+
+  it('handles single-quoted style attributes and last declarations', () => {
+    const html = "<p style='margin:0 !important;color:#000 !important'>x</p>";
+    expect(stripInlineColorImportant(html)).toBe("<p style='margin:0 !important;color:#000'>x</p>");
+  });
+
+  it('passes through bodies with nothing to strip', () => {
+    const html = '<p style="color:#000">x</p><p>plain</p>';
+    expect(stripInlineColorImportant(html)).toBe(html);
+    expect(stripInlineColorImportant('')).toBe('');
+  });
+});
+
+describe('buildEmailIframeHtml colour priorities', () => {
+  const body = '<h2 style="color:#000 !important">Hi</h2>';
+
+  it('strips them when Dark Reader will run', () => {
+    expect(buildEmailIframeHtml({ bodyHtml: body, themeTag: 'dark' }))
+      .toContain('style="color:#000"');
+  });
+
+  it('leaves the body untouched in light mode', () => {
+    expect(buildEmailIframeHtml({ bodyHtml: body, themeTag: 'light' })).toContain(body);
   });
 });
 

@@ -21,6 +21,30 @@ export function getEmailBodyContent(html) {
   return bodyMatch ? bodyMatch[1] : html;
 }
 
+// Dark Reader overrides inline styles from a stylesheet rule
+// (`[data-darkreader-inline-color] { color: var(--darkreader-inline-color) !important }`).
+// An `!important` declaration in the element's own `style` attribute outranks
+// that rule — element-attached styles win over style rules of the same origin
+// and importance — so a mail shipping `style="color:#000 !important"` keeps
+// black text on Dark Reader's dark background and reads as invisible.
+//
+// Drop the priority from colour-carrying inline declarations only (dark mode
+// only), so Dark Reader can win. Layout `!important`s are left alone: emails
+// use them to beat webmail stylesheets, and removing them changes light mode.
+const IMPORTANT_DECL = /(^|;)(\s*)([-a-zA-Z]+)(\s*:\s*[^;]*?)\s*!\s*important\s*(?=;|$)/g;
+const COLOR_PROP = /(?:^|-)color$|^(?:background|fill|stroke)$/i;
+
+export function stripInlineColorImportant(html) {
+  if (!html || html.indexOf('!important') === -1) return html;
+  const dropPriority = (css) => css.replace(
+    IMPORTANT_DECL,
+    (decl, sep, pad, prop, value) => (COLOR_PROP.test(prop) ? `${sep}${pad}${prop}${value}` : decl)
+  );
+  return html
+    .replace(/style\s*=\s*"([^"]*)"/gi, (_m, css) => `style="${dropPriority(css)}"`)
+    .replace(/style\s*=\s*'([^']*)'/gi, (_m, css) => `style='${dropPriority(css)}'`);
+}
+
 // Content height of an email iframe document, for auto-sizing the frame.
 //
 // Measure the BODY box only. `documentElement.scrollHeight` is never smaller
@@ -54,6 +78,11 @@ export function buildEmailIframeHtml({ bodyHtml, themeTag = 'light', extraHead =
   const tableCss = tableMode === 'clip'
     ? 'table { table-layout: fixed; width: 100% !important; overflow: hidden; } td, th { overflow: hidden; text-overflow: ellipsis; }'
     : 'table { max-width: 100% !important; width: auto !important; }';
+
+  // Inline `!important` colours outrank Dark Reader's override sheet — strip
+  // their priority when DR is going to run (themeTag 'dark' is the single
+  // signal every caller pairs with getDarkReaderInlineScripts()).
+  const body = themeTag === 'dark' ? stripInlineColorImportant(bodyHtml) : bodyHtml;
 
   // <meta charset> is first in <head> so WKWebView decodes correctly even
   // when the document is loaded from a file:// URL (which would otherwise
@@ -91,7 +120,7 @@ export function buildEmailIframeHtml({ bodyHtml, themeTag = 'light', extraHead =
     </style>
     ${extraHead}
   </head>
-  <body>${bodyHtml}${extraBody}</body>
+  <body>${body}${extraBody}</body>
 </html>`;
 }
 

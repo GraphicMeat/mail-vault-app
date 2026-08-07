@@ -122,6 +122,12 @@ function rfc822({ uid, to, from, subject, body, date }) {
  * more than any measurement slack for the height assertions to mean anything.
  * No In-Reply-To — this one stands alone so it opens in the single-email
  * viewer regardless of the threading setting.
+ *
+ * The body also carries the two inline-style shapes newsletters ship, which
+ * decide whether dark mode is readable:
+ *   - a heading with `color: … !important`, which outranks Dark Reader's
+ *     override sheet and used to stay black on the dark background;
+ *   - a brand-coloured link without `!important`, which must keep its hue.
  */
 export function htmlQuotedMessage({ uid, to, from, subject, date }) {
   const boundary = 'MockMvBoundary';
@@ -147,6 +153,8 @@ export function htmlQuotedMessage({ uid, to, from, subject, date }) {
     'Content-Type: text/html; charset=UTF-8',
     '',
     '<p>Short answer above the quote.</p>'
+      + `<h2 id="${DARK_HEADING_ID}" style="color:hsl(0, 0%, 0%) !important; font-size:1.3em !important; font-weight:600 !important;">Heading that ships its own colour</h2>`
+      + `<a id="${DARK_BRAND_LINK_ID}" href="https://example.com/brand" style="color:#e6375a; font-weight:600;">Brand coloured link</a>`
       + '<hr>'
       + `<blockquote><p><strong>Original Message</strong></p>${quoteLines}</blockquote>`,
     '',
@@ -211,6 +219,10 @@ export function mailbox(name, count, { owner = 'user@example.com', attrs, subjec
 
 /** Subject of the HTML-quoted message, so specs can find its row. */
 export const HTML_QUOTED_SUBJECT = 'HTML render check';
+
+/** Ids of the two dark-mode probes inside that message's HTML body. */
+export const DARK_HEADING_ID = 'mv-dark-important-heading';
+export const DARK_BRAND_LINK_ID = 'mv-dark-brand-link';
 
 // ── Threaded messages for the wrong-mailbox regression ──────────────────────
 // A UID identifies a message only inside one mailbox: Sent UID 6 and INBOX UID

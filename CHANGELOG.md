@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Headings and text in newsletters stay readable in dark mode.** Some senders pin a text colour in a way that overrode MailVault's dark conversion, so headings kept their original black and disappeared into the dark background while the rest of the message converted normally. Those colours are now converted like everything else, and brand colours that convert correctly are left as they were.
+
 ## [2.9.2] - 2026-08-07
 
 ### Added
