@@ -228,6 +228,52 @@ jobs:
             esac
           done
 
+      - name: Verify checkout self-heals a poisoned customer row
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+        run: |
+          # 2026-08-08: rows minted while the Stripe secrets pointed at another
+          # account held customer ids the live key doesn't know ("No such
+          # customer"), silently blocking checkout for those emails. The pinned
+          # probe above can't see that failure mode — its row is healthy. This
+          # probe plants a poisoned row (DB name on the box: mailvault_website)
+          # and requires checkout to heal it end-to-end, then leaves no residue.
+          HEAL_EMAIL=heal-probe-c4d1@example.com
+          POISON=cus_000healprobe000
+          run_sql() {
+            ssh -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts \
+              ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+              "mysql -N -e \"$1\""
+          }
+
+          run_sql "DELETE FROM mailvault_website.billing_customers WHERE email='$HEAL_EMAIL'"
+          run_sql "INSERT INTO mailvault_website.billing_customers (email, stripe_customer_id) VALUES ('$HEAL_EMAIL', '$POISON')"
+
+          body=$(curl -sS --max-time 25 -X POST https://mailvaultapp.com/api/billing/checkout-session \
+            -H 'Content-Type: application/json' \
+            -d "{\"email\":\"$HEAL_EMAIL\",\"planId\":\"monthly\"}")
+          url=$(echo "$body" | jq -r '.url // empty')
+          healed=$(echo "$body" | jq -r '.customerId // empty')
+          case "$url" in
+            https://checkout.stripe.com/*) : ;;
+            *) echo "::error::heal probe: checkout did not recover from a poisoned customer row: $(echo "$body" | jq -c '{error, code}')"; exit 1 ;;
+          esac
+          if [ -z "$healed" ] || [ "$healed" = "$POISON" ]; then
+            echo "::error::heal probe: customer row was not repointed (customerId=$healed)"
+            exit 1
+          fi
+
+          row=$(run_sql "SELECT stripe_customer_id FROM mailvault_website.billing_customers WHERE email='$HEAL_EMAIL'")
+          if [ "$row" != "$healed" ]; then
+            echo "::error::heal probe: DB row ($row) does not match healed customer ($healed)"
+            exit 1
+          fi
+          echo "heal probe: $POISON -> $healed"
+
+          # No residue: drop the minted Stripe customer and the probe row.
+          curl -sS -X DELETE "https://api.stripe.com/v1/customers/$healed" -u "$STRIPE_SECRET_KEY:" > /dev/null
+          run_sql "DELETE FROM mailvault_website.billing_customers WHERE email='$HEAL_EMAIL'"
+
       - name: Clean up SSH key
         if: always()
         run: |
