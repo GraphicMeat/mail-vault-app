@@ -603,8 +603,8 @@ function formatAmount(amount, currency) {
   } catch { return `${(amount / 100).toFixed(2)} ${currency.toUpperCase()}`; }
 }
 
-// Trial applies to both monthly and yearly. TRIAL_DAYS is the current knob;
-// YEARLY_TRIAL_DAYS is honored for backward compat if TRIAL_DAYS is unset.
+// Trial applies to the YEARLY plan only — monthly bills from day one.
+// TRIAL_DAYS is the knob; YEARLY_TRIAL_DAYS honored for backward compat.
 const TRIAL_DAYS = parseInt(process.env.TRIAL_DAYS) || parseInt(process.env.YEARLY_TRIAL_DAYS) || 14;
 
 // Check if a customer has ever had a subscription (used trial or paid)
@@ -670,7 +670,7 @@ app.get('/api/billing/pricing', statusLimiter, async (req, res) => {
         currency: displayCur,
         amount: resolved.monthly,
         formattedAmount: monthlyFormatted,
-        trialDays: TRIAL_DAYS,
+        trialDays: 0,
         trialEligible,
       },
       {
@@ -712,7 +712,7 @@ app.post('/api/billing/checkout-session', checkoutLimiter, requireBilling, async
       await db.execute('INSERT INTO billing_customers (email, stripe_customer_id) VALUES (?, ?)', [email.toLowerCase(), customerId]);
     }
 
-    // Determine trial eligibility (applies to both monthly and yearly)
+    // Determine trial eligibility (yearly plan only — monthly bills immediately)
     let applyTrial = false;
     try {
       const [custRows] = await db.execute('SELECT id FROM billing_customers WHERE stripe_customer_id = ?', [customerId]);
@@ -737,7 +737,8 @@ app.post('/api/billing/checkout-session', checkoutLimiter, requireBilling, async
       // from yearly sessions is the enforcement.
       allow_promotion_codes: interval === 'monthly',
     };
-    if (applyTrial) {
+    const trialApplied = applyTrial && interval === 'yearly';
+    if (trialApplied) {
       sessionParams.subscription_data = { trial_period_days: TRIAL_DAYS };
     }
 
@@ -760,7 +761,7 @@ app.post('/api/billing/checkout-session', checkoutLimiter, requireBilling, async
     }
 
     bumpMetric('checkout_created');
-    res.json({ url: session.url, customerId, trialApplied: applyTrial });
+    res.json({ url: session.url, customerId, trialApplied });
   } catch (error) {
     console.error('[billing/checkout-session]', error.message);
     // Echo Stripe's error code (never the message — it can carry ids): enough to tell a
