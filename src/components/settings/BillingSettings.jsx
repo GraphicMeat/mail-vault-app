@@ -39,6 +39,35 @@ function formatDate(dateStr) {
   return formatDateLong(dateStr) || '--';
 }
 
+/**
+ * Why a sign-in that reached the server still left the user without premium.
+ * Pure — the server always answers 200 for an unknown email, so this is the
+ * only thing standing between "nothing happened" and an explanation.
+ */
+export function signInFailureNotice(result) {
+  if (!result) return null;
+  if (!result.hasSubscription) {
+    return result.customerId
+      ? 'No active subscription on this email. Pick a plan below to start one.'
+      : 'No subscription found for this email. Pick a plan below, or sign in with the email you used at checkout.';
+  }
+  if (result.premiumAccess && result.clientAccessGranted === false) {
+    return 'Subscription is active, but this device could not be activated. Remove a device from another machine, then try again.';
+  }
+  switch (result.status) {
+    case 'canceled':
+      return 'This subscription has ended. Pick a plan below to resubscribe.';
+    case 'past_due':
+    case 'unpaid':
+      return 'Payment failed on this subscription. Update your payment method in Manage Subscription.';
+    case 'incomplete':
+    case 'incomplete_expired':
+      return 'Checkout was never completed for this email. Pick a plan below to finish signing up.';
+    default:
+      return `Subscription status "${result.status || 'unknown'}" does not grant premium access. Check Manage Subscription.`;
+  }
+}
+
 function timeAgo(dateStr) {
   if (!dateStr) return 'never';
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -98,6 +127,8 @@ export function BillingSettings() {
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
   const [pricing, setPricing] = useState(null); // { currency, currencySource, plans: [...] }
   const [pricingLoading, setPricingLoading] = useState(false);
+  const [pricingError, setPricingError] = useState(null);
+  const [signInNotice, setSignInNotice] = useState(null); // why the last sign-in granted nothing
 
   const inflightRef = useRef(false);
   const refreshPromiseRef = useRef(null);
@@ -128,14 +159,24 @@ export function BillingSettings() {
   // Load client info once
   useEffect(() => { getClientInfo().then(info => { clientInfoRef.current = info; }); }, []);
 
-  // Fetch pricing on mount (only when not premium — plan cards are hidden for premium users)
   // Pass email/customerId so server can check trial eligibility
-  useEffect(() => {
-    if (!isPremium && !pricing && !pricingLoading) {
-      setPricingLoading(true);
-      fetchPricing({ email: billingEmail, customerId })
-        .then(setPricing).catch(() => {}).finally(() => setPricingLoading(false));
+  const loadPricing = useCallback(async (email) => {
+    setPricingLoading(true);
+    setPricingError(null);
+    try {
+      setPricing(await fetchPricing({ email: email || billingEmail, customerId }));
+    } catch (e) {
+      // The API answers 503 with a bare code (`pricing_unavailable`) and no prose.
+      const msg = e.message || '';
+      setPricingError(/\s/.test(msg) ? msg : 'The billing service is temporarily unavailable.');
+    } finally {
+      setPricingLoading(false);
     }
+  }, [billingEmail, customerId]);
+
+  // Fetch pricing on mount (only when not premium — plan cards are hidden for premium users)
+  useEffect(() => {
+    if (!isPremium && !pricing && !pricingLoading) loadPricing();
   }, [isPremium]);
 
   // Cooldown ticker — count down when rate-limited or in manual cooldown
@@ -216,8 +257,9 @@ export function BillingSettings() {
 
   // Sign in: email-only lookup, NO customerId — prevents stale identity reuse
   const signInWithEmail = useCallback(async (email) => {
+    setSignInNotice(null);
     const result = await billingRequest({ email, customerId: undefined, manual: true });
-    if (!result) return;
+    if (!result) return; // network/rate-limit paths surface via syncError / rateLimitMsg
 
     setBillingProfile(result);
 
@@ -229,8 +271,12 @@ export function BillingSettings() {
     // If no premium access, clear the persisted identity so we stay signed out
     if (!hasPremiumAccess(result)) {
       setBillingEmail('');
+      setSignInNotice(signInFailureNotice(result));
+      // Re-price for this email — trial eligibility is per customer, and the
+      // mount fetch ran before we knew who they were.
+      loadPricing(resolvedEmail);
     }
-  }, [billingRequest, setBillingProfile, setBillingEmail]);
+  }, [billingRequest, setBillingProfile, setBillingEmail, loadPricing]);
 
   // Refresh: uses stored billing identity (customerId + email) — only when signed in
   const refreshSignedIn = useCallback(async ({ manual = false } = {}) => {
@@ -322,6 +368,7 @@ export function BillingSettings() {
     useSettingsStore.getState().clearBillingProfile();
     setSelectedEmail(accountEmails[0] || '');
     setSyncError(null);
+    setSignInNotice(null);
     setLogoutLoading(false);
     setShowLogoutConfirm(false);
 
@@ -413,7 +460,7 @@ export function BillingSettings() {
           <div className="flex gap-2">
             <select
               value={selectedEmail}
-              onChange={e => setSelectedEmail(e.target.value)}
+              onChange={e => { setSelectedEmail(e.target.value); setSignInNotice(null); }}
               className="flex-1 min-w-0 px-3 py-2 text-sm bg-mail-bg border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent"
             >
               {accountEmails.map(email => (
@@ -425,6 +472,12 @@ export function BillingSettings() {
               {syncing ? <Loader size={14} className="animate-spin" /> : <CreditCard size={14} />}
               <span>{signInLabel}</span>
             </button>
+          </div>
+        )}
+        {signInNotice && !isSignedIn && (
+          <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+            <p className="text-xs font-medium text-amber-600 dark:text-amber-400">{signInNotice}</p>
+            {selectedEmail && <p className="text-[11px] text-mail-text-muted mt-1">Checked: {selectedEmail}</p>}
           </div>
         )}
         {syncError && <p className="text-xs text-mail-danger mt-2">{syncError}</p>}
@@ -519,6 +572,23 @@ export function BillingSettings() {
       {!isPremium && !pricing && pricingLoading && (
         <div className="flex items-center justify-center py-8 text-mail-text-muted text-xs gap-2">
           <Loader size={14} className="animate-spin" /> Loading plans...
+        </div>
+      )}
+      {/* Plans unreachable — never leave the user without a way to subscribe */}
+      {!isPremium && !pricing && !pricingLoading && pricingError && (
+        <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+          <h4 className="text-sm font-semibold text-mail-text mb-1">Plans could not be loaded</h4>
+          <p className="text-xs text-mail-text-muted mb-3">{pricingError}</p>
+          <div className="flex gap-2">
+            <button onClick={() => loadPricing()}
+              className="px-4 py-2 text-sm font-medium bg-mail-accent text-white rounded-lg hover:bg-mail-accent/90 transition-colors flex items-center gap-1.5">
+              <RefreshCw size={14} /> Retry
+            </button>
+            <button onClick={() => openInBrowser('https://mailvaultapp.com/pricing.html').catch(() => {})}
+              className="px-4 py-2 text-sm font-medium border border-mail-border rounded-lg hover:border-mail-accent transition-colors text-mail-text flex items-center gap-1.5">
+              <ExternalLink size={14} /> View plans in browser
+            </button>
+          </div>
         </div>
       )}
 

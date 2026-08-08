@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Signing in to Premium now tells you what it found.** Choosing an email address that has no subscription — or one whose subscription has ended, or whose checkout was never completed — ran the check, stopped the spinner and changed nothing on screen, which was indistinguishable from the button not working. Sign-in now explains what the billing server holds for that address and what to do next. If the plans themselves can't be loaded, the page no longer shows blank space where they should be: it says so, offers a retry, and can open the plans in your browser. Signing in also re-checks free-trial eligibility for that address, so the trial badge stops promising a free trial to someone who has subscribed before.
+
 ## [2.9.2] - 2026-08-08
 
 ### Added
