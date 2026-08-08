@@ -741,7 +741,23 @@ app.post('/api/billing/checkout-session', checkoutLimiter, requireBilling, async
       sessionParams.subscription_data = { trial_period_days: TRIAL_DAYS };
     }
 
-    const session = await stripe.checkout.sessions.create(sessionParams);
+    let session;
+    try {
+      session = await stripe.checkout.sessions.create(sessionParams);
+    } catch (error) {
+      // Rows minted while STRIPE_SECRET_KEY pointed at another Stripe account
+      // hold customer ids that don't exist here ("No such customer") and
+      // permanently block checkout for that email. Nothing can be attached to
+      // a customer Stripe says is missing, so recreating it loses nothing:
+      // mint a fresh customer, repoint the row, retry once.
+      if (error.code !== 'resource_missing' || error.param !== 'customer') throw error;
+      const customer = await stripe.customers.create({ email: email.toLowerCase() });
+      await db.execute('UPDATE billing_customers SET stripe_customer_id = ? WHERE email = ?', [customer.id, email.toLowerCase()]);
+      console.warn(`[billing/checkout-session] replaced missing customer ${customerId} with ${customer.id}`);
+      customerId = customer.id;
+      sessionParams.customer = customer.id;
+      session = await stripe.checkout.sessions.create(sessionParams);
+    }
 
     bumpMetric('checkout_created');
     res.json({ url: session.url, customerId, trialApplied: applyTrial });
@@ -776,6 +792,11 @@ app.post('/api/billing/portal-session', checkoutLimiter, requireBilling, async (
     res.json({ url: session.url });
   } catch (error) {
     console.error('[billing/portal-session]', error.message);
+    // A stored customer id Stripe doesn't recognize has no portal to show —
+    // that's "no billing account", not a server fault.
+    if (error.code === 'resource_missing' && error.param === 'customer') {
+      return res.status(404).json({ error: 'No billing customer found.' });
+    }
     res.status(500).json({ error: 'portal_failed', message: 'Could not open billing portal. Please try again.' });
   }
 });
