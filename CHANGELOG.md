@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- **After a successful manual backup, MailVault now offers to automate the next ones.** A one-time panel suggests scheduled backups once your first manual backup completes, and a small "Automate" chip stays on the account's backup card afterwards. Shown once per install, never stacked with the star-and-share panel.
+
 ### Fixed
 - **The "Showing cached data" warning no longer appears — or refuses to leave — when MailVault rebuilds its email list from your saved copies.** If the fast email index was missing while the saved mail itself was intact, opening the account raised a warning banner even though this rebuild is routine and heals itself within moments. Worse, once anything raised that banner, the quick "has anything changed on the server?" checks that run on every account switch skipped the code that removes it — so the warning sat there for the rest of the session, and its reload button appeared to do nothing. The rebuild is now silent, and every check that confirms your mail matches the server also clears the warning, so the one remaining genuine warning (the server unexpectedly claiming a mailbox is empty when you have mail in it) disappears by itself as soon as the server checks out.
 - **"Mark unread" now closes the email and sticks.** Marking the open message unread left it on screen, and opening it again brought back the state it had when it was first read — so the button still offered "Mark unread" for a message the list showed as unread, and the message was never marked read again no matter how often you opened it. Marking unread now closes the message, and reopening it marks it read as usual, so the button always names what happens next. Opening a message also updates its row and the sidebar's unread count straight away instead of waiting for the next refresh.

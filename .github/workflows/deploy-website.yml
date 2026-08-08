@@ -97,6 +97,8 @@ jobs:
           GRAPHICMEAT_PARTNER_KEY: ${{ secrets.GRAPHICMEAT_PARTNER_KEY }}
           IP_SALT: ${{ secrets.IP_SALT }}
           ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
+          # Guards /api/metrics/summary; endpoint 404s while unset.
+          METRICS_TOKEN: ${{ secrets.METRICS_TOKEN }}
           ANALYTICS_API_KEY: ${{ secrets.ANALYTICS_API_KEY }}
           GRAPHICMEAT_ANALYTICS_URL: ${{ secrets.GRAPHICMEAT_ANALYTICS_URL }}
           GRAPHICMEAT_ANALYTICS_KEY: ${{ secrets.GRAPHICMEAT_ANALYTICS_KEY }}
@@ -108,6 +110,7 @@ jobs:
           CORS_ORIGIN=https://mailvaultapp.com,tauri://localhost,http://tauri.localhost,http://localhost:1420
           IP_SALT=${IP_SALT}
           ADMIN_KEY=${ADMIN_KEY}
+          METRICS_TOKEN=${METRICS_TOKEN}
           ANALYTICS_API_KEY=${ANALYTICS_API_KEY}
           GRAPHICMEAT_ANALYTICS_URL=${GRAPHICMEAT_ANALYTICS_URL}
           GRAPHICMEAT_ANALYTICS_KEY=${GRAPHICMEAT_ANALYTICS_KEY}
