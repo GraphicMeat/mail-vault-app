@@ -13,6 +13,7 @@ import {
   markSelectedAsUnread as _markSelectedAsUnread,
   deleteSelectedFromServer as _deleteSelectedFromServer,
   moveEmails as _moveEmails,
+  purgeEverywhere as _purgeEverywhere,
 } from '../../services/workflows/messageMutations';
 
 export const createSelectionSlice = (set, get) => ({
@@ -73,6 +74,13 @@ export const createSelectionSlice = (set, get) => ({
     set({ selectedEmailIds: new Set() });
   },
 
+  // Replace the selection wholesale. The bulk modal's date range resolves to a
+  // uid list; writing it here is what puts checkmarks on the rows and lets the
+  // user amend the range by hand before starting.
+  setSelection: (keys) => {
+    set({ selectedEmailIds: new Set(keys) });
+  },
+
   getSelectionSummary: () => {
     const { selectedEmailIds, sortedEmails, activeMailbox } = get();
     if (selectedEmailIds.size === 0) return { threads: 0, emails: 0 };
@@ -95,4 +103,5 @@ export const createSelectionSlice = (set, get) => ({
   markSelectedAsUnread: () => _markSelectedAsUnread(),
   deleteSelectedFromServer: () => _deleteSelectedFromServer(),
   moveEmails: (uids, targetMailbox) => _moveEmails(uids, targetMailbox),
+  purgeSelectedEverywhere: (opts) => _purgeEverywhere([...get().selectedEmailIds], opts),
 });

@@ -19,6 +19,34 @@ export const createUiSlice = (set, get) => ({
   bulkSaveProgress: null, // { total, completed, errors, active }
   exportProgress: null, // { total, completed, active, mode: 'export'|'import' }
 
+  // Bulk operations modal + session.
+  // The session outlives the modal: closing the modal minimizes to
+  // BulkSelectionBubble, keeping the selection so it can be amended by hand.
+  bulkModalOpen: false,
+  bulkSession: null, // { active: true, step: 1|2, range, action }
+
+  openBulkModal: () => {
+    const existing = get().bulkSession;
+    set({
+      bulkModalOpen: true,
+      bulkSession: existing || { active: true, step: 1, range: null, action: null },
+    });
+  },
+
+  setBulkSession: (patch) => {
+    set(state => ({
+      bulkSession: { ...(state.bulkSession || { active: true, step: 1, range: null, action: null }), ...patch },
+    }));
+  },
+
+  minimizeBulkModal: () => {
+    set({ bulkModalOpen: false });
+  },
+
+  endBulkSession: () => {
+    set({ bulkModalOpen: false, bulkSession: null, selectedEmailIds: new Set() });
+  },
+
   // Error state
   error: null,
 
