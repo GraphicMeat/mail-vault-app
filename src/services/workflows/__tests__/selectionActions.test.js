@@ -285,6 +285,63 @@ describe('deleteSelectedFromServer', () => {
     // The tombstone is lifted so the loadEmails() reconcile can restore it.
     expect(useMailStore.getState().deleteTombstones.size).toBe(0);
   });
+
+  // "Delete from Server" promises the local copy survives. It does — the
+  // .eml stays in Maildir — but nothing ever cleared the optimistic
+  // tombstone, so the row stayed hidden for the rest of the session instead
+  // of re-rendering as "Local only".
+  it('re-renders a message with a surviving local copy as local-only after a successful server delete', async () => {
+    const localCopy = seedThread()[0]; // uid 1, archived locally
+
+    useMailStore.setState({
+      accounts: [ACCOUNT],
+      activeAccountId: ACCOUNT.id,
+      activeMailbox: 'INBOX',
+      viewMode: 'all',
+      emails: seedThread(),
+      sentEmails: [],
+      localEmails: [localCopy],
+      savedEmailIds: new Set([1]),
+      archivedEmailIds: new Set([1]),
+      serverUidSet: new Set([1, 2]),
+      deleteTombstones: new Set(),
+      totalEmails: 2,
+      selectedEmailIds: new Set([1]),
+      selectedEmail: null,
+      selectedEmailId: null,
+      // Stand-in for the real server round-trip: a genuine reconcile would
+      // find uid 1 gone from the server and drop it from serverUidSet.
+      loadEmails: vi.fn(() => {
+        useMailStore.setState(s => ({
+          serverUidSet: new Set([...s.serverUidSet].filter(u => u !== 1)),
+        }));
+        useMailStore.getState().updateSortedEmails();
+        return Promise.resolve();
+      }),
+      _sortedEmailsFingerprint: '',
+    });
+    invalidateChatAndThreadCaches();
+    useMailStore.getState().updateSortedEmails();
+
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    expect(useMailStore.getState().deleteTombstones.size).toBe(0);
+    const row = useMailStore.getState().sortedEmails.find(e => e.uid === 1);
+    expect(row).toBeDefined();
+    expect(row.source).toBe('local-only');
+  });
+
+  // The same tombstone is load-bearing for a message with NO local copy —
+  // without it, a stale header-cache hydration on account/folder switch
+  // could resurrect a row the server delete just removed.
+  it('leaves the tombstone in place and the row absent for a message with no local copy', async () => {
+    primeStore(seedThread(), [1]); // uid 1 not archived — primeStore seeds archivedEmailIds empty
+
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    expect(useMailStore.getState().deleteTombstones.size).toBe(1);
+    expect(useMailStore.getState().sortedEmails.find(e => e.uid === 1)).toBeUndefined();
+  });
 });
 
 describe('moveEmails', () => {

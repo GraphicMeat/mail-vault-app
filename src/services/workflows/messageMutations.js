@@ -559,6 +559,12 @@ export async function deleteSelectedFromServer() {
   get().updateSortedEmails();
 
   const deletedRealUids = new Set();
+  // Tombstones to lift once the server delete succeeds AND the message still
+  // has a surviving local (archived) copy on disk — those rows must re-render
+  // as "Local only" rather than staying hidden for the rest of the session.
+  // A message with no local copy keeps its tombstone forever (see the
+  // comment on the tombstone block above for why that half is load-bearing).
+  const survivingLocalTombstones = new Set();
 
   const invoke = window.__TAURI__?.core?.invoke;
 
@@ -598,6 +604,9 @@ export async function deleteSelectedFromServer() {
         await api.deleteEmail(account, realUid, mailbox);
       }
       deletedRealUids.add(realUid);
+      if (!isUnified && get().archivedEmailIds.has(realUid)) {
+        survivingLocalTombstones.add(tombstone);
+      }
     } catch (e) {
       console.error(`Failed to delete email ${key}:`, e);
       // Lift the tombstone so the reconcile below can restore this email.
@@ -609,7 +618,21 @@ export async function deleteSelectedFromServer() {
 
   // Reconcile with the server: prunes the header cache and restores any email
   // whose delete failed (resilient over silently wrong).
-  if (!isUnified) get().loadEmails();
+  if (!isUnified) {
+    await get().loadEmails();
+
+    // Lift tombstones for messages whose local archive survived the server
+    // delete, now that loadEmails() has refreshed serverUidSet (and
+    // archivedEmailIds/localEmails, unchanged but re-confirmed) — lifting
+    // any earlier risks a brief flash as "still on server" before the next
+    // refresh corrects it.
+    if (survivingLocalTombstones.size > 0) {
+      const ts = new Set(get().deleteTombstones);
+      for (const t of survivingLocalTombstones) ts.delete(t);
+      useMailStore.setState({ deleteTombstones: ts });
+      get().updateSortedEmails();
+    }
+  }
 }
 
 
