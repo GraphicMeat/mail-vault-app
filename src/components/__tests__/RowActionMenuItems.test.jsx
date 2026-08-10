@@ -44,7 +44,11 @@ const initialStoreState = () => ({
   activeMailbox: 'INBOX',
   activeAccountId: 'acct-1',
   selectedEmailIds: new Set(),
-  setSelection: vi.fn(),
+  // A real reducer (spy-wrapped, not a bare vi.fn()) so runScoped's
+  // "is selectedEmailIds still exactly what I scoped it to" check in its
+  // finally has real state to compare against, not a value frozen at mock
+  // creation.
+  setSelection: vi.fn((keys) => useMailStoreMock.setState({ selectedEmailIds: new Set(keys) })),
   markSelectedAsRead: vi.fn().mockResolvedValue(),
   markSelectedAsUnread: vi.fn().mockResolvedValue(),
   purgeSelectedEverywhere: vi.fn().mockResolvedValue({ deleted: 1, failed: 0, queuedBackup: 0, needsResync: 0 }),
@@ -334,6 +338,50 @@ describe('RowActionMenuItems', () => {
 
       const calls = useMailStoreMock.getState().setSelection.mock.calls;
       expect(calls[calls.length - 1][0]).toEqual([]);
+    });
+  });
+
+  describe('a selection change mid-flight is not stomped by the stale prior snapshot', () => {
+    it('another row toggling selectedEmailIds while markSelectedAsRead is still in flight wins, not the pre-action snapshot', async () => {
+      useMailStoreMock.setState({ selectedEmailIds: new Set([1, 2, 3]) });
+      const email = baseEmail({ uid: 99, flags: [] });
+      // markSelectedAsRead's own network loop is slow enough that another
+      // row's checkbox toggle (or another row's own action finishing) can
+      // land on selectedEmailIds before this one resolves.
+      useMailStoreMock.setState({
+        markSelectedAsRead: vi.fn().mockImplementation(async () => {
+          useMailStoreMock.setState({ selectedEmailIds: new Set([7, 8]) });
+        }),
+      });
+      const onClose = vi.fn();
+      render(<RowActionMenuItems emails={[email]} actions={makeActions()} onRequestDelete={vi.fn()} onClose={onClose} />);
+
+      fireEvent.click(screen.getByText('Mark as read'));
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // Scoped once, to this row — and never restored over the mid-flight
+      // write, since selectedEmailIds no longer matched what was scoped.
+      const calls = useMailStoreMock.getState().setSelection.mock.calls;
+      expect(calls.length).toBe(1);
+      expect(calls[0][0]).toEqual([99]);
+      expect(useMailStoreMock.getState().selectedEmailIds).toEqual(new Set([7, 8]));
+      expect(onClose).toHaveBeenCalled();
+    });
+
+    it('restores normally when nothing else touched selectedEmailIds while in flight', async () => {
+      useMailStoreMock.setState({ selectedEmailIds: new Set([1, 2, 3]) });
+      const email = baseEmail({ uid: 99, flags: [] });
+      render(<RowActionMenuItems emails={[email]} actions={makeActions()} onRequestDelete={vi.fn()} onClose={vi.fn()} />);
+
+      fireEvent.click(screen.getByText('Mark as read'));
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      const calls = useMailStoreMock.getState().setSelection.mock.calls;
+      expect(calls[calls.length - 1][0]).toEqual([1, 2, 3]);
     });
   });
 });

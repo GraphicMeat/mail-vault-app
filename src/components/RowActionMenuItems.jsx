@@ -45,14 +45,25 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
   // destructive actions, since those messages no longer exist to stay
   // selected. Non-destructive actions restore the prior set untouched, so a
   // row that wasn't previously selected ends up not selected.
+  //
+  // `fn` can be slow (a per-key network loop, a multi-step purge) — long
+  // enough for the user to toggle a different row's checkbox or fire another
+  // row's action while this one is still in flight. Only restore if
+  // selectedEmailIds still holds exactly what we scoped it to; if something
+  // else changed it since, that write already reflects the user's or another
+  // action's more-recent intent and a stale snapshot must not stomp it.
   const runScoped = async (fn, { destructive = false } = {}) => {
     const prior = [...useMailStore.getState().selectedEmailIds];
     setSelection(keys);
     try {
       await fn();
     } finally {
-      const keySet = new Set(keys);
-      setSelection(destructive ? prior.filter(k => !keySet.has(k)) : prior);
+      const live = useMailStore.getState().selectedEmailIds;
+      const stillOurs = live.size === keys.length && keys.every(k => live.has(k));
+      if (stillOurs) {
+        const keySet = new Set(keys);
+        setSelection(destructive ? prior.filter(k => !keySet.has(k)) : prior);
+      }
     }
   };
 
