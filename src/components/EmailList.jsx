@@ -60,6 +60,34 @@ function getDateRange(emails) {
   return `${fmt(oldest)} – ${fmt(newest)}`;
 }
 
+// purgeEverywhere's four outcome counts aren't mutually exclusive — one run
+// can produce several at once (e.g. a few uids held back for resync AND a
+// few backup copies queued) — so every non-zero count gets its own clause
+// instead of an if/else chain that would silently report only the first.
+// A clean run (nothing held back, nothing queued, nothing failed) returns
+// null: there's nothing to warn about, the list already reflects the delete.
+export function formatPurgeEverywhereOutcome(result) {
+  if (!result) return null;
+  const { deleted = 0, failed = 0, queuedBackup = 0, needsResync = 0 } = result;
+  if (!failed && !queuedBackup && !needsResync) return null;
+
+  const clauses = [`${deleted} removed.`];
+  if (failed > 0) {
+    clauses.push(`${failed} could not be deleted from the server and ${failed === 1 ? 'was' : 'were'} left untouched locally.`);
+  }
+  if (queuedBackup > 0) {
+    clauses.push(`${queuedBackup} backup ${queuedBackup === 1 ? 'copy' : 'copies'} will be removed when the backup drive reconnects.`);
+  }
+  if (needsResync > 0) {
+    // The UID space couldn't be trusted, so these were held back entirely —
+    // no server delete, no vault purge, no backup purge. Without this clause
+    // a user selecting only stale-UID messages sees "0 removed" and nothing
+    // else, with no hint that retrying won't help until the mailbox resyncs.
+    clauses.push(`${needsResync} ${needsResync === 1 ? 'was' : 'were'} skipped because this mailbox needs to resync — resync it, then try again.`);
+  }
+  return clauses.join(' ');
+}
+
 function EmailListComponent() {
   // Individual selectors — component only re-renders when these specific fields change
   const loading = useSyncStore(s => s.loading);
@@ -625,7 +653,8 @@ function EmailListComponent() {
     let account = accounts.find(a => a.id === activeAccountId);
     if (!account) return;
 
-    clearSelection();
+    // The run consumes the selection; the session is done either way.
+    useMailStore.getState().endBulkSession();
 
     // Handle unarchive separately — not a bulk operation manager action
     if (action === 'unarchive') {
@@ -652,6 +681,19 @@ function EmailListComponent() {
 
       if (bulkOperationManager.operation?.status === 'complete') {
         await useMailStore.getState().loadEmails();
+      }
+
+      // Only delete_everywhere populates `result` (BulkOperationManager.js) —
+      // null for every other action type, so this is a no-op for them.
+      const outcomeMessage = formatPurgeEverywhereOutcome(bulkOperationManager.operation?.result);
+      if (outcomeMessage) {
+        // Reuses the store's `error` field, the one feedback channel already
+        // wired to a Toast at the app root (App.jsx renders it off `error`/
+        // `clearError`) and reachable from any workflow via setState. It
+        // always renders as the default (error-styled, 5s) Toast — there is
+        // no warning-styled variant wired up yet for a "succeeded with a
+        // caveat" run, which is what modal-standards.md calls for here.
+        useMailStore.setState({ error: outcomeMessage });
       }
     } catch (err) {
       console.error('[EmailList] Bulk operation failed:', err);

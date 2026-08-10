@@ -359,3 +359,62 @@ describe('EmailList virtualization', () => {
     useMailStore.setState({ bulkSession: null, selectedEmailIds: new Set() });
   });
 });
+
+// purgeEverywhere's four outcome counts (deleted/failed/queuedBackup/needsResync)
+// are not mutually exclusive, and needsResync had no consumer before this —
+// a run that held uids back for a UIDVALIDITY mismatch must not read as silent
+// success. These test the pure formatter directly rather than driving it
+// through handleBulkConfirm, since the interesting behavior is the message
+// composition, not the store plumbing around it (already covered above).
+describe('formatPurgeEverywhereOutcome', () => {
+  it('returns null for a clean run (nothing to warn about)', async () => {
+    const { formatPurgeEverywhereOutcome } = await import('../EmailList.jsx');
+    expect(formatPurgeEverywhereOutcome({ deleted: 5, failed: 0, queuedBackup: 0, needsResync: 0 })).toBeNull();
+  });
+
+  it('returns null when there is no result (non-delete_everywhere actions)', async () => {
+    const { formatPurgeEverywhereOutcome } = await import('../EmailList.jsx');
+    expect(formatPurgeEverywhereOutcome(undefined)).toBeNull();
+    expect(formatPurgeEverywhereOutcome(null)).toBeNull();
+  });
+
+  it('names the queuedBackup count when the backup drive was unreachable', async () => {
+    const { formatPurgeEverywhereOutcome } = await import('../EmailList.jsx');
+    const msg = formatPurgeEverywhereOutcome({ deleted: 3, failed: 0, queuedBackup: 2, needsResync: 0 });
+    expect(msg).toContain('3 removed');
+    expect(msg).toContain('2 backup copies will be removed when the backup drive reconnects');
+    expect(msg).not.toMatch(/could not be deleted|resync/);
+  });
+
+  it('names the failed count and states the local copies were left alone', async () => {
+    const { formatPurgeEverywhereOutcome } = await import('../EmailList.jsx');
+    const msg = formatPurgeEverywhereOutcome({ deleted: 4, failed: 1, queuedBackup: 0, needsResync: 0 });
+    expect(msg).toContain('4 removed');
+    expect(msg).toContain('1 could not be deleted from the server and was left untouched locally');
+  });
+
+  it('names the needsResync count and tells the user to resync rather than retry', async () => {
+    const { formatPurgeEverywhereOutcome } = await import('../EmailList.jsx');
+    const msg = formatPurgeEverywhereOutcome({ deleted: 0, failed: 0, queuedBackup: 0, needsResync: 3 });
+    expect(msg).toContain('0 removed');
+    expect(msg).toContain('3 were skipped because this mailbox needs to resync');
+    expect(msg).toContain('resync it, then try again');
+  });
+
+  it('composes every non-zero outcome in one message when several happen at once', async () => {
+    const { formatPurgeEverywhereOutcome } = await import('../EmailList.jsx');
+    const msg = formatPurgeEverywhereOutcome({ deleted: 2, failed: 1, queuedBackup: 3, needsResync: 4 });
+    expect(msg).toContain('2 removed');
+    expect(msg).toContain('1 could not be deleted from the server');
+    expect(msg).toContain('3 backup copies will be removed');
+    expect(msg).toContain('4 were skipped because this mailbox needs to resync');
+  });
+
+  it('uses singular wording for a count of exactly one', async () => {
+    const { formatPurgeEverywhereOutcome } = await import('../EmailList.jsx');
+    const msg = formatPurgeEverywhereOutcome({ deleted: 0, failed: 1, queuedBackup: 1, needsResync: 1 });
+    expect(msg).toContain('1 could not be deleted from the server and was left untouched locally');
+    expect(msg).toContain('1 backup copy will be removed');
+    expect(msg).toContain('1 was skipped because this mailbox needs to resync');
+  });
+});

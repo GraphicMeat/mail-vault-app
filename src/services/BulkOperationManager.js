@@ -22,7 +22,7 @@ class BulkOperationManager {
   /**
    * Start a bulk operation.
    * @param {Object} params
-   * @param {string} params.type - 'archive' | 'delete' | 'archive_and_delete'
+   * @param {string} params.type - 'archive' | 'delete' | 'archive_and_delete' | 'delete_everywhere'
    * @param {string} params.accountId
    * @param {Object} params.account - Full account object (for IMAP auth)
    * @param {string} params.mailbox
@@ -44,8 +44,8 @@ class BulkOperationManager {
       mailbox,
       totalUids: [...uids],
       completedUids: [],
-      currentPhase: type === 'delete' ? 'delete' : 'archive',
-      status: type === 'delete' ? 'deleting' : 'archiving',
+      currentPhase: (type === 'delete' || type === 'delete_everywhere') ? 'delete' : 'archive',
+      status: (type === 'delete' || type === 'delete_everywhere') ? 'deleting' : 'archiving',
       total: uids.length,
       completed: 0,
       errors: 0,
@@ -115,6 +115,19 @@ class BulkOperationManager {
         this._emitProgress();
 
         await api.bulkDeleteEmails(freshAccount, accountId, mailbox, uids);
+      } else if (type === 'delete_everywhere') {
+        // Server, vault and backup mirror. purgeEverywhere owns the ordering
+        // and the "server delete failed → keep the local copies" rule.
+        const { purgeEverywhere } = await import('./workflows/messageMutations');
+        const result = await purgeEverywhere(uids, {
+          onProgress: (p) => {
+            this._operation.currentPhase = p.phase;
+            this._operation.total = p.total;
+            this._operation.completed = p.completed;
+            this._emitProgress();
+          },
+        });
+        this._operation.result = result;
       }
 
       if (!this._cancelled) {
