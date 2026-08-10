@@ -76,7 +76,7 @@ const { purgeEverywhere } = await import('../messageMutations');
 // prefix and silently no-ops on anything shorter.
 const ACCOUNT = { id: '11111111-1111-4111-8111-111111111111', email: 'me@mock.test' };
 
-function prime({ emails, archived = [] }) {
+function prime({ emails, archived = [], localOnly = [] }) {
   useMailStore.setState({
     accounts: [ACCOUNT],
     activeAccountId: ACCOUNT.id,
@@ -84,7 +84,11 @@ function prime({ emails, archived = [] }) {
     viewMode: 'all',
     emails,
     sentEmails: [],
-    localEmails: [],
+    // Rows still on the server live in `emails`. A row purged from the server
+    // but still archived locally lives only in `localEmails` — the real
+    // production placement for the "local-only" case, and where
+    // updateSortedEmails() derives `source: 'local-only'` for it.
+    localEmails: localOnly,
     savedEmailIds: new Set(),
     archivedEmailIds: new Set(archived),
     serverUidSet: new Set(emails.filter(e => e.source !== 'local-only').map(e => e.uid)),
@@ -143,12 +147,34 @@ describe('purgeEverywhere — storage matrix', () => {
   });
 
   it('local-only message: never calls the server', async () => {
-    prime({ emails: [{ ...serverMsg(9), source: 'local-only' }], archived: [9] });
+    // uid 9 was purged from the server already — never in `emails`, only in
+    // `localEmails` (where production puts it, and where updateSortedEmails()
+    // itself derives `source: 'local-only'` for it).
+    prime({ emails: [], archived: [9], localOnly: [serverMsg(9)] });
     await purgeEverywhere([9]);
 
     expect(mockDeleteEmail).not.toHaveBeenCalled();
     expect(mockMaildirDeleteMany).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX.Spam', [9]);
     expect(mockBackupPurgeUids).toHaveBeenCalledWith(ACCOUNT.email, 'INBOX.Spam', [9]);
+  });
+
+  it('regression: an archived row still in `emails` is never misread as local-only just because serverUidSet lags', async () => {
+    // Simulates the restore-descriptor paint (activateAccount.js:459) and the
+    // offline window: serverUidSet can be empty or stale while archivedEmailIds
+    // is already populated. The row is still server-backed — it's in `emails`,
+    // which updateSortedEmails() always stamps `source: 'server'` — so it must
+    // go through the normal server-delete path. Treating an incomplete
+    // serverUidSet as proof of absence would classify it as local-only instead:
+    // the server delete gets skipped while the vault/backup copies are
+    // destroyed anyway, the inverse of the rule this workflow exists to enforce.
+    prime({ emails: [serverMsg(1)], archived: [1] });
+    useMailStore.setState({ serverUidSet: new Set() });
+
+    const res = await purgeEverywhere([1]);
+
+    expect(mockDeleteEmail).toHaveBeenCalledTimes(1);
+    expect(res.deleted).toBe(1);
+    expect(res.failed).toBe(0);
   });
 
   it('server delete fails: local and backup copies are left alone', async () => {

@@ -497,6 +497,28 @@ export const markSelectedAsRead = () => _markSelected(true);
 export const markSelectedAsUnread = () => _markSelected(false);
 
 
+// ── shared per-key context resolution ──
+//
+// Both delete workflows below need the same thing per selected key: unwind a
+// unified-inbox composite key (or a plain uid) into the real uid, account,
+// mailbox and — if we have one — the matching email object. `emailMap` and
+// `sentPath` are supplied by the caller since each builds `emailMap` from a
+// different set of arrays (see purgeEverywhere's comment on why it also
+// includes `localEmails`).
+
+function _resolveKeyContext(key, state, emailMap, sentPath) {
+  const isUnified = state.activeMailbox === 'UNIFIED';
+  const ctx = isUnified ? _resolveUnifiedContext(key, state) : null;
+  const uid = ctx?.uid ?? key;
+  const accountId = ctx?.accountId || state.activeAccountId;
+  const emailObj = emailMap.get(key);
+  const rawMailbox = ctx?.mailbox || (emailObj?._fromSentFolder && sentPath ? sentPath : state.activeMailbox);
+  const mailbox = rawMailbox === 'UNIFIED' ? 'INBOX' : rawMailbox;
+  const account = ctx?.account || state.accounts.find(a => a.id === accountId);
+  return { uid, accountId, mailbox, account, emailObj, tombstone: `${accountId}|${mailbox}|${uid}` };
+}
+
+
 // ── deleteSelectedFromServer workflow ──
 
 
@@ -505,7 +527,7 @@ export async function deleteSelectedFromServer() {
   const get = () => useMailStore.getState();
 
   const state = get();
-  const { selectedEmailIds, accounts } = state;
+  const { selectedEmailIds } = state;
   const isUnified = state.activeMailbox === 'UNIFIED';
   if (selectedEmailIds.size === 0) return;
 
@@ -514,6 +536,7 @@ export async function deleteSelectedFromServer() {
   const sentPath = get().getSentMailboxPath();
   const allEmails = [...state.emails, ...state.sentEmails];
   const emailMap = new Map(allEmails.map(e => [isUnified ? _selKey(e) : e.uid, e]));
+  const contextOf = (key) => _resolveKeyContext(key, state, emailMap, sentPath);
 
   // Remove from the UI immediately — the server/maildir deletes below can take
   // seconds (pool checkout + one round-trip per email). The post-loop
@@ -521,18 +544,8 @@ export async function deleteSelectedFromServer() {
   const deletedKeySet = new Set(keys);
   const realUidSet = new Set(keys.map(k => (isUnified ? _resolveUnifiedContext(k, state)?.uid : k) ?? k));
 
-  // Tombstone helper — must match the composition in updateSortedEmails.
-  const tombstoneKey = (key) => {
-    const ctx = isUnified ? _resolveUnifiedContext(key, state) : null;
-    const realUid = ctx?.uid ?? key;
-    const accountId = ctx?.accountId || state.activeAccountId;
-    const emailObj = emailMap.get(key);
-    const rawMailbox = ctx?.mailbox || (emailObj?._fromSentFolder && sentPath ? sentPath : state.activeMailbox);
-    const mailbox = rawMailbox === 'UNIFIED' ? 'INBOX' : rawMailbox;
-    return `${accountId}|${mailbox}|${realUid}`;
-  };
   const newTombstones = new Set(state.deleteTombstones);
-  for (const key of keys) newTombstones.add(tombstoneKey(key));
+  for (const key of keys) newTombstones.add(contextOf(key).tombstone);
 
   useMailStore.setState({
     deleteTombstones: newTombstones,
@@ -551,12 +564,7 @@ export async function deleteSelectedFromServer() {
 
   for (const key of keys) {
     try {
-      const ctx = isUnified ? _resolveUnifiedContext(key, state) : null;
-      const realUid = ctx?.uid ?? key;
-      const accountId = ctx?.accountId || state.activeAccountId;
-      const emailObj = emailMap.get(key);
-      const rawMailbox = ctx?.mailbox || (emailObj?._fromSentFolder && sentPath ? sentPath : state.activeMailbox);
-      const mailbox = rawMailbox === 'UNIFIED' ? 'INBOX' : rawMailbox;
+      const { uid: realUid, accountId, mailbox, account: ctxAccount, emailObj } = contextOf(key);
 
       // Local-only messages (e.g. sent emails that never made it to server via
       // IMAP APPEND) live only in Maildir + local-index. Route them through the
@@ -577,8 +585,7 @@ export async function deleteSelectedFromServer() {
         continue;
       }
 
-      let account = ctx?.account || accounts.find(a => a.id === accountId);
-      account = await ensureFreshToken(account);
+      const account = await ensureFreshToken(ctxAccount);
 
       if (isGraphAccount(account)) {
         const graphId = getGraphMessageId(accountId, mailbox, realUid);
@@ -595,7 +602,7 @@ export async function deleteSelectedFromServer() {
       console.error(`Failed to delete email ${key}:`, e);
       // Lift the tombstone so the reconcile below can restore this email.
       const ts = new Set(get().deleteTombstones);
-      ts.delete(tombstoneKey(key));
+      ts.delete(contextOf(key).tombstone);
       useMailStore.setState({ deleteTombstones: ts });
     }
   }
@@ -627,30 +634,28 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
   if (!keys?.length) return { deleted: 0, failed: 0, queuedBackup: 0 };
 
   const sentPath = get().getSentMailboxPath();
-  const allEmails = [...state.emails, ...state.sentEmails];
+  // Includes localEmails (unlike deleteSelectedFromServer's emailMap) because
+  // that's where a genuinely local-only row actually lives — updateSortedEmails()
+  // (messageListSlice.js:157) already stamps `source: 'local-only'` on it there.
+  const allEmails = [...state.emails, ...state.sentEmails, ...state.localEmails];
   const emailMap = new Map(allEmails.map(e => [isUnified ? _selKey(e) : e.uid, e]));
 
   const resolve = (key) => {
-    const ctx = isUnified ? _resolveUnifiedContext(key, state) : null;
-    const uid = ctx?.uid ?? key;
-    const accountId = ctx?.accountId || state.activeAccountId;
-    const emailObj = emailMap.get(key);
-    const rawMailbox = ctx?.mailbox || (emailObj?._fromSentFolder && sentPath ? sentPath : state.activeMailbox);
-    const mailbox = rawMailbox === 'UNIFIED' ? 'INBOX' : rawMailbox;
-    const account = ctx?.account || state.accounts.find(a => a.id === accountId);
-    // `emailObj.source`/`_localStaged` catch compose-staged local-only sent
-    // items, whose object lives in sentEmails and is never touched by
-    // updateSortedEmails(). They do NOT catch an archived Spam message whose
-    // server copy has since vanished: that object lives in state.emails, and
-    // updateSortedEmails() unconditionally stamps every state.emails entry
-    // `source: 'server'` regardless of what it was seeded with. serverUidSet
-    // vs archivedEmailIds is the same authoritative signal updateSortedEmails
-    // itself uses to decide 'local-only' — fall back to it so this case (the
-    // whole reason purgeEverywhere exists) isn't misrouted through a server
-    // delete it will never need.
-    const localOnly = emailObj?.source === 'local-only' || emailObj?._localStaged === true
-      || (state.archivedEmailIds.has(uid) && !state.serverUidSet.has(uid));
-    return { uid, accountId, mailbox, account, localOnly, tombstone: `${accountId}|${mailbox}|${uid}` };
+    const { uid, accountId, mailbox, account, emailObj, tombstone } = _resolveKeyContext(key, state, emailMap, sentPath);
+    // Trust the email object's own source/_localStaged when we have one — a row
+    // present in state.emails is server-backed by construction (updateSortedEmails
+    // stamps it 'server'), so its verdict is always "not local-only", correctly.
+    // Only fall back to the archivedEmailIds/serverUidSet signal when we found no
+    // object at all for this key. Never let that fallback override an emailObj's
+    // verdict: serverUidSet can be incomplete (empty during the restore-descriptor
+    // paint, never filled in while offline) without meaning "not on the server", and
+    // treating that as proof of absence would misclassify a still-server-side
+    // message as local-only — skipping its server delete while destroying the only
+    // other copies it has left.
+    const localOnly = emailObj
+      ? (emailObj.source === 'local-only' || emailObj._localStaged === true)
+      : (state.archivedEmailIds.has(uid) && !state.serverUidSet.has(uid));
+    return { uid, accountId, mailbox, account, localOnly, tombstone };
   };
 
   const targets = keys.map(resolve).filter(t => t.account || t.localOnly);
@@ -727,14 +732,15 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
     }
   }
 
-  // Refresh local state once for the whole batch — removeLocalEmail re-reads
-  // the entire index per message, which over a bulk selection hangs the app.
-  if (groups.size) {
-    const first = [...groups.values()][0];
+  // Refresh local state once per group touched — removeLocalEmail re-reads the
+  // entire index per message, which over a bulk selection hangs the app. Every
+  // group gets refreshed, not just the first, so a selection spanning multiple
+  // accounts/mailboxes (unified inbox) doesn't leave the others stale.
+  for (const g of groups.values()) {
     const [savedEmailIds, archivedEmailIds, localEmails] = await Promise.all([
-      db.getSavedEmailIds(first.accountId, first.mailbox),
-      db.getArchivedEmailIds(first.accountId, first.mailbox),
-      db.getLocalEmails(first.accountId, first.mailbox),
+      db.getSavedEmailIds(g.accountId, g.mailbox),
+      db.getArchivedEmailIds(g.accountId, g.mailbox),
+      db.getLocalEmails(g.accountId, g.mailbox),
     ]);
     useMailStore.setState({ savedEmailIds, archivedEmailIds, localEmails });
   }
