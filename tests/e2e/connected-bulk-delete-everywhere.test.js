@@ -100,9 +100,19 @@ describe('Bulk delete everywhere', function () {
   const sidebarHasArchive = () => browser.execute(() =>
     (document.querySelector('[data-testid="sidebar"]')?.innerText || '').includes('Archive'));
 
-  /** Click a visible, enabled button anywhere in the app whose text starts with `text`. */
+  /**
+   * Click a visible, enabled button outside the sidebar whose text starts
+   * with `text`. Scoped away from the sidebar because it renders before the
+   * modal in the DOM and carries its own "All" button (the server/local/all
+   * View Mode toggle) — an unscoped search matches that one first and clicks
+   * it silently (setViewMode('all') on an already-'all' view is a no-op, so
+   * nothing visibly changes and the real failure only shows up as the range
+   * preset never registering).
+   */
   const clickByText = (text) => browser.execute((needle) => {
+    const sidebar = document.querySelector('[data-testid="sidebar"]');
     for (const el of document.querySelectorAll('button')) {
+      if (sidebar && sidebar.contains(el)) continue;
       if (el.offsetHeight > 0 && !el.disabled && (el.textContent || '').trim().startsWith(needle)) {
         el.click();
         return true;
