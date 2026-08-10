@@ -126,6 +126,33 @@ export async function readLocalEmailIndex(accountId, mailbox) {
 }
 
 /**
+ * uid → the local index's own `source` string, straight off disk.
+ *
+ * `readLocalEmailIndex` rewrites every entry to `source: 'local'` so the rows
+ * render as local, which destroys the one field that records where a message
+ * came from: `'local'` means archived FROM a server, `'local_sent'` and
+ * `'local_draft'` mean it was created here and never existed on one. A
+ * destructive path needs that distinction, so it reads the raw entries.
+ */
+export async function getLocalIndexProvenance(accountId, mailbox) {
+  await initBasic();
+  if (!invoke) return new Map();
+  try {
+    const data = await invoke('local_index_read', { accountId, mailbox });
+    if (!data) return new Map();
+    const entries = JSON.parse(data);
+    return new Map(
+      entries
+        .filter(e => e && e.uid != null && typeof e.source === 'string')
+        .map(e => [Number(e.uid), e.source])
+    );
+  } catch (e) {
+    console.warn('[db] Failed to read local index provenance:', e);
+    return new Map();
+  }
+}
+
+/**
  * Load only archived emails from Maildir (fast — reads only archived .eml files, not all).
  * Uses archivedEmailIds (already loaded via fast maildir_list) to read only the subset.
  */

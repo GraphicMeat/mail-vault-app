@@ -25,12 +25,15 @@ vi.mock('../../api', () => ({
   graphSetRead: vi.fn().mockResolvedValue(undefined),
 }));
 
+const mockGetLocalIndexProvenance = vi.fn().mockResolvedValue(new Map());
+
 vi.mock('../../db', () => ({
   initDB: vi.fn().mockResolvedValue(undefined),
   getSavedEmailIds: vi.fn().mockResolvedValue(new Set()),
   getArchivedEmailIds: vi.fn().mockResolvedValue(new Set()),
   getLocalEmails: vi.fn().mockResolvedValue([]),
   readLocalEmailIndex: vi.fn().mockResolvedValue(null),
+  getLocalIndexProvenance: (...a) => mockGetLocalIndexProvenance(...a),
   deleteLocalEmail: vi.fn().mockResolvedValue(undefined),
   getEmailHeadersPartial: vi.fn().mockResolvedValue({ emails: [], totalEmails: 0 }),
   getEmailHeadersMeta: vi.fn().mockResolvedValue(null),
@@ -76,14 +79,14 @@ const { purgeEverywhere } = await import('../messageMutations');
 // prefix and silently no-ops on anything shorter.
 const ACCOUNT = { id: '11111111-1111-4111-8111-111111111111', email: 'me@mock.test' };
 
-function prime({ emails, archived = [], localOnly = [] }) {
+function prime({ emails, archived = [], localOnly = [], serverUids, sent = [], provenance }) {
   useMailStore.setState({
     accounts: [ACCOUNT],
     activeAccountId: ACCOUNT.id,
     activeMailbox: 'INBOX.Spam',
     viewMode: 'all',
     emails,
-    sentEmails: [],
+    sentEmails: sent,
     // Rows still on the server live in `emails`. A row purged from the server
     // but still archived locally lives only in `localEmails` — the real
     // production placement for the "local-only" case, and where
@@ -91,7 +94,7 @@ function prime({ emails, archived = [], localOnly = [] }) {
     localEmails: localOnly,
     savedEmailIds: new Set(),
     archivedEmailIds: new Set(archived),
-    serverUidSet: new Set(emails.filter(e => e.source !== 'local-only').map(e => e.uid)),
+    serverUidSet: new Set(serverUids !== undefined ? serverUids : emails.filter(e => e.source !== 'local-only').map(e => e.uid)),
     deleteTombstones: new Set(),
     totalEmails: emails.length,
     selectedEmailIds: new Set(),
@@ -100,6 +103,7 @@ function prime({ emails, archived = [], localOnly = [] }) {
     loadEmails: vi.fn(),
     _sortedEmailsFingerprint: '',
   });
+  mockGetLocalIndexProvenance.mockResolvedValue(provenance || new Map());
   useMailStore.getState().updateSortedEmails();
 }
 
@@ -112,6 +116,7 @@ beforeEach(() => {
   mockDeleteEmail.mockReset().mockResolvedValue(undefined);
   mockMaildirDeleteMany.mockReset().mockResolvedValue({ removed: 0 });
   mockBackupPurgeUids.mockReset().mockResolvedValue({ removed: 0, queued: 0 });
+  mockGetLocalIndexProvenance.mockReset().mockResolvedValue(new Map());
 });
 
 describe('purgeEverywhere — storage matrix', () => {
@@ -147,10 +152,15 @@ describe('purgeEverywhere — storage matrix', () => {
   });
 
   it('local-only message: never calls the server', async () => {
-    // uid 9 was purged from the server already — never in `emails`, only in
-    // `localEmails` (where production puts it, and where updateSortedEmails()
-    // itself derives `source: 'local-only'` for it).
-    prime({ emails: [], archived: [9], localOnly: [serverMsg(9)] });
+    // uid 9 is local-only because it was composed here, not because it's
+    // merely absent from `emails` — the index provenance entry is what
+    // proves that, and is what makes this local-only rather than unproven.
+    prime({
+      emails: [],
+      archived: [9],
+      localOnly: [serverMsg(9)],
+      provenance: new Map([[9, 'local_sent']]),
+    });
     await purgeEverywhere([9]);
 
     expect(mockDeleteEmail).not.toHaveBeenCalled();
@@ -232,5 +242,83 @@ describe('purgeEverywhere — storage matrix', () => {
 
     const ts = useMailStore.getState().deleteTombstones;
     expect([...ts].some(k => k.endsWith('|1'))).toBe(false);
+  });
+});
+
+describe('purgeEverywhere — positive local-only proof', () => {
+  it('archived row absent from serverUidSet still gets a server delete attempt', async () => {
+    // The exact shape of the third data-loss route: a locally archived message
+    // that IS on the server, sitting outside the loaded window, so nothing in
+    // the store knows the server has it. Index provenance says 'local' —
+    // archived FROM the server — so the server delete must be attempted.
+    prime({
+      emails: [],
+      archived: [1],
+      localOnly: [{ ...serverMsg(1), source: 'local-only' }],
+      serverUids: [],
+      provenance: new Map([[1, 'local']]),
+    });
+
+    await purgeEverywhere([1]);
+
+    expect(mockDeleteEmail).toHaveBeenCalledTimes(1);
+    expect(mockMaildirDeleteMany).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX.Spam', [1]);
+  });
+
+  it('a composed-here message is proven local-only and never hits the server', async () => {
+    prime({
+      emails: [],
+      archived: [9],
+      localOnly: [{ ...serverMsg(9), source: 'local-only' }],
+      serverUids: [],
+      provenance: new Map([[9, 'local_sent']]),
+    });
+
+    await purgeEverywhere([9]);
+
+    expect(mockDeleteEmail).not.toHaveBeenCalled();
+    expect(mockMaildirDeleteMany).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX.Spam', [9]);
+  });
+
+  it('a staged draft is proven local-only', async () => {
+    prime({
+      emails: [],
+      archived: [7],
+      localOnly: [{ ...serverMsg(7), source: 'local-only' }],
+      serverUids: [],
+      provenance: new Map([[7, 'local_draft']]),
+    });
+
+    await purgeEverywhere([7]);
+
+    expect(mockDeleteEmail).not.toHaveBeenCalled();
+  });
+
+  it('no index entry at all means unproven, so the server is tried first', async () => {
+    prime({
+      emails: [],
+      archived: [3],
+      localOnly: [{ ...serverMsg(3), source: 'local-only' }],
+      serverUids: [],
+      provenance: new Map(),
+    });
+
+    await purgeEverywhere([3]);
+
+    expect(mockDeleteEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it('_localStaged still proves local-only without an index entry', async () => {
+    // The compose optimistic entry lives in sentEmails with a pseudo-uid and
+    // has no index row yet.
+    prime({
+      emails: [],
+      sent: [{ ...serverMsg(1700000000), _localStaged: true }],
+      provenance: new Map(),
+    });
+
+    await purgeEverywhere([1700000000]);
+
+    expect(mockDeleteEmail).not.toHaveBeenCalled();
   });
 });

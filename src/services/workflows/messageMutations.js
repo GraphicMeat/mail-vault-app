@@ -648,25 +648,38 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
   const allEmails = [...state.localEmails, ...state.emails, ...state.sentEmails];
   const emailMap = new Map(allEmails.map(e => [isUnified ? _selKey(e) : e.uid, e]));
 
-  const resolve = (key) => {
-    const { uid, accountId, mailbox, account, emailObj, tombstone } = _resolveKeyContext(key, state, emailMap, sentPath);
-    // Trust the email object's own source/_localStaged when we have one — a row
-    // present in state.emails is server-backed by construction (updateSortedEmails
-    // stamps it 'server'), so its verdict is always "not local-only", correctly.
-    // Only fall back to the archivedEmailIds/serverUidSet signal when we found no
-    // object at all for this key. Never let that fallback override an emailObj's
-    // verdict: serverUidSet can be incomplete (empty during the restore-descriptor
-    // paint, never filled in while offline) without meaning "not on the server", and
-    // treating that as proof of absence would misclassify a still-server-side
-    // message as local-only — skipping its server delete while destroying the only
-    // other copies it has left.
-    const localOnly = emailObj
-      ? (emailObj.source === 'local-only' || emailObj._localStaged === true)
-      : (state.archivedEmailIds.has(uid) && !state.serverUidSet.has(uid));
-    return { uid, accountId, mailbox, account, localOnly, tombstone };
-  };
+  const contexts = keys.map(key => _resolveKeyContext(key, state, emailMap, sentPath));
 
-  const targets = keys.map(resolve).filter(t => t.account || t.localOnly);
+  // Local-only is a claim about provenance, so prove it from provenance.
+  // `source` on a store object is derived from `serverUidSet`, which is
+  // window-derived on three load paths and empty during a restore paint — so
+  // "absent from it" means "not seen yet", never "not on the server". Getting
+  // this wrong in the local-only direction skips the server delete and destroys
+  // both local copies of a message the server still has.
+  // `'local'` in the index means archived FROM a server. Only `local_sent` /
+  // `local_draft` were created here. Anything unproven gets a server delete
+  // attempt, which is harmless when the UID is already gone: the permanent path
+  // is STORE \Deleted + UID EXPUNGE and no-ops.
+  const LOCALLY_CREATED = new Set(['local_sent', 'local_draft']);
+
+  // Read provenance once per distinct (accountId, mailbox) pair in the target
+  // set — this runs over bulk selections of thousands of uids, not once each.
+  const groupKey = (accountId, mailbox) => JSON.stringify([accountId, mailbox]);
+  const distinctGroups = new Map();
+  for (const c of contexts) distinctGroups.set(groupKey(c.accountId, c.mailbox), { accountId: c.accountId, mailbox: c.mailbox });
+  const provenanceByGroup = new Map(
+    await Promise.all([...distinctGroups.entries()].map(async ([gk, { accountId, mailbox }]) =>
+      [gk, await db.getLocalIndexProvenance(accountId, mailbox)]
+    ))
+  );
+
+  const targets = contexts.map(({ uid, accountId, mailbox, account, emailObj, tombstone }) => {
+    // `_localStaged` is sufficient proof on its own — the compose optimistic
+    // entry has no index row yet.
+    const provenance = provenanceByGroup.get(groupKey(accountId, mailbox))?.get(uid);
+    const localOnly = emailObj?._localStaged === true || LOCALLY_CREATED.has(provenance);
+    return { uid, accountId, mailbox, account, localOnly, tombstone };
+  }).filter(t => t.account || t.localOnly);
 
   // Optimistic removal, same shape as deleteSelectedFromServer — the deletes
   // below take seconds and the list must not sit there looking untouched.

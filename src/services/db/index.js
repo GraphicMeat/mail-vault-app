@@ -30,6 +30,7 @@ export {
   getLocalEmailLight,
   getLocalEmails,
   readLocalEmailIndex,
+  getLocalIndexProvenance,
   getArchivedEmails,
   getAllLocalEmails,
   deleteLocalEmail,
