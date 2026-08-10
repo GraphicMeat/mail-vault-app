@@ -46,12 +46,16 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
   // selected. Non-destructive actions restore the prior set untouched, so a
   // row that wasn't previously selected ends up not selected.
   //
-  // `fn` can be slow (a per-key network loop, a multi-step purge) — long
-  // enough for the user to toggle a different row's checkbox or fire another
-  // row's action while this one is still in flight. Only restore if
-  // selectedEmailIds still holds exactly what we scoped it to; if something
-  // else changed it since, that write already reflects the user's or another
-  // action's more-recent intent and a stale snapshot must not stomp it.
+  // `fn` itself unconditionally clears selectedEmailIds as part of its own
+  // completion (messageMutations.js _markSelected/purgeEverywhere both
+  // `setState({ selectedEmailIds: new Set() })` before any awaited network
+  // work) — so by the time `await fn()` resolves, live is normally empty,
+  // not "still equal to keys". That's the workflow's own side effect, not
+  // someone else taking ownership, and still needs a restore. `fn` can also
+  // be slow enough (a per-key network loop, a multi-step purge) for the user
+  // to toggle a different row's checkbox or fire another row's action while
+  // still in flight — that write lands as a non-empty, non-matching live
+  // value, and must be left alone rather than stomped with the stale prior.
   const runScoped = async (fn, { destructive = false } = {}) => {
     const prior = [...useMailStore.getState().selectedEmailIds];
     setSelection(keys);
@@ -59,9 +63,10 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
       await fn();
     } finally {
       const live = useMailStore.getState().selectedEmailIds;
-      const stillOurs = live.size === keys.length && keys.every(k => live.has(k));
+      const keySet = new Set(keys);
+      const matchesScoped = live.size === keys.length && keys.every(k => live.has(k));
+      const stillOurs = live.size === 0 || matchesScoped;
       if (stillOurs) {
-        const keySet = new Set(keys);
         setSelection(destructive ? prior.filter(k => !keySet.has(k)) : prior);
       }
     }

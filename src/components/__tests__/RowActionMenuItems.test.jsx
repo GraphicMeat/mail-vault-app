@@ -49,9 +49,22 @@ const initialStoreState = () => ({
   // finally has real state to compare against, not a value frozen at mock
   // creation.
   setSelection: vi.fn((keys) => useMailStoreMock.setState({ selectedEmailIds: new Set(keys) })),
-  markSelectedAsRead: vi.fn().mockResolvedValue(),
-  markSelectedAsUnread: vi.fn().mockResolvedValue(),
-  purgeSelectedEverywhere: vi.fn().mockResolvedValue({ deleted: 1, failed: 0, queuedBackup: 0, needsResync: 0 }),
+  // Honest mocks: the real _markSelected/purgeEverywhere workflows clear
+  // selectedEmailIds to empty as their own side effect, synchronously,
+  // before any awaited network work (messageMutations.js). A bare
+  // mockResolvedValue() that leaves selectedEmailIds untouched tests a
+  // fictional version of these functions — runScoped's restore logic
+  // depends on this clear actually happening.
+  markSelectedAsRead: vi.fn().mockImplementation(async () => {
+    useMailStoreMock.setState({ selectedEmailIds: new Set() });
+  }),
+  markSelectedAsUnread: vi.fn().mockImplementation(async () => {
+    useMailStoreMock.setState({ selectedEmailIds: new Set() });
+  }),
+  purgeSelectedEverywhere: vi.fn().mockImplementation(async () => {
+    useMailStoreMock.setState({ selectedEmailIds: new Set() });
+    return { deleted: 1, failed: 0, queuedBackup: 0, needsResync: 0 };
+  }),
   loadEmails: vi.fn(),
 });
 
