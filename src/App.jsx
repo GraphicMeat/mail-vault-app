@@ -38,6 +38,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw, X } from 'lucide-react';
 import * as bulkApi from './services/api';
 import { bulkOperationManager } from './services/BulkOperationManager';
+import { resolveErrorToastProps } from './utils/errorToast';
 import { migrationManager } from './services/migrationManager.js';
 import { restoreManager } from './services/restoreManager.js';
 import { version } from '../package.json';
@@ -100,7 +101,9 @@ function App() {
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   const error = useUiStore(s => s.error);
   const errorType = useUiStore(s => s.errorType);
+  const errorTypeFor = useUiStore(s => s.errorTypeFor);
   const clearError = useUiStore(s => s.clearError);
+  const errorToast = resolveErrorToastProps({ error, errorType, errorTypeFor });
   const loading = useSyncStore(s => s.loading);
   const initTheme = useThemeStore(s => s.initTheme);
   const userLayoutMode = useSettingsStore(s => s.layoutMode);
@@ -756,7 +759,7 @@ function App() {
 
       <AnimatePresence>
         {error && (
-          <Toast message={error} onClose={clearError} type={errorType} duration={errorType === 'warning' ? 8000 : 5000} />
+          <Toast message={error} onClose={clearError} type={errorToast.type} duration={errorToast.duration} />
         )}
       </AnimatePresence>
 

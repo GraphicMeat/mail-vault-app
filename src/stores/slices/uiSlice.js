@@ -54,11 +54,16 @@ export const createUiSlice = (set, get) => ({
   },
 
   // Error state — errorType lets a caveated-success message use the
-  // warning-styled Toast instead of the default error-red one; resets to
-  // 'error' on clear so a stale warning tint never bleeds onto the next
-  // genuine error.
+  // warning-styled Toast instead of the default error-red one. errorType is
+  // only trusted by App.jsx when errorTypeFor still names the current
+  // `error` message (see resolveErrorToastProps in utils/errorToast.js) —
+  // that's what makes it self-invalidating: a plain `setState({ error })` from
+  // any other call site (there are several, and more may be added later)
+  // automatically reads as a default error, with no need for that caller to
+  // also reset errorType/errorTypeFor itself.
   error: null,
   errorType: 'error',
+  errorTypeFor: null,
 
   // View mode — refresh local state from disk when switching to local view
   // so that in-progress bulk saves are reflected immediately
@@ -133,5 +138,5 @@ export const createUiSlice = (set, get) => ({
   },
 
   // Clear error
-  clearError: () => set({ error: null, errorType: 'error' }),
+  clearError: () => set({ error: null, errorType: 'error', errorTypeFor: null }),
 });
