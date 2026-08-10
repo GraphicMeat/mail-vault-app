@@ -711,7 +711,7 @@ function EmailListComponent() {
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden">
       {/* Header */}
-      <div data-tauri-drag-region className="flex items-center justify-between px-4 py-3 border-b border-mail-border bg-mail-surface flex-shrink-0 min-h-[48px]">
+      <div data-tauri-drag-region data-testid="email-list-header" className="flex items-center justify-between px-4 py-3 border-b border-mail-border bg-mail-surface flex-shrink-0 min-h-[48px]">
         <div className="flex items-center gap-3">
           <button
             onClick={() => allSelected ? clearSelection() : openBulkModal()}

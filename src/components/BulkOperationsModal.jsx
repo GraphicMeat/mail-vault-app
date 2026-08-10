@@ -391,6 +391,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                 </button>
                 <button
                   onClick={handleDeleteConfirm}
+                  data-testid="bulk-delete-confirm"
                   className="px-4 py-2 text-sm font-medium bg-mail-danger text-white rounded-lg
                             hover:bg-mail-danger/90 transition-colors"
                 >
@@ -592,6 +593,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                   return (
                     <button
                       key={action.id}
+                      data-testid={`bulk-action-${action.id}`}
                       onClick={() => setSelectedAction(action.id)}
                       className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-all text-left ${
                         isActive ? '' : 'bg-mail-surface border-mail-border hover:bg-mail-surface-hover'
@@ -639,6 +641,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                 <button
                   onClick={handleConfirm}
                   disabled={!selectedAction}
+                  data-testid="bulk-step2-confirm"
                   className="px-4 py-2 text-sm font-medium text-white rounded-lg transition-all
                             disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
                   style={{

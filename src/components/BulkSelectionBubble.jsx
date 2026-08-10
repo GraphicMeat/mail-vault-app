@@ -52,6 +52,7 @@ export function BulkSelectionBubble() {
           >
             <button
               onClick={openBulkModal}
+              data-testid="bulk-selection-bubble-reopen"
               className="flex items-center gap-2 px-1 py-0.5 rounded-lg hover:bg-mail-surface-hover transition-colors"
               title="Back to bulk operations"
             >
