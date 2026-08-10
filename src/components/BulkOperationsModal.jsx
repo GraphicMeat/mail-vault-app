@@ -215,12 +215,23 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
   const lastSyncedRangeRef = useRef(null);
   useEffect(() => {
     if (!selectedRange) { lastSyncedRangeRef.current = null; return; }
+    // This modal is a child of EmailList, whose own effect ends a session
+    // bound to a different (account, mailbox, viewMode) than the live one.
+    // Without this check, correctness here would rest on an implicit
+    // child-before-parent effect-ordering guarantee — this effect running
+    // and writing a transiently-wrong selection before EmailList's sibling
+    // effect ends the session, one commit later — rather than on an explicit
+    // guard. Do NOT delete this as "redundant" with that teardown: it's what
+    // makes the teardown a cleanup instead of a race it happens to win.
+    if (bulkSession.accountId !== activeAccountId || bulkSession.mailbox !== activeMailbox || bulkSession.viewMode !== viewMode) {
+      return;
+    }
     const poolPart = cachedRows === null ? emailPool.length : 'settled';
     const signature = `${JSON.stringify(selectedRange)}|${poolPart}|${customFrom}|${customTo}`;
     if (lastSyncedRangeRef.current === signature) return;
     lastSyncedRangeRef.current = signature;
     setSelection(selectedEmails.map(e => e.uid));
-  }, [selectedRange, cachedRows, emailPool.length, customFrom, customTo, selectedEmails, setSelection]);
+  }, [selectedRange, bulkSession, activeAccountId, activeMailbox, viewMode, cachedRows, emailPool.length, customFrom, customTo, selectedEmails, setSelection]);
 
   // Live count, not the range's own result — hand edits made while the modal
   // was minimized must be reflected here and must be what Start acts on.

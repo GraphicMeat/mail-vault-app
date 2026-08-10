@@ -290,20 +290,22 @@ describe('EmailList virtualization', () => {
     useMailStore.setState({ hasMoreEmails: false });
   });
 
-  // A bulk session is bound to the (account, mailbox) it was opened against
-  // (uiSlice's openBulkModal). If the user navigates to a different mailbox
-  // while a session is minimized, the session (and its selection) must not
-  // silently keep applying to the new mailbox — activateAccount already
-  // clears selectedEmailIds on switch for exactly this cross-mailbox-bleed
-  // reason, and a session outliving its folder would fight that clear.
+  // A bulk session is bound to the (account, mailbox, viewMode) it was
+  // opened against (uiSlice's openBulkModal). If the user navigates to a
+  // different mailbox while a session is minimized, the session (and its
+  // selection) must not silently keep applying to the new mailbox —
+  // activateAccount already clears selectedEmailIds on switch for exactly
+  // this cross-mailbox-bleed reason, and a session outliving its folder
+  // would fight that clear.
   it('ends a bulk session bound to a different mailbox than the one now active', async () => {
     const { useMailStore } = await import('../../stores/mailStore');
     useMailStore.getState().endBulkSession.mockClear();
     useMailStore.setState({
-      bulkSession: { active: true, step: 1, range: { type: 'all' }, action: null, accountId: 'acc1', mailbox: 'INBOX' },
+      bulkSession: { active: true, step: 1, range: { type: 'all' }, action: null, accountId: 'acc1', mailbox: 'INBOX', viewMode: 'all' },
       selectedEmailIds: new Set([1, 2, 3]),
       activeAccountId: 'acc1',
       activeMailbox: 'Sent', // session was bound to INBOX — mismatch
+      viewMode: 'all',
     });
 
     const { EmailList } = await import('../EmailList.jsx');
@@ -314,14 +316,38 @@ describe('EmailList virtualization', () => {
     useMailStore.setState({ bulkSession: null, selectedEmailIds: new Set(), activeMailbox: 'INBOX' });
   });
 
-  it('does not end a bulk session whose mailbox still matches the active one', async () => {
+  // viewMode is bound the same way: "All" resolves against a different pool
+  // in local-only view than in server view for the very same mailbox, so
+  // toggling it (the Sidebar's view-mode control) invalidates a session just
+  // as surely as switching folders does — independent of any navigation.
+  it('ends a bulk session bound to a different viewMode than the one now active', async () => {
     const { useMailStore } = await import('../../stores/mailStore');
     useMailStore.getState().endBulkSession.mockClear();
     useMailStore.setState({
-      bulkSession: { active: true, step: 1, range: { type: 'all' }, action: null, accountId: 'acc1', mailbox: 'INBOX' },
+      bulkSession: { active: true, step: 1, range: { type: 'all' }, action: null, accountId: 'acc1', mailbox: 'INBOX', viewMode: 'all' },
       selectedEmailIds: new Set([1, 2, 3]),
       activeAccountId: 'acc1',
-      activeMailbox: 'INBOX', // matches — no mismatch
+      activeMailbox: 'INBOX', // same account and mailbox —
+      viewMode: 'local', // — only viewMode changed
+    });
+
+    const { EmailList } = await import('../EmailList.jsx');
+    render(React.createElement(EmailList));
+
+    expect(useMailStore.getState().endBulkSession).toHaveBeenCalled();
+
+    useMailStore.setState({ bulkSession: null, selectedEmailIds: new Set(), viewMode: 'all' });
+  });
+
+  it('does not end a bulk session whose (account, mailbox, viewMode) still match', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    useMailStore.getState().endBulkSession.mockClear();
+    useMailStore.setState({
+      bulkSession: { active: true, step: 1, range: { type: 'all' }, action: null, accountId: 'acc1', mailbox: 'INBOX', viewMode: 'all' },
+      selectedEmailIds: new Set([1, 2, 3]),
+      activeAccountId: 'acc1',
+      activeMailbox: 'INBOX', // matches
+      viewMode: 'all', // matches — no mismatch
     });
 
     const { EmailList } = await import('../EmailList.jsx');

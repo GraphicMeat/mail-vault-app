@@ -37,6 +37,12 @@ const CACHED_ROWS = CACHED_UIDS.map(uid => ({
 const tombstones = new Set(['acct-1|INBOX|2']);
 const archivedEmailIds = new Set();
 
+// What the real openBulkModal() produces for acct-1/INBOX/'all' — the modal
+// only ever renders with isOpen after that ran, so tests start from here
+// rather than from a bare `null`, matching how the accountId/mailbox/
+// viewMode-bound session actually comes into being.
+const boundSession = () => ({ active: true, step: 1, range: null, action: null, accountId: 'acct-1', mailbox: 'INBOX', viewMode: 'all' });
+
 // Task 5 moved step/range/action/selection into the store. The modal now
 // reads and writes them live, so the mock has to actually be reactive —
 // a real zustand store (already a project dep) beats hand-rolling a pub-sub.
@@ -84,7 +90,14 @@ import { BulkOperationsModal } from '../BulkOperationsModal';
 
 describe('BulkOperationsModal', () => {
   beforeEach(() => {
-    useMessageListStoreMock.setState({ bulkSession: null, selectedEmailIds: new Set(), sortedEmails: WINDOW });
+    useMessageListStoreMock.setState({
+      bulkSession: boundSession(),
+      selectedEmailIds: new Set(),
+      sortedEmails: WINDOW,
+      activeAccountId: 'acct-1',
+      activeMailbox: 'INBOX',
+      viewMode: 'all',
+    });
   });
   afterEach(() => cleanup());
 
@@ -248,5 +261,29 @@ describe('BulkOperationsModal', () => {
     fireEvent.click(screen.getByText('Archive'));
     fireEvent.click(screen.getByText('Start Archive'));
     expect(onConfirm).toHaveBeenCalledWith({ action: 'archive', uids: [5, 1] });
+  });
+
+  // Explicit guard, driven directly: correctness here must not rest on
+  // EmailList's sibling teardown effect winning a child-before-parent
+  // ordering race. A session bound to a mailbox other than the live one
+  // must never reach setSelection, regardless of whether or when anything
+  // outside this component ends the stale session.
+  it('the sync effect does not write a selection when the session is bound to a stale mailbox', async () => {
+    useMessageListStoreMock.setState({
+      bulkSession: { active: true, step: 1, range: { type: 'all' }, action: null, accountId: 'acct-1', mailbox: 'INBOX', viewMode: 'all' },
+      activeMailbox: 'Sent', // live store has already moved on — the session's binding is stale
+      selectedEmailIds: new Set(),
+    });
+
+    render(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={vi.fn()} />);
+    await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
+
+    // A range is already picked (range: { type: 'all' }) and the pool has
+    // settled — everything needed to trigger a resync is present except a
+    // matching mailbox. The guard must have bailed before ever calling
+    // setSelection.
+    expect(useMessageListStoreMock.getState().selectedEmailIds.size).toBe(0);
+
+    useMessageListStoreMock.setState({ activeMailbox: 'INBOX' });
   });
 });

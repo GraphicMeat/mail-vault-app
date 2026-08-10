@@ -22,19 +22,20 @@ export const createUiSlice = (set, get) => ({
   // Bulk operations modal + session.
   // The session outlives the modal: closing the modal minimizes to
   // BulkSelectionBubble, keeping the selection so it can be amended by hand.
-  // A session belongs to exactly one (account, mailbox) — it's bound at
-  // creation and EmailList ends it if the user navigates away from that pair,
-  // otherwise a minimized selection for Spam could silently pick up Sent's
-  // rows once the user looks elsewhere.
+  // A session belongs to exactly one (account, mailbox, viewMode) — it's
+  // bound at creation and EmailList ends it if the user navigates away from
+  // that triple, otherwise a minimized selection for Spam could silently
+  // pick up Sent's rows once the user looks elsewhere, or "All" from server
+  // view could silently mean something else once view mode flips to local.
   bulkModalOpen: false,
-  bulkSession: null, // { active: true, step: 1|2, range, action, accountId, mailbox }
+  bulkSession: null, // { active: true, step: 1|2, range, action, accountId, mailbox, viewMode }
 
   openBulkModal: () => {
     const existing = get().bulkSession;
-    const { activeAccountId, activeMailbox } = get();
+    const { activeAccountId, activeMailbox, viewMode } = get();
     set({
       bulkModalOpen: true,
-      bulkSession: existing || { active: true, step: 1, range: null, action: null, accountId: activeAccountId, mailbox: activeMailbox },
+      bulkSession: existing || { active: true, step: 1, range: null, action: null, accountId: activeAccountId, mailbox: activeMailbox, viewMode },
     });
   },
 

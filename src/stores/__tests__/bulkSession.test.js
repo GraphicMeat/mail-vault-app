@@ -94,16 +94,19 @@ describe('bulk session', () => {
     expect(useMailStore.getState().bulkSession.active).toBe(true);
   });
 
-  // A session belongs to exactly one (account, mailbox) — bound at creation
-  // so EmailList can tell "still the same folder" apart from "user navigated
-  // away" and end a session that no longer applies.
-  it('openBulkModal binds the session to the account and mailbox active at creation', () => {
-    useMailStore.setState({ activeAccountId: 'acct-9', activeMailbox: 'INBOX.Spam' });
+  // A session belongs to exactly one (account, mailbox, viewMode) — bound at
+  // creation so EmailList can tell "still the same folder and view" apart
+  // from "user navigated away" and end a session that no longer applies.
+  // viewMode matters because "All" resolves against a different pool in
+  // local-only view than in server view, for the very same mailbox.
+  it('openBulkModal binds the session to the account, mailbox, and viewMode active at creation', () => {
+    useMailStore.setState({ activeAccountId: 'acct-9', activeMailbox: 'INBOX.Spam', viewMode: 'local' });
 
     useMailStore.getState().openBulkModal();
 
     const s = useMailStore.getState();
     expect(s.bulkSession.accountId).toBe('acct-9');
     expect(s.bulkSession.mailbox).toBe('INBOX.Spam');
+    expect(s.bulkSession.viewMode).toBe('local');
   });
 });
