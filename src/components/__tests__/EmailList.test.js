@@ -56,6 +56,7 @@ vi.mock('lucide-react', () => {
 vi.mock('../SearchBar', () => ({ SearchBar: () => null }));
 vi.mock('../BulkOperationsModal', () => ({ BulkOperationsModal: () => null }));
 vi.mock('../BulkOperationProgress', () => ({ BulkOperationProgress: () => null }));
+vi.mock('../BulkSelectionBubble', () => ({ BulkSelectionBubble: () => null }));
 vi.mock('../LinkAlertIcon', () => ({ LinkAlertIcon: () => null }));
 vi.mock('../SenderAlertIcon', () => ({ SenderAlertIcon: () => null, getSenderAlertLevel: () => null }));
 vi.mock('../../services/BulkOperationManager', () => ({

@@ -33,6 +33,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { BulkOperationsModal } from './BulkOperationsModal';
+import { BulkSelectionBubble } from './BulkSelectionBubble';
 import { BulkOperationProgress } from './BulkOperationProgress';
 import { bulkOperationManager } from '../services/BulkOperationManager';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -1115,6 +1116,7 @@ function EmailListComponent() {
         </div>
       </div>
 
+      <BulkSelectionBubble />
       <BulkOperationsModal
         isOpen={bulkModalOpen}
         onClose={minimizeBulkModal}
