@@ -60,6 +60,9 @@ keyring = { version = "3", features = ["sync-secret-service"] }
 tauri-plugin-updater = "2"
 signal-hook = "0.3"
 
+[dev-dependencies]
+tempfile = "3"
+
 [features]
 default = ["custom-protocol", "sparkle"]
 custom-protocol = ["tauri/custom-protocol"]

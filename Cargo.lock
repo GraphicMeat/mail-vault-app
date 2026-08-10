@@ -3636,6 +3636,7 @@ dependencies = [
  "tauri-plugin-sparkle-updater",
  "tauri-plugin-updater",
  "tauri-plugin-webdriver-automation",
+ "tempfile",
  "tokio",
  "tracing",
  "tracing-appender",

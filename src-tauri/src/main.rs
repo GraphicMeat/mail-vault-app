@@ -1807,6 +1807,55 @@ pub fn find_file_by_uid(dir: &Path, uid: u32) -> Option<PathBuf> {
     None
 }
 
+/// Delete every Maildir file in `cur_dir` whose uid is in `uids`.
+/// One directory pass — the per-uid `find_file_by_uid` rescans the whole
+/// directory each call, which is quadratic over a bulk selection.
+/// Vault filenames are always `<uid>:<flags>` (see `build_maildir_filename`),
+/// so the uid is the run of digits before the first ':'.
+pub fn delete_maildir_files(cur_dir: &Path, uids: &std::collections::HashSet<u32>) -> usize {
+    let mut removed = 0usize;
+    if let Ok(entries) = fs::read_dir(cur_dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            let uid = match name.split(':').next().and_then(|s| s.parse::<u32>().ok()) {
+                Some(u) => u,
+                None => continue,
+            };
+            if !uids.contains(&uid) {
+                continue;
+            }
+            match fs::remove_file(entry.path()) {
+                Ok(()) => removed += 1,
+                Err(e) => warn!("maildir purge: failed to remove {:?}: {}", entry.path(), e),
+            }
+        }
+    }
+    removed
+}
+
+/// Drop `uids` from a mailbox's `local-index.json` in a single read-modify-write.
+/// A missing index is not an error — nothing was ever indexed.
+pub fn prune_local_index(
+    index_path: &Path,
+    uids: &std::collections::HashSet<u32>,
+) -> Result<(), String> {
+    if !index_path.exists() {
+        return Ok(());
+    }
+    let content = fs::read_to_string(index_path)
+        .map_err(|e| format!("Failed to read local index: {}", e))?;
+    let mut entries: Vec<serde_json::Value> = serde_json::from_str(&content).unwrap_or_default();
+    entries.retain(|e| {
+        e.get("uid")
+            .and_then(|u| u.as_u64())
+            .map(|u| !uids.contains(&(u as u32)))
+            .unwrap_or(true)
+    });
+    let data = serde_json::to_string(&entries)
+        .map_err(|e| format!("Failed to serialize local index: {}", e))?;
+    fs::write(index_path, &data).map_err(|e| format!("Failed to write local index: {}", e))
+}
+
 fn parse_address_str(header_value: &str) -> Vec<MaildirAddress> {
     match mailparse::addrparse(header_value) {
         Ok(addrs) => {
@@ -2714,6 +2763,33 @@ fn maildir_delete(
         info!("Deleted email UID {} from {:?}", uid, path);
     }
     Ok(())
+}
+
+#[tauri::command]
+fn maildir_delete_many(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    mailbox: String,
+    uids: Vec<u32>,
+) -> Result<serde_json::Value, String> {
+    let uid_set: std::collections::HashSet<u32> = uids.into_iter().collect();
+    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
+    let removed = delete_maildir_files(&cur_dir, &uid_set);
+
+    let index_path = vault::root(&app_handle)?
+        .join("maildir")
+        .join(&account_id)
+        .join(&mailbox)
+        .join("local-index.json");
+    if let Err(e) = prune_local_index(&index_path, &uid_set) {
+        warn!("maildir_delete_many: index prune failed: {}", e);
+    }
+
+    info!(
+        "maildir_delete_many: removed {} files from {}/{}",
+        removed, account_id, mailbox
+    );
+    Ok(serde_json::json!({ "removed": removed }))
 }
 
 #[tauri::command]
@@ -4444,6 +4520,7 @@ fn main() {
             maildir_exists,
             maildir_list,
             maildir_delete,
+            maildir_delete_many,
             maildir_set_flags,
             maildir_storage_stats,
             maildir_clear_cache,
@@ -5272,5 +5349,67 @@ iVBORw0KGgo=\r\n\
             --outer--\r\n";
         let email = parse_eml_bytes_light(raw, 1, vec![]).unwrap();
         assert!(email.has_attachments, "Email with real PDF attachment should set has_attachments");
+    }
+}
+
+#[cfg(test)]
+mod purge_tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    fn touch(dir: &Path, name: &str) {
+        std::fs::write(dir.join(name), b"x").unwrap();
+    }
+
+    #[test]
+    fn deletes_only_requested_uids() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cur = tmp.path();
+        touch(cur, "101:2,S");
+        touch(cur, "102:2,");
+        touch(cur, "103:2,S");
+        // A uid that is a prefix of another must not be swept up.
+        touch(cur, "1010:2,S");
+
+        let mut uids = HashSet::new();
+        uids.insert(101u32);
+        uids.insert(103u32);
+
+        let removed = delete_maildir_files(cur, &uids);
+
+        assert_eq!(removed, 2);
+        assert!(!cur.join("101:2,S").exists());
+        assert!(!cur.join("103:2,S").exists());
+        assert!(cur.join("102:2,").exists());
+        assert!(cur.join("1010:2,S").exists(), "1010 must survive a purge of 101");
+    }
+
+    #[test]
+    fn prunes_only_requested_uids_from_index() {
+        let tmp = tempfile::tempdir().unwrap();
+        let index = tmp.path().join("local-index.json");
+        std::fs::write(
+            &index,
+            r#"[{"uid":101,"subject":"a"},{"uid":102,"subject":"b"},{"uid":103,"subject":"c"}]"#,
+        )
+        .unwrap();
+
+        let mut uids = HashSet::new();
+        uids.insert(102u32);
+
+        prune_local_index(&index, &uids).unwrap();
+
+        let left: Vec<serde_json::Value> =
+            serde_json::from_str(&std::fs::read_to_string(&index).unwrap()).unwrap();
+        let kept: Vec<u64> = left.iter().map(|e| e["uid"].as_u64().unwrap()).collect();
+        assert_eq!(kept, vec![101, 103]);
+    }
+
+    #[test]
+    fn missing_index_is_not_an_error() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut uids = HashSet::new();
+        uids.insert(1u32);
+        assert!(prune_local_index(&tmp.path().join("nope.json"), &uids).is_ok());
     }
 }
