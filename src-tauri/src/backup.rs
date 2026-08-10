@@ -216,6 +216,40 @@ pub fn queue_purge(
     write_purge_queue(data_dir, &q)
 }
 
+/// Apply every queued purge against a now-reachable backup root.
+/// Entries are dropped as they are applied; anything left in the map stays
+/// queued for the next run.
+pub fn drain_purge_queue(data_dir: &std::path::Path, root: &std::path::Path) -> usize {
+    let q = read_purge_queue(data_dir);
+    if q.is_empty() {
+        return 0;
+    }
+    let mut removed_total = 0usize;
+    let mut leftover: std::collections::BTreeMap<String, Vec<u32>> = Default::default();
+
+    for (key, uids) in q {
+        let Some((email, mailbox)) = key.split_once('|') else {
+            continue; // malformed key — drop it, nothing can act on it
+        };
+        let uid_set: HashSet<u32> = uids.iter().copied().collect();
+        let mirror = root.join(email).join(mailbox).join("cur");
+        if !mirror.exists() {
+            // Folder not mirrored (yet). Keep the entry rather than declare success.
+            leftover.insert(key.clone(), uids);
+            continue;
+        }
+        removed_total += purge_backup_files(root, email, mailbox, &uid_set);
+    }
+
+    if let Err(e) = write_purge_queue(data_dir, &leftover) {
+        warn!("drain_purge_queue: failed to rewrite queue: {}", e);
+    }
+    if removed_total > 0 {
+        info!("drain_purge_queue: removed {} queued mirror files", removed_total);
+    }
+    removed_total
+}
+
 /// Build a FolderBackupStatus for one folder.
 fn build_folder_status(
     path: &str,
@@ -557,8 +591,13 @@ pub async fn run_account_backup(
 
     // Resolve external path via bookmark if needed
     let (resolved_path, needs_release) = resolve_backup_path(&app_handle, backup_path);
-    if resolved_path.is_some() {
-        info!("backup: using external path: {:?}", resolved_path);
+    if let Some(ref root) = resolved_path {
+        info!("backup: using external path: {:?}", root);
+        // Drain BEFORE any mirroring work — a run that copies first would put
+        // back the very files the queue is about to delete.
+        if let Ok(dd) = app_handle.path().app_data_dir() {
+            drain_purge_queue(&dd, std::path::Path::new(root));
+        }
     }
 
     // Check if this is a Graph account
@@ -1197,5 +1236,31 @@ mod purge_queue_tests {
         let tmp = tempfile::tempdir().unwrap();
         std::fs::write(purge_queue_path(tmp.path()), b"{ not json").unwrap();
         assert!(read_purge_queue(tmp.path()).is_empty());
+    }
+
+    #[test]
+    fn drain_removes_files_and_clears_entries() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dd = tmp.path().join("data");
+        let root = tmp.path().join("mirror");
+        std::fs::create_dir_all(&dd).unwrap();
+        seed_mirror(&root, "me@x.test", "INBOX.Spam", &["1:2,S.eml", "2.eml", "7:2,S.eml"]);
+
+        queue_purge(&dd, "me@x.test", "INBOX.Spam", &[1, 2]).unwrap();
+
+        let removed = drain_purge_queue(&dd, &root);
+
+        assert_eq!(removed, 2);
+        let cur = root.join("me@x.test").join("INBOX.Spam").join("cur");
+        assert!(!cur.join("1:2,S.eml").exists());
+        assert!(!cur.join("2.eml").exists());
+        assert!(cur.join("7:2,S.eml").exists());
+        assert!(read_purge_queue(&dd).is_empty(), "drained entries must be cleared");
+    }
+
+    #[test]
+    fn drain_of_empty_queue_is_a_noop() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert_eq!(drain_purge_queue(tmp.path(), tmp.path()), 0);
     }
 }
