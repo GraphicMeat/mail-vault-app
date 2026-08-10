@@ -681,19 +681,47 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
     return { uid, accountId, mailbox, account, localOnly, tombstone };
   }).filter(t => t.account || t.localOnly);
 
+  // Optimistic removal, same shape as deleteSelectedFromServer — the deletes
+  // below take seconds (now including a STATUS round trip) and the list must
+  // not sit there looking untouched. Must run before the UIDVALIDITY guard,
+  // not after: the guard is a network call and `state` here is a snapshot —
+  // running the guard first would widen the window in which a row the store
+  // gains mid-purge gets clobbered by the `emails: state.emails.filter(...)`
+  // write below.
+  const keySet = new Set(keys);
+  const tombstones = new Set(state.deleteTombstones);
+  for (const t of targets) tombstones.add(t.tombstone);
+  useMailStore.setState({
+    deleteTombstones: tombstones,
+    selectedEmailIds: new Set(),
+    emails: state.emails.filter(e => !keySet.has(isUnified ? _selKey(e) : e.uid)),
+    sentEmails: state.sentEmails.filter(e => !keySet.has(isUnified ? _selKey(e) : e.uid)),
+    totalEmails: Math.max(0, (state.totalEmails || 0) - keys.length),
+  });
+  get().updateSortedEmails();
+
   // ── UIDVALIDITY guard ──
   // Neither the vault nor local-index.json carries a UIDVALIDITY stamp. After
   // a server-side UID reissue (the change-server flow, or one the server
-  // initiates on its own), every uid held for this mailbox — server-backed or
-  // claimed local-only — can now name an unrelated message: `t.uid` at the
-  // server-delete call below would be spent against whatever the server put
-  // there instead, and the vault/backup purge would destroy that unrelated
-  // message's only local copy. headerMemo.js:131 and syncProbe.js:83 already
-  // refuse to trust a UID set across a reissue; this is the same refusal
-  // before any uid in the group gets spent on a delete. One STATUS round trip
-  // per (accountId, mailbox) group, not per message.
+  // initiates on its own), a uid this mailbox holds for a SERVER delete can
+  // now name an unrelated message: `t.uid` at the server-delete call below
+  // would be spent against whatever the server put there instead.
+  // headerMemo.js:131 and syncProbe.js:83 already refuse to trust a UID set
+  // across a reissue; this is the same refusal before a uid gets spent there.
+  //
+  // Only targets headed for a server delete are gated. A proven local-only
+  // target's purge touches local files under the uid it was archived/staged
+  // under — no server round trip, so no server UID space to have been
+  // reissued out from under it; gating it too would make deleting an
+  // offline-composed message a permanent failure for an operation that
+  // touches no server at all. Graph accounts are exempt outright: Graph
+  // deletes address messages by Graph id (getGraphMessageId), never by IMAP
+  // uid, so there is no UID space here to poison in the first place.
+  //
+  // One STATUS round trip per (accountId, mailbox) group, not per message.
   const uvGroups = new Map();
   for (const t of targets) {
+    if (t.localOnly) continue;
     const gk = groupKey(t.accountId, t.mailbox);
     if (!uvGroups.has(gk)) uvGroups.set(gk, { accountId: t.accountId, mailbox: t.mailbox, account: t.account, items: [] });
     const g = uvGroups.get(gk);
@@ -704,6 +732,7 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
   const untrustedTargets = new Set();
   let needsResync = 0;
   await Promise.all([...uvGroups.values()].map(async (g) => {
+    if (isGraphAccount(g.account)) return; // no UID space to poison — trusted without a STATUS call
     let trusted = false;
     try {
       const account = g.account ? await ensureFreshToken(g.account) : null;
@@ -722,20 +751,6 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
       for (const t of g.items) untrustedTargets.add(t);
     }
   }));
-
-  // Optimistic removal, same shape as deleteSelectedFromServer — the deletes
-  // below take seconds and the list must not sit there looking untouched.
-  const keySet = new Set(keys);
-  const tombstones = new Set(state.deleteTombstones);
-  for (const t of targets) tombstones.add(t.tombstone);
-  useMailStore.setState({
-    deleteTombstones: tombstones,
-    selectedEmailIds: new Set(),
-    emails: state.emails.filter(e => !keySet.has(isUnified ? _selKey(e) : e.uid)),
-    sentEmails: state.sentEmails.filter(e => !keySet.has(isUnified ? _selKey(e) : e.uid)),
-    totalEmails: Math.max(0, (state.totalEmails || 0) - keys.length),
-  });
-  get().updateSortedEmails();
 
   // ── Phase 1: server ──
   onProgress?.({ phase: 'delete', total: targets.length, completed: 0 });

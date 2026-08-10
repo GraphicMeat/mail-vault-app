@@ -16,6 +16,7 @@ const mockBackupPurgeUids = vi.fn().mockResolvedValue({ removed: 0, queued: 0 })
 // the UIDVALIDITY guard sees a "trusted" mailbox and behaves as before it
 // existed. Tests that DO care override one side to force a mismatch.
 const mockCheckMailboxStatus = vi.fn().mockResolvedValue({ uidValidity: 1 });
+const mockGraphDeleteMessage = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../../api', () => ({
   deleteEmail: (...a) => mockDeleteEmail(...a),
@@ -26,7 +27,7 @@ vi.mock('../../api', () => ({
   fetchEmailLight: vi.fn(),
   updateEmailFlags: vi.fn().mockResolvedValue(undefined),
   moveEmails: vi.fn().mockResolvedValue(undefined),
-  graphDeleteMessage: vi.fn().mockResolvedValue(undefined),
+  graphDeleteMessage: (...a) => mockGraphDeleteMessage(...a),
   graphSetRead: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -54,10 +55,17 @@ vi.mock('../../authUtils', () => ({
   resolveServerAccount: (id, account) => Promise.resolve({ ok: true, account }),
 }));
 
+const mockIsGraphAccount = vi.fn().mockReturnValue(false);
+const mockGetGraphMessageId = vi.fn().mockReturnValue(null);
+
 vi.mock('../../graphConfig', () => ({
-  isGraphAccount: () => false,
+  isGraphAccount: (...a) => mockIsGraphAccount(...a),
   graphMessageToEmail: (m) => m,
-  getGraphMessageId: () => null,
+}));
+
+// getGraphMessageId is imported from cacheManager, not graphConfig.
+vi.mock('../../cacheManager', () => ({
+  getGraphMessageId: (...a) => mockGetGraphMessageId(...a),
 }));
 
 vi.mock('../../safeStorage', () => ({
@@ -125,6 +133,9 @@ beforeEach(() => {
   mockGetLocalIndexProvenance.mockReset().mockResolvedValue(new Map());
   mockCheckMailboxStatus.mockReset().mockResolvedValue({ uidValidity: 1 });
   mockGetEmailHeadersMeta.mockReset().mockResolvedValue({ uidValidity: 1 });
+  mockGraphDeleteMessage.mockReset().mockResolvedValue(undefined);
+  mockIsGraphAccount.mockReset().mockReturnValue(false);
+  mockGetGraphMessageId.mockReset().mockReturnValue(null);
 });
 
 describe('purgeEverywhere — storage matrix', () => {
@@ -404,10 +415,14 @@ describe('purgeEverywhere — UIDVALIDITY guard', () => {
     expect(res.needsResync).toBe(1);
   });
 
-  it('a proven local-only message in an untrusted group is also held back', async () => {
-    // The ruling applies the guard to every uid in the group, not just the
-    // ones headed for a server delete — the local vault write is keyed by
-    // the same untrusted uid, so purging it is just as much a guess.
+  it('a proven local-only message purges regardless of the mailbox UIDVALIDITY verdict', async () => {
+    // The guard only gates uids headed for a SERVER delete. A proven
+    // local-only message's purge touches local files under the uid it was
+    // archived/staged under, with no server round trip — a server-side UID
+    // reissue renumbers nothing on disk. Gating this too would turn deleting
+    // an offline-composed message into a permanent failure for an operation
+    // that never touches the server. No target here is headed for a server
+    // delete, so the group is never even formed — no STATUS call happens.
     mockGetEmailHeadersMeta.mockResolvedValue({ uidValidity: 1 });
     mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 2 });
     prime({
@@ -421,9 +436,41 @@ describe('purgeEverywhere — UIDVALIDITY guard', () => {
     const res = await purgeEverywhere([9]);
 
     expect(mockDeleteEmail).not.toHaveBeenCalled();
-    expect(mockMaildirDeleteMany).not.toHaveBeenCalled();
-    expect(mockBackupPurgeUids).not.toHaveBeenCalled();
+    expect(mockCheckMailboxStatus).not.toHaveBeenCalled();
+    expect(mockMaildirDeleteMany).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX.Spam', [9]);
+    expect(mockBackupPurgeUids).toHaveBeenCalledWith(ACCOUNT.email, 'INBOX.Spam', [9]);
+    expect(res.deleted).toBe(1);
+    expect(res.failed).toBe(0);
+    expect(res.needsResync).toBe(0);
+  });
+
+  it('checkMailboxStatus rejecting (offline, unsupported) is treated as a mismatch, not thrown', async () => {
+    // Pins the fail-closed contract against a future refactor that moves the
+    // uidValidity comparison out of the try — a rejected STATUS call must
+    // hold the uid back exactly like an explicit mismatch, never propagate.
+    mockCheckMailboxStatus.mockRejectedValue(new Error('offline'));
+    prime({ emails: [serverMsg(1)], archived: [1] });
+
+    const res = await purgeEverywhere([1]);
+
+    expect(mockDeleteEmail).not.toHaveBeenCalled();
     expect(res.failed).toBe(1);
     expect(res.needsResync).toBe(1);
+  });
+
+  it('Graph account: purges normally, no STATUS call — Graph ids carry no UID space to poison', async () => {
+    mockIsGraphAccount.mockReturnValue(true);
+    mockGetGraphMessageId.mockReturnValue('graph-msg-1');
+    prime({ emails: [serverMsg(1)], archived: [1] });
+
+    const res = await purgeEverywhere([1]);
+
+    expect(mockGraphDeleteMessage).toHaveBeenCalledTimes(1);
+    expect(mockCheckMailboxStatus).not.toHaveBeenCalled();
+    expect(mockDeleteEmail).not.toHaveBeenCalled();
+    expect(mockMaildirDeleteMany).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX.Spam', [1]);
+    expect(res.deleted).toBe(1);
+    expect(res.failed).toBe(0);
+    expect(res.needsResync).toBe(0);
   });
 });
