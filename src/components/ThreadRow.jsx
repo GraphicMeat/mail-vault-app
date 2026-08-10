@@ -117,7 +117,7 @@ export const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onS
         )}
 
         <RowActionMenu open={menuOpen} onOpen={onOpenMenu} onClose={onCloseMenu}>
-          <RowActionMenuItems email={latestEmail} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} />
+          <RowActionMenuItems emails={thread.emails} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} />
         </RowActionMenu>
       </div>
     </div>
@@ -221,7 +221,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ thread, i
           </button>
         )}
         <RowActionMenu open={menuOpen} onOpen={onOpenMenu} onClose={onCloseMenu} size={13}>
-          <RowActionMenuItems email={latestEmail} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} />
+          <RowActionMenuItems emails={thread.emails} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} />
         </RowActionMenu>
       </div>
     </div>

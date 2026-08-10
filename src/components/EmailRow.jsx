@@ -108,7 +108,7 @@ export const EmailRow = React.memo(function EmailRow({ email, isSelected, onSele
         )}
 
         <RowActionMenu open={menuOpen} onOpen={onOpenMenu} onClose={onCloseMenu}>
-          <RowActionMenuItems email={email} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} />
+          <RowActionMenuItems emails={[email]} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} />
         </RowActionMenu>
       </div>
     </div>
@@ -194,7 +194,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSe
           </button>
         )}
         <RowActionMenu open={menuOpen} onOpen={onOpenMenu} onClose={onCloseMenu} size={13}>
-          <RowActionMenuItems email={email} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} />
+          <RowActionMenuItems emails={[email]} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} />
         </RowActionMenu>
       </div>
     </div>
