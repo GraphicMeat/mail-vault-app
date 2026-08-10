@@ -12,11 +12,16 @@ globalThis.window.removeEventListener = globalThis.window.removeEventListener ||
 const mockDeleteEmail = vi.fn().mockResolvedValue(undefined);
 const mockMaildirDeleteMany = vi.fn().mockResolvedValue({ removed: 0 });
 const mockBackupPurgeUids = vi.fn().mockResolvedValue({ removed: 0, queued: 0 });
+// Matching non-null values by default so every test that doesn't care about
+// the UIDVALIDITY guard sees a "trusted" mailbox and behaves as before it
+// existed. Tests that DO care override one side to force a mismatch.
+const mockCheckMailboxStatus = vi.fn().mockResolvedValue({ uidValidity: 1 });
 
 vi.mock('../../api', () => ({
   deleteEmail: (...a) => mockDeleteEmail(...a),
   maildirDeleteMany: (...a) => mockMaildirDeleteMany(...a),
   backupPurgeUids: (...a) => mockBackupPurgeUids(...a),
+  checkMailboxStatus: (...a) => mockCheckMailboxStatus(...a),
   removeFromLocalIndex: vi.fn().mockResolvedValue(undefined),
   fetchEmailLight: vi.fn(),
   updateEmailFlags: vi.fn().mockResolvedValue(undefined),
@@ -26,6 +31,7 @@ vi.mock('../../api', () => ({
 }));
 
 const mockGetLocalIndexProvenance = vi.fn().mockResolvedValue(new Map());
+const mockGetEmailHeadersMeta = vi.fn().mockResolvedValue({ uidValidity: 1 });
 
 vi.mock('../../db', () => ({
   initDB: vi.fn().mockResolvedValue(undefined),
@@ -36,7 +42,7 @@ vi.mock('../../db', () => ({
   getLocalIndexProvenance: (...a) => mockGetLocalIndexProvenance(...a),
   deleteLocalEmail: vi.fn().mockResolvedValue(undefined),
   getEmailHeadersPartial: vi.fn().mockResolvedValue({ emails: [], totalEmails: 0 }),
-  getEmailHeadersMeta: vi.fn().mockResolvedValue(null),
+  getEmailHeadersMeta: (...a) => mockGetEmailHeadersMeta(...a),
   getCachedMailboxEntry: vi.fn().mockResolvedValue(null),
   saveEmailHeaders: vi.fn().mockResolvedValue(undefined),
   getAccounts: vi.fn().mockResolvedValue([]),
@@ -117,6 +123,8 @@ beforeEach(() => {
   mockMaildirDeleteMany.mockReset().mockResolvedValue({ removed: 0 });
   mockBackupPurgeUids.mockReset().mockResolvedValue({ removed: 0, queued: 0 });
   mockGetLocalIndexProvenance.mockReset().mockResolvedValue(new Map());
+  mockCheckMailboxStatus.mockReset().mockResolvedValue({ uidValidity: 1 });
+  mockGetEmailHeadersMeta.mockReset().mockResolvedValue({ uidValidity: 1 });
 });
 
 describe('purgeEverywhere — storage matrix', () => {
@@ -207,6 +215,27 @@ describe('purgeEverywhere — storage matrix', () => {
     expect(mockDeleteEmail).toHaveBeenCalledTimes(1);
     expect(res.deleted).toBe(1);
     expect(res.failed).toBe(0);
+  });
+
+  it('a _localStaged duplicate sitting in localEmails never shadows a server-backed row in emails', async () => {
+    // Provenance already settles which SOURCE wins a uid, looked up by
+    // (accountId, mailbox, uid) rather than from whichever object survives
+    // the emailMap collision. What the localEmails-first ordering still
+    // guards is `_localStaged`, which is read straight off the winning
+    // object: if a stale duplicate carrying `_localStaged: true` ever sat in
+    // `localEmails` under the same uid as a genuine server-backed row in
+    // `emails`, the wrong ordering would let that duplicate's flag decide
+    // the verdict and skip the server delete outright.
+    prime({
+      emails: [serverMsg(1)],
+      archived: [1],
+      localOnly: [{ ...serverMsg(1), _localStaged: true }],
+    });
+
+    const res = await purgeEverywhere([1]);
+
+    expect(mockDeleteEmail).toHaveBeenCalledTimes(1);
+    expect(res.deleted).toBe(1);
   });
 
   it('server delete fails: local and backup copies are left alone', async () => {
@@ -320,5 +349,81 @@ describe('purgeEverywhere — positive local-only proof', () => {
     await purgeEverywhere([1700000000]);
 
     expect(mockDeleteEmail).not.toHaveBeenCalled();
+  });
+});
+
+describe('purgeEverywhere — UIDVALIDITY guard', () => {
+  it('matching uidValidity behaves as today', async () => {
+    mockGetEmailHeadersMeta.mockResolvedValue({ uidValidity: 42 });
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 42 });
+    prime({ emails: [serverMsg(1)], archived: [1] });
+
+    const res = await purgeEverywhere([1]);
+
+    expect(mockDeleteEmail).toHaveBeenCalledTimes(1);
+    expect(mockMaildirDeleteMany).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX.Spam', [1]);
+    expect(mockBackupPurgeUids).toHaveBeenCalledWith(ACCOUNT.email, 'INBOX.Spam', [1]);
+    expect(res.deleted).toBe(1);
+    expect(res.failed).toBe(0);
+    expect(res.needsResync).toBe(0);
+  });
+
+  it('mismatched uidValidity skips the server, vault and backup deletes and reports the uids', async () => {
+    // A server-side UID reissue (change-server flow, or the server's own) means
+    // the vault uid for this mailbox may now name an unrelated message. Neither
+    // the vault nor local-index.json carries a UIDVALIDITY stamp, so this is
+    // the only place that can catch it before a uid gets spent on a delete.
+    mockGetEmailHeadersMeta.mockResolvedValue({ uidValidity: 1 });
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 2 });
+    prime({ emails: [serverMsg(1)], archived: [1] });
+
+    const res = await purgeEverywhere([1]);
+
+    expect(mockDeleteEmail).not.toHaveBeenCalled();
+    expect(mockMaildirDeleteMany).not.toHaveBeenCalled();
+    expect(mockBackupPurgeUids).not.toHaveBeenCalled();
+    expect(res.deleted).toBe(0);
+    expect(res.failed).toBe(1);
+    expect(res.needsResync).toBe(1);
+
+    // Reconcile must be able to restore the row — same contract as an
+    // ordinary failed server delete.
+    const ts = useMailStore.getState().deleteTombstones;
+    expect([...ts].some(k => k.endsWith('|1'))).toBe(false);
+  });
+
+  it('unknown/null uidValidity on either side is treated as a mismatch', async () => {
+    mockGetEmailHeadersMeta.mockResolvedValue({ uidValidity: null });
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 5 });
+    prime({ emails: [serverMsg(1)], archived: [1] });
+
+    const res = await purgeEverywhere([1]);
+
+    expect(mockDeleteEmail).not.toHaveBeenCalled();
+    expect(res.failed).toBe(1);
+    expect(res.needsResync).toBe(1);
+  });
+
+  it('a proven local-only message in an untrusted group is also held back', async () => {
+    // The ruling applies the guard to every uid in the group, not just the
+    // ones headed for a server delete — the local vault write is keyed by
+    // the same untrusted uid, so purging it is just as much a guess.
+    mockGetEmailHeadersMeta.mockResolvedValue({ uidValidity: 1 });
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 2 });
+    prime({
+      emails: [],
+      archived: [9],
+      localOnly: [{ ...serverMsg(9), source: 'local-only' }],
+      serverUids: [],
+      provenance: new Map([[9, 'local_sent']]),
+    });
+
+    const res = await purgeEverywhere([9]);
+
+    expect(mockDeleteEmail).not.toHaveBeenCalled();
+    expect(mockMaildirDeleteMany).not.toHaveBeenCalled();
+    expect(mockBackupPurgeUids).not.toHaveBeenCalled();
+    expect(res.failed).toBe(1);
+    expect(res.needsResync).toBe(1);
   });
 });

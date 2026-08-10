@@ -631,20 +631,20 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
 
   const state = get();
   const isUnified = state.activeMailbox === 'UNIFIED';
-  if (!keys?.length) return { deleted: 0, failed: 0, queuedBackup: 0 };
+  if (!keys?.length) return { deleted: 0, failed: 0, queuedBackup: 0, needsResync: 0 };
 
   const sentPath = get().getSentMailboxPath();
   // Includes localEmails (unlike deleteSelectedFromServer's emailMap) because
-  // that's where a genuinely local-only row actually lives — updateSortedEmails()
-  // (messageListSlice.js:157) already stamps `source: 'local-only'` on it there.
-  // localEmails goes FIRST: `new Map(...)` keeps the last entry on a uid
-  // collision, and a still-server-side archived row is a normal case in both
-  // `emails` and `localEmails` at once. updateSortedEmails() only stamps a
-  // localEmails object when its uid is absent from `emails` — but on a cold
-  // load the archived read can land while `emails` is still empty, stamping
-  // it 'local-only' before the server uid ever arrives, and that stamp is
-  // never revisited. Emails/sentEmails must win that collision so a
-  // server-backed row is never read through its stale local duplicate.
+  // that's where a genuinely local-only row actually lives. localEmails goes
+  // FIRST: `new Map(...)` keeps the last entry on a uid collision, and a
+  // still-server-side archived row is a normal case in both `emails` and
+  // `localEmails` at once (the local archive read can land before the server
+  // window fills in). Provenance below already settles which *source* a uid
+  // has — it's looked up by (accountId, mailbox, uid), not read off whichever
+  // object wins this collision — but `_localStaged` is still read straight off
+  // the winning object. Emails/sentEmails must win the collision so a stale
+  // `_localStaged` duplicate sitting in `localEmails` can never masquerade as
+  // the server-backed row's verdict.
   const allEmails = [...state.localEmails, ...state.emails, ...state.sentEmails];
   const emailMap = new Map(allEmails.map(e => [isUnified ? _selKey(e) : e.uid, e]));
 
@@ -681,6 +681,48 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
     return { uid, accountId, mailbox, account, localOnly, tombstone };
   }).filter(t => t.account || t.localOnly);
 
+  // ── UIDVALIDITY guard ──
+  // Neither the vault nor local-index.json carries a UIDVALIDITY stamp. After
+  // a server-side UID reissue (the change-server flow, or one the server
+  // initiates on its own), every uid held for this mailbox — server-backed or
+  // claimed local-only — can now name an unrelated message: `t.uid` at the
+  // server-delete call below would be spent against whatever the server put
+  // there instead, and the vault/backup purge would destroy that unrelated
+  // message's only local copy. headerMemo.js:131 and syncProbe.js:83 already
+  // refuse to trust a UID set across a reissue; this is the same refusal
+  // before any uid in the group gets spent on a delete. One STATUS round trip
+  // per (accountId, mailbox) group, not per message.
+  const uvGroups = new Map();
+  for (const t of targets) {
+    const gk = groupKey(t.accountId, t.mailbox);
+    if (!uvGroups.has(gk)) uvGroups.set(gk, { accountId: t.accountId, mailbox: t.mailbox, account: t.account, items: [] });
+    const g = uvGroups.get(gk);
+    g.items.push(t);
+    if (!g.account) g.account = t.account;
+  }
+
+  const untrustedTargets = new Set();
+  let needsResync = 0;
+  await Promise.all([...uvGroups.values()].map(async (g) => {
+    let trusted = false;
+    try {
+      const account = g.account ? await ensureFreshToken(g.account) : null;
+      const [meta, status] = await Promise.all([
+        db.getEmailHeadersMeta(g.accountId, g.mailbox),
+        account ? api.checkMailboxStatus(account, g.mailbox) : Promise.resolve(null),
+      ]);
+      const cachedUV = meta?.uidValidity;
+      const liveUV = status?.uidValidity;
+      trusted = cachedUV != null && liveUV != null && cachedUV === liveUV;
+    } catch (e) {
+      console.warn(`[purgeEverywhere] UIDVALIDITY check failed for ${g.accountId}/${g.mailbox}:`, e);
+    }
+    if (!trusted) {
+      needsResync += g.items.length;
+      for (const t of g.items) untrustedTargets.add(t);
+    }
+  }));
+
   // Optimistic removal, same shape as deleteSelectedFromServer — the deletes
   // below take seconds and the list must not sit there looking untouched.
   const keySet = new Set(keys);
@@ -701,25 +743,37 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
   let failed = 0;
 
   for (const t of targets) {
-    if (t.localOnly) { purgeable.push(t); continue; }
-    try {
-      const account = await ensureFreshToken(t.account);
-      if (isGraphAccount(account)) {
-        const graphId = getGraphMessageId(t.accountId, t.mailbox, t.uid);
-        if (!graphId) throw new Error(`No Graph ID for UID ${t.uid}`);
-        await api.graphDeleteMessage(account.oauth2AccessToken, graphId);
-      } else {
-        await api.deleteEmail(account, t.uid, t.mailbox);
-      }
-      purgeable.push(t);
-    } catch (e) {
-      console.error(`[purgeEverywhere] Server delete failed for ${t.uid}:`, e);
+    if (untrustedTargets.has(t)) {
+      // UIDVALIDITY guard tripped for this uid's group: skip the server
+      // delete AND the vault/backup purge below — never spend an untrusted
+      // uid on any of the three. Lift the tombstone so the reconcile
+      // restores the row, same contract as an ordinary failed server delete.
       failed++;
-      // Lift the tombstone so the trailing reconcile restores this row, and
-      // leave its local copies alone — they are now the only copies but one.
       const ts = new Set(get().deleteTombstones);
       ts.delete(t.tombstone);
       useMailStore.setState({ deleteTombstones: ts });
+    } else if (t.localOnly) {
+      purgeable.push(t);
+    } else {
+      try {
+        const account = await ensureFreshToken(t.account);
+        if (isGraphAccount(account)) {
+          const graphId = getGraphMessageId(t.accountId, t.mailbox, t.uid);
+          if (!graphId) throw new Error(`No Graph ID for UID ${t.uid}`);
+          await api.graphDeleteMessage(account.oauth2AccessToken, graphId);
+        } else {
+          await api.deleteEmail(account, t.uid, t.mailbox);
+        }
+        purgeable.push(t);
+      } catch (e) {
+        console.error(`[purgeEverywhere] Server delete failed for ${t.uid}:`, e);
+        failed++;
+        // Lift the tombstone so the trailing reconcile restores this row, and
+        // leave its local copies alone — they are now the only copies but one.
+        const ts = new Set(get().deleteTombstones);
+        ts.delete(t.tombstone);
+        useMailStore.setState({ deleteTombstones: ts });
+      }
     }
     onProgress?.({ phase: 'delete', total: targets.length, completed: purgeable.length });
   }
@@ -772,7 +826,7 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
 
   if (!isUnified) get().loadEmails();
 
-  return { deleted: purgeable.length, failed, queuedBackup };
+  return { deleted: purgeable.length, failed, queuedBackup, needsResync };
 }
 
 
