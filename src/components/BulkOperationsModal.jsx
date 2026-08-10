@@ -241,7 +241,15 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
     }
     const poolPart = cachedRows === null ? emailPool.length : 'settled';
     const signature = `${JSON.stringify(selectedRange)}|${poolPart}|${customFrom}|${customTo}`;
-    if (lastSyncedRangeRef.current === signature) return;
+    // Same signature normally means "nothing to re-derive" — but something
+    // outside this effect (a selection-bar row workflow's optimistic update)
+    // can empty selectedEmailIds without touching the range or ending the
+    // session. That leaves a live range with zero selected and no dep change
+    // to react to it — except re-picking the same range, which does change
+    // `bulkSession` and re-runs this effect. Treat "range active, live
+    // selection empty" as a reason to re-derive even on an unchanged
+    // signature, so that re-pick isn't a no-op.
+    if (lastSyncedRangeRef.current === signature && selectedEmailIds.size > 0) return;
     lastSyncedRangeRef.current = signature;
     setSelection(selectedEmails.map(e => e.uid));
   }, [selectedRange, bulkSession, activeAccountId, activeMailbox, viewMode, cachedRows, emailPool.length, customFrom, customTo, selectedEmails, setSelection]);

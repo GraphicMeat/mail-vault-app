@@ -273,6 +273,36 @@ describe('BulkOperationsModal', () => {
     expect(onConfirm).toHaveBeenCalledWith({ action: 'archive', uids: [5, 1] });
   });
 
+  // The defect: an action bar workflow can clear selectedEmailIds out from
+  // under a live bulk session (optimistic update on a row action) without
+  // ending the session itself — bulkSession/range survive, only the
+  // selection is wiped. Re-picking the identical range must still
+  // re-populate it; same signature must not be a reason to bail once the
+  // live selection has gone empty.
+  it('re-picking the same range after something external empties the selection re-populates it', async () => {
+    const onConfirm = vi.fn();
+    render(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={onConfirm} />);
+    await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
+
+    fireEvent.click(screen.getByText('All'));
+    expect(screen.getByText('3 emails selected')).toBeTruthy(); // 5, 4, 1
+
+    // Something external (a selection-bar row workflow's optimistic update)
+    // empties selectedEmailIds while the range/session stay live — this is
+    // exactly what clearSelection() does, without touching bulkSession.
+    act(() => { useMessageListStoreMock.getState().setSelection([]); });
+    expect(screen.getByText('Select a date range')).toBeTruthy();
+
+    // Re-pick the identical range.
+    fireEvent.click(screen.getByText('All'));
+    expect(screen.getByText('3 emails selected')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('Next'));
+    fireEvent.click(screen.getByText('Archive'));
+    fireEvent.click(screen.getByText('Start Archive'));
+    expect(onConfirm).toHaveBeenCalledWith({ action: 'archive', uids: [5, 4, 1] });
+  });
+
   // Explicit guard, driven directly: correctness here must not rest on
   // EmailList's sibling teardown effect winning a child-before-parent
   // ordering race. A session bound to a mailbox other than the live one
