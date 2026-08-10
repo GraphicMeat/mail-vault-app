@@ -268,13 +268,20 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
   // "Delete from Server" must not claim a copy survives when none does.
   // Derived from the same archivedSelectedCount/selectedCount the legend
   // already shows, not a fresh traversal — the two must always agree.
+  //
+  // No backup claim here, on purpose: hasBackupConfigured is a settings/intent
+  // flag (a location is set up), not proof these specific uids have actually
+  // been mirrored — backup is an async dual-write, and an archived-but-not-yet-
+  // backed-up email is a real, queued state (src-tauri/src/backup.rs). We
+  // deliberately don't walk the mirror on modal open to answer that, so this
+  // description doesn't assert what it hasn't checked. "Remove from server
+  // only" already tells the user the other two locations aren't touched; the
+  // legend above states whether a backup is configured without claiming contents.
   const deleteDescription = archivedSelectedCount === 0
     ? 'Remove from server. No copy exists on this computer — this is permanent.'
     : archivedSelectedCount < selectedCount
       ? 'Remove from server only. Copies are kept only for the emails already archived here.'
-      : hasBackupConfigured
-        ? 'Remove from server only. Your copies on this computer and in backup are kept.'
-        : 'Remove from server only. Your copy on this computer is kept.';
+      : 'Remove from server only. Your copy on this computer is kept.';
 
   const handleConfirm = () => {
     if (selectedAction === 'delete' || selectedAction === 'archive_and_delete' || selectedAction === 'delete_everywhere') {

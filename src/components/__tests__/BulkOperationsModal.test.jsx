@@ -376,8 +376,17 @@ describe('BulkOperationsModal', () => {
   // Fix round 1: "Delete from Server" used to unconditionally claim a local
   // and backup copy survive. That's the same class of error the whole
   // feature exists to fix, just pointed the other way — must be conditional
-  // on the live archived/backup state, matching the legend above it.
-  describe('Delete from Server description reflects live archived/backup state', () => {
+  // on the live archived state, matching the legend above it.
+  //
+  // Fix round 2: round 1's "all archived" wording still hedged on
+  // hasBackupConfigured ("...and in backup are kept") — but a configured
+  // backup location is a settings/intent flag, not proof these specific
+  // uids were actually mirrored (backup is an async dual-write; an
+  // archived-but-not-yet-backed-up email is a real queued state). The
+  // description now makes no backup claim in any state — "Remove from
+  // server only" already covers it, and the legend states configured/not
+  // without claiming contents.
+  describe('Delete from Server description reflects live archived state (no backup claim)', () => {
     // "All" selects uids 5, 4, 1 (3 emails) — see WINDOW/CACHED_ROWS at top.
     const openToStep2 = async () => {
       render(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={vi.fn()} />);
@@ -393,7 +402,17 @@ describe('BulkOperationsModal', () => {
       expect(screen.queryByText(/kept/)).toBeNull();
     });
 
-    it('all archived, no backup configured: only the local copy is named as kept', async () => {
+    it('some but not all archived: only says copies survive for the already-archived ones', async () => {
+      archivedEmailIds.add(1); // 1 of 3 selected
+      backupState.externalBackupLocation = { displayPath: '/Volumes/Backup', status: 'ready' }; // must not change this branch's wording
+      await openToStep2();
+      // Exact-string match — a stray "...and in backup" tail would make this
+      // fail to find a match at all, since the two would no longer be equal.
+      expect(screen.getByText('Remove from server only. Copies are kept only for the emails already archived here.')).toBeTruthy();
+      expect(screen.queryByText(/permanent/)).toBeNull();
+    });
+
+    it('all archived, no backup configured: the local copy is named as kept', async () => {
       archivedEmailIds.add(5); archivedEmailIds.add(4); archivedEmailIds.add(1);
       backupState.externalBackupLocation = null;
       await openToStep2();
@@ -401,19 +420,14 @@ describe('BulkOperationsModal', () => {
       expect(screen.queryByText(/permanent/)).toBeNull();
     });
 
-    it('all archived, backup configured: both copies are named as kept', async () => {
+    it('all archived, backup configured: renders the identical string — configuring a backup does not claim these uids are mirrored', async () => {
       archivedEmailIds.add(5); archivedEmailIds.add(4); archivedEmailIds.add(1);
       backupState.externalBackupLocation = { displayPath: '/Volumes/Backup', status: 'ready' };
       await openToStep2();
-      expect(screen.getByText('Remove from server only. Your copies on this computer and in backup are kept.')).toBeTruthy();
-    });
-
-    it('some but not all archived: only says copies survive for the already-archived ones', async () => {
-      archivedEmailIds.add(1); // 1 of 3 selected
-      backupState.externalBackupLocation = { displayPath: '/Volumes/Backup', status: 'ready' }; // must not change this branch's wording
-      await openToStep2();
-      expect(screen.getByText('Remove from server only. Copies are kept only for the emails already archived here.')).toBeTruthy();
-      expect(screen.queryByText(/permanent/)).toBeNull();
+      // Exact-string match — same description as the no-backup case above,
+      // even though the legend elsewhere on this screen does say "backup
+      // configured". The description itself makes no claim either way.
+      expect(screen.getByText('Remove from server only. Your copy on this computer is kept.')).toBeTruthy();
     });
   });
 });
