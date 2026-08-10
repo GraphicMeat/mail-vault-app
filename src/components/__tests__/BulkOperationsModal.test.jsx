@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { create } from 'zustand';
@@ -54,6 +54,13 @@ const useMessageListStoreMock = create((set) => ({
     bulkSession: { ...(state.bulkSession || { active: true, step: 1, range: null, action: null }), ...patch },
   })),
   setSelection: (keys) => set({ selectedEmailIds: new Set(keys) }),
+  // Mirrors selectionSlice's real toggleEmailSelection (non-unified path) —
+  // stands in for a row checkbox click while the modal is minimized.
+  toggleEmailSelection: (uid) => set(state => {
+    const next = new Set(state.selectedEmailIds);
+    next.has(uid) ? next.delete(uid) : next.add(uid);
+    return { selectedEmailIds: next };
+  }),
   minimizeBulkModal: vi.fn(), // isOpen is driven by the `isOpen` prop in this test, not by store state
   endBulkSession: () => set({ bulkSession: null, selectedEmailIds: new Set() }),
 }));
@@ -76,6 +83,9 @@ vi.mock('../../services/db', () => ({
 import { BulkOperationsModal } from '../BulkOperationsModal';
 
 describe('BulkOperationsModal', () => {
+  beforeEach(() => {
+    useMessageListStoreMock.setState({ bulkSession: null, selectedEmailIds: new Set() });
+  });
   afterEach(() => cleanup());
 
   it('selects the whole cached mailbox minus deleted messages, not just the loaded window', async () => {
@@ -93,5 +103,97 @@ describe('BulkOperationsModal', () => {
 
     // 5 and 4 from the window, 1 only from the cache; 2 tombstoned, 3 \Deleted.
     expect(onConfirm).toHaveBeenCalledWith({ action: 'archive', uids: [5, 4, 1] });
+  });
+
+  // Backdrop, header X, and Escape all delegate to the `onClose` prop, which
+  // the real app wires to minimizeBulkModal (EmailList.jsx) — the session and
+  // the selection must survive, so none of these three may call
+  // endBulkSession (which wipes both). Asserted on observable store state
+  // rather than spying on an action reference, matching bulkSession.test.js.
+  it('backdrop click minimizes (calls onClose) without ending the session', async () => {
+    const onClose = vi.fn();
+    render(<BulkOperationsModal isOpen onClose={onClose} onConfirm={vi.fn()} />);
+    await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
+    fireEvent.click(screen.getByText('All'));
+
+    fireEvent.click(document.querySelector('.bg-black\\/50'));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(useMessageListStoreMock.getState().bulkSession).not.toBeNull();
+    expect(useMessageListStoreMock.getState().selectedEmailIds.size).toBe(3);
+  });
+
+  it('header X minimizes (calls onClose) without ending the session', async () => {
+    const onClose = vi.fn();
+    render(<BulkOperationsModal isOpen onClose={onClose} onConfirm={vi.fn()} />);
+    await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
+    fireEvent.click(screen.getByText('All'));
+
+    // The header X has no accessible name — find it by its lucide icon mock.
+    fireEvent.click(document.querySelector('[data-icon="X"]').closest('button'));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(useMessageListStoreMock.getState().bulkSession).not.toBeNull();
+    expect(useMessageListStoreMock.getState().selectedEmailIds.size).toBe(3);
+  });
+
+  it('Escape minimizes (calls onClose) without ending the session', async () => {
+    const onClose = vi.fn();
+    render(<BulkOperationsModal isOpen onClose={onClose} onConfirm={vi.fn()} />);
+    await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
+    fireEvent.click(screen.getByText('All'));
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(useMessageListStoreMock.getState().bulkSession).not.toBeNull();
+    expect(useMessageListStoreMock.getState().selectedEmailIds.size).toBe(3);
+  });
+
+  it('step-1 Cancel ends the session (endBulkSession), not just a minimize', async () => {
+    const onClose = vi.fn();
+    render(<BulkOperationsModal isOpen onClose={onClose} onConfirm={vi.fn()} />);
+    await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
+    fireEvent.click(screen.getByText('All'));
+
+    fireEvent.click(screen.getByText('Cancel'));
+
+    expect(useMessageListStoreMock.getState().bulkSession).toBeNull();
+    expect(useMessageListStoreMock.getState().selectedEmailIds.size).toBe(0);
+  });
+
+  // Regression test for the reopen-wipes-hand-edit bug: the sync effect used
+  // to list `isOpen` as a dependency, so reopening after a minimize re-ran it
+  // and silently overwrote a checkbox the user had toggled by hand.
+  it('a hand-toggled checkbox survives a minimize/reopen cycle and is what confirm sends', async () => {
+    const onConfirm = vi.fn();
+    const { rerender } = render(
+      <BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={onConfirm} />
+    );
+    await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
+
+    fireEvent.click(screen.getByText('All'));
+    expect(screen.getByText('3 emails selected')).toBeTruthy(); // uids 5, 4, 1
+
+    // Minimize.
+    rerender(<BulkOperationsModal isOpen={false} onClose={vi.fn()} onConfirm={onConfirm} />);
+
+    // Hand-toggle a row checkbox while minimized — same store action a real
+    // EmailRow checkbox calls, mutating selectedEmailIds directly.
+    useMessageListStoreMock.getState().toggleEmailSelection(4);
+    expect(useMessageListStoreMock.getState().selectedEmailIds.size).toBe(2);
+
+    // Reopen — same session, same range, same pool.
+    rerender(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={onConfirm} />);
+    await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
+
+    // The hand edit must have survived the reopen, not been reset to 3.
+    expect(screen.getByText('2 emails selected')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('Next'));
+    fireEvent.click(screen.getByText('Archive'));
+    fireEvent.click(screen.getByText('Start Archive'));
+
+    expect(onConfirm).toHaveBeenCalledWith({ action: 'archive', uids: [5, 1] });
   });
 });

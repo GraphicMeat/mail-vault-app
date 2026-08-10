@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Archive, ArchiveRestore, Trash2, ArrowRight, ArrowLeft, AlertTriangle, HardDrive, Calendar } from 'lucide-react';
 import { useMessageListStore } from '../stores/messageListStore';
@@ -36,7 +36,6 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
   const bulkSession = useMessageListStore(s => s.bulkSession);
   const setBulkSession = useMessageListStore(s => s.setBulkSession);
   const setSelection = useMessageListStore(s => s.setSelection);
-  const minimizeBulkModal = useMessageListStore(s => s.minimizeBulkModal);
   const endBulkSession = useMessageListStore(s => s.endBulkSession);
   const selectedEmailIds = useMessageListStore(s => s.selectedEmailIds);
 
@@ -69,11 +68,17 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
   useEffect(() => {
     // Local view shows archived-only, and unified spans accounts — neither maps
     // to one mailbox's cache, so both keep using the window.
-    if (!isOpen || !activeAccountId || unifiedInbox || viewMode === 'local') {
+    if (!activeAccountId || unifiedInbox || viewMode === 'local') {
       setCachedRows(null);
       setLoadingPool(false);
       return;
     }
+    // Don't fetch while minimized, but don't discard what's already loaded
+    // either: the bulk session and its selection survive a minimize, and the
+    // selection-sync effect below re-syncs whenever the pool's size changes —
+    // nulling it here would read as "the pool shrank" and wipe a hand-edited
+    // checkbox for no reason other than the modal being hidden.
+    if (!isOpen) return;
     let cancelled = false;
     setLoadingPool(true);
     (async () => {
@@ -176,16 +181,38 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
   // The range is only a *description* of a selection. Writing the resolved uids
   // into the store is what checkmarks the rows, and what lets the user add or
   // remove messages by hand before pressing Start.
+  //
+  // The modal never unmounts on minimize (isOpen just makes it render null),
+  // so this effect stays live across a minimize/reopen cycle. It must NOT
+  // fire on a bare visibility flip — reopening reuses the same session, so
+  // isOpen going false→true changes nothing about what the range *means*,
+  // and re-running setSelection here would stomp a checkbox the user hand-
+  // toggled while minimized. Re-sync only when the range's meaning actually
+  // changes: a new pick, edited custom dates, or the pool widening once the
+  // sidecar cache finishes loading (a range picked before it lands must
+  // still grow to match). A signature of those inputs, not `isOpen`, gates it.
+  const lastSyncedRangeRef = useRef(null);
   useEffect(() => {
-    if (!isOpen || !selectedRange) return;
+    if (!selectedRange) { lastSyncedRangeRef.current = null; return; }
+    const signature = `${JSON.stringify(selectedRange)}|${emailPool.length}|${customFrom}|${customTo}`;
+    if (lastSyncedRangeRef.current === signature) return;
+    lastSyncedRangeRef.current = signature;
     setSelection(selectedEmails.map(e => e.uid));
-  }, [isOpen, selectedRange, selectedEmails, setSelection]);
+  }, [selectedRange, emailPool.length, customFrom, customTo, selectedEmails, setSelection]);
 
   // Live count, not the range's own result — hand edits made while the modal
   // was minimized must be reflected here and must be what Start acts on.
   const selectedCount = selectedRange ? selectedEmailIds.size : 0;
   const liveUids = () => [...selectedEmailIds];
   const isPartialLoad = !loadingPool && emailPool.length < totalEmails;
+
+  // Same live-selection principle as selectedCount: once a hand edit diverges
+  // from the range's own result, the archived-locally warning and the
+  // Unarchive option must follow the checkboxes, not the stale range.
+  const hasArchivedSelected = useMemo(
+    () => [...selectedEmailIds].some(uid => archivedEmailIds.has(uid)),
+    [selectedEmailIds, archivedEmailIds]
+  );
 
   const handleConfirm = () => {
     if (selectedAction === 'delete' || selectedAction === 'archive_and_delete') {
@@ -205,18 +232,23 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
 
   // Backdrop, X and Escape MINIMIZE — the session and its selection survive so
   // the bubble can carry them. Only Cancel ends the session.
+  //
+  // `onClose` is minimizeBulkModal, wired by the parent (EmailList) — it's the
+  // single owner of "minimize" the store's state, so this just delegates to
+  // it rather than also calling minimizeBulkModal directly (that fired the
+  // same store update twice per minimize).
   const handleMinimize = () => {
     setShowDeleteConfirm(false);
-    minimizeBulkModal();
     onClose();
   };
 
+  // endBulkSession already flips bulkModalOpen to false (same as onClose
+  // would), so cancel only needs its own action — no redundant onClose() too.
   const handleCancel = () => {
     setShowDeleteConfirm(false);
     setCustomFrom('');
     setCustomTo('');
     endBulkSession();
-    onClose();
   };
 
   // ESC to minimize
@@ -227,7 +259,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose, minimizeBulkModal]);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -424,7 +456,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
             /* Step 2: Action Selection */
             <div className="p-5">
               {/* Warning for locally-stored emails */}
-              {selectedEmails.some(e => archivedEmailIds.has(e.uid)) && (
+              {hasArchivedSelected && (
                 <div className="flex items-start gap-2 p-3 mb-3 rounded-lg bg-mail-warning/10 border border-mail-warning/30">
                   <AlertTriangle size={14} className="text-mail-warning flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-mail-text">
@@ -441,7 +473,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                     label: 'Archive',
                     description: 'Download emails to your computer',
                   },
-                  ...(selectedEmails.some(e => archivedEmailIds.has(e.uid)) ? [{
+                  ...(hasArchivedSelected ? [{
                     id: 'unarchive',
                     icon: ArchiveRestore,
                     label: 'Unarchive',
