@@ -64,6 +64,13 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
   // the whole mailbox, so read uid+date straight from it instead.
   const [cachedRows, setCachedRows] = useState(null);
   const [loadingPool, setLoadingPool] = useState(false);
+  // What (account, mailbox) `cachedRows` currently reflects. Lets the effect
+  // below tell "just minimized" (isOpen alone changed — keep the pool) apart
+  // from "the mailbox underneath changed" (must invalidate, isOpen or not).
+  // EmailList ends the whole bulk session on a mailbox switch, so this is
+  // belt-and-suspenders for the modal's own cache rather than the primary
+  // guard — but it must hold on its own, since nothing else clears cachedRows.
+  const cachedForRef = useRef(null);
 
   useEffect(() => {
     // Local view shows archived-only, and unified spans accounts — neither maps
@@ -71,14 +78,23 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
     if (!activeAccountId || unifiedInbox || viewMode === 'local') {
       setCachedRows(null);
       setLoadingPool(false);
+      cachedForRef.current = null;
       return;
     }
+    const identity = `${activeAccountId}|${activeMailbox}`;
+    if (cachedForRef.current !== identity) {
+      // The mailbox this pool was fetched for no longer matches — a stale
+      // pool from a different mailbox must not linger, minimized or not.
+      setCachedRows(null);
+      cachedForRef.current = null;
+    }
     // Don't fetch while minimized, but don't discard what's already loaded
-    // either: the bulk session and its selection survive a minimize, and the
-    // selection-sync effect below re-syncs whenever the pool's size changes —
-    // nulling it here would read as "the pool shrank" and wipe a hand-edited
-    // checkbox for no reason other than the modal being hidden.
-    if (!isOpen) return;
+    // for THIS mailbox either: the bulk session and its selection survive a
+    // minimize, and the selection-sync effect below re-syncs whenever the
+    // pool changes — nulling it here would read as "the pool shrank" and
+    // wipe a hand-edited checkbox for no reason other than the modal being
+    // hidden.
+    if (!isOpen) { setLoadingPool(false); return; }
     let cancelled = false;
     setLoadingPool(true);
     (async () => {
@@ -103,6 +119,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
           .filter(e => archived.has(e.uid) || !e.flags?.includes('\\Deleted'))
           .map(e => ({ uid: e.uid, date: e.date || e.internalDate }))
           .sort((a, b) => b.uid - a.uid));
+        cachedForRef.current = identity;
       } catch (e) {
         console.warn('[BulkOperationsModal] Cache read failed, using loaded window:', e);
       } finally {
@@ -183,22 +200,27 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
   // remove messages by hand before pressing Start.
   //
   // The modal never unmounts on minimize (isOpen just makes it render null),
-  // so this effect stays live across a minimize/reopen cycle. It must NOT
-  // fire on a bare visibility flip — reopening reuses the same session, so
-  // isOpen going false→true changes nothing about what the range *means*,
-  // and re-running setSelection here would stomp a checkbox the user hand-
-  // toggled while minimized. Re-sync only when the range's meaning actually
-  // changes: a new pick, edited custom dates, or the pool widening once the
-  // sidecar cache finishes loading (a range picked before it lands must
-  // still grow to match). A signature of those inputs, not `isOpen`, gates it.
+  // so this effect stays live across a minimize/reopen cycle, and across any
+  // background churn while minimized. It must NOT fire on a bare visibility
+  // flip, and once the sidecar cache has landed for this mailbox it must NOT
+  // fire on later pool churn either (new mail arriving, a flag/tombstone
+  // change) — only a genuine range/date edit should re-derive the selection
+  // at that point. The one legitimate exception is the pool still *settling*:
+  // a range picked before the sidecar cache read lands must still widen once
+  // it does, so pool size counts toward the signature only until `cachedRows`
+  // first lands — `cachedRows === null` is "still on the window fallback,
+  // widen still pending"; once populated, later size changes (either a fresh
+  // fetch after `cachedRows` resets, or plain window churn folded into
+  // `emailPool`) are frozen out.
   const lastSyncedRangeRef = useRef(null);
   useEffect(() => {
     if (!selectedRange) { lastSyncedRangeRef.current = null; return; }
-    const signature = `${JSON.stringify(selectedRange)}|${emailPool.length}|${customFrom}|${customTo}`;
+    const poolPart = cachedRows === null ? emailPool.length : 'settled';
+    const signature = `${JSON.stringify(selectedRange)}|${poolPart}|${customFrom}|${customTo}`;
     if (lastSyncedRangeRef.current === signature) return;
     lastSyncedRangeRef.current = signature;
     setSelection(selectedEmails.map(e => e.uid));
-  }, [selectedRange, emailPool.length, customFrom, customTo, selectedEmails, setSelection]);
+  }, [selectedRange, cachedRows, emailPool.length, customFrom, customTo, selectedEmails, setSelection]);
 
   // Live count, not the range's own result — hand edits made while the modal
   // was minimized must be reflected here and must be what Start acts on.

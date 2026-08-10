@@ -2,7 +2,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react';
 import { create } from 'zustand';
 
 vi.mock('lucide-react', () => {
@@ -84,7 +84,7 @@ import { BulkOperationsModal } from '../BulkOperationsModal';
 
 describe('BulkOperationsModal', () => {
   beforeEach(() => {
-    useMessageListStoreMock.setState({ bulkSession: null, selectedEmailIds: new Set() });
+    useMessageListStoreMock.setState({ bulkSession: null, selectedEmailIds: new Set(), sortedEmails: WINDOW });
   });
   afterEach(() => cleanup());
 
@@ -194,6 +194,59 @@ describe('BulkOperationsModal', () => {
     fireEvent.click(screen.getByText('Archive'));
     fireEvent.click(screen.getByText('Start Archive'));
 
+    expect(onConfirm).toHaveBeenCalledWith({ action: 'archive', uids: [5, 1] });
+  });
+
+  // The sidecar cache read is async — a range picked before it lands must
+  // still widen from the paginated window to the full mailbox once it does.
+  it('widens the selection once the sidecar cache lands, for a range picked while it was still loading', async () => {
+    const onConfirm = vi.fn();
+    render(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={onConfirm} />);
+
+    // Pick "All" synchronously, before the mocked async cache read resolves —
+    // the pool is still just the 2-item paginated window at this point.
+    fireEvent.click(screen.getByText('All'));
+    expect(screen.getByText('2 emails selected')).toBeTruthy();
+
+    // Cache lands — pool grows to the full (filtered) mailbox.
+    await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
+    expect(screen.getByText('3 emails selected')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('Next'));
+    fireEvent.click(screen.getByText('Archive'));
+    fireEvent.click(screen.getByText('Start Archive'));
+    expect(onConfirm).toHaveBeenCalledWith({ action: 'archive', uids: [5, 4, 1] });
+  });
+
+  // Regression test for the second wipe route the reviewer found: once the
+  // sidecar cache has landed (the pool has "settled"), later pool-size
+  // churn in the SAME mailbox — new mail arriving, a flag change — must not
+  // re-derive the selection and overwrite a hand edit. Only a genuine range
+  // or custom-date edit may do that from this point on.
+  it('a same-mailbox pool-size change after the pool has settled does not overwrite a hand-edited selection', async () => {
+    const onConfirm = vi.fn();
+    render(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={onConfirm} />);
+    await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull()); // settled
+
+    fireEvent.click(screen.getByText('All'));
+    expect(screen.getByText('3 emails selected')).toBeTruthy(); // 5, 4, 1
+
+    // Hand edit: drop uid 4.
+    act(() => { useMessageListStoreMock.getState().toggleEmailSelection(4); });
+    expect(screen.getByText('2 emails selected')).toBeTruthy();
+
+    // New mail arrives in the same mailbox — sortedEmails (the window) grows.
+    act(() => {
+      useMessageListStoreMock.setState({ sortedEmails: [...WINDOW, { uid: 6, date: '2026-04-01T10:00:00Z' }] });
+    });
+
+    // The pool already settled before the hand edit — this churn must not
+    // re-derive the selection back from the range.
+    expect(screen.getByText('2 emails selected')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('Next'));
+    fireEvent.click(screen.getByText('Archive'));
+    fireEvent.click(screen.getByText('Start Archive'));
     expect(onConfirm).toHaveBeenCalledWith({ action: 'archive', uids: [5, 1] });
   });
 });

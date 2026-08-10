@@ -109,6 +109,8 @@ vi.mock('../../stores/mailStore', () => {
     bulkModalOpen: false,
     openBulkModal: vi.fn(),
     minimizeBulkModal: vi.fn(),
+    bulkSession: null,
+    endBulkSession: vi.fn(),
     loadEmails: vi.fn(),
     loadMoreEmails: vi.fn(),
     selectEmail: vi.fn(),
@@ -286,5 +288,47 @@ describe('EmailList virtualization', () => {
     expect(state.loadMoreEmails).toHaveBeenCalled();
 
     useMailStore.setState({ hasMoreEmails: false });
+  });
+
+  // A bulk session is bound to the (account, mailbox) it was opened against
+  // (uiSlice's openBulkModal). If the user navigates to a different mailbox
+  // while a session is minimized, the session (and its selection) must not
+  // silently keep applying to the new mailbox — activateAccount already
+  // clears selectedEmailIds on switch for exactly this cross-mailbox-bleed
+  // reason, and a session outliving its folder would fight that clear.
+  it('ends a bulk session bound to a different mailbox than the one now active', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    useMailStore.getState().endBulkSession.mockClear();
+    useMailStore.setState({
+      bulkSession: { active: true, step: 1, range: { type: 'all' }, action: null, accountId: 'acc1', mailbox: 'INBOX' },
+      selectedEmailIds: new Set([1, 2, 3]),
+      activeAccountId: 'acc1',
+      activeMailbox: 'Sent', // session was bound to INBOX — mismatch
+    });
+
+    const { EmailList } = await import('../EmailList.jsx');
+    render(React.createElement(EmailList));
+
+    expect(useMailStore.getState().endBulkSession).toHaveBeenCalled();
+
+    useMailStore.setState({ bulkSession: null, selectedEmailIds: new Set(), activeMailbox: 'INBOX' });
+  });
+
+  it('does not end a bulk session whose mailbox still matches the active one', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    useMailStore.getState().endBulkSession.mockClear();
+    useMailStore.setState({
+      bulkSession: { active: true, step: 1, range: { type: 'all' }, action: null, accountId: 'acc1', mailbox: 'INBOX' },
+      selectedEmailIds: new Set([1, 2, 3]),
+      activeAccountId: 'acc1',
+      activeMailbox: 'INBOX', // matches — no mismatch
+    });
+
+    const { EmailList } = await import('../EmailList.jsx');
+    render(React.createElement(EmailList));
+
+    expect(useMailStore.getState().endBulkSession).not.toHaveBeenCalled();
+
+    useMailStore.setState({ bulkSession: null, selectedEmailIds: new Set() });
   });
 });

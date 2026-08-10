@@ -111,7 +111,23 @@ function EmailListComponent() {
   const bulkModalOpen = useMailStore(s => s.bulkModalOpen);
   const openBulkModal = useMailStore(s => s.openBulkModal);
   const minimizeBulkModal = useMailStore(s => s.minimizeBulkModal);
+  const bulkSession = useMailStore(s => s.bulkSession);
+  const endBulkSession = useMailStore(s => s.endBulkSession);
   const [bulkOpProgress, setBulkOpProgress] = useState(null);
+
+  // A bulk session is bound to the (account, mailbox) it was opened against.
+  // The modal never unmounts on minimize, so a session for Spam would
+  // otherwise sit there picking up Sent's rows once the user navigates away
+  // — activateAccount already clears selectedEmailIds on account/mailbox
+  // switch for exactly this cross-mailbox-bleed reason; this keeps the
+  // session in agreement with that instead of resurrecting a selection it
+  // just cleared.
+  useEffect(() => {
+    if (!bulkSession?.active) return;
+    if (bulkSession.accountId !== activeAccountId || bulkSession.mailbox !== activeMailbox) {
+      endBulkSession();
+    }
+  }, [bulkSession, activeAccountId, activeMailbox, endBulkSession]);
 
   // Sender-grouped accordion state
   const [senderGroups, setSenderGroups] = useState(null);
