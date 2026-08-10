@@ -55,6 +55,20 @@ describe('Bulk delete everywhere', function () {
   // and must stay gone after a reload.
   let deletedSubjects;
 
+  /**
+   * These tests share state by design: each step builds on the folder state
+   * the previous one left. When an earlier step fails, the later ones would
+   * otherwise die on `undefined` with a `TypeError` that says nothing about
+   * the real problem — three red tests for one defect, and the two noisy ones
+   * on top. Fail them with the actual reason instead.
+   */
+  function requireSubjects(value, name, setBy) {
+    if (!value) {
+      throw new Error(`"${name}" was never set — the "${setBy}" step did not complete, so this test cannot run. Fix that failure first.`);
+    }
+    return value;
+  }
+
   // ── DOM helpers ─────────────────────────────────────────────────────────
 
   const rows = () => browser.execute((re) => {
@@ -211,6 +225,38 @@ describe('Bulk delete everywhere', function () {
     expect((await rows()).length).toBeGreaterThan(0);
   });
 
+  /**
+   * Put the app back where the next spec expects to find it.
+   *
+   * The suite is single-tenant: every spec drives one long-lived app instance,
+   * so a spec that navigates owns putting it back. This one switches to
+   * account 2's Archive folder and, without this hook, strands every later
+   * spec on the wrong account and folder — `connected-list-header` and
+   * `connected-move-to-folder` both broke that way the first time this spec
+   * ran, and neither had changed.
+   *
+   * Navigating away also ends any live bulk session: it is bound to the
+   * (account, mailbox, viewMode) it was created in and `EmailList` tears it
+   * down on mismatch, so the bubble and selection cannot leak forward either.
+   *
+   * Never let cleanup throw — a failure here would mask the real failure that
+   * a test above already reported.
+   */
+  after(async function () {
+    try {
+      const [lukeEmail] = browser.mockAccounts.map(a => a.email);
+      await clickSidebarItem(lukeEmail);
+      await browser.waitUntil(
+        async () => (await folderHeaderText()) !== 'Archive',
+        { timeout: 8_000, interval: 300 },
+      ).catch(() => {});
+      await clickSidebarItem('INBOX');
+      await waitForEmails();
+    } catch (e) {
+      console.warn('[bulk-delete-everywhere] cleanup could not restore INBOX:', e.message);
+    }
+  });
+
   it('checkmarks the rows a range selects', async function () {
     // Header select-all checkbox opens the bulk modal at step 1.
     expect(await browser.execute(() => {
@@ -333,6 +379,7 @@ describe('Bulk delete everywhere', function () {
   });
 
   it('reopens the modal at the step it was left on and deletes everywhere', async function () {
+    requireSubjects(deletedSubjects, 'deletedSubjects', 'follows a hand-edited checkbox');
     await waitClick(() => clickTestId('bulk-selection-bubble-reopen'), 'Could not reopen the modal from the bubble');
     // Lands back on step 2 with Delete Everywhere still selected — if the
     // session had reset to step 1, or lost the chosen action, the confirm
@@ -363,6 +410,7 @@ describe('Bulk delete everywhere', function () {
   });
 
   it('does not bring the rows back on reload — the vault and backup purges actually ran', async function () {
+    requireSubjects(deletedSubjects, 'deletedSubjects', 'follows a hand-edited checkbox');
     await browser.execute(() => window.location.reload());
     await waitForApp();
 
