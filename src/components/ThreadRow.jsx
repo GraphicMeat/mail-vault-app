@@ -1,25 +1,23 @@
 import React, { useMemo } from 'react';
-import { useMailStore } from '../stores/mailStore';
-import { resolveEmailLocation } from '../stores/slices/unifiedHelpers';
 import { getSenderName } from '../utils/emailParser';
 import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
 import { ReplyToAlertIcon, getThreadReplyToMismatch } from './ReplyToAlertIcon';
 import { RowActionMenu } from './RowActionMenu';
+import { RowActionMenuItems } from './RowActionMenuItems';
 import { formatEmailDate } from '../utils/dateFormat';
 import {
   RefreshCw,
   HardDrive,
   Cloud,
   Paperclip,
-  Trash2,
   Archive,
 } from 'lucide-react';
 
 // Thread row for default layout — shows collapsed thread with participant names and count
 export const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectThread, onToggleSelection, anyChecked, style, actions, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
-  const { saveEmailsLocally, deleteEmailFromServer } = actions;
+  const { saveEmailsLocally } = actions;
 
   if (!thread?.lastEmail) return null;
   const latestEmail = thread.lastEmail;
@@ -50,32 +48,6 @@ export const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onS
     } finally {
       onStopSaving();
     }
-  };
-
-  const handleDeleteThread = (e) => {
-    e.stopPropagation();
-    const serverEmails = thread.emails.filter(em => em.source !== 'local-only');
-    onRequestDelete(
-      async () => {
-        const state = useMailStore.getState();
-        for (const email of serverEmails) {
-          // Delete needs the message's real folder — the same UID in another
-          // folder is a different message, and this delete is irreversible.
-          const mailbox = resolveEmailLocation(email, state)?.mailbox;
-          if (!mailbox) {
-            console.error(`[deleteThread] Unknown mailbox for email ${email.uid} — skipped`);
-            continue;
-          }
-          try {
-            await deleteEmailFromServer(email.uid, { skipRefresh: true, mailboxOverride: mailbox });
-          } catch (err) {
-            console.error(`[handleDeleteThread] Failed to delete email ${email.uid} from ${mailbox}:`, err);
-          }
-        }
-        if (serverEmails.length > 0) useMailStore.getState().loadEmails();
-      },
-      `${serverEmails.length} email${serverEmails.length !== 1 ? 's' : ''} in this thread will be permanently deleted from the server. This cannot be undone.`
-    );
   };
 
   return (
@@ -145,14 +117,7 @@ export const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onS
         )}
 
         <RowActionMenu open={menuOpen} onOpen={onOpenMenu} onClose={onCloseMenu}>
-          <button
-            onClick={handleDeleteThread}
-            className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover
-                      flex items-center gap-2 text-mail-danger"
-          >
-            <Trash2 size={14} />
-            Delete thread from server
-          </button>
+          <RowActionMenuItems email={latestEmail} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} />
         </RowActionMenu>
       </div>
     </div>
@@ -161,7 +126,7 @@ export const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onS
 
 // Compact thread row for compact layout
 export const CompactThreadRow = React.memo(function CompactThreadRow({ thread, isSelected, onSelectThread, onToggleSelection, anyChecked, style, actions, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
-  const { saveEmailsLocally, deleteEmailFromServer } = actions;
+  const { saveEmailsLocally } = actions;
 
   if (!thread?.lastEmail) return null;
   const latestEmail = thread.lastEmail;
@@ -191,32 +156,6 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ thread, i
     } finally {
       onStopSaving();
     }
-  };
-
-  const handleDeleteThread = (e) => {
-    e.stopPropagation();
-    const serverEmails = thread.emails.filter(em => em.source !== 'local-only');
-    onRequestDelete(
-      async () => {
-        const state = useMailStore.getState();
-        for (const email of serverEmails) {
-          // Delete needs the message's real folder — the same UID in another
-          // folder is a different message, and this delete is irreversible.
-          const mailbox = resolveEmailLocation(email, state)?.mailbox;
-          if (!mailbox) {
-            console.error(`[deleteThread] Unknown mailbox for email ${email.uid} — skipped`);
-            continue;
-          }
-          try {
-            await deleteEmailFromServer(email.uid, { skipRefresh: true, mailboxOverride: mailbox });
-          } catch (err) {
-            console.error(`Failed to delete email ${email.uid} from ${mailbox}:`, err);
-          }
-        }
-        if (serverEmails.length > 0) useMailStore.getState().loadEmails();
-      },
-      `${serverEmails.length} email${serverEmails.length !== 1 ? 's' : ''} in this thread will be permanently deleted from the server. This cannot be undone.`
-    );
   };
 
   return (
@@ -282,10 +221,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ thread, i
           </button>
         )}
         <RowActionMenu open={menuOpen} onOpen={onOpenMenu} onClose={onCloseMenu} size={13}>
-          <button onClick={handleDeleteThread}
-            className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover flex items-center gap-2 text-mail-danger">
-            <Trash2 size={14} /> Delete thread from server
-          </button>
+          <RowActionMenuItems email={latestEmail} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} />
         </RowActionMenu>
       </div>
     </div>

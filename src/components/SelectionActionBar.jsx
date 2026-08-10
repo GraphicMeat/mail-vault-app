@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useSelectionStore } from '../stores/selectionStore';
 import { useMessageListStore } from '../stores/messageListStore';
 import {
-  MailOpen, Mail, Trash2, Archive, ArchiveRestore, X, AlertTriangle, FolderSymlink
+  MailOpen, Mail, Trash2, Archive, ArchiveRestore, X, AlertTriangle, FolderSymlink, ShieldX
 } from 'lucide-react';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 
@@ -15,10 +15,14 @@ export function SelectionActionBar() {
   const markSelectedAsRead = useSelectionStore(s => s.markSelectedAsRead);
   const markSelectedAsUnread = useSelectionStore(s => s.markSelectedAsUnread);
   const deleteSelectedFromServer = useSelectionStore(s => s.deleteSelectedFromServer);
+  const purgeSelectedEverywhere = useSelectionStore(s => s.purgeSelectedEverywhere);
   const removeLocalEmail = useSelectionStore(s => s.removeLocalEmail);
   const getSelectionSummary = useSelectionStore(s => s.getSelectionSummary);
 
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  // Which delete was requested — 'server' or 'everywhere' — so a single
+  // popover can show the right confirmation copy for whichever button
+  // triggered it. null means the popover is closed.
+  const [deleteMode, setDeleteMode] = useState(null);
   const [showMoveDropdown, setShowMoveDropdown] = useState(false);
   const moveButtonRef = useRef(null);
 
@@ -26,7 +30,7 @@ export function SelectionActionBar() {
 
   // Dismiss delete confirmation when selection changes
   useEffect(() => {
-    setShowDeleteConfirm(false);
+    setDeleteMode(null);
   }, [selectedEmailIds]);
 
   const summary = useMemo(() => {
@@ -65,12 +69,17 @@ export function SelectionActionBar() {
   };
 
   const handleDelete = () => {
-    setShowDeleteConfirm(true);
+    setDeleteMode('server');
+  };
+
+  const handleDeleteEverywhere = () => {
+    setDeleteMode('everywhere');
   };
 
   const confirmDelete = () => {
-    setShowDeleteConfirm(false);
-    handleAction(deleteSelectedFromServer);
+    const mode = deleteMode;
+    setDeleteMode(null);
+    handleAction(mode === 'everywhere' ? purgeSelectedEverywhere : deleteSelectedFromServer);
   };
 
   const handleUnarchive = async () => {
@@ -186,6 +195,16 @@ export function SelectionActionBar() {
               <Trash2 size={15} />
               <span className="text-xs font-medium">Delete</span>
             </button>
+            <button
+              onClick={handleDeleteEverywhere}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-mail-danger"
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--mail-danger) 10%, transparent)'}
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = ''}
+              title="Delete everywhere"
+            >
+              <ShieldX size={15} />
+              <span className="text-xs font-medium">Delete everywhere</span>
+            </button>
 
             <div className="w-px h-6 bg-mail-border" />
 
@@ -199,9 +218,10 @@ export function SelectionActionBar() {
             </button>
           </div>
 
-          {/* Delete confirmation popover */}
+          {/* Delete confirmation popover — shared by both delete buttons, copy
+              branches on which one was requested */}
           <AnimatePresence>
-            {showDeleteConfirm && (
+            {deleteMode !== null && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -212,12 +232,14 @@ export function SelectionActionBar() {
                 <div className="flex items-start gap-2 mb-3">
                   <AlertTriangle size={16} className="text-mail-danger flex-shrink-0 mt-0.5" />
                   <p className="text-sm text-mail-text">
-                    Delete {summary.emails} email{summary.emails !== 1 ? 's' : ''} from server? This cannot be undone.
+                    {deleteMode === 'everywhere'
+                      ? `Delete ${summary.emails} email${summary.emails !== 1 ? 's' : ''} from the server, this computer, and your external backup? No copy will be left anywhere. This cannot be undone.`
+                      : `Delete ${summary.emails} email${summary.emails !== 1 ? 's' : ''} from server? This cannot be undone.`}
                   </p>
                 </div>
                 <div className="flex justify-end gap-2">
                   <button
-                    onClick={() => setShowDeleteConfirm(false)}
+                    onClick={() => setDeleteMode(null)}
                     className="px-3 py-1.5 text-xs text-mail-text-muted hover:bg-mail-border rounded-lg transition-colors"
                   >
                     Cancel

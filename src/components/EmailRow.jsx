@@ -6,18 +6,18 @@ import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon } from './SenderAlertIcon';
 import { ReplyToAlertIcon } from './ReplyToAlertIcon';
 import { RowActionMenu } from './RowActionMenu';
+import { RowActionMenuItems } from './RowActionMenuItems';
 import { formatEmailDate } from '../utils/dateFormat';
 import {
   RefreshCw,
   HardDrive,
   Cloud,
   Paperclip,
-  Trash2,
   Archive,
 } from 'lucide-react';
 
 export const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
-  const { saveEmailLocally, removeLocalEmail, deleteEmailFromServer } = actions;
+  const { saveEmailLocally } = actions;
 
   const handleSave = async (e) => {
     e.stopPropagation();
@@ -27,20 +27,6 @@ export const EmailRow = React.memo(function EmailRow({ email, isSelected, onSele
     } finally {
       onStopSaving();
     }
-  };
-
-  const handleRemoveLocal = async (e) => {
-    e.stopPropagation();
-    await removeLocalEmail(email.uid);
-    onCloseMenu();
-  };
-
-  const handleDeleteServer = (e) => {
-    e.stopPropagation();
-    onRequestDelete(
-      () => deleteEmailFromServer(email.uid),
-      'This email will be permanently deleted from the server. This cannot be undone.'
-    );
   };
 
   const isUnread = !email.flags?.includes('\\Seen');
@@ -122,26 +108,7 @@ export const EmailRow = React.memo(function EmailRow({ email, isSelected, onSele
         )}
 
         <RowActionMenu open={menuOpen} onOpen={onOpenMenu} onClose={onCloseMenu}>
-          {email.isArchived && (
-            <button
-              onClick={handleRemoveLocal}
-              className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover
-                        flex items-center gap-2 text-mail-text"
-            >
-              <Archive size={14} />
-              Unarchive
-            </button>
-          )}
-          {email.source !== 'local-only' && (
-            <button
-              onClick={handleDeleteServer}
-              className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover
-                        flex items-center gap-2 text-mail-danger"
-            >
-              <Trash2 size={14} />
-              Delete from server
-            </button>
-          )}
+          <RowActionMenuItems email={email} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} />
         </RowActionMenu>
       </div>
     </div>
@@ -149,26 +116,12 @@ export const EmailRow = React.memo(function EmailRow({ email, isSelected, onSele
 });
 
 export const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSelected, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
-  const { saveEmailLocally, removeLocalEmail, deleteEmailFromServer } = actions;
+  const { saveEmailLocally } = actions;
 
   const handleSave = async (e) => {
     e.stopPropagation();
     onStartSaving();
     try { await saveEmailLocally(email.uid); } finally { onStopSaving(); }
-  };
-
-  const handleRemoveLocal = async (e) => {
-    e.stopPropagation();
-    await removeLocalEmail(email.uid);
-    onCloseMenu();
-  };
-
-  const handleDeleteServer = (e) => {
-    e.stopPropagation();
-    onRequestDelete(
-      () => deleteEmailFromServer(email.uid),
-      'This email will be permanently deleted from the server. This cannot be undone.'
-    );
   };
 
   const isUnread = !email.flags?.includes('\\Seen');
@@ -241,18 +194,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSe
           </button>
         )}
         <RowActionMenu open={menuOpen} onOpen={onOpenMenu} onClose={onCloseMenu} size={13}>
-          {email.isArchived && (
-            <button onClick={handleRemoveLocal}
-              className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover flex items-center gap-2 text-mail-text">
-              <Archive size={14} /> Unarchive
-            </button>
-          )}
-          {email.source !== 'local-only' && (
-            <button onClick={handleDeleteServer}
-              className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover flex items-center gap-2 text-mail-danger">
-              <Trash2 size={14} /> Delete from server
-            </button>
-          )}
+          <RowActionMenuItems email={email} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} />
         </RowActionMenu>
       </div>
     </div>
