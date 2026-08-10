@@ -339,6 +339,36 @@ describe('BulkOperationsModal', () => {
     setSelectionSpy.mockRestore();
   });
 
+  // Pins the ruling from the second re-review: a re-click on an
+  // ALREADY-active range control still re-derives, even over a hand-narrowed
+  // selection. The reviewer's alternative — skip the click-counter bump when
+  // the new range value equals the current one — was rejected: that value
+  // equality is exactly the gesture the e2e defect needs fixed (pick "All",
+  // get emptied externally, re-click "All"), so skipping it there would
+  // silently reopen `Expected: 3, Received: 0`. A redundant click meaning
+  // "re-derive" is the accepted trade-off, not an oversight.
+  it('re-clicking an already-active range control re-derives even over a hand-narrowed selection', async () => {
+    const onConfirm = vi.fn();
+    render(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={onConfirm} />);
+    await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull()); // settled
+
+    fireEvent.click(screen.getByText('All'));
+    expect(screen.getByText('3 emails selected')).toBeTruthy(); // 5, 4, 1
+
+    // Hand-narrow the selection while "All" is still the active range.
+    act(() => { useMessageListStoreMock.getState().toggleEmailSelection(4); });
+    expect(screen.getByText('2 emails selected')).toBeTruthy(); // 5, 1
+
+    // Re-click the SAME, still-active control — not a different range.
+    fireEvent.click(screen.getByText('All'));
+    expect(screen.getByText('3 emails selected')).toBeTruthy(); // re-derived, hand edit superseded
+
+    fireEvent.click(screen.getByText('Next'));
+    fireEvent.click(screen.getByText('Archive'));
+    fireEvent.click(screen.getByText('Start Archive'));
+    expect(onConfirm).toHaveBeenCalledWith({ action: 'archive', uids: [5, 4, 1] });
+  });
+
   // Explicit guard, driven directly: correctness here must not rest on
   // EmailList's sibling teardown effect winning a child-before-parent
   // ordering race. A session bound to a mailbox other than the live one

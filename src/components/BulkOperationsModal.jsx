@@ -218,19 +218,36 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
   // into the store is what checkmarks the rows, and what lets the user add or
   // remove messages by hand before pressing Start.
   //
-  // The modal never unmounts on minimize (isOpen just makes it render null),
-  // so this effect stays live across a minimize/reopen cycle, and across any
-  // background churn while minimized. It must NOT fire on a bare visibility
-  // flip, and once the sidecar cache has landed for this mailbox it must NOT
-  // fire on later pool churn either (new mail arriving, a flag/tombstone
-  // change) — only a genuine range/date edit should re-derive the selection
-  // at that point. The one legitimate exception is the pool still *settling*:
-  // a range picked before the sidecar cache read lands must still widen once
-  // it does, so pool size counts toward the signature only until `cachedRows`
-  // first lands — `cachedRows === null` is "still on the window fallback,
-  // widen still pending"; once populated, later size changes (either a fresh
-  // fetch after `cachedRows` resets, or plain window churn folded into
-  // `emailPool`) are frozen out.
+  // The actual contract (three lines, read them before "fixing" this again):
+  //   1. An explicit click on a range control (a year button, a preset, the
+  //      Custom Range toggle) ALWAYS re-derives that range — even a redundant
+  //      click on the control that's already active, and even over a
+  //      hand-narrowed selection. The click is what re-derivation means; a
+  //      range button that silently no-ops when clicked is worse than
+  //      superseding a hand edit.
+  //   2. Nothing else re-derives: not a bare minimize/reopen, not the sidecar
+  //      cache settling and then churning further (new mail, a flag flip, a
+  //      tombstone reconcile), not any other background sync. Only rule 1
+  //      writes a selection.
+  //   3. Do NOT skip the click-counter bump in `setSelectedRange` when the new
+  //      range value equals the current one ("nothing changed, why write?").
+  //      That equality is exactly what the reachable defect looks like: pick
+  //      "All", have something external empty `selectedEmailIds` (e.g. the
+  //      selection action bar's Clear), then re-click "All" — same value,
+  //      must still re-derive. Value-equality skips rule 1 the moment it
+  //      matters and reopens that defect (e2e:
+  //      `connected-bulk-delete-everywhere.test.js`, `Expected: 3, Received: 0`).
+  //
+  // Mechanically: the modal never unmounts on minimize (isOpen just makes it
+  // render null), so this effect stays live across a minimize/reopen cycle
+  // and across any background churn while minimized — rule 2 above. The one
+  // legitimate non-click trigger is the pool still *settling*: a range picked
+  // before the sidecar cache read lands must still widen once it does, so
+  // pool size counts toward the signature only until `cachedRows` first lands
+  // — `cachedRows === null` is "still on the window fallback, widen still
+  // pending"; once populated, later size changes (a fresh fetch after
+  // `cachedRows` resets, or plain window churn folded into `emailPool`) are
+  // frozen out, same as any other background churn.
   const lastSyncedRangeRef = useRef(null);
   useEffect(() => {
     if (!selectedRange) { lastSyncedRangeRef.current = null; return; }
