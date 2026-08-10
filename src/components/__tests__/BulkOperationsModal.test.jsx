@@ -303,6 +303,42 @@ describe('BulkOperationsModal', () => {
     expect(onConfirm).toHaveBeenCalledWith({ action: 'archive', uids: [5, 4, 1] });
   });
 
+  // Regression pin for the review finding on the fix above: a plain
+  // `selectedEmailIds.size === 0` bypass reopens the class of bug the
+  // stale-signature guard exists to prevent, because reaching empty-while-
+  // range-active is one click away (SelectionActionBar's "Clear", live
+  // throughout a minimized session) and the effect already re-runs on any
+  // `sortedEmails`/`emailPool` churn — routine background sync in a
+  // live-syncing mail client. A deliberate Clear must survive ordinary sync
+  // churn with no user action; only an explicit re-pick may resurrect it.
+  it('a deliberate Clear stays cleared through background pool churn — only a re-pick resyncs', async () => {
+    render(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={vi.fn()} />);
+    await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull()); // settled
+
+    fireEvent.click(screen.getByText('All'));
+    expect(screen.getByText('3 emails selected')).toBeTruthy(); // 5, 4, 1
+
+    // Deliberate Clear (what SelectionActionBar's "X" does) — session/range
+    // stay live, only the selection empties.
+    act(() => { useMessageListStoreMock.getState().setSelection([]); });
+    expect(screen.getByText('Select a date range')).toBeTruthy();
+
+    const setSelectionSpy = vi.spyOn(useMessageListStoreMock.getState(), 'setSelection');
+
+    // Background sync churn, no user interaction: new mail changes the
+    // window, which changes `emailPool`/`selectedEmails` and re-runs the
+    // sync effect — but nobody clicked a range control.
+    act(() => {
+      useMessageListStoreMock.setState({ sortedEmails: [...WINDOW, { uid: 6, date: '2026-04-01T10:00:00Z' }] });
+    });
+
+    expect(setSelectionSpy).not.toHaveBeenCalled();
+    expect(useMessageListStoreMock.getState().selectedEmailIds.size).toBe(0);
+    expect(screen.getByText('Select a date range')).toBeTruthy();
+
+    setSelectionSpy.mockRestore();
+  });
+
   // Explicit guard, driven directly: correctness here must not rest on
   // EmailList's sibling teardown effect winning a child-before-parent
   // ordering race. A session bound to a mailbox other than the live one

@@ -49,7 +49,13 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
   const selectedRange = bulkSession?.range ?? null;
   const selectedAction = bulkSession?.action ?? null;
   const setStep = (v) => setBulkSession({ step: v });
-  const setSelectedRange = (v) => setBulkSession({ range: v });
+  // Every range control (year buttons, presets, the Custom Range toggle) goes
+  // through this one setter, so it's the single place to mark "a user just
+  // clicked a range control" — a ref bump, not state, since it only needs to
+  // be readable inside the sync effect below, not to trigger a render itself
+  // (the setBulkSession call right after already does that).
+  const rangePickRef = useRef(0);
+  const setSelectedRange = (v) => { rangePickRef.current += 1; setBulkSession({ range: v }); };
   const setSelectedAction = (v) => setBulkSession({ action: v });
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -240,16 +246,18 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
       return;
     }
     const poolPart = cachedRows === null ? emailPool.length : 'settled';
-    const signature = `${JSON.stringify(selectedRange)}|${poolPart}|${customFrom}|${customTo}`;
-    // Same signature normally means "nothing to re-derive" — but something
-    // outside this effect (a selection-bar row workflow's optimistic update)
-    // can empty selectedEmailIds without touching the range or ending the
-    // session. That leaves a live range with zero selected and no dep change
-    // to react to it — except re-picking the same range, which does change
-    // `bulkSession` and re-runs this effect. Treat "range active, live
-    // selection empty" as a reason to re-derive even on an unchanged
-    // signature, so that re-pick isn't a no-op.
-    if (lastSyncedRangeRef.current === signature && selectedEmailIds.size > 0) return;
+    // `rangePickRef` only moves on an explicit click of a range control (see
+    // setSelectedRange above) — never on background churn (new mail, a flag
+    // flip, a tombstone reconcile all change `emailPool`/`selectedEmails`,
+    // which re-run this effect, but don't touch the ref). Folding it into the
+    // signature means a re-pick of the identical range always produces a
+    // fresh signature — closing the "something external emptied
+    // selectedEmailIds, re-picking the same range did nothing" defect —
+    // while a signature match still means exactly "nothing a user did
+    // changed", so routine sync churn can never silently resurrect a
+    // selection the user (or another workflow) just cleared.
+    const signature = `${JSON.stringify(selectedRange)}|${poolPart}|${customFrom}|${customTo}|${rangePickRef.current}`;
+    if (lastSyncedRangeRef.current === signature) return;
     lastSyncedRangeRef.current = signature;
     setSelection(selectedEmails.map(e => e.uid));
   }, [selectedRange, bulkSession, activeAccountId, activeMailbox, viewMode, cachedRows, emailPool.length, customFrom, customTo, selectedEmails, setSelection]);
