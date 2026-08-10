@@ -108,7 +108,9 @@ function EmailListComponent() {
   const RowComponent = isCompact ? CompactEmailRow : EmailRow;
 
   const [showSearch, setShowSearch] = useState(false);
-  const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  const bulkModalOpen = useMailStore(s => s.bulkModalOpen);
+  const openBulkModal = useMailStore(s => s.openBulkModal);
+  const minimizeBulkModal = useMailStore(s => s.minimizeBulkModal);
   const [bulkOpProgress, setBulkOpProgress] = useState(null);
 
   // Sender-grouped accordion state
@@ -647,7 +649,7 @@ function EmailListComponent() {
       <div data-tauri-drag-region className="flex items-center justify-between px-4 py-3 border-b border-mail-border bg-mail-surface flex-shrink-0 min-h-[48px]">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => allSelected ? clearSelection() : setBulkModalOpen(true)}
+            onClick={() => allSelected ? clearSelection() : openBulkModal()}
             className="p-1 hover:bg-mail-border rounded transition-colors"
           >
             {allSelected ? (
@@ -1096,7 +1098,7 @@ function EmailListComponent() {
 
       <BulkOperationsModal
         isOpen={bulkModalOpen}
-        onClose={() => setBulkModalOpen(false)}
+        onClose={minimizeBulkModal}
         onConfirm={handleBulkConfirm}
       />
       <BulkOperationProgress

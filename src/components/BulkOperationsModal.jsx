@@ -33,9 +33,20 @@ function actionBg(color, pct) {
 }
 
 export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
-  const [step, setStep] = useState(1);
-  const [selectedRange, setSelectedRange] = useState(null);
-  const [selectedAction, setSelectedAction] = useState(null);
+  const bulkSession = useMessageListStore(s => s.bulkSession);
+  const setBulkSession = useMessageListStore(s => s.setBulkSession);
+  const setSelection = useMessageListStore(s => s.setSelection);
+  const minimizeBulkModal = useMessageListStore(s => s.minimizeBulkModal);
+  const endBulkSession = useMessageListStore(s => s.endBulkSession);
+  const selectedEmailIds = useMessageListStore(s => s.selectedEmailIds);
+
+  const step = bulkSession?.step ?? 1;
+  const selectedRange = bulkSession?.range ?? null;
+  const selectedAction = bulkSession?.action ?? null;
+  const setStep = (v) => setBulkSession({ step: v });
+  const setSelectedRange = (v) => setBulkSession({ range: v });
+  const setSelectedAction = (v) => setBulkSession({ action: v });
+
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -162,7 +173,18 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
     });
   }, [selectedRange, emailPool, customFrom, customTo]);
 
-  const selectedCount = selectedEmails.length;
+  // The range is only a *description* of a selection. Writing the resolved uids
+  // into the store is what checkmarks the rows, and what lets the user add or
+  // remove messages by hand before pressing Start.
+  useEffect(() => {
+    if (!isOpen || !selectedRange) return;
+    setSelection(selectedEmails.map(e => e.uid));
+  }, [isOpen, selectedRange, selectedEmails, setSelection]);
+
+  // Live count, not the range's own result — hand edits made while the modal
+  // was minimized must be reflected here and must be what Start acts on.
+  const selectedCount = selectedRange ? selectedEmailIds.size : 0;
+  const liveUids = () => [...selectedEmailIds];
   const isPartialLoad = !loadingPool && emailPool.length < totalEmails;
 
   const handleConfirm = () => {
@@ -170,36 +192,42 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
       setShowDeleteConfirm(true);
       return;
     }
-    const uids = selectedEmails.map(e => e.uid);
+    const uids = liveUids();
     onConfirm({ action: selectedAction, uids });
-    handleClose();
+    handleMinimize();
   };
 
   const handleDeleteConfirm = () => {
-    const uids = selectedEmails.map(e => e.uid);
+    const uids = liveUids();
     onConfirm({ action: selectedAction, uids });
-    handleClose();
+    handleMinimize();
   };
 
-  const handleClose = () => {
-    setStep(1);
-    setSelectedRange(null);
-    setSelectedAction(null);
+  // Backdrop, X and Escape MINIMIZE — the session and its selection survive so
+  // the bubble can carry them. Only Cancel ends the session.
+  const handleMinimize = () => {
     setShowDeleteConfirm(false);
-    setCustomFrom('');
-    setCustomTo('');
+    minimizeBulkModal();
     onClose();
   };
 
-  // ESC to close
+  const handleCancel = () => {
+    setShowDeleteConfirm(false);
+    setCustomFrom('');
+    setCustomTo('');
+    endBulkSession();
+    onClose();
+  };
+
+  // ESC to minimize
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape') { e.preventDefault(); onClose(); }
+      if (e.key === 'Escape') { e.preventDefault(); handleMinimize(); }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, minimizeBulkModal]);
 
   if (!isOpen) return null;
 
@@ -212,7 +240,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="absolute inset-0 bg-black/50"
-          onClick={handleClose}
+          onClick={handleMinimize}
         />
 
         {/* Modal */}
@@ -228,7 +256,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
             <h2 className="text-lg font-semibold text-mail-text">
               {showDeleteConfirm ? 'Confirm Delete' : step === 1 ? 'Bulk Email Operations' : `Choose Action for ${selectedCount.toLocaleString()} Emails`}
             </h2>
-            <button onClick={handleClose} className="p-1 hover:bg-mail-border rounded transition-colors">
+            <button onClick={handleMinimize} className="p-1 hover:bg-mail-border rounded transition-colors">
               <X size={18} className="text-mail-text-muted" />
             </button>
           </div>
@@ -375,7 +403,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                 </span>
                 <div className="flex gap-2">
                   <button
-                    onClick={handleClose}
+                    onClick={handleCancel}
                     className="px-4 py-2 text-sm text-mail-text-muted hover:bg-mail-border rounded-lg transition-colors"
                   >
                     Cancel

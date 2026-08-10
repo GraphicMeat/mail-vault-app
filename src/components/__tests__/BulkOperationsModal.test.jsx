@@ -3,6 +3,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import { create } from 'zustand';
 
 vi.mock('lucide-react', () => {
   const icon = (name) => (props) => React.createElement('span', { 'data-icon': name, ...props });
@@ -34,24 +35,36 @@ const CACHED_ROWS = CACHED_UIDS.map(uid => ({
 }));
 
 const tombstones = new Set(['acct-1|INBOX|2']);
+const archivedEmailIds = new Set();
 
-const state = {
+// Task 5 moved step/range/action/selection into the store. The modal now
+// reads and writes them live, so the mock has to actually be reactive —
+// a real zustand store (already a project dep) beats hand-rolling a pub-sub.
+const useMessageListStoreMock = create((set) => ({
   sortedEmails: WINDOW,
   totalEmails: 5,
-  archivedEmailIds: new Set(),
+  archivedEmailIds,
   activeAccountId: 'acct-1',
   activeMailbox: 'INBOX',
   viewMode: 'all',
   unifiedInbox: false,
-};
+  bulkSession: null,
+  selectedEmailIds: new Set(),
+  setBulkSession: (patch) => set(state => ({
+    bulkSession: { ...(state.bulkSession || { active: true, step: 1, range: null, action: null }), ...patch },
+  })),
+  setSelection: (keys) => set({ selectedEmailIds: new Set(keys) }),
+  minimizeBulkModal: vi.fn(), // isOpen is driven by the `isOpen` prop in this test, not by store state
+  endBulkSession: () => set({ bulkSession: null, selectedEmailIds: new Set() }),
+}));
 
 vi.mock('../../stores/messageListStore', () => ({
-  useMessageListStore: (selector) => selector(state),
+  useMessageListStore: (selector) => useMessageListStoreMock(selector),
 }));
 
 vi.mock('../../stores/mailStore', () => ({
   useMailStore: {
-    getState: () => ({ deleteTombstones: tombstones, archivedEmailIds: state.archivedEmailIds }),
+    getState: () => ({ deleteTombstones: tombstones, archivedEmailIds }),
   },
 }));
 
