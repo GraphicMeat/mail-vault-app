@@ -158,6 +158,28 @@ describe('purgeEverywhere — storage matrix', () => {
     expect(mockBackupPurgeUids).toHaveBeenCalledWith(ACCOUNT.email, 'INBOX.Spam', [9]);
   });
 
+  it('collision: a still-server-side row with a stale local-only duplicate still gets deleted from the server', async () => {
+    // Reproduces the cold-load race: an archived row that's still on the
+    // server can exist in BOTH `emails` and `localEmails` at once (the local
+    // archive read lands before the server window fills in). updateSortedEmails()
+    // only revisits a localEmails entry when its uid is absent from `emails`,
+    // so a localEmails duplicate stamped 'local-only' before the server uid
+    // arrived stays stamped that way for the rest of the session. On a uid
+    // collision the real, server-backed `emails` copy must win the lookup —
+    // not the stale `localEmails` duplicate.
+    prime({
+      emails: [serverMsg(1)],
+      archived: [1],
+      localOnly: [{ ...serverMsg(1), source: 'local-only' }],
+    });
+
+    const res = await purgeEverywhere([1]);
+
+    expect(mockDeleteEmail).toHaveBeenCalledTimes(1);
+    expect(res.deleted).toBe(1);
+    expect(res.failed).toBe(0);
+  });
+
   it('regression: an archived row still in `emails` is never misread as local-only just because serverUidSet lags', async () => {
     // Simulates the restore-descriptor paint (activateAccount.js:459) and the
     // offline window: serverUidSet can be empty or stale while archivedEmailIds

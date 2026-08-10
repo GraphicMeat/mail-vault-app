@@ -637,7 +637,15 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
   // Includes localEmails (unlike deleteSelectedFromServer's emailMap) because
   // that's where a genuinely local-only row actually lives — updateSortedEmails()
   // (messageListSlice.js:157) already stamps `source: 'local-only'` on it there.
-  const allEmails = [...state.emails, ...state.sentEmails, ...state.localEmails];
+  // localEmails goes FIRST: `new Map(...)` keeps the last entry on a uid
+  // collision, and a still-server-side archived row is a normal case in both
+  // `emails` and `localEmails` at once. updateSortedEmails() only stamps a
+  // localEmails object when its uid is absent from `emails` — but on a cold
+  // load the archived read can land while `emails` is still empty, stamping
+  // it 'local-only' before the server uid ever arrives, and that stamp is
+  // never revisited. Emails/sentEmails must win that collision so a
+  // server-backed row is never read through its stale local duplicate.
+  const allEmails = [...state.localEmails, ...state.emails, ...state.sentEmails];
   const emailMap = new Map(allEmails.map(e => [isUnified ? _selKey(e) : e.uid, e]));
 
   const resolve = (key) => {
@@ -732,15 +740,18 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
     }
   }
 
-  // Refresh local state once per group touched — removeLocalEmail re-reads the
-  // entire index per message, which over a bulk selection hangs the app. Every
-  // group gets refreshed, not just the first, so a selection spanning multiple
-  // accounts/mailboxes (unified inbox) doesn't leave the others stale.
-  for (const g of groups.values()) {
+  // savedEmailIds/archivedEmailIds/localEmails are single-mailbox-scoped store
+  // fields — refreshing more than one group would just have the last write
+  // clobber the rest, not "cover" every group. Refresh only the group that
+  // matches the currently active (account, mailbox); skip entirely if the
+  // active view wasn't touched by this purge.
+  const activeMailboxKey = state.activeMailbox === 'UNIFIED' ? 'INBOX' : state.activeMailbox;
+  const activeGroup = groups.get(`${state.activeAccountId}|${activeMailboxKey}`);
+  if (activeGroup) {
     const [savedEmailIds, archivedEmailIds, localEmails] = await Promise.all([
-      db.getSavedEmailIds(g.accountId, g.mailbox),
-      db.getArchivedEmailIds(g.accountId, g.mailbox),
-      db.getLocalEmails(g.accountId, g.mailbox),
+      db.getSavedEmailIds(activeGroup.accountId, activeGroup.mailbox),
+      db.getArchivedEmailIds(activeGroup.accountId, activeGroup.mailbox),
+      db.getLocalEmails(activeGroup.accountId, activeGroup.mailbox),
     ]);
     useMailStore.setState({ savedEmailIds, archivedEmailIds, localEmails });
   }
