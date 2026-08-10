@@ -2238,6 +2238,10 @@ fn maildir_store(
 
 // ── Local index (local-index.json) ──────────────────────────────────────────
 
+fn local_index_path(app_handle: &tauri::AppHandle, account_id: &str, mailbox: &str) -> Result<PathBuf, String> {
+    Ok(vault::root(app_handle)?.join("maildir").join(account_id).join(mailbox).join("local-index.json"))
+}
+
 #[tauri::command]
 async fn local_index_read(
     app_handle: tauri::AppHandle,
@@ -2305,24 +2309,10 @@ async fn local_index_remove(
     mailbox: String,
     uid: u32,
 ) -> Result<(), String> {
-    let data_dir = vault::root(&app_handle)?;
-    let index_path = data_dir.join("maildir").join(&account_id).join(&mailbox).join("local-index.json");
-
-    if !index_path.exists() {
-        return Ok(());
-    }
-
-    let content = tokio::fs::read_to_string(&index_path).await
-        .map_err(|e| format!("Failed to read: {}", e))?;
-    let mut entries: Vec<serde_json::Value> = serde_json::from_str(&content).unwrap_or_default();
-    entries.retain(|e| e.get("uid").and_then(|u| u.as_u64()) != Some(uid as u64));
-
-    let data = serde_json::to_string(&entries)
-        .map_err(|e| format!("Failed to serialize: {}", e))?;
-    tokio::fs::write(&index_path, &data).await
-        .map_err(|e| format!("Failed to write: {}", e))?;
-
-    Ok(())
+    let index_path = local_index_path(&app_handle, &account_id, &mailbox)?;
+    // ponytail: sync fs call in an async command — fine for a small JSON file,
+    // same tradeoff maildir_delete_many already makes.
+    prune_local_index(&index_path, &std::collections::HashSet::from([uid]))
 }
 
 #[tauri::command]
@@ -2776,11 +2766,7 @@ fn maildir_delete_many(
     let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
     let removed = delete_maildir_files(&cur_dir, &uid_set);
 
-    let index_path = vault::root(&app_handle)?
-        .join("maildir")
-        .join(&account_id)
-        .join(&mailbox)
-        .join("local-index.json");
+    let index_path = local_index_path(&app_handle, &account_id, &mailbox)?;
     if let Err(e) = prune_local_index(&index_path, &uid_set) {
         warn!("maildir_delete_many: index prune failed: {}", e);
     }
