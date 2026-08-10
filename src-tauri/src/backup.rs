@@ -1263,4 +1263,50 @@ mod purge_queue_tests {
         let tmp = tempfile::tempdir().unwrap();
         assert_eq!(drain_purge_queue(tmp.path(), tmp.path()), 0);
     }
+
+    #[test]
+    fn drain_keeps_entry_when_mirror_folder_missing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dd = tmp.path().join("data");
+        let root = tmp.path().join("mirror");
+        std::fs::create_dir_all(&dd).unwrap();
+        // Deliberately never seed_mirror — INBOX.Missing has no cur/ dir under root.
+
+        queue_purge(&dd, "me@x.test", "INBOX.Missing", &[5, 6]).unwrap();
+
+        let removed = drain_purge_queue(&dd, &root);
+
+        assert_eq!(removed, 0);
+        let q = read_purge_queue(&dd);
+        assert_eq!(
+            q.get("me@x.test|INBOX.Missing").unwrap(),
+            &vec![5, 6],
+            "entry for an unmirrored folder must stay queued, not be dropped"
+        );
+    }
+
+    #[test]
+    fn drain_drops_malformed_key_but_still_drains_valid_entries() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dd = tmp.path().join("data");
+        let root = tmp.path().join("mirror");
+        std::fs::create_dir_all(&dd).unwrap();
+        seed_mirror(&root, "me@x.test", "INBOX", &["4:2,S.eml"]);
+
+        let mut q: std::collections::BTreeMap<String, Vec<u32>> = Default::default();
+        q.insert("malformed-no-pipe".to_string(), vec![1, 2]);
+        q.insert("me@x.test|INBOX".to_string(), vec![4]);
+        write_purge_queue(&dd, &q).unwrap();
+
+        let removed = drain_purge_queue(&dd, &root);
+
+        assert_eq!(removed, 1, "the well-formed entry must still drain");
+        let cur = root.join("me@x.test").join("INBOX").join("cur");
+        assert!(!cur.join("4:2,S.eml").exists());
+        let leftover = read_purge_queue(&dd);
+        assert!(
+            !leftover.contains_key("malformed-no-pipe"),
+            "a key with no '|' separator must be dropped, not left queued forever"
+        );
+    }
 }
