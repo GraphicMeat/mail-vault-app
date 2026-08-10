@@ -1,13 +1,31 @@
 /**
- * E2E Test: bulk selection survives the modal, and Delete Everywhere sticks
+ * E2E Test: bulk selection survives the modal, and Delete Everywhere actually
+ * removes the local vault copy (not just the server copy)
  *
- * Two regressions in one spec:
+ * Three regressions in one spec:
  *  - the bulk modal used to compute its selection privately, so closing it
  *    (backdrop/X/Escape all minimize now, not cancel) threw the user's range
  *    away and the rows never showed a checkmark, and a session that survived
  *    a minimize forgot the step/action it was left on;
- *  - Delete Everywhere has to actually reach all three copies (server, local
- *    vault, external backup) or the rows come straight back after a reload.
+ *  - "Delete from Server" on an archived message used to look like a no-op:
+ *    the server copy went, the local vault copy stayed, and the row came
+ *    straight back as "Local only (deleted from server)" — this is the
+ *    original bug report Delete Everywhere exists to fix, so this spec pins
+ *    it as an explicit intermediate assertion, not just prose;
+ *  - Delete Everywhere has to actually remove the vault `.eml` file and the
+ *    backup mirror, not just the server copy, or the row reappears after a
+ *    reload exactly like the bug above. Proving that needs a REAL local
+ *    artifact to fail to remove: `source: 'local-only'` requires both a vault
+ *    `.eml` (written by the archive step below) and `archivedEmailIds.has(uid)`
+ *    (messageListSlice.js:137,154) — a spec that runs Delete Everywhere on
+ *    plain server-only messages would pass identically whether or not the
+ *    vault/backup purge phases in `purgeEverywhere` ran at all, since there'd
+ *    be no local copy either way for a dropped purge to fail to remove.
+ *
+ * So this spec archives its fixtures first, deliberately strips one from the
+ * server to pin the intermediate "stays behind as local-only" state, and only
+ * then runs Delete Everywhere on the rest — reload afterward has to
+ * distinguish "purged" from "still local-only" for both groups to pass.
  *
  * Runs against Account 2's Archive folder (3 seeded messages, "Archived
  * message 1/2/3") rather than either account's INBOX. The mock IMAP
@@ -18,7 +36,8 @@
  * connected-thread-bodies' cross-folder thread live in account 1's INBOX;
  * connected-list-header asserts account 2's INBOX total verbatim). Nothing
  * else in the suite reads account 2's Archive folder, which makes it the one
- * safe place to run a real, permanent delete against.
+ * safe place to run real, permanent deletes against (see the guard comment
+ * next to its definition in mockImap.js).
  */
 
 import { waitForApp, waitForEmails } from './helpers.js';
@@ -28,6 +47,13 @@ describe('Bulk delete everywhere', function () {
 
   const SUBJECT_RE = String.raw`Archived message \d+`;
   let folderName;
+  // The one fixture deliberately stripped from the server (but not purged)
+  // in the intermediate check — must still be present, still local-only,
+  // both before and after the later Delete Everywhere run and the reload.
+  let localOnlySubject;
+  // The two fixtures actually run through Delete Everywhere — must be gone,
+  // and must stay gone after a reload.
+  let deletedSubjects;
 
   // ── DOM helpers ─────────────────────────────────────────────────────────
 
@@ -36,8 +62,12 @@ describe('Bulk delete everywhere', function () {
     return [...document.querySelectorAll('[data-testid="email-row"]')].map(row => ({
       subject: ((row.innerText || '').match(pattern) || [null])[0],
       checked: !!row.querySelector('input[type="checkbox"]')?.checked,
+      archived: row.querySelector('[title="Archived"]') !== null,
+      localOnly: row.querySelector('[title^="Local only"]') !== null,
     })).filter(r => r.subject);
   }, SUBJECT_RE);
+
+  const rowFor = async (subject) => (await rows()).find(r => r.subject === subject);
 
   const bodyIncludes = (needle) => browser.execute((t) => document.body.innerText.includes(t), needle);
 
@@ -87,6 +117,16 @@ describe('Bulk delete everywhere', function () {
     el.click();
     return true;
   }, testid);
+
+  /** SelectionActionBar button — same pattern as connected-selection-actions.test.js. */
+  function clickBarButton(title) {
+    return browser.execute((btnTitle) => {
+      const btn = document.querySelector(`button[title="${btnTitle}"]`);
+      if (!btn || btn.offsetHeight === 0) return false;
+      btn.click();
+      return true;
+    }, title);
+  }
 
   function toggleRow(subject) {
     return browser.execute((needle, re) => {
@@ -178,7 +218,70 @@ describe('Bulk delete everywhere', function () {
     expect(checked.length).toBeGreaterThan(0);
   });
 
+  it('archives the fixtures so Delete Everywhere has a real local copy to purge', async function () {
+    await waitClick(() => clickByText('Next'), 'Could not advance from step 1 to step 2');
+    await waitForBodyText('Choose Action for', 'Modal never advanced to the action step');
+
+    await waitClick(() => clickTestId('bulk-action-archive'), 'Could not select the Archive action');
+    await waitClick(() => clickTestId('bulk-step2-confirm'), 'Step 2 confirm button (Start Archive) never became clickable');
+
+    await waitForBodyText('Operation Complete', 'Archive operation never reported completion');
+    await browser.waitUntil(
+      async () => {
+        const list = await rows();
+        return list.length === 3 && list.every(r => r.archived);
+      },
+      { timeout: 30_000, interval: 500, timeoutMsg: 'Not all 3 fixture rows showed the Archived indicator' },
+    );
+  });
+
+  it('keeps a Local-only row after Delete from Server — the bug this feature exists for', async function () {
+    localOnlySubject = (await rows()).find(r => r.archived)?.subject;
+    expect(localOnlySubject).toBeTruthy();
+
+    expect(await toggleRow(localOnlySubject)).toBe(true);
+    expect(await clickBarButton('Delete from server')).toBe(true);
+    await waitForBodyText('cannot be undone', 'Delete-from-server confirmation never appeared');
+
+    const confirmed = await browser.execute(() => {
+      for (const btn of document.querySelectorAll('button')) {
+        if ((btn.textContent || '').trim() === 'Delete' && btn.offsetHeight > 0 && !btn.getAttribute('title')) {
+          btn.click();
+          return true;
+        }
+      }
+      return false;
+    });
+    expect(confirmed).toBe(true);
+
+    // Waits out the real reconcile round-trip: the row is optimistically kept
+    // (it's still in `localEmails`/archivedEmailIds) but only flips from the
+    // "Archived" indicator to "Local only" once the server no longer lists
+    // the uid — i.e. once the delete has actually landed.
+    await browser.waitUntil(
+      async () => (await rowFor(localOnlySubject))?.localOnly === true,
+      {
+        timeout: 30_000,
+        interval: 500,
+        timeoutMsg: `"${localOnlySubject}" never settled into a Local-only row after Delete from Server`,
+      },
+    );
+    // The point of this whole test: it must still be a row, not gone.
+    expect(await rowFor(localOnlySubject)).toBeTruthy();
+  });
+
   it('minimizes to a bubble naming the folder and count', async function () {
+    expect(await browser.execute(() => {
+      const btn = document.querySelector('[data-testid="email-list-header"] button');
+      if (!btn) return false;
+      btn.click();
+      return true;
+    })).toBe(true);
+    await waitForBodyText('Bulk Email Operations', 'Bulk modal never reopened from the header select-all button');
+
+    await waitClick(() => clickByText('All'), 'The "All" preset button never became clickable');
+    await waitForCheckedRows('Rows never showed a checkmark after picking the "All" range');
+
     await waitClick(() => clickByText('Next'), 'Could not advance from step 1 to step 2');
     await waitForBodyText('Choose Action for', 'Modal never advanced to the action step');
     // Legend above the action list — proves it reads real counts, not a placeholder.
@@ -197,19 +300,26 @@ describe('Bulk delete everywhere', function () {
     expect(text).toContain(folderName);
   });
 
-  it('follows a hand-edited checkbox', async function () {
+  it('follows a hand-edited checkbox, excluding the message already proven local-only', async function () {
     const before = await bubbleCount();
-    expect(before).toBeGreaterThan(0);
+    expect(before).toBe(3);
 
-    const victim = (await rows()).find(r => r.checked)?.subject;
-    expect(victim).toBeTruthy();
-    expect(await toggleRow(victim)).toBe(true);
+    // Deselect the fixture the previous test already deleted from the server —
+    // it has no server copy left for Delete Everywhere's server phase to act
+    // on, and this spec already pinned its local-only behavior on its own.
+    // What's left checked is exactly the two still-archived, still-on-server
+    // messages Delete Everywhere is about to run against.
+    expect(await toggleRow(localOnlySubject)).toBe(true);
 
     await browser.waitUntil(async () => (await bubbleCount()) === before - 1, {
       timeout: 10_000,
       interval: 300,
-      timeoutMsg: `Bubble count did not drop from ${before} after unchecking "${victim}"`,
+      timeoutMsg: `Bubble count did not drop from ${before} after unchecking "${localOnlySubject}"`,
     });
+
+    deletedSubjects = (await rows()).filter(r => r.checked).map(r => r.subject);
+    expect(deletedSubjects.length).toBe(2);
+    expect(deletedSubjects).not.toContain(localOnlySubject);
   });
 
   it('reopens the modal at the step it was left on and deletes everywhere', async function () {
@@ -226,14 +336,23 @@ describe('Bulk delete everywhere', function () {
 
     await waitClick(() => clickTestId('bulk-delete-confirm'), 'Could not confirm Delete Everywhere');
 
-    await browser.waitUntil(async () => (await rows()).length === 0, {
-      timeout: 60_000,
-      interval: 1000,
-      timeoutMsg: 'Rows were still present after Delete Everywhere completed',
-    });
+    await browser.waitUntil(
+      async () => {
+        const list = await rows();
+        return deletedSubjects.every(s => !list.some(r => r.subject === s));
+      },
+      {
+        timeout: 60_000,
+        interval: 1000,
+        timeoutMsg: `Deleted-everywhere rows (${deletedSubjects.join(', ')}) were still present after Delete Everywhere completed`,
+      },
+    );
+    // The message deliberately excluded from this run must be untouched —
+    // proof this ran against exactly the selection, not the whole folder.
+    expect(await rowFor(localOnlySubject)).toBeTruthy();
   });
 
-  it('does not bring the rows back on reload', async function () {
+  it('does not bring the rows back on reload — the vault and backup purges actually ran', async function () {
     await browser.execute(() => window.location.reload());
     await waitForApp();
 
@@ -241,6 +360,19 @@ describe('Bulk delete everywhere', function () {
     // left off — navigate back to the folder that was purged to prove it.
     await switchToVaderArchive();
 
-    expect((await rows()).length).toBe(0);
+    const list = await rows();
+    // If the vault purge in purgeEverywhere were dropped, these two would
+    // still have a `.eml` on disk and archivedEmailIds would still list
+    // them — exactly like the local-only fixture below — so they'd
+    // re-render as Local-only rows instead of staying gone.
+    for (const subject of deletedSubjects) {
+      expect(list.some(r => r.subject === subject)).toBe(false);
+    }
+    // The message this spec deliberately left local-only must still come
+    // back that way — confirms the reload reflects real persisted state
+    // rather than the folder simply being empty.
+    const survivor = list.find(r => r.subject === localOnlySubject);
+    expect(survivor).toBeTruthy();
+    expect(survivor.localOnly).toBe(true);
   });
 });
