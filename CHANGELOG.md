@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Added
+- **Delete Everywhere** — remove selected emails from the server, this computer, and the external backup in one action. Available in bulk operations, the selection bar, and the row menu.
+- Bulk operations selection now checkmarks the rows and survives closing the modal — a bubble shows the account, folder, and live count, and the selection can be amended by hand before starting. The session is bound to one account, folder, and view (list or thread); navigating away ends it.
+- Row hover menu now offers every action the selection bar does: mark read/unread, archive, unarchive, move, delete from server, delete everywhere.
+- A bulk run can now report emails held back because the mailbox needs a resync, instead of silently skipping them.
+
+### Changed
+- Bulk operation descriptions now state which of the three storage locations (server, this computer, external backup) each action touches, and "Delete from Server" states per-selection whether local copies survive.
+
+### Fixed
+- Deleting archived emails from a folder left the local copies behind, so the rows reappeared as "Local only" and the delete looked like it had done nothing.
+
 ## [2.9.2] - 2026-08-08
 
 ### Added
