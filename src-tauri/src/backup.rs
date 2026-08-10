@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use serde::Serialize;
@@ -130,6 +131,89 @@ fn scan_external_uids(
         }
     }
     uids
+}
+
+/// Parse the uid a mirror filename belongs to. The mirror has carried three
+/// shapes over its lifetime — `<uid>:2,<flags>.eml`, `<uid>.eml` and
+/// `<uid>_<flags>.eml` — so split on the first of ':', '.' or '_'.
+/// Same rule `scan_external_uids` uses; keep them in step.
+fn mirror_uid_of(name: &str) -> Option<u32> {
+    name.split(|c: char| c == ':' || c == '.' || c == '_')
+        .next()
+        .and_then(|s| s.parse::<u32>().ok())
+}
+
+/// Delete every mirror file under `<root>/<email>/<mailbox>/cur/` whose uid is
+/// in `uids`. Returns how many files were removed.
+pub fn purge_backup_files(
+    root: &Path,
+    email: &str,
+    mailbox: &str,
+    uids: &HashSet<u32>,
+) -> usize {
+    let cur = root.join(email).join(mailbox).join("cur");
+    if !cur.exists() {
+        return 0;
+    }
+    let mut removed = 0usize;
+    if let Ok(entries) = std::fs::read_dir(&cur) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            match mirror_uid_of(&name) {
+                Some(uid) if uids.contains(&uid) => {}
+                _ => continue,
+            }
+            match std::fs::remove_file(entry.path()) {
+                Ok(()) => removed += 1,
+                Err(e) => warn!("backup purge: failed to remove {:?}: {}", entry.path(), e),
+            }
+        }
+    }
+    removed
+}
+
+// ── Pending backup purge queue ──────────────────────────────────────────────
+//
+// The external backup volume is routinely absent (unplugged drive, unmounted
+// network share). "Delete everywhere" must still complete, so uids whose mirror
+// copy could not be reached are parked here and applied on the next backup run.
+
+pub fn purge_queue_path(data_dir: &Path) -> std::path::PathBuf {
+    data_dir.join("pending_backup_purge.json")
+}
+
+pub fn read_purge_queue(
+    data_dir: &Path,
+) -> std::collections::BTreeMap<String, Vec<u32>> {
+    let path = purge_queue_path(data_dir);
+    let Ok(content) = std::fs::read_to_string(&path) else {
+        return Default::default();
+    };
+    // A corrupt queue must not brick delete-everywhere; start over rather than error.
+    serde_json::from_str(&content).unwrap_or_default()
+}
+
+pub fn write_purge_queue(
+    data_dir: &Path,
+    q: &std::collections::BTreeMap<String, Vec<u32>>,
+) -> Result<(), String> {
+    let data = serde_json::to_string(q).map_err(|e| format!("serialize purge queue: {}", e))?;
+    std::fs::write(purge_queue_path(data_dir), data)
+        .map_err(|e| format!("write purge queue: {}", e))
+}
+
+pub fn queue_purge(
+    data_dir: &Path,
+    email: &str,
+    mailbox: &str,
+    uids: &[u32],
+) -> Result<(), String> {
+    let mut q = read_purge_queue(data_dir);
+    let entry = q.entry(format!("{}|{}", email, mailbox)).or_default();
+    entry.extend_from_slice(uids);
+    entry.sort_unstable();
+    entry.dedup();
+    write_purge_queue(data_dir, &q)
 }
 
 /// Build a FolderBackupStatus for one folder.
@@ -976,6 +1060,46 @@ fn normalize_graph_folder_name(name: &str) -> String {
     }
 }
 
+#[tauri::command]
+pub async fn backup_purge_uids(
+    app_handle: tauri::AppHandle,
+    email: String,
+    mailbox: String,
+    uids: Vec<u32>,
+) -> Result<serde_json::Value, String> {
+    if uids.is_empty() {
+        return Ok(serde_json::json!({ "removed": 0, "queued": 0 }));
+    }
+
+    let data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("No app data dir: {}", e))?;
+
+    let (resolved, needs_release) = resolve_backup_path(&app_handle, None);
+    let Some(root) = resolved else {
+        // No backup configured at all is not a queue-worthy event.
+        let loc = external_location::get_external_location(
+            &data_dir,
+            external_location::SLOT_EXTERNAL_BACKUP,
+        );
+        if loc.status == "not_configured" {
+            return Ok(serde_json::json!({ "removed": 0, "queued": 0 }));
+        }
+        queue_purge(&data_dir, &email, &mailbox, &uids)?;
+        info!("backup_purge_uids: backup unreachable, queued {} uids", uids.len());
+        return Ok(serde_json::json!({ "removed": 0, "queued": uids.len() }));
+    };
+
+    let uid_set: HashSet<u32> = uids.iter().copied().collect();
+    let removed = purge_backup_files(Path::new(&root), &email, &mailbox, &uid_set);
+    if needs_release {
+        release_backup_path(&root);
+    }
+    info!("backup_purge_uids: removed {} mirror files for {}/{}", removed, email, mailbox);
+    Ok(serde_json::json!({ "removed": removed, "queued": 0 }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::sync_locations;
@@ -1006,5 +1130,72 @@ mod tests {
         assert_eq!(sync_locations(&app, &ext), 0);
 
         let _ = fs::remove_dir_all(&base);
+    }
+}
+
+#[cfg(test)]
+mod purge_queue_tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    fn seed_mirror(root: &Path, email: &str, mailbox: &str, names: &[&str]) {
+        let cur = root.join(email).join(mailbox).join("cur");
+        std::fs::create_dir_all(&cur).unwrap();
+        for n in names {
+            std::fs::write(cur.join(n), b"x").unwrap();
+        }
+    }
+
+    #[test]
+    fn purges_every_legacy_filename_shape() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        // The three shapes the mirror has carried over its lifetime.
+        seed_mirror(root, "me@x.test", "INBOX.Spam", &[
+            "101:2,S.eml",
+            "102.eml",
+            "103_S.eml",
+            "104:2,S.eml",
+            "1010:2,S.eml",
+        ]);
+
+        let uids: HashSet<u32> = [101u32, 102, 103].into_iter().collect();
+        let removed = purge_backup_files(root, "me@x.test", "INBOX.Spam", &uids);
+
+        let cur = root.join("me@x.test").join("INBOX.Spam").join("cur");
+        assert_eq!(removed, 3);
+        assert!(!cur.join("101:2,S.eml").exists());
+        assert!(!cur.join("102.eml").exists());
+        assert!(!cur.join("103_S.eml").exists());
+        assert!(cur.join("104:2,S.eml").exists());
+        assert!(cur.join("1010:2,S.eml").exists(), "1010 must survive a purge of 101");
+    }
+
+    #[test]
+    fn missing_mirror_dir_removes_nothing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let uids: HashSet<u32> = [1u32].into_iter().collect();
+        assert_eq!(purge_backup_files(tmp.path(), "me@x.test", "INBOX", &uids), 0);
+    }
+
+    #[test]
+    fn queue_appends_and_dedupes() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dd = tmp.path();
+
+        queue_purge(dd, "me@x.test", "INBOX.Spam", &[1, 2]).unwrap();
+        queue_purge(dd, "me@x.test", "INBOX.Spam", &[2, 3]).unwrap();
+        queue_purge(dd, "me@x.test", "INBOX", &[9]).unwrap();
+
+        let q = read_purge_queue(dd);
+        assert_eq!(q.get("me@x.test|INBOX.Spam").unwrap(), &vec![1, 2, 3]);
+        assert_eq!(q.get("me@x.test|INBOX").unwrap(), &vec![9]);
+    }
+
+    #[test]
+    fn corrupt_queue_file_reads_as_empty() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(purge_queue_path(tmp.path()), b"{ not json").unwrap();
+        assert!(read_purge_queue(tmp.path()).is_empty());
     }
 }

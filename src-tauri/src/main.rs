@@ -4571,6 +4571,7 @@ fn main() {
             commands::iap_restore,
             commands::backup_resolve_external_location,
             commands::backup_migrate_legacy_path,
+            backup::backup_purge_uids,
             commands::start_migration,
             commands::cancel_migration,
             commands::pause_migration,
