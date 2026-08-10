@@ -122,8 +122,16 @@ class BulkOperationManager {
         const result = await purgeEverywhere(uids, {
           onProgress: (p) => {
             this._operation.currentPhase = p.phase;
-            this._operation.total = p.total;
-            this._operation.completed = p.completed;
+            // `delete`'s total/completed cover the whole batch — the
+            // meaningful denominator for the progress bar. `vault`/`backup`
+            // report a per-(account,mailbox)-group count instead, which can
+            // be smaller than what `delete` already reached; letting them
+            // overwrite total/completed would make the bar jump backward.
+            // Relay the phase label only for those two.
+            if (p.phase === 'delete') {
+              this._operation.total = p.total;
+              this._operation.completed = p.completed;
+            }
             this._emitProgress();
           },
         });

@@ -99,6 +99,7 @@ function App() {
   const accounts = useAccountStore(s => s.accounts);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   const error = useUiStore(s => s.error);
+  const errorType = useUiStore(s => s.errorType);
   const clearError = useUiStore(s => s.clearError);
   const loading = useSyncStore(s => s.loading);
   const initTheme = useThemeStore(s => s.initTheme);
@@ -755,7 +756,7 @@ function App() {
 
       <AnimatePresence>
         {error && (
-          <Toast message={error} onClose={clearError} />
+          <Toast message={error} onClose={clearError} type={errorType} duration={errorType === 'warning' ? 8000 : 5000} />
         )}
       </AnimatePresence>
 

@@ -1,19 +1,23 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  HardDrive, Trash2, Check, AlertCircle, Minimize2, Maximize2, X
+  HardDrive, Trash2, Check, AlertCircle, Minimize2, Maximize2, X, Shield
 } from 'lucide-react';
 
 const PHASE_LABELS = {
   archive: 'Downloading',
   verify: 'Verifying',
   delete: 'Deleting',
+  vault: 'Removing local copies',
+  backup: 'Clearing backup',
 };
 
 const PHASE_ICONS = {
   archive: HardDrive,
   verify: Check,
   delete: Trash2,
+  vault: HardDrive,
+  backup: Shield,
 };
 
 export function BulkOperationProgress({ operation, onCancel, onDismiss }) {

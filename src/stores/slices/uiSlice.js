@@ -53,8 +53,12 @@ export const createUiSlice = (set, get) => ({
     set({ bulkModalOpen: false, bulkSession: null, selectedEmailIds: new Set() });
   },
 
-  // Error state
+  // Error state — errorType lets a caveated-success message use the
+  // warning-styled Toast instead of the default error-red one; resets to
+  // 'error' on clear so a stale warning tint never bleeds onto the next
+  // genuine error.
   error: null,
+  errorType: 'error',
 
   // View mode — refresh local state from disk when switching to local view
   // so that in-progress bulk saves are reflected immediately
@@ -129,5 +133,5 @@ export const createUiSlice = (set, get) => ({
   },
 
   // Clear error
-  clearError: () => set({ error: null }),
+  clearError: () => set({ error: null, errorType: 'error' }),
 });

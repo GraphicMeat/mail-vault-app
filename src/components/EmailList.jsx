@@ -689,11 +689,11 @@ function EmailListComponent() {
       if (outcomeMessage) {
         // Reuses the store's `error` field, the one feedback channel already
         // wired to a Toast at the app root (App.jsx renders it off `error`/
-        // `clearError`) and reachable from any workflow via setState. It
-        // always renders as the default (error-styled, 5s) Toast — there is
-        // no warning-styled variant wired up yet for a "succeeded with a
-        // caveat" run, which is what modal-standards.md calls for here.
-        useMailStore.setState({ error: outcomeMessage });
+        // `errorType`/`clearError`). `failed`/`queuedBackup`/`needsResync`
+        // are caveats on a run that otherwise succeeded, not a hard failure —
+        // `errorType: 'warning'` gets the warning-styled, 8s Toast per
+        // docs/modal-standards.md instead of the default error-red one.
+        useMailStore.setState({ error: outcomeMessage, errorType: 'warning' });
       }
     } catch (err) {
       console.error('[EmailList] Bulk operation failed:', err);
