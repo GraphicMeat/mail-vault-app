@@ -435,6 +435,20 @@ export async function removeFromLocalIndex(accountId, mailbox, uid) {
   }
 }
 
+export async function maildirDeleteMany(accountId, mailbox, uids) {
+  if (IS_TAURI) {
+    return tauriInvoke('maildir_delete_many', { accountId, mailbox, uids });
+  }
+  return { removed: 0 };
+}
+
+export async function backupPurgeUids(email, mailbox, uids) {
+  if (IS_TAURI) {
+    return tauriInvoke('backup_purge_uids', { email, mailbox, uids });
+  }
+  return { removed: 0, queued: 0 };
+}
+
 // ── Mail storage location (vault) ─────────────────────────────────────────────
 
 export async function vaultGetStatus() {

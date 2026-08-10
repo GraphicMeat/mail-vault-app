@@ -606,6 +606,146 @@ export async function deleteSelectedFromServer() {
 }
 
 
+// ── purgeEverywhere workflow ──
+//
+// A message can live in three places: the IMAP server, the local vault Maildir,
+// and the external backup mirror. Every existing delete verb touches exactly
+// one of them, which is why deleting an archived message in Spam looks like a
+// no-op — the server copy goes, the vault copy stays and re-renders.
+//
+// Order matters: server first, and a uid whose server delete FAILED keeps its
+// local copies. Deleting the only backup of a message that is still sitting on
+// the server is data loss the user never asked for; leaving a stale local copy
+// is merely untidy, and the next reconcile fixes it.
+
+export async function purgeEverywhere(keys, { onProgress } = {}) {
+  const { useMailStore } = await import('../../stores/mailStore');
+  const get = () => useMailStore.getState();
+
+  const state = get();
+  const isUnified = state.activeMailbox === 'UNIFIED';
+  if (!keys?.length) return { deleted: 0, failed: 0, queuedBackup: 0 };
+
+  const sentPath = get().getSentMailboxPath();
+  const allEmails = [...state.emails, ...state.sentEmails];
+  const emailMap = new Map(allEmails.map(e => [isUnified ? _selKey(e) : e.uid, e]));
+
+  const resolve = (key) => {
+    const ctx = isUnified ? _resolveUnifiedContext(key, state) : null;
+    const uid = ctx?.uid ?? key;
+    const accountId = ctx?.accountId || state.activeAccountId;
+    const emailObj = emailMap.get(key);
+    const rawMailbox = ctx?.mailbox || (emailObj?._fromSentFolder && sentPath ? sentPath : state.activeMailbox);
+    const mailbox = rawMailbox === 'UNIFIED' ? 'INBOX' : rawMailbox;
+    const account = ctx?.account || state.accounts.find(a => a.id === accountId);
+    // `emailObj.source`/`_localStaged` catch compose-staged local-only sent
+    // items, whose object lives in sentEmails and is never touched by
+    // updateSortedEmails(). They do NOT catch an archived Spam message whose
+    // server copy has since vanished: that object lives in state.emails, and
+    // updateSortedEmails() unconditionally stamps every state.emails entry
+    // `source: 'server'` regardless of what it was seeded with. serverUidSet
+    // vs archivedEmailIds is the same authoritative signal updateSortedEmails
+    // itself uses to decide 'local-only' — fall back to it so this case (the
+    // whole reason purgeEverywhere exists) isn't misrouted through a server
+    // delete it will never need.
+    const localOnly = emailObj?.source === 'local-only' || emailObj?._localStaged === true
+      || (state.archivedEmailIds.has(uid) && !state.serverUidSet.has(uid));
+    return { uid, accountId, mailbox, account, localOnly, tombstone: `${accountId}|${mailbox}|${uid}` };
+  };
+
+  const targets = keys.map(resolve).filter(t => t.account || t.localOnly);
+
+  // Optimistic removal, same shape as deleteSelectedFromServer — the deletes
+  // below take seconds and the list must not sit there looking untouched.
+  const keySet = new Set(keys);
+  const tombstones = new Set(state.deleteTombstones);
+  for (const t of targets) tombstones.add(t.tombstone);
+  useMailStore.setState({
+    deleteTombstones: tombstones,
+    selectedEmailIds: new Set(),
+    emails: state.emails.filter(e => !keySet.has(isUnified ? _selKey(e) : e.uid)),
+    sentEmails: state.sentEmails.filter(e => !keySet.has(isUnified ? _selKey(e) : e.uid)),
+    totalEmails: Math.max(0, (state.totalEmails || 0) - keys.length),
+  });
+  get().updateSortedEmails();
+
+  // ── Phase 1: server ──
+  onProgress?.({ phase: 'delete', total: targets.length, completed: 0 });
+  const purgeable = [];
+  let failed = 0;
+
+  for (const t of targets) {
+    if (t.localOnly) { purgeable.push(t); continue; }
+    try {
+      const account = await ensureFreshToken(t.account);
+      if (isGraphAccount(account)) {
+        const graphId = getGraphMessageId(t.accountId, t.mailbox, t.uid);
+        if (!graphId) throw new Error(`No Graph ID for UID ${t.uid}`);
+        await api.graphDeleteMessage(account.oauth2AccessToken, graphId);
+      } else {
+        await api.deleteEmail(account, t.uid, t.mailbox);
+      }
+      purgeable.push(t);
+    } catch (e) {
+      console.error(`[purgeEverywhere] Server delete failed for ${t.uid}:`, e);
+      failed++;
+      // Lift the tombstone so the trailing reconcile restores this row, and
+      // leave its local copies alone — they are now the only copies but one.
+      const ts = new Set(get().deleteTombstones);
+      ts.delete(t.tombstone);
+      useMailStore.setState({ deleteTombstones: ts });
+    }
+    onProgress?.({ phase: 'delete', total: targets.length, completed: purgeable.length });
+  }
+
+  // ── Phases 2 and 3: vault, then backup — batched per (account, mailbox) ──
+  const groups = new Map();
+  for (const t of purgeable) {
+    const gk = `${t.accountId}|${t.mailbox}`;
+    if (!groups.has(gk)) groups.set(gk, { accountId: t.accountId, mailbox: t.mailbox, account: t.account, uids: [] });
+    groups.get(gk).uids.push(t.uid);
+  }
+
+  let queuedBackup = 0;
+  for (const g of groups.values()) {
+    onProgress?.({ phase: 'vault', total: g.uids.length, completed: 0 });
+    try {
+      await api.maildirDeleteMany(g.accountId, g.mailbox, g.uids);
+    } catch (e) {
+      console.error('[purgeEverywhere] Vault purge failed:', e);
+    }
+
+    onProgress?.({ phase: 'backup', total: g.uids.length, completed: 0 });
+    try {
+      const email = g.account?.email || state.accounts.find(a => a.id === g.accountId)?.email;
+      if (email) {
+        const res = await api.backupPurgeUids(email, g.mailbox, g.uids);
+        queuedBackup += res?.queued || 0;
+      }
+    } catch (e) {
+      console.error('[purgeEverywhere] Backup purge failed:', e);
+    }
+  }
+
+  // Refresh local state once for the whole batch — removeLocalEmail re-reads
+  // the entire index per message, which over a bulk selection hangs the app.
+  if (groups.size) {
+    const first = [...groups.values()][0];
+    const [savedEmailIds, archivedEmailIds, localEmails] = await Promise.all([
+      db.getSavedEmailIds(first.accountId, first.mailbox),
+      db.getArchivedEmailIds(first.accountId, first.mailbox),
+      db.getLocalEmails(first.accountId, first.mailbox),
+    ]);
+    useMailStore.setState({ savedEmailIds, archivedEmailIds, localEmails });
+  }
+  get().updateSortedEmails();
+
+  if (!isUnified) get().loadEmails();
+
+  return { deleted: purgeable.length, failed, queuedBackup };
+}
+
+
 // ── moveEmails workflow ──
 
 export async function moveEmails(uids, targetMailbox) {
