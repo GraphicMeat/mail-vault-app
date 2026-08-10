@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Archive, ArchiveRestore, Trash2, ArrowRight, ArrowLeft, AlertTriangle, HardDrive, Calendar } from 'lucide-react';
 import { useMessageListStore } from '../stores/messageListStore';
 import { useMailStore } from '../stores/mailStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import * as db from '../services/db';
 
 const ACTION_STYLES = {
@@ -25,6 +26,11 @@ const ACTION_STYLES = {
     color: 'var(--mail-warning)',
     iconColor: 'text-mail-warning',
     confirmLabel: 'Unarchive',
+  },
+  delete_everywhere: {
+    color: 'var(--mail-danger)',
+    iconColor: 'text-mail-danger',
+    confirmLabel: 'Delete Everywhere',
   },
 };
 
@@ -57,6 +63,13 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
   const activeMailbox = useMessageListStore(s => s.activeMailbox);
   const viewMode = useMessageListStore(s => s.viewMode);
   const unifiedInbox = useMessageListStore(s => s.unifiedInbox);
+  // The brief pointed at backupStore.js for this, but that store only holds
+  // ephemeral progress — the actual configured location (or null) lives in
+  // settingsStore as `externalBackupLocation`. Any non-null value means the
+  // user has pointed the app at a folder, regardless of its current status
+  // (ready/needs_reauth/unavailable/invalid) — "configured" is about intent,
+  // not live health, so this stays a presence check.
+  const hasBackupConfigured = useSettingsStore(s => !!s.externalBackupLocation);
 
   // `sortedEmails` is the paginated render window, not the mailbox — on a 15k
   // INBOX it holds whatever pagination has drained so far, so selecting "All"
@@ -248,7 +261,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
   );
 
   const handleConfirm = () => {
-    if (selectedAction === 'delete' || selectedAction === 'archive_and_delete') {
+    if (selectedAction === 'delete' || selectedAction === 'archive_and_delete' || selectedAction === 'delete_everywhere') {
       setShowDeleteConfirm(true);
       return;
     }
@@ -319,7 +332,9 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-mail-border">
             <h2 className="text-lg font-semibold text-mail-text">
-              {showDeleteConfirm ? 'Confirm Delete' : step === 1 ? 'Bulk Email Operations' : `Choose Action for ${selectedCount.toLocaleString()} Emails`}
+              {showDeleteConfirm
+                ? (selectedAction === 'delete_everywhere' ? 'Delete Everywhere?' : 'Confirm Delete')
+                : step === 1 ? 'Bulk Email Operations' : `Choose Action for ${selectedCount.toLocaleString()} Emails`}
             </h2>
             <button onClick={handleMinimize} className="p-1 hover:bg-mail-border rounded transition-colors">
               <X size={18} className="text-mail-text-muted" />
@@ -333,9 +348,15 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                 <AlertTriangle size={20} className="text-mail-danger flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-sm font-medium text-mail-text">
-                    Are you sure? This will permanently delete {selectedCount.toLocaleString()} emails from the server.
+                    {selectedAction === 'delete_everywhere'
+                      ? `Permanently remove ${selectedCount.toLocaleString()} emails from the server, this computer, and your external backup?`
+                      : `Are you sure? This will permanently delete ${selectedCount.toLocaleString()} emails from the server.`}
                   </p>
-                  <p className="text-xs text-mail-text-muted mt-1">This cannot be undone.</p>
+                  <p className="text-xs text-mail-text-muted mt-1">
+                    {selectedAction === 'delete_everywhere'
+                      ? 'There will be no copy left anywhere. This cannot be undone.'
+                      : 'This cannot be undone.'}
+                  </p>
                 </div>
               </div>
               <div className="flex justify-end gap-2">
@@ -350,7 +371,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                   className="px-4 py-2 text-sm font-medium bg-mail-danger text-white rounded-lg
                             hover:bg-mail-danger/90 transition-colors"
                 >
-                  Yes, Delete
+                  {selectedAction === 'delete_everywhere' ? 'Yes, Delete Everywhere' : 'Yes, Delete'}
                 </button>
               </div>
             </div>
@@ -488,6 +509,18 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
           ) : (
             /* Step 2: Action Selection */
             <div className="p-5">
+              {/* Which of the three storage locations this selection occupies.
+                  No backup count — reading it means resolving the bookmark and
+                  walking the mirror on modal open, i.e. spinning up a drive for
+                  a number nobody asked for. */}
+              <div className="flex items-center gap-2 mb-3 text-xs text-mail-text-muted">
+                <span>{selectedCount.toLocaleString()} on server</span>
+                <span>·</span>
+                <span>
+                  {[...selectedEmailIds].filter(uid => archivedEmailIds.has(uid)).length.toLocaleString()} archived here
+                </span>
+                {hasBackupConfigured && (<><span>·</span><span>backup configured</span></>)}
+              </div>
               {/* Warning for locally-stored emails */}
               {hasArchivedSelected && (
                 <div className="flex items-start gap-2 p-3 mb-3 rounded-lg bg-mail-warning/10 border border-mail-warning/30">
@@ -504,25 +537,31 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                     id: 'archive',
                     icon: HardDrive,
                     label: 'Archive',
-                    description: 'Download emails to your computer',
+                    description: 'Copy to this computer. Stays on server.',
                   },
                   ...(hasArchivedSelected ? [{
                     id: 'unarchive',
                     icon: ArchiveRestore,
                     label: 'Unarchive',
-                    description: 'Remove local copies — emails only remain on server',
+                    description: 'Delete the copy on this computer. Server copy kept.',
                   }] : []),
                   {
                     id: 'delete',
                     icon: Trash2,
                     label: 'Delete from Server',
-                    description: 'Permanently remove from server (local archives kept)',
+                    description: 'Remove from server only. Copy on this computer and in backup kept.',
                   },
                   {
                     id: 'archive_and_delete',
                     icon: Archive,
                     label: 'Archive & Delete',
-                    description: 'Download first, then remove from server',
+                    description: 'Copy here first, verify, then remove from server.',
+                  },
+                  {
+                    id: 'delete_everywhere',
+                    icon: Trash2,
+                    label: 'Delete Everywhere',
+                    description: 'Remove from server, this computer, and external backup. Unrecoverable.',
                   },
                 ].map(action => {
                   const isActive = selectedAction === action.id;

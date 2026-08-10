@@ -86,6 +86,14 @@ vi.mock('../../services/db', () => ({
   getEmailHeadersByUids: vi.fn(async (_a, _m, uids) => CACHED_ROWS.filter(r => uids.includes(r.uid))),
 }));
 
+// Backup-configured flag the legend reads. A plain mutable object, same
+// pattern as `archivedEmailIds`/`tombstones` above — mutate it per-test,
+// reset in beforeEach.
+const backupState = { externalBackupLocation: null };
+vi.mock('../../stores/settingsStore', () => ({
+  useSettingsStore: (selector) => selector(backupState),
+}));
+
 import { BulkOperationsModal } from '../BulkOperationsModal';
 
 describe('BulkOperationsModal', () => {
@@ -98,6 +106,8 @@ describe('BulkOperationsModal', () => {
       activeMailbox: 'INBOX',
       viewMode: 'all',
     });
+    archivedEmailIds.clear();
+    backupState.externalBackupLocation = null;
   });
   afterEach(() => cleanup());
 
@@ -285,5 +295,81 @@ describe('BulkOperationsModal', () => {
     expect(useMessageListStoreMock.getState().selectedEmailIds.size).toBe(0);
 
     useMessageListStoreMock.setState({ activeMailbox: 'INBOX' });
+  });
+
+  // Task 9: storage legend + Delete Everywhere action and its own confirm.
+  describe('storage legend and Delete Everywhere', () => {
+    it('legend shows server and local-archive counts and omits any backup count, even when backup is configured', async () => {
+      archivedEmailIds.add(1); // uid 1 is in the "All" selection (5, 4, 1)
+      backupState.externalBackupLocation = { displayPath: '/Volumes/Backup', status: 'ready' };
+
+      render(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={vi.fn()} />);
+      await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
+      fireEvent.click(screen.getByText('All'));
+      fireEvent.click(screen.getByText('Next'));
+
+      expect(screen.getByText('3 on server')).toBeTruthy();
+      expect(screen.getByText('1 archived here')).toBeTruthy();
+      // Configured backup is called out, but never with a count attached.
+      expect(screen.getByText('backup configured')).toBeTruthy();
+      expect(screen.queryByText(/\d+\s*(in|on)?\s*backup/i)).toBeNull();
+    });
+
+    it('legend omits the backup note entirely when no backup is configured', async () => {
+      backupState.externalBackupLocation = null;
+
+      render(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={vi.fn()} />);
+      await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
+      fireEvent.click(screen.getByText('All'));
+      fireEvent.click(screen.getByText('Next'));
+
+      expect(screen.getByText('3 on server')).toBeTruthy();
+      expect(screen.queryByText('backup configured')).toBeNull();
+    });
+
+    it('Delete Everywhere renders as an action and produces the delete_everywhere id, with its own red confirmation distinct from plain delete', async () => {
+      const onConfirm = vi.fn();
+      render(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={onConfirm} />);
+      await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
+      fireEvent.click(screen.getByText('All'));
+      fireEvent.click(screen.getByText('Next'));
+
+      // Select it — at this point the footer still says "Start", so the row
+      // label is the only element with this exact text.
+      fireEvent.click(screen.getByText('Delete Everywhere'));
+
+      // The footer confirm button now shares the row's label text; its
+      // accessible name is the exact string (no description appended),
+      // unlike the row button's, so this resolves it unambiguously.
+      fireEvent.click(screen.getByRole('button', { name: 'Delete Everywhere' }));
+
+      // Its own confirmation — distinct header and body from the plain delete confirm.
+      expect(screen.getByText('Delete Everywhere?')).toBeTruthy();
+      expect(screen.queryByText('Confirm Delete')).toBeNull();
+      expect(screen.getByText(/Permanently remove 3 emails from the server, this computer, and your external backup\?/)).toBeTruthy();
+      expect(screen.getByText('There will be no copy left anywhere. This cannot be undone.')).toBeTruthy();
+      expect(screen.queryByText(/Are you sure\? This will permanently delete/)).toBeNull();
+
+      fireEvent.click(screen.getByText('Yes, Delete Everywhere'));
+      expect(onConfirm).toHaveBeenCalledWith({ action: 'delete_everywhere', uids: [5, 4, 1] });
+    });
+
+    it('plain Delete from Server confirmation copy is unchanged by the new delete_everywhere branch', async () => {
+      const onConfirm = vi.fn();
+      render(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={onConfirm} />);
+      await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
+      fireEvent.click(screen.getByText('All'));
+      fireEvent.click(screen.getByText('Next'));
+      fireEvent.click(screen.getByText('Delete from Server'));
+      fireEvent.click(screen.getByText('Confirm Delete'));
+
+      expect(screen.getByText('Confirm Delete', { selector: 'h2' })).toBeTruthy();
+      expect(screen.getByText(/Are you sure\? This will permanently delete 3 emails from the server\./)).toBeTruthy();
+      expect(screen.getByText('This cannot be undone.')).toBeTruthy();
+      expect(screen.queryByText(/no copy left anywhere/)).toBeNull();
+
+      fireEvent.click(screen.getByText('Yes, Delete'));
+      expect(onConfirm).toHaveBeenCalledWith({ action: 'delete', uids: [5, 4, 1] });
+    });
   });
 });
