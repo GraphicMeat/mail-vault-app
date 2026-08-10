@@ -293,6 +293,16 @@ describe('deleteSelectedFromServer', () => {
   it('re-renders a message with a surviving local copy as local-only after a successful server delete', async () => {
     const localCopy = seedThread()[0]; // uid 1, archived locally
 
+    // A regression here previously threw inside the try block and got
+    // silently absorbed by the pre-existing failure-path catch — which
+    // produces the same final row state via a different, wrong mechanism
+    // (immediate lift, before the reconcile, plus a false failure log).
+    // Guard both: no error logged, and the tombstone is still present at the
+    // moment loadEmails() runs (proving the lift happens strictly after the
+    // reconcile, not synchronously in the catch block).
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let tombstoneCountWhenLoadEmailsRan = null;
+
     useMailStore.setState({
       accounts: [ACCOUNT],
       activeAccountId: ACCOUNT.id,
@@ -312,6 +322,7 @@ describe('deleteSelectedFromServer', () => {
       // Stand-in for the real server round-trip: a genuine reconcile would
       // find uid 1 gone from the server and drop it from serverUidSet.
       loadEmails: vi.fn(() => {
+        tombstoneCountWhenLoadEmailsRan = useMailStore.getState().deleteTombstones.size;
         useMailStore.setState(s => ({
           serverUidSet: new Set([...s.serverUidSet].filter(u => u !== 1)),
         }));
@@ -325,10 +336,16 @@ describe('deleteSelectedFromServer', () => {
 
     await useMailStore.getState().deleteSelectedFromServer();
 
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+    // The tombstone must still be set when loadEmails() runs — a lift that
+    // happened earlier (e.g. from the failure-path catch) would show 0 here.
+    expect(tombstoneCountWhenLoadEmailsRan).toBe(1);
     expect(useMailStore.getState().deleteTombstones.size).toBe(0);
     const row = useMailStore.getState().sortedEmails.find(e => e.uid === 1);
     expect(row).toBeDefined();
     expect(row.source).toBe('local-only');
+
+    consoleErrorSpy.mockRestore();
   });
 
   // The same tombstone is load-bearing for a message with NO local copy —

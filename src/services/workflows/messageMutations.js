@@ -570,7 +570,7 @@ export async function deleteSelectedFromServer() {
 
   for (const key of keys) {
     try {
-      const { uid: realUid, accountId, mailbox, account: ctxAccount, emailObj } = contextOf(key);
+      const { uid: realUid, accountId, mailbox, account: ctxAccount, emailObj, tombstone } = contextOf(key);
 
       // Local-only messages (e.g. sent emails that never made it to server via
       // IMAP APPEND) live only in Maildir + local-index. Route them through the
