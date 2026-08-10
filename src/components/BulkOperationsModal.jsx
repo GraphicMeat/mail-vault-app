@@ -253,12 +253,28 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
   const isPartialLoad = !loadingPool && emailPool.length < totalEmails;
 
   // Same live-selection principle as selectedCount: once a hand edit diverges
-  // from the range's own result, the archived-locally warning and the
-  // Unarchive option must follow the checkboxes, not the stale range.
-  const hasArchivedSelected = useMemo(
-    () => [...selectedEmailIds].some(uid => archivedEmailIds.has(uid)),
-    [selectedEmailIds, archivedEmailIds]
-  );
+  // from the range's own result, the archived-locally warning, the Unarchive
+  // option, the legend, and the Delete-from-Server description must all
+  // follow the checkboxes, not the stale range. One traversal shared by all
+  // four consumers — selections here can reach ~15k, so this must not be a
+  // count computed once per consumer.
+  const archivedSelectedCount = useMemo(() => {
+    let n = 0;
+    for (const uid of selectedEmailIds) if (archivedEmailIds.has(uid)) n++;
+    return n;
+  }, [selectedEmailIds, archivedEmailIds]);
+  const hasArchivedSelected = archivedSelectedCount > 0;
+
+  // "Delete from Server" must not claim a copy survives when none does.
+  // Derived from the same archivedSelectedCount/selectedCount the legend
+  // already shows, not a fresh traversal — the two must always agree.
+  const deleteDescription = archivedSelectedCount === 0
+    ? 'Remove from server. No copy exists on this computer — this is permanent.'
+    : archivedSelectedCount < selectedCount
+      ? 'Remove from server only. Copies are kept only for the emails already archived here.'
+      : hasBackupConfigured
+        ? 'Remove from server only. Your copies on this computer and in backup are kept.'
+        : 'Remove from server only. Your copy on this computer is kept.';
 
   const handleConfirm = () => {
     if (selectedAction === 'delete' || selectedAction === 'archive_and_delete' || selectedAction === 'delete_everywhere') {
@@ -516,9 +532,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
               <div className="flex items-center gap-2 mb-3 text-xs text-mail-text-muted">
                 <span>{selectedCount.toLocaleString()} on server</span>
                 <span>·</span>
-                <span>
-                  {[...selectedEmailIds].filter(uid => archivedEmailIds.has(uid)).length.toLocaleString()} archived here
-                </span>
+                <span>{archivedSelectedCount.toLocaleString()} archived here</span>
                 {hasBackupConfigured && (<><span>·</span><span>backup configured</span></>)}
               </div>
               {/* Warning for locally-stored emails */}
@@ -549,7 +563,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                     id: 'delete',
                     icon: Trash2,
                     label: 'Delete from Server',
-                    description: 'Remove from server only. Copy on this computer and in backup kept.',
+                    description: deleteDescription,
                   },
                   {
                     id: 'archive_and_delete',

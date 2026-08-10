@@ -372,4 +372,48 @@ describe('BulkOperationsModal', () => {
       expect(onConfirm).toHaveBeenCalledWith({ action: 'delete', uids: [5, 4, 1] });
     });
   });
+
+  // Fix round 1: "Delete from Server" used to unconditionally claim a local
+  // and backup copy survive. That's the same class of error the whole
+  // feature exists to fix, just pointed the other way — must be conditional
+  // on the live archived/backup state, matching the legend above it.
+  describe('Delete from Server description reflects live archived/backup state', () => {
+    // "All" selects uids 5, 4, 1 (3 emails) — see WINDOW/CACHED_ROWS at top.
+    const openToStep2 = async () => {
+      render(<BulkOperationsModal isOpen onClose={vi.fn()} onConfirm={vi.fn()} />);
+      await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
+      fireEvent.click(screen.getByText('All'));
+      fireEvent.click(screen.getByText('Next'));
+    };
+
+    it('none archived: warns the deletion is permanent, does not say "kept"', async () => {
+      // archivedEmailIds is empty by default (cleared in beforeEach).
+      await openToStep2();
+      expect(screen.getByText('Remove from server. No copy exists on this computer — this is permanent.')).toBeTruthy();
+      expect(screen.queryByText(/kept/)).toBeNull();
+    });
+
+    it('all archived, no backup configured: only the local copy is named as kept', async () => {
+      archivedEmailIds.add(5); archivedEmailIds.add(4); archivedEmailIds.add(1);
+      backupState.externalBackupLocation = null;
+      await openToStep2();
+      expect(screen.getByText('Remove from server only. Your copy on this computer is kept.')).toBeTruthy();
+      expect(screen.queryByText(/permanent/)).toBeNull();
+    });
+
+    it('all archived, backup configured: both copies are named as kept', async () => {
+      archivedEmailIds.add(5); archivedEmailIds.add(4); archivedEmailIds.add(1);
+      backupState.externalBackupLocation = { displayPath: '/Volumes/Backup', status: 'ready' };
+      await openToStep2();
+      expect(screen.getByText('Remove from server only. Your copies on this computer and in backup are kept.')).toBeTruthy();
+    });
+
+    it('some but not all archived: only says copies survive for the already-archived ones', async () => {
+      archivedEmailIds.add(1); // 1 of 3 selected
+      backupState.externalBackupLocation = { displayPath: '/Volumes/Backup', status: 'ready' }; // must not change this branch's wording
+      await openToStep2();
+      expect(screen.getByText('Remove from server only. Copies are kept only for the emails already archived here.')).toBeTruthy();
+      expect(screen.queryByText(/permanent/)).toBeNull();
+    });
+  });
 });
