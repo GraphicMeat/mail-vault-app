@@ -54,6 +54,38 @@ const MOCK_ACCOUNTS = [
     // Its INBOX total is asserted verbatim by connected-list-header.
     crossFolderThread: false,
   },
+  // Accounts 3 and 4 exist only for connected-storage-matrix.test.js, which
+  // needs disposable server/vault/backup-mirror combinations it can delete
+  // permanently and (for account 4) a real IMAP delay to observe an
+  // in-flight delete — neither is safe to do against luke/vader, whose
+  // fixtures the rest of the connected-* suite depends on. Both are plain,
+  // small accounts; nothing else in the suite references them.
+  {
+    id: '33333333-3333-4333-8333-333333333333',
+    email: 'yoda@mock.test',
+    subjectPrefix: 'Yoda',
+    inbox: 3,
+    crossFolderThread: false,
+    archiveCount: 4,
+    archiveSubjectPrefix: 'Yoda archive',
+  },
+  {
+    id: '44444444-4444-4444-8444-444444444444',
+    email: 'leia@mock.test',
+    subjectPrefix: 'Leia',
+    inbox: 3,
+    crossFolderThread: false,
+    archiveCount: 6,
+    archiveSubjectPrefix: 'Leia archive',
+    // Delay every delete-ish response by 4s: STORE (+\Deleted flag), UID
+    // EXPUNGE (permanent delete path), UID MOVE (INBOX move-to-Trash path).
+    // See src-core/src/imap/mod.rs:delete_email for why both paths matter.
+    faults: [
+      { trigger: { OnCommand: 'STORE' }, action: { Delay: { secs: 4, nanos: 0 } } },
+      { trigger: { OnCommand: 'EXPUNGE' }, action: { Delay: { secs: 4, nanos: 0 } } },
+      { trigger: { OnCommand: 'MOVE' }, action: { Delay: { secs: 4, nanos: 0 } } },
+    ],
+  },
 ];
 
 let tauriWd;
@@ -127,6 +159,8 @@ export const config = {
         htmlQuoted: a.htmlQuoted,
         crossFolderThread: a.crossFolderThread,
         faults: a.faults,
+        archiveCount: a.archiveCount,
+        archiveSubjectPrefix: a.archiveSubjectPrefix,
       }))),
     );
     seededAccounts = MOCK_ACCOUNTS.map((a, i) => mockAccount({ ...a, port: mockServers[i].port }));

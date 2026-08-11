@@ -272,7 +272,7 @@ function append(box, messages) {
  * Default account mailbox set: INBOX plus the special-use folders the
  * archive / move-to-folder / compose specs expect to find.
  */
-export function scenario({ owner, inbox = 40, subjectPrefix, htmlQuoted = false, crossFolderThread = true, faults = [] } = {}) {
+export function scenario({ owner, inbox = 40, subjectPrefix, htmlQuoted = false, crossFolderThread = true, faults = [], archiveCount = 3, archiveSubjectPrefix = 'Archived message' } = {}) {
   const inboxBox = mailbox('INBOX', inbox, { owner, subjectPrefix, htmlQuoted });
   const sentBox = mailbox('Sent', 5, { owner, attrs: ['\\HasNoChildren', '\\Sent'], subjectPrefix: 'Sent message' });
 
@@ -323,7 +323,7 @@ export function scenario({ owner, inbox = 40, subjectPrefix, htmlQuoted = false,
         // copy of this folder (archives, deletes-from-server, and purges its 3
         // messages) — don't assume account 2's Archive still holds 3 seeded
         // messages in a spec that runs after it alphabetically.
-        mailbox('Archive', 3, { owner, attrs: ['\\HasNoChildren', '\\Archive'], subjectPrefix: 'Archived message' }),
+        mailbox('Archive', archiveCount, { owner, attrs: ['\\HasNoChildren', '\\Archive'], subjectPrefix: archiveSubjectPrefix }),
         mailbox('Drafts', 0, { owner, attrs: ['\\HasNoChildren', '\\Drafts'] }),
         mailbox('Trash', 0, { owner, attrs: ['\\HasNoChildren', '\\Trash'] }),
       ],
