@@ -357,8 +357,23 @@ describe('Bulk delete everywhere', function () {
   });
 
   it('follows a hand-edited checkbox, excluding the message already proven local-only', async function () {
-    const before = await bubbleCount();
-    expect(before).toBe(3);
+    // Poll rather than read once: this runs immediately after the previous
+    // test minimized the modal, and a bare read cannot tell "the count is
+    // wrong" from "the count has not painted yet". On failure, report what the
+    // bubble and the rows actually said — a bare `Expected 3, Received 0` sent
+    // an earlier diagnosis down the wrong path entirely.
+    let before;
+    try {
+      await browser.waitUntil(
+        async () => { before = await bubbleCount(); return before === 3; },
+        { timeout: 10_000, interval: 300 },
+      );
+    } catch {
+      // Gather the evidence at failure time, not before the wait.
+      const t = await bubbleText();
+      const r = await rows();
+      throw new Error(`Bubble never reported 3 selected (last read: ${before}). bubble="${t}" rows=${JSON.stringify(r)}`);
+    }
 
     // Deselect the fixture the previous test already deleted from the server —
     // it has no server copy left for Delete Everywhere's server phase to act
