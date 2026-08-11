@@ -39,6 +39,7 @@ import { RefreshCw, X } from 'lucide-react';
 import * as bulkApi from './services/api';
 import { bulkOperationManager } from './services/BulkOperationManager';
 import { resolveErrorToastProps } from './utils/errorToast';
+import { resolveEscapeAction } from './utils/escapeAction';
 import { migrationManager } from './services/migrationManager.js';
 import { restoreManager } from './services/restoreManager.js';
 import { version } from '../package.json';
@@ -272,16 +273,22 @@ function App() {
       if (uid) useMailStore.getState().toggleEmailSelection(uid);
     },
     escape: () => {
-      const { selectedEmailIds, clearSelection } = useMailStore.getState();
-      if (selectedEmailIds.size > 0) {
-        clearSelection();
-      } else if (composeState) {
-        setComposeState(null);
-      } else if (showSettings) {
-        setShowSettings(false);
-      } else if (showShortcutsModal) {
-        setShowShortcutsModal(false);
-      }
+      const {
+        selectedEmailIds, clearSelection, bulkModalOpen, bulkSession, endBulkSession,
+      } = useMailStore.getState();
+      const action = resolveEscapeAction({
+        bulkModalOpen,
+        bulkSessionActive: !!bulkSession?.active,
+        selectedCount: selectedEmailIds.size,
+        composeOpen: !!composeState,
+        settingsOpen: showSettings,
+        shortcutsOpen: showShortcutsModal,
+      });
+      if (action === 'end-bulk-session') endBulkSession();
+      else if (action === 'clear-selection') clearSelection();
+      else if (action === 'close-compose') setComposeState(null);
+      else if (action === 'close-settings') setShowSettings(false);
+      else if (action === 'close-shortcuts') setShowShortcutsModal(false);
     },
     focusSearch: () => {
       const input = document.querySelector('input[placeholder*="Search"]');
