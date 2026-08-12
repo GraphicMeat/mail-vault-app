@@ -559,6 +559,13 @@ export async function deleteSelectedFromServer() {
   get().updateSortedEmails();
 
   const deletedRealUids = new Set();
+  // Uids deleted out of the mailbox currently on screen. Only these can be
+  // pruned from the header sidecar here, because saveEmailHeaders rewrites a
+  // mailbox's whole entry from the `emails` array passed to it — handing it the
+  // active list while naming another mailbox would corrupt that mailbox's
+  // cache. Deletes in other mailboxes (Sent) are pruned when those are next
+  // loaded.
+  const deletedInActiveMailbox = new Set();
   // Tombstones to lift once the server delete succeeds AND the message still
   // has a surviving local (archived) copy on disk — those rows must re-render
   // as "Local only" rather than staying hidden for the rest of the session.
@@ -604,6 +611,7 @@ export async function deleteSelectedFromServer() {
         await api.deleteEmail(account, realUid, mailbox);
       }
       deletedRealUids.add(realUid);
+      if (!isUnified && mailbox === state.activeMailbox) deletedInActiveMailbox.add(realUid);
       if (!isUnified && get().archivedEmailIds.has(realUid)) {
         survivingLocalTombstones.add(tombstone);
       }
@@ -614,6 +622,25 @@ export async function deleteSelectedFromServer() {
       ts.delete(contextOf(key).tombstone);
       useMailStore.setState({ deleteTombstones: ts });
     }
+  }
+
+  // Prune the header sidecar for the rows just deleted.
+  //
+  // loadEmails() below cannot do this for us: it derives `removedUids` by
+  // diffing the emails it had before against what the server returns, and the
+  // optimistic update above already stripped these uids from `state.emails` —
+  // so they are absent from both sides and never register as newly-gone. Left
+  // unpruned, the session tombstone is the only thing hiding the row, and a
+  // reload (which wipes tombstones — they are store state) repaints a message
+  // that is gone from the server. deleteEmailFromServer has always pruned like
+  // this for the single-row path; the bulk paths never did, which is why
+  // deleting one row and deleting a selection behaved differently on reload.
+  if (!isUnified && deletedInActiveMailbox.size > 0) {
+    const s = get();
+    await db.saveEmailHeaders(
+      s.activeAccountId, s.activeMailbox, s.emails, s.totalEmails,
+      { removedUids: [...deletedInActiveMailbox] },
+    );
   }
 
   // Reconcile with the server: prunes the header cache and restores any email
@@ -861,6 +888,24 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
     useMailStore.setState({ savedEmailIds, archivedEmailIds, localEmails });
   }
   get().updateSortedEmails();
+
+  // Prune the header sidecar for the rows just purged — same reason as in
+  // deleteSelectedFromServer: the optimistic update already stripped these uids
+  // from `state.emails`, so loadEmails()'s prior-vs-server diff never sees them
+  // as newly-gone and leaves the sidecar entry behind. The session tombstone
+  // then hides the row only until a reload, after which a message purged from
+  // the server, the vault and the backup mirror reappears from cache.
+  //
+  // Only the active mailbox's group: saveEmailHeaders rewrites a mailbox's
+  // whole entry from the `emails` passed to it, so naming another mailbox while
+  // handing it the active list would corrupt that mailbox's cache.
+  if (!isUnified && activeGroup?.uids.length) {
+    const s = get();
+    await db.saveEmailHeaders(
+      s.activeAccountId, s.activeMailbox, s.emails, s.totalEmails,
+      { removedUids: [...activeGroup.uids] },
+    );
+  }
 
   if (!isUnified) get().loadEmails();
 

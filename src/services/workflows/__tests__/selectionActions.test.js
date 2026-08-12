@@ -286,6 +286,32 @@ describe('deleteSelectedFromServer', () => {
     expect(useMailStore.getState().deleteTombstones.size).toBe(0);
   });
 
+  // The tombstone that hides a deleted row is store state, so a reload wipes it.
+  // If the header sidecar still lists the uid, the row repaints as though it was
+  // never deleted. loadEmails() cannot prune it either — it diffs the emails it
+  // had against the server's, and the optimistic update already removed this uid
+  // from both sides. The single-row deleteEmailFromServer has always pruned;
+  // the bulk path did not, which is what an e2e reload assertion caught.
+  it('prunes the deleted uid from the header sidecar so a reload cannot resurrect it', async () => {
+    primeStore(seedThread(), [1]);
+
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    const prune = mockSaveEmailHeaders.mock.calls.find(c => c[4]?.removedUids?.includes(1));
+    expect(prune).toBeTruthy();
+    expect(prune[0]).toBe(ACCOUNT.id);
+    expect(prune[1]).toBe('INBOX');
+  });
+
+  it('does not prune a uid whose server delete failed', async () => {
+    mockDeleteEmail.mockRejectedValueOnce(new Error('nope'));
+    primeStore(seedThread(), [1]);
+
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    expect(mockSaveEmailHeaders.mock.calls.some(c => c[4]?.removedUids?.includes(1))).toBe(false);
+  });
+
   // "Delete from Server" promises the local copy survives. It does — the
   // .eml stays in Maildir — but nothing ever cleared the optimistic
   // tombstone, so the row stayed hidden for the rest of the session instead

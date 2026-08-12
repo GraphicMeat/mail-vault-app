@@ -33,6 +33,7 @@ vi.mock('../../api', () => ({
 
 const mockGetLocalIndexProvenance = vi.fn().mockResolvedValue(new Map());
 const mockGetEmailHeadersMeta = vi.fn().mockResolvedValue({ uidValidity: 1 });
+const mockSaveEmailHeaders = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../../db', () => ({
   initDB: vi.fn().mockResolvedValue(undefined),
@@ -45,7 +46,7 @@ vi.mock('../../db', () => ({
   getEmailHeadersPartial: vi.fn().mockResolvedValue({ emails: [], totalEmails: 0 }),
   getEmailHeadersMeta: (...a) => mockGetEmailHeadersMeta(...a),
   getCachedMailboxEntry: vi.fn().mockResolvedValue(null),
-  saveEmailHeaders: vi.fn().mockResolvedValue(undefined),
+  saveEmailHeaders: (...a) => mockSaveEmailHeaders(...a),
   getAccounts: vi.fn().mockResolvedValue([]),
 }));
 
@@ -131,6 +132,9 @@ beforeEach(() => {
   mockMaildirDeleteMany.mockReset().mockResolvedValue({ removed: 0 });
   mockBackupPurgeUids.mockReset().mockResolvedValue({ removed: 0, queued: 0 });
   mockGetLocalIndexProvenance.mockReset().mockResolvedValue(new Map());
+  // Without this, prune assertions match a previous test's call and pass (or
+  // fail) for the wrong reason.
+  mockSaveEmailHeaders.mockReset().mockResolvedValue(undefined);
   mockCheckMailboxStatus.mockReset().mockResolvedValue({ uidValidity: 1 });
   mockGetEmailHeadersMeta.mockReset().mockResolvedValue({ uidValidity: 1 });
   mockGraphDeleteMessage.mockReset().mockResolvedValue(undefined);
@@ -149,6 +153,34 @@ describe('purgeEverywhere — storage matrix', () => {
     expect(mockMaildirDeleteMany).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX.Spam', [1]);
     expect(res.deleted).toBe(1);
     expect(res.failed).toBe(0);
+  });
+
+  // The tombstone hiding a purged row is store state, so a reload wipes it. If
+  // the header sidecar still lists the uid, a message purged from the server,
+  // the vault AND the backup mirror repaints from cache as though nothing
+  // happened. loadEmails() cannot prune it — it diffs the emails it had against
+  // the server's, and the optimistic update already removed this uid from both.
+  // This is the mechanism behind the e2e "does not bring the rows back on
+  // reload" failure.
+  it('prunes purged uids from the header sidecar so a reload cannot resurrect them', async () => {
+    prime({ emails: [serverMsg(1), serverMsg(2)], archived: [1, 2] });
+
+    await purgeEverywhere([1, 2]);
+
+    const prune = mockSaveEmailHeaders.mock.calls.find(c => c[4]?.removedUids?.length);
+    expect(prune).toBeTruthy();
+    expect(prune[0]).toBe(ACCOUNT.id);
+    expect(prune[1]).toBe('INBOX.Spam');
+    expect([...prune[4].removedUids].sort()).toEqual([1, 2]);
+  });
+
+  it('does not prune a uid whose server delete failed', async () => {
+    mockDeleteEmail.mockRejectedValue(new Error('boom'));
+    prime({ emails: [serverMsg(1)], archived: [1] });
+
+    await purgeEverywhere([1]);
+
+    expect(mockSaveEmailHeaders.mock.calls.some(c => c[4]?.removedUids?.includes(1))).toBe(false);
   });
 
   it('server + vault: purges the archived local copy', async () => {
