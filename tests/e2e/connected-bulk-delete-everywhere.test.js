@@ -461,19 +461,89 @@ describe('Bulk delete everywhere', function () {
     // server-deleted the third, so only the local-only survivor can render.
     await switchToVaderArchive({ expectEmails: false });
 
+    // Wait for the survivor BEFORE asserting anything about the deleted rows.
+    //
+    // Order matters here, and the old order made this test unreliable in both
+    // directions. A local-only row is not part of the server fetch: it appears
+    // only once loadEmails() has also read the Maildir and the local index, a
+    // round-trip that lands after the folder header does — so reading the list
+    // straight after the switch caught an empty list that was merely early. In
+    // the other direction, "the deleted rows are gone" passes trivially on that
+    // same empty list, so checking it first could have gone green while the
+    // folder had not loaded at all. Waiting for the row that MUST be there
+    // proves the folder is really populated, and everything after it is then
+    // asserted against a settled list.
+    await browser.waitUntil(
+      async () => (await rows()).some(r => r.subject === localOnlySubject),
+      { timeout: 30_000, interval: 500, timeoutMsg: 'never-appeared' },
+    ).catch(() => { /* fall through to the diagnostic below */ });
+
     const list = await rows();
-    // If the vault purge in purgeEverywhere were dropped, these two would
-    // still have a `.eml` on disk and archivedEmailIds would still list
-    // them — exactly like the local-only fixture below — so they'd
-    // re-render as Local-only rows instead of staying gone.
+    // The message this spec deliberately left local-only must come back that
+    // way — this is what confirms the reload reflects real persisted state.
+    const survivor = list.find(r => r.subject === localOnlySubject);
+    if (!survivor) {
+      // A local-only row needs two things to render: the message in
+      // `localEmails`, and its uid in `archivedEmailIds` (see
+      // messageListSlice's updateSortedEmails). Read both, plus what the
+      // Maildir on disk actually says, so the failure names which one is
+      // missing instead of just "no row".
+      const [, vaderEmail] = browser.mockAccounts.map(a => a.email);
+      const vaderId = browser.mockAccounts.find(a => a.email === vaderEmail).id;
+      const store = await browser.execute(() => {
+        const s = window.__MAIL_STORE__?.getState?.();
+        if (!s) return null;
+        return {
+          activeAccountId: s.activeAccountId, activeMailbox: s.activeMailbox, viewMode: s.viewMode,
+          emails: (s.emails || []).map(e => ({ uid: e.uid, subject: e.subject })),
+          // sortedEmails is what the list renders — if the row is here but not
+          // in the DOM the problem is rendering, not derivation.
+          sortedEmails: (s.sortedEmails || []).map(e => ({ uid: e.uid, subject: e.subject, source: e.source })),
+          localEmails: (s.localEmails || []).map(e => ({ uid: e.uid, subject: e.subject, source: e.source })),
+          archivedEmailIds: [...(s.archivedEmailIds || [])],
+          savedEmailIds: [...(s.savedEmailIds || [])],
+          serverUidSet: [...(s.serverUidSet || [])],
+          tombstones: [...(s.deleteTombstones || [])],
+        };
+      });
+      const disk = await browser.executeAsync((accountId, mailbox, done) => {
+        const inv = window.__TAURI__.core.invoke;
+        Promise.all([
+          inv('maildir_list', { accountId, mailbox, requireFlag: null }).catch(e => ({ __error: String(e) })),
+          inv('maildir_list', { accountId, mailbox, requireFlag: 'archived' }).catch(e => ({ __error: String(e) })),
+          inv('local_index_read', { accountId, mailbox }).catch(e => ({ __error: String(e) })),
+        ]).then(([all, archived, index]) => done({ all, archived, index })).catch(e => done({ __error: String(e) }));
+      }, vaderId, 'Archive');
+      // All the inputs can be right and the row still absent, if the
+      // memoization guard decided nothing changed. Clear the fingerprint and
+      // re-derive from the very same state: if the row appears, the derivation
+      // was never the problem — the guard skipped it.
+      const forced = await browser.execute(() => {
+        const store = window.__MAIL_STORE__;
+        if (!store) return null;
+        const before = store.getState().sortedEmails.length;
+        const fingerprint = store.getState()._sortedEmailsFingerprint;
+        store.setState({ _sortedEmailsFingerprint: '' });
+        store.getState().updateSortedEmails();
+        return { fingerprint, before, after: store.getState().sortedEmails.length };
+      });
+      throw new Error(
+        `"${localOnlySubject}" did not come back as a Local-only row after the reload, within 30s.\n` +
+        `  rendered rows: ${JSON.stringify(list)}\n` +
+        `  store: ${JSON.stringify(store)}\n` +
+        `  forced re-derive: ${JSON.stringify(forced)}\n` +
+        `  disk: ${JSON.stringify(disk)}`,
+      );
+    }
+    expect(survivor.localOnly).toBe(true);
+
+    // Now that the folder is proven populated, the purged rows must be absent
+    // from that same settled list. If the vault purge in purgeEverywhere were
+    // dropped, these two would still have a `.eml` on disk and archivedEmailIds
+    // would still list them — exactly like the survivor — so they would render
+    // as Local-only rows instead of staying gone.
     for (const subject of deletedSubjects) {
       expect(list.some(r => r.subject === subject)).toBe(false);
     }
-    // The message this spec deliberately left local-only must still come
-    // back that way — confirms the reload reflects real persisted state
-    // rather than the folder simply being empty.
-    const survivor = list.find(r => r.subject === localOnlySubject);
-    expect(survivor).toBeTruthy();
-    expect(survivor.localOnly).toBe(true);
   });
 });
