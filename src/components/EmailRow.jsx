@@ -76,11 +76,20 @@ export const EmailRow = React.memo(function EmailRow({ email, isSelected, onSele
         <span className="truncate">{getSenderName(email)}</span>
       </div>
 
-      <div className="flex-1 min-w-0 flex items-center gap-2">
+      {/*
+        min-w-[120px], not min-w-0, and flex-1 on the subject span below.
+        The sender column is a fixed w-48 that only gives up space once the
+        flex line overflows — and min-w-0 here meant it never did, because
+        this column absorbed the whole deficit instead. At a 349px row that
+        left 51px for a 67px date and the subject rendered at 0px wide: for
+        every message whose date carries a year, the row showed a sender and
+        a date and no subject at all.
+      */}
+      <div className="flex-1 min-w-[120px] flex items-center gap-2">
         <SenderAlertIcon level={email._senderAlert} email={email} />
         <ReplyToAlertIcon mismatch={email._replyToMismatch} />
         <LinkAlertIcon level={email._linkAlert} alerts={getCachedAlerts(email.uid)} />
-        <span className={`truncate ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
+        <span className={`flex-1 min-w-0 truncate ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
           {email.subject}
         </span>
         {email.hasAttachments && (
@@ -175,7 +184,8 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSe
           <SenderAlertIcon level={email._senderAlert} email={email} size={12} />
           <ReplyToAlertIcon mismatch={email._replyToMismatch} size={12} />
           <LinkAlertIcon level={email._linkAlert} size={12} alerts={getCachedAlerts(email.uid)} />
-          <span className={`truncate text-sm leading-snug ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
+          {/* flex-1 min-w-0: same shrink-to-nothing hazard as the row above. */}
+          <span className={`flex-1 min-w-0 truncate text-sm leading-snug ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
             {email.subject}
           </span>
           {email.hasAttachments && (
