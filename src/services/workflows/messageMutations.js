@@ -635,12 +635,20 @@ export async function deleteSelectedFromServer() {
   // that is gone from the server. deleteEmailFromServer has always pruned like
   // this for the single-row path; the bulk paths never did, which is why
   // deleting one row and deleting a selection behaved differently on reload.
+  // Pin the identity, same hazard as in purgeEverywhere: these uids were
+  // collected against the account/mailbox that was active when the loop started,
+  // but the per-message server deletes above take seconds and the user can
+  // switch view inside that window. Pruning the mailbox that happens to be on
+  // screen now, with uids from the one we deleted from, makes a row disappear
+  // from a mailbox nobody touched — uids are unique per mailbox, not globally.
   if (!isUnified && deletedInActiveMailbox.size > 0) {
     const s = get();
-    await db.saveEmailHeaders(
-      s.activeAccountId, s.activeMailbox, s.emails, s.totalEmails,
-      { removedUids: [...deletedInActiveMailbox] },
-    );
+    if (s.activeAccountId === state.activeAccountId && s.activeMailbox === state.activeMailbox) {
+      await db.saveEmailHeaders(
+        state.activeAccountId, state.activeMailbox, s.emails, s.totalEmails,
+        { removedUids: [...deletedInActiveMailbox] },
+      );
+    }
   }
 
   // Reconcile with the server: prunes the header cache and restores any email
@@ -899,12 +907,22 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
   // Only the active mailbox's group: saveEmailHeaders rewrites a mailbox's
   // whole entry from the `emails` passed to it, so naming another mailbox while
   // handing it the active list would corrupt that mailbox's cache.
+  // Pin the identity: `activeGroup.uids` belongs to the mailbox this purge ran
+  // against, while `s.emails` is whatever is on screen NOW — the purge spans
+  // seconds of server, vault and backup awaits, and the user can switch account
+  // or folder inside that window. Writing one with the other hands a different
+  // account's cache a foreign uid list, and a row vanishes from a mailbox
+  // nobody deleted from (uids collide freely across accounts — they are only
+  // unique per mailbox). If the view moved, skip: that mailbox is not on screen
+  // and its cache reconciles the next time it loads.
   if (!isUnified && activeGroup?.uids.length) {
     const s = get();
-    await db.saveEmailHeaders(
-      s.activeAccountId, s.activeMailbox, s.emails, s.totalEmails,
-      { removedUids: [...activeGroup.uids] },
-    );
+    if (s.activeAccountId === activeGroup.accountId && s.activeMailbox === activeGroup.mailbox) {
+      await db.saveEmailHeaders(
+        activeGroup.accountId, activeGroup.mailbox, s.emails, s.totalEmails,
+        { removedUids: [...activeGroup.uids] },
+      );
+    }
   }
 
   if (!isUnified) get().loadEmails();

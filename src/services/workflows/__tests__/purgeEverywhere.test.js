@@ -293,6 +293,27 @@ describe('purgeEverywhere — storage matrix', () => {
     expect(res.deleted).toBe(0);
   });
 
+  // A purge spans seconds of server, vault and backup awaits, and the user can
+  // switch account or folder inside that window. The uids belong to the mailbox
+  // the purge ran against; `state.emails` after the awaits belongs to whatever
+  // is on screen now. Writing one with the other hands another account's cache a
+  // foreign uid list — and uids are unique per mailbox, not globally, so a row
+  // vanishes from a mailbox nobody deleted from. Seen on the mac mini: a purge
+  // on one account made an unrelated row disappear from another account's
+  // Archive while the server still had it.
+  it('does not prune when the user switched account mid-purge', async () => {
+    prime({ emails: [serverMsg(1)], archived: [1] });
+    const OTHER = '99999999-9999-4999-8999-999999999999';
+    mockDeleteEmail.mockImplementation(async () => {
+      // The view moves while the server delete is in flight.
+      useMailStore.setState({ activeAccountId: OTHER, activeMailbox: 'Archive' });
+    });
+
+    await purgeEverywhere([1]);
+
+    expect(mockSaveEmailHeaders.mock.calls.some(c => c[4]?.removedUids?.length)).toBe(false);
+  });
+
   it('mixed batch: only the uids whose server delete succeeded are purged locally', async () => {
     mockDeleteEmail.mockImplementation((_a, uid) =>
       uid === 3 ? Promise.reject(new Error('boom')) : Promise.resolve());
