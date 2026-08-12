@@ -40,7 +40,7 @@
  * next to its definition in mockImap.js).
  */
 
-import { waitForApp, waitForEmails } from './helpers.js';
+import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
 
 describe('Bulk delete everywhere', function () {
   this.timeout(180_000);
@@ -237,7 +237,15 @@ describe('Bulk delete everywhere', function () {
   before(async function () {
     await waitForApp();
     await waitForEmails();
-    await switchToVaderArchive();
+    // The shared helper for the opening switch, not the local one: this spec
+    // now starts from a genuinely cold app data dir (wdio.conf.js exports
+    // E2E_DATA_DIR, so beforeSession's resetAppState finally wipes the
+    // directory the app actually uses), and a cold first fetch of vader's
+    // Archive can land with zero rows. switchToFolder retries the whole
+    // sequence and waits for the store to settle on the pair it asked for;
+    // the local switchToVaderArchive only retries the sidebar listing.
+    const [, vaderEmail] = browser.mockAccounts.map(a => a.email);
+    await switchToFolder(vaderEmail, 'Archive');
     folderName = await folderHeaderText();
     expect(folderName).toBe('Archive');
     expect((await rows()).length).toBeGreaterThan(0);

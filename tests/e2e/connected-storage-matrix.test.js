@@ -2,52 +2,39 @@
  * E2E Test: storage-matrix diagnostics for "Delete Everywhere"
  *
  * A message can live in three places: the IMAP server, the local vault
- * Maildir, and the external backup mirror. This spec is diagnostic, not a
- * regression pin — it exists to show what actually happens across every
- * combination of those three, across a reload, across two accounts at once,
- * and in unified inbox. It does not change product code.
+ * Maildir, and the external backup mirror. This spec walks every combination
+ * of those three, across a reload, across three accounts at once, and in
+ * unified inbox.
  *
- * REWORK NOTE (second pass): the first cut added two throwaway accounts
- * (yoda/leia). That broke visual-screens/visual-settings — extra account
- * avatars in the sidebar shifted every baseline screenshot — and the repo
- * owner ruled against a third account even to keep delay-fault coverage.
- * This version gives the matrix its own mailboxes on the two EXISTING
- * accounts instead:
- *   - vader@mock.test gets one extra mailbox, "Matrix" (wdio.conf.js
- *     MOCK_ACCOUNTS[1].extraMailbox) — vader is never the active account in
- *     either visual spec, so a mailbox only it has never appears in a
- *     baseline. Its existing INBOX (700, exact-count fixture for
- *     connected-list-header) and Archive (permanently consumed by
- *     connected-bulk-delete-everywhere) are untouched.
- *   - luke@mock.test's existing Archive folder gets a bigger, renamed
- *     fixture (archiveCount 4, prefix "Luke archive" instead of the default
- *     "Archived message") — confirmed via a codebase search that no spec
- *     reads luke's Archive or asserts an exact luke INBOX count. luke IS the
- *     default active account, so nothing new was added to its INBOX or its
- *     folder list beyond renaming Archive's own contents.
- *   - luke's INBOX loses exactly one ordinary message (uid 2, "Luke message
- *     2") to the unified-inbox test — chosen because no spec names it (the
- *     one spec that names a specific luke INBOX message,
- *     connected-selection-actions.test.js, uses uid 7 for a non-destructive
- *     read/unread toggle) and INBOX deletes here are non-permanent (COPY to
- *     Trash), so the message isn't actually gone from the account.
+ * It began as pure diagnostics. Most of it is now regression pins, because the
+ * diagnostics found real bugs and those bugs got fixed: the cross-account
+ * sidecar prune, the subject column collapsing to zero width, and a prune that
+ * was skipped whenever the view moved mid-delete. One test is still a pin on an
+ * OPEN bug and is expected to fail — see "a confirmed delete survives the app
+ * reloading mid-flight". Every other failure here means something regressed.
  *
- * DROPPED: the delay-fault coverage (in-flight visibility, the owner's
- * switch-mailbox hypothesis) from the first pass. Faults in the mock IMAP
- * server are per-connection/per-account (src-mock-imap/src/scenario.rs's
- * Trigger is only OnCommand/OnNthCommand/OnConnect — there is no per-mailbox
- * scoping), so a delay lives on the shared vader or luke server and would
- * slow or flake every other spec's deletes (connected-selection-actions,
- * connected-move-to-folder, etc.) for the whole suite run. OnNthCommand was
- * considered and rejected: it requires deterministic command ordering across
- * the whole suite, which nothing here guarantees, and a fault that
- * occasionally fires against the wrong spec is worse than no fault. That
- * work already produced its finding before being dropped (see the report):
- * the owner's hypothesis did not reproduce (the tombstone hides a row
- * instantly and survives a plain switch fine); a reload during a genuinely
- * slow in-flight delete does show the row, correctly, because the server
- * hasn't deleted it yet. Re-running that specific scenario is what's lost —
- * covered here only by prose, not by a live test.
+ * FIXTURES (third pass). Each account here earns its place:
+ *   - vader@mock.test owns one extra mailbox, "Matrix" (wdio.conf.js
+ *     MOCK_ACCOUNTS[1].extraMailbox), so the matrix never touches vader's
+ *     INBOX (700, an exact-count fixture for connected-list-header) or its
+ *     Archive (permanently consumed by connected-bulk-delete-everywhere).
+ *   - luke@mock.test's Archive carries a bigger, renamed fixture
+ *     (archiveCount 4, prefix "Luke archive") — no other spec reads it.
+ *   - yoda@mock.test is new and exists for two reasons the other two cannot
+ *     serve. Its server stalls MOVE and EXPUNGE by 4s, which is the only way
+ *     to observe an in-flight delete: mock faults are per-account with no
+ *     per-mailbox scoping (src-mock-imap/src/scenario.rs's Trigger is
+ *     OnCommand / OnNthCommand / OnConnect), so the same fault on luke or
+ *     vader would slow every other spec's deletes. And its UIDs start at 901,
+ *     which — since dates derive from the UID — makes its mail the newest in
+ *     the suite and therefore the only mail that can reach the unified
+ *     inbox's rendered window at all.
+ *
+ * The earlier cut dropped both of those and left the delay coverage as prose.
+ * The reason given was that a third account shifts every visual-* baseline
+ * screenshot; those specs are `local-manual` and never run in CI, so the real
+ * cost is regenerating developer-local baselines once, and the coverage is
+ * worth more than that.
  *
  * Key grounding established by reading the product code (not asserted here,
  * just what shaped this spec's design):
@@ -84,10 +71,13 @@
  *     title^="Local only". No per-row backup/cloud indicator exists.
  */
 
-import { existsSync, mkdtempSync, readdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { waitForApp, waitForEmails } from './helpers.js';
+import {
+  waitForApp, waitForEmails,
+  clickSidebarItem, folderHeaderText, switchToFolder, churnAccounts,
+} from './helpers.js';
 import { appDataDir } from './mockImap.js';
 
 describe('Storage matrix diagnostics', function () {
@@ -96,6 +86,12 @@ describe('Storage matrix diagnostics', function () {
   const HOME = () => browser.testDataDir;
   const LUKE = 'luke@mock.test';
   const VADER = 'vader@mock.test';
+  // The faulted account: MOVE and EXPUNGE stall 4s on its server alone, so a
+  // delete started here is still on the wire while the view moves underneath
+  // it. Its UIDs start at 901, which makes its mail the newest in the suite
+  // and therefore the only mail that reaches the unified inbox's rendered
+  // window (see wdio.conf.js MOCK_ACCOUNTS for both).
+  const YODA = 'yoda@mock.test';
 
   const accountOf = (email) => browser.mockAccounts.find((a) => a.email === email);
   const accountIdOf = (email) => accountOf(email).id;
@@ -116,6 +112,31 @@ describe('Storage matrix diagnostics', function () {
 
   function vaultFile(accountId, mbox, uid) {
     return findByUid(join(appDataDir(HOME()), 'Maildir', accountId, mbox, 'cur'), uid);
+  }
+
+  /**
+   * Every file the vault Maildir holds, as `accountId/mailbox/cur → [names]`.
+   *
+   * `vaultFile()` returning null has two very different causes — the archive
+   * never wrote anything, or it wrote somewhere this spec is not looking (the
+   * vault root is relocatable, and `maildir_cur_path` sanitises the mailbox
+   * name) — and a boolean cannot tell them apart.
+   */
+  function vaultTree() {
+    const root = join(appDataDir(HOME()), 'Maildir');
+    if (!existsSync(root)) return { root, missing: true };
+    const tree = {};
+    for (const account of readdirSync(root)) {
+      const accountDir = join(root, account);
+      // The Maildir root also holds plain files (`.maildir_version`) — readdir
+      // them and the whole checkpoint dies on ENOTDIR.
+      if (!existsSync(accountDir) || !statSync(accountDir).isDirectory()) continue;
+      for (const mbox of readdirSync(accountDir)) {
+        const cur = join(accountDir, mbox, 'cur');
+        if (existsSync(cur)) tree[`${account}/${mbox}`] = readdirSync(cur);
+      }
+    }
+    return tree;
   }
 
   function backupFile(email, mbox, uid) {
@@ -148,6 +169,57 @@ describe('Storage matrix diagnostics', function () {
 
   function sidecarExists(accountId, mbox, uid) {
     return existsSync(join(appDataDir(HOME()), 'email_cache', cacheBaseName(accountId, mbox), `${uid}.json`));
+  }
+
+  /** Every UID the sidecar cache holds for one mailbox, ascending. */
+  function sidecarUids(accountId, mbox) {
+    const dir = join(appDataDir(HOME()), 'email_cache', cacheBaseName(accountId, mbox));
+    if (!existsSync(dir)) return null;
+    return readdirSync(dir)
+      .filter((n) => /^\d+\.json$/.test(n))
+      .map((n) => parseInt(n, 10))
+      .sort((a, b) => a - b);
+  }
+
+  /**
+   * A row can go missing at four different places, and the four look identical
+   * from the DOM. Read all of them at once so a failure names the layer instead
+   * of the symptom:
+   *
+   *   sidecar  — the on-disk header cache. Missing here = something pruned it.
+   *   store    — `emails` in the mail store. Present in sidecar but not here =
+   *              the load dropped it.
+   *   sorted   — `sortedEmails`, after the tombstone and \Deleted filters.
+   *              Present in `emails` but not here = a filter is hiding it.
+   *   dom      — what the virtualizer actually rendered. Present in sorted but
+   *              not here = it is below the render window, not missing.
+   *
+   * Plus the live tombstone set, which is the one piece of state that hides a
+   * row without removing it from anywhere.
+   */
+  async function whereIsRow(accountId, mbox, uid) {
+    const store = await browser.execute(() => {
+      const s = window.__MAIL_STORE__?.getState?.();
+      if (!s) return null;
+      return {
+        activeAccountId: s.activeAccountId,
+        activeMailbox: s.activeMailbox,
+        emailUids: (s.emails || []).map((e) => e.uid),
+        sortedUids: (s.sortedEmails || []).map((e) => e.uid),
+        tombstones: [...(s.deleteTombstones || [])],
+        serverUidSetSize: s.serverUidSet?.size ?? null,
+      };
+    });
+    return {
+      uid,
+      sidecar: sidecarUids(accountId, mbox),
+      store: store && {
+        ...store,
+        inEmails: store.emailUids.includes(uid),
+        inSorted: store.sortedUids.includes(uid),
+      },
+      dom: (await rows()).map((r) => r.text.replace(/\n/g, ' ').trim()),
+    };
   }
 
   /**
@@ -255,73 +327,25 @@ describe('Storage matrix diagnostics', function () {
     });
   }
 
-  function clickSidebarItem(text) {
-    return browser.execute((needle) => {
-      const sidebar = document.querySelector('[data-testid="sidebar"]');
-      if (!sidebar) return false;
-      for (const el of sidebar.querySelectorAll('*')) {
-        if (el.children.length === 0 && (el.textContent || '').trim() === needle) {
-          el.click();
-          return true;
-        }
-      }
-      return false;
-    }, text);
-  }
-
-  const sidebarHasFolder = (name) => browser.execute((needle) =>
-    (document.querySelector('[data-testid="sidebar"]')?.innerText || '').includes(needle), name);
-
-  const folderHeaderText = () => browser.execute(() => document.querySelector('h2')?.textContent?.trim() || '');
+  // clickSidebarItem / switchToFolder / churnAccounts now live in helpers.js —
+  // they were written here, but the switching coverage below needs them in
+  // more than one spec and they carry hard-won waits worth sharing.
 
   /**
-   * The harness has a documented class of "first fetch of a session" races
-   * (see connected-bulk-delete-everywhere.test.js's switchToVaderArchive). A
-   * bare switch can time out a full 60s in waitForEmails() with nothing
-   * rendered at all — retry the whole switch sequence once, not just the
-   * sidebar-listing sub-step below.
+   * Visit every account in turn and come back. `home` is where the caller was
+   * before the churn, so the view ends where it started.
+   *
+   * A single switch away and back is not what breaks: the cache writes and
+   * tombstones that leak across accounts need the active pair to move several
+   * times before a stale key lines up with fresh data. Run this after every
+   * mutating action, not just once at the end.
    */
-  async function switchToFolder(email, folderName, opts = {}) {
-    try {
-      await switchToFolderOnce(email, folderName, opts);
-    } catch (e) {
-      console.warn(`[storage-matrix] switchToFolder(${email}, ${folderName}) failed once (${e.message}) — retrying`);
-      await switchToFolderOnce(email, folderName, opts);
-    }
-  }
-
-  async function switchToFolderOnce(email, folderName, { requireRows = true } = {}) {
-    expect(await clickSidebarItem(email)).toBe(true);
-    try {
-      await browser.waitUntil(() => sidebarHasFolder(folderName), { timeout: 8_000, interval: 300 });
-    } catch {
-      // First folder fetch of a session can race credential loading (same
-      // gap connected-bulk-delete-everywhere.test.js works around) — retry once.
-      expect(await clickSidebarItem(email)).toBe(true);
-      await browser.waitUntil(() => sidebarHasFolder(folderName), {
-        timeout: 15_000, interval: 300, timeoutMsg: `${email} never listed a "${folderName}" folder`,
-      });
-    }
-    expect(await clickSidebarItem(folderName)).toBe(true);
-    // waitForEmails() only checks "some row exists", which a virtualized
-    // list can satisfy with the PREVIOUS folder's still-rendered rows for a
-    // moment after the click — wait for the header to actually say the
-    // folder we asked for before treating the switch as done.
-    await browser.waitUntil(async () => (await folderHeaderText()) === folderName, {
-      timeout: 10_000, interval: 300, timeoutMsg: `Folder header never showed "${folderName}" after switching (${email})`,
-    });
-    await waitForEmails();
-    // waitForEmails()'s own success criteria includes the EMPTY-state
-    // element — a mailbox visited for the first time this session can
-    // resolve into that state genuinely empty. Every folder this spec
-    // expects rows from is non-empty by construction — re-click once if it isn't.
-    if (requireRows && (await rows()).length === 0) {
-      expect(await clickSidebarItem(folderName)).toBe(true);
-      await browser.waitUntil(async () => (await rows()).length > 0, {
-        timeout: 20_000, interval: 500, timeoutMsg: `"${folderName}" (${email}) still empty on retry — cold-start folder fetch never produced rows`,
-      });
-    }
-  }
+  const churn = (home) => churnAccounts([
+    { email: LUKE, folder: 'Archive' },
+    { email: YODA, folder: 'INBOX' },
+    { email: VADER, folder: 'Matrix' },
+    home,
+  ]);
 
   const waitClick = (fn, msg) => browser.waitUntil(fn, { timeout: 15_000, interval: 300, timeoutMsg: msg });
   const waitForBodyText = (needle, msg) => browser.waitUntil(() => bodyIncludes(needle), { timeout: 15_000, interval: 300, timeoutMsg: msg });
@@ -333,7 +357,37 @@ describe('Storage matrix diagnostics', function () {
     await waitForEmails();
     backupRoot = mkdtempSync(join(tmpdir(), 'mailvault-e2e-backup-'));
     console.log('[storage-matrix] backup mirror root:', backupRoot);
-    console.log('[storage-matrix] luke accountId=%s, vader accountId=%s', accountIdOf(LUKE), accountIdOf(VADER));
+    console.log('[storage-matrix] accountIds: luke=%s vader=%s yoda=%s',
+      accountIdOf(LUKE), accountIdOf(VADER), accountIdOf(YODA));
+  });
+
+  /**
+   * Bystander watch.
+   *
+   * The failure this spec keeps surfacing is a row disappearing from a mailbox
+   * NOTHING in the failing test touched — luke's Archive losing a UID while a
+   * test operates on vader. A failure at the end of the run cannot say which
+   * action did it, so record the bystander caches after every single test: the
+   * first checkpoint that comes back short names the culprit directly.
+   *
+   * Cheap (two readdirs) and never throws — a broken checkpoint must not mask
+   * the assertion that actually failed.
+   */
+  afterEach(function () {
+    try {
+      console.log('[checkpoint] after "%s" — luke/Archive sidecar uids=%s, vader/Matrix=%s, yoda/INBOX=%s',
+        this.currentTest?.title,
+        JSON.stringify(sidecarUids(accountIdOf(LUKE), 'Archive')),
+        JSON.stringify(sidecarUids(accountIdOf(VADER), 'Matrix')),
+        JSON.stringify(sidecarUids(accountIdOf(YODA), 'INBOX')));
+      // Where the vault actually put its .eml files. Several matrix rows
+      // report "archived badge true, no vault file", and the two candidate
+      // explanations — the write never happened, or this spec is reading the
+      // wrong directory — are indistinguishable from a boolean. List the tree.
+      console.log('[checkpoint] vault tree: %s', JSON.stringify(vaultTree()));
+    } catch (e) {
+      console.warn('[checkpoint] could not read caches:', e.message);
+    }
   });
 
   /**
@@ -370,6 +424,14 @@ describe('Storage matrix diagnostics', function () {
   //   Luke archive 2 -> row 2 (archived, no backup — the positive case)
   //   Luke archive 3 -> row 5 (archived + delete-from-server, no backup)
   //   Luke archive 4 -> cross-account section below
+  //   Yoda message 903 -> in-flight section below
+  //   Yoda message 905 -> unified-inbox section below
+  //
+  // Note the UID collision this is built on, deliberately: "Vader matrix 4"
+  // and "Luke archive 4" are both uid 4, in different accounts. A uid is
+  // unique per mailbox and nowhere else, so any cache write that pairs one
+  // mailbox's uid list with another mailbox's key drops the bystander — which
+  // is exactly what the cross-account section watches for.
 
   describe('bulk modal legend never reports a backup count', function () {
     it('omits any backup mention when no backup location is configured', async function () {
@@ -672,18 +734,28 @@ describe('Storage matrix diagnostics', function () {
   });
 
   // ═══════════════════════════════════════════════════════════════════════
-  // Section: two accounts at once — cross-account bleed
+  // Section: three accounts at once — cross-account bleed
   // ═══════════════════════════════════════════════════════════════════════
   //
-  // No artificial delay (see the file-header note on the dropped fault
-  // coverage) — this tests whether starting a delete on one account and
-  // immediately switching to the other, without waiting for the first to
-  // settle, leaks a tombstone or a stray selection across the switch. It is
-  // not a genuine in-flight race (both deletes likely complete before this
-  // test even finishes reading the DOM), just a same-tick account switch.
+  // The bug class this section exists for: a write keyed by (account, mailbox)
+  // that reads half its inputs before an await and half after. A single switch
+  // away and back rarely lines the halves up wrong; several switches, with a
+  // mutating action between them, does. So every action here is followed by a
+  // full churn through all three accounts (`churn()`), and the assertions run
+  // after the churn, not before it.
+  //
+  // Prior finding, retired: "Luke archive 4 vanishes from luke's Archive after
+  // an unrelated account's Delete Everywhere + reload, while the server still
+  // has it". Root-caused since (commit 3aaa244): the sidecar prune in
+  // deleteSelectedFromServer / purgeEverywhere collected its uids before the
+  // server round-trips and re-read the account/mailbox after them, so a switch
+  // inside that window pruned the mailbox now on screen using uids from the
+  // mailbox actually deleted from. UIDs are unique per mailbox, not globally,
+  // so vader's Matrix uid 4 dropped luke's Archive uid 4. The assertions below
+  // are now regression pins on that fix, not a diagnosis.
 
-  describe('two accounts at once: cross-account bleed', function () {
-    it('start a delete on vader, switch to luke and delete there without waiting, switch back', async function () {
+  describe('three accounts at once: cross-account bleed', function () {
+    it('delete on vader, churn all three accounts, delete on luke, churn again', async function () {
       await switchToFolder(VADER, 'Matrix');
       const vaderSubject = 'Vader matrix 6';
       expect(await toggleRowExact(vaderSubject)).toBe(true);
@@ -691,37 +763,28 @@ describe('Storage matrix diagnostics', function () {
       await waitForBodyText('cannot be undone', 'Delete-from-server confirmation never appeared (vader)');
       expect(await confirmDeletePopover()).toBe(true);
 
-      // Switch accounts immediately, without waiting for vader's delete to settle.
-      await switchToFolder(LUKE, 'Archive');
-      const lukeSubject = 'Luke archive 4';
-
-      // Observed directly (not theorized): by this point in a full run —
-      // vader's rows 1/6/4/7 plus a Delete Everywhere + reload in the
-      // "reload root-cause" section before this test — luke's Archive can
-      // read back with only 3 of its 4 rows, "Luke archive 4" missing, even
-      // though nothing in this spec ever touches luke before this test and
-      // a raw IMAP probe of the mock server confirms it still has all 4.
-      // Isolating exactly which earlier test's reload causes it (a lingering
-      // minimized bulk session was one candidate, fixed above, but did not
-      // fully explain it) was not resolved in the time available — treat it
-      // as a real, reportable finding and make this assertion self-describing
-      // rather than let it die on a bare toggle failure with no context.
-      if (!(await rowFor(lukeSubject))) {
-        console.warn(`[cross-account] "${lukeSubject}" missing from luke's Archive after switching from vader — retrying with a full re-switch. rows seen: ${JSON.stringify(await rows())}`);
-        // Use the well-tested switchToFolder helper, not a raw click — a raw
-        // click retry here was observed to land on luke's INBOX instead of
-        // Archive (whatever it hit inside the sidebar was not the Archive
-        // folder entry), turning a diagnosable "row missing" finding into a
-        // confusing "wrong folder entirely" one.
-        await switchToFolder(LUKE, 'Archive', { requireRows: false });
-        if (!(await rowFor(lukeSubject))) {
-          throw new Error(
-            `"${lukeSubject}" never reappeared in luke's Archive even after a full re-switch — this is the ` +
-            `"row missing after an unrelated account's Delete Everywhere + reload" finding (see the report). ` +
-            `Rows seen: ${JSON.stringify(await rows())}`,
-          );
-        }
+      // Move the view immediately, three times, without waiting for vader's
+      // delete to settle. This is the window in which a prune keyed to the
+      // live view writes vader's uids into somebody else's cache.
+      const stops = await churn({ email: LUKE, folder: 'Archive' });
+      for (const stop of stops) {
+        console.log(`[cross-account] ${stop.email} ${stop.folder} after vader's delete: ${JSON.stringify(stop.subjects)}`);
       }
+
+      const lukeSubject = 'Luke archive 4';
+      if (!(await rowFor(lukeSubject))) {
+        // uid 4 in luke's Archive is the same NUMBER as vader's Matrix uid 4,
+        // which an earlier test deletes from the server. If this row is gone,
+        // say which layer lost it rather than just that the DOM lacks it.
+        const where = await whereIsRow(accountIdOf(LUKE), 'Archive', 4);
+        throw new Error(
+          `"${lukeSubject}" is missing from luke's Archive after a delete on vader and a churn through ` +
+          `${stops.length} account stops — the server still has it.\n` +
+          `  layer report: ${JSON.stringify(where, null, 2)}\n` +
+          `  churn stops: ${JSON.stringify(stops)}`,
+        );
+      }
+
       expect(await toggleRowExact(lukeSubject)).toBe(true);
       expect(await clickBarButton('Delete from server')).toBe(true);
       await waitForBodyText('cannot be undone', 'Delete-from-server confirmation never appeared (luke)');
@@ -730,24 +793,41 @@ describe('Storage matrix diagnostics', function () {
       await browser.waitUntil(async () => !(await rowFor(lukeSubject)), {
         timeout: 15_000, interval: 300, timeoutMsg: `"${lukeSubject}" never disappeared on luke's account`,
       });
-      console.log('[cross-account] luke deleted cleanly right after switching away from vader');
 
-      // Switch back to vader and confirm ITS delete resolves correctly, with
-      // no bleed from the luke operation (no stray checked row, no phantom
-      // reappearance).
-      await switchToFolder(VADER, 'Matrix');
-      const vaderRowNow = await rowFor(vaderSubject);
-      console.log('[cross-account] vader row right after switching back:', JSON.stringify(vaderRowNow));
+      // Churn again, this time landing back on vader, and confirm ITS delete
+      // resolved without bleed from luke's.
+      const stops2 = await churn({ email: VADER, folder: 'Matrix' });
+      for (const stop of stops2) {
+        console.log(`[cross-account] ${stop.email} ${stop.folder} after luke's delete: ${JSON.stringify(stop.subjects)}`);
+      }
+
+      // luke's Archive is passed through by the churn — the other three rows
+      // must still be there. A prune that named the wrong mailbox takes out a
+      // bystander, and only a stop that nothing acted on can show that.
+      const lukeStop = stops2.find((s) => s.email === LUKE);
+      const missing = ['Luke archive 1', 'Luke archive 2']
+        .filter((s) => !lukeStop.subjects.some((seen) => seen.includes(s)));
+      if (missing.length) {
+        throw new Error(
+          `luke's Archive lost ${missing.join(', ')} — nothing in this test deleted them. ` +
+          `Subjects seen at that stop: ${JSON.stringify(lukeStop.subjects)}`,
+        );
+      }
+
+      // yoda is never acted on at all in this test. Its INBOX is the cleanest
+      // bystander in the suite: anything missing there came from another
+      // account's operation.
+      const yodaStop = stops2.find((s) => s.email === YODA);
+      expect(yodaStop.subjects.length).toBeGreaterThan(0);
 
       await browser.waitUntil(async () => {
         const r = await rowFor(vaderSubject);
         return !r || r.localOnly === true;
-      }, { timeout: 20_000, interval: 500, timeoutMsg: `"${vaderSubject}" never settled after switching back from luke` });
+      }, { timeout: 20_000, interval: 500, timeoutMsg: `"${vaderSubject}" never settled after churning away from vader` });
 
-      const vaderFinal = await rowFor(vaderSubject);
-      console.log('[cross-account] vader row settled state:', JSON.stringify(vaderFinal));
+      console.log('[cross-account] vader row settled state:', JSON.stringify(await rowFor(vaderSubject)));
 
-      // No stray selection should have survived the account switches.
+      // No stray selection should have survived six account switches.
       const strayChecked = (await rows()).filter((r) => r.checked);
       console.log('[cross-account] rows still checked after both operations:', JSON.stringify(strayChecked));
       expect(strayChecked.length).toBe(0);
@@ -755,10 +835,179 @@ describe('Storage matrix diagnostics', function () {
   });
 
   // ═══════════════════════════════════════════════════════════════════════
+  // Section: in-flight delete — the view moves while the delete is on the wire
+  // ═══════════════════════════════════════════════════════════════════════
+  //
+  // This is the coverage that was dropped when a fault could only be put on a
+  // shared account. yoda's server stalls MOVE and EXPUNGE by 4s, so between
+  // confirming the delete and the server acting on it there is a real window
+  // to switch account, switch folder, and reload — the exact window every
+  // "cache written with half-stale inputs" bug lives in.
+  //
+  // Ground truth is always the server here: a delete out of INBOX is a MOVE to
+  // Trash, so "did the delete happen" is answered by looking in Trash, never by
+  // the row disappearing. The row disappears instantly either way — that is the
+  // optimistic update plus a session tombstone, and it is exactly what makes a
+  // lost delete invisible to the user.
+  //
+  // Whether the row is briefly visible again mid-flight is NOT asserted: the
+  // server genuinely still has the message at that point, so showing it is
+  // correct behaviour, not a bug.
+  //
+  // Fixtures used here: uid 903 for the churn case, uid 904 for the reload
+  // case. Separate messages, because the first test's delete really does land
+  // and the second must start from a message that is still on the server.
+
+  describe('in-flight delete on the faulted account', function () {
+    it('churns accounts while a 4s delete is still on the wire', async function () {
+      await switchToFolder(YODA, 'INBOX');
+      const subject = 'Yoda message 903';
+      if (!(await rowFor(subject))) {
+        // The rows render but their subject cell comes back empty for this
+        // account, so say what the store actually holds — a blank subject in
+        // the DOM and a missing message look identical from a row dump.
+        const held = await browser.execute(() => {
+          const s = window.__MAIL_STORE__?.getState?.();
+          return s ? (s.emails || []).slice(0, 3).map((e) => ({
+            uid: e.uid, subject: e.subject, from: e.from, date: e.date, source: e.source,
+          })) : null;
+        });
+        // If the store has the subject but the row's text does not, the span is
+        // there and has no width — measure it rather than guess.
+        const geometry = await browser.execute(() => {
+          const row = document.querySelector('[data-testid="email-row"]');
+          if (!row) return null;
+          const box = (el) => Math.round(el.getBoundingClientRect().width);
+          return {
+            viewport: [window.innerWidth, window.innerHeight],
+            rowWidth: box(row),
+            children: [...row.children].map((c) => ({ cls: c.className, w: box(c) })),
+            spans: [...row.querySelectorAll('span')].map((s) => ({
+              text: s.textContent, cls: s.className, w: box(s),
+            })),
+          };
+        });
+        throw new Error(
+          `"${subject}" is not in yoda's INBOX.\n  store holds: ${JSON.stringify(held)}\n` +
+          `  row geometry: ${JSON.stringify(geometry)}\n` +
+          `  rendered rows: ${JSON.stringify(await rows())}`,
+        );
+      }
+
+      const before = await churnAccounts([
+        { email: LUKE, folder: 'Archive' },
+        { email: VADER, folder: 'Matrix' },
+        { email: YODA, folder: 'INBOX' },
+      ]);
+      const lukeBefore = before.find((s) => s.email === LUKE).subjects;
+      const vaderBefore = before.find((s) => s.email === VADER).subjects;
+
+      expect(await toggleRowExact(subject)).toBe(true);
+      expect(await clickBarButton('Delete from server')).toBe(true);
+      await waitForBodyText('cannot be undone', 'Delete-from-server confirmation never appeared (yoda)');
+      expect(await confirmDeletePopover()).toBe(true);
+
+      // No wait: the server is sitting on the MOVE for 4s. Move the view twice
+      // inside that window.
+      const during = await churnAccounts([
+        { email: LUKE, folder: 'Archive' },
+        { email: VADER, folder: 'Matrix' },
+      ]);
+      for (const stop of during) {
+        console.log(`[in-flight] ${stop.email} ${stop.folder} mid-delete: ${JSON.stringify(stop.subjects)}`);
+      }
+
+      // Ground truth is the server, not the list: a delete out of INBOX is a
+      // MOVE to Trash, so the message must be sitting there.
+      await switchToFolder(YODA, 'Trash', { requireRows: false });
+      await browser.waitUntil(async () => !!(await rowFor(subject)), {
+        timeout: 30_000, interval: 500,
+        timeoutMsg: `"${subject}" never reached yoda's Trash — the server delete did not survive the account churn`,
+      });
+
+      await switchToFolder(YODA, 'INBOX', { requireRows: false });
+      await browser.waitUntil(async () => !(await rowFor(subject)), {
+        timeout: 30_000, interval: 500,
+        timeoutMsg: `"${subject}" is in yoda's Trash — the server delete landed — but yoda's INBOX still lists it`,
+      });
+
+      // The bystanders. A delete that stalls 4s gives every "prune the cache
+      // that is on screen now" path its widest possible window — if any of
+      // them fires, it fires against luke or vader, not yoda.
+      const after = await churnAccounts([
+        { email: LUKE, folder: 'Archive' },
+        { email: VADER, folder: 'Matrix' },
+      ]);
+      const lukeAfter = after.find((s) => s.email === LUKE).subjects;
+      const vaderAfter = after.find((s) => s.email === VADER).subjects;
+
+      expect({ luke: lukeAfter.length, vader: vaderAfter.length })
+        .toEqual({ luke: lukeBefore.length, vader: vaderBefore.length });
+    });
+
+    /**
+     * OPEN PRODUCT BUG — this test is expected to fail today, and it should
+     * stay failing until the gap is closed. It is not a harness problem.
+     *
+     * A "Delete from server" the user confirmed is issued from the frontend:
+     * the row is hidden optimistically, then the workflow awaits the IMAP
+     * round-trip. Reload (or quit) the app inside that window and the JS
+     * context dies before the command is ever sent — the message is never
+     * deleted, nothing reports an error, and nothing retries. The user saw the
+     * row vanish and has every reason to believe it is gone; it comes back on
+     * the next launch, still on the server.
+     *
+     * The 4s MOVE stall on this account is what makes the window observable;
+     * on a fast server it is small but not zero, and it is exactly as wide as
+     * the server is slow — the case a real provider hits, not a synthetic one.
+     *
+     * Closing it means the delete has to outlive the webview: a durable
+     * operation queue (or moving the whole delete into the Rust side and
+     * replaying it on launch), not a wait or a retry in the frontend. That is
+     * a feature, not a patch, which is why this is pinned rather than papered
+     * over.
+     */
+    it('a confirmed delete survives the app reloading mid-flight', async function () {
+      await switchToFolder(YODA, 'INBOX');
+      const subject = 'Yoda message 904';
+      expect(await rowFor(subject)).toBeTruthy();
+
+      expect(await toggleRowExact(subject)).toBe(true);
+      expect(await clickBarButton('Delete from server')).toBe(true);
+      await waitForBodyText('cannot be undone', 'Delete-from-server confirmation never appeared (yoda reload)');
+      expect(await confirmDeletePopover()).toBe(true);
+
+      // Reload immediately, while the server is still sitting on the MOVE.
+      await browser.execute(() => window.location.reload());
+      await waitForApp();
+
+      await switchToFolder(YODA, 'Trash', { requireRows: false });
+      if (!(await rowFor(subject))) {
+        throw new Error(
+          `"${subject}" never reached yoda's Trash — the delete the user confirmed was lost when the app ` +
+          `reloaded while it was still in flight, with no error and no retry. The message is still on the ` +
+          `server, and the app showed the user a row disappearing.`,
+        );
+      }
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
   // Section: unified inbox
   // ═══════════════════════════════════════════════════════════════════════
+  //
+  // Why the target is a yoda message and not a luke one, which is what this
+  // test used to reach for and skip on: the unified list is one date-sorted
+  // list across every account, rendered by a virtualizer that only puts the
+  // visible window in the DOM. Message dates come from the UID
+  // (mockImap.js `stamp` = 2026-01-01 + uid days), and vader's INBOX runs to
+  // uid 700 — so 658 vader messages are newer than luke's newest, and NO luke
+  // INBOX message can reach the rendered window without scrolling past ~600
+  // rows. "Luke message 2" was the oldest message in the entire suite: the old
+  // skip was arithmetic, not a bug. yoda's UIDs start at 901, which puts its
+  // mail at the top of the list where a test can actually see it.
 
-  describe('unified inbox: delete and switch', function () {
+  describe('unified inbox: delete, churn accounts, reload', function () {
     async function switchToUnified() {
       // "All Inboxes" is the sidebar's actual label (see connected-unified-inbox.test.js).
       expect(await browser.execute(() => {
@@ -769,41 +1018,52 @@ describe('Storage matrix diagnostics', function () {
       await waitForEmails();
     }
 
-    it('delete a unified-inbox row, switch mailbox, and reload — does it come back?', async function () {
+    it('a row deleted in unified mode stays gone across account churn and a reload', async function () {
       await switchToUnified();
-      const subject = 'Luke message 2';
+      const subject = 'Yoda message 905';
 
-      const found = await rowFor(subject);
-      if (!found) {
-        console.warn(`[unified] "${subject}" not visible in the unified list window — skipping (see report)`);
-        this.skip();
-        return;
-      }
+      // Not a skip: if the newest account in the suite cannot reach the top of
+      // the unified list, unified mode is not merging that account at all —
+      // which is the finding, and it should fail loudly.
+      await browser.waitUntil(async () => !!(await rowFor(subject)), {
+        timeout: 20_000, interval: 500,
+        timeoutMsg: `"${subject}" never appeared in the unified list. yoda's mail is the newest in the ` +
+          `suite, so it should be at the very top — unified mode is not merging this account.`,
+      });
 
       expect(await toggleRowExact(subject)).toBe(true);
       expect(await clickBarButton('Delete from server')).toBe(true);
       await waitForBodyText('cannot be undone', 'Delete-from-server confirmation never appeared (unified)');
       expect(await confirmDeletePopover()).toBe(true);
-      await browser.pause(500);
 
-      const rightAfter = await rowFor(subject);
-      console.log('[unified] row right after confirming delete:', JSON.stringify(rightAfter));
+      console.log('[unified] row right after confirming delete:', JSON.stringify(await rowFor(subject)));
 
-      // Switch to vader's own INBOX and back to Unified — the known gap
-      // (deleteSelectedFromServer skips its trailing loadEmails() entirely
-      // in unified mode) means the tombstone set when this delete started
-      // may never get lifted, and unified mode never prunes the header
-      // cache (saveEmailHeaders is called with `undefined` when isUnified).
-      await switchToFolder(VADER, 'INBOX');
+      // Churn through the single-account views while the (4s-stalled) delete is
+      // still on the wire, then come back to Unified. The gap this probes:
+      // deleteSelectedFromServer skips its trailing loadEmails() entirely in
+      // unified mode, and unified mode never prunes the header cache
+      // (saveEmailHeaders gets `undefined` when isUnified), so the tombstone
+      // set when the delete started is the only thing hiding the row — and
+      // tombstones do not survive a reload.
+      await churnAccounts([
+        { email: LUKE, folder: 'Archive' },
+        { email: VADER, folder: 'Matrix' },
+        { email: YODA, folder: 'INBOX', requireRows: false },
+      ]);
       await switchToUnified();
-      const afterSwitch = await rowFor(subject);
-      console.log('[unified] row after switching away and back to Unified:', JSON.stringify(afterSwitch));
+      console.log('[unified] row after churning three accounts and returning:', JSON.stringify(await rowFor(subject)));
 
       await browser.execute(() => window.location.reload());
       await waitForApp();
       await switchToUnified();
-      const afterReload = await rowFor(subject);
-      console.log('[unified] row after a reload back into Unified Inbox:', JSON.stringify(afterReload));
+
+      // After a reload the tombstone is gone, so this is the real question:
+      // does the deleted message come back from the header cache?
+      await browser.waitUntil(async () => !(await rowFor(subject)), {
+        timeout: 30_000, interval: 500,
+        timeoutMsg: `"${subject}" is back in the unified inbox after a reload. The server delete succeeded, ` +
+          `so this row is being repainted from a header sidecar that unified mode never prunes.`,
+      });
     });
   });
 });
