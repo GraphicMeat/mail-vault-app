@@ -27,6 +27,14 @@ let _chatEmailsFingerprint = '';
 let _threadsCache = new Map();
 let _threadsFingerprint = '';
 
+// The exact input collections the last updateSortedEmails() ran on, compared by
+// identity. The string fingerprint below can only summarise a Set or an array
+// by its size, so a collection whose CONTENTS changed while its size did not is
+// invisible to it — and the store hands out fresh instances on every write, so
+// identity catches exactly that case for free. See the guard for the bug this
+// let through.
+let _sortedInputs = null;
+
 // Module-level loadMore dedup timer
 let _loadMoreTimer = null;
 
@@ -113,9 +121,32 @@ export const createMessageListSlice = (set, get) => ({
   updateSortedEmails: () => {
     const { emails, localEmails, viewMode, savedEmailIds, archivedEmailIds, serverUidSet, unifiedInbox, activeAccountId, activeMailbox, deleteTombstones, _sortedEmailsFingerprint } = get();
 
-    // Fingerprint check: skip if the input set hasn't materially changed
+    // Fingerprint check: skip if the input set hasn't materially changed.
+    //
+    // The string alone is not enough to decide that. It describes every
+    // collection by its size, so two different one-element Sets look identical
+    // to it — and that really happens during a folder switch, where the sets
+    // arrive in stages: a derivation can run with `localEmails` already holding
+    // this folder's message while `archivedEmailIds` still holds the previous
+    // view's single uid, produce nothing (the uids don't match), and store this
+    // exact fingerprint. When the correct set lands a moment later — same size,
+    // different uid — the string matches and the recompute is skipped, so the
+    // row never appears at all. Seen after a reload as an archived,
+    // server-deleted message that would not come back as "Local only" even
+    // though the store and the Maildir both had everything needed to render it.
+    //
+    // Identity closes that hole at O(1): every write replaces these with fresh
+    // instances, so a changed collection is always a changed reference. Keep
+    // the string too — it still catches in-place growth and the scalar inputs.
+    const sameInputs = _sortedInputs !== null
+      && _sortedInputs.emails === emails
+      && _sortedInputs.localEmails === localEmails
+      && _sortedInputs.archivedEmailIds === archivedEmailIds
+      && _sortedInputs.savedEmailIds === savedEmailIds
+      && _sortedInputs.serverUidSet === serverUidSet
+      && _sortedInputs.deleteTombstones === deleteTombstones;
     const fp = `${activeAccountId}-${activeMailbox}-${viewMode}-${emails.length}-${emails[0]?.uid || 0}-${emails[emails.length - 1]?.uid || 0}-${localEmails.length}-${archivedEmailIds.size}-${savedEmailIds.size}-${serverUidSet.size}-${_flagChangeCounter}-${deleteTombstones?.size || 0}`;
-    if (fp === _sortedEmailsFingerprint) return;
+    if (fp === _sortedEmailsFingerprint && sameInputs) return;
 
     // In unified inbox, UIDs collide across accounts — use compound key for dedup
     const uidKey = unifiedInbox
@@ -230,6 +261,7 @@ export const createMessageListSlice = (set, get) => ({
 
     _chatEmailsFingerprint = '';
     _threadsFingerprint = '';
+    _sortedInputs = { emails, localEmails, archivedEmailIds, savedEmailIds, serverUidSet, deleteTombstones };
     set({ sortedEmails: result, _sortedEmailsFingerprint: fp });
   },
 

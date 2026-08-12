@@ -447,3 +447,66 @@ describe('getChatEmails provenance stamping', () => {
     expect(sent._fromSentFolder).toBe(true);
   });
 });
+
+describe('updateSortedEmails memoization', () => {
+  // The guard summarised every collection by its size, so two different
+  // one-element Sets were indistinguishable. During a folder switch the sets
+  // arrive in stages: a derivation runs with this folder's localEmails but the
+  // PREVIOUS view's archivedEmailIds, finds no matching uid, renders nothing,
+  // and stores that fingerprint. The correct set lands a moment later with the
+  // same size and a different uid — fingerprint matches, recompute skipped, and
+  // the row never appears. Reproduced as an archived + server-deleted message
+  // that would not come back as "Local only" after a reload.
+  it('re-derives when a set keeps its size but changes contents', () => {
+    const local = { uid: 3, subject: 'Archived message 3', date: 'Sun, 04 Jan 2026 12:00:00 +0000' };
+
+    useMailStore.setState({
+      activeAccountId: 'acct-1',
+      activeMailbox: 'Archive',
+      viewMode: 'all',
+      emails: [],
+      localEmails: [local],
+      serverUidSet: new Set(),
+      deleteTombstones: new Set(),
+      // Same sizes as the correct state below, different uid — this is the
+      // stale half-loaded moment.
+      archivedEmailIds: new Set([99]),
+      savedEmailIds: new Set([99]),
+      _sortedEmailsFingerprint: '',
+    });
+    useMailStore.getState().updateSortedEmails();
+    expect(useMailStore.getState().sortedEmails).toHaveLength(0);
+
+    useMailStore.setState({
+      archivedEmailIds: new Set([3]),
+      savedEmailIds: new Set([3]),
+    });
+    useMailStore.getState().updateSortedEmails();
+
+    const sorted = useMailStore.getState().sortedEmails;
+    expect(sorted).toHaveLength(1);
+    expect(sorted[0].uid).toBe(3);
+    expect(sorted[0].source).toBe('local-only');
+  });
+
+  it('still skips the derivation when nothing changed at all', () => {
+    useMailStore.setState({
+      activeAccountId: 'acct-1',
+      activeMailbox: 'Archive',
+      viewMode: 'all',
+      emails: [],
+      localEmails: [{ uid: 3, subject: 'Archived message 3' }],
+      archivedEmailIds: new Set([3]),
+      savedEmailIds: new Set([3]),
+      serverUidSet: new Set(),
+      deleteTombstones: new Set(),
+      _sortedEmailsFingerprint: '',
+    });
+    useMailStore.getState().updateSortedEmails();
+    const first = useMailStore.getState().sortedEmails;
+
+    useMailStore.getState().updateSortedEmails();
+    // Same array instance back means the guard short-circuited.
+    expect(useMailStore.getState().sortedEmails).toBe(first);
+  });
+});
