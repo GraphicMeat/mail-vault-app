@@ -196,8 +196,17 @@ describe('Bulk delete everywhere', function () {
     { timeout: 10_000, interval: 300, timeoutMsg: msg },
   );
 
-  /** Switch to vader@mock.test's Archive folder — the disposable fixture this spec purges. */
-  async function switchToVaderArchive() {
+  /**
+   * Switch to vader@mock.test's Archive folder — the disposable fixture this
+   * spec purges.
+   *
+   * `expectEmails: false` for the post-reload check: by then this spec has
+   * purged two of the three fixtures and server-deleted the third, so the
+   * folder holds no server messages at all. The shared `waitForEmails()` helper
+   * requires at least one row and would time out on a folder this spec
+   * deliberately emptied — which is a pass, not a failure.
+   */
+  async function switchToVaderArchive({ expectEmails = true } = {}) {
     const [, vaderEmail] = browser.mockAccounts.map(a => a.email);
 
     expect(await clickSidebarItem(vaderEmail)).toBe(true);
@@ -213,7 +222,16 @@ describe('Bulk delete everywhere', function () {
       });
     }
     expect(await clickSidebarItem('Archive')).toBe(true);
-    await waitForEmails();
+    if (expectEmails) {
+      await waitForEmails();
+    } else {
+      // Wait for the folder to actually be the one on screen, then let the list
+      // settle — zero rows is a legitimate outcome here.
+      await browser.waitUntil(async () => (await folderHeaderText()) === 'Archive', {
+        timeout: 15_000, interval: 300, timeoutMsg: 'Never landed on the Archive folder after reload',
+      });
+      await browser.pause(2000);
+    }
   }
 
   before(async function () {
@@ -431,7 +449,9 @@ describe('Bulk delete everywhere', function () {
 
     // A fresh boot always lands on account 1's INBOX, not wherever this spec
     // left off — navigate back to the folder that was purged to prove it.
-    await switchToVaderArchive();
+    // Zero server rows is expected here: this spec purged two fixtures and
+    // server-deleted the third, so only the local-only survivor can render.
+    await switchToVaderArchive({ expectEmails: false });
 
     const list = await rows();
     // If the vault purge in purgeEverywhere were dropped, these two would
