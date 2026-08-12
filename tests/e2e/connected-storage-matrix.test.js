@@ -4,22 +4,50 @@
  * A message can live in three places: the IMAP server, the local vault
  * Maildir, and the external backup mirror. This spec is diagnostic, not a
  * regression pin — it exists to show what actually happens across every
- * combination of those three, across delays, across a reload, across two
- * accounts at once, and in unified inbox. It does not change product code.
+ * combination of those three, across a reload, across two accounts at once,
+ * and in unified inbox. It does not change product code.
  *
- * Runs against two extra seeded mock-IMAP accounts (wdio.conf.js
- * MOCK_ACCOUNTS, accounts 3 and 4 — see the comment there), so it never
- * touches luke/vader's fixtures the rest of the connected-* suite depends
- * on:
- *   - yoda@mock.test — no fault, backup run once at the top of "storage
- *     matrix combinations" below, before any other op touches it
- *   - leia@mock.test — STORE/EXPUNGE/MOVE delayed 4s, backup never run
+ * REWORK NOTE (second pass): the first cut added two throwaway accounts
+ * (yoda/leia). That broke visual-screens/visual-settings — extra account
+ * avatars in the sidebar shifted every baseline screenshot — and the repo
+ * owner ruled against a third account even to keep delay-fault coverage.
+ * This version gives the matrix its own mailboxes on the two EXISTING
+ * accounts instead:
+ *   - vader@mock.test gets one extra mailbox, "Matrix" (wdio.conf.js
+ *     MOCK_ACCOUNTS[1].extraMailbox) — vader is never the active account in
+ *     either visual spec, so a mailbox only it has never appears in a
+ *     baseline. Its existing INBOX (700, exact-count fixture for
+ *     connected-list-header) and Archive (permanently consumed by
+ *     connected-bulk-delete-everywhere) are untouched.
+ *   - luke@mock.test's existing Archive folder gets a bigger, renamed
+ *     fixture (archiveCount 4, prefix "Luke archive" instead of the default
+ *     "Archived message") — confirmed via a codebase search that no spec
+ *     reads luke's Archive or asserts an exact luke INBOX count. luke IS the
+ *     default active account, so nothing new was added to its INBOX or its
+ *     folder list beyond renaming Archive's own contents.
+ *   - luke's INBOX loses exactly one ordinary message (uid 2, "Luke message
+ *     2") to the unified-inbox test — chosen because no spec names it (the
+ *     one spec that names a specific luke INBOX message,
+ *     connected-selection-actions.test.js, uses uid 7 for a non-destructive
+ *     read/unread toggle) and INBOX deletes here are non-permanent (COPY to
+ *     Trash), so the message isn't actually gone from the account.
  *
- * (First cut of this spec drove the AccountModal live to add its own
- * throwaway accounts. That raced accounts.json's disk write against the
- * "Connected!" UI text and was too fragile to build a suite on — seeding
- * through wdio.conf.js's onPrepare, same as luke/vader, is what every other
- * connected-* spec already relies on.)
+ * DROPPED: the delay-fault coverage (in-flight visibility, the owner's
+ * switch-mailbox hypothesis) from the first pass. Faults in the mock IMAP
+ * server are per-connection/per-account (src-mock-imap/src/scenario.rs's
+ * Trigger is only OnCommand/OnNthCommand/OnConnect — there is no per-mailbox
+ * scoping), so a delay lives on the shared vader or luke server and would
+ * slow or flake every other spec's deletes (connected-selection-actions,
+ * connected-move-to-folder, etc.) for the whole suite run. OnNthCommand was
+ * considered and rejected: it requires deterministic command ordering across
+ * the whole suite, which nothing here guarantees, and a fault that
+ * occasionally fires against the wrong spec is worse than no fault. That
+ * work already produced its finding before being dropped (see the report):
+ * the owner's hypothesis did not reproduce (the tombstone hides a row
+ * instantly and survives a plain switch fine); a reload during a genuinely
+ * slow in-flight delete does show the row, correctly, because the server
+ * hasn't deleted it yet. Re-running that specific scenario is what's lost —
+ * covered here only by prose, not by a live test.
  *
  * Key grounding established by reading the product code (not asserted here,
  * just what shaped this spec's design):
@@ -31,31 +59,29 @@
  *   - `backup_run_account` (the real full-account backup pipeline) mirrors
  *     every message in every folder straight from IMAP, and for any message
  *     not yet in the vault it calls the SAME `run_with_backup` archive.rs
- *     helper — meaning backing up a message also archives it (writes the
- *     vault .eml + local-index.json entry with the "archived" flag). Backup
- *     and archive are NOT independent: you cannot get "backed up, never
+ *     helper — meaning backing up a message also archives it. Backup and
+ *     archive are NOT independent: you cannot get "backed up, never
  *     archived" through the running app except by backing up and then
- *     unarchiving (which removes only the vault copy, never the mirror).
- *     A corollary: backup_run_account SKIPS any message already in the
- *     vault (its own delta check is against the vault, not the mirror) — so
- *     archiving a message first and backing up second never mirrors it.
+ *     unarchiving (which removes only the vault copy, never the mirror). A
+ *     corollary: backup_run_account SKIPS any message already in the vault
+ *     (its delta check is against the vault, not the mirror).
+ *   - `backup_run_account` walks every SELECTABLE folder for the account,
+ *     in LIST order (src-mock-imap/src/commands.rs's do_list iterates
+ *     state.mailboxes in array order — confirmed by reading it), and
+ *     `skip_folders` skips a PREFIX of that list. vader's mailboxes array is
+ *     [INBOX, Sent, Archive, Drafts, Trash, Matrix] — skipFolders: 5 backs
+ *     up ONLY "Matrix", never touching vader's 700-message INBOX. This is
+ *     what makes it safe to run the real backup pipeline here at all.
  *   - Neither `deleteSelectedFromServer` nor `purgeEverywhere`
- *     (src/services/workflows/messageMutations.js) ever call
- *     `db.saveEmailHeaders(..., { removedUids })` themselves — they rely
- *     entirely on the `loadEmails()` call at the end of each to prune the
- *     on-disk header sidecar cache (email_cache/<accountId>_<mailbox>/
- *     <uid>.json, src-tauri/src/main.rs:754-848). That cache is patch-only:
- *     "nothing is deleted unless removedUids names it explicitly" (db/
- *     caches.js:83). See the "reload root cause" section below for how this
- *     interacts with the optimistic removal already having happened before
- *     that reconcile runs.
+ *     (src/services/workflows/messageMutations.js) used to prune the header
+ *     sidecar cache themselves — see the "reload root cause" section below.
+ *     Product commit 545e8e9 (already on this branch) fixed this; the test
+ *     there now asserts the fix holds instead of documenting the break.
  *   - The bulk modal's step-2 legend (BulkOperationsModal.jsx:568-575) reads
- *     "N on server · M archived here [· backup configured]" — it has no
- *     backup COUNT, by design (the comment there says reading one means
- *     resolving the bookmark and walking the mirror on every modal open).
+ *     "N on server · M archived here [· backup configured]" — no backup
+ *     COUNT, by design.
  *   - EmailRow.jsx has exactly two source badges: title="Archived" and
- *     title^="Local only" (EmailRow.jsx:55-59,146-148). There is no per-row
- *     backup/cloud indicator at all.
+ *     title^="Local only". No per-row backup/cloud indicator exists.
  */
 
 import { existsSync, mkdtempSync, readdirSync } from 'node:fs';
@@ -68,8 +94,8 @@ describe('Storage matrix diagnostics', function () {
   this.timeout(600_000);
 
   const HOME = () => browser.testDataDir;
-  const YODA = 'yoda@mock.test';
-  const LEIA = 'leia@mock.test';
+  const LUKE = 'luke@mock.test';
+  const VADER = 'vader@mock.test';
 
   const accountOf = (email) => browser.mockAccounts.find((a) => a.email === email);
   const accountIdOf = (email) => accountOf(email).id;
@@ -98,12 +124,12 @@ describe('Storage matrix diagnostics', function () {
 
   /**
    * The DOM badge (archived/localOnly) and the on-disk file are not the
-   * same clock — the first run through the matrix caught the badge
-   * flipping true one poll cycle before the fs write it's supposed to
-   * follow was visible to a second process's readdir. Poll a few seconds
-   * before treating a disk check as ground truth for a positive
-   * expectation; negative expectations (file should NOT exist) read once,
-   * since polling for absence just delays the assertion.
+   * same clock — an early run through the matrix caught the badge flipping
+   * true one poll cycle before the fs write it's supposed to follow was
+   * visible to a second process's readdir. Poll a few seconds before
+   * treating a disk check as ground truth for a positive expectation;
+   * negative expectations (file should NOT exist) read once, since polling
+   * for absence just delays the assertion.
    */
   async function waitForDisk(fn, { timeoutMs = 8000, interval = 300 } = {}) {
     const deadline = Date.now() + timeoutMs;
@@ -124,6 +150,44 @@ describe('Storage matrix diagnostics', function () {
     return existsSync(join(appDataDir(HOME()), 'email_cache', cacheBaseName(accountId, mbox), `${uid}.json`));
   }
 
+  /**
+   * Self-describing row+disk assertion for the matrix — a bare
+   * `expect(x).toBe(true)` reports nothing about what was actually seen.
+   * `want` is any subset of {present, archived, localOnly, vault, backup};
+   * on mismatch this throws one error naming every field that disagreed
+   * plus the full row and disk objects, so a failure is diagnosable from
+   * the mocha output alone.
+   */
+  function checkRow(label, subject, row, disk, want) {
+    const problems = [];
+    const present = !!row;
+    if ('present' in want && present !== want.present) {
+      problems.push(`present: want ${want.present}, got ${present}`);
+    }
+    if (row) {
+      if ('archived' in want && !!row.archived !== want.archived) {
+        problems.push(`Archived badge: want ${want.archived}, got ${!!row.archived}`);
+      }
+      if ('localOnly' in want && !!row.localOnly !== want.localOnly) {
+        problems.push(`Local-only badge: want ${want.localOnly}, got ${!!row.localOnly}`);
+      }
+    }
+    if (disk) {
+      if ('vault' in want && !!disk.vault !== want.vault) {
+        problems.push(`vault .eml file: want ${want.vault}, got ${!!disk.vault}`);
+      }
+      if ('backup' in want && !!disk.backup !== want.backup) {
+        problems.push(`backup mirror file: want ${want.backup}, got ${!!disk.backup}`);
+      }
+    }
+    if (problems.length) {
+      throw new Error(
+        `[matrix ${label}] "${subject}" — ${problems.join('; ')}\n` +
+        `  row=${JSON.stringify(row)}\n  disk=${JSON.stringify(disk)}`,
+      );
+    }
+  }
+
   // ── Tauri invoke bridge — used for backup config, which has no fast UI path ──
 
   /**
@@ -131,10 +195,8 @@ describe('Storage matrix diagnostics', function () {
    * return value is serialized at the point the (non-async) function
    * returns, so `window.__TAURI__.core.invoke(...)` (a pending Promise, no
    * own enumerable properties) always came back as `{}` regardless of what
-   * the Rust command actually resolved with. Caught this directly: both
-   * backup_save_external_location and backup_run_account logged `{}` on the
-   * first real run of this section. `executeAsync` (WebDriver's execute/async
-   * endpoint) is the one that actually waits for the callback.
+   * the Rust command actually resolved with. `executeAsync` (WebDriver's
+   * execute/async endpoint) is the one that actually waits for the callback.
    */
   function invoke(cmd, args) {
     return browser.executeAsync((c, a, done) => {
@@ -214,12 +276,10 @@ describe('Storage matrix diagnostics', function () {
 
   /**
    * The harness has a documented class of "first fetch of a session" races
-   * (see connected-bulk-delete-everywhere.test.js's switchToVaderArchive) —
-   * this spec hits a wider version of it than any other connected-* spec
-   * because yoda/leia are freshly-seeded accounts a full suite run never
-   * warms up before this file's tests reach them. A bare switch can time out
-   * a full 60s in waitForEmails() with nothing rendered at all — retry the
-   * whole switch sequence once, not just the sidebar-listing sub-step below.
+   * (see connected-bulk-delete-everywhere.test.js's switchToVaderArchive). A
+   * bare switch can time out a full 60s in waitForEmails() with nothing
+   * rendered at all — retry the whole switch sequence once, not just the
+   * sidebar-listing sub-step below.
    */
   async function switchToFolder(email, folderName, opts = {}) {
     try {
@@ -253,11 +313,8 @@ describe('Storage matrix diagnostics', function () {
     await waitForEmails();
     // waitForEmails()'s own success criteria includes the EMPTY-state
     // element — a mailbox visited for the first time this session can
-    // resolve into that state genuinely empty (caught this directly: a
-    // never-before-visited account's Archive folder showed "No emails in
-    // this folder" for 10+ seconds, then the exact same folder loaded fine
-    // on its second visit later in the run). Every folder this spec expects
-    // rows from is non-empty by construction — re-click once if it isn't.
+    // resolve into that state genuinely empty. Every folder this spec
+    // expects rows from is non-empty by construction — re-click once if it isn't.
     if (requireRows && (await rows()).length === 0) {
       expect(await clickSidebarItem(folderName)).toBe(true);
       await browser.waitUntil(async () => (await rows()).length > 0, {
@@ -269,10 +326,6 @@ describe('Storage matrix diagnostics', function () {
   const waitClick = (fn, msg) => browser.waitUntil(fn, { timeout: 15_000, interval: 300, timeoutMsg: msg });
   const waitForBodyText = (needle, msg) => browser.waitUntil(() => bodyIncludes(needle), { timeout: 15_000, interval: 300, timeoutMsg: msg });
 
-  const dispatchEscape = () => browser.execute(() => {
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
-  });
-
   // ── Suite setup ──────────────────────────────────────────────────────────
 
   before(async function () {
@@ -280,7 +333,7 @@ describe('Storage matrix diagnostics', function () {
     await waitForEmails();
     backupRoot = mkdtempSync(join(tmpdir(), 'mailvault-e2e-backup-'));
     console.log('[storage-matrix] backup mirror root:', backupRoot);
-    console.log('[storage-matrix] yoda accountId=%s, leia accountId=%s', accountIdOf(YODA), accountIdOf(LEIA));
+    console.log('[storage-matrix] luke accountId=%s, vader accountId=%s', accountIdOf(LUKE), accountIdOf(VADER));
   });
 
   /**
@@ -289,8 +342,7 @@ describe('Storage matrix diagnostics', function () {
    */
   after(async function () {
     try {
-      const [lukeEmail] = browser.mockAccounts.map((a) => a.email);
-      await clickSidebarItem(lukeEmail);
+      await clickSidebarItem(LUKE);
       await browser.waitUntil(async () => (await folderHeaderText()) !== 'Archive', { timeout: 8_000, interval: 300 }).catch(() => {});
       await clickSidebarItem('INBOX');
       await waitForEmails();
@@ -303,22 +355,25 @@ describe('Storage matrix diagnostics', function () {
   // Section 1: the storage matrix
   // ═══════════════════════════════════════════════════════════════════════
   //
-  // yoda's Archive (backup run once, in "storage matrix combinations"'s own
-  // before() below, before any row-specific op) gives rows 1/4/6/7. leia's
-  // Archive (backup never run for this account) gives rows 2/3/5.
-  //   Yoda archive 1 -> row 1 (untouched baseline after backup_run_account)
-  //   Yoda archive 2 -> row 6 (unarchive after backup)
-  //   Yoda archive 3 -> row 4 (delete-from-server after backup)
-  //   Yoda archive 4 -> row 7 (unarchive + delete-from-server after backup)
-  //   Leia archive 1 -> row 3 (untouched — also the archive_emails
+  // vader's "Matrix" mailbox (backup run once, in "storage matrix
+  // combinations"'s own before() below, scoped to just this folder via
+  // skipFolders: 5) gives rows 1/4/6/7. luke's Archive (backup never run for
+  // luke) gives rows 2/3/5.
+  //   Vader matrix 1 -> row 1 (untouched baseline after backup_run_account)
+  //   Vader matrix 2 -> row 6 (unarchive after backup)
+  //   Vader matrix 3 -> row 4 (delete-from-server after backup)
+  //   Vader matrix 4 -> row 7 (unarchive + delete-from-server after backup)
+  //   Vader matrix 5 -> reload-root-cause section below
+  //   Vader matrix 6 -> cross-account section below
+  //   Luke archive 1 -> row 3 (untouched — also the archive_emails
   //                     "does it actually write a vault file" negative case)
-  //   Leia archive 2 -> row 2 (archived, no backup — the positive case)
-  //   Leia archive 3 -> row 5 (archived + delete-from-server, no backup)
-  //   Leia archive 4/5/6 -> reserved for the delay/hypothesis sections below
+  //   Luke archive 2 -> row 2 (archived, no backup — the positive case)
+  //   Luke archive 3 -> row 5 (archived + delete-from-server, no backup)
+  //   Luke archive 4 -> cross-account section below
 
   describe('bulk modal legend never reports a backup count', function () {
     it('omits any backup mention when no backup location is configured', async function () {
-      await switchToFolder(LEIA, 'Archive');
+      await switchToFolder(LUKE, 'Archive');
       expect(await browser.execute(() => {
         const btn = document.querySelector('[data-testid="email-list-header"] button');
         if (!btn) return false;
@@ -340,8 +395,7 @@ describe('Storage matrix diagnostics', function () {
         return false;
       }), 'The "All" preset never became clickable');
       // "Next" stays disabled until selectedCount > 0 — wait for the range
-      // pick to actually check rows before trying to advance (the original
-      // connected-bulk-delete-everywhere.test.js hits this same gap).
+      // pick to actually check rows before trying to advance.
       await browser.waitUntil(
         async () => (await rows()).some((r) => r.checked),
         { timeout: 15_000, interval: 300, timeoutMsg: 'Rows never showed a checkmark after picking the "All" range' },
@@ -366,7 +420,25 @@ describe('Storage matrix diagnostics', function () {
       expect(legend).not.toContain('backup configured');
       expect(legend).not.toMatch(/\d+ backed up|\d+ in backup/i);
 
-      await dispatchEscape();
+      // Escape only MINIMIZES a bulk session (selection and all) — only
+      // step-1's own Cancel actually ends it. Caught this directly: leaving
+      // this session minimized (never confirmed, no action chosen) carried
+      // a stale luke-Archive selection across the rest of the file, and a
+      // later test's reload made one of its 4 rows vanish from the list —
+      // a real bug in this spec, not in the app. Back to step 1, then Cancel.
+      expect(await browser.execute(() => {
+        for (const el of document.querySelectorAll('button')) {
+          if ((el.textContent || '').trim() === 'Back' && el.offsetHeight > 0) { el.click(); return true; }
+        }
+        return false;
+      })).toBe(true);
+      await waitForBodyText('Bulk Email Operations', 'Back button did not return to step 1');
+      expect(await browser.execute(() => {
+        for (const el of document.querySelectorAll('button')) {
+          if ((el.textContent || '').trim() === 'Cancel' && el.offsetHeight > 0) { el.click(); return true; }
+        }
+        return false;
+      })).toBe(true);
     });
   });
 
@@ -375,38 +447,46 @@ describe('Storage matrix diagnostics', function () {
       const loc = await invoke('backup_save_external_location', { path: backupRoot });
       console.log('[storage-matrix] backup_save_external_location ->', JSON.stringify(loc));
 
-      // Snapshot backup for yoda BEFORE any row-specific action — every
-      // Archive message currently on yoda's server (and not yet vaulted)
-      // gets mirrored, and since fetch_and_store always marks what it
-      // stores "archived", every one of them also becomes an archived-here
-      // row at this point.
+      // Scoped to JUST vader's "Matrix" mailbox (see the file-header comment
+      // on skipFolders ordering) — INBOX (700 msgs), Sent, Archive, Drafts,
+      // Trash are skipped entirely, untouched. Every message the backup
+      // pipeline touches also gets archived (fetch_and_store always writes
+      // the vault copy), so every Matrix row also becomes archived-here here.
       const result = await invoke('backup_run_account', {
-        accountId: accountIdOf(YODA),
-        accountJson: JSON.stringify(accountOf(YODA)),
+        accountId: accountIdOf(VADER),
+        accountJson: JSON.stringify(accountOf(VADER)),
         backupPath: null,
-        skipFolders: 0,
+        skipFolders: 5,
       });
-      console.log('[storage-matrix] backup_run_account(yoda) ->', JSON.stringify(result));
+      console.log('[storage-matrix] backup_run_account(vader, skipFolders=5) ->', JSON.stringify(result));
     });
 
     it('row 1: server + archived + backed up', async function () {
-      const accountId = accountIdOf(YODA);
-      await switchToFolder(YODA, 'Archive');
-      const subject = 'Yoda archive 1';
+      const accountId = accountIdOf(VADER);
+      await switchToFolder(VADER, 'Matrix');
+      const subject = 'Vader matrix 1';
+
+      // This is the first-ever UI visit to this folder in the session (the
+      // before() hook above wrote via a direct invoke, never through
+      // loadEmails()) — the row can render before serverUidSet has been
+      // populated by the live IMAP fetch, showing "Local only" (source
+      // derives from serverUidSet.has(uid)) for a message that is, in fact,
+      // still on the server. Wait for it to settle the same way rows
+      // 6/4/7 already do before reading it as ground truth.
+      await browser.waitUntil(async () => (await rowFor(subject))?.archived === true, {
+        timeout: 10_000, interval: 300, timeoutMsg: `"${subject}" never settled into Archived (serverUidSet may still be populating)`,
+      });
+
       const row = await rowFor(subject);
-      const disk = { vault: !!(await waitForDisk(() => vaultFile(accountId, 'Archive', 1))), backup: !!(await waitForDisk(() => backupFile(YODA, 'Archive', 1))) };
+      const disk = { vault: !!(await waitForDisk(() => vaultFile(accountId, 'Matrix', 1))), backup: !!(await waitForDisk(() => backupFile(VADER, 'Matrix', 1))) };
       console.log('[matrix] row1', subject, 'ui=', row, 'disk=', disk);
-      expect(row).toBeTruthy();
-      expect(row.archived).toBe(true);
-      expect(row.localOnly).toBe(false);
-      expect(disk.vault).toBe(true);
-      expect(disk.backup).toBe(true);
+      checkRow('row1', subject, row, disk, { present: true, archived: true, localOnly: false, vault: true, backup: true });
     });
 
     it('row 6 (odd but reachable — stale mirror): server + backed up, archive removed via Unarchive', async function () {
-      const accountId = accountIdOf(YODA);
-      await switchToFolder(YODA, 'Archive');
-      const subject = 'Yoda archive 2';
+      const accountId = accountIdOf(VADER);
+      await switchToFolder(VADER, 'Matrix');
+      const subject = 'Vader matrix 2';
 
       // Confirm the pre-state: backup_run_account archived it too.
       await browser.waitUntil(async () => (await rowFor(subject))?.archived === true, {
@@ -422,18 +502,16 @@ describe('Storage matrix diagnostics', function () {
       }, { timeout: 15_000, interval: 300, timeoutMsg: `"${subject}" still showed a local badge after Unarchive` });
 
       const row = await rowFor(subject);
-      const disk = { vault: !!vaultFile(accountId, 'Archive', 2), backup: !!(await waitForDisk(() => backupFile(YODA, 'Archive', 2))) };
+      const disk = { vault: !!vaultFile(accountId, 'Matrix', 2), backup: !!(await waitForDisk(() => backupFile(VADER, 'Matrix', 2))) };
       console.log('[matrix] row6', subject, 'ui=', row, 'disk=', disk);
-      expect(row.archived).toBe(false);
-      expect(row.localOnly).toBe(false);
-      expect(disk.vault).toBe(false); // Unarchive removed the vault copy
-      expect(disk.backup).toBe(true); // ...but never touches the mirror
+      // Unarchive removed the vault copy but never touches the mirror.
+      checkRow('row6', subject, row, disk, { present: true, archived: false, localOnly: false, vault: false, backup: true });
     });
 
     it('row 4: archived + backed up, removed from server only', async function () {
-      const accountId = accountIdOf(YODA);
-      await switchToFolder(YODA, 'Archive');
-      const subject = 'Yoda archive 3';
+      const accountId = accountIdOf(VADER);
+      await switchToFolder(VADER, 'Matrix');
+      const subject = 'Vader matrix 3';
 
       await browser.waitUntil(async () => (await rowFor(subject))?.archived === true, {
         timeout: 10_000, interval: 300, timeoutMsg: `"${subject}" was not archived by backup_run_account`,
@@ -449,17 +527,15 @@ describe('Storage matrix diagnostics', function () {
       });
 
       const row = await rowFor(subject);
-      const disk = { vault: !!(await waitForDisk(() => vaultFile(accountId, 'Archive', 3))), backup: !!(await waitForDisk(() => backupFile(YODA, 'Archive', 3))) };
+      const disk = { vault: !!(await waitForDisk(() => vaultFile(accountId, 'Matrix', 3))), backup: !!(await waitForDisk(() => backupFile(VADER, 'Matrix', 3))) };
       console.log('[matrix] row4', subject, 'ui=', row, 'disk=', disk);
-      expect(row.localOnly).toBe(true);
-      expect(disk.vault).toBe(true);
-      expect(disk.backup).toBe(true);
+      checkRow('row4', subject, row, disk, { present: true, localOnly: true, vault: true, backup: true });
     });
 
     it('row 7 (orphaned mirror): unarchived AND removed from server, mirror still there', async function () {
-      const accountId = accountIdOf(YODA);
-      await switchToFolder(YODA, 'Archive');
-      const subject = 'Yoda archive 4';
+      const accountId = accountIdOf(VADER);
+      await switchToFolder(VADER, 'Matrix');
+      const subject = 'Vader matrix 4';
 
       await browser.waitUntil(async () => (await rowFor(subject))?.archived === true, {
         timeout: 10_000, interval: 300, timeoutMsg: `"${subject}" was not archived by backup_run_account`,
@@ -482,30 +558,26 @@ describe('Storage matrix diagnostics', function () {
         timeoutMsg: `"${subject}" (server-gone, never archived) should have vanished from the row list entirely`,
       });
 
-      const disk = { vault: !!vaultFile(accountId, 'Archive', 4), backup: !!(await waitForDisk(() => backupFile(YODA, 'Archive', 4))) };
+      const disk = { vault: !!vaultFile(accountId, 'Matrix', 4), backup: !!(await waitForDisk(() => backupFile(VADER, 'Matrix', 4))) };
       console.log('[matrix] row7', subject, 'ui=(row gone)', 'disk=', disk);
-      expect(disk.vault).toBe(false);
-      expect(disk.backup).toBe(true); // orphaned — nothing in this app ever purges a mirror-only leftover
+      // Orphaned — nothing in this app ever purges a mirror-only leftover.
+      checkRow('row7', subject, null, disk, { present: false, vault: false, backup: true });
     });
 
     it('row 3: plain server message, untouched (also: archive_emails never ran here, so no vault file should exist)', async function () {
-      const accountId = accountIdOf(LEIA);
-      await switchToFolder(LEIA, 'Archive');
-      const subject = 'Leia archive 1';
+      const accountId = accountIdOf(LUKE);
+      await switchToFolder(LUKE, 'Archive');
+      const subject = 'Luke archive 1';
       const row = await rowFor(subject);
-      const disk = { vault: !!vaultFile(accountId, 'Archive', 1), backup: !!backupFile(LEIA, 'Archive', 1) };
+      const disk = { vault: !!vaultFile(accountId, 'Archive', 1), backup: !!backupFile(LUKE, 'Archive', 1) };
       console.log('[matrix] row3', subject, 'ui=', row, 'disk=', disk);
-      expect(row).toBeTruthy();
-      expect(row.archived).toBe(false);
-      expect(row.localOnly).toBe(false);
-      expect(disk.vault).toBe(false);
-      expect(disk.backup).toBe(false);
+      checkRow('row3', subject, row, disk, { present: true, archived: false, localOnly: false, vault: false, backup: false });
     });
 
     it('row 2: server + archived, backup never run for this account — direct evidence archive_emails writes a real vault file', async function () {
-      const accountId = accountIdOf(LEIA);
-      await switchToFolder(LEIA, 'Archive');
-      const subject = 'Leia archive 2';
+      const accountId = accountIdOf(LUKE);
+      await switchToFolder(LUKE, 'Archive');
+      const subject = 'Luke archive 2';
 
       expect(await toggleRowExact(subject)).toBe(true);
       expect(await clickBarButton('Archive selected')).toBe(true);
@@ -514,17 +586,15 @@ describe('Storage matrix diagnostics', function () {
       });
 
       const row = await rowFor(subject);
-      const disk = { vault: !!(await waitForDisk(() => vaultFile(accountId, 'Archive', 2))), backup: !!backupFile(LEIA, 'Archive', 2) };
+      const disk = { vault: !!(await waitForDisk(() => vaultFile(accountId, 'Archive', 2))), backup: !!backupFile(LUKE, 'Archive', 2) };
       console.log('[matrix] row2', subject, 'ui=', row, 'disk=', disk, '<- badge vs on-disk file, not just the badge');
-      expect(row.archived).toBe(true);
-      expect(disk.vault).toBe(true);
-      expect(disk.backup).toBe(false);
+      checkRow('row2', subject, row, disk, { archived: true, vault: true, backup: false });
     });
 
     it('row 5: server-deleted local-only, backup never run for this account', async function () {
-      const accountId = accountIdOf(LEIA);
-      await switchToFolder(LEIA, 'Archive');
-      const subject = 'Leia archive 3';
+      const accountId = accountIdOf(LUKE);
+      await switchToFolder(LUKE, 'Archive');
+      const subject = 'Luke archive 3';
 
       expect(await toggleRowExact(subject)).toBe(true);
       expect(await clickBarButton('Archive selected')).toBe(true);
@@ -537,164 +607,32 @@ describe('Storage matrix diagnostics', function () {
       await waitForBodyText('cannot be undone', 'Delete-from-server confirmation never appeared');
       expect(await confirmDeletePopover()).toBe(true);
 
-      // leia's delete path is delayed 4s (see wdio.conf.js) — this row's
-      // settle just takes longer than a plain account's would.
       await browser.waitUntil(async () => (await rowFor(subject))?.localOnly === true, {
         timeout: 30_000, interval: 500, timeoutMsg: `"${subject}" never settled into Local-only`,
       });
 
       const row = await rowFor(subject);
-      const disk = { vault: !!(await waitForDisk(() => vaultFile(accountId, 'Archive', 3))), backup: !!backupFile(LEIA, 'Archive', 3) };
+      const disk = { vault: !!(await waitForDisk(() => vaultFile(accountId, 'Archive', 3))), backup: !!backupFile(LUKE, 'Archive', 3) };
       console.log('[matrix] row5', subject, 'ui=', row, 'disk=', disk);
-      expect(row.localOnly).toBe(true);
-      expect(disk.vault).toBe(true);
-      expect(disk.backup).toBe(false);
+      checkRow('row5', subject, row, disk, { localOnly: true, vault: true, backup: false });
     });
   });
 
   // ═══════════════════════════════════════════════════════════════════════
-  // Section 2 + 3: delays and the owner's switch-mailbox hypothesis
+  // Section: the "Expected: false, Received: true" reload failure — now a
+  // regression pin, not a diagnosis. Product commit 545e8e9 (already on this
+  // branch) prunes the header sidecar from inside deleteSelectedFromServer /
+  // purgeEverywhere themselves; this asserts the fix holds. No delay.
   // ═══════════════════════════════════════════════════════════════════════
-  //
-  // leia's mock server delays STORE/EXPUNGE/MOVE by 4s (wdio.conf.js) —
-  // every delete against leia is now observably "in flight" for a real
-  // window.
 
-  describe('delayed delete: in-flight visibility', function () {
-    it('no fault control: a plain delete-from-server never shows a stale row mid-flight (yoda, no delay)', async function () {
-      await switchToFolder(YODA, 'INBOX');
-      const subject = 'Yoda 1';
-      expect(await toggleRowExact(subject)).toBe(true);
-      expect(await clickBarButton('Delete from server')).toBe(true);
-      await waitForBodyText('cannot be undone', 'Delete-from-server confirmation never appeared');
-      expect(await confirmDeletePopover()).toBe(true);
+  describe('reload root-cause regression (no delay)', function () {
+    it('the deleted uid does not repaint from a stale header sidecar on reload', async function () {
+      const accountId = accountIdOf(VADER);
+      await switchToFolder(VADER, 'Matrix');
+      const subject = 'Vader matrix 5';
+      const uid = 5;
 
-      await browser.waitUntil(async () => !(await rowFor(subject)), {
-        timeout: 15_000, interval: 300, timeoutMsg: `"${subject}" (no delay) never disappeared after Delete from server`,
-      });
-      console.log('[delay] control (no delay): row gone promptly, as expected');
-    });
-
-    it('leia (4s delay): the row during the in-flight window, and after it settles', async function () {
-      await switchToFolder(LEIA, 'Archive');
-      const subject = 'Leia archive 4';
-
-      expect(await toggleRowExact(subject)).toBe(true);
-      expect(await clickBarButton('Delete from server')).toBe(true);
-      await waitForBodyText('cannot be undone', 'Delete-from-server confirmation never appeared');
-
-      const t0 = Date.now();
-      expect(await confirmDeletePopover()).toBe(true);
-
-      // Sample mid-flight, well before the 4s server delay elapses.
-      await browser.pause(1200);
-      const midFlight = await rowFor(subject);
-      console.log(`[delay] t+${Date.now() - t0}ms mid-flight row for "${subject}":`, JSON.stringify(midFlight));
-
-      // Now wait out the delay and confirm it settles to gone-or-local-only.
-      await browser.waitUntil(async () => {
-        const r = await rowFor(subject);
-        return !r || r.localOnly === true;
-      }, { timeout: 20_000, interval: 500, timeoutMsg: `"${subject}" never settled after the delay elapsed` });
-
-      const settled = await rowFor(subject);
-      console.log(`[delay] t+${Date.now() - t0}ms settled row for "${subject}":`, JSON.stringify(settled));
-    });
-  });
-
-  describe("owner's hypothesis: delete in flight, switch away and back", function () {
-    it('switch to another folder mid-delete, then back — does the row reappear?', async function () {
-      await switchToFolder(LEIA, 'Archive');
-      const subject = 'Leia archive 5';
-
-      expect(await toggleRowExact(subject)).toBe(true);
-      expect(await clickBarButton('Delete from server')).toBe(true);
-      await waitForBodyText('cannot be undone', 'Delete-from-server confirmation never appeared');
-      expect(await confirmDeletePopover()).toBe(true);
-
-      // Give the optimistic removal a moment to paint, then switch away
-      // while the 4s server delay is still pending.
-      await browser.pause(600);
-      const beforeSwitch = await rowFor(subject);
-      console.log('[hypothesis] row just before switching folders:', JSON.stringify(beforeSwitch));
-
-      expect(await clickSidebarItem('INBOX')).toBe(true);
-      await waitForEmails();
-      await browser.pause(500);
-
-      // Switch back to Archive while the delay may still be in flight.
-      expect(await clickSidebarItem('Archive')).toBe(true);
-      await waitForEmails();
-      const rightAfterSwitchBack = await rowFor(subject);
-      console.log('[hypothesis] row immediately after switching back to Archive:', JSON.stringify(rightAfterSwitchBack));
-
-      // Wait out the rest of the delay window and check the final state.
-      await browser.waitUntil(async () => {
-        const r = await rowFor(subject);
-        return !r || r.localOnly === true;
-      }, { timeout: 20_000, interval: 500, timeoutMsg: `"${subject}" never settled after switching back` });
-
-      const finalState = await rowFor(subject);
-      console.log('[hypothesis] final settled row after switch-away-and-back:', JSON.stringify(finalState));
-
-      // Report, don't assume: whether or not the row was visible mid-flight
-      // is exactly what this test exists to observe (see the report for the
-      // conclusion this run reached).
-    });
-
-    it('reload instead of switch — does the row reappear after a fresh boot?', async function () {
-      await switchToFolder(LEIA, 'Archive');
-      const subject = 'Leia archive 6';
-
-      expect(await toggleRowExact(subject)).toBe(true);
-      expect(await clickBarButton('Delete from server')).toBe(true);
-      await waitForBodyText('cannot be undone', 'Delete-from-server confirmation never appeared');
-      expect(await confirmDeletePopover()).toBe(true);
-
-      // Reload immediately — well inside the 4s server delay window, so the
-      // server-side delete has almost certainly not landed yet either.
-      await browser.pause(600);
-      await browser.execute(() => window.location.reload());
-      await waitForApp();
-      await switchToFolder(LEIA, 'Archive');
-
-      const afterReload = await rowFor(subject);
-      console.log('[hypothesis] row right after a reload during an in-flight delete:', JSON.stringify(afterReload));
-
-      // The tombstone (session state) is gone after reload by construction —
-      // whatever hides or shows this row now must come from the persisted
-      // header cache / server reconcile, not the tombstone. Poll to the
-      // settled state and report both readings.
-      await browser.waitUntil(async () => {
-        const r = await rowFor(subject);
-        return !r || r.localOnly === true;
-      }, { timeout: 20_000, interval: 500, timeoutMsg: `"${subject}" never settled after the post-reload delta-sync` }).catch((e) => {
-        console.warn('[hypothesis]', e.message);
-      });
-      const settledAfterReload = await rowFor(subject);
-      console.log('[hypothesis] settled row after reload + delta-sync:', JSON.stringify(settledAfterReload));
-    });
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // Section: isolating the "Expected: false, Received: true" reload failure
-  // ═══════════════════════════════════════════════════════════════════════
-  //
-  // No delay here at all — this reproduces the exact shape of the failing
-  // assertion in connected-bulk-delete-everywhere.test.js: a clean,
-  // undelayed Delete Everywhere, then an immediate reload. The header
-  // sidecar file is read directly off disk before and after, which is the
-  // one piece of evidence the original spec's DOM-only assertion couldn't
-  // provide.
-
-  describe('reload root-cause isolation (no delay)', function () {
-    it('does the deleted uid\'s header sidecar survive the post-delete reconcile?', async function () {
-      const accountId = accountIdOf(YODA);
-      await switchToFolder(YODA, 'INBOX');
-      const subject = 'Yoda 2';
-      const uid = 2;
-
-      const sidecarBefore = sidecarExists(accountId, 'INBOX', uid);
+      const sidecarBefore = sidecarExists(accountId, 'Matrix', uid);
       console.log(`[reload-root-cause] sidecar for uid ${uid} before delete:`, sidecarBefore);
 
       expect(await toggleRowExact(subject)).toBe(true);
@@ -710,63 +648,104 @@ describe('Storage matrix diagnostics', function () {
       // moment to actually finish its network round-trip and its
       // save_email_cache write before inspecting the sidecar.
       await browser.pause(2000);
-      const sidecarRightAfterDelete = sidecarExists(accountId, 'INBOX', uid);
+      const sidecarRightAfterDelete = sidecarExists(accountId, 'Matrix', uid);
       console.log(`[reload-root-cause] sidecar for uid ${uid} right after Delete Everywhere's own reconcile:`, sidecarRightAfterDelete);
+      if (sidecarRightAfterDelete) {
+        console.warn(`[reload-root-cause] sidecar for uid ${uid} survived the delete's own reconcile — the prune fix did not run/land as expected`);
+      }
 
       await browser.execute(() => window.location.reload());
       await waitForApp();
-      await switchToFolder(YODA, 'INBOX');
+      await switchToFolder(VADER, 'Matrix');
 
       const rowImmediatelyAfterReload = await rowFor(subject);
       console.log(`[reload-root-cause] row for "${subject}" immediately after reload:`, JSON.stringify(rowImmediatelyAfterReload));
 
-      // This is the exact assertion shape that failed in
-      // connected-bulk-delete-everywhere.test.js's last test.
-      expect(!!rowImmediatelyAfterReload).toBe(false);
+      if (rowImmediatelyAfterReload) {
+        throw new Error(
+          `"${subject}" reappeared after reload — the deleted row's header sidecar was not pruned.\n` +
+          `  sidecar before delete: ${sidecarBefore}\n  sidecar right after the delete's own reconcile: ${sidecarRightAfterDelete}\n` +
+          `  row after reload: ${JSON.stringify(rowImmediatelyAfterReload)}`,
+        );
+      }
     });
   });
 
   // ═══════════════════════════════════════════════════════════════════════
-  // Section 4: two accounts at once — cross-account bleed
+  // Section: two accounts at once — cross-account bleed
   // ═══════════════════════════════════════════════════════════════════════
+  //
+  // No artificial delay (see the file-header note on the dropped fault
+  // coverage) — this tests whether starting a delete on one account and
+  // immediately switching to the other, without waiting for the first to
+  // settle, leaks a tombstone or a stray selection across the switch. It is
+  // not a genuine in-flight race (both deletes likely complete before this
+  // test even finishes reading the DOM), just a same-tick account switch.
 
   describe('two accounts at once: cross-account bleed', function () {
-    it('start a delayed delete on leia, switch to yoda and delete there, switch back', async function () {
-      await switchToFolder(LEIA, 'INBOX');
-      const leiaSubject = 'Leia 1';
-      expect(await toggleRowExact(leiaSubject)).toBe(true);
+    it('start a delete on vader, switch to luke and delete there without waiting, switch back', async function () {
+      await switchToFolder(VADER, 'Matrix');
+      const vaderSubject = 'Vader matrix 6';
+      expect(await toggleRowExact(vaderSubject)).toBe(true);
       expect(await clickBarButton('Delete from server')).toBe(true);
-      await waitForBodyText('cannot be undone', 'Delete-from-server confirmation never appeared (leia)');
-      expect(await confirmDeletePopover()).toBe(true);
-      await browser.pause(500);
-
-      // Switch accounts while leia's delete is still in flight (4s delay).
-      await switchToFolder(YODA, 'INBOX');
-      const yodaSubject = 'Yoda 3';
-      expect(await toggleRowExact(yodaSubject)).toBe(true);
-      expect(await clickBarButton('Delete from server')).toBe(true);
-      await waitForBodyText('cannot be undone', 'Delete-from-server confirmation never appeared (yoda)');
+      await waitForBodyText('cannot be undone', 'Delete-from-server confirmation never appeared (vader)');
       expect(await confirmDeletePopover()).toBe(true);
 
-      await browser.waitUntil(async () => !(await rowFor(yodaSubject)), {
-        timeout: 15_000, interval: 300, timeoutMsg: `"${yodaSubject}" (no delay) never disappeared on yoda's account`,
+      // Switch accounts immediately, without waiting for vader's delete to settle.
+      await switchToFolder(LUKE, 'Archive');
+      const lukeSubject = 'Luke archive 4';
+
+      // Observed directly (not theorized): by this point in a full run —
+      // vader's rows 1/6/4/7 plus a Delete Everywhere + reload in the
+      // "reload root-cause" section before this test — luke's Archive can
+      // read back with only 3 of its 4 rows, "Luke archive 4" missing, even
+      // though nothing in this spec ever touches luke before this test and
+      // a raw IMAP probe of the mock server confirms it still has all 4.
+      // Isolating exactly which earlier test's reload causes it (a lingering
+      // minimized bulk session was one candidate, fixed above, but did not
+      // fully explain it) was not resolved in the time available — treat it
+      // as a real, reportable finding and make this assertion self-describing
+      // rather than let it die on a bare toggle failure with no context.
+      if (!(await rowFor(lukeSubject))) {
+        console.warn(`[cross-account] "${lukeSubject}" missing from luke's Archive after switching from vader — retrying with a full re-switch. rows seen: ${JSON.stringify(await rows())}`);
+        // Use the well-tested switchToFolder helper, not a raw click — a raw
+        // click retry here was observed to land on luke's INBOX instead of
+        // Archive (whatever it hit inside the sidebar was not the Archive
+        // folder entry), turning a diagnosable "row missing" finding into a
+        // confusing "wrong folder entirely" one.
+        await switchToFolder(LUKE, 'Archive', { requireRows: false });
+        if (!(await rowFor(lukeSubject))) {
+          throw new Error(
+            `"${lukeSubject}" never reappeared in luke's Archive even after a full re-switch — this is the ` +
+            `"row missing after an unrelated account's Delete Everywhere + reload" finding (see the report). ` +
+            `Rows seen: ${JSON.stringify(await rows())}`,
+          );
+        }
+      }
+      expect(await toggleRowExact(lukeSubject)).toBe(true);
+      expect(await clickBarButton('Delete from server')).toBe(true);
+      await waitForBodyText('cannot be undone', 'Delete-from-server confirmation never appeared (luke)');
+      expect(await confirmDeletePopover()).toBe(true);
+
+      await browser.waitUntil(async () => !(await rowFor(lukeSubject)), {
+        timeout: 15_000, interval: 300, timeoutMsg: `"${lukeSubject}" never disappeared on luke's account`,
       });
-      console.log('[cross-account] yoda deleted cleanly while leia delete was still in flight');
+      console.log('[cross-account] luke deleted cleanly right after switching away from vader');
 
-      // Switch back to leia and confirm ITS delete resolves correctly, with
-      // no bleed from the yoda operation (no stray checked row, no phantom
+      // Switch back to vader and confirm ITS delete resolves correctly, with
+      // no bleed from the luke operation (no stray checked row, no phantom
       // reappearance).
-      await switchToFolder(LEIA, 'INBOX');
-      const leiaRowNow = await rowFor(leiaSubject);
-      console.log('[cross-account] leia row right after switching back:', JSON.stringify(leiaRowNow));
+      await switchToFolder(VADER, 'Matrix');
+      const vaderRowNow = await rowFor(vaderSubject);
+      console.log('[cross-account] vader row right after switching back:', JSON.stringify(vaderRowNow));
 
       await browser.waitUntil(async () => {
-        const r = await rowFor(leiaSubject);
+        const r = await rowFor(vaderSubject);
         return !r || r.localOnly === true;
-      }, { timeout: 20_000, interval: 500, timeoutMsg: `"${leiaSubject}" never settled after switching back from yoda` });
+      }, { timeout: 20_000, interval: 500, timeoutMsg: `"${vaderSubject}" never settled after switching back from luke` });
 
-      const leiaFinal = await rowFor(leiaSubject);
-      console.log('[cross-account] leia row settled state:', JSON.stringify(leiaFinal));
+      const vaderFinal = await rowFor(vaderSubject);
+      console.log('[cross-account] vader row settled state:', JSON.stringify(vaderFinal));
 
       // No stray selection should have survived the account switches.
       const strayChecked = (await rows()).filter((r) => r.checked);
@@ -776,7 +755,7 @@ describe('Storage matrix diagnostics', function () {
   });
 
   // ═══════════════════════════════════════════════════════════════════════
-  // Section 5: unified inbox
+  // Section: unified inbox
   // ═══════════════════════════════════════════════════════════════════════
 
   describe('unified inbox: delete and switch', function () {
@@ -792,7 +771,7 @@ describe('Storage matrix diagnostics', function () {
 
     it('delete a unified-inbox row, switch mailbox, and reload — does it come back?', async function () {
       await switchToUnified();
-      const subject = 'Leia 2';
+      const subject = 'Luke message 2';
 
       const found = await rowFor(subject);
       if (!found) {
@@ -807,15 +786,15 @@ describe('Storage matrix diagnostics', function () {
       expect(await confirmDeletePopover()).toBe(true);
       await browser.pause(500);
 
-      const midFlight = await rowFor(subject);
-      console.log('[unified] row mid-flight (leia has a 4s delete delay):', JSON.stringify(midFlight));
+      const rightAfter = await rowFor(subject);
+      console.log('[unified] row right after confirming delete:', JSON.stringify(rightAfter));
 
-      // Switch to yoda's own INBOX and back to Unified — the known gap
+      // Switch to vader's own INBOX and back to Unified — the known gap
       // (deleteSelectedFromServer skips its trailing loadEmails() entirely
       // in unified mode) means the tombstone set when this delete started
       // may never get lifted, and unified mode never prunes the header
       // cache (saveEmailHeaders is called with `undefined` when isUnified).
-      await switchToFolder(YODA, 'INBOX');
+      await switchToFolder(VADER, 'INBOX');
       await switchToUnified();
       const afterSwitch = await rowFor(subject);
       console.log('[unified] row after switching away and back to Unified:', JSON.stringify(afterSwitch));

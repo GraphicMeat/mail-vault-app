@@ -45,7 +45,17 @@ const MOCK_ACCOUNTS = [
   // Account 1 carries the one HTML message in the suite (newest in its INBOX):
   // plain-text bodies never reach the iframe render path that connected-html-render
   // asserts on.
-  { id: '11111111-1111-4111-8111-111111111111', email: 'luke@mock.test', subjectPrefix: 'Luke message', htmlQuoted: true },
+  {
+    id: '11111111-1111-4111-8111-111111111111',
+    email: 'luke@mock.test',
+    subjectPrefix: 'Luke message',
+    htmlQuoted: true,
+    // connected-storage-matrix needs a bigger, differently-named Archive
+    // fixture than the default 3 "Archived message" — confirmed no other
+    // spec reads luke's Archive folder before repurposing it this way.
+    archiveCount: 4,
+    archiveSubjectPrefix: 'Luke archive',
+  },
   {
     id: '22222222-2222-4222-8222-222222222222',
     email: 'vader@mock.test',
@@ -53,38 +63,12 @@ const MOCK_ACCOUNTS = [
     inbox: BIG_INBOX,
     // Its INBOX total is asserted verbatim by connected-list-header.
     crossFolderThread: false,
-  },
-  // Accounts 3 and 4 exist only for connected-storage-matrix.test.js, which
-  // needs disposable server/vault/backup-mirror combinations it can delete
-  // permanently and (for account 4) a real IMAP delay to observe an
-  // in-flight delete — neither is safe to do against luke/vader, whose
-  // fixtures the rest of the connected-* suite depends on. Both are plain,
-  // small accounts; nothing else in the suite references them.
-  {
-    id: '33333333-3333-4333-8333-333333333333',
-    email: 'yoda@mock.test',
-    subjectPrefix: 'Yoda',
-    inbox: 3,
-    crossFolderThread: false,
-    archiveCount: 4,
-    archiveSubjectPrefix: 'Yoda archive',
-  },
-  {
-    id: '44444444-4444-4444-8444-444444444444',
-    email: 'leia@mock.test',
-    subjectPrefix: 'Leia',
-    inbox: 3,
-    crossFolderThread: false,
-    archiveCount: 6,
-    archiveSubjectPrefix: 'Leia archive',
-    // Delay every delete-ish response by 4s: STORE (+\Deleted flag), UID
-    // EXPUNGE (permanent delete path), UID MOVE (INBOX move-to-Trash path).
-    // See src-core/src/imap/mod.rs:delete_email for why both paths matter.
-    faults: [
-      { trigger: { OnCommand: 'STORE' }, action: { Delay: { secs: 4, nanos: 0 } } },
-      { trigger: { OnCommand: 'EXPUNGE' }, action: { Delay: { secs: 4, nanos: 0 } } },
-      { trigger: { OnCommand: 'MOVE' }, action: { Delay: { secs: 4, nanos: 0 } } },
-    ],
+    // connected-storage-matrix's own dedicated mailbox — see that file's
+    // header comment for why it's safe (vader is never the active account
+    // in a visual-regression screenshot, and this never touches vader's
+    // INBOX or its Archive folder, the latter already permanently consumed
+    // by connected-bulk-delete-everywhere.test.js).
+    extraMailbox: { name: 'Matrix', count: 6, subjectPrefix: 'Vader matrix' },
   },
 ];
 
@@ -161,6 +145,7 @@ export const config = {
         faults: a.faults,
         archiveCount: a.archiveCount,
         archiveSubjectPrefix: a.archiveSubjectPrefix,
+        extraMailbox: a.extraMailbox,
       }))),
     );
     seededAccounts = MOCK_ACCOUNTS.map((a, i) => mockAccount({ ...a, port: mockServers[i].port }));

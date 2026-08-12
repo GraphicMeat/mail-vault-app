@@ -272,7 +272,7 @@ function append(box, messages) {
  * Default account mailbox set: INBOX plus the special-use folders the
  * archive / move-to-folder / compose specs expect to find.
  */
-export function scenario({ owner, inbox = 40, subjectPrefix, htmlQuoted = false, crossFolderThread = true, faults = [], archiveCount = 3, archiveSubjectPrefix = 'Archived message' } = {}) {
+export function scenario({ owner, inbox = 40, subjectPrefix, htmlQuoted = false, crossFolderThread = true, faults = [], archiveCount = 3, archiveSubjectPrefix = 'Archived message', extraMailbox = null } = {}) {
   const inboxBox = mailbox('INBOX', inbox, { owner, subjectPrefix, htmlQuoted });
   const sentBox = mailbox('Sent', 5, { owner, attrs: ['\\HasNoChildren', '\\Sent'], subjectPrefix: 'Sent message' });
 
@@ -314,22 +314,30 @@ export function scenario({ owner, inbox = 40, subjectPrefix, htmlQuoted = false,
     }
   }
 
-  return {
-    state: {
-      mailboxes: [
-        inboxBox,
-        sentBox,
-        // connected-bulk-delete-everywhere.test.js permanently consumes account 2's
-        // copy of this folder (archives, deletes-from-server, and purges its 3
-        // messages) — don't assume account 2's Archive still holds 3 seeded
-        // messages in a spec that runs after it alphabetically.
-        mailbox('Archive', archiveCount, { owner, attrs: ['\\HasNoChildren', '\\Archive'], subjectPrefix: archiveSubjectPrefix }),
-        mailbox('Drafts', 0, { owner, attrs: ['\\HasNoChildren', '\\Drafts'] }),
-        mailbox('Trash', 0, { owner, attrs: ['\\HasNoChildren', '\\Trash'] }),
-      ],
-    },
-    faults,
-  };
+  const mailboxes = [
+    inboxBox,
+    sentBox,
+    // connected-bulk-delete-everywhere.test.js permanently consumes account 2's
+    // copy of this folder (archives, deletes-from-server, and purges its 3
+    // messages) — don't assume account 2's Archive still holds 3 seeded
+    // messages in a spec that runs after it alphabetically.
+    mailbox('Archive', archiveCount, { owner, attrs: ['\\HasNoChildren', '\\Archive'], subjectPrefix: archiveSubjectPrefix }),
+    mailbox('Drafts', 0, { owner, attrs: ['\\HasNoChildren', '\\Drafts'] }),
+    mailbox('Trash', 0, { owner, attrs: ['\\HasNoChildren', '\\Trash'] }),
+  ];
+
+  // Must stay LAST in this array: the mock IMAP server's LIST command
+  // returns mailboxes in this exact array order (src-mock-imap/src/
+  // commands.rs's do_list), and connected-storage-matrix.test.js relies on
+  // that to scope a real backup_run_account call to just this folder via
+  // skipFolders — skipping every folder ahead of it in the list.
+  if (extraMailbox) {
+    mailboxes.push(mailbox(extraMailbox.name, extraMailbox.count, {
+      owner, attrs: ['\\HasNoChildren'], subjectPrefix: extraMailbox.subjectPrefix,
+    }));
+  }
+
+  return { state: { mailboxes }, faults };
 }
 /**
  * Slow every FETCH by `ms`. Used to hold a large mailbox in its partially
