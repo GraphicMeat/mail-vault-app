@@ -6,6 +6,7 @@ import {
   buildMockServer,
   startMockImap,
   scenario,
+  slowCommand,
   mockAccount,
   seedAccounts,
   resetAppState,
@@ -69,6 +70,39 @@ const MOCK_ACCOUNTS = [
     // INBOX or its Archive folder, the latter already permanently consumed
     // by connected-bulk-delete-everywhere.test.js).
     extraMailbox: { name: 'Matrix', count: 6, subjectPrefix: 'Vader matrix' },
+  },
+  // Account 3 exists to carry faults. Faults are per-account with no
+  // per-mailbox scoping (src-mock-imap/src/scenario.rs), so slowing a server
+  // command on luke or vader is paid by every spec that touches them — the
+  // reason in-flight delete coverage was dropped once already. A third account
+  // that nothing else reads makes that coverage free.
+  //
+  // Two properties, both deliberate:
+  //   - MOVE and EXPUNGE stall 4s. Those are the two commands a server delete
+  //     ends on (src-core/src/imap/mod.rs: UID MOVE to Trash when the server
+  //     advertises MOVE, else COPY + STORE \Deleted + UID EXPUNGE), so a delete
+  //     here stays genuinely in flight long enough to switch account, switch
+  //     folder, or reload underneath it. Nothing else is slowed: SELECT and
+  //     FETCH run at full speed, so browsing this account costs nothing.
+  //   - Its UIDs start at 901, which (dates are derived from the UID — see
+  //     mockImap.js `stamp`) makes its mail the NEWEST in the suite. The
+  //     unified inbox sorts date-descending across accounts, and vader's 700
+  //     INBOX messages otherwise fill every rendered row — no luke message can
+  //     reach the visible window at all. This account's rows land at the top,
+  //     which is what makes a unified-inbox assertion possible without
+  //     scrolling a virtualized list past 600 rows.
+  //
+  // Cost: the sidebar gains a third account avatar, which shifts every
+  // visual-* baseline. Those specs are `local-manual` and never run in CI;
+  // regenerating them is a developer-local step.
+  {
+    id: '33333333-3333-4333-8333-333333333333',
+    email: 'yoda@mock.test',
+    subjectPrefix: 'Yoda message',
+    inbox: 8,
+    inboxUidStart: 901,
+    crossFolderThread: false,
+    faults: [slowCommand('MOVE', 4000), slowCommand('EXPUNGE', 4000)],
   },
 ];
 
@@ -140,6 +174,7 @@ export const config = {
         owner: a.email,
         subjectPrefix: a.subjectPrefix,
         inbox: a.inbox,
+        inboxUidStart: a.inboxUidStart,
         htmlQuoted: a.htmlQuoted,
         crossFolderThread: a.crossFolderThread,
         faults: a.faults,
@@ -153,6 +188,17 @@ export const config = {
 
     // onPrepare runs in the launcher, before() runs in each worker — module state
     // does not cross that boundary, but the environment workers are spawned with does.
+    //
+    // testDataDir MUST be exported for the same reason, and for a long time it
+    // was not. Each worker re-imports this file, re-runs the `mkdtempSync`
+    // fallback, and gets its OWN empty directory. Two things followed, both
+    // silent: `beforeSession`'s resetAppState wiped that decoy instead of the
+    // app's real data dir — so spec files were never isolated from each other,
+    // they all shared one accumulating HOME — and `browser.testDataDir` pointed
+    // specs at a directory the app never writes to, which is why every on-disk
+    // assertion in connected-storage-matrix (vault .eml files, header sidecars)
+    // could only ever read back "not there".
+    process.env.E2E_DATA_DIR = testDataDir;
     process.env.E2E_MOCK_ACCOUNTS = JSON.stringify(seededAccounts);
     process.env.E2E_MOCK_SERVERS = JSON.stringify(mockServers.map(({ host, port }) => ({ host, port })));
     process.env.E2E_MOCK_INBOX_SIZES = JSON.stringify(MOCK_ACCOUNTS.map((a) => a.inbox || 40));

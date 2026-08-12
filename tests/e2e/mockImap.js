@@ -169,10 +169,16 @@ export function htmlQuotedMessage({ uid, to, from, subject, date }) {
  *
  * `htmlQuoted` appends one HTML message with a folded quote (see
  * `htmlQuotedMessage`) as the newest entry.
+ *
+ * `uidStart` shifts the whole UID range up. Dates come from the UID
+ * (`stamp(uid)` = 2026-01-01 + uid days), so a high `uidStart` is also the only
+ * way to make an account's mail the NEWEST in the unified inbox — that list is
+ * sorted date-descending across every account, and the 700-message account
+ * otherwise occupies every visible row (see connected-storage-matrix).
  */
-export function mailbox(name, count, { owner = 'user@example.com', attrs, subjectPrefix = 'Mock message', htmlQuoted = false } = {}) {
+export function mailbox(name, count, { owner = 'user@example.com', attrs, subjectPrefix = 'Mock message', htmlQuoted = false, uidStart = 1 } = {}) {
   const messages = [];
-  for (let uid = 1; uid <= count; uid++) {
+  for (let uid = uidStart; uid < uidStart + count; uid++) {
     // Highest UID is newest, so the list has a stable, meaningful sort order.
     const { internalDate, header } = stamp(uid);
     messages.push({
@@ -191,7 +197,7 @@ export function mailbox(name, count, { owner = 'user@example.com', attrs, subjec
     });
   }
   if (htmlQuoted) {
-    const uid = count + 1;
+    const uid = uidStart + count;
     const { internalDate, header } = stamp(uid);
     messages.push({
       uid,
@@ -207,12 +213,16 @@ export function mailbox(name, count, { owner = 'user@example.com', attrs, subjec
       }),
     });
   }
+  // maxUid + 1, not messages.length + 1 — identical while UIDs start at 1, but
+  // a shifted `uidStart` would otherwise advertise a UIDNEXT below the UIDs
+  // actually present, which reads to the client as a UID-space rollback.
+  const maxUid = messages.reduce((max, m) => Math.max(max, m.uid), 0);
   return {
     name,
     attrs: attrs || ['\\HasNoChildren'],
     uid_validity: 1,
-    uid_next: messages.length + 1,
-    highest_modseq: messages.length + 1,
+    uid_next: maxUid + 1,
+    highest_modseq: maxUid + 1,
     messages,
   };
 }
@@ -272,8 +282,8 @@ function append(box, messages) {
  * Default account mailbox set: INBOX plus the special-use folders the
  * archive / move-to-folder / compose specs expect to find.
  */
-export function scenario({ owner, inbox = 40, subjectPrefix, htmlQuoted = false, crossFolderThread = true, faults = [], archiveCount = 3, archiveSubjectPrefix = 'Archived message', extraMailbox = null } = {}) {
-  const inboxBox = mailbox('INBOX', inbox, { owner, subjectPrefix, htmlQuoted });
+export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, htmlQuoted = false, crossFolderThread = true, faults = [], archiveCount = 3, archiveSubjectPrefix = 'Archived message', extraMailbox = null } = {}) {
+  const inboxBox = mailbox('INBOX', inbox, { owner, subjectPrefix, htmlQuoted, uidStart: inboxUidStart });
   const sentBox = mailbox('Sent', 5, { owner, attrs: ['\\HasNoChildren', '\\Sent'], subjectPrefix: 'Sent message' });
 
   // `inbox: 0` means an empty INBOX to the integration harness — leave it alone.
@@ -340,12 +350,28 @@ export function scenario({ owner, inbox = 40, subjectPrefix, htmlQuoted = false,
   return { state: { mailboxes }, faults };
 }
 /**
+ * Stall every occurrence of one IMAP command by `ms`.
+ *
+ * Faults are scoped to a server, and a server is one account — the mock's
+ * Trigger is OnCommand / OnNthCommand / OnConnect with no per-mailbox scoping
+ * (src-mock-imap/src/scenario.rs). Anything slowed here is slowed for every
+ * spec that touches the account, so put a fault on a DEDICATED account rather
+ * than on one the rest of the suite shares.
+ */
+export function slowCommand(command, ms) {
+  return {
+    trigger: { OnCommand: command.toUpperCase() },
+    action: { Delay: { secs: Math.floor(ms / 1000), nanos: (ms % 1000) * 1e6 } },
+  };
+}
+
+/**
  * Slow every FETCH by `ms`. Used to hold a large mailbox in its partially
  * loaded state long enough for a spec to observe it — a loopback mock answers
  * faster than the UI can be sampled otherwise.
  */
 export function slowFetch(ms) {
-  return { trigger: { OnCommand: 'FETCH' }, action: { Delay: { secs: Math.floor(ms / 1000), nanos: (ms % 1000) * 1e6 } } };
+  return slowCommand('FETCH', ms);
 }
 
 // ── Account seeding ─────────────────────────────────────────────────────────
