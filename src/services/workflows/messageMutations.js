@@ -635,20 +635,33 @@ export async function deleteSelectedFromServer() {
   // that is gone from the server. deleteEmailFromServer has always pruned like
   // this for the single-row path; the bulk paths never did, which is why
   // deleting one row and deleting a selection behaved differently on reload.
-  // Pin the identity, same hazard as in purgeEverywhere: these uids were
-  // collected against the account/mailbox that was active when the loop started,
-  // but the per-message server deletes above take seconds and the user can
-  // switch view inside that window. Pruning the mailbox that happens to be on
-  // screen now, with uids from the one we deleted from, makes a row disappear
-  // from a mailbox nobody touched — uids are unique per mailbox, not globally.
+  // Pin the identity: these uids were collected against the account/mailbox
+  // that was active when the loop started, but the per-message server deletes
+  // above take seconds and the user can switch view inside that window.
+  //
+  // Two halves, and BOTH matter:
+  //   - the KEY and the uids always come from `state`, never from live state.
+  //     Pruning the mailbox that happens to be on screen now, with uids from
+  //     the one we deleted from, makes a row disappear from a mailbox nobody
+  //     touched — uids are unique per mailbox, not globally.
+  //   - the prune still runs when the view HAS moved; only the `emails`
+  //     payload is dropped (an empty array writes no headers, and a null total
+  //     leaves the stored one untouched). Skipping the prune outright was the
+  //     first fix and it was wrong: by the comment above, loadEmails() cannot
+  //     reconcile this later — the uid is absent from both sides of its diff —
+  //     so the sidecar keeps the header forever, the session tombstone is the
+  //     only thing hiding the row, and the next reload repaints a message that
+  //     is gone from the server. Deleting and then switching account made a
+  //     delete permanently fail to stick.
   if (!isUnified && deletedInActiveMailbox.size > 0) {
     const s = get();
-    if (s.activeAccountId === state.activeAccountId && s.activeMailbox === state.activeMailbox) {
-      await db.saveEmailHeaders(
-        state.activeAccountId, state.activeMailbox, s.emails, s.totalEmails,
-        { removedUids: [...deletedInActiveMailbox] },
-      );
-    }
+    const viewUnmoved = s.activeAccountId === state.activeAccountId && s.activeMailbox === state.activeMailbox;
+    await db.saveEmailHeaders(
+      state.activeAccountId, state.activeMailbox,
+      viewUnmoved ? s.emails : [],
+      viewUnmoved ? s.totalEmails : null,
+      { removedUids: [...deletedInActiveMailbox] },
+    );
   }
 
   // Reconcile with the server: prunes the header cache and restores any email
@@ -913,16 +926,23 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
   // or folder inside that window. Writing one with the other hands a different
   // account's cache a foreign uid list, and a row vanishes from a mailbox
   // nobody deleted from (uids collide freely across accounts — they are only
-  // unique per mailbox). If the view moved, skip: that mailbox is not on screen
-  // and its cache reconciles the next time it loads.
+  // unique per mailbox).
+  //
+  // When the view HAS moved, drop the payload but still prune: an empty
+  // `emails` writes no headers and a null total leaves the stored one alone,
+  // so nothing foreign lands in this mailbox's cache — while the uids that
+  // were genuinely purged still go away. "Skip and let it reconcile later" was
+  // the first fix and it does not hold: per the paragraph above, loadEmails()
+  // never sees these uids as newly-gone, so the sidecar keeps them forever.
   if (!isUnified && activeGroup?.uids.length) {
     const s = get();
-    if (s.activeAccountId === activeGroup.accountId && s.activeMailbox === activeGroup.mailbox) {
-      await db.saveEmailHeaders(
-        activeGroup.accountId, activeGroup.mailbox, s.emails, s.totalEmails,
-        { removedUids: [...activeGroup.uids] },
-      );
-    }
+    const viewUnmoved = s.activeAccountId === activeGroup.accountId && s.activeMailbox === activeGroup.mailbox;
+    await db.saveEmailHeaders(
+      activeGroup.accountId, activeGroup.mailbox,
+      viewUnmoved ? s.emails : [],
+      viewUnmoved ? s.totalEmails : null,
+      { removedUids: [...activeGroup.uids] },
+    );
   }
 
   if (!isUnified) get().loadEmails();

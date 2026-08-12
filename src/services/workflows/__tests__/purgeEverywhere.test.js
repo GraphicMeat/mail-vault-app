@@ -301,9 +301,11 @@ describe('purgeEverywhere — storage matrix', () => {
   // vanishes from a mailbox nobody deleted from. Seen on the mac mini: a purge
   // on one account made an unrelated row disappear from another account's
   // Archive while the server still had it.
-  it('does not prune when the user switched account mid-purge', async () => {
+  it('prunes the mailbox it purged, not the one on screen, when the user switched account mid-purge', async () => {
     prime({ emails: [serverMsg(1)], archived: [1] });
     const OTHER = '99999999-9999-4999-8999-999999999999';
+    const purgedAccount = useMailStore.getState().activeAccountId;
+    const purgedMailbox = useMailStore.getState().activeMailbox;
     mockDeleteEmail.mockImplementation(async () => {
       // The view moves while the server delete is in flight.
       useMailStore.setState({ activeAccountId: OTHER, activeMailbox: 'Archive' });
@@ -311,7 +313,20 @@ describe('purgeEverywhere — storage matrix', () => {
 
     await purgeEverywhere([1]);
 
-    expect(mockSaveEmailHeaders.mock.calls.some(c => c[4]?.removedUids?.length)).toBe(false);
+    const prune = mockSaveEmailHeaders.mock.calls.find(c => c[4]?.removedUids?.length);
+    // It must still happen: loadEmails() cannot reconcile this later, because
+    // the optimistic update already removed the uid from `emails`, so it never
+    // registers as newly-gone. Skipping here left the header cached forever and
+    // a reload brought a purged message back.
+    expect(prune).toBeTruthy();
+    expect(prune[0]).toBe(purgedAccount);
+    expect(prune[1]).toBe(purgedMailbox);
+    expect(prune[4].removedUids).toEqual([1]);
+    // …but with no payload from the view that moved: an empty emails array
+    // writes no headers into this mailbox, and a null total leaves the stored
+    // one untouched.
+    expect(prune[2]).toEqual([]);
+    expect(prune[3]).toBeNull();
   });
 
   it('mixed batch: only the uids whose server delete succeeded are purged locally', async () => {
