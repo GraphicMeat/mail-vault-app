@@ -4,6 +4,18 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './styles/index.css';
 
+// A row can vanish at four layers — the sidecar cache, `emails`, the filters
+// that produce `sortedEmails`, and the virtualizer's render window — and from
+// the DOM all four look the same. Without a store handle an E2E failure can
+// only report "the row isn't there", which is how a cross-account cache bug
+// stayed open through several passes. Same compile-time gate as e2eMotion:
+// `VITE_E2E` is a constant, so a normal build drops this entirely.
+if (import.meta.env.VITE_E2E === '1') {
+  import('./stores/mailStore').then(({ useMailStore }) => {
+    window.__MAIL_STORE__ = useMailStore;
+  });
+}
+
 if (navigator.platform?.startsWith('Mac') || navigator.userAgent?.includes('Mac')) {
   document.documentElement.classList.add('platform-mac');
 }
