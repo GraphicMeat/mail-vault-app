@@ -23,6 +23,7 @@ export function useEmailScheduler() {
 
   const intervalRef = useRef(null);
   const hasRefreshedOnLaunch = useRef(false);
+  const hasReplayedDeletes = useRef(false);
   const lastBadgeCount = useRef(-1);
 
   // Send notification via Tauri
@@ -136,6 +137,22 @@ export function useEmailScheduler() {
       doRefresh();
     }
   }, [refreshOnLaunch, accounts.length]);
+
+  // Finish any server delete the last session confirmed but never sent.
+  //
+  // Deliberately NOT gated on refreshOnLaunch: that setting governs whether the
+  // app goes looking for new mail, while this is unfinished work the user
+  // already asked for and was shown as done. It also has to run before the
+  // first list load, or that load re-downloads the very headers this is about
+  // to delete. Once per session — accounts.length can change as accounts load,
+  // and re-issuing these is not free.
+  useEffect(() => {
+    if (accounts.length === 0 || hasReplayedDeletes.current) return;
+    hasReplayedDeletes.current = true;
+    import('../services/workflows/replayPendingDeletes')
+      .then(({ replayPendingDeletes }) => replayPendingDeletes())
+      .catch((e) => console.warn('[scheduler] Could not replay pending deletes:', e));
+  }, [accounts.length]);
 
   // Set up interval for periodic refresh
   useEffect(() => {
