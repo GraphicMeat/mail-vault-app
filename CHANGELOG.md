@@ -12,6 +12,9 @@
 - Bulk operation descriptions now state which of the three storage locations (server, this computer, external backup) each action touches, and "Delete from Server" states per-selection whether local copies survive.
 
 ### Fixed
+- Deleting emails from the server is no longer lost if the app is closed or reloaded while the delete is still going. The delete is recorded before the rows disappear and finished the next time the app starts, so a message you were shown as deleted stays deleted.
+- Email subjects no longer vanish from the list when a message's date includes a year — older mail showed only a sender and a date in a narrow list.
+- A message deleted while switching accounts could take an unrelated message with it, or fail to stay deleted after a restart.
 - Deleting archived emails from a folder left the local copies behind, so the rows reappeared as "Local only" and the delete looked like it had done nothing.
 
 ## [2.9.2] - 2026-08-08
