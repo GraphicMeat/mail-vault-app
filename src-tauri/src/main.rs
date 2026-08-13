@@ -28,6 +28,7 @@ mod iap;
 pub use mailvault_core::imap;
 mod migration;
 mod move_emails;
+mod pending_delete;
 mod restore;
 pub use mailvault_core::oauth2;
 mod smtp;
@@ -1219,6 +1220,53 @@ fn load_email_cache_meta(app_handle: tauri::AppHandle, account_id: String, mailb
     }
 
     Ok(None)
+}
+
+// ── Pending server deletes ──────────────────────────────────────────────────
+//
+// The journal lives in app_data_dir, NOT vault::root: the vault is relocatable
+// and can be an external volume that is absent at launch, which is exactly when
+// the replay needs to read this.
+
+fn pending_delete_dir(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not get app data directory: {}", e))
+}
+
+#[tauri::command]
+fn pending_delete_queue(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    mailbox: String,
+    uids: Vec<u32>,
+) -> Result<(), String> {
+    let dir = pending_delete_dir(&app_handle)?;
+    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create data directory: {}", e))?;
+    pending_delete::queue(&dir, &account_id, &mailbox, &uids)
+}
+
+#[tauri::command]
+fn pending_delete_clear(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    mailbox: String,
+    uids: Vec<u32>,
+) -> Result<(), String> {
+    pending_delete::clear(&pending_delete_dir(&app_handle)?, &account_id, &mailbox, &uids)
+}
+
+/// Everything still owed a server delete, as `[{accountId, mailbox, uids}]`.
+#[tauri::command]
+fn pending_delete_read(app_handle: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let entries = pending_delete::entries(&pending_delete_dir(&app_handle)?)
+        .into_iter()
+        .map(|(account_id, mailbox, uids)| {
+            serde_json::json!({ "accountId": account_id, "mailbox": mailbox, "uids": uids })
+        })
+        .collect::<Vec<_>>();
+    Ok(serde_json::Value::Array(entries))
 }
 
 #[tauri::command]
@@ -4484,6 +4532,9 @@ fn main() {
             load_email_cache_by_uids,
             list_cached_uids,
             clear_email_cache,
+            pending_delete_queue,
+            pending_delete_clear,
+            pending_delete_read,
             save_mailbox_cache,
             load_mailbox_cache,
             delete_mailbox_cache,

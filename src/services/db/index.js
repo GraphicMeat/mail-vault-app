@@ -57,3 +57,9 @@ export {
   saveGraphIdMap,
   loadGraphIdMap,
 } from './caches.js';
+
+export {
+  queuePendingDeletes,
+  clearPendingDeletes,
+  readPendingDeletes,
+} from './pendingDeletes.js';
