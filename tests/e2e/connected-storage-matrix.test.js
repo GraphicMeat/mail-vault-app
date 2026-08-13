@@ -6,12 +6,12 @@
  * of those three, across a reload, across three accounts at once, and in
  * unified inbox.
  *
- * It began as pure diagnostics. Most of it is now regression pins, because the
+ * It began as pure diagnostics. It is now regression pins, because the
  * diagnostics found real bugs and those bugs got fixed: the cross-account
- * sidecar prune, the subject column collapsing to zero width, and a prune that
- * was skipped whenever the view moved mid-delete. One test is still a pin on an
- * OPEN bug and is expected to fail — see "a confirmed delete survives the app
- * reloading mid-flight". Every other failure here means something regressed.
+ * sidecar prune, the subject column collapsing to zero width, a prune skipped
+ * whenever the view moved mid-delete, and a confirmed delete silently lost when
+ * the app reloaded while it was still on the wire. Every failure here now means
+ * something regressed.
  *
  * FIXTURES (third pass). Each account here earns its place:
  *   - vader@mock.test owns one extra mailbox, "Matrix" (wdio.conf.js
@@ -71,7 +71,7 @@
  *     title^="Local only". No per-row backup/cloud indicator exists.
  */
 
-import { existsSync, mkdtempSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -169,6 +169,22 @@ describe('Storage matrix diagnostics', function () {
 
   function sidecarExists(accountId, mbox, uid) {
     return existsSync(join(appDataDir(HOME()), 'email_cache', cacheBaseName(accountId, mbox), `${uid}.json`));
+  }
+
+  /**
+   * The durable journal of confirmed-but-unfinished server deletes, or null if
+   * there is nothing owed. Written before the first IMAP round-trip of a delete
+   * and cleared after the last, so its contents at a given moment say exactly
+   * how far a delete got.
+   */
+  function pendingDeleteJournal() {
+    const path = join(appDataDir(HOME()), 'pending_server_delete.json');
+    if (!existsSync(path)) return null;
+    try {
+      return JSON.parse(readFileSync(path, 'utf-8'));
+    } catch (e) {
+      return { __unparseable: e.message };
+    }
   }
 
   /** Every UID the sidecar cache holds for one mailbox, ascending. */
@@ -946,49 +962,91 @@ describe('Storage matrix diagnostics', function () {
     });
 
     /**
-     * OPEN PRODUCT BUG — this test is expected to fail today, and it should
-     * stay failing until the gap is closed. It is not a harness problem.
+     * The whole delete runs in the webview, so reloading inside it kills the
+     * workflow before the remaining IMAP commands are sent. The rows are hidden
+     * optimistically and a session tombstone keeps them hidden, so the user is
+     * shown a completed delete either way — and before this was fixed, the
+     * messages that never got sent were simply back on the next launch.
      *
-     * A "Delete from server" the user confirmed is issued from the frontend:
-     * the row is hidden optimistically, then the workflow awaits the IMAP
-     * round-trip. Reload (or quit) the app inside that window and the JS
-     * context dies before the command is ever sent — the message is never
-     * deleted, nothing reports an error, and nothing retries. The user saw the
-     * row vanish and has every reason to believe it is gone; it comes back on
-     * the next launch, still on the server.
+     * What makes it survive now: the uids are journalled to disk before the
+     * first round-trip and cleared after the last, and launch replays whatever
+     * is left (src-tauri/src/pending_delete.rs,
+     * services/workflows/replayPendingDeletes.js). This asserts the outcome the
+     * user actually cares about — the message really is gone from INBOX and
+     * really is in Trash — not that any particular mechanism ran.
      *
-     * The 4s MOVE stall on this account is what makes the window observable;
-     * on a fast server it is small but not zero, and it is exactly as wide as
-     * the server is slow — the case a real provider hits, not a synthetic one.
-     *
-     * Closing it means the delete has to outlive the webview: a durable
-     * operation queue (or moving the whole delete into the Rust side and
-     * replaying it on launch), not a wait or a retry in the frontend. That is
-     * a feature, not a patch, which is why this is pinned rather than papered
-     * over.
+     * The 4s MOVE stall on this account is what makes the window observable; on
+     * a fast server it is small but never zero, and it is exactly as wide as the
+     * server is slow. That is the case a real provider hits.
      */
     it('a confirmed delete survives the app reloading mid-flight', async function () {
       await switchToFolder(YODA, 'INBOX');
       const subject = 'Yoda message 904';
       expect(await rowFor(subject)).toBeTruthy();
 
+
       expect(await toggleRowExact(subject)).toBe(true);
       expect(await clickBarButton('Delete from server')).toBe(true);
       await waitForBodyText('cannot be undone', 'Delete-from-server confirmation never appeared (yoda reload)');
       expect(await confirmDeletePopover()).toBe(true);
 
-      // Reload immediately, while the server is still sitting on the MOVE.
+      // Wait for the row to disappear, then reload — that moment is the whole
+      // contract. The row vanishing is the app telling the user the delete is
+      // done, and the delete is only durable from the point the journal has
+      // been written, so the workflow writes it BEFORE the optimistic update.
+      // Reloading here is therefore the strictest fair test: the instant the
+      // user is told it is gone, the app must be able to make that true.
+      //
+      // (Reloading earlier still — inside the few ms between the click and the
+      // row disappearing — is a race no frontend can win, and no user can hit:
+      // the app has not claimed anything yet at that point.)
+      await browser.waitUntil(async () => !(await rowFor(subject)), {
+        timeout: 20_000, interval: 200,
+        timeoutMsg: `"${subject}" never disappeared after confirming the delete`,
+      });
+      const journalMidFlight = pendingDeleteJournal();
+      console.log('[reload-durability] journal at the moment the row vanished:', JSON.stringify(journalMidFlight));
+
+      // The server is still sitting on the 4s MOVE.
       await browser.execute(() => window.location.reload());
       await waitForApp();
+      console.log('[reload-durability] journal right after reload:', JSON.stringify(pendingDeleteJournal()));
+      // Wait for the launch replay to actually finish before asking the UI
+      // anything. It waits on the keychain and then a 4s-stalled MOVE, and a
+      // folder opened before it lands shows a pre-delete server state that
+      // nothing re-fetches — which reads as "the delete was lost" when it was
+      // merely not finished yet.
+      await browser.waitUntil(async () => !!(await browser.execute(
+        () => window.__MAIL_STORE__?.getState?.().pendingDeleteReplay)), {
+        timeout: 60_000, interval: 500, timeoutMsg: 'The launch replay never ran at all',
+      });
+      const replay = await browser.execute(() => window.__MAIL_STORE__?.getState?.().pendingDeleteReplay || null);
+      console.log('[reload-durability] replay result:', JSON.stringify(replay));
 
-      await switchToFolder(YODA, 'Trash', { requireRows: false });
-      if (!(await rowFor(subject))) {
-        throw new Error(
-          `"${subject}" never reached yoda's Trash — the delete the user confirmed was lost when the app ` +
-          `reloaded while it was still in flight, with no error and no retry. The message is still on the ` +
-          `server, and the app showed the user a row disappearing.`,
-        );
-      }
+      // Re-switch on every poll: Trash may have been opened and cached before
+      // the replay's MOVE landed, and a folder already on screen does not
+      // re-fetch on its own.
+      await browser.waitUntil(async () => {
+        if (await rowFor(subject)) return true;
+        await switchToFolder(YODA, 'INBOX', { requireRows: false });
+        await switchToFolder(YODA, 'Trash', { requireRows: false });
+        return !!(await rowFor(subject));
+      }, {
+        timeout: 90_000, interval: 1000,
+        timeoutMsg: `"${subject}" never reached yoda's Trash — the delete the user confirmed was lost when ` +
+          `the app reloaded while it was still in flight. The message is still on the server, and the app ` +
+          `showed the user a row disappearing.\n` +
+          `  journal mid-flight (before the reload): ${JSON.stringify(journalMidFlight)}\n` +
+          `  replay: ${JSON.stringify(replay)}\n` +
+          `  journal now: ${JSON.stringify(pendingDeleteJournal())}`,
+      });
+
+      // …and it must not still be listed where it was deleted from.
+      await switchToFolder(YODA, 'INBOX', { requireRows: false });
+      await browser.waitUntil(async () => !(await rowFor(subject)), {
+        timeout: 30_000, interval: 500,
+        timeoutMsg: `"${subject}" is in yoda's Trash but yoda's INBOX still lists it after the reload`,
+      });
     });
   });
 
