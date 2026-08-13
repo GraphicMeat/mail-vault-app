@@ -538,6 +538,36 @@ export async function deleteSelectedFromServer() {
   const emailMap = new Map(allEmails.map(e => [isUnified ? _selKey(e) : e.uid, e]));
   const contextOf = (key) => _resolveKeyContext(key, state, emailMap, sentPath);
 
+  // Journal the intent BEFORE anything else, and await it.
+  //
+  // Everything below runs in the webview: reload or quit inside the loop and
+  // this context dies before the remaining commands are sent. The journal is
+  // what lets the next launch finish the job (see replayPendingDeletes) — but
+  // only if it actually reached disk first, and it is an async IPC racing the
+  // very window it exists to cover.
+  //
+  // So it goes ahead of the optimistic update, not after it. That ordering is
+  // the guarantee: the rows do not disappear until the delete is durable, so
+  // from the moment the app shows the user a completed delete, it is one. The
+  // other order lost the race outright — the row vanished, the app was
+  // reloaded, and the write never landed.
+  //
+  // Graph accounts are skipped: their delete is addressed by a per-session
+  // message id, not a UID, so a journalled uid is not something a later launch
+  // could act on. Nothing is written rather than something unreplayable.
+  const journalGroups = new Map();
+  for (const key of keys) {
+    const { uid, accountId, mailbox, account, emailObj } = contextOf(key);
+    if (!account || isGraphAccount(account)) continue;
+    if (emailObj?.source === 'local-only' || emailObj?._localStaged === true) continue;
+    const groupKey = `${accountId}|${mailbox}`;
+    if (!journalGroups.has(groupKey)) journalGroups.set(groupKey, { accountId, mailbox, uids: [] });
+    journalGroups.get(groupKey).uids.push(uid);
+  }
+  await Promise.all([...journalGroups.values()].map(
+    (g) => db.queuePendingDeletes(g.accountId, g.mailbox, g.uids),
+  ));
+
   // Remove from the UI immediately — the server/maildir deletes below can take
   // seconds (pool checkout + one round-trip per email). The post-loop
   // loadEmails() reconcile restores anything whose server delete failed.
@@ -623,6 +653,15 @@ export async function deleteSelectedFromServer() {
       useMailStore.setState({ deleteTombstones: ts });
     }
   }
+
+  // Every uid above has now been attempted — the loop's own catch is what makes
+  // that true even for the ones that failed. Clearing the whole batch (rather
+  // than a uid at a time) keeps this to one small write instead of one per
+  // message, and the only thing it gives up is that a crash mid-loop replays a
+  // few already-deleted uids at launch, which the replay is written to shrug off.
+  await Promise.all([...journalGroups.values()].map(
+    (g) => db.clearPendingDeletes(g.accountId, g.mailbox, g.uids),
+  ));
 
   // Prune the header sidecar for the rows just deleted.
   //

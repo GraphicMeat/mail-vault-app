@@ -18,6 +18,8 @@ const mockGraphSetRead = vi.fn().mockResolvedValue(undefined);
 const mockDeleteEmail = vi.fn().mockResolvedValue(undefined);
 const mockMoveEmails = vi.fn().mockResolvedValue(undefined);
 const mockSaveEmailHeaders = vi.fn().mockResolvedValue(undefined);
+const mockQueuePendingDeletes = vi.fn().mockResolvedValue(undefined);
+const mockClearPendingDeletes = vi.fn().mockResolvedValue(undefined);
 const mockSetUnreadForAccount = vi.fn();
 const mockGetGraphMessageId = vi.fn().mockReturnValue(null);
 const mockIsGraphAccount = vi.fn().mockReturnValue(false);
@@ -34,6 +36,8 @@ vi.mock('../../db', () => ({
   getArchivedEmails: vi.fn().mockResolvedValue([]),
   deleteLocalEmail: vi.fn().mockResolvedValue(undefined),
   saveEmailHeaders: (...a) => mockSaveEmailHeaders(...a),
+  queuePendingDeletes: (...a) => mockQueuePendingDeletes(...a),
+  clearPendingDeletes: (...a) => mockClearPendingDeletes(...a),
   initDB: vi.fn().mockResolvedValue(undefined),
   getAccounts: vi.fn().mockResolvedValue([]),
   ensureAccountsInFile: vi.fn().mockResolvedValue(undefined),
@@ -301,6 +305,36 @@ describe('deleteSelectedFromServer', () => {
     expect(prune).toBeTruthy();
     expect(prune[0]).toBe(ACCOUNT.id);
     expect(prune[1]).toBe('INBOX');
+  });
+
+  // The whole delete runs in the webview, so a reload or quit inside the loop
+  // kills it before the remaining commands are sent — and the rows are already
+  // hidden, so the user is shown a finished delete either way. The journal is
+  // what lets the next launch finish the job, and it is only useful if it is
+  // written BEFORE the first round-trip.
+  it('journals the uids before the first server delete and clears them after', async () => {
+    const order = [];
+    mockQueuePendingDeletes.mockImplementation(async (...a) => { order.push(['queue', ...a]); });
+    mockClearPendingDeletes.mockImplementation(async (...a) => { order.push(['clear', ...a]); });
+    mockDeleteEmail.mockImplementation(async () => { order.push(['delete']); });
+    primeStore(seedThread(), [1, 2]);
+
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    expect(order[0]).toEqual(['queue', ACCOUNT.id, 'INBOX', [1, 2]]);
+    expect(order.at(-1)).toEqual(['clear', ACCOUNT.id, 'INBOX', [1, 2]]);
+    expect(order.filter(o => o[0] === 'delete')).toHaveLength(2);
+  });
+
+  // A delete that failed is still a delete that was attempted. Leaving it
+  // journalled would re-issue it on every launch for the life of the install.
+  it('clears the journal even when the server delete failed', async () => {
+    mockDeleteEmail.mockRejectedValueOnce(new Error('nope'));
+    primeStore(seedThread(), [1]);
+
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    expect(mockClearPendingDeletes).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX', [1]);
   });
 
   it('does not prune a uid whose server delete failed', async () => {
