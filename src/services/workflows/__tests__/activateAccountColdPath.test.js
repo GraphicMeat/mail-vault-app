@@ -289,3 +289,59 @@ describe('activateAccount daemon-sync cold path (daemon alive, first visit)', ()
     expect(state.serverUidsKnown).toBe(true);
   });
 });
+
+// mailboxIsUnchanged's "unchanged" verdict only proves the SERVER hasn't
+// moved since the cache was written — it says nothing about whether that
+// cache is a complete enumeration. This branch is the dominant path in
+// practice (every account switch back to a recently-viewed mailbox lands
+// here), so a fix that never reaches it leaves serverUidsKnown permanently
+// false for the most-travelled path in the app.
+describe('activateAccount probe.unchanged branch (daemon alive, no sync needed)', () => {
+  beforeEach(() => {
+    mockGetDaemonHealth.mockReturnValue({ alive: true });
+    mockSyncNow.mockResolvedValue(undefined);
+    mockWaitForSync.mockResolvedValue({ success: true, new_emails: 0, total_emails: 0 });
+  });
+
+  it('proves serverUidsKnown true when the capped disk read is provably the whole cache', async () => {
+    primeActiveForBackgroundRefresh();
+    mockMailboxIsUnchanged.mockResolvedValue({ unchanged: true, reason: 'uidnext-exists-match' });
+    mockGetEmailHeadersPartial.mockResolvedValue({
+      emails: [mkHeader(1), mkHeader(2), mkHeader(3)],
+      totalEmails: 3,
+    });
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
+
+    const state = useMailStore.getState();
+    expect(state.serverUidsKnown).toBe(true);
+    expect([...state.serverUidSet].sort()).toEqual([1, 2, 3]);
+    expect(mockSyncNow).not.toHaveBeenCalled(); // sanity: took the unchanged shortcut, not a real sync
+  });
+
+  it('flips a stale true to false when the capped disk read is short of totalEmails', async () => {
+    primeActiveForBackgroundRefresh();
+    mockMailboxIsUnchanged.mockResolvedValue({ unchanged: true, reason: 'modseq-match' });
+    mockGetEmailHeadersPartial.mockResolvedValue({
+      emails: [mkHeader(1)], // far short — a large mailbox's cache, capped at 500
+      totalEmails: 500,
+    });
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
+
+    expect(useMailStore.getState().serverUidsKnown).toBe(false);
+    expect(mockSyncNow).not.toHaveBeenCalled();
+  });
+
+  it('probed-recently: preserves serverUidsKnown instead of re-deriving it (no live check ran)', async () => {
+    primeActiveForBackgroundRefresh(); // serverUidsKnown primed true
+    mockMailboxIsUnchanged.mockResolvedValue({ unchanged: true, reason: 'probed-recently' });
+    // If this were wrongly read as a completeness signal, a mismatched or
+    // empty cache read here would flip the flag; it must not be consulted.
+    mockGetEmailHeadersPartial.mockResolvedValue({ emails: [], totalEmails: 0 });
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
+
+    expect(useMailStore.getState().serverUidsKnown).toBe(true);
+  });
+});

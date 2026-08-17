@@ -742,7 +742,33 @@ export async function activateAccount(accountId, mailbox, options = {}) {
               accountId, effectiveMailbox, probe.reason);
             markVerified(accountId, effectiveMailbox);
             if (!signal.aborted) {
-              useMailStore.setState(serverVerifiedPatch());
+              // probe.unchanged proves the SERVER hasn't moved since the cache
+              // was written (a live checkMailboxStatus round trip, except for
+              // the 'probed-recently' TTL shortcut below) — it says nothing by
+              // itself about whether the cache is a COMPLETE enumeration.
+              let patch = serverVerifiedPatch();
+              if (probe.reason === 'probed-recently') {
+                // No live check ran this time; _lastVerified only gets set
+                // after one did, so an earlier hit within the last 10s already
+                // ran the branch below and left serverUidsKnown correctly set
+                // for a mailbox nothing has since touched. Leave it alone.
+              } else {
+                // Same capped read + same proof as the daemon-sync branch
+                // below (freshCache.emails.length >= totalEmails): a direct,
+                // unmerged disk read, so a count match isn't a coincidental
+                // window — it really is the whole cache. Complete: trust it
+                // for serverUidSet too. Incomplete: only correct the flag —
+                // writing a smaller windowed set here could regress whatever
+                // loadLocalEmails()'s concurrent first-paint already holds.
+                const cached = await db.getEmailHeadersPartial(accountId, effectiveMailbox, 500);
+                const cacheComplete = !!cached?.totalEmails && cached.emails.length >= cached.totalEmails;
+                patch = serverVerifiedPatch(
+                  cacheComplete
+                    ? { serverUidSet: new Set(cached.emails.map(e => e.uid)), serverUidsKnown: true }
+                    : { serverUidsKnown: false }
+                );
+              }
+              if (!signal.aborted) useMailStore.setState(patch);
               // "Unchanged" is about the cache, not about what we are showing.
               await _resumeDrainIfWindowShort(accountId, effectiveMailbox, signal, useMailStoreRef, get);
             }
