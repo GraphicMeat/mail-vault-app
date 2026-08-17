@@ -636,7 +636,11 @@ describe('unified inbox — serverUidsKnown never carries a stale true', () => {
 });
 
 describe('refreshBackedUpUids', () => {
-  it('keys backed-up uids by account so unified inbox cannot collide', async () => {
+  // Renamed from "...so unified inbox cannot collide" — unifiedInbox is false
+  // and only one account is registered here, so no collision is exercised.
+  // This test only pins the compound-key format for a single target; the
+  // unified-inbox multi-account case is covered separately below.
+  it('keys backed-up uids by account id', async () => {
     mockBackupScanUids.mockResolvedValue([11, 12]);
     useMailStore.setState({
       activeAccountId: 'acct-1',
@@ -667,5 +671,75 @@ describe('refreshBackedUpUids', () => {
     await useMailStore.getState().refreshBackedUpUids();
 
     expect(useMailStore.getState().backedUpKeys).toBeNull();
+  });
+
+  it('unified inbox: one account failing to scan makes the whole answer null, not a partial set', async () => {
+    // acct-1 scans clean first; acct-2 (scanned second) can't be read at all.
+    // The correct answer is "unknown", never a Set holding only acct-1's keys.
+    mockBackupScanUids
+      .mockResolvedValueOnce([11, 12])
+      .mockResolvedValueOnce(null);
+    useMailStore.setState({
+      unifiedInbox: true,
+      unifiedFolder: 'INBOX',
+      accounts: [
+        { id: 'acct-1', email: 'luke@mock.test' },
+        { id: 'acct-2', email: 'leia@mock.test' },
+      ],
+    });
+
+    await useMailStore.getState().refreshBackedUpUids();
+
+    expect(useMailStore.getState().backedUpKeys).toBeNull();
+  });
+
+  it('no resolvable target means "unknown", not a lingering stale answer', async () => {
+    // Mid account-switch, activeAccountId can briefly point at an id not yet
+    // in `accounts`. A previous account's backedUpKeys must not survive and
+    // be read as this account's answer.
+    useMailStore.setState({
+      activeAccountId: 'acct-1',
+      activeMailbox: 'INBOX',
+      unifiedInbox: false,
+      accounts: [],
+      backedUpKeys: new Set(['acct-9:1']),
+    });
+
+    await useMailStore.getState().refreshBackedUpUids();
+
+    expect(useMailStore.getState().backedUpKeys).toBeNull();
+  });
+
+  it('drops a stale in-flight scan so an older call cannot clobber a newer one', async () => {
+    let resolveFirst, resolveSecond;
+    const first = new Promise((resolve) => { resolveFirst = resolve; });
+    const second = new Promise((resolve) => { resolveSecond = resolve; });
+    mockBackupScanUids
+      .mockImplementationOnce(() => first)
+      .mockImplementationOnce(() => second);
+
+    useMailStore.setState({
+      activeAccountId: 'acct-1',
+      activeMailbox: 'INBOX',
+      unifiedInbox: false,
+      accounts: [{ id: 'acct-1', email: 'luke@mock.test' }],
+      backedUpKeys: null,
+    });
+
+    // Two overlapping refreshes — e.g. two archivedEmailIds changes in quick
+    // succession. Neither is awaited before the next starts.
+    const call1 = useMailStore.getState().refreshBackedUpUids();
+    const call2 = useMailStore.getState().refreshBackedUpUids();
+
+    // The newer call's scan comes back first...
+    resolveSecond([99]);
+    await call2;
+    // ...then the older, now-stale call finally resolves.
+    resolveFirst([11, 12]);
+    await call1;
+
+    const keys = useMailStore.getState().backedUpKeys;
+    expect(keys.has('acct-1:99')).toBe(true);
+    expect(keys.has('acct-1:11')).toBe(false);
   });
 });

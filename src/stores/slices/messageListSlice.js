@@ -44,6 +44,12 @@ let _loadEmailsGeneration = 0;
 // Module-level retry flag — prevents infinite retry loops on persistent errors
 let _loadEmailsRetried = false;
 
+// Module-level refreshBackedUpUids generation counter — same shape as
+// _loadEmailsGeneration: an older scan can resolve after a newer one starts
+// (account/mailbox switched again before backupScanUids returned), and
+// applying its answer would silently mislabel the account now on screen.
+let _backedUpGeneration = 0;
+
 // ── AbortController for progressive loading — cancels background loading on switch ──
 let _loadAbortController = null;
 
@@ -284,6 +290,13 @@ export const createMessageListSlice = (set, get) => ({
   // Rescan the external backup mirror for the active view (or every account,
   // in unified inbox) and rebuild backedUpKeys from scratch.
   refreshBackedUpUids: async () => {
+    const generation = ++_backedUpGeneration;
+    // Guarded setter — an older in-flight call resolving after a newer one
+    // must drop its result on the floor instead of clobbering it.
+    const commit = (backedUpKeys) => {
+      if (generation === _backedUpGeneration) set({ backedUpKeys });
+    };
+
     const { activeAccountId, activeMailbox, unifiedInbox, accounts, unifiedFolder } = get();
     const targets = unifiedInbox
       ? (accounts || []).map(a => ({ id: a.id, email: a.email, mailbox: unifiedFolder || 'INBOX' }))
@@ -292,25 +305,26 @@ export const createMessageListSlice = (set, get) => ({
           return a && activeMailbox ? [{ id: a.id, email: a.email, mailbox: activeMailbox }] : [];
         })();
 
-    if (!targets.length) return;
+    // No resolvable target (e.g. mid account-switch) is itself a
+    // can't-determine case — it must not leave a different account's answer
+    // sitting there looking current.
+    if (!targets.length) { commit(null); return; }
 
     const keys = new Set();
     for (const t of targets) {
       let uids;
       try {
         uids = await api.backupScanUids(t.email, t.mailbox);
-      } catch {
+      } catch (e) {
+        console.warn('[refreshBackedUpUids] backupScanUids failed:', e);
         uids = null;
       }
       // One unreadable target makes the whole answer unknown. A partial set
       // would render "not backed up" for accounts we simply could not scan.
-      if (uids === null) {
-        set({ backedUpKeys: null });
-        return;
-      }
+      if (uids === null) { commit(null); return; }
       for (const uid of uids) keys.add(`${t.id}:${uid}`);
     }
-    set({ backedUpKeys: keys });
+    commit(keys);
   },
 
   // ── Passthrough wrappers to workflow functions ──
