@@ -800,12 +800,31 @@ export async function activateAccount(accountId, mailbox, options = {}) {
               uidMap.merge(headersWithSource);
               if (freshCache.uidValidity != null) uidMap.checkUidValidity(freshCache.uidValidity);
 
+              // The daemon just did a real IMAP sync and this is a re-read of
+              // what it wrote — live truth, not a stale disk placeholder.
+              // freshUids IS the whole mailbox exactly when this read (capped
+              // at 500) already reaches totalEmails; when it does, lowestFresh
+              // is the mailbox's true lowest UID, so the prune loop above
+              // already reconciled every uidMap entry against freshUids — no
+              // window left unaccounted for. No extra round trip: both counts
+              // came from the read this branch already did.
+              const daemonSyncComplete = freshCache.emails.length >= (freshCache.totalEmails || freshCache.emails.length);
+
               commitToStore(uidMap, signal, accountId, useMailStoreRef, serverVerifiedPatch({
                 totalEmails: freshCache.totalEmails || freshCache.emails.length,
                 cachedCount: freshCache.totalCached ?? freshCache.emails.length,
-                hasMoreEmails: freshCache.emails.length < (freshCache.totalEmails || freshCache.emails.length),
+                hasMoreEmails: !daemonSyncComplete,
                 currentPage: Math.ceil(freshCache.emails.length / 200) || 1,
-                ...(freshCache.serverUids ? { serverUidSet: freshCache.serverUids } : {}),
+                // freshCache.serverUids (existing behavior, untouched here) is a
+                // disk-cached field from some earlier full search — its own
+                // completeness isn't this read's to judge. Otherwise, write
+                // BOTH freshUids and daemonSyncComplete together: omitting
+                // serverUidsKnown on the incomplete branch would leave a stale
+                // true from an earlier fully-synced visit in place instead of
+                // correcting it — the same bug this whole fix exists to close.
+                ...(freshCache.serverUids
+                  ? { serverUidSet: freshCache.serverUids }
+                  : { serverUidSet: freshUids, serverUidsKnown: daemonSyncComplete }),
               }));
 
               // Save an in-memory restore descriptor for this mailbox so the
@@ -1038,12 +1057,25 @@ export async function activateAccount(accountId, mailbox, options = {}) {
         ? new Set([...existingServerUidSet, ...sorted.map(e => e.uid)])
         : new Set(sorted.map(e => e.uid));
 
+      // True exactly when a page-1 fetch (the UIDVALIDITY-changed or
+      // no-cached-sync branch above — serverEmails stays null on the
+      // delta-sync path, which already proved this at searchAllUids above)
+      // is provably the whole mailbox: sorted matching serverEmails 1:1
+      // rules out an earlier local-cache paint (loadLocalEmails' own
+      // uidMap.merge) having left unverified rows in the map, and reaching
+      // serverTotal means nothing was left on later pages. No extra round
+      // trip — both numbers already came out of this fetch.
+      const coldFetchProvedComplete = serverEmails != null
+        && sorted.length === serverEmails.length
+        && serverEmails.length >= serverTotal;
+
       setLoadEmailsRetried(false);
       commitToStore(uidMap, signal, accountId, useMailStoreRef, serverVerifiedPatch({
         totalEmails: serverTotal,
         hasMoreEmails: sorted.length < serverTotal,
         currentPage: Math.ceil(sorted.length / 200) || 1,
         serverUidSet: mergedServerUidSet,
+        ...(serverEmails != null ? { serverUidsKnown: coldFetchProvedComplete } : {}),
       }));
       serverTrace.mark('server-merged', { count: sorted.length, serverTotal });
 

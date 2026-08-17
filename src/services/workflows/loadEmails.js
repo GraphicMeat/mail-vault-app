@@ -283,6 +283,12 @@ export async function loadEmails() {
     let newUidNext;
     let newHighestModseq;
     let _loadMoreTimer;
+    // Set explicitly (both true and false) only by the two page-1-fetch
+    // branches below, which know whether their own listing is the whole
+    // mailbox. Left undefined everywhere else so the common setState at the
+    // bottom omits the key and the flag keeps whatever it already was — the
+    // UID-search delta-sync branch proves it directly via searchAllUids.
+    let serverUidsKnown;
 
     if (hasCachedSync) {
       const status = await api.checkMailboxStatus(account, activeMailbox);
@@ -307,6 +313,12 @@ export async function loadEmails() {
           isLocal: savedEmailIds.has(email.uid),
           source: 'server'
         }));
+        // This single page IS the whole mailbox exactly when it already
+        // reaches serverTotal — proven by data this fetch already returned,
+        // no extra round trip. UIDVALIDITY changing means any earlier proof
+        // is void regardless of which way this comes out, so state it
+        // explicitly rather than leaving the old value in place.
+        serverUidsKnown = mergedEmails.length >= serverTotal;
       } else if (
         newHighestModseq != null && cachedHighestModseq != null &&
         newHighestModseq === cachedHighestModseq &&
@@ -511,6 +523,13 @@ export async function loadEmails() {
           isLocal: savedEmailIds.has(email.uid),
           source: 'server'
         }));
+        // Same proof as the UIDVALIDITY-changed branch above: mergedEmails
+        // here is exactly this fetch's own page, nothing merged in from
+        // cleanedExisting, so reaching serverTotal really does mean the
+        // whole mailbox fit on one page. The `if` branch just above mixes
+        // in cleanedExisting rows past the checked overlap window — not
+        // provable the same way, so it leaves serverUidsKnown untouched.
+        serverUidsKnown = mergedEmails.length >= serverTotal;
       }
     }
 
@@ -573,7 +592,8 @@ export async function loadEmails() {
       hasMoreEmails,
       totalEmails: serverTotal,
       loadingMore: false,
-      serverUidSet: mergedServerUidSet
+      serverUidSet: mergedServerUidSet,
+      ...(serverUidsKnown !== undefined ? { serverUidsKnown } : {}),
     });
 
     get().updateSortedEmails();
