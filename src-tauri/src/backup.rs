@@ -1139,6 +1139,44 @@ pub async fn backup_purge_uids(
     Ok(serde_json::json!({ "removed": removed, "queued": 0 }))
 }
 
+/// Which uids of `<email>/<mailbox>` are present in the external mirror.
+///
+/// `Ok(None)` means "could not determine" — no backup location configured, or
+/// one configured but unreachable (drive unplugged, bookmark stale). The UI
+/// renders that as an explicit unknown; it must never be confused with an
+/// empty set, which is the positive claim "nothing here is mirrored".
+#[tauri::command]
+pub async fn backup_scan_uids(
+    app_handle: tauri::AppHandle,
+    email: String,
+    mailbox: String,
+) -> Result<Option<Vec<u32>>, String> {
+    let data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("No app data dir: {}", e))?;
+
+    // Users with no backup drive pay nothing: bail before resolving a bookmark.
+    let loc = external_location::get_external_location(
+        &data_dir,
+        external_location::SLOT_EXTERNAL_BACKUP,
+    );
+    if loc.status == "not_configured" {
+        return Ok(None);
+    }
+
+    let (resolved, needs_release) = resolve_backup_path(&app_handle, None);
+    let Some(root) = resolved else {
+        return Ok(None);
+    };
+
+    let uids = scan_external_uids(&root, &email, &mailbox);
+    if needs_release {
+        release_backup_path(&root);
+    }
+    Ok(Some(uids.into_iter().collect()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::sync_locations;
@@ -1167,6 +1205,33 @@ mod tests {
 
         // Second pass must be a no-op — no duplicates under either naming scheme.
         assert_eq!(sync_locations(&app, &ext), 0);
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// The mirror scanner must recognise every filename shape the mirror has
+    /// carried — `<uid>:2,<flags>.eml`, `<uid>.eml`, `<uid>_<flags>.eml` —
+    /// or a backed-up message renders as "not backed up".
+    #[test]
+    fn scan_external_uids_reads_every_filename_shape() {
+        let base = std::env::temp_dir().join("mv-scan-ext-uids-test");
+        let _ = fs::remove_dir_all(&base);
+        let cur = base.join("luke@mock.test").join("INBOX").join("cur");
+        fs::create_dir_all(&cur).unwrap();
+        fs::write(cur.join("11:2,S.eml"), b"a").unwrap();
+        fs::write(cur.join("12.eml"), b"b").unwrap();
+        fs::write(cur.join("13_S.eml"), b"c").unwrap();
+        fs::write(cur.join("not-a-uid.eml"), b"d").unwrap();
+
+        let uids = super::scan_external_uids(base.to_str().unwrap(), "luke@mock.test", "INBOX");
+        assert_eq!(uids.len(), 3);
+        for uid in [11u32, 12, 13] {
+            assert!(uids.contains(&uid), "missing uid {}", uid);
+        }
+
+        // A mailbox with no mirror directory is empty, not an error.
+        let none = super::scan_external_uids(base.to_str().unwrap(), "luke@mock.test", "Sent");
+        assert!(none.is_empty());
 
         let _ = fs::remove_dir_all(&base);
     }

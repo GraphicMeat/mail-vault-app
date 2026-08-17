@@ -449,6 +449,18 @@ export async function backupPurgeUids(email, mailbox, uids) {
   return { removed: 0, queued: 0 };
 }
 
+/**
+ * Uids of this mailbox present in the external backup mirror, or null when we
+ * cannot tell (no location configured, or the drive is not connected). Null is
+ * not an empty set — see backup_scan_uids.
+ */
+export async function backupScanUids(email, mailbox) {
+  if (IS_TAURI) {
+    return tauriInvoke('backup_scan_uids', { email, mailbox });
+  }
+  return null;
+}
+
 // ── Mail storage location (vault) ─────────────────────────────────────────────
 
 export async function vaultGetStatus() {
