@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Cloud, HardDrive } from 'lucide-react';
 
@@ -97,6 +97,16 @@ export function StateTooltip({ label, detail, children, testId = 'msg-state-icon
     if (r) setPos({ top: r.bottom + 6, left: r.left + r.width / 2 });
   }, []);
   const close = useCallback(() => setPos(null), []);
+
+  const isOpen = pos !== null;
+  useEffect(() => {
+    if (!isOpen) return;
+    // The virtualized list scrolls an internal container, and `scroll`
+    // doesn't bubble to window — capture is the only phase that sees it.
+    // Close rather than reposition: cheaper, and correct for a hover tooltip.
+    window.addEventListener('scroll', close, true);
+    return () => window.removeEventListener('scroll', close, true);
+  }, [isOpen, close]);
 
   return (
     <>

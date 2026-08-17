@@ -102,4 +102,19 @@ describe('MessageStateIcon', () => {
     rerender(<MessageStateIcon email={{ source: 'server', isArchived: true }} />);
     expect(document.querySelector('[data-icon="HardDrive"]')).not.toBeNull();
   });
+
+  it('closes the tooltip on scroll, including a non-bubbling scroll from a nested container', () => {
+    // Virtualized-list rows scroll an internal container, and `scroll`
+    // events don't bubble — testing-library's default `scroll` init is
+    // { bubbles: false }, same as the real DOM. A listener that isn't on
+    // the capture phase would never see this and the test would fail.
+    render(<MessageStateIcon email={{ source: 'server', isArchived: false }} />);
+    const icon = screen.getByTestId('msg-state-icon');
+
+    fireEvent.focus(icon);
+    expect(screen.getByTestId('msg-state-tooltip')).toBeTruthy();
+
+    fireEvent.scroll(icon);
+    expect(screen.queryByTestId('msg-state-tooltip')).toBeNull();
+  });
 });
