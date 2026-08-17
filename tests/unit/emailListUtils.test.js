@@ -142,8 +142,10 @@ describe('computeDisplayEmails', () => {
         localEmails: [localEmail(1, 'A'), localEmail(2, 'B')],
         archivedEmailIds: new Set([1, 2]),
         viewMode: 'local',
+        serverUidSet: new Set(),
+        serverUidsKnown: false,
       });
-      // Server list is empty — we can't distinguish, so default to "local"
+      // Server set is empty and unverified — never claim "local-only" without proof.
       expect(result).toHaveLength(2);
       expect(result.every((e) => e.source === 'local')).toBe(true);
     });

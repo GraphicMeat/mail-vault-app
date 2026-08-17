@@ -267,6 +267,7 @@ async function _loadServerEmailsViaGraph(account, accountId, activeMailbox, uidM
     hasMoreEmails: !!result.nextLink,
     currentPage: 1,
     serverUidSet: new Set(sorted.map(e => e.uid)),
+    serverUidsKnown: !result.nextLink,
   }));
 
   if (!useMailStoreRef.getState().unifiedInbox) {
@@ -487,6 +488,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       mailboxes: restoredMailboxes,
       mailboxesFetchedAt: restored.mailboxesFetchedAt ?? null,
       serverUidSet: new Set(),
+      serverUidsKnown: false,
       selectedEmailId: restored.selectedUid || null,
       selectedEmail: null,
       selectedEmailSource: null,
@@ -524,6 +526,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       savedEmailIds: new Set(),
       archivedEmailIds: new Set(),
       serverUidSet: new Set(),
+      serverUidsKnown: false,
       cachedCount: 0,
       hasMoreEmails: true,
       currentPage: 1,
@@ -970,7 +973,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
           const serverUids = await api.searchAllUids(account, effectiveMailbox);
           if (signal.aborted) return;
           const serverUidSet = new Set(serverUids);
-          useMailStore.setState({ serverUidSet });
+          useMailStore.setState({ serverUidSet, serverUidsKnown: true });
 
           const existingEmails = uidMap.toSortedArray();
           const storeUidSet = new Set(existingEmails.map(e => e.uid));

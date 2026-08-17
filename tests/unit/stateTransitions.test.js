@@ -210,9 +210,11 @@ describe('quick-load state (before keychain)', () => {
       localEmails,
       archivedEmailIds: new Set([10, 20]),
       viewMode: 'local',
+      serverUidSet: new Set(),
+      serverUidsKnown: false,
     });
     expect(result).toHaveLength(2);
-    // When server emails is empty, don't flag as local-only (can't distinguish)
+    // Server set is unverified — never flag local-only without proof.
     expect(result.every((e) => e.source === 'local')).toBe(true);
   });
 

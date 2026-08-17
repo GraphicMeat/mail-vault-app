@@ -467,6 +467,7 @@ describe('updateSortedEmails memoization', () => {
       emails: [],
       localEmails: [local],
       serverUidSet: new Set(),
+      serverUidsKnown: true,
       deleteTombstones: new Set(),
       // Same sizes as the correct state below, different uid — this is the
       // stale half-loaded moment.
@@ -487,6 +488,48 @@ describe('updateSortedEmails memoization', () => {
     expect(sorted).toHaveLength(1);
     expect(sorted[0].uid).toBe(3);
     expect(sorted[0].source).toBe('local-only');
+  });
+
+  it('never stamps local-only while the server uid set is unverified', () => {
+    // The account-switch paint: archivedEmailIds restored from cache, server
+    // list not back yet. An empty serverUidSet is "not asked", not "not there".
+    useMailStore.setState({
+      activeAccountId: 'acct-1',
+      activeMailbox: 'INBOX',
+      viewMode: 'all',
+      emails: [],
+      localEmails: [{ uid: 3, subject: 'Archived message 3', date: 'Sun, 04 Jan 2026 12:00:00 +0000' }],
+      archivedEmailIds: new Set([3]),
+      savedEmailIds: new Set([3]),
+      serverUidSet: new Set(),
+      serverUidsKnown: false,
+      deleteTombstones: new Set(),
+      _sortedEmailsFingerprint: '',
+    });
+    useMailStore.getState().updateSortedEmails();
+
+    const sorted = useMailStore.getState().sortedEmails;
+    expect(sorted).toHaveLength(1);
+    expect(sorted[0].source).toBe('local');
+  });
+
+  it('stamps local-only once the server uid set is verified complete', () => {
+    useMailStore.setState({
+      activeAccountId: 'acct-1',
+      activeMailbox: 'INBOX',
+      viewMode: 'all',
+      emails: [],
+      localEmails: [{ uid: 3, subject: 'Archived message 3', date: 'Sun, 04 Jan 2026 12:00:00 +0000' }],
+      archivedEmailIds: new Set([3]),
+      savedEmailIds: new Set([3]),
+      serverUidSet: new Set([7]),
+      serverUidsKnown: true,
+      deleteTombstones: new Set(),
+      _sortedEmailsFingerprint: '',
+    });
+    useMailStore.getState().updateSortedEmails();
+
+    expect(useMailStore.getState().sortedEmails[0].source).toBe('local-only');
   });
 
   it('still skips the derivation when nothing changed at all', () => {

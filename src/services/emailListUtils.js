@@ -11,13 +11,17 @@
  * @param {Set} state.archivedEmailIds
  * @param {string} state.viewMode - 'all' | 'server' | 'local'
  * @param {Set} [state.serverUidSet] - Full server UID set (optional; derived from emails if absent)
+ * @param {boolean} [state.serverUidsKnown] - True only when serverUidSet is a complete
+ *   enumeration. Absent means "derived from emails", which is complete for the
+ *   caller's purposes (tests pass the emails they consider the whole server).
  * @returns {Array} Display-ready emails with source/isArchived/isLocal flags
  */
-export function computeDisplayEmails({ searchActive, searchResults, emails, localEmails, archivedEmailIds, viewMode, serverUidSet }) {
+export function computeDisplayEmails({ searchActive, searchResults, emails, localEmails, archivedEmailIds, viewMode, serverUidSet, serverUidsKnown }) {
   if (searchActive) return searchResults;
 
   // If no explicit serverUidSet, derive from emails array (backward compat for tests)
   const serverUids = serverUidSet || new Set(emails.map(e => e.uid));
+  const known = serverUidSet ? !!serverUidsKnown : true;
 
   let result = [];
 
@@ -35,7 +39,7 @@ export function computeDisplayEmails({ searchActive, searchResults, emails, loca
         ...e,
         isLocal: true,
         isArchived: true,
-        source: serverUids.size > 0 && !serverUids.has(e.uid) ? 'local-only' : 'local'
+        source: known && !serverUids.has(e.uid) ? 'local-only' : 'local'
       }));
   } else {
     // viewMode === 'all'
@@ -53,7 +57,7 @@ export function computeDisplayEmails({ searchActive, searchResults, emails, loca
           ...localEmail,
           isLocal: true,
           isArchived: true,
-          source: serverUids.size > 0 && !serverUids.has(localEmail.uid) ? 'local-only' : 'local'
+          source: known && !serverUids.has(localEmail.uid) ? 'local-only' : 'local'
         });
       }
     }

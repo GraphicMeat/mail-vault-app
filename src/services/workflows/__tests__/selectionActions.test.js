@@ -374,17 +374,21 @@ describe('deleteSelectedFromServer', () => {
       savedEmailIds: new Set([1]),
       archivedEmailIds: new Set([1]),
       serverUidSet: new Set([1, 2]),
+      // Not yet reconciled post-delete — the mock below is what proves it.
+      serverUidsKnown: false,
       deleteTombstones: new Set(),
       totalEmails: 2,
       selectedEmailIds: new Set([1]),
       selectedEmail: null,
       selectedEmailId: null,
       // Stand-in for the real server round-trip: a genuine reconcile would
-      // find uid 1 gone from the server and drop it from serverUidSet.
+      // find uid 1 gone from the server, drop it from serverUidSet, and mark
+      // the set verified-complete (see loadEmails.js's UID-search branch).
       loadEmails: vi.fn(() => {
         tombstoneCountWhenLoadEmailsRan = useMailStore.getState().deleteTombstones.size;
         useMailStore.setState(s => ({
           serverUidSet: new Set([...s.serverUidSet].filter(u => u !== 1)),
+          serverUidsKnown: true,
         }));
         useMailStore.getState().updateSortedEmails();
         return Promise.resolve();

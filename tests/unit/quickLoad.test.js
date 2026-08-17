@@ -195,9 +195,11 @@ describe('quick-load display emails', () => {
       localEmails,
       archivedEmailIds: new Set([10, 20]),
       viewMode: 'local',
+      serverUidSet: new Set(),
+      serverUidsKnown: false,
     });
     expect(result).toHaveLength(2);
-    // No server emails → can't distinguish, default to 'local' (not 'local-only')
+    // Server set is unverified — never flag local-only without proof.
     expect(result.every((e) => e.source === 'local')).toBe(true);
   });
 

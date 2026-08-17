@@ -424,7 +424,7 @@ export async function loadEmails() {
           return;
         }
         const serverUidSet = new Set(serverUids);
-        useMailStore.setState({ serverUidSet });
+        useMailStore.setState({ serverUidSet, serverUidsKnown: true });
         const storeUidSet = new Set(existingEmails.map(e => e.uid));
 
         const newUids = cachedUidNext
@@ -755,6 +755,7 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
       loading: false,
       loadingMore: false,
       serverUidSet: new Set(mergedEmails.map(e => e.uid)),
+      serverUidsKnown: !hasMoreEmails,
     });
 
     get().updateSortedEmails();

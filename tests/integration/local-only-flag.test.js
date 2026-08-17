@@ -162,9 +162,11 @@ describe('Local-Only Flag Detection (send → archive → delete → verify)', (
       localEmails,
       archivedEmailIds: new Set([uidA, uidB]),
       viewMode: 'local',
+      serverUidSet: new Set(),
+      serverUidsKnown: false,
     });
 
-    // When server emails haven't loaded, everything should be "local" (not "local-only")
+    // Server set is unverified — never flag local-only without proof.
     expect(result.every((e) => e.source === 'local')).toBe(true);
   });
 });
