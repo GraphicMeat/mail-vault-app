@@ -105,6 +105,7 @@ function EmailListComponent() {
   const searchResults = useSearchStore(s => s.searchResults);
   const flagSeq = useUiStore(s => s._flagSeq);
   const archivedSize = useMessageListStore(s => s.archivedEmailIds.size);
+  const archivedEmailIds = useMessageListStore(s => s.archivedEmailIds);
   // Actions (stable references — never cause re-renders)
   const loadEmails = useMessageListStore(s => s.loadEmails);
   const loadMoreEmails = useMessageListStore(s => s.loadMoreEmails);
@@ -116,6 +117,7 @@ function EmailListComponent() {
   const clearSearch = useSearchStore(s => s.clearSearch);
   const getChatEmails = useMessageListStore(s => s.getChatEmails);
   const getSentMailboxPath = useMessageListStore(s => s.getSentMailboxPath);
+  const refreshBackedUpUids = useMessageListStore(s => s.refreshBackedUpUids);
   const activeAccountEmail = useAccountStore(s => s.accounts.find(a => a.id === s.activeAccountId)?.email);
 
   // Shared row props — subscribed once in parent, passed to all rows via props
@@ -160,6 +162,14 @@ function EmailListComponent() {
       endBulkSession();
     }
   }, [bulkSession, activeAccountId, activeMailbox, viewMode, endBulkSession]);
+
+  // The mirror is scanned from exactly one place. Keying on archivedEmailIds is
+  // what makes that enough: all fourteen paths that load archived state end by
+  // replacing that Set, so account switch, folder switch, archive and unarchive
+  // all land here without threading a call through any of them.
+  useEffect(() => {
+    refreshBackedUpUids();
+  }, [activeAccountId, activeMailbox, unifiedInbox, archivedEmailIds, refreshBackedUpUids]);
 
   // Sender-grouped accordion state
   const [senderGroups, setSenderGroups] = useState(null);

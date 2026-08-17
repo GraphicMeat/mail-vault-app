@@ -45,8 +45,10 @@ vi.mock('../../services/db', () => ({
   getLocalEmails: (...args) => mockGetLocalEmails(...args),
 }));
 const mockFetchEmailLight = vi.fn().mockResolvedValue(null);
+const mockBackupScanUids = vi.fn().mockResolvedValue(null);
 vi.mock('../../services/api', () => ({
   fetchEmailLight: (...args) => mockFetchEmailLight(...args),
+  backupScanUids: (...args) => mockBackupScanUids(...args),
 }));
 vi.mock('../../services/authUtils', () => ({
   hasValidCredentials: () => true,
@@ -630,5 +632,40 @@ describe('unified inbox — serverUidsKnown never carries a stale true', () => {
     expect(useMailStore.getState().serverUidsKnown).toBe(false);
 
     _unifiedFolderCache.delete('Archive');
+  });
+});
+
+describe('refreshBackedUpUids', () => {
+  it('keys backed-up uids by account so unified inbox cannot collide', async () => {
+    mockBackupScanUids.mockResolvedValue([11, 12]);
+    useMailStore.setState({
+      activeAccountId: 'acct-1',
+      activeMailbox: 'INBOX',
+      unifiedInbox: false,
+      accounts: [{ id: 'acct-1', email: 'luke@mock.test' }],
+    });
+
+    await useMailStore.getState().refreshBackedUpUids();
+
+    const keys = useMailStore.getState().backedUpKeys;
+    expect(keys.has('acct-1:11')).toBe(true);
+    expect(keys.has('acct-1:12')).toBe(true);
+    expect(keys.has('acct-2:11')).toBe(false);
+  });
+
+  it('reports null — not an empty set — when the mirror cannot be read', async () => {
+    // An unplugged drive must never read as "nothing is backed up".
+    mockBackupScanUids.mockResolvedValue(null);
+    useMailStore.setState({
+      activeAccountId: 'acct-1',
+      activeMailbox: 'INBOX',
+      unifiedInbox: false,
+      accounts: [{ id: 'acct-1', email: 'luke@mock.test' }],
+      backedUpKeys: new Set(['acct-1:11']),
+    });
+
+    await useMailStore.getState().refreshBackedUpUids();
+
+    expect(useMailStore.getState().backedUpKeys).toBeNull();
   });
 });

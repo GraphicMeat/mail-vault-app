@@ -121,6 +121,7 @@ vi.mock('../../stores/mailStore', () => {
     clearSelection: vi.fn(),
     getChatEmails: vi.fn(() => []),
     getSentMailboxPath: vi.fn(() => 'Sent'),
+    refreshBackedUpUids: vi.fn(),
     saveEmailLocally: vi.fn(),
     removeLocalEmail: vi.fn(),
     deleteEmailFromServer: vi.fn(),

@@ -2,6 +2,7 @@
 // Large async orchestration functions are extracted to src/services/workflows/.
 // This slice contains state, pure synchronous derivations, and passthrough wrappers.
 
+import * as api from '../../services/api';
 import { useSettingsStore } from '../settingsStore';
 import { buildThreads } from '../../utils/emailParser';
 import { detectReplyToMismatch } from '../../utils/replyToCheck';
@@ -101,6 +102,15 @@ export const createMessageListSlice = (set, get) => ({
   // `local-only` from an unverified set made every archived row read
   // "deleted from server" for the whole account-switch paint.
   serverUidsKnown: false,
+
+  // Uids present in the external backup mirror, keyed "<accountId>:<uid>".
+  // null means "could not determine" — no backup location, or the drive is not
+  // connected. Never conflate that with an empty Set, which is the positive
+  // claim that nothing in this mailbox is mirrored.
+  //
+  // Keyed by account on purpose: archivedEmailIds is a flat uid Set and
+  // collides across accounts in unified inbox. Not repeating that here.
+  backedUpKeys: null,
 
   // Pre-sorted emails for performance (memoization)
   sortedEmails: [],
@@ -269,6 +279,38 @@ export const createMessageListSlice = (set, get) => ({
     _threadsFingerprint = '';
     _sortedInputs = { emails, localEmails, archivedEmailIds, savedEmailIds, serverUidSet, deleteTombstones };
     set({ sortedEmails: result, _sortedEmailsFingerprint: fp });
+  },
+
+  // Rescan the external backup mirror for the active view (or every account,
+  // in unified inbox) and rebuild backedUpKeys from scratch.
+  refreshBackedUpUids: async () => {
+    const { activeAccountId, activeMailbox, unifiedInbox, accounts, unifiedFolder } = get();
+    const targets = unifiedInbox
+      ? (accounts || []).map(a => ({ id: a.id, email: a.email, mailbox: unifiedFolder || 'INBOX' }))
+      : (() => {
+          const a = (accounts || []).find(x => x.id === activeAccountId);
+          return a && activeMailbox ? [{ id: a.id, email: a.email, mailbox: activeMailbox }] : [];
+        })();
+
+    if (!targets.length) return;
+
+    const keys = new Set();
+    for (const t of targets) {
+      let uids;
+      try {
+        uids = await api.backupScanUids(t.email, t.mailbox);
+      } catch {
+        uids = null;
+      }
+      // One unreadable target makes the whole answer unknown. A partial set
+      // would render "not backed up" for accounts we simply could not scan.
+      if (uids === null) {
+        set({ backedUpKeys: null });
+        return;
+      }
+      for (const uid of uids) keys.add(`${t.id}:${uid}`);
+    }
+    set({ backedUpKeys: keys });
   },
 
   // ── Passthrough wrappers to workflow functions ──
