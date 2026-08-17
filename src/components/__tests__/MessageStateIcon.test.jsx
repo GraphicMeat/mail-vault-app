@@ -1,7 +1,15 @@
 // @vitest-environment jsdom
 
-import { describe, it, expect } from 'vitest';
-import { describeMessageState } from '../email/MessageStateIcon';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import React from 'react';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+
+vi.mock('lucide-react', () => {
+  const icon = (name) => (props) => React.createElement('span', { 'data-icon': name, ...props });
+  return { Cloud: icon('Cloud'), HardDrive: icon('HardDrive') };
+});
+
+import { describeMessageState, MessageStateIcon } from '../email/MessageStateIcon';
 
 const server = { source: 'server', isArchived: false };
 const archived = { source: 'server', isArchived: true };
@@ -55,5 +63,43 @@ describe('describeMessageState', () => {
     // serverKnown must not get the alarm by default.
     expect(describeMessageState(localOnly).tone).not.toBe('warning');
     expect(describeMessageState(localOnly, { backedUp: false }).tone).not.toBe('warning');
+  });
+});
+
+describe('MessageStateIcon', () => {
+  afterEach(() => cleanup());
+
+  it('exposes the state id as a data attribute', () => {
+    render(<MessageStateIcon email={{ source: 'local-only', isArchived: true }} backedUp={true} serverKnown={true} />);
+    expect(screen.getByTestId('msg-state-icon').getAttribute('data-state')).toBe('local-only-backed-up');
+  });
+
+  it('shows the tooltip on hover and hides it on leave', () => {
+    render(<MessageStateIcon email={{ source: 'server', isArchived: false }} />);
+    expect(screen.queryByTestId('msg-state-tooltip')).toBeNull();
+
+    fireEvent.mouseEnter(screen.getByTestId('msg-state-icon'));
+    expect(screen.getByTestId('msg-state-tooltip').textContent).toContain('On the server');
+
+    fireEvent.mouseLeave(screen.getByTestId('msg-state-icon'));
+    expect(screen.queryByTestId('msg-state-tooltip')).toBeNull();
+  });
+
+  it('shows the tooltip on keyboard focus', () => {
+    // Focus is the a11y path AND the only trigger the e2e harness can drive.
+    render(<MessageStateIcon email={{ source: 'server', isArchived: true }} serverKnown={false} />);
+    const icon = screen.getByTestId('msg-state-icon');
+    expect(icon.getAttribute('tabindex')).toBe('0');
+
+    fireEvent.focus(icon);
+    expect(screen.getByTestId('msg-state-tooltip').textContent).toContain('Server copy not verified yet');
+  });
+
+  it('renders a cloud for server rows and a drive for vault rows', () => {
+    const { rerender } = render(<MessageStateIcon email={{ source: 'server', isArchived: false }} />);
+    expect(document.querySelector('[data-icon="Cloud"]')).not.toBeNull();
+
+    rerender(<MessageStateIcon email={{ source: 'server', isArchived: true }} />);
+    expect(document.querySelector('[data-icon="HardDrive"]')).not.toBeNull();
   });
 });
