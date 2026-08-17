@@ -49,4 +49,11 @@ describe('describeMessageState', () => {
     expect(describeMessageState(server, { backedUp: false, serverKnown: false }).id)
       .toBe('server-only');
   });
+
+  it('fails closed: no options object means no proof, so never amber', () => {
+    // The gate exists to require proof. A caller that forgets to pass
+    // serverKnown must not get the alarm by default.
+    expect(describeMessageState(localOnly).tone).not.toBe('warning');
+    expect(describeMessageState(localOnly, { backedUp: false }).tone).not.toBe('warning');
+  });
 });

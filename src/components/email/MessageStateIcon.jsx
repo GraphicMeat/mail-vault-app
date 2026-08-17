@@ -14,7 +14,7 @@
  * made every account switch flash "deleted from server" across the list.
  */
 
-export function describeMessageState(email, { backedUp = false, serverKnown = true } = {}) {
+export function describeMessageState(email, { backedUp = false, serverKnown = false } = {}) {
   const dot = backedUp === null ? 'hollow' : backedUp ? 'filled' : null;
   const dotSuffix = dot === 'filled' ? '-backed-up' : dot === 'hollow' ? '-backup-unknown' : '';
 
