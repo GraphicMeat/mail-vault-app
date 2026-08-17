@@ -24,6 +24,9 @@ const mockEnsureAccountsInFile = vi.fn().mockResolvedValue(undefined);
 const mockSaveMailboxes = vi.fn().mockResolvedValue(undefined);
 const mockReadLocalEmailIndex = vi.fn().mockResolvedValue(null);
 const mockGetArchivedEmails = vi.fn().mockResolvedValue([]);
+// Used by loadUnifiedInbox.js (per-account mailbox tree + local-email fallback).
+const mockGetCachedMailboxes = vi.fn().mockResolvedValue([]);
+const mockGetLocalEmails = vi.fn().mockResolvedValue([]);
 
 vi.mock('../../services/db', () => ({
   getLocalEmailLight: (...args) => mockGetLocalEmailLight(...args),
@@ -38,6 +41,8 @@ vi.mock('../../services/db', () => ({
   saveMailboxes: (...args) => mockSaveMailboxes(...args),
   readLocalEmailIndex: (...args) => mockReadLocalEmailIndex(...args),
   getArchivedEmails: (...args) => mockGetArchivedEmails(...args),
+  getCachedMailboxes: (...args) => mockGetCachedMailboxes(...args),
+  getLocalEmails: (...args) => mockGetLocalEmails(...args),
 }));
 const mockFetchEmailLight = vi.fn().mockResolvedValue(null);
 vi.mock('../../services/api', () => ({
@@ -551,5 +556,79 @@ describe('updateSortedEmails memoization', () => {
     useMailStore.getState().updateSortedEmails();
     // Same array instance back means the guard short-circuited.
     expect(useMailStore.getState().sortedEmails).toBe(first);
+  });
+});
+
+// Unified inbox merges cache/local data across accounts — it is never a live
+// server enumeration for any of them. If serverUidsKnown carried a stale
+// `true` from the single-account view the user was just on, every archived
+// row outside the rendered chunk would derive "local-only" the instant
+// unified inbox painted. All three serverUidSet writes in
+// loadUnifiedInbox.js must force the flag back to false; zustand's shallow
+// merge means silently omitting it would let the old value survive.
+describe('unified inbox — serverUidsKnown never carries a stale true', () => {
+  const ACCOUNT = { id: 'acct-1', email: 'a@example.com' };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetRestoreDescriptor.mockReturnValue(null);
+    mockGetEmailHeadersPartial.mockResolvedValue({ emails: [], totalEmails: 0 });
+    mockGetCachedMailboxes.mockResolvedValue([]);
+    mockGetSavedEmailIds.mockResolvedValue(new Set());
+    mockGetArchivedEmailIds.mockResolvedValue(new Set());
+    mockReadLocalEmailIndex.mockResolvedValue(null);
+    mockGetLocalEmails.mockResolvedValue([]);
+  });
+
+  it('loadUnifiedInbox clears the flag for both the first chunk and later chunks', async () => {
+    // 65 cached headers on disk — one past CHUNK_SIZE (50), so the
+    // progressive-chunk loop (site :237) runs at least once in addition to
+    // the first-chunk write (site :206).
+    const headers = Array.from({ length: 65 }, (_, i) => ({
+      uid: i + 1,
+      subject: `Msg ${i + 1}`,
+      date: new Date(2026, 0, 1, 0, 0, i).toISOString(),
+    }));
+    mockGetEmailHeadersPartial.mockResolvedValue({ emails: headers, totalEmails: headers.length });
+
+    useMailStore.setState({
+      accounts: [ACCOUNT],
+      unifiedInbox: true,
+      unifiedFolder: 'INBOX',
+      viewMode: 'all',
+      // Simulates the single-account view completing a full sync right
+      // before the user switched into unified inbox.
+      serverUidsKnown: true,
+    });
+
+    await useMailStore.getState().loadUnifiedInbox(null, 'INBOX');
+
+    expect(useMailStore.getState().serverUidSet.size).toBe(65);
+    expect(useMailStore.getState().serverUidsKnown).toBe(false);
+  });
+
+  it('switchUnifiedFolder\'s cache-hit path clears the flag too', async () => {
+    const { _unifiedFolderCache } = await import('../../services/workflows/activateAccount');
+    _unifiedFolderCache.set('Archive', {
+      emails: [{ uid: 1, subject: 'Cached', date: '2026-01-01T00:00:00Z' }],
+      timestamp: Date.now(),
+    });
+
+    useMailStore.setState({
+      accounts: [ACCOUNT],
+      unifiedInbox: true,
+      unifiedFolder: 'INBOX',
+      viewMode: 'all',
+      serverUidsKnown: true,
+    });
+
+    await useMailStore.getState().switchUnifiedFolder('Archive');
+    // The synchronous cache-hit write is what's under test; the function
+    // also fires a background loadUnifiedInbox() refresh it doesn't await.
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(useMailStore.getState().serverUidsKnown).toBe(false);
+
+    _unifiedFolderCache.delete('Archive');
   });
 });
