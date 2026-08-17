@@ -1,12 +1,9 @@
 import React, { useEffect, useRef, useMemo, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Cloud,
-  HardDrive,
-  Info,
-} from 'lucide-react';
+import { Info } from 'lucide-react';
 import { SenderVerificationBadge } from './EmailHeaderComponent';
+import { ConnectedStateIcon } from './MessageStateIcon';
 import { getSenderName } from '../../utils/emailParser';
 
 /**
@@ -26,6 +23,12 @@ export const SenderInfoPopover = memo(function SenderInfoPopover({
   const senderName = getSenderName(email);
   const initial = senderName ? senderName[0].toUpperCase() : '?';
   const hasDistinctName = email?.from?.name && email.from.name !== email.from.address;
+
+  // `email` is fetched fresh for its body (IMAP/Maildir/chat list), not
+  // derived through the row pipeline, so it never carries `.isArchived`.
+  // archivedEmailIds is the live store Set and stays the source of truth,
+  // same as the ternary this replaced.
+  const stateEmail = { ...email, isArchived: !!archivedEmailIds?.has(email.uid) };
 
   // Extract mailing list name
   const listId = email?.listId || email?.headers?.['list-id'];
@@ -127,13 +130,9 @@ export const SenderInfoPopover = memo(function SenderInfoPopover({
 
         {/* Storage icon + DKIM shield + insights row */}
         <div className="flex items-center gap-2 mb-2">
-          {email.source === 'local-only' ? (
-            <HardDrive size={12} className="text-mail-warning flex-shrink-0" title="Local only" />
-          ) : archivedEmailIds?.has(email.uid) ? (
-            <HardDrive size={12} className="text-mail-local flex-shrink-0" title="Archived" />
-          ) : (
-            <Cloud size={12} className="flex-shrink-0" style={{ color: 'rgba(59, 130, 246, 0.5)' }} title="Server" />
-          )}
+          <span className="flex-shrink-0">
+            <ConnectedStateIcon email={stateEmail} size={12} />
+          </span>
           <SenderVerificationBadge email={email} size={14} />
         </div>
 

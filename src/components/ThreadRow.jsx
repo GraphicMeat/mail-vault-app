@@ -7,10 +7,9 @@ import { ReplyToAlertIcon, getThreadReplyToMismatch } from './ReplyToAlertIcon';
 import { RowActionMenu } from './RowActionMenu';
 import { RowActionMenuItems } from './RowActionMenuItems';
 import { formatEmailDate } from '../utils/dateFormat';
+import { ConnectedStateIcon } from './email/MessageStateIcon';
 import {
   RefreshCw,
-  HardDrive,
-  Cloud,
   Paperclip,
   Archive,
 } from 'lucide-react';
@@ -66,13 +65,7 @@ export const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onS
       </div>
 
       <div className="w-5 flex items-center justify-center flex-shrink-0">
-        {latestEmail.source === 'local-only' ? (
-          <HardDrive size={14} className="text-mail-warning" title="Local only" />
-        ) : latestEmail.isArchived ? (
-          <HardDrive size={14} className="text-mail-local" title="Archived" />
-        ) : (
-          <Cloud size={14} style={{ color: 'rgba(59, 130, 246, 0.5)' }} />
-        )}
+        <ConnectedStateIcon email={latestEmail} size={14} />
       </div>
 
       <div className={`w-48 min-w-[80px] truncate flex-shrink ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
@@ -174,13 +167,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ thread, i
       </div>
 
       <div className="w-4 flex items-center justify-center flex-shrink-0">
-        {latestEmail.source === 'local-only' ? (
-          <HardDrive size={13} className="text-mail-warning" title="Local only" />
-        ) : latestEmail.isArchived ? (
-          <HardDrive size={13} className="text-mail-local" title="Archived" />
-        ) : (
-          <Cloud size={13} style={{ color: 'rgba(59, 130, 246, 0.5)' }} />
-        )}
+        <ConnectedStateIcon email={latestEmail} size={13} />
       </div>
 
       <div className="flex-1 min-w-0 py-1.5">

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Cloud, HardDrive } from 'lucide-react';
+import { useMailStore } from '../../stores/mailStore';
 
 /**
  * Where a message lives, as one glyph.
@@ -157,4 +158,16 @@ export function MessageStateIcon({ email, size = 14, backedUp = false, serverKno
       </span>
     </StateTooltip>
   );
+}
+
+/**
+ * Store-connected form. Rows use this; the plain MessageStateIcon stays pure
+ * for tests and for the legend, which has no email to describe.
+ */
+export function ConnectedStateIcon({ email, size = 14 }) {
+  const backedUpKeys = useMailStore(s => s.backedUpKeys);
+  const serverUidsKnown = useMailStore(s => s.serverUidsKnown);
+  const key = `${email._accountId || useMailStore.getState().activeAccountId}:${email.uid}`;
+  const backedUp = backedUpKeys === null ? null : backedUpKeys.has(key);
+  return <MessageStateIcon email={email} size={size} backedUp={backedUp} serverKnown={serverUidsKnown} />;
 }

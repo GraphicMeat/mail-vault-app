@@ -5,13 +5,12 @@ import {
   ChevronDown,
   ChevronUp,
   Info,
-  Cloud,
-  HardDrive,
   Code,
   RefreshCw,
 } from 'lucide-react';
 import { SenderVerificationBadge } from './EmailHeaderComponent';
 import { SenderInfoPopover } from './SenderInfoPopover';
+import { ConnectedStateIcon } from './MessageStateIcon';
 import { getSenderName } from '../../utils/emailParser';
 
 /**
@@ -44,6 +43,12 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
   const senderName = getSenderName(email);
   const initial = senderName ? senderName[0].toUpperCase() : '?';
   const hasDistinctName = email?.from?.name && email.from.name !== email.from.address;
+
+  // `email` here is `selectedEmail` (or a thread email) — fetched fresh from
+  // IMAP/Maildir for its body, not derived through the row pipeline, so it
+  // never carries `.isArchived`. archivedEmailIds is the live store Set and
+  // stays the source of truth, same as the ternary this replaced.
+  const stateEmail = { ...email, isArchived: !!archivedEmailIds?.has(email.uid) };
 
   // Extract mailing list name from List-Id
   const listId = email?.listId || email?.headers?.['list-id'];
@@ -93,13 +98,9 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             {/* Storage icon */}
-            {email.source === 'local-only' ? (
-              <HardDrive size={12} className="text-mail-warning flex-shrink-0" title="Local only" />
-            ) : archivedEmailIds?.has(email.uid) ? (
-              <HardDrive size={12} className="text-mail-local flex-shrink-0" title="Archived" />
-            ) : (
-              <Cloud size={12} className="flex-shrink-0" style={{ color: 'rgba(59, 130, 246, 0.5)' }} title="Server" />
-            )}
+            <span className="flex-shrink-0">
+              <ConnectedStateIcon email={stateEmail} size={12} />
+            </span>
 
             {/* Sender name — click opens Sender Details (parity with chat view) */}
             <span

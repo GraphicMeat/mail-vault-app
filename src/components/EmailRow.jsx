@@ -8,10 +8,9 @@ import { ReplyToAlertIcon } from './ReplyToAlertIcon';
 import { RowActionMenu } from './RowActionMenu';
 import { RowActionMenuItems } from './RowActionMenuItems';
 import { formatEmailDate } from '../utils/dateFormat';
+import { ConnectedStateIcon } from './email/MessageStateIcon';
 import {
   RefreshCw,
-  HardDrive,
-  Cloud,
   Paperclip,
   Archive,
 } from 'lucide-react';
@@ -51,17 +50,7 @@ export const EmailRow = React.memo(function EmailRow({ email, isSelected, onSele
       </div>
 
       <div className="w-5 flex items-center justify-center flex-shrink-0">
-        {email.source === 'local-only' ? (
-          <div title="Local only (deleted from server)">
-            <HardDrive size={14} className="text-mail-warning" />
-          </div>
-        ) : email.isArchived ? (
-          <div title="Archived">
-            <HardDrive size={14} className="text-mail-local" />
-          </div>
-        ) : (
-          <Cloud size={14} style={{ color: 'rgba(59, 130, 246, 0.5)' }} />
-        )}
+        <ConnectedStateIcon email={email} size={14} />
       </div>
 
       <div className={`w-48 min-w-[80px] truncate flex-shrink flex items-center gap-1.5 ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
@@ -151,13 +140,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSe
 
       {/* Source icon */}
       <div className="w-4 flex items-center justify-center flex-shrink-0">
-        {email.source === 'local-only' ? (
-          <HardDrive size={13} className="text-mail-warning" title="Local only" />
-        ) : email.isArchived ? (
-          <HardDrive size={13} className="text-mail-local" title="Archived" />
-        ) : (
-          <Cloud size={13} style={{ color: 'rgba(59, 130, 246, 0.5)' }} />
-        )}
+        <ConnectedStateIcon email={email} size={13} />
       </div>
 
       {/* Two-line content */}

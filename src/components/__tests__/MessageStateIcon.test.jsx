@@ -9,7 +9,17 @@ vi.mock('lucide-react', () => {
   return { Cloud: icon('Cloud'), HardDrive: icon('HardDrive') };
 });
 
-import { describeMessageState, MessageStateIcon } from '../email/MessageStateIcon';
+// Minimal zustand-like mock — mirrors the pattern EmailList.test.js uses for
+// the same store, so ConnectedStateIcon's useMailStore(selector) calls and
+// useMailStore.getState() both resolve against one mutable object.
+let mockStoreState;
+vi.mock('../../stores/mailStore', () => {
+  const hook = vi.fn((selector) => selector(mockStoreState));
+  hook.getState = () => mockStoreState;
+  return { useMailStore: hook };
+});
+
+import { describeMessageState, MessageStateIcon, ConnectedStateIcon } from '../email/MessageStateIcon';
 
 const server = { source: 'server', isArchived: false };
 const archived = { source: 'server', isArchived: true };
@@ -116,5 +126,45 @@ describe('MessageStateIcon', () => {
 
     fireEvent.scroll(icon);
     expect(screen.queryByTestId('msg-state-tooltip')).toBeNull();
+  });
+});
+
+describe('ConnectedStateIcon', () => {
+  afterEach(() => cleanup());
+
+  // The one rule the whole task hinges on: backedUpKeys === null ("could not
+  // determine") must reach the icon as backedUp: null (hollow dot), never
+  // collapse via ?.has()/|| into false ("not mirrored" — a different claim).
+  it('renders a hollow dot when backedUpKeys is null, not no dot at all', () => {
+    mockStoreState = { backedUpKeys: null, serverUidsKnown: true, activeAccountId: 'acc1' };
+    render(<ConnectedStateIcon email={{ uid: 5, _accountId: 'acc1', source: 'server', isArchived: false }} />);
+    expect(screen.getByTestId('msg-state-icon').getAttribute('data-state')).toBe('server-only-backup-unknown');
+    expect(document.querySelector('[data-dot="hollow"]')).not.toBeNull();
+  });
+
+  it('renders a filled dot when the accountId:uid key is present in backedUpKeys', () => {
+    mockStoreState = { backedUpKeys: new Set(['acc1:5']), serverUidsKnown: true, activeAccountId: 'acc1' };
+    render(<ConnectedStateIcon email={{ uid: 5, _accountId: 'acc1', source: 'server', isArchived: false }} />);
+    expect(screen.getByTestId('msg-state-icon').getAttribute('data-state')).toBe('server-only-backed-up');
+    expect(document.querySelector('[data-dot="filled"]')).not.toBeNull();
+  });
+
+  it('renders no dot when backedUpKeys is a defined Set without this key (proven not mirrored)', () => {
+    mockStoreState = { backedUpKeys: new Set(['acc1:999']), serverUidsKnown: true, activeAccountId: 'acc1' };
+    render(<ConnectedStateIcon email={{ uid: 5, _accountId: 'acc1', source: 'server', isArchived: false }} />);
+    expect(screen.getByTestId('msg-state-icon').getAttribute('data-state')).toBe('server-only');
+    expect(document.querySelector('[data-dot]')).toBeNull();
+  });
+
+  it('falls back to the active account id when the email carries none', () => {
+    mockStoreState = { backedUpKeys: new Set(['acc1:5']), serverUidsKnown: true, activeAccountId: 'acc1' };
+    render(<ConnectedStateIcon email={{ uid: 5, source: 'server', isArchived: false }} />);
+    expect(document.querySelector('[data-dot="filled"]')).not.toBeNull();
+  });
+
+  it('passes serverUidsKnown through so a local-only row proven gone renders the warning tone', () => {
+    mockStoreState = { backedUpKeys: new Set(), serverUidsKnown: true, activeAccountId: 'acc1' };
+    render(<ConnectedStateIcon email={{ uid: 5, _accountId: 'acc1', source: 'local-only', isArchived: true }} />);
+    expect(screen.getByTestId('msg-state-icon').getAttribute('data-state')).toBe('local-only');
   });
 });

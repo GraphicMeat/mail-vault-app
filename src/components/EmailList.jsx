@@ -39,10 +39,45 @@ import { bulkOperationManager } from '../services/BulkOperationManager';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { EmailRow, CompactEmailRow } from './EmailRow';
 import { ThreadRow, CompactThreadRow } from './ThreadRow';
+import { ConnectedStateIcon, StateTooltip } from './email/MessageStateIcon';
 
 const ROW_HEIGHT_DEFAULT = 56;
 const ROW_HEIGHT_COMPACT = 52;
 
+// View-mode legend entries — three glyphs and one modifier. Cloud/HardDrive
+// here are the same lucide icons the empty-state illustrations and
+// ConnectedStateIcon use; the legend is static (no email to describe), so it
+// renders them directly instead of going through describeMessageState.
+const LEGEND_ENTRIES = [
+  {
+    id: 'legend-server',
+    glyph: <Cloud size={12} className="text-mail-server" />,
+    text: 'Server only',
+    label: 'On the server',
+    detail: 'Not saved to your vault yet. If the account goes away, so does this message.',
+  },
+  {
+    id: 'legend-archived',
+    glyph: <HardDrive size={12} className="text-mail-local" />,
+    text: 'Archived',
+    label: 'Saved in your vault',
+    detail: 'A copy lives on this machine. Green also covers messages whose server copy has not been verified yet.',
+  },
+  {
+    id: 'legend-local-only',
+    glyph: <HardDrive size={12} className="text-mail-warning" />,
+    text: 'Local only (deleted from server)',
+    label: 'Your only copy',
+    detail: 'Confirmed gone from the server. Nothing else has it — back this up.',
+  },
+  {
+    id: 'legend-backed-up',
+    glyph: <span className="w-[6px] h-[6px] rounded-full border bg-mail-local border-mail-local" />,
+    text: 'Also on backup drive',
+    label: 'On your backup drive',
+    detail: 'A filled dot means the external mirror has it too. A hollow dot means the drive is not connected and we cannot check.',
+  },
+];
 
 function getDateRange(emails) {
   if (!emails || emails.length === 0) return null;
@@ -1047,13 +1082,7 @@ function EmailListComponent() {
                         </div>
                         <div className="flex items-center gap-1.5 flex-shrink-0">
                           {item.email.has_attachments && <Paperclip size={12} className="text-mail-text-muted" />}
-                          {item.email.source === 'local-only' ? (
-                            <HardDrive size={13} className="text-mail-warning" title="Local only" />
-                          ) : item.email.isArchived ? (
-                            <HardDrive size={13} className="text-mail-local" title="Archived" />
-                          ) : (
-                            <Cloud size={13} style={{ color: 'rgba(59, 130, 246, 0.5)' }} />
-                          )}
+                          <ConnectedStateIcon email={item.email} size={13} />
                         </div>
                       </button>
                     )}
@@ -1154,21 +1183,19 @@ function EmailListComponent() {
         )}
       </div>
 
-      {/* View Mode Legend */}
+      {/* View Mode Legend — three glyphs and one modifier, each explaining
+          itself on hover or focus. Not one row per state: the dot is a
+          modifier, and showing it as one is what teaches the composition. */}
       <div className="px-4 py-2 border-t border-mail-border bg-mail-surface/50
                       flex items-center gap-4 text-xs text-mail-text-muted flex-shrink-0">
-        <div className="flex items-center gap-1.5">
-          <HardDrive size={12} className="text-mail-local" />
-          <span>Archived</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Cloud size={12} className="text-mail-server" />
-          <span>Server only</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <HardDrive size={12} className="text-mail-warning" />
-          <span>Local only (deleted from server)</span>
-        </div>
+        {LEGEND_ENTRIES.map(entry => (
+          <StateTooltip key={entry.id} label={entry.label} detail={entry.detail} state={entry.id} testId="legend-state-icon">
+            <span className="flex items-center gap-1.5">
+              {entry.glyph}
+              <span>{entry.text}</span>
+            </span>
+          </StateTooltip>
+        ))}
       </div>
 
       <BulkSelectionBubble />
