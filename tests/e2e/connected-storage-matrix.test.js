@@ -68,7 +68,11 @@
  *     "N on server · M archived here [· backup configured]" — no backup
  *     COUNT, by design.
  *   - EmailRow.jsx has exactly two source badges: title="Archived" and
- *     title^="Local only". No per-row backup/cloud indicator exists.
+ *     title^="Local only". Every row now carries a per-row state icon
+ *     (`[data-testid="msg-state-icon"]`, `data-state="<id>"`) whose id encodes
+ *     vault × server × mirror. This spec knows each row's disk truth, so it is
+ *     the oracle for that icon: if the icon and the disk disagree, the icon is
+ *     lying to the user.
  */
 
 import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -241,7 +245,7 @@ describe('Storage matrix diagnostics', function () {
   /**
    * Self-describing row+disk assertion for the matrix — a bare
    * `expect(x).toBe(true)` reports nothing about what was actually seen.
-   * `want` is any subset of {present, archived, localOnly, vault, backup};
+   * `want` is any subset of {present, archived, localOnly, vault, backup, icon};
    * on mismatch this throws one error naming every field that disagreed
    * plus the full row and disk objects, so a failure is diagnosable from
    * the mocha output alone.
@@ -258,6 +262,9 @@ describe('Storage matrix diagnostics', function () {
       }
       if ('localOnly' in want && !!row.localOnly !== want.localOnly) {
         problems.push(`Local-only badge: want ${want.localOnly}, got ${!!row.localOnly}`);
+      }
+      if ('icon' in want && row.icon !== want.icon) {
+        problems.push(`state icon: want ${want.icon}, got ${row.icon}`);
       }
     }
     if (disk) {
@@ -295,13 +302,29 @@ describe('Storage matrix diagnostics', function () {
   // ── DOM helpers (same shapes as connected-bulk-delete-everywhere.test.js) ──
 
   const rows = () => browser.execute(() => {
-    return [...document.querySelectorAll('[data-testid="email-row"]')].map((row) => ({
-      subject: (row.innerText || '').split('\n')[0] || '',
-      text: row.innerText || '',
-      checked: !!row.querySelector('input[type="checkbox"]')?.checked,
-      archived: row.querySelector('[title="Archived"]') !== null,
-      localOnly: row.querySelector('[title^="Local only"]') !== null,
-    }));
+    return [...document.querySelectorAll('[data-testid="email-row"]')].map((row) => {
+      // The per-row state icon's `data-state` id — see checkRow's `icon` key.
+      const icon = row.querySelector('[data-testid="msg-state-icon"]')?.getAttribute('data-state') || null;
+      // `archived`/`localOnly` used to read the row's own title="Archived" /
+      // title^="Local only" badges. The state-icon rollout (commit 8c2fe9f)
+      // replaced those badges with the icon above and carries no title
+      // attribute, so a selector-based read of them now silently finds
+      // nothing forever. Derive the same two booleans from `icon` instead —
+      // provably the same conditions the old badges rendered under: the old
+      // "Archived" title showed whenever `isArchived && source !== 'local-only'`,
+      // which is exactly every `archived*` id (including the `-server-unknown`
+      // variant, which the old badge had no concept of and rendered
+      // identically); the old "Local only" title showed whenever
+      // `source === 'local-only'`, which is exactly every `local-only*` id.
+      return {
+        subject: (row.innerText || '').split('\n')[0] || '',
+        text: row.innerText || '',
+        checked: !!row.querySelector('input[type="checkbox"]')?.checked,
+        archived: !!icon && icon.startsWith('archived'),
+        localOnly: !!icon && icon.startsWith('local-only'),
+        icon,
+      };
+    });
   });
 
   const rowFor = async (subject) => (await rows()).find((r) => r.text.includes(subject));
@@ -558,7 +581,7 @@ describe('Storage matrix diagnostics', function () {
       const row = await rowFor(subject);
       const disk = { vault: !!(await waitForDisk(() => vaultFile(accountId, 'Matrix', 1))), backup: !!(await waitForDisk(() => backupFile(VADER, 'Matrix', 1))) };
       console.log('[matrix] row1', subject, 'ui=', row, 'disk=', disk);
-      checkRow('row1', subject, row, disk, { present: true, archived: true, localOnly: false, vault: true, backup: true });
+      checkRow('row1', subject, row, disk, { present: true, archived: true, localOnly: false, vault: true, backup: true, icon: 'archived-backed-up' });
     });
 
     it('row 6 (odd but reachable — stale mirror): server + backed up, archive removed via Unarchive', async function () {
@@ -583,7 +606,7 @@ describe('Storage matrix diagnostics', function () {
       const disk = { vault: !!vaultFile(accountId, 'Matrix', 2), backup: !!(await waitForDisk(() => backupFile(VADER, 'Matrix', 2))) };
       console.log('[matrix] row6', subject, 'ui=', row, 'disk=', disk);
       // Unarchive removed the vault copy but never touches the mirror.
-      checkRow('row6', subject, row, disk, { present: true, archived: false, localOnly: false, vault: false, backup: true });
+      checkRow('row6', subject, row, disk, { present: true, archived: false, localOnly: false, vault: false, backup: true, icon: 'server-only-backed-up' });
     });
 
     it('row 4: archived + backed up, removed from server only', async function () {
@@ -607,7 +630,7 @@ describe('Storage matrix diagnostics', function () {
       const row = await rowFor(subject);
       const disk = { vault: !!(await waitForDisk(() => vaultFile(accountId, 'Matrix', 3))), backup: !!(await waitForDisk(() => backupFile(VADER, 'Matrix', 3))) };
       console.log('[matrix] row4', subject, 'ui=', row, 'disk=', disk);
-      checkRow('row4', subject, row, disk, { present: true, localOnly: true, vault: true, backup: true });
+      checkRow('row4', subject, row, disk, { present: true, localOnly: true, vault: true, backup: true, icon: 'local-only-backed-up' });
     });
 
     it('row 7 (orphaned mirror): unarchived AND removed from server, mirror still there', async function () {
@@ -639,6 +662,10 @@ describe('Storage matrix diagnostics', function () {
       const disk = { vault: !!vaultFile(accountId, 'Matrix', 4), backup: !!(await waitForDisk(() => backupFile(VADER, 'Matrix', 4))) };
       console.log('[matrix] row7', subject, 'ui=(row gone)', 'disk=', disk);
       // Orphaned — nothing in this app ever purges a mirror-only leftover.
+      // No `icon:` here: the row is gone (present: false), so there is no
+      // `[data-testid="msg-state-icon"]` element left to read a data-state
+      // off of. This disk state — off server, never archived, mirrored — is
+      // also not one of the six the icon renders for; nothing is shown for it.
       checkRow('row7', subject, null, disk, { present: false, vault: false, backup: true });
     });
 
@@ -649,7 +676,7 @@ describe('Storage matrix diagnostics', function () {
       const row = await rowFor(subject);
       const disk = { vault: !!vaultFile(accountId, 'Archive', 1), backup: !!backupFile(LUKE, 'Archive', 1) };
       console.log('[matrix] row3', subject, 'ui=', row, 'disk=', disk);
-      checkRow('row3', subject, row, disk, { present: true, archived: false, localOnly: false, vault: false, backup: false });
+      checkRow('row3', subject, row, disk, { present: true, archived: false, localOnly: false, vault: false, backup: false, icon: 'server-only' });
     });
 
     it('row 2: server + archived, backup never run for this account — direct evidence archive_emails writes a real vault file', async function () {
@@ -666,7 +693,7 @@ describe('Storage matrix diagnostics', function () {
       const row = await rowFor(subject);
       const disk = { vault: !!(await waitForDisk(() => vaultFile(accountId, 'Archive', 2))), backup: !!backupFile(LUKE, 'Archive', 2) };
       console.log('[matrix] row2', subject, 'ui=', row, 'disk=', disk, '<- badge vs on-disk file, not just the badge');
-      checkRow('row2', subject, row, disk, { archived: true, vault: true, backup: false });
+      checkRow('row2', subject, row, disk, { archived: true, vault: true, backup: false, icon: 'archived' });
     });
 
     it('row 5: server-deleted local-only, backup never run for this account', async function () {
@@ -692,7 +719,7 @@ describe('Storage matrix diagnostics', function () {
       const row = await rowFor(subject);
       const disk = { vault: !!(await waitForDisk(() => vaultFile(accountId, 'Archive', 3))), backup: !!backupFile(LUKE, 'Archive', 3) };
       console.log('[matrix] row5', subject, 'ui=', row, 'disk=', disk);
-      checkRow('row5', subject, row, disk, { localOnly: true, vault: true, backup: false });
+      checkRow('row5', subject, row, disk, { localOnly: true, vault: true, backup: false, icon: 'local-only' });
     });
   });
 
