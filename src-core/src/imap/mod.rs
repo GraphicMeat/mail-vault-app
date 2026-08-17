@@ -560,8 +560,15 @@ pub fn compress_uid_ranges(uids: &[u32]) -> String {
 
 // ── IMAP Operations ─────────────────────────────────────────────────────────
 
-/// List all mailboxes
-pub async fn list_mailboxes(session: &mut ImapSession) -> Result<Vec<MailboxInfo>, String> {
+/// Run a LIST and collect its names, failing on the first stream error.
+///
+/// Every item must be checked. `filter_map(Result::ok)` here turned a socket
+/// that died mid-LIST into `Ok(vec![])` — a broken pipe reported as "this server
+/// has no folders", which no caller can tell from the real thing. The frontend
+/// raised "Server returned empty folder list unexpectedly" and kept showing
+/// cached folders; `ensure_role_mailbox` would have created a duplicate
+/// Archive/Trash instead of finding the existing one.
+async fn list_names(session: &mut ImapSession) -> Result<Vec<Name>, String> {
     let names_stream = session
         .list(Some(""), Some("*"))
         .await
@@ -571,8 +578,25 @@ pub async fn list_mailboxes(session: &mut ImapSession) -> Result<Vec<MailboxInfo
         .collect::<Vec<_>>()
         .await
         .into_iter()
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("LIST stream failed: {}", e))?;
+
+    // A socket that dies mid-LIST does not yield an error item — the stream
+    // simply ends, so EOF and "the server said nothing" are the same thing here.
+    // An authenticated account always has at least INBOX, so zero names is never
+    // a real answer; reporting it as one is what produced "Server returned empty
+    // folder list unexpectedly" while the pool was still holding a broken pipe.
+    // As an error the session gets discarded and the caller retries on a fresh
+    // connection.
+    if names.is_empty() {
+        return Err("LIST returned no mailboxes — connection likely dropped mid-response".to_string());
+    }
+    Ok(names)
+}
+
+/// List all mailboxes
+pub async fn list_mailboxes(session: &mut ImapSession) -> Result<Vec<MailboxInfo>, String> {
+    let names = list_names(session).await?;
 
     info!("[IMAP] LIST returned {} raw mailbox names", names.len());
 
@@ -1160,16 +1184,7 @@ async fn ensure_role_mailbox(
     create_name: &str,
     candidates: &[&str],
 ) -> Result<String, String> {
-    let names_stream = session
-        .list(Some(""), Some("*"))
-        .await
-        .map_err(|e| format!("LIST failed: {}", e))?;
-    let names: Vec<Name> = names_stream
-        .collect::<Vec<_>>()
-        .await
-        .into_iter()
-        .filter_map(|r| r.ok())
-        .collect();
+    let names = list_names(session).await?;
 
     let entries: Vec<(String, Vec<String>)> = names
         .iter()

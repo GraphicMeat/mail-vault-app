@@ -75,6 +75,27 @@ async fn test_connection_succeeds_and_logs_out() {
     );
 }
 
+/// A LIST on a socket that dies mid-response must be an error. It used to
+/// `filter_map(Result::ok)` the stream, so a broken pipe became `Ok(vec![])` —
+/// indistinguishable from a server that genuinely has no folders. The frontend
+/// believed it, raised "Server returned empty folder list unexpectedly", and
+/// kept showing cached folders (prod log 2026-08-17: `LIST returned 0 raw
+/// mailbox names`, then 116ms later `Pooled IMAP session stale: Broken pipe`).
+#[async_std::test]
+async fn a_dropped_list_is_an_error_not_an_empty_folder_list() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(synthetic_mailbox("INBOX", 3))
+            .fault(Trigger::on("LIST"), Action::DropConnection),
+    );
+    let mut sess = session(&server).await;
+
+    let err = list_mailboxes(&mut sess)
+        .await
+        .expect_err("a LIST on a dead socket must not report zero mailboxes");
+    assert!(!err.is_empty());
+}
+
 #[async_std::test]
 async fn a_dropped_connection_surfaces_as_an_error_not_a_hang() {
     let server = MockImap::start(

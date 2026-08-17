@@ -1072,7 +1072,12 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                       <span>Showing cached data</span>
                     </div>
                     <button
-                      onClick={() => activateAccount(activeAccountId, activeMailbox)}
+                      // Not activateAccount: that lands in the sync probe's 10s
+                      // "checked moments ago" window and returns without asking
+                      // the server anything, which is why this button was
+                      // reported as doing nothing. refreshCurrentView clears the
+                      // probe first, so an explicit retry always reaches the server.
+                      onClick={refreshCurrentView}
                       className="p-1 hover:bg-mail-warning/20 rounded transition-colors"
                       title="Retry connection"
                     >
@@ -1153,7 +1158,12 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                       <span>Showing cached data</span>
                     </div>
                     <button
-                      onClick={() => activateAccount(activeAccountId, activeMailbox)}
+                      // Not activateAccount: that lands in the sync probe's 10s
+                      // "checked moments ago" window and returns without asking
+                      // the server anything, which is why this button was
+                      // reported as doing nothing. refreshCurrentView clears the
+                      // probe first, so an explicit retry always reaches the server.
+                      onClick={refreshCurrentView}
                       className="p-1 hover:bg-mail-warning/20 rounded transition-colors"
                       title="Retry connection"
                     >

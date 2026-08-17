@@ -16,7 +16,7 @@ import { saveRestoreDescriptor as _saveRestore, getRestoreDescriptor as _getRest
 import { createPerfTrace } from '../../utils/perfTrace';
 import { countMailboxes, isMailboxTreeComplete, pickMailboxList, INBOX_PLACEHOLDER, retryOnce } from './mailboxTree';
 import { _buildRestoreDescriptor, _resolveUnifiedContext, _selKey, _parseSelKey } from '../../stores/slices/unifiedHelpers';
-import { serverVerifiedPatch } from '../../stores/slices/syncSlice';
+import { serverVerifiedPatch, shortWindowPatch } from '../../stores/slices/syncSlice';
 import {
   _resetNetworkRetry, _scheduleNetworkRetry,
   getLoadAbortController, setLoadAbortController,
@@ -297,6 +297,36 @@ function _memoizeOutgoing(accountId, mailbox, emails) {
   db.getEmailHeadersMeta(accountId, mailbox)
     .then(meta => memoRemember(accountId, mailbox, settled, meta))
     .catch(() => {});
+}
+
+/**
+ * Resume the cache drain when the list on screen is short of what we hold.
+ *
+ * The paths that verify the server against the CACHE return without touching
+ * the list — correctly, since nothing changed server-side. But the list is a
+ * window onto that cache and can be short of it, and no one else re-checks:
+ * every later activation asks the same question, gets "unchanged", and returns.
+ * The IMAP fallback already re-arms the drain this way (the CONDSTORE branches
+ * in `loadServerEmails`); the daemon's probe-unchanged branch did not, which is
+ * how a list stuck at "3 of 11 emails" survived any number of reload clicks.
+ */
+async function _resumeDrainIfWindowShort(accountId, mailbox, signal, useMailStoreRef, get) {
+  const meta = await db.getEmailHeadersMeta(accountId, mailbox).catch(() => null);
+  if (signal.aborted) return;
+
+  const state = useMailStoreRef.getState();
+  if (state.activeAccountId !== accountId || state.activeMailbox !== mailbox) return;
+
+  const patch = shortWindowPatch(state.emails.length, meta);
+  if (!patch) return;
+
+  console.log('[activateAccount] Window short of cache for %s/%s (%d of %d) — resuming drain',
+    accountId, mailbox, state.emails.length, patch.totalEmails);
+  useMailStoreRef.setState(patch);
+
+  const timer = getLoadMoreTimer();
+  if (timer) clearTimeout(timer);
+  setLoadMoreTimer(setTimeout(() => { setLoadMoreTimer(null); get().loadMoreEmails(); }, 200));
 }
 
 function commitToStore(uidMap, signal, accountId, useMailStoreRef, extras = {}) {
@@ -710,6 +740,8 @@ export async function activateAccount(accountId, mailbox, options = {}) {
             markVerified(accountId, effectiveMailbox);
             if (!signal.aborted) {
               useMailStore.setState(serverVerifiedPatch());
+              // "Unchanged" is about the cache, not about what we are showing.
+              await _resumeDrainIfWindowShort(accountId, effectiveMailbox, signal, useMailStoreRef, get);
             }
             serverTrace.end('probe-unchanged', { reason: probe.reason });
             return;
