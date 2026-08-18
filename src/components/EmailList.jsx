@@ -73,7 +73,7 @@ const LEGEND_ENTRIES = [
   {
     id: 'legend-backed-up',
     glyph: <span className="w-[6px] h-[6px] rounded-full border bg-mail-local border-mail-local" />,
-    text: 'Also on backup drive',
+    text: 'On backup drive',
     label: 'On your backup drive',
     detail: 'A filled dot means the external mirror has it too. A hollow dot means the drive is not connected and we cannot check.',
   },
@@ -1186,11 +1186,11 @@ function EmailListComponent() {
       {/* View Mode Legend — three glyphs and one modifier, each explaining
           itself on hover or focus. Not one row per state: the dot is a
           modifier, and showing it as one is what teaches the composition. */}
-      <div className="px-4 py-2 border-t border-mail-border bg-mail-surface/50
-                      flex items-center gap-4 text-xs text-mail-text-muted flex-shrink-0">
+      <div className="px-4 py-2.5 border-t border-mail-border bg-mail-surface/50
+                      flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-mail-text-muted flex-shrink-0">
         {LEGEND_ENTRIES.map(entry => (
           <StateTooltip key={entry.id} label={entry.label} detail={entry.detail} state={entry.id} testId="legend-state-icon">
-            <span className="flex items-center gap-1.5">
+            <span className="flex items-center gap-1.5 whitespace-nowrap leading-none">
               {entry.glyph}
               <span>{entry.text}</span>
             </span>

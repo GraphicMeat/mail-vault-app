@@ -113,6 +113,37 @@ describe('MessageStateIcon', () => {
     expect(document.querySelector('[data-icon="HardDrive"]')).not.toBeNull();
   });
 
+  it('flips above the icon when there is no room below, so the bottom legend stays visible', () => {
+    // The legend sits on the window's bottom edge. A below-anchored tooltip
+    // there renders off-screen entirely — the reported bug.
+    const rect = (top, left) => () => ({ top, left, bottom: top + 14, right: left + 14, width: 14, height: 14, x: left, y: top });
+    render(<MessageStateIcon email={{ source: 'server', isArchived: false }} />);
+    const icon = screen.getByTestId('msg-state-icon');
+
+    icon.getBoundingClientRect = rect(window.innerHeight - 20, 400);
+    fireEvent.focus(icon);
+    let style = screen.getByTestId('msg-state-tooltip').style;
+    expect(style.bottom).not.toBe('');
+    expect(style.top).toBe('');
+
+    fireEvent.blur(icon);
+    icon.getBoundingClientRect = rect(100, 400);
+    fireEvent.focus(icon);
+    style = screen.getByTestId('msg-state-tooltip').style;
+    expect(style.top).toBe('120px');
+    expect(style.bottom).toBe('');
+  });
+
+  it('clamps a tooltip on an icon near the viewport edge', () => {
+    render(<MessageStateIcon email={{ source: 'server', isArchived: false }} />);
+    const icon = screen.getByTestId('msg-state-icon');
+
+    icon.getBoundingClientRect = () => ({ top: 100, left: 4, bottom: 114, right: 18, width: 14, height: 14, x: 4, y: 100 });
+    fireEvent.focus(icon);
+    // Centred it would be at 11px, putting half of a 240px box off-screen.
+    expect(screen.getByTestId('msg-state-tooltip').style.left).toBe('128px');
+  });
+
   it('closes the tooltip on scroll, including a non-bubbling scroll from a nested container', () => {
     // Virtualized-list rows scroll an internal container, and `scroll`
     // events don't bubble — testing-library's default `scroll` init is

@@ -95,7 +95,19 @@ export function StateTooltip({ label, detail, children, testId = 'msg-state-icon
 
   const open = useCallback(() => {
     const r = ref.current?.getBoundingClientRect();
-    if (r) setPos({ top: r.bottom + 6, left: r.left + r.width / 2 });
+    if (!r) return;
+    // The legend sits on the window's bottom edge, where a below-anchored
+    // tooltip renders off-screen entirely. Flip above there — and anchor the
+    // flipped one by `bottom`, so the browser keeps it on-screen whatever its
+    // real height. ponytail: 120 only picks the side, no measuring pass.
+    const above = r.bottom + 120 > window.innerHeight;
+    // Centering on an icon near either edge pushes half the tooltip out of
+    // view; clamp against max-w-[240px] plus an 8px margin.
+    const half = 128;
+    const left = Math.min(Math.max(r.left + r.width / 2, half), window.innerWidth - half);
+    setPos(above
+      ? { bottom: window.innerHeight - r.top + 6, left }
+      : { top: r.bottom + 6, left });
   }, []);
   const close = useCallback(() => setPos(null), []);
 
@@ -128,7 +140,7 @@ export function StateTooltip({ label, detail, children, testId = 'msg-state-icon
         <div
           role="tooltip"
           data-testid="msg-state-tooltip"
-          style={{ top: pos.top, left: pos.left, transform: 'translateX(-50%)' }}
+          style={{ ...pos, transform: 'translateX(-50%)' }}
           className="fixed z-[9999] max-w-[240px] px-2.5 py-1.5 rounded-md pointer-events-none
                      bg-mail-surface border border-mail-border shadow-lg text-xs"
         >
