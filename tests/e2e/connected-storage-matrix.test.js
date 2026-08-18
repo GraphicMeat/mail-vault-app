@@ -570,13 +570,18 @@ describe('Storage matrix diagnostics', function () {
 
       // This is the first-ever UI visit to this folder in the session (the
       // before() hook above wrote via a direct invoke, never through
-      // loadEmails()) — the row can render before serverUidSet has been
-      // populated by the live IMAP fetch, showing "Local only" (source
-      // derives from serverUidSet.has(uid)) for a message that is, in fact,
-      // still on the server. Wait for it to settle the same way rows
-      // 6/4/7 already do before reading it as ground truth.
-      await browser.waitUntil(async () => (await rowFor(subject))?.archived === true, {
-        timeout: 10_000, interval: 300, timeoutMsg: `"${subject}" never settled into Archived (serverUidSet may still be populating)`,
+      // loadEmails()) — the row can render before the server uid set has been
+      // populated by the live IMAP fetch. Until it is, the row renders the
+      // honest `-server-unknown` variant: archived, but with no proof either
+      // way about the server copy. `archived === true` alone is satisfied by
+      // that transient, so wait for the enumeration to actually settle before
+      // reading the icon as ground truth. The asserted icon below is still the
+      // full state, not the condition waited on.
+      await browser.waitUntil(async () => {
+        const r = await rowFor(subject);
+        return r?.archived === true && !r.icon?.includes('server-unknown');
+      }, {
+        timeout: 10_000, interval: 300, timeoutMsg: `"${subject}" never settled into Archived with a proven server uid set`,
       });
 
       const row = await rowFor(subject);
@@ -687,8 +692,13 @@ describe('Storage matrix diagnostics', function () {
 
       expect(await toggleRowExact(subject)).toBe(true);
       expect(await clickBarButton('Archive selected')).toBe(true);
-      await browser.waitUntil(async () => (await rowFor(subject))?.archived === true, {
-        timeout: 20_000, interval: 500, timeoutMsg: `"${subject}" never showed the Archived badge`,
+      // Same settle condition as row 1: `archived` is also true for the
+      // `-server-unknown` variant this row shows until the uid set is proven.
+      await browser.waitUntil(async () => {
+        const r = await rowFor(subject);
+        return r?.archived === true && !r.icon?.includes('server-unknown');
+      }, {
+        timeout: 20_000, interval: 500, timeoutMsg: `"${subject}" never settled into Archived with a proven server uid set`,
       });
 
       const row = await rowFor(subject);
