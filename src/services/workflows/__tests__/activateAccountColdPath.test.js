@@ -290,58 +290,68 @@ describe('activateAccount daemon-sync cold path (daemon alive, first visit)', ()
   });
 });
 
-// mailboxIsUnchanged's "unchanged" verdict only proves the SERVER hasn't
-// moved since the cache was written — it says nothing about whether that
-// cache is a complete enumeration. This branch is the dominant path in
-// practice (every account switch back to a recently-viewed mailbox lands
-// here), so a fix that never reaches it leaves serverUidsKnown permanently
-// false for the most-travelled path in the app.
-describe('activateAccount probe.unchanged branch (daemon alive, no sync needed)', () => {
+// mailboxIsUnchanged's "unchanged" verdict answers "has the server moved
+// since the cache was written" — a different question from "do we have a
+// complete enumeration". A descriptor-restore paint legitimately empties
+// serverUidSet (and sets serverUidsKnown: false) on every switch back to a
+// mailbox — see activateAccount.js's own serverUidsKnown: false sites — and
+// short-circuiting on probe.unchanged regardless of that flag is what let
+// the reset survive forever: an unchanged verdict never itself re-proves
+// anything, and the probe's own 10s TTL shortcut re-extends on every hit
+// (markVerified runs unconditionally), so a live check might never run again
+// to give the flag a chance to recover. The fix: gate the shortcut on
+// serverUidsKnown already being true; fall through to a real sync otherwise.
+describe('activateAccount probe.unchanged branch (daemon alive)', () => {
   beforeEach(() => {
     mockGetDaemonHealth.mockReturnValue({ alive: true });
     mockSyncNow.mockResolvedValue(undefined);
-    mockWaitForSync.mockResolvedValue({ success: true, new_emails: 0, total_emails: 0 });
   });
 
-  it('proves serverUidsKnown true when the capped disk read is provably the whole cache', async () => {
-    primeActiveForBackgroundRefresh();
+  it('a proven true survives a subsequent activation without paying for a sync', async () => {
+    primeActiveForBackgroundRefresh(); // serverUidsKnown primed true
     mockMailboxIsUnchanged.mockResolvedValue({ unchanged: true, reason: 'uidnext-exists-match' });
-    mockGetEmailHeadersPartial.mockResolvedValue({
-      emails: [mkHeader(1), mkHeader(2), mkHeader(3)],
-      totalEmails: 3,
-    });
 
     await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
 
     const state = useMailStore.getState();
     expect(state.serverUidsKnown).toBe(true);
-    expect([...state.serverUidSet].sort()).toEqual([1, 2, 3]);
-    expect(mockSyncNow).not.toHaveBeenCalled(); // sanity: took the unchanged shortcut, not a real sync
-  });
-
-  it('flips a stale true to false when the capped disk read is short of totalEmails', async () => {
-    primeActiveForBackgroundRefresh();
-    mockMailboxIsUnchanged.mockResolvedValue({ unchanged: true, reason: 'modseq-match' });
-    mockGetEmailHeadersPartial.mockResolvedValue({
-      emails: [mkHeader(1)], // far short — a large mailbox's cache, capped at 500
-      totalEmails: 500,
-    });
-
-    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
-
-    expect(useMailStore.getState().serverUidsKnown).toBe(false);
+    expect([...state.serverUidSet]).toEqual([1]); // untouched — the shortcut was taken, nothing re-derived
+    // The latency guarantee: once proven, an unchanged mailbox costs one
+    // probe, never a sync.now/wait.for round trip.
     expect(mockSyncNow).not.toHaveBeenCalled();
   });
 
-  it('probed-recently: preserves serverUidsKnown instead of re-deriving it (no live check ran)', async () => {
-    primeActiveForBackgroundRefresh(); // serverUidsKnown primed true
-    mockMailboxIsUnchanged.mockResolvedValue({ unchanged: true, reason: 'probed-recently' });
-    // If this were wrongly read as a completeness signal, a mismatched or
-    // empty cache read here would flip the flag; it must not be consulted.
-    mockGetEmailHeadersPartial.mockResolvedValue({ emails: [], totalEmails: 0 });
+  it('an unproven false falls through to a real sync instead of short-circuiting', async () => {
+    primeActiveForBackgroundRefresh();
+    useMailStore.setState({ serverUidsKnown: false }); // e.g. just reset by a descriptor-restore paint
+    mockMailboxIsUnchanged.mockResolvedValue({ unchanged: true, reason: 'modseq-match' });
+    mockWaitForSync.mockResolvedValue({ success: true, new_emails: 0, total_emails: 1 });
+    mockGetEmailHeadersPartial.mockResolvedValue({ emails: [mkHeader(1)], totalEmails: 1 });
 
     await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
 
+    // Fell through despite probe.unchanged: true — this is the assertion
+    // that actually distinguishes this fix from a no-op.
+    expect(mockSyncNow).toHaveBeenCalled();
+    expect(mockWaitForSync).toHaveBeenCalled();
+    // And the fall-through did its job: the sync's own completeness proof
+    // (already covered by the daemon-sync describe block above) re-establishes true.
+    expect(useMailStore.getState().serverUidsKnown).toBe(true);
+  });
+
+  it('probed-recently does not exempt an unproven false from falling through', async () => {
+    primeActiveForBackgroundRefresh();
+    useMailStore.setState({ serverUidsKnown: false });
+    // The TTL shortcut reason specifically — proves the fix does not special-
+    // case it back into a preserve-only branch, which is what let the TTL
+    // re-extend itself indefinitely in the original bug.
+    mockMailboxIsUnchanged.mockResolvedValue({ unchanged: true, reason: 'probed-recently' });
+    mockWaitForSync.mockResolvedValue({ success: true, new_emails: 0, total_emails: 1 });
+    mockGetEmailHeadersPartial.mockResolvedValue({ emails: [mkHeader(1)], totalEmails: 1 });
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
+
+    expect(mockSyncNow).toHaveBeenCalled();
     expect(useMailStore.getState().serverUidsKnown).toBe(true);
   });
 });

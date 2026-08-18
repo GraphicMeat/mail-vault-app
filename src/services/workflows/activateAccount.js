@@ -737,43 +737,35 @@ export async function activateAccount(accountId, mailbox, options = {}) {
           // 30s `sync.wait`, and switching between accounts hits this path on
           // every single switch. Anything but a clean "unchanged" syncs.
           const probe = await mailboxIsUnchanged(account, accountId, effectiveMailbox);
-          if (probe.unchanged) {
+          // probe.unchanged answers "has the server moved since the cache was
+          // written" — a different question from "do we have a complete
+          // enumeration". A descriptor-restore paint (this file, the
+          // serverUidsKnown: false sites) legitimately empties serverUidSet
+          // on every switch back to a mailbox, and this probe alone can never
+          // recover it: an unchanged verdict says nothing was missed, not
+          // that anything was ever found. Short-circuiting on probe.unchanged
+          // regardless of serverUidsKnown is what let a reset survive forever
+          // — the flag can only go false->true through an actual sync
+          // (below), so skip the shortcut and fall through to one whenever
+          // completeness is still unproven. Once a sync re-establishes it,
+          // subsequent unchanged checks (including probed-recently) take the
+          // shortcut again — this only costs a sync once per reset, not once
+          // per check.
+          if (probe.unchanged && get().serverUidsKnown) {
             console.log('[activateAccount] %s/%s unchanged (%s) — skipping sync',
               accountId, effectiveMailbox, probe.reason);
             markVerified(accountId, effectiveMailbox);
             if (!signal.aborted) {
-              // probe.unchanged proves the SERVER hasn't moved since the cache
-              // was written (a live checkMailboxStatus round trip, except for
-              // the 'probed-recently' TTL shortcut below) — it says nothing by
-              // itself about whether the cache is a COMPLETE enumeration.
-              let patch = serverVerifiedPatch();
-              if (probe.reason === 'probed-recently') {
-                // No live check ran this time; _lastVerified only gets set
-                // after one did, so an earlier hit within the last 10s already
-                // ran the branch below and left serverUidsKnown correctly set
-                // for a mailbox nothing has since touched. Leave it alone.
-              } else {
-                // Same capped read + same proof as the daemon-sync branch
-                // below (freshCache.emails.length >= totalEmails): a direct,
-                // unmerged disk read, so a count match isn't a coincidental
-                // window — it really is the whole cache. Complete: trust it
-                // for serverUidSet too. Incomplete: only correct the flag —
-                // writing a smaller windowed set here could regress whatever
-                // loadLocalEmails()'s concurrent first-paint already holds.
-                const cached = await db.getEmailHeadersPartial(accountId, effectiveMailbox, 500);
-                const cacheComplete = !!cached?.totalEmails && cached.emails.length >= cached.totalEmails;
-                patch = serverVerifiedPatch(
-                  cacheComplete
-                    ? { serverUidSet: new Set(cached.emails.map(e => e.uid)), serverUidsKnown: true }
-                    : { serverUidsKnown: false }
-                );
-              }
-              if (!signal.aborted) useMailStore.setState(patch);
+              useMailStore.setState(serverVerifiedPatch());
               // "Unchanged" is about the cache, not about what we are showing.
               await _resumeDrainIfWindowShort(accountId, effectiveMailbox, signal, useMailStoreRef, get);
             }
             serverTrace.end('probe-unchanged', { reason: probe.reason });
             return;
+          }
+          if (probe.unchanged) {
+            console.log('[activateAccount] %s/%s unchanged but serverUidsKnown is false — syncing to (re-)prove completeness',
+              accountId, effectiveMailbox);
           }
           console.log('[activateAccount] %s/%s needs sync (%s)',
             accountId, effectiveMailbox, probe.reason);
