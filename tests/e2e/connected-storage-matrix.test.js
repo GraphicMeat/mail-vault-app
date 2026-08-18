@@ -581,7 +581,11 @@ describe('Storage matrix diagnostics', function () {
         const r = await rowFor(subject);
         return r?.archived === true && !r.icon?.includes('server-unknown');
       }, {
-        timeout: 10_000, interval: 300, timeoutMsg: `"${subject}" never settled into Archived with a proven server uid set`,
+        // 30s, matching rows 4/5 rather than the 10s the Archived-only wait
+        // used: this is the first-ever UI visit to the folder, so settling
+        // means a full live enumeration, and under a whole-suite run on a busy
+        // machine that does not fit in 10s. Solo it settles in well under one.
+        timeout: 30_000, interval: 300, timeoutMsg: `"${subject}" never settled into Archived with a proven server uid set`,
       });
 
       const row = await rowFor(subject);

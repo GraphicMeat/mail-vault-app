@@ -67,11 +67,26 @@ describe('Selection Action Bar effects', function () {
 
   const rows = () => browser.execute((re) => {
     const pattern = new RegExp(re);
-    return [...document.querySelectorAll('[data-testid="email-row"]')].map(row => ({
-      subject: ((row.innerText || '').match(pattern) || [null])[0],
-      unread: row.classList.contains('bg-mail-surface'),
-      archived: row.querySelector('[title="Archived"]') !== null,
-    })).filter(r => r.subject);
+    return [...document.querySelectorAll('[data-testid="email-row"]')].map(row => {
+      // Derived from the state icon's `data-state`, not from the row's old
+      // title="Archived" / title^="Local only" badges: the message-state-icon
+      // rollout (commit 8c2fe9f) removed those attributes, so selecting on them
+      // silently found nothing forever and every wait on these booleans timed
+      // out. Same derivation connected-storage-matrix already uses — the old
+      // "Archived" badge showed whenever `isArchived && source !== 'local-only'`,
+      // which is exactly every `archived*` id (the `-server-unknown` variant
+      // included: it means "archived, server copy unproven", which the old badge
+      // had no concept of and rendered identically), and the old "Local only"
+      // badge showed whenever `source === 'local-only'`, exactly every
+      // `local-only*` id.
+      const icon = row.querySelector('[data-testid="msg-state-icon"]')?.getAttribute('data-state') || null;
+      return {
+        subject: ((row.innerText || '').match(pattern) || [null])[0],
+        unread: row.classList.contains('bg-mail-surface'),
+        archived: !!icon && icon.startsWith('archived'),
+        icon,
+      };
+    }).filter(r => r.subject);
   }, SUBJECT_RE);
 
   /** Subjects of the first `count` rows matching a predicate. */
