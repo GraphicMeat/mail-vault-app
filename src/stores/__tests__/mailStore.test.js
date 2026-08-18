@@ -92,6 +92,7 @@ vi.mock('../../services/cacheManager', () => ({
 }));
 
 const { useMailStore } = await import('../mailStore');
+const { serverUids, NO_SERVER_UIDS } = await import('../slices/serverUids');
 
 // Helper: create a fake email with a predictable size
 function fakeEmail(uid, sizeKB = 10) {
@@ -473,8 +474,7 @@ describe('updateSortedEmails memoization', () => {
       viewMode: 'all',
       emails: [],
       localEmails: [local],
-      serverUidSet: new Set(),
-      serverUidsKnown: true,
+      serverUids: serverUids(new Set(), { complete: true }),
       deleteTombstones: new Set(),
       // Same sizes as the correct state below, different uid — this is the
       // stale half-loaded moment.
@@ -497,9 +497,18 @@ describe('updateSortedEmails memoization', () => {
     expect(sorted[0].source).toBe('local-only');
   });
 
+  it('refuses to build a server uid set without an explicit completeness claim', () => {
+    // The whole point of binding: you cannot forget to say whether this is
+    // the whole mailbox. A forgotten argument must fail loudly, not default.
+    expect(() => serverUids(new Set([1]))).toThrow(TypeError);
+    expect(() => serverUids(new Set([1]), {})).toThrow(TypeError);
+    expect(() => serverUids(new Set([1]), { complete: 'yes' })).toThrow(TypeError);
+    expect(serverUids(new Set([1]), { complete: false }).complete).toBe(false);
+  });
+
   it('never stamps local-only while the server uid set is unverified', () => {
     // The account-switch paint: archivedEmailIds restored from cache, server
-    // list not back yet. An empty serverUidSet is "not asked", not "not there".
+    // list not back yet. An empty uid set is "not asked", not "not there".
     useMailStore.setState({
       activeAccountId: 'acct-1',
       activeMailbox: 'INBOX',
@@ -508,8 +517,7 @@ describe('updateSortedEmails memoization', () => {
       localEmails: [{ uid: 3, subject: 'Archived message 3', date: 'Sun, 04 Jan 2026 12:00:00 +0000' }],
       archivedEmailIds: new Set([3]),
       savedEmailIds: new Set([3]),
-      serverUidSet: new Set(),
-      serverUidsKnown: false,
+      serverUids: serverUids(new Set(), { complete: false }),
       deleteTombstones: new Set(),
       _sortedEmailsFingerprint: '',
     });
@@ -529,8 +537,7 @@ describe('updateSortedEmails memoization', () => {
       localEmails: [{ uid: 3, subject: 'Archived message 3', date: 'Sun, 04 Jan 2026 12:00:00 +0000' }],
       archivedEmailIds: new Set([3]),
       savedEmailIds: new Set([3]),
-      serverUidSet: new Set([7]),
-      serverUidsKnown: true,
+      serverUids: serverUids(new Set([7]), { complete: true }),
       deleteTombstones: new Set(),
       _sortedEmailsFingerprint: '',
     });
@@ -548,7 +555,7 @@ describe('updateSortedEmails memoization', () => {
       localEmails: [{ uid: 3, subject: 'Archived message 3' }],
       archivedEmailIds: new Set([3]),
       savedEmailIds: new Set([3]),
-      serverUidSet: new Set(),
+      serverUids: NO_SERVER_UIDS,
       deleteTombstones: new Set(),
       _sortedEmailsFingerprint: '',
     });
@@ -562,13 +569,13 @@ describe('updateSortedEmails memoization', () => {
 });
 
 // Unified inbox merges cache/local data across accounts — it is never a live
-// server enumeration for any of them. If serverUidsKnown carried a stale
+// server enumeration for any of them. If completeness carried a stale
 // `true` from the single-account view the user was just on, every archived
 // row outside the rendered chunk would derive "local-only" the instant
-// unified inbox painted. All three serverUidSet writes in
+// unified inbox painted. All three serverUids writes in
 // loadUnifiedInbox.js must force the flag back to false; zustand's shallow
 // merge means silently omitting it would let the old value survive.
-describe('unified inbox — serverUidsKnown never carries a stale true', () => {
+describe('unified inbox — server uid completeness never carries a stale true', () => {
   const ACCOUNT = { id: 'acct-1', email: 'a@example.com' };
 
   beforeEach(() => {
@@ -600,13 +607,13 @@ describe('unified inbox — serverUidsKnown never carries a stale true', () => {
       viewMode: 'all',
       // Simulates the single-account view completing a full sync right
       // before the user switched into unified inbox.
-      serverUidsKnown: true,
+      serverUids: serverUids(new Set(), { complete: true }),
     });
 
     await useMailStore.getState().loadUnifiedInbox(null, 'INBOX');
 
-    expect(useMailStore.getState().serverUidSet.size).toBe(65);
-    expect(useMailStore.getState().serverUidsKnown).toBe(false);
+    expect(useMailStore.getState().serverUids.uids.size).toBe(65);
+    expect(useMailStore.getState().serverUids.complete).toBe(false);
   });
 
   it('switchUnifiedFolder\'s cache-hit path clears the flag too', async () => {
@@ -621,7 +628,7 @@ describe('unified inbox — serverUidsKnown never carries a stale true', () => {
       unifiedInbox: true,
       unifiedFolder: 'INBOX',
       viewMode: 'all',
-      serverUidsKnown: true,
+      serverUids: serverUids(new Set(), { complete: true }),
     });
 
     await useMailStore.getState().switchUnifiedFolder('Archive');
@@ -629,7 +636,7 @@ describe('unified inbox — serverUidsKnown never carries a stale true', () => {
     // also fires a background loadUnifiedInbox() refresh it doesn't await.
     await new Promise((r) => setTimeout(r, 0));
 
-    expect(useMailStore.getState().serverUidsKnown).toBe(false);
+    expect(useMailStore.getState().serverUids.complete).toBe(false);
 
     _unifiedFolderCache.delete('Archive');
   });

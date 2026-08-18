@@ -6,6 +6,7 @@ import * as api from '../../services/api';
 import { useSettingsStore } from '../settingsStore';
 import { buildThreads } from '../../utils/emailParser';
 import { detectReplyToMismatch } from '../../utils/replyToCheck';
+import { NO_SERVER_UIDS } from './serverUids';
 import {
   loadEmails as _loadEmails,
   _loadEmailsViaGraph,
@@ -101,13 +102,13 @@ export const createMessageListSlice = (set, get) => ({
   localEmails: [],
   savedEmailIds: new Set(),
   archivedEmailIds: new Set(),
-  serverUidSet: new Set(), // Full set of UIDs known to exist on the IMAP server
-  // True only when serverUidSet is a COMPLETE enumeration of the active
-  // mailbox. Window-derived and cleared sets leave it false. Absence from an
-  // unverified set means "not seen yet", never "not on the server" — deriving
-  // `local-only` from an unverified set made every archived row read
-  // "deleted from server" for the whole account-switch paint.
-  serverUidsKnown: false,
+  // The uids the server is known to hold, bound to whether that set is a
+  // COMPLETE enumeration of the active mailbox. Window-derived and cleared
+  // sets are incomplete. Absence from an incomplete set means "not seen yet",
+  // never "not on the server" — deriving `local-only` from one made every
+  // archived row read "deleted from server" for the whole account-switch
+  // paint. See slices/serverUids.js for why the two travel together.
+  serverUids: NO_SERVER_UIDS,
 
   // Uids present in the external backup mirror, keyed "<accountId>:<uid>".
   // null means "could not determine" — no backup location, or the drive is not
@@ -141,7 +142,7 @@ export const createMessageListSlice = (set, get) => ({
 
   // Update sorted emails (memoization for performance) — pure synchronous derivation
   updateSortedEmails: () => {
-    const { emails, localEmails, viewMode, savedEmailIds, archivedEmailIds, serverUidSet, serverUidsKnown, unifiedInbox, activeAccountId, activeMailbox, deleteTombstones, _sortedEmailsFingerprint } = get();
+    const { emails, localEmails, viewMode, savedEmailIds, archivedEmailIds, serverUids, unifiedInbox, activeAccountId, activeMailbox, deleteTombstones, _sortedEmailsFingerprint } = get();
 
     // Fingerprint check: skip if the input set hasn't materially changed.
     //
@@ -165,9 +166,9 @@ export const createMessageListSlice = (set, get) => ({
       && _sortedInputs.localEmails === localEmails
       && _sortedInputs.archivedEmailIds === archivedEmailIds
       && _sortedInputs.savedEmailIds === savedEmailIds
-      && _sortedInputs.serverUidSet === serverUidSet
+      && _sortedInputs.serverUids === serverUids
       && _sortedInputs.deleteTombstones === deleteTombstones;
-    const fp = `${activeAccountId}-${activeMailbox}-${viewMode}-${emails.length}-${emails[0]?.uid || 0}-${emails[emails.length - 1]?.uid || 0}-${localEmails.length}-${archivedEmailIds.size}-${savedEmailIds.size}-${serverUidSet.size}-${serverUidsKnown}-${_flagChangeCounter}-${deleteTombstones?.size || 0}`;
+    const fp = `${activeAccountId}-${activeMailbox}-${viewMode}-${emails.length}-${emails[0]?.uid || 0}-${emails[emails.length - 1]?.uid || 0}-${localEmails.length}-${archivedEmailIds.size}-${savedEmailIds.size}-${serverUids.uids.size}-${serverUids.complete}-${_flagChangeCounter}-${deleteTombstones?.size || 0}`;
     if (fp === _sortedEmailsFingerprint && sameInputs) return;
 
     // In unified inbox, UIDs collide across accounts — use compound key for dedup
@@ -190,7 +191,7 @@ export const createMessageListSlice = (set, get) => ({
         if (archivedEmailIds.has(e.uid)) {
           e.isLocal = true;
           e.isArchived = true;
-          e.source = !serverUidsKnown || serverUidSet.has(e.uid) ? 'local' : 'local-only';
+          e.source = !serverUids.complete || serverUids.uids.has(e.uid) ? 'local' : 'local-only';
           result.push(e);
         }
       }
@@ -207,7 +208,7 @@ export const createMessageListSlice = (set, get) => ({
         if (!loadedKeys.has(uidKey(localEmail)) && archivedEmailIds.has(localEmail.uid)) {
           localEmail.isLocal = true;
           localEmail.isArchived = true;
-          localEmail.source = !serverUidsKnown || serverUidSet.has(localEmail.uid) ? 'local' : 'local-only';
+          localEmail.source = !serverUids.complete || serverUids.uids.has(localEmail.uid) ? 'local' : 'local-only';
           result.push(localEmail);
         }
       }
@@ -283,7 +284,7 @@ export const createMessageListSlice = (set, get) => ({
 
     _chatEmailsFingerprint = '';
     _threadsFingerprint = '';
-    _sortedInputs = { emails, localEmails, archivedEmailIds, savedEmailIds, serverUidSet, deleteTombstones };
+    _sortedInputs = { emails, localEmails, archivedEmailIds, savedEmailIds, serverUids, deleteTombstones };
     set({ sortedEmails: result, _sortedEmailsFingerprint: fp });
   },
 
