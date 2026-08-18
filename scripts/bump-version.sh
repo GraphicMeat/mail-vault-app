@@ -42,6 +42,15 @@ echo "Bumping version: $CURRENT → $NEW"
 # package.json: "version": "X.Y.Z"
 sed -i '' 's/"version": *"[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*"/"version": "'"$NEW"'"/' "$ROOT/package.json"
 
+# package-lock.json: top-level .version and .packages[""].version
+# JSON-parsed rather than sed'd — the file has a "version" line for every dependency
+node -e '
+  const fs = require("fs"), p = process.argv[1], o = JSON.parse(fs.readFileSync(p, "utf8"));
+  o.version = process.argv[2];
+  if (o.packages && o.packages[""]) o.packages[""].version = process.argv[2];
+  fs.writeFileSync(p, JSON.stringify(o, null, 2) + "\n");
+' "$ROOT/package-lock.json" "$NEW"
+
 # src-tauri/Cargo.toml: version = "X.Y.Z" under [package] (first occurrence)
 # macOS sed doesn't support 0, address — use awk for first-match-only replacement
 awk -v new="$NEW" '!done && /^version = "[0-9]+\.[0-9]+\.[0-9]+"/ { sub(/version = "[0-9]+\.[0-9]+\.[0-9]+"/, "version = \"" new "\""); done=1 } 1' "$ROOT/src-tauri/Cargo.toml" > "$ROOT/src-tauri/Cargo.toml.tmp" && mv "$ROOT/src-tauri/Cargo.toml.tmp" "$ROOT/src-tauri/Cargo.toml"
@@ -82,6 +91,7 @@ verify_version "$ROOT/package.json" "\"version\": \"$NEW\"" "package.json"
 verify_version "$ROOT/src-tauri/Cargo.toml" "version = \"$NEW\"" "Cargo.toml"
 verify_version "$ROOT/src-tauri/tauri.conf.json" "\"version\": \"$NEW\"" "tauri.conf.json"
 verify_version "$ROOT/snap/snapcraft.yaml" "version: '$NEW'" "snapcraft.yaml"
+verify_version "$ROOT/package-lock.json" "\"version\": \"$NEW\"" "package-lock.json"
 
 if [[ $ERRORS -gt 0 ]]; then
   echo ""
@@ -92,6 +102,7 @@ fi
 echo ""
 echo "Updated files:"
 echo "  package.json            → $NEW"
+echo "  package-lock.json       → $NEW"
 echo "  src-tauri/Cargo.toml    → $NEW"
 echo "  src-tauri/tauri.conf.json → $NEW"
 echo "  snap/snapcraft.yaml     → $NEW"
