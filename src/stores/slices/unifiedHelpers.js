@@ -22,6 +22,12 @@ export function _buildRestoreDescriptor(state, mailbox, { topVisibleIndex = 0 } 
     firstWindowArchivedUids: sorted.slice(0, 50)
       .filter(e => state.archivedEmailIds?.has(e.uid))
       .map(e => e.uid),
+    // Carried whole, completeness included. Snapshotting the uids without it
+    // was the same mistake as splitting them in the store: every restore
+    // paint then had to reset completeness to false, and the probe's
+    // "unchanged" verdict can never re-prove an enumeration — so the reset
+    // survived every switch back and the amber state became unreachable.
+    serverUids: state.serverUids,
     timestamp: Date.now(),
   };
 }

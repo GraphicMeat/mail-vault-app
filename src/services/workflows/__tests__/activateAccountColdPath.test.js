@@ -375,3 +375,71 @@ describe('activateAccount probe.unchanged branch (daemon alive)', () => {
     expect(useMailStore.getState().serverUids.complete).toBe(true);
   });
 });
+
+// A descriptor is a snapshot of what the store held on switch-away. It used
+// to snapshot everything EXCEPT the server uid set, so every restore paint
+// reset completeness to false — and since the probe's "unchanged" verdict
+// can never itself re-prove an enumeration, that reset survived every
+// subsequent switch back. Carrying the bound value through the descriptor is
+// what closes that cycle; carrying it honestly (a descriptor written before
+// this change, or from an unproven state, restores to incomplete) is what
+// keeps it from becoming a new way to invent a completeness claim.
+describe('restore descriptor carries server uid completeness', () => {
+  const mkDescriptor = (extra) => ({
+    accountId: ACCOUNT.id,
+    mailbox: 'INBOX',
+    viewMode: 'all',
+    totalEmails: 1,
+    topVisibleIndex: 0,
+    selectedUid: null,
+    mailboxes: [{ name: 'INBOX', path: 'INBOX' }],
+    mailboxesFetchedAt: Date.now(),
+    firstWindow: [mkHeader(1)],
+    firstWindowSavedUids: [],
+    firstWindowArchivedUids: [],
+    timestamp: Date.now(),
+    ...extra,
+  });
+
+  beforeEach(() => {
+    // Park the background refresh the restore paint fires — this test is
+    // about the synchronous paint, not what re-proves it afterwards.
+    mockGetDaemonHealth.mockReturnValue({ alive: false });
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 2, highestModseq: null });
+    mockFetchEmails.mockResolvedValue({ total: 1, emails: [mkHeader(1)] });
+  });
+
+  it('restores a proven-complete snapshot as complete', async () => {
+    primeCold();
+    mockGetRestoreDescriptor.mockReturnValue(mkDescriptor({
+      serverUids: serverUids(new Set([1]), { complete: true }),
+    }));
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX');
+
+    const state = useMailStore.getState();
+    expect([...state.serverUids.uids]).toEqual([1]);
+    expect(state.serverUids.complete).toBe(true);
+  });
+
+  it('restores an unproven snapshot as incomplete', async () => {
+    primeCold();
+    mockGetRestoreDescriptor.mockReturnValue(mkDescriptor({
+      serverUids: serverUids(new Set([1]), { complete: false }),
+    }));
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX');
+
+    expect(useMailStore.getState().serverUids.complete).toBe(false);
+  });
+
+  it('treats a descriptor written before this change as incomplete, never as proof', async () => {
+    primeCold();
+    mockGetRestoreDescriptor.mockReturnValue(mkDescriptor()); // no serverUids field at all
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX');
+
+    const state = useMailStore.getState();
+    expect(state.serverUids.complete).toBe(false);
+  });
+});

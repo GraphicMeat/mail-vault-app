@@ -487,7 +487,10 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       archivedEmailIds: restoredArchivedIds,
       mailboxes: restoredMailboxes,
       mailboxesFetchedAt: restored.mailboxesFetchedAt ?? null,
-      serverUids: NO_SERVER_UIDS,
+      // A descriptor written before serverUids was carried has no such field;
+      // its absence is "unproven", never "complete". Same for one snapshotted
+      // from an unproven state — this restores the claim, it cannot invent one.
+      serverUids: restored.serverUids ?? NO_SERVER_UIDS,
       selectedEmailId: restored.selectedUid || null,
       selectedEmail: null,
       selectedEmailSource: null,
