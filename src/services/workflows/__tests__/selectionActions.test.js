@@ -374,21 +374,24 @@ describe('deleteSelectedFromServer', () => {
       localEmails: [localCopy],
       savedEmailIds: new Set([1]),
       archivedEmailIds: new Set([1]),
-      serverUids: serverUids(new Set([1, 2]), { complete: false }),
-      // Not yet reconciled post-delete — the mock below is what proves it.
+      // Proven complete BEFORE the delete, and still holding uid 1 — so the
+      // only thing that can make this row read local-only is the delete
+      // itself taking uid 1 out of the set.
+      serverUids: serverUids(new Set([1, 2]), { complete: true }),
       deleteTombstones: new Set(),
       totalEmails: 2,
       selectedEmailIds: new Set([1]),
       selectedEmail: null,
       selectedEmailId: null,
-      // Stand-in for the real server round-trip: a genuine reconcile would
-      // find uid 1 gone from the server, drop it from the uid set, and mark
-      // the set verified-complete (see loadEmails.js's UID-search branch).
+      // A reconcile that re-derives but never re-enumerates. This is not a
+      // weakened stand-in — it is what the real loadEmails() does whenever
+      // its CONDSTORE flag-only or delta-noop branch matches: those return
+      // before the UID search, leaving the uid set exactly as they found it.
+      // The old version of this mock pruned the uid and set complete itself,
+      // which made the test pass while production shipped a row stuck on
+      // `local` for the rest of the session.
       loadEmails: vi.fn(() => {
         tombstoneCountWhenLoadEmailsRan = useMailStore.getState().deleteTombstones.size;
-        useMailStore.setState(s => ({
-          serverUids: serverUids([...s.serverUids.uids].filter(u => u !== 1), { complete: true }),
-        }));
         useMailStore.getState().updateSortedEmails();
         return Promise.resolve();
       }),
@@ -404,6 +407,8 @@ describe('deleteSelectedFromServer', () => {
     // happened earlier (e.g. from the failure-path catch) would show 0 here.
     expect(tombstoneCountWhenLoadEmailsRan).toBe(1);
     expect(useMailStore.getState().deleteTombstones.size).toBe(0);
+    expect([...useMailStore.getState().serverUids.uids]).toEqual([2]);
+    expect(useMailStore.getState().serverUids.complete).toBe(true);
     const row = useMailStore.getState().sortedEmails.find(e => e.uid === 1);
     expect(row).toBeDefined();
     expect(row.source).toBe('local-only');

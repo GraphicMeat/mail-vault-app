@@ -22,3 +22,23 @@ export function serverUids(uids, { complete } = {}) {
 }
 
 export const NO_SERVER_UIDS = Object.freeze({ uids: new Set(), complete: false });
+
+/**
+ * Narrow a uid set by uids the server has confirmed are gone.
+ *
+ * Removing a uid from a complete enumeration keeps it complete — the server
+ * itself is the authority for the removal. Nothing else does this: the
+ * reconcile in loadEmails() derives its removals by diffing what it held
+ * against what the server returns, and a just-deleted uid is already absent
+ * from both sides, so its CONDSTORE flag-only and delta-noop branches return
+ * without touching the set at all. Left in, an archived row whose server copy
+ * is gone keeps deriving `local` instead of `local-only` for the rest of the
+ * session — a complete set that is stale by one uid hides the very state the
+ * completeness claim exists to enable.
+ */
+export function withoutUids(current, gone) {
+  if (!gone?.size) return current;
+  const remaining = new Set();
+  for (const uid of current.uids) if (!gone.has(uid)) remaining.add(uid);
+  return { uids: remaining, complete: current.complete };
+}

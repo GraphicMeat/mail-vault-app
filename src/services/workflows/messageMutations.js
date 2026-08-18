@@ -8,6 +8,7 @@ import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
 import { getGraphMessageId } from '../cacheManager';
 import { _resolveUnifiedContext, _selKey, _parseSelKey } from '../../stores/slices/unifiedHelpers';
 import { bumpFlagChangeCounter } from '../../stores/slices/messageListSlice';
+import { withoutUids } from '../../stores/slices/serverUids';
 
 
 // ── saveEmailLocally workflow ──
@@ -313,6 +314,13 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
     updates.selectedEmail = null;
     updates.selectedEmailSource = null;
     updates.selectedThread = null;
+  }
+  // The server confirmed this uid is gone, so take it out of the uid set too.
+  // Only the active view's set — uids are per-mailbox, and the store holds one
+  // mailbox's set at a time. See withoutUids for why loadEmails() below cannot
+  // do this for us.
+  if (!isUnified && accountId === get().activeAccountId && mailbox === get().activeMailbox) {
+    updates.serverUids = withoutUids(get().serverUids, new Set([uid]));
   }
   useMailStore.setState(updates);
   get().updateSortedEmails();
@@ -695,6 +703,13 @@ export async function deleteSelectedFromServer() {
   if (!isUnified && deletedInActiveMailbox.size > 0) {
     const s = get();
     const viewUnmoved = s.activeAccountId === state.activeAccountId && s.activeMailbox === state.activeMailbox;
+    // Same reasoning as the sidecar prune, for the in-memory uid set: these
+    // uids are gone from the server and nothing downstream will take them out
+    // (see withoutUids). Only when the view has not moved — the store holds
+    // whatever mailbox is on screen now, and uids are per-mailbox.
+    if (viewUnmoved) {
+      useMailStore.setState({ serverUids: withoutUids(s.serverUids, deletedInActiveMailbox) });
+    }
     await db.saveEmailHeaders(
       state.activeAccountId, state.activeMailbox,
       viewUnmoved ? s.emails : [],
