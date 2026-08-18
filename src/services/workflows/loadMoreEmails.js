@@ -6,6 +6,7 @@ import { ensureFreshToken, resolveServerAccount } from '../authUtils';
 import { getSyncStatus } from '../syncService';
 import { saveRestoreDescriptor as _saveRestore } from '../cacheManager';
 import { _buildRestoreDescriptor } from '../../stores/slices/unifiedHelpers';
+import { serverUids } from '../../stores/slices/serverUids';
 import {
   getLoadMoreTimer, setLoadMoreTimer,
 } from '../../stores/slices/messageListSlice';
@@ -152,7 +153,7 @@ export async function loadMoreEmails() {
       // headers while the cache read was in flight.
       const loadedUids = new Set(current.emails.map(e => e.uid));
       const freshCached = drained.emails.filter(e => !loadedUids.has(e.uid));
-      const updatedServerUidSet = new Set(current.serverUidSet);
+      const updatedServerUidSet = new Set(current.serverUids.uids);
       for (const e of drained.emails) updatedServerUidSet.add(e.uid);
       useMailStore.setState({
         emails: [...current.emails, ...freshCached],
@@ -163,7 +164,9 @@ export async function loadMoreEmails() {
         totalEmails: drained.total,
         cachedCount: drained.cached,
         loadingMore: false,
-        serverUidSet: updatedServerUidSet,
+        // Widening, never replacing: a complete set stays complete, an
+        // incomplete one stays incomplete. Stated, not inherited.
+        serverUids: serverUids(updatedServerUidSet, { complete: current.serverUids.complete }),
       });
       get().updateSortedEmails();
       // Progress — the backfill is alive, so it gets a fresh wait budget.
@@ -215,7 +218,7 @@ export async function loadMoreEmails() {
       const existingUids = new Set(current.emails.map(e => e.uid));
       const freshEmails = serverResult.emails.filter(e => !existingUids.has(e.uid));
       const newEmails = [...current.emails, ...freshEmails];
-      const updatedServerUidSet = new Set(current.serverUidSet);
+      const updatedServerUidSet = new Set(current.serverUids.uids);
       for (const e of serverResult.emails) updatedServerUidSet.add(e.uid);
       useMailStore.setState({
         emails: newEmails,
@@ -223,7 +226,8 @@ export async function loadMoreEmails() {
         hasMoreEmails: serverResult.hasMore,
         totalEmails: serverResult.total,
         loadingMore: false,
-        serverUidSet: updatedServerUidSet
+        // Widening only — carry the existing completeness claim forward.
+        serverUids: serverUids(updatedServerUidSet, { complete: current.serverUids.complete })
       });
 
       get().updateSortedEmails();
@@ -339,7 +343,7 @@ export async function loadEmailRange(startIndex, endIndex) {
 
       const loadingRangesAfter = new Set(get().loadingRanges);
       loadingRangesAfter.delete(rangeKey);
-      const rangeServerUidSet = new Set(get().serverUidSet);
+      const rangeServerUidSet = new Set(get().serverUids.uids);
       for (const e of result.emails) rangeServerUidSet.add(e.uid);
 
       useMailStore.setState({
@@ -347,7 +351,8 @@ export async function loadEmailRange(startIndex, endIndex) {
         loadingRanges: loadingRangesAfter,
         emails: finalEmails,
         totalEmails: result.total,
-        serverUidSet: rangeServerUidSet
+        // Widening only — carry the existing completeness claim forward.
+        serverUids: serverUids(rangeServerUidSet, { complete: get().serverUids.complete })
       });
 
       get().updateSortedEmails();

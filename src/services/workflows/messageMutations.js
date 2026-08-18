@@ -709,7 +709,7 @@ export async function deleteSelectedFromServer() {
     await get().loadEmails();
 
     // Lift tombstones for messages whose local archive survived the server
-    // delete, now that loadEmails() has refreshed serverUidSet (and
+    // delete, now that loadEmails() has refreshed serverUids (and
     // archivedEmailIds/localEmails, unchanged but re-confirmed) — lifting
     // any earlier risks a brief flash as "still on server" before the next
     // refresh corrects it.
@@ -761,7 +761,7 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
   const contexts = keys.map(key => _resolveKeyContext(key, state, emailMap, sentPath));
 
   // Local-only is a claim about provenance, so prove it from provenance.
-  // `source` on a store object is derived from `serverUidSet`, which is
+  // `source` on a store object is derived from `serverUids`, which is
   // window-derived on three load paths and empty during a restore paint — so
   // "absent from it" means "not seen yet", never "not on the server". Getting
   // this wrong in the local-only direction skips the server delete and destroys

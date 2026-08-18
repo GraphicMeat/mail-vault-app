@@ -1,10 +1,11 @@
-// serverUidsKnown on loadEmails()'s cold-fetch branches (no cached
+// server uid completeness on loadEmails()'s cold-fetch branches (no cached
 // UIDVALIDITY/UIDNEXT yet, or UIDVALIDITY just changed) — the paths a
 // mailbox's first-visit-this-session load actually takes. Task 1 originally
 // only proved completeness inside the UID-search delta-sync branch, which
 // requires a *prior* cached sync — leaving the true cold path with no way to
 // ever earn the flag. See task-1-report.md, "Fix round 2".
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { serverUids } from '../../../stores/slices/serverUids';
 
 if (!globalThis.window) {
   globalThis.window = { addEventListener: () => {}, removeEventListener: () => {} };
@@ -83,8 +84,7 @@ function primeCold(mailbox = 'INBOX') {
     localEmails: [],
     savedEmailIds: new Set(),
     archivedEmailIds: new Set(),
-    serverUidSet: new Set(),
-    serverUidsKnown: true, // stale carry-over from a prior fully-synced mailbox
+    serverUids: serverUids(new Set(), { complete: true }), // stale carry-over from a prior fully-synced mailbox
     deleteTombstones: new Set(),
     totalEmails: 0,
   });
@@ -100,7 +100,7 @@ beforeEach(() => {
 });
 
 describe('loadEmails cold path — no cached sync (first visit this session)', () => {
-  it('proves serverUidsKnown true when the page-1 fetch already covers serverTotal', async () => {
+  it('proves completeness true when the page-1 fetch already covers serverTotal', async () => {
     primeCold();
     mockFetchEmails.mockResolvedValue({
       total: 3,
@@ -111,11 +111,11 @@ describe('loadEmails cold path — no cached sync (first visit this session)', (
     await useMailStore.getState().loadEmails();
 
     const state = useMailStore.getState();
-    expect(state.serverUidsKnown).toBe(true);
-    expect(state.serverUidSet.size).toBe(3);
+    expect(state.serverUids.complete).toBe(true);
+    expect(state.serverUids.uids.size).toBe(3);
   });
 
-  it('proves serverUidsKnown false when the page-1 fetch does not cover serverTotal', async () => {
+  it('proves completeness false when the page-1 fetch does not cover serverTotal', async () => {
     primeCold();
     mockFetchEmails.mockResolvedValue({
       total: 500,
@@ -126,7 +126,7 @@ describe('loadEmails cold path — no cached sync (first visit this session)', (
     await useMailStore.getState().loadEmails();
 
     const state = useMailStore.getState();
-    expect(state.serverUidsKnown).toBe(false);
+    expect(state.serverUids.complete).toBe(false);
   });
 
   // The `if` branch of the no-cached-sync fetch mixes newly-fetched rows with
@@ -134,12 +134,12 @@ describe('loadEmails cold path — no cached sync (first visit this session)', (
   // rows this fetch never verified. mergedEmails.length can coincidentally
   // reach serverTotal there without the listing actually being the whole
   // mailbox. Getting this wrong is exactly the false-amber bug Task 1 exists
-  // to kill, so the guard must leave serverUidsKnown untouched here.
+  // to kill, so the guard must leave server uid completeness untouched here.
   it('does not claim complete when the fetch merges with unverified existing rows', async () => {
     primeCold();
     useMailStore.setState({
       emails: [mkHeader(1), mkHeader(2)],
-      serverUidsKnown: false,
+      serverUids: serverUids(new Set(), { complete: false }),
     });
     // Page 1 overlaps uid 2 (already known) and adds uid 3 — triggers the
     // merge-with-existing branch. mergedEmails ends up [3, 1, 2] — 3 rows,
@@ -155,7 +155,7 @@ describe('loadEmails cold path — no cached sync (first visit this session)', (
 
     const state = useMailStore.getState();
     expect(state.emails).toHaveLength(3); // sanity: confirms the merge branch actually ran
-    expect(state.serverUidsKnown).toBe(false);
+    expect(state.serverUids.complete).toBe(false);
   });
 });
 
@@ -169,8 +169,7 @@ describe('loadEmails cold path — UIDVALIDITY changed (full reload)', () => {
       localEmails: [],
       savedEmailIds: new Set(),
       archivedEmailIds: new Set(),
-      serverUidSet: new Set([1]),
-      serverUidsKnown: true, // proven complete under the OLD uidValidity — must not survive
+      serverUids: serverUids(new Set([1]), { complete: true }), // proven complete under the OLD uidValidity — must not survive
       deleteTombstones: new Set(),
       totalEmails: 1,
     });
@@ -179,7 +178,7 @@ describe('loadEmails cold path — UIDVALIDITY changed (full reload)', () => {
     });
   }
 
-  it('proves serverUidsKnown true when the post-reload page-1 fetch covers the new serverTotal', async () => {
+  it('proves completeness true when the post-reload page-1 fetch covers the new serverTotal', async () => {
     primeWithStaleSync();
     // uidValidity 200 != cached 100 -> full reload branch
     mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 200, uidNext: 6, highestModseq: null });
@@ -191,7 +190,7 @@ describe('loadEmails cold path — UIDVALIDITY changed (full reload)', () => {
     await useMailStore.getState().loadEmails();
 
     const state = useMailStore.getState();
-    expect(state.serverUidsKnown).toBe(true);
+    expect(state.serverUids.complete).toBe(true);
   });
 
   it('flips a stale true to false when the reload only returns a partial page', async () => {
@@ -205,6 +204,6 @@ describe('loadEmails cold path — UIDVALIDITY changed (full reload)', () => {
     await useMailStore.getState().loadEmails();
 
     const state = useMailStore.getState();
-    expect(state.serverUidsKnown).toBe(false);
+    expect(state.serverUids.complete).toBe(false);
   });
 });

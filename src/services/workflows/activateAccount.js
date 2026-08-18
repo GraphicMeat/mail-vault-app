@@ -17,6 +17,7 @@ import { createPerfTrace } from '../../utils/perfTrace';
 import { countMailboxes, isMailboxTreeComplete, pickMailboxList, INBOX_PLACEHOLDER, retryOnce } from './mailboxTree';
 import { _buildRestoreDescriptor, _resolveUnifiedContext, _selKey, _parseSelKey } from '../../stores/slices/unifiedHelpers';
 import { serverVerifiedPatch, shortWindowPatch } from '../../stores/slices/syncSlice';
+import { serverUids, NO_SERVER_UIDS } from '../../stores/slices/serverUids';
 import {
   _resetNetworkRetry, _scheduleNetworkRetry,
   getLoadAbortController, setLoadAbortController,
@@ -266,8 +267,7 @@ async function _loadServerEmailsViaGraph(account, accountId, activeMailbox, uidM
     totalEmails: serverTotal,
     hasMoreEmails: !!result.nextLink,
     currentPage: 1,
-    serverUidSet: new Set(sorted.map(e => e.uid)),
-    serverUidsKnown: !result.nextLink,
+    serverUids: serverUids(sorted.map(e => e.uid), { complete: !result.nextLink }),
   }));
 
   if (!useMailStoreRef.getState().unifiedInbox) {
@@ -487,8 +487,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       archivedEmailIds: restoredArchivedIds,
       mailboxes: restoredMailboxes,
       mailboxesFetchedAt: restored.mailboxesFetchedAt ?? null,
-      serverUidSet: new Set(),
-      serverUidsKnown: false,
+      serverUids: NO_SERVER_UIDS,
       selectedEmailId: restored.selectedUid || null,
       selectedEmail: null,
       selectedEmailSource: null,
@@ -525,8 +524,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       totalEmails: 0,
       savedEmailIds: new Set(),
       archivedEmailIds: new Set(),
-      serverUidSet: new Set(),
-      serverUidsKnown: false,
+      serverUids: NO_SERVER_UIDS,
       cachedCount: 0,
       hasMoreEmails: true,
       currentPage: 1,
@@ -635,7 +633,13 @@ export async function activateAccount(accountId, mailbox, options = {}) {
           totalEmails: cachedTotal,
           hasMoreEmails: cachedHasMore,
           currentPage: Math.ceil(cachedHeaders.emails.length / 200) || 1,
-          ...(cachedHeaders.serverUids ? { serverUidSet: cachedHeaders.serverUids } : {}),
+          // The header cache stores a uid list but never records whether it
+          // was a complete enumeration, so a restore from it can only ever be
+          // incomplete. Claiming otherwise is what let a cache-derived set
+          // masquerade as proof of server absence.
+          ...(cachedHeaders.serverUids
+            ? { serverUids: serverUids(cachedHeaders.serverUids, { complete: false }) }
+            : {}),
         });
         localTrace.mark('first-paint', { emailCount: cachedHeaders.emails.length });
 
@@ -740,18 +744,18 @@ export async function activateAccount(accountId, mailbox, options = {}) {
           // probe.unchanged answers "has the server moved since the cache was
           // written" — a different question from "do we have a complete
           // enumeration". A descriptor-restore paint (this file, the
-          // serverUidsKnown: false sites) legitimately empties serverUidSet
-          // on every switch back to a mailbox, and this probe alone can never
+          // NO_SERVER_UIDS sites) legitimately empties the uid set on every
+          // switch back to a mailbox, and this probe alone can never
           // recover it: an unchanged verdict says nothing was missed, not
           // that anything was ever found. Short-circuiting on probe.unchanged
-          // regardless of serverUidsKnown is what let a reset survive forever
-          // — the flag can only go false->true through an actual sync
+          // regardless of completeness is what let a reset survive forever
+          // — completeness can only go false->true through an actual sync
           // (below), so skip the shortcut and fall through to one whenever
           // completeness is still unproven. Once a sync re-establishes it,
           // subsequent unchanged checks (including probed-recently) take the
           // shortcut again — this only costs a sync once per reset, not once
           // per check.
-          if (probe.unchanged && get().serverUidsKnown) {
+          if (probe.unchanged && get().serverUids.complete) {
             console.log('[activateAccount] %s/%s unchanged (%s) — skipping sync',
               accountId, effectiveMailbox, probe.reason);
             markVerified(accountId, effectiveMailbox);
@@ -764,7 +768,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
             return;
           }
           if (probe.unchanged) {
-            console.log('[activateAccount] %s/%s unchanged but serverUidsKnown is false — syncing to (re-)prove completeness',
+            console.log('[activateAccount] %s/%s unchanged but completeness is unproven — syncing to (re-)prove it',
               accountId, effectiveMailbox);
           }
           console.log('[activateAccount] %s/%s needs sync (%s)',
@@ -833,16 +837,15 @@ export async function activateAccount(accountId, mailbox, options = {}) {
                 cachedCount: freshCache.totalCached ?? freshCache.emails.length,
                 hasMoreEmails: !daemonSyncComplete,
                 currentPage: Math.ceil(freshCache.emails.length / 200) || 1,
-                // freshCache.serverUids (existing behavior, untouched here) is a
-                // disk-cached field from some earlier full search — its own
-                // completeness isn't this read's to judge. Otherwise, write
-                // BOTH freshUids and daemonSyncComplete together: omitting
-                // serverUidsKnown on the incomplete branch would leave a stale
-                // true from an earlier fully-synced visit in place instead of
-                // correcting it — the same bug this whole fix exists to close.
-                ...(freshCache.serverUids
-                  ? { serverUidSet: freshCache.serverUids }
-                  : { serverUidSet: freshUids, serverUidsKnown: daemonSyncComplete }),
+                // freshCache.serverUids is a disk-cached field from some
+                // earlier full search — nothing on disk records whether it was
+                // complete, so it can never be claimed as proof of absence.
+                // When this read already proved the mailbox, freshUids IS the
+                // whole mailbox and is the better value; the wider cached set
+                // is only worth keeping while completeness is unproven anyway.
+                serverUids: freshCache.serverUids && !daemonSyncComplete
+                  ? serverUids(freshCache.serverUids, { complete: false })
+                  : serverUids(freshUids, { complete: daemonSyncComplete }),
               }));
 
               // Save an in-memory restore descriptor for this mailbox so the
@@ -1007,19 +1010,19 @@ export async function activateAccount(accountId, mailbox, options = {}) {
             }
           }
 
-          const serverUids = await api.searchAllUids(account, effectiveMailbox);
+          const serverUidList = await api.searchAllUids(account, effectiveMailbox);
           if (signal.aborted) return;
-          const serverUidSet = new Set(serverUids);
-          useMailStore.setState({ serverUidSet, serverUidsKnown: true });
+          const foundUids = new Set(serverUidList);
+          useMailStore.setState({ serverUids: serverUids(foundUids, { complete: true }) });
 
           const existingEmails = uidMap.toSortedArray();
           const storeUidSet = new Set(existingEmails.map(e => e.uid));
           const newUids = cachedUidNext
-            ? serverUids.filter(uid => uid >= cachedUidNext)
-            : serverUids.filter(uid => !storeUidSet.has(uid));
+            ? serverUidList.filter(uid => uid >= cachedUidNext)
+            : serverUidList.filter(uid => !storeUidSet.has(uid));
 
           for (const email of existingEmails) {
-            if (!serverUidSet.has(email.uid)) {
+            if (!foundUids.has(email.uid)) {
               uidMap.delete(email.uid);
               prunedUids.push(email.uid);
             }
@@ -1069,7 +1072,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
 
       if (signal.aborted) return;
 
-      const existingServerUidSet = get().serverUidSet;
+      const existingServerUidSet = get().serverUids.uids;
       const sorted = uidMap.toSortedArray();
       const mergedServerUidSet = existingServerUidSet.size > 0
         ? new Set([...existingServerUidSet, ...sorted.map(e => e.uid)])
@@ -1092,8 +1095,12 @@ export async function activateAccount(accountId, mailbox, options = {}) {
         totalEmails: serverTotal,
         hasMoreEmails: sorted.length < serverTotal,
         currentPage: Math.ceil(sorted.length / 200) || 1,
-        serverUidSet: mergedServerUidSet,
-        ...(serverEmails != null ? { serverUidsKnown: coldFetchProvedComplete } : {}),
+        // A cold page-1 fetch can prove completeness; the delta-sync path
+        // already proved it at searchAllUids above, so carry that forward
+        // rather than overwriting it with a merge that proves nothing.
+        serverUids: serverUids(mergedServerUidSet, {
+          complete: serverEmails != null ? coldFetchProvedComplete : get().serverUids.complete,
+        }),
       }));
       serverTrace.mark('server-merged', { count: sorted.length, serverTotal });
 
@@ -1103,7 +1110,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
         uidValidity: newUidValidity,
         uidNext: newUidNext,
         highestModseq: newHighestModseq ?? null,
-        serverUids: get().serverUidSet,
+        serverUids: get().serverUids.uids,
         removedUids: prunedUids,
       }).catch(e => console.warn('[activateAccount] Failed to cache headers:', e));
 

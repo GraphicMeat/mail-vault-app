@@ -20,7 +20,7 @@ vi.mock('../../src/stores/settingsStore', () => {
 });
 
 vi.mock('../../src/stores/mailStore', () => {
-  const state = { activeAccountId: 'test', activeMailbox: 'INBOX', archivedEmailIds: new Set(), backedUpKeys: null, serverUidsKnown: false };
+  const state = { activeAccountId: 'test', activeMailbox: 'INBOX', archivedEmailIds: new Set(), backedUpKeys: null, serverUids: { uids: new Set(), complete: false } };
   const hook = vi.fn((selector) => selector(state));
   hook.getState = () => state;
   hook.setState = (update) => Object.assign(state, typeof update === 'function' ? update(state) : update);

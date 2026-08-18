@@ -166,8 +166,8 @@ export function MessageStateIcon({ email, size = 14, backedUp = false, serverKno
  */
 export function ConnectedStateIcon({ email, size = 14 }) {
   const backedUpKeys = useMailStore(s => s.backedUpKeys);
-  const serverUidsKnown = useMailStore(s => s.serverUidsKnown);
+  const serverKnown = useMailStore(s => s.serverUids.complete);
   const key = `${email._accountId || useMailStore.getState().activeAccountId}:${email.uid}`;
   const backedUp = backedUpKeys === null ? null : backedUpKeys.has(key);
-  return <MessageStateIcon email={email} size={size} backedUp={backedUp} serverKnown={serverUidsKnown} />;
+  return <MessageStateIcon email={email} size={size} backedUp={backedUp} serverKnown={serverKnown} />;
 }

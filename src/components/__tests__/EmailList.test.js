@@ -109,7 +109,7 @@ vi.mock('../../stores/mailStore', () => {
     // ConnectedStateIcon reads these for every rendered row — null/false are
     // the real store defaults (messageListSlice), not just test filler.
     backedUpKeys: null,
-    serverUidsKnown: false,
+    serverUids: { uids: new Set(), complete: false },
     accounts: [{ id: 'acc1', email: 'me@test.com' }],
     bulkModalOpen: false,
     openBulkModal: vi.fn(),
@@ -245,7 +245,7 @@ describe('EmailList virtualization', () => {
         _flagSeq: 0,
         archivedEmailIds: new Set(),
         backedUpKeys: null,
-        serverUidsKnown: false,
+        serverUids: { uids: new Set(), complete: false },
         accounts: [{ id: 'acc1', email: 'me@test.com' }],
         loadEmails: vi.fn(),
         loadMoreEmails: vi.fn(),

@@ -4,6 +4,7 @@ import * as db from '../db';
 import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { _buildRestoreDescriptor, _resolveMailboxPath } from '../../stores/slices/unifiedHelpers';
+import { serverUids } from '../../stores/slices/serverUids';
 import { getRestoreDescriptor as _getRestore, getAccountCacheMailboxes as _getAccountMailboxes } from '../cacheManager';
 import {
   getLoadAbortController, setLoadAbortController,
@@ -61,10 +62,9 @@ export async function switchUnifiedFolder(mailbox) {
     useMailStore.setState({
       unifiedFolder: mailbox,
       emails: cached.emails,
-      serverUidSet: allServerUids,
       // Cross-account, cache-derived — never a live server enumeration. Must
       // not inherit a stale `true` from the single-account view left behind.
-      serverUidsKnown: false,
+      serverUids: serverUids(allServerUids, { complete: false }),
       totalEmails: cached.emails.length,
       _sortedEmailsFingerprint: '',
       selectedEmailId: null,
@@ -206,10 +206,9 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
 
   useMailStore.setState({
     emails: firstBatch,
-    serverUidSet: allServerUids,
     // firstBatch is a rendered chunk of a cross-account cache merge, never a
     // server enumeration — see the same note on the progressive chunk below.
-    serverUidsKnown: false,
+    serverUids: serverUids(allServerUids, { complete: false }),
     _sortedEmailsFingerprint: '',
     activeMailbox: 'UNIFIED',
     totalEmails: total,
@@ -240,11 +239,10 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
 
       useMailStore.setState({
         emails: chunk,
-        serverUidSet: chunkServerUids,
         // Still widening toward allEmails, but allEmails is itself a
         // cross-account cache/local merge, not a server enumeration — this
         // never earns `true`, not even on the final chunk.
-        serverUidsKnown: false,
+        serverUids: serverUids(chunkServerUids, { complete: false }),
         totalEmails: total,
         _sortedEmailsFingerprint: '',
         loadingProgress: { loaded: Math.min(offset, total), total },

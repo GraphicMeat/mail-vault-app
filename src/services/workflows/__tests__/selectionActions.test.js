@@ -6,6 +6,7 @@
 // selection as read used to update `emails` alone, so the rows kept showing the
 // old unread state until something else forced a re-derive.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { serverUids } from '../../../stores/slices/serverUids';
 
 if (!globalThis.window) {
   globalThis.window = { addEventListener: () => {}, removeEventListener: () => {} };
@@ -124,7 +125,7 @@ function primeStore(emails, selected) {
     localEmails: [],
     savedEmailIds: new Set(),
     archivedEmailIds: new Set(),
-    serverUidSet: new Set(emails.map(e => e.uid)),
+    serverUids: serverUids(emails.map(e => e.uid), { complete: false }),
     deleteTombstones: new Set(),
     totalEmails: emails.length,
     selectedEmailIds: new Set(selected),
@@ -373,22 +374,20 @@ describe('deleteSelectedFromServer', () => {
       localEmails: [localCopy],
       savedEmailIds: new Set([1]),
       archivedEmailIds: new Set([1]),
-      serverUidSet: new Set([1, 2]),
+      serverUids: serverUids(new Set([1, 2]), { complete: false }),
       // Not yet reconciled post-delete — the mock below is what proves it.
-      serverUidsKnown: false,
       deleteTombstones: new Set(),
       totalEmails: 2,
       selectedEmailIds: new Set([1]),
       selectedEmail: null,
       selectedEmailId: null,
       // Stand-in for the real server round-trip: a genuine reconcile would
-      // find uid 1 gone from the server, drop it from serverUidSet, and mark
+      // find uid 1 gone from the server, drop it from the uid set, and mark
       // the set verified-complete (see loadEmails.js's UID-search branch).
       loadEmails: vi.fn(() => {
         tombstoneCountWhenLoadEmailsRan = useMailStore.getState().deleteTombstones.size;
         useMailStore.setState(s => ({
-          serverUidSet: new Set([...s.serverUidSet].filter(u => u !== 1)),
-          serverUidsKnown: true,
+          serverUids: serverUids([...s.serverUids.uids].filter(u => u !== 1), { complete: true }),
         }));
         useMailStore.getState().updateSortedEmails();
         return Promise.resolve();

@@ -4,6 +4,7 @@
 // fails. Deleting a local copy of a message still sitting on the server is
 // data loss the user did not ask for; that case is the reason this file exists.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { serverUids } from '../../../stores/slices/serverUids';
 
 if (!globalThis.window) globalThis.window = {};
 globalThis.window.addEventListener = globalThis.window.addEventListener || (() => {});
@@ -94,7 +95,7 @@ const { purgeEverywhere } = await import('../messageMutations');
 // prefix and silently no-ops on anything shorter.
 const ACCOUNT = { id: '11111111-1111-4111-8111-111111111111', email: 'me@mock.test' };
 
-function prime({ emails, archived = [], localOnly = [], serverUids, sent = [], provenance }) {
+function prime({ emails, archived = [], localOnly = [], serverUidList, sent = [], provenance }) {
   useMailStore.setState({
     accounts: [ACCOUNT],
     activeAccountId: ACCOUNT.id,
@@ -109,7 +110,7 @@ function prime({ emails, archived = [], localOnly = [], serverUids, sent = [], p
     localEmails: localOnly,
     savedEmailIds: new Set(),
     archivedEmailIds: new Set(archived),
-    serverUidSet: new Set(serverUids !== undefined ? serverUids : emails.filter(e => e.source !== 'local-only').map(e => e.uid)),
+    serverUids: serverUids(serverUidList !== undefined ? serverUidList : emails.filter(e => e.source !== 'local-only').map(e => e.uid), { complete: false }),
     deleteTombstones: new Set(),
     totalEmails: emails.length,
     selectedEmailIds: new Set(),
@@ -241,17 +242,17 @@ describe('purgeEverywhere — storage matrix', () => {
     expect(res.failed).toBe(0);
   });
 
-  it('regression: an archived row still in `emails` is never misread as local-only just because serverUidSet lags', async () => {
+  it('regression: an archived row still in `emails` is never misread as local-only just because the server uid set lags', async () => {
     // Simulates the restore-descriptor paint (activateAccount.js:459) and the
-    // offline window: serverUidSet can be empty or stale while archivedEmailIds
+    // offline window: the server uid set can be empty or stale while archivedEmailIds
     // is already populated. The row is still server-backed — it's in `emails`,
     // which updateSortedEmails() always stamps `source: 'server'` — so it must
     // go through the normal server-delete path. Treating an incomplete
-    // serverUidSet as proof of absence would classify it as local-only instead:
+    // an unproven uid set as proof of absence would classify it as local-only instead:
     // the server delete gets skipped while the vault/backup copies are
     // destroyed anyway, the inverse of the rule this workflow exists to enforce.
     prime({ emails: [serverMsg(1)], archived: [1] });
-    useMailStore.setState({ serverUidSet: new Set() });
+    useMailStore.setState({ serverUids: serverUids(new Set(), { complete: false }) });
 
     const res = await purgeEverywhere([1]);
 
@@ -354,7 +355,7 @@ describe('purgeEverywhere — storage matrix', () => {
 });
 
 describe('purgeEverywhere — positive local-only proof', () => {
-  it('archived row absent from serverUidSet still gets a server delete attempt', async () => {
+  it('archived row absent from the server uid set still gets a server delete attempt', async () => {
     // The exact shape of the third data-loss route: a locally archived message
     // that IS on the server, sitting outside the loaded window, so nothing in
     // the store knows the server has it. Index provenance says 'local' —
@@ -363,7 +364,7 @@ describe('purgeEverywhere — positive local-only proof', () => {
       emails: [],
       archived: [1],
       localOnly: [{ ...serverMsg(1), source: 'local-only' }],
-      serverUids: [],
+      serverUidList: [],
       provenance: new Map([[1, 'local']]),
     });
 
@@ -378,7 +379,7 @@ describe('purgeEverywhere — positive local-only proof', () => {
       emails: [],
       archived: [9],
       localOnly: [{ ...serverMsg(9), source: 'local-only' }],
-      serverUids: [],
+      serverUidList: [],
       provenance: new Map([[9, 'local_sent']]),
     });
 
@@ -393,7 +394,7 @@ describe('purgeEverywhere — positive local-only proof', () => {
       emails: [],
       archived: [7],
       localOnly: [{ ...serverMsg(7), source: 'local-only' }],
-      serverUids: [],
+      serverUidList: [],
       provenance: new Map([[7, 'local_draft']]),
     });
 
@@ -407,7 +408,7 @@ describe('purgeEverywhere — positive local-only proof', () => {
       emails: [],
       archived: [3],
       localOnly: [{ ...serverMsg(3), source: 'local-only' }],
-      serverUids: [],
+      serverUidList: [],
       provenance: new Map(),
     });
 
@@ -497,7 +498,7 @@ describe('purgeEverywhere — UIDVALIDITY guard', () => {
       emails: [],
       archived: [9],
       localOnly: [{ ...serverMsg(9), source: 'local-only' }],
-      serverUids: [],
+      serverUidList: [],
       provenance: new Map([[9, 'local_sent']]),
     });
 

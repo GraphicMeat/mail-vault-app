@@ -7,6 +7,7 @@
 // "Mark unread" because the body cache handed back the flags it was filled
 // with.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { serverUids } from '../../../stores/slices/serverUids';
 
 if (!globalThis.window) {
   globalThis.window = { addEventListener: () => {}, removeEventListener: () => {} };
@@ -126,7 +127,7 @@ function primeStore(flags = []) {
     localEmails: [],
     savedEmailIds: new Set(),
     archivedEmailIds: new Set(),
-    serverUidSet: new Set([1]),
+    serverUids: serverUids(new Set([1]), { complete: false }),
     deleteTombstones: new Set(),
     totalEmails: 1,
     selectedEmailIds: new Set(),

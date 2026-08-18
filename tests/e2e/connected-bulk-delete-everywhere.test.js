@@ -502,7 +502,7 @@ describe('Bulk delete everywhere', function () {
           localEmails: (s.localEmails || []).map(e => ({ uid: e.uid, subject: e.subject, source: e.source })),
           archivedEmailIds: [...(s.archivedEmailIds || [])],
           savedEmailIds: [...(s.savedEmailIds || [])],
-          serverUidSet: [...(s.serverUidSet || [])],
+          serverUidSet: [...(s.serverUids?.uids || [])],
           tombstones: [...(s.deleteTombstones || [])],
         };
       });

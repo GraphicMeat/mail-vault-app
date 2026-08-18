@@ -227,7 +227,8 @@ describe('Storage matrix diagnostics', function () {
         emailUids: (s.emails || []).map((e) => e.uid),
         sortedUids: (s.sortedEmails || []).map((e) => e.uid),
         tombstones: [...(s.deleteTombstones || [])],
-        serverUidSetSize: s.serverUidSet?.size ?? null,
+        serverUidSetSize: s.serverUids?.uids?.size ?? null,
+        serverUidsComplete: s.serverUids?.complete ?? null,
       };
     });
     return {

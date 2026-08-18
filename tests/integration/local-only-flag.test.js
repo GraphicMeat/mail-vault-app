@@ -162,8 +162,7 @@ describe('Local-Only Flag Detection (send → archive → delete → verify)', (
       localEmails,
       archivedEmailIds: new Set([uidA, uidB]),
       viewMode: 'local',
-      serverUidSet: new Set(),
-      serverUidsKnown: false,
+      serverUids: serverUids(new Set(), { complete: false }),
     });
 
     // Server set is unverified — never flag local-only without proof.

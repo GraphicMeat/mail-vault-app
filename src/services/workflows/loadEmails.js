@@ -7,6 +7,7 @@ import { ensureFreshToken, hasValidCredentials, resolveServerAccount } from '../
 import { isGraphAccount, normalizeGraphFolderName, graphFoldersToMailboxes, graphMessageToEmail } from '../graphConfig';
 import { saveRestoreDescriptor as _saveRestore, setGraphIdMap as _setGraphIdMap, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap } from '../cacheManager';
 import { _buildRestoreDescriptor } from '../../stores/slices/unifiedHelpers';
+import { serverUids } from '../../stores/slices/serverUids';
 import { createPerfTrace } from '../../utils/perfTrace';
 import { waitForSentMailboxPath } from '../../utils/sentFolder';
 import {
@@ -286,9 +287,9 @@ export async function loadEmails() {
     // Set explicitly (both true and false) only by the two page-1-fetch
     // branches below, which know whether their own listing is the whole
     // mailbox. Left undefined everywhere else so the common setState at the
-    // bottom omits the key and the flag keeps whatever it already was — the
-    // UID-search delta-sync branch proves it directly via searchAllUids.
-    let serverUidsKnown;
+    // bottom carries the store's current claim forward — the UID-search
+    // delta-sync branch proves it directly via searchAllUids.
+    let provedComplete;
 
     if (hasCachedSync) {
       const status = await api.checkMailboxStatus(account, activeMailbox);
@@ -318,7 +319,7 @@ export async function loadEmails() {
         // no extra round trip. UIDVALIDITY changing means any earlier proof
         // is void regardless of which way this comes out, so state it
         // explicitly rather than leaving the old value in place.
-        serverUidsKnown = mergedEmails.length >= serverTotal;
+        provedComplete = mergedEmails.length >= serverTotal;
       } else if (
         newHighestModseq != null && cachedHighestModseq != null &&
         newHighestModseq === cachedHighestModseq &&
@@ -426,23 +427,23 @@ export async function loadEmails() {
 
       // UID search delta-sync
       if (mergedEmails == null && newUidValidity === cachedUidValidity) {
-        const serverUids = await api.searchAllUids(account, activeMailbox);
+        const serverUidList = await api.searchAllUids(account, activeMailbox);
         // Sanity guard: an empty search result while the server reports a
         // non-empty mailbox is a flaky/desynced response — pruning on it would
         // blank the whole list. Keep current state and let the next sync retry.
-        if (serverUids.length === 0 && status.exists > 0) {
+        if (serverUidList.length === 0 && status.exists > 0) {
           console.warn('[loadEmails] UID SEARCH returned 0 but EXISTS=%d — ignoring suspicious empty result', status.exists);
           useMailStore.setState({ loading: false, loadingMore: false });
           return;
         }
-        const serverUidSet = new Set(serverUids);
-        useMailStore.setState({ serverUidSet, serverUidsKnown: true });
+        const foundUids = new Set(serverUidList);
+        useMailStore.setState({ serverUids: serverUids(foundUids, { complete: true }) });
         const storeUidSet = new Set(existingEmails.map(e => e.uid));
 
         const newUids = cachedUidNext
-          ? serverUids.filter(uid => uid >= cachedUidNext)
-          : serverUids.filter(uid => !storeUidSet.has(uid));
-        const deletedUids = existingEmails.filter(e => !serverUidSet.has(e.uid)).map(e => e.uid);
+          ? serverUidList.filter(uid => uid >= cachedUidNext)
+          : serverUidList.filter(uid => !storeUidSet.has(uid));
+        const deletedUids = existingEmails.filter(e => !foundUids.has(e.uid)).map(e => e.uid);
         prunedUids = deletedUids;
 
         let updatedEmails = existingEmails;
@@ -528,8 +529,8 @@ export async function loadEmails() {
         // cleanedExisting, so reaching serverTotal really does mean the
         // whole mailbox fit on one page. The `if` branch just above mixes
         // in cleanedExisting rows past the checked overlap window — not
-        // provable the same way, so it leaves serverUidsKnown untouched.
-        serverUidsKnown = mergedEmails.length >= serverTotal;
+        // provable the same way, so it leaves completeness untouched.
+        provedComplete = mergedEmails.length >= serverTotal;
       }
     }
 
@@ -576,7 +577,7 @@ export async function loadEmails() {
       return;
     }
 
-    const existingServerUidSet = get().serverUidSet;
+    const existingServerUidSet = get().serverUids.uids;
     const mergedServerUidSet = existingServerUidSet.size > 0
       ? new Set([...existingServerUidSet, ...mergedEmails.map(e => e.uid)])
       : new Set(mergedEmails.map(e => e.uid));
@@ -592,8 +593,9 @@ export async function loadEmails() {
       hasMoreEmails,
       totalEmails: serverTotal,
       loadingMore: false,
-      serverUidSet: mergedServerUidSet,
-      ...(serverUidsKnown !== undefined ? { serverUidsKnown } : {}),
+      serverUids: serverUids(mergedServerUidSet, {
+        complete: provedComplete !== undefined ? provedComplete : get().serverUids.complete,
+      }),
     });
 
     get().updateSortedEmails();
@@ -613,7 +615,7 @@ export async function loadEmails() {
       uidValidity: newUidValidity,
       uidNext: newUidNext,
       highestModseq: newHighestModseq ?? null,
-      serverUids: get().serverUidSet,
+      serverUids: get().serverUids.uids,
       removedUids: prunedUids,
     }).catch(e => console.warn('[loadEmails] Failed to cache headers:', e));
 
@@ -774,8 +776,7 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
       totalEmails: serverTotal,
       loading: false,
       loadingMore: false,
-      serverUidSet: new Set(mergedEmails.map(e => e.uid)),
-      serverUidsKnown: !hasMoreEmails,
+      serverUids: serverUids(mergedEmails.map(e => e.uid), { complete: !hasMoreEmails }),
     });
 
     get().updateSortedEmails();

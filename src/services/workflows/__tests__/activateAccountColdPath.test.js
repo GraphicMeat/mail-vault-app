@@ -1,9 +1,10 @@
-// serverUidsKnown on activateAccount()'s cold-open paths — this is the
+// server uid completeness on activateAccount()'s cold-open paths — this is the
 // function every sidebar/folder click and app-launch quick-load actually
 // calls (see Sidebar.jsx, App.jsx), so it is the real first-visit-this-
 // session path, not just loadEmails()'s refresh cycle. See
 // task-1-report.md, "Fix round 2".
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { serverUids } from '../../../stores/slices/serverUids';
 
 if (!globalThis.window) {
   globalThis.window = { addEventListener: () => {}, removeEventListener: () => {} };
@@ -122,8 +123,7 @@ function primeCold() {
     sortedEmails: [],
     savedEmailIds: new Set(),
     archivedEmailIds: new Set(),
-    serverUidSet: new Set(),
-    serverUidsKnown: true, // stale carry-over from a prior fully-synced mailbox
+    serverUids: serverUids(new Set(), { complete: true }), // stale carry-over from a prior fully-synced mailbox
     deleteTombstones: new Set(),
     totalEmails: 0,
     mailboxes: [],
@@ -134,10 +134,10 @@ function primeCold() {
 
 // For _backgroundRefresh: true calls specifically: that option makes
 // activateAccount skip its own "clear stale data on switch" setState (the
-// one that already, independently of this fix, resets serverUidsKnown to
+// one that already, independently of this fix, resets server uid completeness to
 // false — see messageListSlice.js's original Task 1 sites). Priming as
 // already-active and refreshing in the background means the ONLY thing that
-// can move serverUidsKnown is the code this fix adds, so these tests prove
+// can move server uid completeness is the code this fix adds, so these tests prove
 // something a plain activateAccount() call can't distinguish from "nothing
 // touched it, the old clear already left it false".
 function primeActiveForBackgroundRefresh() {
@@ -151,8 +151,7 @@ function primeActiveForBackgroundRefresh() {
     sortedEmails: [],
     savedEmailIds: new Set(),
     archivedEmailIds: new Set(),
-    serverUidSet: new Set([1]),
-    serverUidsKnown: true, // stale carry-over — must not survive an incomplete refresh
+    serverUids: serverUids(new Set([1]), { complete: true }), // stale carry-over — must not survive an incomplete refresh
     deleteTombstones: new Set(),
     totalEmails: 1,
     mailboxes: [],
@@ -175,7 +174,7 @@ beforeEach(() => {
 });
 
 describe('activateAccount IMAP-fallback cold path (daemon not alive, first visit)', () => {
-  it('proves serverUidsKnown true when the page-1 fetch already covers serverTotal', async () => {
+  it('proves completeness true when the page-1 fetch already covers serverTotal', async () => {
     primeCold();
     mockFetchEmails.mockResolvedValue({ total: 3, emails: [mkHeader(1), mkHeader(2), mkHeader(3)] });
     mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 4, highestModseq: null });
@@ -183,11 +182,11 @@ describe('activateAccount IMAP-fallback cold path (daemon not alive, first visit
     await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX');
 
     const state = useMailStore.getState();
-    expect(state.serverUidsKnown).toBe(true);
-    expect(state.serverUidSet.size).toBe(3);
+    expect(state.serverUids.complete).toBe(true);
+    expect(state.serverUids.uids.size).toBe(3);
   });
 
-  it('proves serverUidsKnown false when the page-1 fetch does not cover serverTotal', async () => {
+  it('proves completeness false when the page-1 fetch does not cover serverTotal', async () => {
     primeCold();
     mockFetchEmails.mockResolvedValue({ total: 500, emails: [mkHeader(1), mkHeader(2)] });
     mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 501, highestModseq: null });
@@ -195,7 +194,7 @@ describe('activateAccount IMAP-fallback cold path (daemon not alive, first visit
     await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX');
 
     const state = useMailStore.getState();
-    expect(state.serverUidsKnown).toBe(false);
+    expect(state.serverUids.complete).toBe(false);
   });
 
   // See primeActiveForBackgroundRefresh's comment: isolates this fix's own
@@ -209,7 +208,7 @@ describe('activateAccount IMAP-fallback cold path (daemon not alive, first visit
 
     await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
 
-    expect(useMailStore.getState().serverUidsKnown).toBe(false);
+    expect(useMailStore.getState().serverUids.complete).toBe(false);
   });
 
   // loadLocalEmails() and loadServerEmails() run concurrently off the same
@@ -233,7 +232,7 @@ describe('activateAccount IMAP-fallback cold path (daemon not alive, first visit
 
     const state = useMailStore.getState();
     expect(state.emails.map(e => e.uid).sort()).toEqual([1, 99]); // sanity: both rows really did land in uidMap
-    expect(state.serverUidsKnown).toBe(false);
+    expect(state.serverUids.complete).toBe(false);
   });
 });
 
@@ -244,7 +243,7 @@ describe('activateAccount daemon-sync cold path (daemon alive, first visit)', ()
     mockSyncNow.mockResolvedValue(undefined);
   });
 
-  it('proves serverUidsKnown true when the post-sync disk read (capped at 500) already covers totalEmails', async () => {
+  it('proves completeness true when the post-sync disk read (capped at 500) already covers totalEmails', async () => {
     primeActiveForBackgroundRefresh();
     mockWaitForSync.mockResolvedValue({ success: true, new_emails: 3, total_emails: 3 });
     mockGetEmailHeadersPartial.mockResolvedValue({
@@ -255,11 +254,11 @@ describe('activateAccount daemon-sync cold path (daemon alive, first visit)', ()
     await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
 
     const state = useMailStore.getState();
-    expect(state.serverUidsKnown).toBe(true);
-    expect([...state.serverUidSet].sort()).toEqual([1, 2, 3]);
+    expect(state.serverUids.complete).toBe(true);
+    expect([...state.serverUids.uids].sort()).toEqual([1, 2, 3]);
   });
 
-  it('proves serverUidsKnown false when the post-sync disk read is short of totalEmails (mailbox past the 500 cap)', async () => {
+  it('proves completeness false when the post-sync disk read is short of totalEmails (mailbox past the 500 cap)', async () => {
     primeActiveForBackgroundRefresh();
     mockWaitForSync.mockResolvedValue({ success: true, new_emails: 1, total_emails: 5000 });
     mockGetEmailHeadersPartial.mockResolvedValue({
@@ -269,38 +268,59 @@ describe('activateAccount daemon-sync cold path (daemon alive, first visit)', ()
 
     await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
 
-    expect(useMailStore.getState().serverUidsKnown).toBe(false);
+    expect(useMailStore.getState().serverUids.complete).toBe(false);
   });
 
-  it('leaves serverUidsKnown untouched when the disk cache already carries a (possibly stale) serverUids field', async () => {
+  // The disk cache carries a serverUids list from some earlier full search,
+  // but nothing on disk records whether that list was complete — so it can
+  // never itself be proof of what the server holds. Both directions matter:
+  // when this read proves the mailbox, the fresh uids win outright; when it
+  // does not, the wider cached list is still the better thing to render from
+  // but must not carry a completeness claim.
+  it('lets the proven fresh read win over the disk cache\'s stale serverUids field', async () => {
     primeActiveForBackgroundRefresh();
     mockWaitForSync.mockResolvedValue({ success: true, new_emails: 0, total_emails: 1 });
     mockGetEmailHeadersPartial.mockResolvedValue({
       emails: [mkHeader(1)],
-      totalEmails: 1,
-      serverUids: [7, 8, 9], // pre-existing field takes the old code path, unrelated to this fix
+      totalEmails: 1, // read covers the mailbox — this IS the enumeration
+      serverUids: [7, 8, 9], // stale: uids the server no longer holds
     });
 
     await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
 
     const state = useMailStore.getState();
-    expect([...state.serverUidSet].sort()).toEqual([7, 8, 9]);
-    // Primed true, and this branch doesn't touch the flag either way — pre-existing behavior, not this fix's concern.
-    expect(state.serverUidsKnown).toBe(true);
+    expect([...state.serverUids.uids].sort()).toEqual([1]);
+    expect(state.serverUids.complete).toBe(true);
+  });
+
+  it('keeps the wider cached uid list when the read proves nothing, but never claims it', async () => {
+    primeActiveForBackgroundRefresh(); // primed complete: true — must not survive
+    mockWaitForSync.mockResolvedValue({ success: true, new_emails: 0, total_emails: 5000 });
+    mockGetEmailHeadersPartial.mockResolvedValue({
+      emails: [mkHeader(1)], // far short of 5000
+      totalEmails: 5000,
+      serverUids: [7, 8, 9],
+    });
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
+
+    const state = useMailStore.getState();
+    expect([...state.serverUids.uids].sort()).toEqual([7, 8, 9]);
+    expect(state.serverUids.complete).toBe(false);
   });
 });
 
 // mailboxIsUnchanged's "unchanged" verdict answers "has the server moved
 // since the cache was written" — a different question from "do we have a
 // complete enumeration". A descriptor-restore paint legitimately empties
-// serverUidSet (and sets serverUidsKnown: false) on every switch back to a
-// mailbox — see activateAccount.js's own serverUidsKnown: false sites — and
+// the server uid set (and marks it incomplete) on every switch back to a
+// mailbox — see activateAccount.js's own NO_SERVER_UIDS sites — and
 // short-circuiting on probe.unchanged regardless of that flag is what let
 // the reset survive forever: an unchanged verdict never itself re-proves
 // anything, and the probe's own 10s TTL shortcut re-extends on every hit
 // (markVerified runs unconditionally), so a live check might never run again
 // to give the flag a chance to recover. The fix: gate the shortcut on
-// serverUidsKnown already being true; fall through to a real sync otherwise.
+// server uid completeness already being true; fall through to a real sync otherwise.
 describe('activateAccount probe.unchanged branch (daemon alive)', () => {
   beforeEach(() => {
     mockGetDaemonHealth.mockReturnValue({ alive: true });
@@ -308,14 +328,14 @@ describe('activateAccount probe.unchanged branch (daemon alive)', () => {
   });
 
   it('a proven true survives a subsequent activation without paying for a sync', async () => {
-    primeActiveForBackgroundRefresh(); // serverUidsKnown primed true
+    primeActiveForBackgroundRefresh(); // server uid completeness primed true
     mockMailboxIsUnchanged.mockResolvedValue({ unchanged: true, reason: 'uidnext-exists-match' });
 
     await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
 
     const state = useMailStore.getState();
-    expect(state.serverUidsKnown).toBe(true);
-    expect([...state.serverUidSet]).toEqual([1]); // untouched — the shortcut was taken, nothing re-derived
+    expect(state.serverUids.complete).toBe(true);
+    expect([...state.serverUids.uids]).toEqual([1]); // untouched — the shortcut was taken, nothing re-derived
     // The latency guarantee: once proven, an unchanged mailbox costs one
     // probe, never a sync.now/wait.for round trip.
     expect(mockSyncNow).not.toHaveBeenCalled();
@@ -323,7 +343,7 @@ describe('activateAccount probe.unchanged branch (daemon alive)', () => {
 
   it('an unproven false falls through to a real sync instead of short-circuiting', async () => {
     primeActiveForBackgroundRefresh();
-    useMailStore.setState({ serverUidsKnown: false }); // e.g. just reset by a descriptor-restore paint
+    useMailStore.setState({ serverUids: serverUids(new Set(), { complete: false }) }); // e.g. just reset by a descriptor-restore paint
     mockMailboxIsUnchanged.mockResolvedValue({ unchanged: true, reason: 'modseq-match' });
     mockWaitForSync.mockResolvedValue({ success: true, new_emails: 0, total_emails: 1 });
     mockGetEmailHeadersPartial.mockResolvedValue({ emails: [mkHeader(1)], totalEmails: 1 });
@@ -336,12 +356,12 @@ describe('activateAccount probe.unchanged branch (daemon alive)', () => {
     expect(mockWaitForSync).toHaveBeenCalled();
     // And the fall-through did its job: the sync's own completeness proof
     // (already covered by the daemon-sync describe block above) re-establishes true.
-    expect(useMailStore.getState().serverUidsKnown).toBe(true);
+    expect(useMailStore.getState().serverUids.complete).toBe(true);
   });
 
   it('probed-recently does not exempt an unproven false from falling through', async () => {
     primeActiveForBackgroundRefresh();
-    useMailStore.setState({ serverUidsKnown: false });
+    useMailStore.setState({ serverUids: serverUids(new Set(), { complete: false }) });
     // The TTL shortcut reason specifically — proves the fix does not special-
     // case it back into a preserve-only branch, which is what let the TTL
     // re-extend itself indefinitely in the original bug.
@@ -352,6 +372,6 @@ describe('activateAccount probe.unchanged branch (daemon alive)', () => {
     await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
 
     expect(mockSyncNow).toHaveBeenCalled();
-    expect(useMailStore.getState().serverUidsKnown).toBe(true);
+    expect(useMailStore.getState().serverUids.complete).toBe(true);
   });
 });
