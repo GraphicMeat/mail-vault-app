@@ -131,9 +131,93 @@
 
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.9.2</span>
-          <span class="text-slate-500 dark:text-slate-400 text-sm">August 7, 2026</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.10.0</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">August 18, 2026</span>
           <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            </span>
+            Added
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Delete Everywhere</strong> — remove selected emails from the server, this computer, and the external backup in one action. Available in bulk operations, the selection bar, and the row menu.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span>Bulk operations selection now checkmarks the rows and survives closing the modal — a bubble shows the account, folder, and live count, and the selection can be amended by hand before starting. The session is bound to one account, folder, and view (list or thread); navigating away ends it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span>Row hover menu now offers every action the selection bar does: mark read/unread, archive, unarchive, move, delete from server, delete everywhere.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span>A bulk run can now report emails held back because the mailbox needs a resync, instead of silently skipping them.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </span>
+            Changed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span>Bulk operation descriptions now state which of the three storage locations (server, this computer, external backup) each action touches, and "Delete from Server" states per-selection whether local copies survive.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            </span>
+            Fixed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A short email list now fills itself in instead of waiting for a second reload.</strong> The list could settle at "3 of 11 emails" and stay there: the check that runs on every account switch and reload asks whether the local copy matches the server, and when the answer was "nothing has changed" it returned without noticing that the list on screen was showing far less than the copy it had just verified. Clicking reload landed in that same check and appeared to do nothing; a second click a while later brought everything back. The check now compares what is on screen against what is stored and loads the difference, and the reload button in the "Showing cached data" warning always reaches the server instead of answering from a check made moments earlier.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A dropped connection no longer looks like an account with no folders.</strong> If the connection died while the folder list was being read, MailVault treated the silence as an answer — "this account has no folders" — and showed the "Showing cached data" warning while quietly holding a broken connection. It is now recognised as the failure it is, so the connection is replaced and the folders come back on the retry.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span>Deleting emails from the server is no longer lost if the app is closed or reloaded while the delete is still going. The delete is recorded before the rows disappear and finished the next time the app starts, so a message you were shown as deleted stays deleted.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span>Email subjects no longer vanish from the list when a message's date includes a year — older mail showed only a sender and a date in a narrow list.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span>A message deleted while switching accounts could take an unrelated message with it, or fail to stay deleted after a restart.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span>Deleting archived emails from a folder left the local copies behind, so the rows reappeared as "Local only" and the delete looked like it had done nothing.</span>
+            </li>
+          </ul>
+        </div>
+
+      </article>
+      <article class="mb-16">
+        <div class="flex items-center gap-3 mb-6">
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.9.2</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">August 8, 2026</span>
         </div>
 
         <div class="mb-8">
@@ -152,6 +236,10 @@
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
               <span><strong>Signature and display name save as you type.</strong> The "Save Changes" button is gone — edits are stored automatically, with a brief "Saved" mark next to the section title.</span>
             </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>After a successful manual backup, MailVault now offers to automate the next ones.</strong> A one-time panel suggests scheduled backups once your first manual backup completes, and a small "Automate" chip stays on the account's backup card afterwards. Shown once per install, never stacked with the star-and-share panel.</span>
+            </li>
           </ul>
         </div>
 
@@ -163,6 +251,34 @@
             Fixed
           </h3>
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message in a conversation no longer shows the contents of a completely different email.</strong> Opening a thread could render an unrelated message — sometimes from another folder or even another account — under the right sender and subject. A message is identified by a number that is only unique inside one folder, and the thread view worked out which folder to read from by looking at whichever mailbox happened to be on screen; when that guess was off, the same number pointed at a real but unrelated email. Each message now carries its own account and folder, and when its identity can't be confirmed MailVault shows nothing rather than someone else's mail. The same guess is gone from attachment downloads, "View source", and "Delete thread from server", which could previously act on the wrong message.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Signing in to Premium now tells you what it found.</strong> Choosing an email address that has no subscription — or one whose subscription has ended, or whose checkout was never completed — ran the check, stopped the spinner and changed nothing on screen, which was indistinguishable from the button not working. Sign-in now explains what the billing server holds for that address and what to do next. If the plans themselves can't be loaded, the page no longer shows blank space where they should be: it says so, offers a retry, and can open the plans in your browser. Signing in also re-checks free-trial eligibility for that address, so the trial badge stops promising a free trial to someone who has subscribed before.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The "Showing cached data" warning no longer appears — or refuses to leave — when MailVault rebuilds its email list from your saved copies.</strong> If the fast email index was missing while the saved mail itself was intact, opening the account raised a warning banner even though this rebuild is routine and heals itself within moments. Worse, once anything raised that banner, the quick "has anything changed on the server?" checks that run on every account switch skipped the code that removes it — so the warning sat there for the rest of the session, and its reload button appeared to do nothing. The rebuild is now silent, and every check that confirms your mail matches the server also clears the warning, so the one remaining genuine warning (the server unexpectedly claiming a mailbox is empty when you have mail in it) disappears by itself as soon as the server checks out.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>"Mark unread" now closes the email and sticks.</strong> Marking the open message unread left it on screen, and opening it again brought back the state it had when it was first read — so the button still offered "Mark unread" for a message the list showed as unread, and the message was never marked read again no matter how often you opened it. Marking unread now closes the message, and reopening it marks it read as usual, so the button always names what happens next. Opening a message also updates its row and the sidebar's unread count straight away instead of waiting for the next refresh.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Buttons that did nothing are gone from the conversation and chat views.</strong> Archive, Delete, Move and Mark read/unread appeared under each message in a thread and on chat bubbles but were never connected to anything — clicking them did nothing at all. They now appear only where they work.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Headings and text in newsletters stay readable in dark mode.</strong> Some senders pin a text colour in a way that overrode MailVault's dark conversion, so headings kept their original black and disappeared into the dark background while the rest of the message converted normally. Those colours are now converted like everything else, and brand colours that convert correctly are left as they were.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Conversations show your own replies on a first run too.</strong> On a freshly installed or freshly reset account, the Sent folder was looked up a moment before the folder list came back from the server, found nothing, and never looked again — so INBOX threads were missing every message you had sent, for the rest of the session. Switching accounts and back was the only way to get them. The lookup now waits for the folder list.</span>
+            </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
               <span><strong>Your folders no longer go missing, leaving only INBOX in the sidebar.</strong> If the very first folder lookup of a session ran a moment before the account's password was ready, it failed and was never tried again — the account showed a single INBOX until the app was restarted, and "Move to folder" had nothing to offer. The lookup now retries, and switching accounts no longer paints the old one-folder placeholder back over a list that had already loaded.</span>
@@ -3260,6 +3376,5 @@
       });
     });
   </script>
-  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
 </body>
 </html>

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.10.0] - 2026-08-18
+
 ### Added
 - **Delete Everywhere** — remove selected emails from the server, this computer, and the external backup in one action. Available in bulk operations, the selection bar, and the row menu.
 - Bulk operations selection now checkmarks the rows and survives closing the modal — a bubble shows the account, folder, and live count, and the selection can be amended by hand before starting. The session is bound to one account, folder, and view (list or thread); navigating away ends it.
