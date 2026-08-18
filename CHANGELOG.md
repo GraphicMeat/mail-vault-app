@@ -20,6 +20,7 @@
 - Email subjects no longer vanish from the list when a message's date includes a year — older mail showed only a sender and a date in a narrow list.
 - A message deleted while switching accounts could take an unrelated message with it, or fail to stay deleted after a restart.
 - Deleting archived emails from a folder left the local copies behind, so the rows reappeared as "Local only" and the delete looked like it had done nothing.
+- **The key under the email list is readable again, and its explanations are visible.** Its four entries were squeezed until the labels broke mid-phrase, and hovering one opened its explanation below the bottom edge of the window, where it could not be seen at all.
 
 ## [2.9.2] - 2026-08-08
 
