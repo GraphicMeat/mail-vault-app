@@ -443,3 +443,62 @@ describe('restore descriptor carries server uid completeness', () => {
     expect(state.serverUids.complete).toBe(false);
   });
 });
+
+// Three ways a completeness proof used to be thrown away. Each left the
+// mailbox on the honest-but-useless "server unknown" icon with no path back:
+// probe.unchanged never re-proves an enumeration, so a downgrade or a dropped
+// search result survives every subsequent activation. e2e caught all three
+// (connected-storage-matrix rows 1/4/5); these pin them where they are cheap.
+describe('activateAccount never discards a proven enumeration', () => {
+  it('does not let the disk-cache first paint downgrade a proven set', async () => {
+    // The local half paints from getEmailHeadersPartial, whose entry can carry
+    // a serverUids list. That list records no completeness of its own, so it
+    // can neither claim one nor destroy one.
+    primeActiveForBackgroundRefresh(); // proven complete, uids {1}
+    mockGetEmailHeadersMeta.mockResolvedValue({ uidValidity: 1, uidNext: 2, totalEmails: 1, totalCached: 1 });
+    mockGetEmailHeadersPartial.mockResolvedValue({
+      emails: [mkHeader(1)],
+      totalEmails: 1,
+      uidValidity: 1,
+      serverUids: [1, 2, 3], // wider, older, and not proof of anything
+    });
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 2, highestModseq: null });
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
+
+    const state = useMailStore.getState();
+    expect(state.serverUids.complete).toBe(true);
+    expect([...state.serverUids.uids]).toEqual([1]);
+  });
+
+  // The third discard — a completed UID SEARCH dropped by `if (signal.aborted)
+  // return` when a newer activation superseded the flow — is deliberately NOT
+  // pinned here. Reaching that branch needs uidMap already non-empty when the
+  // server half evaluates hasCachedSync, and the two halves run under one
+  // Promise.all with no ordering between them: any unit test of it would pass
+  // or fail on scheduling. connected-storage-matrix row 1 covers it against a
+  // real IMAP server, which is where the defect was found.
+
+  it('falls through to IMAP when the post-sync cache re-read comes back empty', async () => {
+    // The daemon reports success a moment before its sidecar write lands, so
+    // the re-read is empty and that branch learns nothing. Returning there left
+    // the mailbox with no uid set at all; the IMAP path is what would have run
+    // had the daemon been dead, and it can still prove the mailbox.
+    primeCold();
+    mockGetDaemonHealth.mockReturnValue({ alive: true });
+    mockMailboxIsUnchanged.mockResolvedValue({ unchanged: false, reason: 'never-synced' });
+    mockWaitForSync.mockResolvedValue({ success: true, new_emails: 0, total_emails: 3 });
+    mockGetEmailHeadersPartial.mockResolvedValue({ emails: [], totalEmails: 0 }); // daemon has not written yet
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 4, highestModseq: null });
+    mockFetchEmails.mockResolvedValue({ total: 3, emails: [mkHeader(1), mkHeader(2), mkHeader(3)] });
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX');
+
+    // The fall-through itself, then what it bought: a proven enumeration.
+    expect(mockCheckMailboxStatus).toHaveBeenCalled();
+    const state = useMailStore.getState();
+    expect(state.serverUids.complete).toBe(true);
+    expect([...state.serverUids.uids].sort()).toEqual([1, 2, 3]);
+  });
+});
+
