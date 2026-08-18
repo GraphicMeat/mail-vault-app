@@ -125,7 +125,7 @@ describe('RowActionMenuItems', () => {
   });
 
   it('a local-only row hides Delete from server but keeps Delete everywhere', () => {
-    // Local-only rows are always archived (computeDisplayEmails/updateSortedEmails
+    // Local-only rows are always archived (deriveDisplayRows/updateSortedEmails
     // force isArchived: true wherever source becomes 'local-only').
     const email = baseEmail({ isArchived: true, source: 'local-only' });
     render(<RowActionMenuItems emails={[email]} actions={makeActions()} onRequestDelete={vi.fn()} onClose={vi.fn()} />);

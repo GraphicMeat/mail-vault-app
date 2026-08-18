@@ -1,6 +1,27 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { startSeededServer, createClient, deliver } from './mockHarness.js';
-import { computeDisplayEmails } from '../../src/services/emailListUtils.js';
+import { deriveDisplayRows } from '../../src/stores/slices/messageListSlice.js';
+import { serverUids } from '../../src/stores/slices/serverUids.js';
+
+// The production derivation, imported directly. This file used to call
+// `services/emailListUtils.js`, a test-only reimplementation of it that had
+// quietly drifted: it stamped `local-only` off a uid set it derived from
+// `emails` and assumed complete, so these assertions could pass while the real
+// store could not reach that state at all. That file is gone; there is one
+// derivation now.
+//
+// `display()` is a fixture, not a second implementation — it only supplies the
+// inputs the old signature left implicit. When a case passes no uid set, it
+// means "the emails I passed ARE the whole server", and now says so.
+function display({ emails = [], localEmails = [], archivedEmailIds = new Set(), viewMode = 'all', savedEmailIds = new Set(), serverUidSet, serverUidsKnown, ...rest }) {
+  return deriveDisplayRows({
+    emails, localEmails, archivedEmailIds, viewMode, savedEmailIds, ...rest,
+    serverUids: serverUidSet
+      ? serverUids(serverUidSet, { complete: !!serverUidsKnown })
+      : serverUids(emails.map(e => e.uid), { complete: true }),
+  });
+}
+
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -119,7 +140,7 @@ describe('Local-Only Flag Detection (send → archive → delete → verify)', (
     expect(serverUids).toContain(uidB);
 
     // ----- viewMode: 'all' -----
-    const allResult = computeDisplayEmails({
+    const allResult = display({
       searchActive: false,
       searchResults: [],
       emails: serverEmailsAfterDelete,
@@ -135,7 +156,7 @@ describe('Local-Only Flag Detection (send → archive → delete → verify)', (
     expect(emailBAll.source).toBe('server');
 
     // ----- viewMode: 'local' -----
-    const localResult = computeDisplayEmails({
+    const localResult = display({
       searchActive: false,
       searchResults: [],
       emails: serverEmailsAfterDelete,
@@ -155,7 +176,7 @@ describe('Local-Only Flag Detection (send → archive → delete → verify)', (
       { uid: uidB, subject: subjectB, date: '2026-02-10T00:00:00Z', from: { address: LUKE.email }, flags: [] },
     ];
 
-    const result = computeDisplayEmails({
+    const result = display({
       searchActive: false,
       searchResults: [],
       emails: [], // Server not loaded yet

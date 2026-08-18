@@ -1,5 +1,26 @@
 import { describe, it, expect } from 'vitest';
-import { computeDisplayEmails } from '../../src/services/emailListUtils.js';
+import { deriveDisplayRows } from '../../src/stores/slices/messageListSlice.js';
+import { serverUids } from '../../src/stores/slices/serverUids.js';
+
+// The production derivation, imported directly. This file used to call
+// `services/emailListUtils.js`, a test-only reimplementation of it that had
+// quietly drifted: it stamped `local-only` off a uid set it derived from
+// `emails` and assumed complete, so these assertions could pass while the real
+// store could not reach that state at all. That file is gone; there is one
+// derivation now.
+//
+// `display()` is a fixture, not a second implementation — it only supplies the
+// inputs the old signature left implicit. When a case passes no uid set, it
+// means "the emails I passed ARE the whole server", and now says so.
+function display({ emails = [], localEmails = [], archivedEmailIds = new Set(), viewMode = 'all', savedEmailIds = new Set(), serverUidSet, serverUidsKnown, ...rest }) {
+  return deriveDisplayRows({
+    emails, localEmails, archivedEmailIds, viewMode, savedEmailIds, ...rest,
+    serverUids: serverUidSet
+      ? serverUids(serverUidSet, { complete: !!serverUidsKnown })
+      : serverUids(emails.map(e => e.uid), { complete: true }),
+  });
+}
+
 
 // ---------------------------------------------------------------------------
 // Fixtures — simulate the store state at each step of user workflows
@@ -43,7 +64,7 @@ describe('archive → delete from server → local-only', () => {
   };
 
   it('Step 1: email shows as "server" before archiving', () => {
-    const result = computeDisplayEmails(step1_serverOnly);
+    const result = display(step1_serverOnly);
     const found = result.find((e) => e.uid === uid);
     expect(found).toBeDefined();
     expect(found.source).toBe('server');
@@ -51,7 +72,7 @@ describe('archive → delete from server → local-only', () => {
   });
 
   it('Step 2: email shows as "server" with isArchived after archiving', () => {
-    const result = computeDisplayEmails(step2_archived);
+    const result = display(step2_archived);
     const found = result.find((e) => e.uid === uid);
     expect(found).toBeDefined();
     expect(found.source).toBe('server');
@@ -59,7 +80,7 @@ describe('archive → delete from server → local-only', () => {
   });
 
   it('Step 3: email shows as "local-only" after deletion from server', () => {
-    const result = computeDisplayEmails(step3_deletedFromServer);
+    const result = display(step3_deletedFromServer);
     const found = result.find((e) => e.uid === uid);
     expect(found).toBeDefined();
     expect(found.source).toBe('local-only');
@@ -67,21 +88,21 @@ describe('archive → delete from server → local-only', () => {
   });
 
   it('Step 3: other emails still show as "server"', () => {
-    const result = computeDisplayEmails(step3_deletedFromServer);
+    const result = display(step3_deletedFromServer);
     const other = result.find((e) => e.uid === 100);
     expect(other).toBeDefined();
     expect(other.source).toBe('server');
   });
 
   it('Step 3 in local view: email shows as "local-only"', () => {
-    const result = computeDisplayEmails({ ...step3_deletedFromServer, viewMode: 'local' });
+    const result = display({ ...step3_deletedFromServer, viewMode: 'local' });
     const found = result.find((e) => e.uid === uid);
     expect(found).toBeDefined();
     expect(found.source).toBe('local-only');
   });
 
   it('Step 3 in server view: deleted email is NOT shown', () => {
-    const result = computeDisplayEmails({ ...step3_deletedFromServer, viewMode: 'server' });
+    const result = display({ ...step3_deletedFromServer, viewMode: 'server' });
     const found = result.find((e) => e.uid === uid);
     expect(found).toBeUndefined();
   });
@@ -96,7 +117,7 @@ describe('cache restoration should not undo local-only status', () => {
     const email = mkEmail(uid, 'Archived email');
 
     // State after delete: email removed from emails, still in localEmails
-    const afterDelete = computeDisplayEmails({
+    const afterDelete = display({
       searchActive: false,
       searchResults: [],
       emails: [mkEmail(100, 'Other')], // uid 42 removed
@@ -107,7 +128,7 @@ describe('cache restoration should not undo local-only status', () => {
     expect(afterDelete.find((e) => e.uid === uid).source).toBe('local-only');
 
     // If cache were NOT updated, loadEmails would restore uid 42 to emails:
-    const withStaleCacheRestored = computeDisplayEmails({
+    const withStaleCacheRestored = display({
       searchActive: false,
       searchResults: [],
       emails: [email, mkEmail(100, 'Other')], // uid 42 restored from stale cache
@@ -119,7 +140,7 @@ describe('cache restoration should not undo local-only status', () => {
     expect(withStaleCacheRestored.find((e) => e.uid === uid).source).toBe('server');
 
     // With correct cache update, loadEmails uses filtered cache (uid 42 removed):
-    const withUpdatedCache = computeDisplayEmails({
+    const withUpdatedCache = display({
       searchActive: false,
       searchResults: [],
       emails: [mkEmail(100, 'Other')], // uid 42 NOT restored (cache was updated)
@@ -136,7 +157,7 @@ describe('cache restoration should not undo local-only status', () => {
 // ---------------------------------------------------------------------------
 describe('auto-cached (non-archived) emails', () => {
   it('do not appear in all view when deleted from server', () => {
-    const result = computeDisplayEmails({
+    const result = display({
       searchActive: false,
       searchResults: [],
       emails: [], // server empty
@@ -148,7 +169,7 @@ describe('auto-cached (non-archived) emails', () => {
   });
 
   it('do not appear in local view', () => {
-    const result = computeDisplayEmails({
+    const result = display({
       searchActive: false,
       searchResults: [],
       emails: [mkEmail(1, 'On server')],
@@ -160,7 +181,7 @@ describe('auto-cached (non-archived) emails', () => {
   });
 
   it('archived emails appear, non-archived do not in local view', () => {
-    const result = computeDisplayEmails({
+    const result = display({
       searchActive: false,
       searchResults: [],
       emails: [mkEmail(1, 'On server'), mkEmail(2, 'On server')],
@@ -185,7 +206,7 @@ describe('quick-load state (before keychain)', () => {
       mkEmail(2, 'Cached B', '2026-02-14T10:00:00Z'),
       mkEmail(3, 'Cached C', '2026-02-13T10:00:00Z'),
     ];
-    const result = computeDisplayEmails({
+    const result = display({
       searchActive: false,
       searchResults: [],
       emails: cachedEmails,
@@ -203,7 +224,7 @@ describe('quick-load state (before keychain)', () => {
   it('local emails available during quick-load', () => {
     // Quick-load populates localEmails from Maildir (no keychain needed)
     const localEmails = [mkEmail(10, 'Local A'), mkEmail(20, 'Local B')];
-    const result = computeDisplayEmails({
+    const result = display({
       searchActive: false,
       searchResults: [],
       emails: [], // server not loaded yet
@@ -219,7 +240,7 @@ describe('quick-load state (before keychain)', () => {
   });
 
   it('empty state before quick-load completes', () => {
-    const result = computeDisplayEmails({
+    const result = display({
       searchActive: false,
       searchResults: [],
       emails: [],

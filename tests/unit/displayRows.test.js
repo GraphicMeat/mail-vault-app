@@ -1,5 +1,26 @@
 import { describe, it, expect } from 'vitest';
-import { computeDisplayEmails } from '../../src/services/emailListUtils.js';
+import { deriveDisplayRows } from '../../src/stores/slices/messageListSlice.js';
+import { serverUids } from '../../src/stores/slices/serverUids.js';
+
+// The production derivation, imported directly. This file used to call
+// `services/emailListUtils.js`, a test-only reimplementation of it that had
+// quietly drifted: it stamped `local-only` off a uid set it derived from
+// `emails` and assumed complete, so these assertions could pass while the real
+// store could not reach that state at all. That file is gone; there is one
+// derivation now.
+//
+// `display()` is a fixture, not a second implementation — it only supplies the
+// inputs the old signature left implicit. When a case passes no uid set, it
+// means "the emails I passed ARE the whole server", and now says so.
+function display({ emails = [], localEmails = [], archivedEmailIds = new Set(), viewMode = 'all', savedEmailIds = new Set(), serverUidSet, serverUidsKnown, ...rest }) {
+  return deriveDisplayRows({
+    emails, localEmails, archivedEmailIds, viewMode, savedEmailIds, ...rest,
+    serverUids: serverUidSet
+      ? serverUids(serverUidSet, { complete: !!serverUidsKnown })
+      : serverUids(emails.map(e => e.uid), { complete: true }),
+  });
+}
+
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -23,22 +44,11 @@ const localEmail = (uid, subject, date) => ({
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
-describe('computeDisplayEmails', () => {
-  // -----------------------------------------------------------------------
-  // Search mode
-  // -----------------------------------------------------------------------
-  it('returns searchResults when searchActive is true', () => {
-    const searchResults = [{ uid: 1, subject: 'found' }];
-    const result = computeDisplayEmails({
-      searchActive: true,
-      searchResults,
-      emails: [serverEmail(99, 'ignored')],
-      localEmails: [],
-      archivedEmailIds: new Set(),
-      viewMode: 'all',
-    });
-    expect(result).toBe(searchResults);
-  });
+describe('deriveDisplayRows', () => {
+  // The search short-circuit the deleted twin carried (`searchActive` →
+  // return searchResults) is not part of this derivation and never was in the
+  // app: EmailList.jsx:357 picks between searchResults and sortedEmails.
+  // Asserting it here only ever tested the twin.
 
   // -----------------------------------------------------------------------
   // \Deleted (flagged but not yet expunged)
@@ -46,7 +56,7 @@ describe('computeDisplayEmails', () => {
   describe('\\Deleted messages', () => {
     it('hides server messages flagged \\Deleted', () => {
       const doomed = { ...serverEmail(2, 'deleted'), flags: ['\\Seen', '\\Deleted'] };
-      const result = computeDisplayEmails({
+      const result = display({
         searchActive: false,
         searchResults: [],
         emails: [serverEmail(1, 'kept'), doomed],
@@ -59,7 +69,7 @@ describe('computeDisplayEmails', () => {
 
     it('keeps a \\Deleted message that is archived locally', () => {
       const doomed = { ...serverEmail(2, 'deleted but vaulted'), flags: ['\\Deleted'] };
-      const result = computeDisplayEmails({
+      const result = display({
         searchActive: false,
         searchResults: [],
         emails: [serverEmail(1, 'kept'), doomed],
@@ -76,7 +86,7 @@ describe('computeDisplayEmails', () => {
   // -----------------------------------------------------------------------
   describe('viewMode: server', () => {
     it('returns server emails with source "server"', () => {
-      const result = computeDisplayEmails({
+      const result = display({
         searchActive: false,
         searchResults: [],
         emails: [serverEmail(1, 'A'), serverEmail(2, 'B')],
@@ -88,17 +98,26 @@ describe('computeDisplayEmails', () => {
       expect(result.every((e) => e.source === 'server')).toBe(true);
     });
 
-    it('marks archived emails correctly', () => {
-      const result = computeDisplayEmails({
-        searchActive: false,
-        searchResults: [],
-        emails: [serverEmail(1, 'Archived'), serverEmail(2, 'Not archived')],
+    // DRIFT, found by deleting the twin. The twin set `isArchived` from
+    // `archivedEmailIds` here and this case asserted `true`; the store has
+    // always hard-set `isArchived = false` for every row in server view, so
+    // the app never behaved the way this assertion claimed. Pinned to what
+    // production does, not to what the twin did.
+    //
+    // Whether server view SHOULD surface the archived badge is a product
+    // question, not a test question — it is the one view whose contract is
+    // "show the server's copy", and answering it means touching the row icons
+    // and their visual baselines. Left as it ships.
+    it('flattens isArchived to false in server view, whatever the vault holds', () => {
+      const result = display({
+        emails: [serverEmail(1, 'Archived here'), serverEmail(2, 'Not archived')],
         localEmails: [],
         archivedEmailIds: new Set([1]),
         viewMode: 'server',
       });
-      expect(result.find((e) => e.uid === 1).isArchived).toBe(true);
+      expect(result.find((e) => e.uid === 1).isArchived).toBe(false);
       expect(result.find((e) => e.uid === 2).isArchived).toBe(false);
+      expect(result.every((e) => e.source === 'server')).toBe(true);
     });
   });
 
@@ -107,7 +126,7 @@ describe('computeDisplayEmails', () => {
   // -----------------------------------------------------------------------
   describe('viewMode: local', () => {
     it('returns local emails with source "local" when server emails contain matching UIDs', () => {
-      const result = computeDisplayEmails({
+      const result = display({
         searchActive: false,
         searchResults: [],
         emails: [serverEmail(1, 'A'), serverEmail(2, 'B')],
@@ -121,7 +140,7 @@ describe('computeDisplayEmails', () => {
     });
 
     it('flags local emails as "local-only" when their UID is NOT on the server', () => {
-      const result = computeDisplayEmails({
+      const result = display({
         searchActive: false,
         searchResults: [],
         emails: [serverEmail(1, 'Still on server')],
@@ -135,7 +154,7 @@ describe('computeDisplayEmails', () => {
     });
 
     it('does NOT flag local emails as "local-only" when server emails are empty (not loaded yet)', () => {
-      const result = computeDisplayEmails({
+      const result = display({
         searchActive: false,
         searchResults: [],
         emails: [],
@@ -151,7 +170,7 @@ describe('computeDisplayEmails', () => {
     });
 
     it('excludes non-archived local emails from local view', () => {
-      const result = computeDisplayEmails({
+      const result = display({
         searchActive: false,
         searchResults: [],
         emails: [serverEmail(1, 'On server')],
@@ -165,7 +184,7 @@ describe('computeDisplayEmails', () => {
     });
 
     it('flags ALL local emails as "local-only" when none match server UIDs', () => {
-      const result = computeDisplayEmails({
+      const result = display({
         searchActive: false,
         searchResults: [],
         emails: [serverEmail(100, 'Different email')],
@@ -183,7 +202,7 @@ describe('computeDisplayEmails', () => {
   // -----------------------------------------------------------------------
   describe('viewMode: all', () => {
     it('combines server and local-only emails', () => {
-      const result = computeDisplayEmails({
+      const result = display({
         searchActive: false,
         searchResults: [],
         emails: [serverEmail(1, 'On server')],
@@ -200,7 +219,7 @@ describe('computeDisplayEmails', () => {
     });
 
     it('does not show non-archived local emails as local-only', () => {
-      const result = computeDisplayEmails({
+      const result = display({
         searchActive: false,
         searchResults: [],
         emails: [serverEmail(1, 'On server')],
@@ -215,7 +234,7 @@ describe('computeDisplayEmails', () => {
     });
 
     it('does not duplicate emails that exist on both server and local', () => {
-      const result = computeDisplayEmails({
+      const result = display({
         searchActive: false,
         searchResults: [],
         emails: [serverEmail(1, 'A'), serverEmail(2, 'B')],
@@ -229,7 +248,7 @@ describe('computeDisplayEmails', () => {
     });
 
     it('sorts combined results by date descending', () => {
-      const result = computeDisplayEmails({
+      const result = display({
         searchActive: false,
         searchResults: [],
         emails: [serverEmail(1, 'Old', '2026-01-01T00:00:00Z')],
@@ -242,7 +261,7 @@ describe('computeDisplayEmails', () => {
     });
 
     it('marks server emails as not archived when they have no local copy', () => {
-      const result = computeDisplayEmails({
+      const result = display({
         searchActive: false,
         searchResults: [],
         emails: [serverEmail(1, 'Server only')],
@@ -261,7 +280,7 @@ describe('computeDisplayEmails', () => {
   // -----------------------------------------------------------------------
   describe('edge cases', () => {
     it('handles empty emails and localEmails', () => {
-      const result = computeDisplayEmails({
+      const result = display({
         searchActive: false,
         searchResults: [],
         emails: [],
@@ -273,7 +292,7 @@ describe('computeDisplayEmails', () => {
     });
 
     it('handles local view with no server data and no local data', () => {
-      const result = computeDisplayEmails({
+      const result = display({
         searchActive: false,
         searchResults: [],
         emails: [],
@@ -294,7 +313,7 @@ describe('computeDisplayEmails', () => {
       const serverEmails = [serverEmail(5, 'Archived email'), serverEmail(10, 'Other')];
 
       // Before delete: email 5 is on server → source "server"
-      const before = computeDisplayEmails({
+      const before = display({
         searchActive: false,
         searchResults: [],
         emails: serverEmails,
@@ -305,7 +324,7 @@ describe('computeDisplayEmails', () => {
       expect(before.find((e) => e.uid === 5).source).toBe('server');
 
       // After delete: email 5 removed from server array → source "local-only"
-      const after = computeDisplayEmails({
+      const after = display({
         searchActive: false,
         searchResults: [],
         emails: serverEmails.filter((e) => e.uid !== 5),
@@ -322,7 +341,7 @@ describe('computeDisplayEmails', () => {
       const serverEmails = [serverEmail(5, 'Archived email'), serverEmail(10, 'Other')];
 
       // Before delete: email 5 is on server → source "local"
-      const before = computeDisplayEmails({
+      const before = display({
         searchActive: false,
         searchResults: [],
         emails: serverEmails,
@@ -333,7 +352,7 @@ describe('computeDisplayEmails', () => {
       expect(before.find((e) => e.uid === 5).source).toBe('local');
 
       // After delete: email 5 removed from server array → source "local-only"
-      const after = computeDisplayEmails({
+      const after = display({
         searchActive: false,
         searchResults: [],
         emails: serverEmails.filter((e) => e.uid !== 5),
@@ -350,7 +369,7 @@ describe('computeDisplayEmails', () => {
       const archived = new Set([1, 99]);
 
       // In "server" mode: only server emails, no local-only
-      const serverView = computeDisplayEmails({
+      const serverView = display({
         searchActive: false, searchResults: [], emails, localEmails: locals,
         archivedEmailIds: archived, viewMode: 'server',
       });
@@ -358,7 +377,7 @@ describe('computeDisplayEmails', () => {
       expect(serverView.every((e) => e.source === 'server')).toBe(true);
 
       // Switch to "local" mode: local-only flag should appear for uid 99
-      const localView = computeDisplayEmails({
+      const localView = display({
         searchActive: false, searchResults: [], emails, localEmails: locals,
         archivedEmailIds: archived, viewMode: 'local',
       });
@@ -367,7 +386,7 @@ describe('computeDisplayEmails', () => {
       expect(localView.find((e) => e.uid === 1).source).toBe('local');
 
       // Switch to "all" mode: uid 99 should be local-only
-      const allView = computeDisplayEmails({
+      const allView = display({
         searchActive: false, searchResults: [], emails, localEmails: locals,
         archivedEmailIds: archived, viewMode: 'all',
       });

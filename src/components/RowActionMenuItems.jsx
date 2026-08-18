@@ -173,8 +173,8 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
       )}
 
       {/* hasArchived || hasServerBacked is a verified tautology, not a live
-          gate: computeDisplayEmails/updateSortedEmails force isArchived: true
-          on every row whose source becomes 'local-only' (emailListUtils.js,
+          gate: the display-row derivation forces isArchived: true
+          on every row whose source becomes 'local-only' (deriveDisplayRows in
           messageListSlice.js), so isLocalOnly always implies isArchived and
           this never evaluates false for a real email. Kept explicit as the
           documented reason Delete everywhere is always safe to show, rather

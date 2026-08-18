@@ -1,5 +1,26 @@
 import { describe, it, expect } from 'vitest';
-import { computeDisplayEmails } from '../../src/services/emailListUtils.js';
+import { deriveDisplayRows } from '../../src/stores/slices/messageListSlice.js';
+import { serverUids } from '../../src/stores/slices/serverUids.js';
+
+// The production derivation, imported directly. This file used to call
+// `services/emailListUtils.js`, a test-only reimplementation of it that had
+// quietly drifted: it stamped `local-only` off a uid set it derived from
+// `emails` and assumed complete, so these assertions could pass while the real
+// store could not reach that state at all. That file is gone; there is one
+// derivation now.
+//
+// `display()` is a fixture, not a second implementation — it only supplies the
+// inputs the old signature left implicit. When a case passes no uid set, it
+// means "the emails I passed ARE the whole server", and now says so.
+function display({ emails = [], localEmails = [], archivedEmailIds = new Set(), viewMode = 'all', savedEmailIds = new Set(), serverUidSet, serverUidsKnown, ...rest }) {
+  return deriveDisplayRows({
+    emails, localEmails, archivedEmailIds, viewMode, savedEmailIds, ...rest,
+    serverUids: serverUidSet
+      ? serverUids(serverUidSet, { complete: !!serverUidsKnown })
+      : serverUids(emails.map(e => e.uid), { complete: true }),
+  });
+}
+
 
 // ---------------------------------------------------------------------------
 // These tests verify the quick-load → full-init state machine that prevents
@@ -173,7 +194,7 @@ describe('quick-load display emails', () => {
       mkEmail(2, 'Email B', '2026-02-14T10:00:00Z'),
       mkEmail(3, 'Email C', '2026-02-13T10:00:00Z'),
     ];
-    const result = computeDisplayEmails({
+    const result = display({
       searchActive: false,
       searchResults: [],
       emails: cachedHeaders,
@@ -188,7 +209,7 @@ describe('quick-load display emails', () => {
 
   it('renders local archived emails during quick-load (local mode)', () => {
     const localEmails = [mkEmail(10, 'Archived A'), mkEmail(20, 'Archived B')];
-    const result = computeDisplayEmails({
+    const result = display({
       searchActive: false,
       searchResults: [],
       emails: [],
@@ -206,7 +227,7 @@ describe('quick-load display emails', () => {
   it('combines cached headers + local emails during quick-load (all mode)', () => {
     const cachedHeaders = [mkEmail(1, 'Server A'), mkEmail(2, 'Server B')];
     const localEmails = [mkEmail(1, 'Also local'), mkEmail(99, 'Deleted from server')];
-    const result = computeDisplayEmails({
+    const result = display({
       searchActive: false,
       searchResults: [],
       emails: cachedHeaders,
@@ -221,7 +242,7 @@ describe('quick-load display emails', () => {
   });
 
   it('empty state renders nothing (no crash)', () => {
-    const result = computeDisplayEmails({
+    const result = display({
       searchActive: false,
       searchResults: [],
       emails: [],

@@ -96,6 +96,101 @@ export function invalidateChatAndThreadCaches() {
   _threadsFingerprint = '';
 }
 
+/**
+ * The display-row derivation, exactly as the store runs it.
+ *
+ * Exported because it used to have a twin: `services/emailListUtils.js`
+ * reimplemented this logic for tests only, and drifted — its default was
+ * `known = serverUidSet ? !!serverUidsKnown : true`, so omitting the set made
+ * it stamp `local-only` with no proof at all, while production (correctly)
+ * refuses to. The twin was MORE lenient than production in the one direction
+ * that matters, which is why ~47 assertions could pass for months while the
+ * real derivation could not reach its amber state. One implementation, one
+ * place to be wrong.
+ *
+ * Mutates the row objects in place and returns them — `updateSortedEmails`'s
+ * memo compares by identity, and copying every row on every derivation is what
+ * this list cannot afford. Callers own the arrays they pass in.
+ */
+export function deriveDisplayRows({
+  emails = [],
+  localEmails = [],
+  viewMode = 'all',
+  savedEmailIds = new Set(),
+  archivedEmailIds = new Set(),
+  serverUids = NO_SERVER_UIDS,
+  unifiedInbox = false,
+  activeAccountId = null,
+  activeMailbox = null,
+  deleteTombstones = null,
+}) {
+  // In unified inbox, UIDs collide across accounts — use compound key for dedup
+  const uidKey = unifiedInbox
+    ? (e) => `${e._accountId || ''}:${e.uid}`
+    : (e) => e.uid;
+
+  let result = [];
+
+  if (viewMode === 'server') {
+    for (const e of emails) {
+      e.isLocal = false;
+      e.isArchived = false;
+      e.source = 'server';
+    }
+    result = emails;
+  } else if (viewMode === 'local') {
+    result = [];
+    for (const e of localEmails) {
+      if (archivedEmailIds.has(e.uid)) {
+        e.isLocal = true;
+        e.isArchived = true;
+        e.source = !serverUids.complete || serverUids.uids.has(e.uid) ? 'local' : 'local-only';
+        result.push(e);
+      }
+    }
+  } else {
+    const loadedKeys = new Set(emails.map(e => uidKey(e)));
+    for (const e of emails) {
+      e.isLocal = savedEmailIds.has(e.uid);
+      e.isArchived = archivedEmailIds.has(e.uid);
+      e.source = 'server';
+    }
+    result = [...emails];
+
+    for (const localEmail of localEmails) {
+      if (!loadedKeys.has(uidKey(localEmail)) && archivedEmailIds.has(localEmail.uid)) {
+        localEmail.isLocal = true;
+        localEmail.isArchived = true;
+        localEmail.source = !serverUids.complete || serverUids.uids.has(localEmail.uid) ? 'local' : 'local-only';
+        result.push(localEmail);
+      }
+    }
+  }
+
+  // Hide messages the server flagged \Deleted but hasn't expunged yet. They
+  // still count in EXISTS, so the list total can read one or two higher than
+  // the rows shown. Archived copies stay visible — the local vault outranks
+  // the server's opinion about a message it hasn't actually removed.
+  result = result.filter(e => e.isArchived || !e.flags?.includes('\\Deleted'));
+
+  // Drop tombstoned (deleted-but-not-yet-reconciled) emails — stale cache
+  // hydration on account/folder switch must not resurrect them.
+  if (deleteTombstones?.size) {
+    result = result.filter(e => {
+      const acct = e._accountId || activeAccountId;
+      const mbox = activeMailbox === 'UNIFIED' ? (e._mailbox || 'INBOX') : activeMailbox;
+      return !deleteTombstones.has(`${acct}|${mbox}|${e.uid}`);
+    });
+  }
+
+  // Sort by date descending (newest first)
+  for (const e of result) {
+    e._ts = new Date(e.date || e.internalDate || 0).getTime();
+  }
+  result.sort((a, b) => b._ts - a._ts);
+  return result;
+}
+
 export const createMessageListSlice = (set, get) => ({
   // Emails
   emails: [],
@@ -171,70 +266,10 @@ export const createMessageListSlice = (set, get) => ({
     const fp = `${activeAccountId}-${activeMailbox}-${viewMode}-${emails.length}-${emails[0]?.uid || 0}-${emails[emails.length - 1]?.uid || 0}-${localEmails.length}-${archivedEmailIds.size}-${savedEmailIds.size}-${serverUids.uids.size}-${serverUids.complete}-${_flagChangeCounter}-${deleteTombstones?.size || 0}`;
     if (fp === _sortedEmailsFingerprint && sameInputs) return;
 
-    // In unified inbox, UIDs collide across accounts — use compound key for dedup
-    const uidKey = unifiedInbox
-      ? (e) => `${e._accountId || ''}:${e.uid}`
-      : (e) => e.uid;
-
-    let result = [];
-
-    if (viewMode === 'server') {
-      for (const e of emails) {
-        e.isLocal = false;
-        e.isArchived = false;
-        e.source = 'server';
-      }
-      result = emails;
-    } else if (viewMode === 'local') {
-      result = [];
-      for (const e of localEmails) {
-        if (archivedEmailIds.has(e.uid)) {
-          e.isLocal = true;
-          e.isArchived = true;
-          e.source = !serverUids.complete || serverUids.uids.has(e.uid) ? 'local' : 'local-only';
-          result.push(e);
-        }
-      }
-    } else {
-      const loadedKeys = new Set(emails.map(e => uidKey(e)));
-      for (const e of emails) {
-        e.isLocal = savedEmailIds.has(e.uid);
-        e.isArchived = archivedEmailIds.has(e.uid);
-        e.source = 'server';
-      }
-      result = [...emails];
-
-      for (const localEmail of localEmails) {
-        if (!loadedKeys.has(uidKey(localEmail)) && archivedEmailIds.has(localEmail.uid)) {
-          localEmail.isLocal = true;
-          localEmail.isArchived = true;
-          localEmail.source = !serverUids.complete || serverUids.uids.has(localEmail.uid) ? 'local' : 'local-only';
-          result.push(localEmail);
-        }
-      }
-    }
-
-    // Hide messages the server flagged \Deleted but hasn't expunged yet. They
-    // still count in EXISTS, so the list total can read one or two higher than
-    // the rows shown. Archived copies stay visible — the local vault outranks
-    // the server's opinion about a message it hasn't actually removed.
-    result = result.filter(e => e.isArchived || !e.flags?.includes('\\Deleted'));
-
-    // Drop tombstoned (deleted-but-not-yet-reconciled) emails — stale cache
-    // hydration on account/folder switch must not resurrect them.
-    if (deleteTombstones?.size) {
-      result = result.filter(e => {
-        const acct = e._accountId || activeAccountId;
-        const mbox = activeMailbox === 'UNIFIED' ? (e._mailbox || 'INBOX') : activeMailbox;
-        return !deleteTombstones.has(`${acct}|${mbox}|${e.uid}`);
-      });
-    }
-
-    // Sort by date descending (newest first)
-    for (const e of result) {
-      e._ts = new Date(e.date || e.internalDate || 0).getTime();
-    }
-    result.sort((a, b) => b._ts - a._ts);
+    const result = deriveDisplayRows({
+      emails, localEmails, viewMode, savedEmailIds, archivedEmailIds, serverUids,
+      unifiedInbox, activeAccountId, activeMailbox, deleteTombstones,
+    });
 
     // Apply persisted link safety alerts from settingsStore
     const { linkAlerts, linkSafetyEnabled } = useSettingsStore.getState();
