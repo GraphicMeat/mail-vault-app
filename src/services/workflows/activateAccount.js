@@ -640,7 +640,15 @@ export async function activateAccount(accountId, mailbox, options = {}) {
           // was a complete enumeration, so a restore from it can only ever be
           // incomplete. Claiming otherwise is what let a cache-derived set
           // masquerade as proof of server absence.
-          ...(cachedHeaders.serverUids
+          //
+          // It must not run the other way either. This is a disk paint — it
+          // carries strictly less information than a live enumeration, so when
+          // the store already holds a proven one for this mailbox it has
+          // nothing to add and writing at all would destroy the proof. That
+          // downgrade is not recoverable in place: an "unchanged" probe verdict
+          // never re-proves anything, so the row sits on the honest-but-useless
+          // "server unknown" icon until something forces a full sync.
+          ...(cachedHeaders.serverUids && !get().serverUids.complete
             ? { serverUids: serverUids(cachedHeaders.serverUids, { complete: false }) }
             : {}),
         });
@@ -869,6 +877,17 @@ export async function activateAccount(accountId, mailbox, options = {}) {
             }
 
             serverTrace.end('daemon-sync-done', { emailCount: freshCache?.emails?.length || 0 });
+            // Everything above hangs off `freshCache?.emails?.length > 0`. On a
+            // first visit the daemon can report success a moment before its
+            // sidecar write lands, so that re-read comes back empty and this
+            // activation learns nothing at all — no rows, and no uid set. The
+            // list still fills in (loadMoreEmails drains the cache seconds
+            // later) but that drain only widens a set nobody ever proved, so
+            // the mailbox stays "server unknown" until some later activation
+            // happens to re-prove it. Fall through to the IMAP path instead,
+            // which is exactly what this activation would have done had the
+            // daemon been dead: ask the server directly, and prove it.
+            if (freshCache?.emails?.length > 0) return;
           } else {
             if (!signal.aborted) {
               useMailStore.setState({
@@ -880,8 +899,8 @@ export async function activateAccount(accountId, mailbox, options = {}) {
               });
             }
             serverTrace.end('daemon-sync-error', { error: syncResult?.error });
+            return;
           }
-          return;
         } catch (e) {
           console.warn('[activateAccount] Daemon sync failed:', e.message);
           serverTrace.mark('daemon-sync-fallback');
@@ -1014,9 +1033,22 @@ export async function activateAccount(accountId, mailbox, options = {}) {
           }
 
           const serverUidList = await api.searchAllUids(account, effectiveMailbox);
-          if (signal.aborted) return;
           const foundUids = new Set(serverUidList);
-          useMailStore.setState({ serverUids: serverUids(foundUids, { complete: true }) });
+          // Commit the enumeration BEFORE the abort check, gated on the view
+          // instead of on this flow. A completed UID SEARCH is a fact about
+          // (account, mailbox) — nothing about it goes stale because a newer
+          // activation superseded the flow that asked for it. The abort guard
+          // exists to stop a superseded flow from painting the wrong mailbox's
+          // rows; dropping the uid set with it threw away the only proof of
+          // completeness this path ever produces, and no later step re-runs the
+          // search: the probe's "unchanged" verdict never re-proves anything,
+          // so the mailbox sat on "server unknown" for the rest of the session
+          // and the amber local-only state could not appear at all.
+          if (useMailStore.getState().activeAccountId === accountId
+              && useMailStore.getState().activeMailbox === effectiveMailbox) {
+            useMailStore.setState({ serverUids: serverUids(foundUids, { complete: true }) });
+          }
+          if (signal.aborted) return;
 
           const existingEmails = uidMap.toSortedArray();
           const storeUidSet = new Set(existingEmails.map(e => e.uid));
