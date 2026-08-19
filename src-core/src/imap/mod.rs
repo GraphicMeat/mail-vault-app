@@ -998,16 +998,31 @@ pub async fn fetch_email_by_uid(
         .await
         .map_err(|e| format!("UID FETCH {} failed: {}", uid, e))?;
 
-    let fetches: Vec<Fetch> = fetch_stream
-        .collect::<Vec<_>>()
-        .await
-        .into_iter()
-        .filter_map(|r| r.ok())
-        .collect();
+    // Errors in the stream are the server refusing the FETCH — a tagged NO, a
+    // dropped connection, a parse failure. Dropping them with `.ok()` turned
+    // every one of those into an empty result, which the caller reports as
+    // "Email not found": a message that is sitting right there on the server
+    // then reads as deleted. Absence has to mean absence.
+    let mut fetches: Vec<Fetch> = Vec::new();
+    for item in fetch_stream.collect::<Vec<_>>().await {
+        match item {
+            Ok(f) => fetches.push(f),
+            Err(e) => return Err(format!("UID FETCH {} failed: {}", uid, e)),
+        }
+    }
 
     let fetch = match fetches.first() {
         Some(f) => f,
-        None => return Ok(None),
+        None => {
+            // Empty here is not proof of absence — see `uid_still_present`.
+            if uid_still_present(session, uid).await {
+                return Err(format!(
+                    "Server returned no body for UID {}, but the message is still in {}",
+                    uid, mailbox
+                ));
+            }
+            return Ok(None);
+        }
     };
 
     let body = fetch
@@ -1956,6 +1971,25 @@ fn walk_mime_parts_light(
     }
 }
 
+
+/// Is `uid` still in the mailbox the session has selected?
+///
+/// Asked only when a body fetch came back empty. `async-imap` ends a fetch
+/// stream on the tagged response without inspecting it, so a server that
+/// answers `NO` yields exactly what a deleted message yields: nothing. This
+/// second, much cheaper question is the independent claim that tells the two
+/// apart — the caller reports absence only when the uid really is gone.
+///
+/// Ambiguous the same way if it also comes back empty, and that is fine: two
+/// empty answers in a row is the case where "not found" is the honest report.
+async fn uid_still_present(session: &mut ImapSession, uid: u32) -> bool {
+    let Ok(stream) = session.uid_fetch(uid.to_string(), "(UID)").await else {
+        return false;
+    };
+    let found = stream.collect::<Vec<_>>().await.into_iter().any(|r| r.is_ok());
+    found
+}
+
 /// Fetch a single email by UID with light content (no attachment binaries, no rawSource)
 /// Returns the raw bytes separately for Maildir persistence
 pub async fn fetch_email_by_uid_light(
@@ -1970,16 +2004,31 @@ pub async fn fetch_email_by_uid_light(
         .await
         .map_err(|e| format!("UID FETCH {} failed: {}", uid, e))?;
 
-    let fetches: Vec<Fetch> = fetch_stream
-        .collect::<Vec<_>>()
-        .await
-        .into_iter()
-        .filter_map(|r| r.ok())
-        .collect();
+    // Errors in the stream are the server refusing the FETCH — a tagged NO, a
+    // dropped connection, a parse failure. Dropping them with `.ok()` turned
+    // every one of those into an empty result, which the caller reports as
+    // "Email not found": a message that is sitting right there on the server
+    // then reads as deleted. Absence has to mean absence.
+    let mut fetches: Vec<Fetch> = Vec::new();
+    for item in fetch_stream.collect::<Vec<_>>().await {
+        match item {
+            Ok(f) => fetches.push(f),
+            Err(e) => return Err(format!("UID FETCH {} failed: {}", uid, e)),
+        }
+    }
 
     let fetch = match fetches.first() {
         Some(f) => f,
-        None => return Ok(None),
+        None => {
+            // Empty here is not proof of absence — see `uid_still_present`.
+            if uid_still_present(session, uid).await {
+                return Err(format!(
+                    "Server returned no body for UID {}, but the message is still in {}",
+                    uid, mailbox
+                ));
+            }
+            return Ok(None);
+        }
     };
 
     let body = fetch

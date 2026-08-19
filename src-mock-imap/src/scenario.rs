@@ -16,6 +16,11 @@ pub enum Trigger {
     OnNthCommand(String, usize),
     /// Fires once, right after the TCP connection is accepted.
     OnConnect,
+    /// Every occurrence of a command whose arguments contain `needle`
+    /// (case-insensitive). The only way to fault one FETCH shape and not the
+    /// others: a body read is `BODY.PEEK[]`, a header page is
+    /// `BODY.PEEK[HEADER.FIELDS (…)]`, and both arrive as "FETCH".
+    OnCommandWith(String, String),
 }
 
 impl Trigger {
@@ -24,6 +29,9 @@ impl Trigger {
     }
     pub fn nth(cmd: &str, n: usize) -> Self {
         Trigger::OnNthCommand(cmd.to_uppercase(), n)
+    }
+    pub fn with(cmd: &str, needle: &str) -> Self {
+        Trigger::OnCommandWith(cmd.to_uppercase(), needle.to_uppercase())
     }
 }
 

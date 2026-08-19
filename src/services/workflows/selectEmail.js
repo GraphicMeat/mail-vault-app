@@ -48,6 +48,14 @@ async function _autoMarkRead(useMailStore, { email, accountId, mailbox, uid, isU
 
 // ── _prefetchAdjacentEmails workflow ──
 
+// selectedEmailId is `accountId:uid` in the unified inbox and a bare uid
+// elsewhere — same shape selectEmail writes.
+function _selectionIdFor(uid, state) {
+  if (state.activeMailbox !== 'UNIFIED') return uid;
+  const row = state.sortedEmails.find(e => e.uid === uid);
+  return `${row?._accountId || state.activeAccountId}:${uid}`;
+}
+
 export async function _prefetchAdjacentEmails(currentUid) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
@@ -65,6 +73,10 @@ export async function _prefetchAdjacentEmails(currentUid) {
   if (currentIndex < 0) return;
 
   for (let i = 1; i <= 3; i++) {
+    // The user moved on — every remaining fetch here is for a row nobody is
+    // looking at, and each one still costs a pool permit and a round trip.
+    if (get().selectedEmailId !== _selectionIdFor(currentUid, get())) return;
+
     const nextEmail = sortedEmails[currentIndex + i];
     if (!nextEmail) break;
 
@@ -91,7 +103,7 @@ export async function _prefetchAdjacentEmails(currentUid) {
         const email = graphMessageToEmail(graphMsg, nextEmail.uid);
         get().addToCache(cacheKey, email, cacheLimitMB, { prefetch: true });
       } else {
-        const email = await api.fetchEmailLight(account, nextEmail.uid, prefetchMailbox, prefetchAccountId);
+        const email = await api.fetchEmailLight(account, nextEmail.uid, prefetchMailbox, prefetchAccountId, { background: true });
         get().addToCache(cacheKey, email, cacheLimitMB, { prefetch: true });
       }
     } catch (e) {
@@ -238,28 +250,35 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
   } catch (error) {
     console.error('[selectEmail] Failed to load email:', error);
     console.error('[selectEmail] Error details:', { name: error.name, message: error.message, status: error.status, stack: error.stack });
+    const detail = error.message || String(error);
+
+    // Header-only is a FAILURE, not a message with a short body: the row's own
+    // subject used to be written into `text`, which the viewer then rendered as
+    // if it were the body — a fetch that never returned looked exactly like an
+    // email whose body is its subject. `_bodyError` is what makes the two
+    // distinguishable downstream (EmailViewer shows it, with a retry).
+    const headerOnly = () => {
+      const headerEmail = get().emails.find(e => e.uid === uid);
+      if (!headerEmail) {
+        useMailStore.setState({ error: `Failed to load email (UID ${uid}, ${mailbox}): ${detail}` });
+        return;
+      }
+      useMailStore.setState({
+        selectedEmail: { ...headerEmail, text: headerEmail.snippet || '', _bodyError: detail },
+        selectedEmailSource: 'header-only',
+      });
+    };
+
     try {
       const localEmail = await db.getLocalEmailLight(accountId, mailbox, uid);
       if (localEmail) {
         useMailStore.setState({ selectedEmail: localEmail, selectedEmailSource: 'local-only' });
       } else {
-        const headerEmail = get().emails.find(e => e.uid === uid);
-        if (headerEmail) {
-          useMailStore.setState({ selectedEmail: { ...headerEmail, text: headerEmail.snippet || headerEmail.subject || '' }, selectedEmailSource: 'header-only' });
-        } else {
-          const detail = error.message || String(error);
-          useMailStore.setState({ error: `Failed to load email (UID ${uid}, ${mailbox}): ${detail}` });
-        }
+        headerOnly();
       }
     } catch (fallbackError) {
       console.error('[selectEmail] Fallback also failed:', fallbackError);
-      const headerEmail = get().emails.find(e => e.uid === uid);
-      if (headerEmail) {
-        useMailStore.setState({ selectedEmail: { ...headerEmail, text: headerEmail.snippet || headerEmail.subject || '' }, selectedEmailSource: 'header-only' });
-      } else {
-        const detail = error.message || String(error);
-        useMailStore.setState({ error: `Failed to load email (UID ${uid}, ${mailbox}): ${detail}` });
-      }
+      headerOnly();
     }
   } finally {
     useMailStore.setState({ loadingEmail: false });

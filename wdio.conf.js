@@ -7,6 +7,7 @@ import {
   startMockImap,
   scenario,
   slowCommand,
+  unreadableBody,
   mockAccount,
   seedAccounts,
   resetAppState,
@@ -77,7 +78,7 @@ const MOCK_ACCOUNTS = [
   // reason in-flight delete coverage was dropped once already. A third account
   // that nothing else reads makes that coverage free.
   //
-  // Two properties, both deliberate:
+  // Three properties, all deliberate:
   //   - MOVE and EXPUNGE stall 4s. Those are the two commands a server delete
   //     ends on (src-core/src/imap/mod.rs: UID MOVE to Trash when the server
   //     advertises MOVE, else COPY + STORE \Deleted + UID EXPUNGE), so a delete
@@ -91,6 +92,13 @@ const MOCK_ACCOUNTS = [
   //     reach the visible window at all. This account's rows land at the top,
   //     which is what makes a unified-inbox assertion possible without
   //     scrolling a virtualized list past 600 rows.
+  //   - Message 907's body fetch stalls 3s and then answers NO — that one
+  //     message only. The fault matches the command's arguments, so header
+  //     pages (`BODY.PEEK[HEADER.FIELDS …]`), every other uid, and the delete
+  //     path above are untouched. connected-email-viewer reads it: the viewer
+  //     has to show a loader while the body is on the wire and a named error
+  //     with a retry when it never arrives, instead of quietly printing the
+  //     subject line as if it were the body.
   //
   // Cost: the sidebar gains a third account avatar, which shifts every
   // visual-* baseline. Those specs are `local-manual` and never run in CI;
@@ -102,7 +110,7 @@ const MOCK_ACCOUNTS = [
     inbox: 8,
     inboxUidStart: 901,
     crossFolderThread: false,
-    faults: [slowCommand('MOVE', 4000), slowCommand('EXPUNGE', 4000)],
+    faults: [slowCommand('MOVE', 4000), slowCommand('EXPUNGE', 4000), ...unreadableBody(907, 3000)],
   },
 ];
 

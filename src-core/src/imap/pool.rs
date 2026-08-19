@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore};
 use tokio::time::Instant;
 use tracing::{info, warn};
@@ -32,6 +33,13 @@ const MAX_POOL_SIZE: usize = 3;
 
 /// Sessions used within this window skip the NOOP health check.
 const NOOP_SKIP_SECS: u64 = 60;
+
+/// Cap on the pooled-session health check. A socket the peer dropped silently
+/// (laptop sleep, NAT timeout, server restart) accepts the NOOP write and then
+/// never answers, so an unbounded `noop().await` stalls the caller until the
+/// OS gives up on the TCP retransmits — minutes. Past this, treat the session
+/// as dead and connect fresh.
+const NOOP_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Connection key: "email-host:port".
 ///
@@ -241,12 +249,23 @@ impl ImapPool {
                 return Ok((session, last_sel));
             }
 
-            // Verify the session is still alive with a NOOP (outside lock)
-            match session.noop().await {
-                Ok(_) => return Ok((session, last_sel)),
-                Err(e) => {
+            // Verify the session is still alive with a NOOP (outside lock).
+            // Both the NOOP and the follow-up logout are bounded: a half-open
+            // socket answers neither.
+            match tokio::time::timeout(NOOP_TIMEOUT, session.noop()).await {
+                Ok(Ok(_)) => return Ok((session, last_sel)),
+                Ok(Err(e)) => {
                     warn!("Pooled IMAP session stale for {}: {}, creating new", config.email, e);
-                    let _ = session.logout().await;
+                    let _ = tokio::time::timeout(NOOP_TIMEOUT, session.logout()).await;
+                }
+                Err(_) => {
+                    warn!(
+                        "Pooled IMAP session for {} did not answer NOOP within {}s — dropping it",
+                        config.email,
+                        NOOP_TIMEOUT.as_secs()
+                    );
+                    // No logout: the same dead socket would swallow that too.
+                    drop(session);
                 }
             }
         }

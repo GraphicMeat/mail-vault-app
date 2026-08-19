@@ -374,6 +374,28 @@ export function slowFetch(ms) {
   return slowCommand('FETCH', ms);
 }
 
+/**
+ * The FETCH that reads ONE message's body: `UID FETCH <uid> (UID FLAGS ENVELOPE
+ * INTERNALDATE BODY.PEEK[])` (src-core/src/imap/mod.rs).
+ *
+ * Faults are per-account with no mailbox scoping, but this one matches on the
+ * command's arguments, so it lands on a single message instead of the whole
+ * account: header pages ask for `BODY.PEEK[HEADER.FIELDS (…)]` and every other
+ * message asks under its own uid. That is what makes body-fetch coverage
+ * affordable on an account other specs already use.
+ */
+export function bodyFetchOfUid(uid) {
+  return { OnCommandWith: ['FETCH', `${uid} (UID FLAGS ENVELOPE INTERNALDATE BODY.PEEK[])`] };
+}
+
+/** Stall one message's body fetch by `ms`, then fail it with a tagged NO. */
+export function unreadableBody(uid, ms) {
+  return [
+    { trigger: bodyFetchOfUid(uid), action: { Delay: { secs: Math.floor(ms / 1000), nanos: (ms % 1000) * 1e6 } } },
+    { trigger: bodyFetchOfUid(uid), action: { Respond: ['NO', 'Server cannot read that message'] } },
+  ];
+}
+
 // ── Account seeding ─────────────────────────────────────────────────────────
 
 /** Where the app and daemon put their data under a given HOME. */

@@ -186,9 +186,9 @@ export async function fetchEmail(account, uid, mailbox = 'INBOX') {
   return data.email;
 }
 
-export async function fetchEmailLight(account, uid, mailbox = 'INBOX', accountId = null) {
+export async function fetchEmailLight(account, uid, mailbox = 'INBOX', accountId = null, { background = false } = {}) {
   if (IS_TAURI) {
-    const params = { account, uid, mailbox };
+    const params = { account, uid, mailbox, background };
     if (accountId) params.accountId = accountId;
     const data = await tauriInvoke('imap_get_email_light', params);
     return data.email;

@@ -326,6 +326,15 @@ pub async fn imap_get_email(
 
 // ── Fetch single email (light — no attachment binaries, no rawSource) ──
 
+/// Ceiling on a single body fetch, semaphore wait included.
+///
+/// Nothing below this has a read timeout of its own — only the TCP connect
+/// does — so a server that accepts the FETCH and then stops talking used to
+/// leave the viewer spinning until the OS gave up on the socket. The wait for
+/// a pool permit is inside the same budget on purpose: queueing behind other
+/// fetches is indistinguishable from a stall to whoever is staring at the pane.
+const BODY_FETCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(45);
+
 #[tauri::command]
 pub async fn imap_get_email_light(
     app_handle: tauri::AppHandle,
@@ -334,15 +343,57 @@ pub async fn imap_get_email_light(
     uid: u32,
     mailbox: Option<String>,
     account_id: Option<String>,
+    background: Option<bool>,
 ) -> Result<serde_json::Value, String> {
     let mailbox = mailbox.unwrap_or_else(|| "INBOX".to_string());
     let mb_clone = mailbox.clone();
+    // Prefetch of the next rows is background work. Left on the priority lane it
+    // took all 3 of that account's permits, and the click the user actually made
+    // then queued behind up to three whole message bodies.
+    let use_background = background.unwrap_or(false);
+    let started = std::time::Instant::now();
 
-    let email = with_priority(&pool, &account, |mut session| async move {
-        let result = imap::fetch_email_by_uid_light(&mut session, &mailbox, uid).await
-            .map_err(|e| format!("Failed to fetch email: {}", e))?;
-        Ok((result, session, Some(mailbox)))
-    }).await?;
+    let fetch = async {
+        if use_background {
+            let mb = mailbox.clone();
+            with_background(&pool, &account, move |mut session| async move {
+                let result = imap::fetch_email_by_uid_light(&mut session, &mb, uid).await
+                    .map_err(|e| format!("Failed to fetch email: {}", e))?;
+                Ok((result, session, Some(mb)))
+            }).await
+        } else {
+            let mb = mailbox.clone();
+            with_priority(&pool, &account, move |mut session| async move {
+                let result = imap::fetch_email_by_uid_light(&mut session, &mb, uid).await
+                    .map_err(|e| format!("Failed to fetch email: {}", e))?;
+                Ok((result, session, Some(mb)))
+            }).await
+        }
+    };
+
+    let email = match tokio::time::timeout(BODY_FETCH_TIMEOUT, fetch).await {
+        Ok(Ok(email)) => email,
+        Ok(Err(e)) => {
+            info!(
+                "[CMD] imap_get_email_light: FAILED uid={} mailbox={} background={} after {}ms: {}",
+                uid, mb_clone, use_background, started.elapsed().as_millis(), e
+            );
+            return Err(e);
+        }
+        Err(_) => {
+            let msg = format!(
+                "Timed out after {}s fetching message UID {} from {}",
+                BODY_FETCH_TIMEOUT.as_secs(), uid, mb_clone
+            );
+            info!("[CMD] imap_get_email_light: {}", msg);
+            return Err(msg);
+        }
+    };
+
+    info!(
+        "[CMD] imap_get_email_light: uid={} mailbox={} background={} found={} in {}ms",
+        uid, mb_clone, use_background, email.is_some(), started.elapsed().as_millis()
+    );
 
     match email {
         Some(e) => {

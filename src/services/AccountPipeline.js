@@ -280,8 +280,10 @@ export class AccountPipeline {
             this.account.oauth2AccessToken, graphId, this.accountId, mailbox, uid
           );
         } else {
-          // IMAP: light fetch auto-persists .eml to Maildir in Rust, returns metadata only
-          email = await api.fetchEmailLight(this.account, uid, mailbox, this.accountId);
+          // IMAP: light fetch auto-persists .eml to Maildir in Rust, returns metadata only.
+          // Background lane: the pipeline runs for the whole mailbox and must never
+          // sit on the permits a click on a single message needs.
+          email = await api.fetchEmailLight(this.account, uid, mailbox, this.accountId, { background: true });
         }
 
         const cacheKey = `${this.accountId}-${mailbox}-${uid}`;

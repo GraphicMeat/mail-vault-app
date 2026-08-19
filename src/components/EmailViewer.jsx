@@ -10,6 +10,8 @@ import {
   HardDrive,
   Cloud,
   FileText,
+  AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
 import { getRealAttachments, replaceCidUrls } from '../services/attachmentUtils';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
@@ -46,6 +48,7 @@ function EmailViewerComponent({ onComposeReply }) {
   const removeLocalEmail = useSelectionStore(s => s.removeLocalEmail);
   const exportEmail = useSelectionStore(s => s.exportEmail);
   const markEmailReadStatus = useSelectionStore(s => s.markEmailReadStatus);
+  const selectEmail = useSelectionStore(s => s.selectEmail);
   const deleteEmailFromServer = useSelectionStore(s => s.deleteEmailFromServer);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   const activeMailbox = useAccountStore(s => s.activeMailbox);
@@ -348,12 +351,16 @@ function EmailViewerComponent({ onComposeReply }) {
 
   if (loadingEmail) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-mail-bg h-full min-h-0">
+      <div
+        data-testid="email-viewer-loading"
+        className="flex-1 flex flex-col items-center justify-center gap-3 bg-mail-bg h-full min-h-0"
+      >
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
           className="w-8 h-8 border-2 border-mail-accent border-t-transparent rounded-full"
         />
+        <p className="text-sm text-mail-text-muted">Loading message…</p>
       </div>
     );
   }
@@ -535,6 +542,31 @@ function EmailViewerComponent({ onComposeReply }) {
                 title="Email content"
                 onContextMenu={e => e.preventDefault()}
               />
+            </div>
+          ) : selectedEmail._bodyError ? (
+            // The body never arrived. Saying so — with the reason and a retry —
+            // is the whole point: the silent version of this state rendered the
+            // subject line as the body and read as a successfully loaded email.
+            <div
+              data-testid="email-body-error"
+              className="rounded-lg p-6 flex flex-col items-center text-center gap-3 border border-mail-border bg-mail-surface"
+            >
+              <AlertTriangle size={28} className="text-mail-warning" />
+              <div>
+                <p className="text-sm font-medium text-mail-text">Couldn’t load this message</p>
+                <p className="text-xs text-mail-text-muted mt-1 max-w-md break-words">
+                  {selectedEmail._bodyError}
+                </p>
+              </div>
+              <button
+                data-testid="email-body-retry"
+                onClick={() => selectEmail(selectedEmail.uid, 'server')}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-mail-text bg-mail-bg
+                          border border-mail-border rounded-lg hover:bg-mail-surface-hover transition-colors"
+              >
+                <RefreshCw size={14} />
+                Try again
+              </button>
             </div>
           ) : (
             <div

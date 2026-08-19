@@ -202,7 +202,7 @@ fn handle_conn(
             continue;
         }
 
-        let actions = match_faults(&faults, &cmd.name, &counts);
+        let actions = match_faults(&faults, &cmd.name, &cmd.args, &counts);
 
         if actions.contains(&Action::DropConnection) {
             return Ok(());
@@ -275,6 +275,7 @@ fn read_literal(
 fn match_faults(
     faults: &[Fault],
     name: &str,
+    args: &str,
     counts: &Arc<Mutex<HashMap<String, usize>>>,
 ) -> Vec<Action> {
     let n = {
@@ -289,6 +290,9 @@ fn match_faults(
             Trigger::OnCommand(c) => c == name,
             Trigger::OnNthCommand(c, k) => c == name && *k == n,
             Trigger::OnConnect => false,
+            Trigger::OnCommandWith(c, needle) => {
+                c == name && args.to_uppercase().contains(needle.as_str())
+            }
         })
         .map(|f| f.action.clone())
         .collect()

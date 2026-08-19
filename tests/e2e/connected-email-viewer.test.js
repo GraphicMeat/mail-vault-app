@@ -5,7 +5,7 @@
  * Requires emails to be loaded in the inbox.
  */
 
-import { waitForApp, waitForEmails } from './helpers.js';
+import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
 
 /**
  * Close every open compose modal via its own Close button, dismissing any
@@ -176,5 +176,111 @@ describe('Email Viewer', function () {
     if (!hasReplyAll) {
       console.warn('[email-viewer] Reply All button not found — email is single-recipient');
     }
+  });
+});
+
+/**
+ * A body that never arrives.
+ *
+ * yoda's uid 907 answers its body FETCH with a 3s stall and then a tagged NO
+ * (wdio.conf.js). Two things have to be true while and after that happens, and
+ * neither was: the pane has to say it is working, and when the fetch fails it
+ * has to say THAT — the old fallback copied the row's subject into `text` and
+ * rendered it as the body, so a message that failed to load was pixel-identical
+ * to one whose body is a single line.
+ */
+describe('Email Viewer — body that never loads', function () {
+  this.timeout(90_000);
+
+  const YODA = 'yoda@mock.test';
+  const SUBJECT = 'Yoda message 907';
+
+  const clickRow = (subject) => browser.execute((needle) => {
+    const row = [...document.querySelectorAll('[data-testid="email-row"]')]
+      .find((r) => (r.innerText || '').includes(needle));
+    if (!row || row.offsetHeight === 0) return false;
+    row.click();
+    return true;
+  }, subject);
+
+  const bodyErrorText = () => browser.execute(() => {
+    const el = document.querySelector('[data-testid="email-body-error"]');
+    return el ? el.innerText : null;
+  });
+
+  before(async function () {
+    await waitForApp();
+    await waitForEmails();
+    await switchToFolder(YODA, 'INBOX');
+  });
+
+  it('shows a loader while the body is still on the wire', async function () {
+    expect(await clickRow(SUBJECT)).toBe(true);
+
+    // Sampled, not waited-for-then-read: the loader is a state the pane passes
+    // through, and a single read after the fact sees only where it landed.
+    let sawLoader = false;
+    for (let i = 0; i < 30 && !sawLoader; i++) {
+      sawLoader = await browser.execute(() => {
+        const el = document.querySelector('[data-testid="email-viewer-loading"]');
+        return !!el && el.offsetHeight > 0;
+      });
+      if (!sawLoader) await browser.pause(100);
+    }
+    expect(sawLoader).toBe(true);
+  });
+
+  it('names the failure instead of printing the subject as the body', async function () {
+    await browser.waitUntil(async () => (await bodyErrorText()) !== null, {
+      timeout: 30_000,
+      interval: 300,
+      timeoutMsg: 'Viewer never rendered the body-failure state for a message the server refused',
+    });
+
+    const text = await bodyErrorText();
+    expect(text).toContain('Couldn');
+    // Not "Email not found". async-imap ends a fetch stream on the tagged NO
+    // without surfacing it, so a refused body used to arrive as an empty result
+    // and get reported as a missing message — for mail that is sitting right
+    // there in the list. The reason has to say the message is still on the
+    // server; that distinction is the whole reason the second probe exists.
+    expect(text.toLowerCase()).toContain('still in inbox');
+    expect(text.toLowerCase()).not.toContain('not found');
+
+    // The regression itself: the subject must not be doubling as the body.
+    const bodyIsSubject = await browser.execute((needle) => {
+      const el = document.querySelector('.email-content');
+      return !!el && (el.innerText || '').trim() === needle;
+    }, SUBJECT);
+    expect(bodyIsSubject).toBe(false);
+  });
+
+  it('retries the fetch from the failure state', async function () {
+    const retried = await browser.execute(() => {
+      const btn = document.querySelector('[data-testid="email-body-retry"]');
+      if (!btn || btn.offsetHeight === 0) return false;
+      btn.click();
+      return true;
+    });
+    expect(retried).toBe(true);
+
+    // The retry goes back to the server, so the pane returns to loading before
+    // it lands on the same failure. Either transition proves the click is wired
+    // to selectEmail rather than being a dead control.
+    let wentBackToLoading = false;
+    for (let i = 0; i < 30 && !wentBackToLoading; i++) {
+      wentBackToLoading = await browser.execute(() => {
+        const el = document.querySelector('[data-testid="email-viewer-loading"]');
+        return !!el && el.offsetHeight > 0;
+      });
+      if (!wentBackToLoading) await browser.pause(100);
+    }
+    expect(wentBackToLoading).toBe(true);
+
+    await browser.waitUntil(async () => (await bodyErrorText()) !== null, {
+      timeout: 30_000,
+      interval: 300,
+      timeoutMsg: 'Retry never resolved back to the failure state',
+    });
   });
 });
