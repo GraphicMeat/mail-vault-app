@@ -2,11 +2,6 @@
 
 ## [Unreleased]
 
-### Fixed
-- **A message whose body fails to arrive now says so.** The reading pane printed the subject line where the body belongs, so a message that never loaded looked exactly like a message with one line in it. It now shows a loader while the body is on its way, and if it never comes, a plain "Couldn't load this message" with the reason and a Try again button.
-- **"Email not found" no longer stands in for a server that refused.** A server that declined to hand over a message ended the exchange in a way MailVault read as "there is no such message" — for mail sitting right there in the list. It now checks whether the message is still on the server before reporting it missing.
-- **Opening a message no longer waits behind the ones being fetched ahead of it.** MailVault reads the next few messages in the background so they open instantly, and that background reading was using the same limited set of connections as the message you actually clicked. It has its own now, it stops as soon as you move to a different message, and a message read that stalls gives up after 45 seconds instead of spinning forever.
-
 ## [2.10.0] - 2026-08-18
 
 ### Added
@@ -26,6 +21,9 @@
 - A message deleted while switching accounts could take an unrelated message with it, or fail to stay deleted after a restart.
 - Deleting archived emails from a folder left the local copies behind, so the rows reappeared as "Local only" and the delete looked like it had done nothing.
 - **The key under the email list is readable again, and its explanations are visible.** Its four entries were squeezed until the labels broke mid-phrase, and hovering one opened its explanation below the bottom edge of the window, where it could not be seen at all.
+- **A message whose body fails to arrive now says so.** The reading pane printed the subject line where the body belongs, so a message that never loaded looked exactly like a message with one line in it. It now shows a loader while the body is on its way, and if it never comes, a plain "Couldn't load this message" with the reason and a Try again button.
+- **"Email not found" no longer stands in for a server that refused.** A server that declined to hand over a message ended the exchange in a way MailVault read as "there is no such message" — for mail sitting right there in the list. It now checks whether the message is still on the server before reporting it missing.
+- **Opening a message no longer waits behind the ones being fetched ahead of it.** MailVault reads the next few messages in the background so they open instantly, and that background reading was using the same limited set of connections as the message you actually clicked. It has its own now, it stops as soon as you move to a different message, and a message read that stalls gives up after 45 seconds instead of spinning forever.
 
 ## [2.9.2] - 2026-08-08
 
