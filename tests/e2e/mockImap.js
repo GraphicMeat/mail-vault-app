@@ -247,6 +247,19 @@ export const HTML_COLLISION_SUBJECT = 'HTML uid collision check';
 /** Text that appears in that message's body and nowhere else. */
 export const HTML_COLLISION_MARKER = 'Body that belongs to the Sent message';
 
+// The same message also carries a spoofed link, so the link scanner raises a
+// RED alert on it. That alert is a second derived copy of per-message state —
+// the level is persisted in settings and the tooltip is cached in memory — and
+// both used to be filed under the bare UID, so opening this Sent message lit a
+// red warning on the INBOX message sharing UID 41 (and on any other account's
+// UID 41). See connected-link-alerts.test.js.
+
+/** Link text of the spoofed link — a domain that is not where the link goes. */
+export const PHISH_LINK_TEXT = 'https://bank.test/login';
+
+/** Where it actually goes. */
+export const PHISH_LINK_HREF = 'https://evil.test/login';
+
 /** An HTML message whose body says which message it is. */
 function htmlMarkerMessage({ uid, owner, from, subject, marker, day }) {
   const { internalDate, header } = stamp(day);
@@ -274,7 +287,8 @@ function htmlMarkerMessage({ uid, owner, from, subject, marker, day }) {
       'Content-Type: text/html; charset=UTF-8',
       '',
       `<p id="mv-collision-body">${marker}</p>`
-        + '<a href="https://example.com/collision">A link, so the scanner runs</a>',
+        + '<a href="https://example.com/collision">A link, so the scanner runs</a>'
+        + `<a href="${PHISH_LINK_HREF}">${PHISH_LINK_TEXT}</a>`,
       '',
       `--${boundary}--`,
       '',

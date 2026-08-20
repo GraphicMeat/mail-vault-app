@@ -14,6 +14,12 @@ if (import.meta.env.VITE_E2E === '1') {
   import('./stores/mailStore').then(({ useMailStore }) => {
     window.__MAIL_STORE__ = useMailStore;
   });
+  // Same reason, one layer over: a link alert is persisted per message, and
+  // "the icon is gone" cannot tell a correctly-scoped map from an empty one.
+  // The key shape is the assertion.
+  import('./stores/settingsStore').then(({ useSettingsStore }) => {
+    window.__SETTINGS_STORE__ = useSettingsStore;
+  });
 }
 
 if (navigator.platform?.startsWith('Mac') || navigator.userAgent?.includes('Mac')) {

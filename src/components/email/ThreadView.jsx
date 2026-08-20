@@ -90,8 +90,8 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
     if (threadScanAlert && !email._linkAlert) {
       email._linkAlert = threadScanAlert;
       useMailStore.setState(state => ({
-        emails: state.emails.map(e => e.uid === email.uid ? { ...e, _linkAlert: threadScanAlert } : e),
-        sortedEmails: state.sortedEmails.map(e => e.uid === email.uid ? { ...e, _linkAlert: threadScanAlert } : e),
+        emails: state.emails.map(e => scopeKey && emailScopeKey(e, state) === scopeKey ? { ...e, _linkAlert: threadScanAlert } : e),
+        sortedEmails: state.sortedEmails.map(e => scopeKey && emailScopeKey(e, state) === scopeKey ? { ...e, _linkAlert: threadScanAlert } : e),
       }));
       useSettingsStore.getState().setLinkAlert(scopeKey, threadScanAlert);
     }

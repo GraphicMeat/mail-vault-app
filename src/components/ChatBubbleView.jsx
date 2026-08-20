@@ -406,11 +406,12 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
   useEffect(() => {
     if (chatScanAlert && !email._linkAlert) {
       email._linkAlert = chatScanAlert;
+      const scopeKey = emailScopeKey(email, useMailStore.getState());
       useMailStore.setState(state => ({
-        emails: state.emails.map(e => e.uid === email.uid ? { ...e, _linkAlert: chatScanAlert } : e),
-        sortedEmails: state.sortedEmails.map(e => e.uid === email.uid ? { ...e, _linkAlert: chatScanAlert } : e),
+        emails: state.emails.map(e => scopeKey && emailScopeKey(e, state) === scopeKey ? { ...e, _linkAlert: chatScanAlert } : e),
+        sortedEmails: state.sortedEmails.map(e => scopeKey && emailScopeKey(e, state) === scopeKey ? { ...e, _linkAlert: chatScanAlert } : e),
       }));
-      useSettingsStore.getState().setLinkAlert(emailScopeKey(email, useMailStore.getState()), chatScanAlert);
+      useSettingsStore.getState().setLinkAlert(scopeKey, chatScanAlert);
     }
   }, [chatScanAlert, email.uid]);
 

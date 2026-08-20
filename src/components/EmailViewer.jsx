@@ -207,8 +207,10 @@ function EmailViewerComponent({ onComposeReply }) {
     if (scanAlertLevel && selectedEmail && !selectedEmail._linkAlert) {
       useMailStore.setState(state => ({
         selectedEmail: { ...state.selectedEmail, _linkAlert: scanAlertLevel },
-        emails: state.emails.map(e => e.uid === selectedEmail.uid ? { ...e, _linkAlert: scanAlertLevel } : e),
-        sortedEmails: state.sortedEmails.map(e => e.uid === selectedEmail.uid ? { ...e, _linkAlert: scanAlertLevel } : e),
+        // Match on the scoped key, not the uid: in unified inbox `emails`
+        // spans accounts, and every row sharing the number would light up.
+        emails: state.emails.map(e => scopeKey && emailScopeKey(e, state) === scopeKey ? { ...e, _linkAlert: scanAlertLevel } : e),
+        sortedEmails: state.sortedEmails.map(e => scopeKey && emailScopeKey(e, state) === scopeKey ? { ...e, _linkAlert: scanAlertLevel } : e),
       }));
       useSettingsStore.getState().setLinkAlert(scopeKey, scanAlertLevel);
     }
