@@ -146,6 +146,10 @@
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>An unread-only filter for the message list.</strong> The envelope button in the list header hides everything you have already read; press it again to bring it back. Conversations stay in the list while any message in them is unread, the message you currently have open stays put even once it is marked read, and the header says how many unread messages it is counting — including how much of a large mailbox has been loaded so far, since the filter can only see mail MailVault has already fetched. When nothing is unread the list says so and offers a way back to all messages.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
               <span><strong>Delete Everywhere</strong> — remove selected emails from the server, this computer, and the external backup in one action. Available in bulk operations, the selection bar, and the row menu.</span>
             </li>
             <li class="flex items-start gap-3">
@@ -186,6 +190,38 @@
             Fixed
           </h3>
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The selection bar and Bulk Email Operations no longer disagree about how much is selected.</strong> With 65 emails picked, the modal said "65 emails selected" while the bar along the bottom said "52 selected (65 emails)" — it led with the number of conversations those emails belong to, not the number of emails every button on it acts on. The bar now leads with the message count and names the conversation count for what it is: "65 selected (52 conversations)". The conversation count was also short whenever the selection reached mail further back than the list had loaded, which a date range in bulk operations routinely does; those messages are now counted as well.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Outlook mail saved on this computer is shown newest-first again, and is no longer thrown away.</strong> Outlook gives its messages no number of their own, so MailVault assigns one the first time it sees each message — working through the folder newest first, which means the oldest mail ends up with the highest numbers. Two things went by those numbers as though they ran the other way. Opening an Outlook account showed the saved copies with the highest numbers, so the list filled with the oldest mail in the folder until the server answered. And the check for messages deleted from the server treated everything below the newest page as gone: refreshing a folder MailVault held more of than one page could delete hundreds of saved messages that were still on the server. Both now go by the date on the message, and mail whose date cannot be read is left alone rather than removed.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A conversation's subject is back in the email list.</strong> Rows that group several messages together showed the participants, the message count and the date but no subject at all at the standard list width — the subject was squeezed to nothing rather than shortened, so the row read as mail with no subject. Widening the list brought it back. Conversation rows now keep room for the subject and shorten the participants instead, the same way single-message rows already did.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Premium prices in the app now match what you are actually charged, in your own currency.</strong> The panels for locked features quoted "$3/month or $25/year" — a price that changed months ago — and quoted it in dollars no matter where you are. They now show the price for your machine's region: pounds in the UK, euros across the eurozone, dollars in the US, and euros elsewhere, which is what checkout bills. Prices ending in a half unit, such as £3.50, are no longer written as "£3.5" on the Billing tab.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Mail saved before you changed email providers is no longer mistaken for other messages.</strong> Each saved message is filed under the number its server gave it, and those numbers belong to one server: when you move to a different provider — or a provider renumbers a mailbox on its own — the number on a saved message points at whatever the new server put there instead. MailVault stopped showing the wrong message when you opened one, but everything else still went by the number: messages were marked as saved to this computer when the saved copy was a different email, "delete everywhere" and bulk actions aimed at it, and the old copies sat in your storage unreachable and uncounted. MailVault now records which server generation a mailbox's saved mail belongs to. When that changes, it matches every saved message to the new server by its Message-ID and files it under its new number, so your saved mail, and the marks that go with it, come back intact. Anything the new server does not have is set aside instead — never deleted, since your copy may be the only one left — and Settings → Storage offers to remove it once you have seen what it is. Messages you wrote here that never reached a server are left alone.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message no longer shows mail from the account's previous email provider.</strong> After moving a mailbox to a different provider, the new server hands out its own message numbers, and a message MailVault had already saved to this computer could be filed under a number the new server had since given to something else. Opening the row showed the old, saved message in full — its sender, its date, its subject and its body — with nothing to say anything was wrong. Every saved copy is now checked against the message it is opened for, and a copy that turns out to be a different message is ignored in favour of the server's.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>"Delete everywhere" no longer reports success on an Outlook message it did not delete.</strong> Outlook messages are addressed by their position in the folder listing, which shifts every time mail arrives or leaves, so MailVault could lose track of which message a row pointed at. When that happened the delete was skipped, the row disappeared anyway, and the message came back on the next reload. MailVault now uses an address carried by the row itself, re-reads the folder when that is not enough, and when it still cannot identify the message it reports the delete as failed and leaves the row — and every local copy — where it is. The same fix applies to deleting, moving, and marking Outlook mail as read.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>An Outlook message now keeps the same number, so the copy saved to this computer stays attached to the message it came from.</strong> Outlook gives its messages no number of their own, so MailVault used each message's position in the folder — which moves every time mail arrives or is deleted. A single new email could shift every message down by one, and the copy saved to this computer was then filed under a number that already belonged to something else: the same email could be saved twice under two numbers, while a third number pointed at mail it never held. MailVault now gives each Outlook message a number of its own the first time it sees it and keeps it for good, so the saved mail, the email list and the folder stay in agreement. Accounts already set up keep the numbers they have.</span>
+            </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
               <span><strong>A phishing warning no longer follows a number into the wrong mailbox.</strong> The red and amber link warnings were filed under a message number that is unique only inside one folder, so a warning raised on one account's message lit up on an unrelated message with the same number in another account or folder — and hovering it listed the other message's links. Warnings are now tied to the account and folder they were raised in; existing saved warnings are discarded and re-checked as each message is opened.</span>
