@@ -539,7 +539,14 @@ export function seedAccounts(home, accounts) {
  */
 export function resetAppState(home, accounts) {
   stopDaemon(home);
-  rmSync(appDataDir(home), { recursive: true, force: true });
+  // `maxRetries` covers what the daemon wait cannot: the app's own process can
+  // still be flushing a write when this runs, and rmSync throws ENOTEMPTY on a
+  // directory that repopulates under its walk. Without it, the throw lands in
+  // `beforeSession`, the spec dies before it ever launches the app — and,
+  // because a spec that never launched leaves no daemon behind, the NEXT spec
+  // resets cleanly and passes. That is what a suite failing on every OTHER
+  // spec file is telling you.
+  rmSync(appDataDir(home), { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   return seedAccounts(home, accounts);
 }
 
@@ -551,12 +558,44 @@ export function resetAppState(home, accounts) {
  * been wiped, which starves the fresh app's own startup. Only ever kills the pid
  * recorded inside the isolated data dir.
  */
-export function stopDaemon(home) {
+export function stopDaemon(home, { waitMs = 5000 } = {}) {
+  let pid = null;
   try {
-    const pid = parseInt(readFileSync(join(appDataDir(home), 'daemon.pid'), 'utf-8').trim(), 10);
-    if (pid > 0) process.kill(pid, 'SIGTERM');
-    return pid;
+    pid = parseInt(readFileSync(join(appDataDir(home), 'daemon.pid'), 'utf-8').trim(), 10);
+    if (!(pid > 0)) return null;
+    process.kill(pid, 'SIGTERM');
   } catch {
     return null; // no daemon, or already gone
   }
+
+  // SIGTERM only asks. Returning the moment it is sent leaves the daemon still
+  // writing `logs/` and `daemon.lock` into the very directory `resetAppState`
+  // is about to delete, so wait for the process to actually go. `process.kill`
+  // with signal 0 throws once the pid is gone — that throw is the answer.
+  const deadline = Date.now() + waitMs;
+  while (Date.now() < deadline) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return pid; // exited
+    }
+    sleepSync(50);
+  }
+
+  // Out of patience: a daemon that ignores SIGTERM would poison every
+  // subsequent spec, which is worse than losing its shutdown flush.
+  try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ }
+  sleepSync(100);
+  return pid;
+}
+
+/**
+ * Block the thread for `ms`.
+ *
+ * wdio's `beforeSession` is where this runs and these helpers are synchronous,
+ * so there is no await to reach for. `Atomics.wait` on a throwaway
+ * SharedArrayBuffer is the standard way to sleep without one.
+ */
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
