@@ -25,6 +25,7 @@ loadEnvFile('/home/u369747114/domains/mailvaultapp.com/.env');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const csrf = require('csrf');
 const rateLimit = require('express-rate-limit');
 let stripe;
 try { stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null; } catch { stripe = null; }
@@ -132,6 +133,16 @@ const limiter = rateLimit({
   message: { error: 'Too many requests, please try again later.' }
 });
 app.use(limiter);
+
+// CSRF protection: require custom header on mutating endpoints
+app.use((req, res, next) => {
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) &&
+      req.originalUrl !== '/api/billing/webhook' &&
+      !req.headers['x-requested-with']) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  next();
+});
 
 // Stricter rate limit for voting
 const voteLimiter = rateLimit({
