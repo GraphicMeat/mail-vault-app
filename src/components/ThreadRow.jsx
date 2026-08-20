@@ -73,11 +73,23 @@ export const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onS
         {participantNames}
       </div>
 
-      <div className="flex-1 min-w-0 flex items-center gap-2">
+      {/*
+        Same shape as EmailRow: a real floor, not min-w-0, and flex-1 on the
+        subject span. The participants column is a fixed w-48 that only gives
+        up space once the flex line overflows — with min-w-0 here it never
+        did, so this column took the whole deficit and the subject rendered at
+        0px while the count badge and date kept theirs.
+
+        140px, not EmailRow's 120px: this row carries the message-count badge
+        as well, and the badge plus its gap is the extra 20px. At a 350px pane
+        that leaves the subject 42px against EmailRow's 50px; 150px would suit
+        the default width better but starts overflowing at 320px.
+      */}
+      <div className="flex-1 min-w-[140px] flex items-center gap-2">
         {(() => { const sa = getSenderAlertLevel(thread.emails); return sa ? <SenderAlertIcon level={sa.level} email={sa.email} /> : null; })()}
         <ReplyToAlertIcon mismatch={getThreadReplyToMismatch(thread.emails)} />
         <LinkAlertIcon level={getLinkAlertLevel(thread.emails)} alerts={getAlertsForEmails(thread.emails, useMailStore.getState())} />
-        <span className={`truncate ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
+        <span className={`flex-1 min-w-0 truncate ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
           {thread.subject}
         </span>
         {thread.messageCount > 1 && (
@@ -190,7 +202,8 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ thread, i
           {(() => { const sa = getSenderAlertLevel(thread.emails); return sa ? <SenderAlertIcon level={sa.level} email={sa.email} size={12} /> : null; })()}
           <ReplyToAlertIcon mismatch={getThreadReplyToMismatch(thread.emails)} size={12} />
           <LinkAlertIcon level={getLinkAlertLevel(thread.emails)} size={12} alerts={getAlertsForEmails(thread.emails, useMailStore.getState())} />
-          <span className={`truncate text-sm leading-snug ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
+          {/* flex-1 min-w-0: same shrink-to-nothing hazard as the row above. */}
+          <span className={`flex-1 min-w-0 truncate text-sm leading-snug ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
             {thread.subject}
           </span>
           {latestEmail.hasAttachments && (
