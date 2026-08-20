@@ -2,9 +2,6 @@
 
 ## [Unreleased]
 
-### Fixed
-- **A phishing warning no longer follows a number into the wrong mailbox.** The red and amber link warnings were filed under a message number that is unique only inside one folder, so a warning raised on one account's message lit up on an unrelated message with the same number in another account or folder — and hovering it listed the other message's links. Warnings are now tied to the account and folder they were raised in; existing saved warnings are discarded and re-checked as each message is opened.
-
 ## [2.10.0] - 2026-08-18
 
 ### Added
@@ -17,6 +14,7 @@
 - Bulk operation descriptions now state which of the three storage locations (server, this computer, external backup) each action touches, and "Delete from Server" states per-selection whether local copies survive.
 
 ### Fixed
+- **A phishing warning no longer follows a number into the wrong mailbox.** The red and amber link warnings were filed under a message number that is unique only inside one folder, so a warning raised on one account's message lit up on an unrelated message with the same number in another account or folder — and hovering it listed the other message's links. Warnings are now tied to the account and folder they were raised in; existing saved warnings are discarded and re-checked as each message is opened.
 - **An open message no longer shows another message's contents.** The reading pane could render a completely unrelated email — from another folder, or another account — underneath the right sender and subject. A message is identified by a number that is unique only inside one folder, and the link checker filed each message's prepared body under that number alone, so the next message to reuse it was handed the earlier one's body. Every prepared body is now tied to the message it was built from.
 - **A short email list now fills itself in instead of waiting for a second reload.** The list could settle at "3 of 11 emails" and stay there: the check that runs on every account switch and reload asks whether the local copy matches the server, and when the answer was "nothing has changed" it returned without noticing that the list on screen was showing far less than the copy it had just verified. Clicking reload landed in that same check and appeared to do nothing; a second click a while later brought everything back. The check now compares what is on screen against what is stored and loads the difference, and the reload button in the "Showing cached data" warning always reaches the server instead of answering from a check made moments earlier.
 - **A dropped connection no longer looks like an account with no folders.** If the connection died while the folder list was being read, MailVault treated the silence as an answer — "this account has no folders" — and showed the "Showing cached data" warning while quietly holding a broken connection. It is now recognised as the failure it is, so the connection is replaced and the folders come back on the retry.
