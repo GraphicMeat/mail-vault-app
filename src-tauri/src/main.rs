@@ -2363,6 +2363,297 @@ async fn local_index_remove(
     prune_local_index(&index_path, &std::collections::HashSet::from([uid]))
 }
 
+// ── Vault generation (UIDVALIDITY) ──────────────────────────────────────────
+//
+// See `mailvault_core::maildir`'s generation section for what this repairs and
+// why nothing here deletes mail.
+
+/// The mailbox directory — parent of `cur/`, and where `.uidvalidity` and
+/// `orphaned/` live. Uses the same sanitized name `maildir_cur_path` does, so
+/// the stamp always sits beside the files it describes.
+fn maildir_mailbox_path(app_handle: &tauri::AppHandle, account_id: &str, mailbox: &str) -> Result<PathBuf, String> {
+    let cur = maildir_cur_path(app_handle, account_id, mailbox)?;
+    cur.parent().map(|p| p.to_path_buf())
+        .ok_or_else(|| "Maildir path has no parent".to_string())
+}
+
+/// Message-ID → uid for the mailbox's *current* generation, read from the
+/// sidecar cache the sync engine already maintains.
+///
+/// The sidecars are the only complete, already-on-disk picture of what the
+/// server holds right now; asking the server instead would put a full header
+/// fetch in front of every mailbox open. A message the cache hasn't reached is
+/// read as absent, which is the safe direction — `orphaned/` keeps the file
+/// either way, and the next repair after a fuller sync re-binds it.
+fn sidecar_message_id_map(
+    app_handle: &tauri::AppHandle,
+    account_id: &str,
+    mailbox: &str,
+) -> (std::collections::HashMap<String, u32>, u64) {
+    let mut map = std::collections::HashMap::new();
+    let mut sidecars = 0u64;
+    let dir = match vault::root(app_handle) {
+        Ok(root) => root.join("email_cache").join(cache_base_name(account_id, mailbox)),
+        Err(_) => return (map, 0),
+    };
+    let entries = match fs::read_dir(&dir) {
+        Ok(e) => e,
+        Err(_) => return (map, 0),
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        // `_meta.json` and anything else that isn't `{uid}.json`.
+        let uid: u32 = match name.strip_suffix(".json").and_then(|s| s.parse().ok()) {
+            Some(u) => u,
+            None => continue,
+        };
+        sidecars += 1;
+        let value: serde_json::Value = match fs::read_to_string(entry.path())
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+        {
+            Some(v) => v,
+            None => continue,
+        };
+        // Sidecars written by the frontend carry `messageId`; ones serialized
+        // from `EmailHeader` carry `message_id`.
+        let raw = value.get("messageId").or_else(|| value.get("message_id"))
+            .and_then(|v| v.as_str());
+        if let Some(raw) = raw {
+            let id = mailvault_core::maildir::normalize_message_id(raw);
+            if !id.is_empty() {
+                map.insert(id, uid);
+            }
+        }
+    }
+    (map, sidecars)
+}
+
+/// Uids in this mailbox that the server never issued — messages composed here
+/// that live only in the vault (`local_sent`, `local_draft`). A UID reissue
+/// says nothing about them, and a repair that moved them aside for "not on the
+/// server" would hide the user's own sent mail and drafts.
+fn locally_created_uids(index_path: &Path) -> std::collections::HashSet<u32> {
+    let mut uids = std::collections::HashSet::new();
+    let entries: Vec<serde_json::Value> = fs::read_to_string(index_path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+    for entry in entries {
+        let source = entry.get("source").and_then(|v| v.as_str()).unwrap_or("");
+        if source == "local_sent" || source == "local_draft" {
+            if let Some(uid) = entry.get("uid").and_then(|u| u.as_u64()) {
+                uids.insert(uid as u32);
+            }
+        }
+    }
+    uids
+}
+
+/// Follow a repair through `local-index.json`: rebound uids are rewritten,
+/// orphaned ones dropped. A *recovered* file needs no entry — it is back
+/// because the server has it, so the list renders it from the server's own
+/// headers and reads its archived mark off the file itself.
+///
+/// Leaving the index alone would keep the rows the list renders pointing at
+/// uids whose files just moved — the same "claims a row is archived when the
+/// archived thing is a different message" the repair exists to end.
+fn remap_local_index(
+    index_path: &Path,
+    report: &mailvault_core::maildir::GenerationRepair,
+) -> Result<(), String> {
+    if !index_path.exists() {
+        return Ok(());
+    }
+    let content = fs::read_to_string(index_path)
+        .map_err(|e| format!("Failed to read local index: {}", e))?;
+    let mut entries: Vec<serde_json::Value> = serde_json::from_str(&content).unwrap_or_default();
+
+    let moved: std::collections::HashMap<u64, u64> =
+        report.rebound.iter().map(|(o, n)| (*o as u64, *n as u64)).collect();
+    let dropped: std::collections::HashSet<u64> =
+        report.orphaned.iter().map(|u| *u as u64).collect();
+
+    entries.retain(|e| {
+        e.get("uid").and_then(|u| u.as_u64()).map_or(true, |u| !dropped.contains(&u))
+    });
+    for entry in entries.iter_mut() {
+        let uid = entry.get("uid").and_then(|u| u.as_u64());
+        if let (Some(uid), Some(obj)) = (uid, entry.as_object_mut()) {
+            if let Some(new_uid) = moved.get(&uid) {
+                obj.insert("uid".to_string(), serde_json::json!(new_uid));
+            }
+        }
+    }
+
+    let data = serde_json::to_string(&entries)
+        .map_err(|e| format!("Failed to serialize local index: {}", e))?;
+    let tmp = index_path.with_extension("json.tmp");
+    fs::write(&tmp, &data).map_err(|e| format!("Failed to write local index tmp: {}", e))?;
+    fs::rename(&tmp, index_path).map_err(|e| format!("Failed to replace local index: {}", e))
+}
+
+/// What the sync engine last recorded for this mailbox: the UIDVALIDITY its
+/// UIDs belong to, and how many messages the server said it holds.
+///
+/// Both are `None` for a mailbox that has never synced, and for Graph accounts
+/// — which have no IMAP UID space to reissue, so there is nothing here for a
+/// repair to do.
+fn cached_sync_meta(app_handle: &tauri::AppHandle, account_id: &str, mailbox: &str) -> (Option<u32>, Option<u64>) {
+    let read = || -> Option<serde_json::Value> {
+        let path = vault::root(app_handle).ok()?
+            .join("email_cache")
+            .join(cache_base_name(account_id, mailbox))
+            .join("_meta.json");
+        serde_json::from_str(&fs::read_to_string(path).ok()?).ok()
+    };
+    match read() {
+        Some(meta) => (
+            meta.get("uidValidity").and_then(|v| v.as_u64()).map(|v| v as u32),
+            meta.get("totalEmails").and_then(|v| v.as_u64()),
+        ),
+        None => (None, None),
+    }
+}
+
+/// Bring a mailbox's vault files onto the server's current UID generation.
+///
+/// Cheap when there is nothing to do: two small file reads, and the sidecar
+/// scan below only runs when they disagree. Safe to call on every mailbox open,
+/// which is the point — a reissue has to be caught before anything asks "is uid
+/// N archived?", not after the answer has already been believed.
+///
+/// The generation comes from `_meta.json` rather than an argument so that every
+/// caller gets the same answer from the same place; a caller that had to fetch
+/// and pass it is a caller that can pass a stale one.
+#[tauri::command]
+async fn maildir_repair_generation(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    mailbox: String,
+) -> Result<mailvault_core::maildir::GenerationRepair, String> {
+    tokio::task::spawn_blocking(move || {
+        let (cached_uv, cached_total) = cached_sync_meta(&app_handle, &account_id, &mailbox);
+        let uid_validity = match cached_uv {
+            Some(uv) => uv,
+            // Nothing to compare against. Stamping the vault with a generation
+            // we did not verify would be worse than leaving it unstamped: the
+            // next repair would trust it.
+            None => return Ok(mailvault_core::maildir::GenerationRepair::default()),
+        };
+        let mailbox_dir = maildir_mailbox_path(&app_handle, &account_id, &mailbox)?;
+
+        // Same check `repair_generation` makes, made again here so the hot path
+        // never builds the Message-ID map — that is a read of every sidecar in
+        // the mailbox, and this runs on every open.
+        if mailvault_core::maildir::read_generation(&mailbox_dir) == Some(uid_validity) {
+            return Ok(mailvault_core::maildir::GenerationRepair {
+                generation: uid_validity,
+                ..Default::default()
+            });
+        }
+
+        // Moving a file aside says "the server does not have this message". The
+        // sidecars are the evidence for that, and a partial cache is not
+        // evidence of anything — during a cold start it is empty, and every
+        // message in the vault would read as gone. Nothing runs until the cache
+        // covers the mailbox; until then the vault stays as it is, which is no
+        // worse than before, and `_readVerifiedLocal` still guards what opens.
+        let (id_to_uid, sidecars) = sidecar_message_id_map(&app_handle, &account_id, &mailbox);
+        let total = cached_total.unwrap_or(0);
+        if total == 0 || sidecars < total {
+            info!(
+                "maildir_repair_generation: {}/{} — cache covers {}/{}, waiting for a fuller sync",
+                account_id, mailbox, sidecars, total,
+            );
+            return Ok(mailvault_core::maildir::GenerationRepair::default());
+        }
+
+        let index_path = local_index_path(&app_handle, &account_id, &mailbox)?;
+        let protected = locally_created_uids(&index_path);
+
+        let report = mailvault_core::maildir::repair_generation(
+            &mailbox_dir, uid_validity, &id_to_uid, &protected,
+        );
+
+        if !report.rebound.is_empty() || !report.orphaned.is_empty() {
+            if let Err(e) = remap_local_index(&index_path, &report) {
+                warn!("maildir_repair_generation: local index remap failed: {}", e);
+            }
+        }
+        Ok(report)
+    }).await.map_err(|e| format!("Task join error: {}", e))?
+}
+
+/// Count what previous repairs moved out of the uid namespace, for one account
+/// or the whole vault.
+#[tauri::command]
+async fn maildir_orphan_stats(
+    app_handle: tauri::AppHandle,
+    account_id: Option<String>,
+) -> Result<mailvault_core::maildir::OrphanStats, String> {
+    tokio::task::spawn_blocking(move || {
+        let base = vault::root(&app_handle)?.join("Maildir");
+        let mut total = mailvault_core::maildir::OrphanStats::default();
+        for mailbox_dir in orphan_mailbox_dirs(&base, account_id.as_deref()) {
+            let s = mailvault_core::maildir::orphan_stats(&mailbox_dir);
+            total.count += s.count;
+            total.bytes += s.bytes;
+        }
+        Ok(total)
+    }).await.map_err(|e| format!("Task join error: {}", e))?
+}
+
+/// Delete every orphan folder for one account, or the whole vault.
+///
+/// These are messages the current server does not have, so this is the one
+/// place in the vault where deleting can lose the last copy. Only ever reached
+/// from an explicit user action.
+#[tauri::command]
+async fn maildir_purge_orphans(
+    app_handle: tauri::AppHandle,
+    account_id: Option<String>,
+) -> Result<u64, String> {
+    tokio::task::spawn_blocking(move || {
+        let base = vault::root(&app_handle)?.join("Maildir");
+        let mut removed = 0u64;
+        for mailbox_dir in orphan_mailbox_dirs(&base, account_id.as_deref()) {
+            match mailvault_core::maildir::purge_orphans(&mailbox_dir) {
+                Ok(n) => removed += n,
+                Err(e) => warn!("maildir_purge_orphans: {}", e),
+            }
+        }
+        info!("maildir_purge_orphans: removed {} files", removed);
+        Ok(removed)
+    }).await.map_err(|e| format!("Task join error: {}", e))?
+}
+
+/// Every `Maildir/{account}/{mailbox}` directory, scoped to one account when
+/// asked. Two levels, not a full walk — the vault below these is large.
+fn orphan_mailbox_dirs(base: &Path, account_id: Option<&str>) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    let accounts: Vec<PathBuf> = match account_id {
+        Some(id) => vec![base.join(id)],
+        None => fs::read_dir(base)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+            .map(|e| e.path())
+            .collect(),
+    };
+    for account_dir in accounts {
+        if let Ok(entries) = fs::read_dir(&account_dir) {
+            for entry in entries.flatten() {
+                if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                    dirs.push(entry.path());
+                }
+            }
+        }
+    }
+    dirs
+}
+
 #[tauri::command]
 async fn archive_emails(
     app_handle: tauri::AppHandle,
@@ -2905,6 +3196,13 @@ fn maildir_clear_cache(
     let mut skipped_archived: u32 = 0;
 
     for entry in WalkDir::new(&base).into_iter().flatten() {
+        // `orphaned/` holds mail set aside by a UID generation repair: messages
+        // the current server does not have, so this copy may be the only one.
+        // "Clear cached emails" promises saved mail survives it, and a file in
+        // here whose flags happen to be empty would otherwise read as cache.
+        if entry.path().components().any(|c| c.as_os_str() == mailvault_core::maildir::ORPHAN_DIR) {
+            continue;
+        }
         if entry.file_type().is_file() {
             let name = entry.file_name().to_string_lossy().to_string();
             if name.contains(":2,") {
@@ -4571,6 +4869,9 @@ fn main() {
             local_index_read,
             local_index_append,
             local_index_remove,
+            maildir_repair_generation,
+            maildir_orphan_stats,
+            maildir_purge_orphans,
             archive_emails,
             cancel_archive,
             bulk_delete_emails,

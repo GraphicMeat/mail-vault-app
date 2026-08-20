@@ -59,6 +59,66 @@ export async function archiveEmail(accountId, mailbox, uid) {
   }
 }
 
+// ── Vault generation (UIDVALIDITY) ────────────────────────────────────────
+//
+// The vault is keyed (accountId, mailbox, uid). A uid only means anything
+// inside one UIDVALIDITY generation, so once a server reissues its UID space —
+// a change-server migration, or a reissue it does on its own — every uid the
+// vault holds names a different message. `getSavedEmailIds` / `getArchivedEmailIds`
+// answer "is uid N archived?" straight off those filenames, so they answer yes
+// about some other message, and every badge, state icon and bulk target reads
+// that as fact.
+//
+// The repair belongs here rather than at the ~15 places that call those getters:
+// a step each caller has to remember is a step each new caller forgets. Rust
+// no-ops when the recorded generation already matches (two small file reads),
+// and no-ops outright for a mailbox that has never synced and for Graph
+// accounts, which have no IMAP UID space to reissue.
+const _generationRepairs = new Map();
+
+export function ensureVaultGeneration(accountId, mailbox) {
+  if (!accountId || !mailbox) return Promise.resolve(null);
+  const key = `${accountId}|${mailbox}`;
+  // Both getters are routinely awaited in the same Promise.all. Two concurrent
+  // repairs would be two concurrent rename passes over one directory.
+  let inFlight = _generationRepairs.get(key);
+  if (!inFlight) {
+    inFlight = (async () => {
+      try {
+        return await invoke('maildir_repair_generation', { accountId, mailbox });
+      } catch (e) {
+        console.warn('[db] Vault generation repair failed:', e);
+        return null;
+      } finally {
+        _generationRepairs.delete(key);
+      }
+    })();
+    _generationRepairs.set(key, inFlight);
+  }
+  return inFlight;
+}
+
+/** Files a repair moved out of the uid namespace — one account, or the vault. */
+export async function getVaultOrphanStats(accountId = null) {
+  await initBasic();
+  try {
+    return await invoke('maildir_orphan_stats', { accountId });
+  } catch (e) {
+    console.warn('[db] Failed to read orphan stats:', e);
+    return { count: 0, bytes: 0 };
+  }
+}
+
+/** Delete orphaned vault files. Destructive — these exist on no server. */
+export async function purgeVaultOrphans(accountId = null) {
+  await initBasic();
+  return invoke('maildir_purge_orphans', { accountId });
+}
+
+// No generation repair here on purpose: this is the per-message read path, and
+// a repair per opened message would be a directory scan per click. selectEmail's
+// `_readVerifiedLocal` already refuses a copy whose Message-ID contradicts the
+// row, which is the stricter check for a single message.
 export async function getLocalEmailLight(accountId, mailbox, uid) {
   await initDB();
   if (!invoke) return undefined;
@@ -75,6 +135,7 @@ export async function getLocalEmails(accountId, mailbox) {
   await initBasic();
   if (!invoke) return [];
 
+  await ensureVaultGeneration(accountId, mailbox);
   try {
     const summaries = await invoke('maildir_list', { accountId, mailbox, requireFlag: null });
     if (summaries.length === 0) return [];
@@ -108,6 +169,7 @@ export async function getLocalEmails(accountId, mailbox) {
 export async function readLocalEmailIndex(accountId, mailbox) {
   await initBasic();
   if (!invoke) return null;
+  await ensureVaultGeneration(accountId, mailbox);
   try {
     const data = await invoke('local_index_read', { accountId, mailbox });
     if (data) {
@@ -137,6 +199,7 @@ export async function readLocalEmailIndex(accountId, mailbox) {
 export async function getLocalIndexProvenance(accountId, mailbox) {
   await initBasic();
   if (!invoke) return new Map();
+  await ensureVaultGeneration(accountId, mailbox);
   try {
     const data = await invoke('local_index_read', { accountId, mailbox });
     if (!data) return new Map();
@@ -337,6 +400,7 @@ export async function isEmailSaved(accountId, mailbox, uid) {
 export async function getSavedEmailIds(accountId, mailbox) {
   await initBasic();
   if (!invoke) return new Set();
+  await ensureVaultGeneration(accountId, mailbox);
   try {
     const summaries = await invoke('maildir_list', { accountId, mailbox, requireFlag: null });
     return new Set(summaries.map(s => s.uid));
@@ -348,6 +412,7 @@ export async function getSavedEmailIds(accountId, mailbox) {
 export async function getArchivedEmailIds(accountId, mailbox) {
   await initBasic();
   if (!invoke) return new Set();
+  await ensureVaultGeneration(accountId, mailbox);
   try {
     const summaries = await invoke('maildir_list', { accountId, mailbox, requireFlag: 'archived' });
     return new Set(summaries.map(s => s.uid));

@@ -50,6 +50,9 @@ export function StorageSettings({ accounts, onUpgrade }) {
   const [showCleanupFirstTimeWarning, setShowCleanupFirstTimeWarning] = useState(false);
   const [cleanupRunning, setCleanupRunning] = useState(false);
   const [cleanupResult, setCleanupResult] = useState(null);
+  const [orphanStats, setOrphanStats] = useState(null);
+  const [purgingOrphans, setPurgingOrphans] = useState(false);
+  const [purgeOrphansConfirm, setPurgeOrphansConfirm] = useState(false);
 
   const invoke = window.__TAURI__?.core?.invoke;
 
@@ -62,9 +65,10 @@ export function StorageSettings({ accounts, onUpgrade }) {
   useEffect(() => {
     const loadStorageUsage = async () => {
       try {
-        const { getStorageUsage } = await import('../../services/db');
-        const usage = await getStorageUsage();
+        const { getStorageUsage, getVaultOrphanStats } = await import('../../services/db');
+        const [usage, orphans] = await Promise.all([getStorageUsage(), getVaultOrphanStats()]);
         setLocalStorageUsage(usage);
+        setOrphanStats(orphans);
       } catch (error) {
         console.error('Failed to get storage usage:', error);
       }
@@ -199,6 +203,69 @@ export function StorageSettings({ accounts, onUpgrade }) {
               </div>
             </div>
           </div>
+
+          {/* Messages from a previous server generation.
+              A UID reissue (change of mail host, or one the server did itself)
+              re-numbers a mailbox, so the vault's copies get re-bound to their
+              new UIDs by Message-ID. What has no match is not on the server at
+              all — the vault may be its only copy — so it is moved aside rather
+              than deleted, and deleting it is left to the person whose mail it
+              is. Hidden entirely when there is nothing set aside. */}
+          {orphanStats?.count > 0 && (
+            <div className="flex items-center justify-between p-3 bg-mail-bg rounded-lg">
+              <div className="pr-4">
+                <div className="text-sm text-mail-text">Messages from a previous server</div>
+                <div className="text-xs text-mail-text-muted">
+                  {orphanStats.count.toLocaleString()} saved {orphanStats.count === 1 ? 'message' : 'messages'}
+                  {' '}({(orphanStats.bytes / (1024 * 1024)).toFixed(1)} MB) that this server no longer has.
+                  {' '}They are kept in the vault and are not shown in your mailboxes. Deleting them is permanent.
+                </div>
+              </div>
+              {!purgeOrphansConfirm ? (
+                <button
+                  onClick={() => setPurgeOrphansConfirm(true)}
+                  disabled={purgingOrphans}
+                  className="flex items-center gap-2 shrink-0 px-3 py-1.5 text-sm font-medium rounded-lg border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
+                >
+                  <Trash2 size={14} />
+                  Delete
+                </button>
+              ) : (
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => setPurgeOrphansConfirm(false)}
+                    disabled={purgingOrphans}
+                    className="px-3 py-1.5 text-sm font-medium rounded-lg border border-mail-border text-mail-text-muted hover:bg-mail-surface transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (purgingOrphans) return;
+                      setPurgingOrphans(true);
+                      try {
+                        const { purgeVaultOrphans, getVaultOrphanStats, getStorageUsage } = await import('../../services/db');
+                        await purgeVaultOrphans();
+                        const [orphans, usage] = await Promise.all([getVaultOrphanStats(), getStorageUsage()]);
+                        setOrphanStats(orphans);
+                        setLocalStorageUsage(usage);
+                      } catch (error) {
+                        console.error('Failed to delete previous-server messages:', error);
+                      } finally {
+                        setPurgingOrphans(false);
+                        setPurgeOrphansConfirm(false);
+                      }
+                    }}
+                    disabled={purgingOrphans}
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+                  >
+                    {purgingOrphans ? <Loader size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                    Delete permanently
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Clear cache */}
           <div className="flex items-center justify-between p-3 bg-mail-bg rounded-lg">
