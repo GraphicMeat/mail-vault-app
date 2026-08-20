@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **A phishing warning no longer follows a number into the wrong mailbox.** The red and amber link warnings were filed under a message number that is unique only inside one folder, so a warning raised on one account's message lit up on an unrelated message with the same number in another account or folder — and hovering it listed the other message's links. Warnings are now tied to the account and folder they were raised in; existing saved warnings are discarded and re-checked as each message is opened.
+
 ## [2.10.0] - 2026-08-18
 
 ### Added

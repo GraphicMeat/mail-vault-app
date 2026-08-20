@@ -26,6 +26,7 @@ import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon } from './SenderAlertIcon';
 import { ReplyToAlertIcon } from './ReplyToAlertIcon';
 import { getCachedAlerts } from '../utils/linkSafety';
+import { emailScopeKey } from '../stores/slices/unifiedHelpers';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useThemeStore } from '../stores/themeStore';
 import { buildEmailIframeHtml, getEmailBodyContent, getContextMenuColors, measureEmailIframeHeight } from '../utils/emailIframeTemplate';
@@ -168,6 +169,10 @@ function EmailViewerComponent({ onComposeReply }) {
   // Render email with theme-aware iframe (low-specificity body defaults;
   // inline email styles always win). Also sets color-scheme so emails with
   // `@media (prefers-color-scheme: dark)` honor the app theme, not the OS.
+  // `accountId-mailbox-uid`, not the bare uid: the scan cache and the persisted
+  // alert map are both shared across accounts and folders.
+  const scopeKey = selectedEmail ? emailScopeKey(selectedEmail, useMailStore.getState()) : null;
+
   const { iframeContent, scanAlertLevel } = useMemo(() => {
     if (!selectedEmail?.html) return { iframeContent: '', scanAlertLevel: null };
     const bodyHtml = getEmailBodyContent(replaceCidUrls(selectedEmail.html, selectedEmail.attachments));
@@ -178,7 +183,7 @@ function EmailViewerComponent({ onComposeReply }) {
     let indicatorStyle = '';
     let alertLevel = null;
     if (linkSafetyEnabled) {
-      const scan = scanEmailLinks(bodyHtml, selectedEmail.uid);
+      const scan = scanEmailLinks(bodyHtml, scopeKey);
       renderedBody = scan.modifiedBodyHtml;
       indicatorStyle = scan.indicatorStyle;
       alertLevel = scan.maxAlertLevel;
@@ -195,7 +200,7 @@ function EmailViewerComponent({ onComposeReply }) {
       extraBody: `${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}`,
     });
     return { iframeContent: html, scanAlertLevel: alertLevel };
-  }, [selectedEmail?.html, selectedEmail?.uid, linkSafetyEnabled, effectiveEmailTheme, signatureDisplay]);
+  }, [selectedEmail?.html, scopeKey, linkSafetyEnabled, effectiveEmailTheme, signatureDisplay]);
 
   // Persist link alert to store + settings (outside render, in useEffect)
   useEffect(() => {
@@ -205,9 +210,9 @@ function EmailViewerComponent({ onComposeReply }) {
         emails: state.emails.map(e => e.uid === selectedEmail.uid ? { ...e, _linkAlert: scanAlertLevel } : e),
         sortedEmails: state.sortedEmails.map(e => e.uid === selectedEmail.uid ? { ...e, _linkAlert: scanAlertLevel } : e),
       }));
-      useSettingsStore.getState().setLinkAlert(selectedEmail.uid, scanAlertLevel);
+      useSettingsStore.getState().setLinkAlert(scopeKey, scanAlertLevel);
     }
-  }, [scanAlertLevel, selectedEmail?.uid]);
+  }, [scanAlertLevel, scopeKey]);
 
   // Auto-resize iframe and apply dark mode overrides
   useEffect(() => {
@@ -375,7 +380,7 @@ function EmailViewerComponent({ onComposeReply }) {
         <h1 className="text-lg font-semibold text-mail-text flex-1 min-w-0 flex items-center gap-1.5">
           <SenderAlertIcon level={selectedEmail._senderAlert} email={selectedEmail} size={18} />
           <ReplyToAlertIcon mismatch={selectedEmail._replyToMismatch} size={18} />
-          <LinkAlertIcon level={selectedEmail._linkAlert} size={18} alerts={getCachedAlerts(selectedEmail.uid)} />
+          <LinkAlertIcon level={selectedEmail._linkAlert} size={18} alerts={getCachedAlerts(scopeKey)} />
           {selectedEmail.subject}
         </h1>
         <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium flex-shrink-0 mt-0.5

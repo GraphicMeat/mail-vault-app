@@ -95,6 +95,22 @@ export function resolveEmailLocation(email, state) {
 }
 
 /**
+ * `accountId-mailbox-uid` for a message, resolved through the view state — the
+ * same shape selectEmail uses for its body cache. A bare UID is not a key: the
+ * same number is a different message in every other folder/account, so keying
+ * by UID alone lets one message's state be served to another's.
+ *
+ * Returns null when the location can't be resolved (foreign account with no
+ * mailbox tag, unified placeholder). Callers must treat null as "no key" and
+ * skip the lookup rather than fall back to the UID — a wrong hit is worse than
+ * a miss for anything that warns the user.
+ */
+export function emailScopeKey(email, state) {
+  const loc = email && resolveEmailLocation(email, state);
+  return loc ? `${loc.accountId}-${loc.mailbox}-${email.uid}` : null;
+}
+
+/**
  * Unique key for a message across accounts and mailboxes. A bare UID is not a
  * key: the same number is a different message in every other folder/account,
  * so keying by UID alone lets one view's loaded body be served to another's.

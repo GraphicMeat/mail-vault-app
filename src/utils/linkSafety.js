@@ -4,6 +4,8 @@
  * Uses DOMParser for safe, correct HTML parsing.
  */
 
+import { emailScopeKey } from '../stores/slices/unifiedHelpers';
+
 // Known legitimate URL shorteners — exempt from YELLOW alerts
 const SHORTENER_ALLOWLIST = new Set([
   'bit.ly', 't.co', 'goo.gl', 'tinyurl.com', 'lnkd.in',
@@ -13,8 +15,9 @@ const SHORTENER_ALLOWLIST = new Set([
 // Patterns indicating URL redirect/tracking in query params
 const REDIRECT_PARAMS = /[?&](url|redirect|goto|target|link|dest|destination)=/i;
 
-// Cache scan results by email UID to avoid re-scanning. Entries carry a
-// fingerprint of the body they were computed from — see `bodyStamp`.
+// Cache scan results by scoped message key (`accountId-mailbox-uid`) to avoid
+// re-scanning. Entries carry a fingerprint of the body they were computed
+// from — see `bodyStamp`.
 const _scanCache = new Map();
 const MAX_CACHE = 500;
 
@@ -22,11 +25,12 @@ const MAX_CACHE = 500;
  * FNV-1a over the body HTML, plus its length.
  *
  * A UID identifies a message inside ONE mailbox: INBOX 41 and Sent 41 are
- * different messages, as are UID 41 in two accounts. Keying the scan cache on
- * the bare UID meant the second message rendered the first one's
- * `modifiedBodyHtml` — the right header over a stranger's body. The stamp is
- * what makes a hit prove it belongs to the body being scanned; hashing keeps
- * the entry small instead of parking a second copy of every body in memory.
+ * different messages, as are UID 41 in two accounts — which is why the cache
+ * is keyed by `accountId-mailbox-uid`, not the bare UID. The stamp is a second
+ * guard on top of that: it makes a hit prove it belongs to the body being
+ * scanned even when the same message is re-fetched with different content.
+ * Hashing keeps the entry small instead of parking a second copy of every body
+ * in memory.
  */
 function bodyStamp(html) {
   let h = 0x811c9dc5;
@@ -88,21 +92,23 @@ const INDICATOR_STYLE_CONTENT = `
  * Scan email body HTML for suspicious links.
  * Returns { alerts, modifiedBodyHtml, indicatorStyle, maxAlertLevel }.
  *
- * Cached by uid + a fingerprint of the body: the input is stable per email, so
- * the result is reusable across theme toggles and re-renders, while a UID
- * reused by another mailbox or account rescans instead of serving that other
- * message's body. Callers wrap the modified body with their own iframe
- * template and place `indicatorStyle` into <head> (as a <style>…</style>
- * block) when non-empty.
+ * `key` is the scoped message key from `emailScopeKey(email, state)` —
+ * `accountId-mailbox-uid`. Pass null when the message can't be located; the
+ * scan still runs, it just isn't cached. Cached by key + a fingerprint of the
+ * body: the input is stable per email, so the result is reusable across theme
+ * toggles and re-renders, while a UID reused by another mailbox or account
+ * gets its own entry instead of being served that other message's body.
+ * Callers wrap the modified body with their own iframe template and place
+ * `indicatorStyle` into <head> (as a <style>…</style> block) when non-empty.
  */
-export function scanEmailLinks(bodyHtml, uid) {
+export function scanEmailLinks(bodyHtml, key) {
   if (!bodyHtml) {
     return { alerts: [], modifiedBodyHtml: bodyHtml, indicatorStyle: '', maxAlertLevel: null };
   }
 
-  const stamp = uid ? bodyStamp(bodyHtml) : null;
+  const stamp = key ? bodyStamp(bodyHtml) : null;
   if (stamp) {
-    const hit = _scanCache.get(uid);
+    const hit = _scanCache.get(key);
     if (hit && hit.stamp === stamp) return hit.result;
   }
 
@@ -182,7 +188,7 @@ export function scanEmailLinks(bodyHtml, uid) {
 
   if (stamp) {
     if (_scanCache.size > MAX_CACHE) _scanCache.clear();
-    _scanCache.set(uid, { stamp, result });
+    _scanCache.set(key, { stamp, result });
   }
 
   return result;
@@ -208,21 +214,24 @@ export function checkLinkAlert(linkElement) {
  * RED > YELLOW > null. Used by topic/thread rows to show aggregate alert.
  */
 /**
- * Get cached scan alerts for an email UID. Returns alerts array or null.
+ * Get cached scan alerts for a scoped message key. Returns alerts array or
+ * null. A null key means "not locatable" — never fall back to the UID here,
+ * that is how one message's links end up listed under another's tooltip.
  */
-export function getCachedAlerts(uid) {
-  if (!uid) return null;
-  return _scanCache.get(uid)?.result.alerts ?? null;
+export function getCachedAlerts(key) {
+  if (!key) return null;
+  return _scanCache.get(key)?.result.alerts ?? null;
 }
 
 /**
- * Collect all cached alerts from an array of emails.
+ * Collect all cached alerts from an array of emails. `state` is the mail store
+ * state, needed to resolve each message's account/mailbox.
  */
-export function getAlertsForEmails(emails) {
+export function getAlertsForEmails(emails, state) {
   if (!emails) return null;
   const all = [];
   for (const e of emails) {
-    const cached = getCachedAlerts(e.uid);
+    const cached = getCachedAlerts(emailScopeKey(e, state));
     if (cached) all.push(...cached);
   }
   return all.length > 0 ? all : null;

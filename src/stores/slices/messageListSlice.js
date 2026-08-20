@@ -17,6 +17,7 @@ import {
   loadEmailRange as _loadEmailRange,
 } from '../../services/workflows/loadMoreEmails';
 import { findSentMailboxPath } from '../../utils/sentFolder';
+import { emailScopeKey } from './unifiedHelpers';
 
 // Module-level flag change counter — used in updateSortedEmails fingerprint
 let _flagChangeCounter = 0;
@@ -271,13 +272,18 @@ export const createMessageListSlice = (set, get) => ({
       unifiedInbox, activeAccountId, activeMailbox, deleteTombstones,
     });
 
-    // Apply persisted link safety alerts from settingsStore
+    // Apply persisted link safety alerts from settingsStore. Keyed by
+    // `accountId-mailbox-uid`: a bare UID is unique inside one mailbox only, so
+    // keying by it painted account A's red flag on every account's UID 41.
     const { linkAlerts, linkSafetyEnabled } = useSettingsStore.getState();
     if (linkAlerts && Object.keys(linkAlerts).length > 0) {
+      const state = get();
       for (const e of result) {
-        if (!e._linkAlert && linkAlerts[e.uid]) {
-          e._linkAlert = linkAlerts[e.uid];
-        }
+        if (e._linkAlert) continue;
+        const key = emailScopeKey(e, state);
+        if (!key) continue;
+        const level = linkAlerts[key];
+        if (level) e._linkAlert = level;
       }
     }
 

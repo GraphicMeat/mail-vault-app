@@ -1020,7 +1020,7 @@ function EmailListComponent() {
                         <div className="flex-1 min-w-0">
                           <div className={`text-sm truncate flex items-center gap-1 ${item.topic.unreadCount > 0 ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
                             {(() => { const sa = getSenderAlertLevel(item.topic.emails); return sa ? <SenderAlertIcon level={sa.level} email={sa.email} size={13} /> : null; })()}
-                            <LinkAlertIcon level={getLinkAlertLevel(item.topic.emails)} size={13} alerts={getAlertsForEmails(item.topic.emails)} />
+                            <LinkAlertIcon level={getLinkAlertLevel(item.topic.emails)} size={13} alerts={getAlertsForEmails(item.topic.emails, useMailStore.getState())} />
                             {item.topic.originalSubject || '(No subject)'}
                           </div>
                           <div className="text-xs text-mail-text-muted truncate mt-0.5">

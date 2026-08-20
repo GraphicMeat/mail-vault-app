@@ -34,6 +34,7 @@ import { splitQuotedContent } from '../utils/quoteFolding';
 import { splitSignature } from '../utils/signatureFolding';
 import { useSettingsStore } from '../stores/settingsStore';
 import { scanEmailLinks, checkLinkAlert } from '../utils/linkSafety';
+import { emailScopeKey } from '../stores/slices/unifiedHelpers';
 import { LinkSafetyModal } from './LinkSafetyModal';
 
 export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail, onBack, onReply }) {
@@ -339,7 +340,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     let indicatorStyle = '';
     let chatAlertLevel = null;
     if (linkSafetyEnabled) {
-      const scan = scanEmailLinks(rawBody, email.uid);
+      const scan = scanEmailLinks(rawBody, emailScopeKey(email, useMailStore.getState()));
       scannedBody = scan.modifiedBodyHtml;
       indicatorStyle = scan.indicatorStyle;
       chatAlertLevel = scan.maxAlertLevel;
@@ -409,7 +410,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
         emails: state.emails.map(e => e.uid === email.uid ? { ...e, _linkAlert: chatScanAlert } : e),
         sortedEmails: state.sortedEmails.map(e => e.uid === email.uid ? { ...e, _linkAlert: chatScanAlert } : e),
       }));
-      useSettingsStore.getState().setLinkAlert(email.uid, chatScanAlert);
+      useSettingsStore.getState().setLinkAlert(emailScopeKey(email, useMailStore.getState()), chatScanAlert);
     }
   }, [chatScanAlert, email.uid]);
 

@@ -202,11 +202,18 @@ export const useSettingsStore = create(
       // Link safety settings
       linkSafetyEnabled: true,
       linkSafetyClickConfirm: true,
-      linkAlerts: {}, // { [uid]: 'red'|'yellow' } — persisted link alert results
+      // Persisted link alert results, keyed `accountId-mailbox-uid`. A bare UID
+      // is unique per mailbox only, so keying by it lit account A's red flag on
+      // account B's message with the same UID. Old (v3) maps are dropped in the
+      // migration below — every entry is recomputed on next open.
+      linkAlerts: {}, // { [`${accountId}-${mailbox}-${uid}`]: 'red'|'yellow' }
       unreadPerAccount: {}, // { [accountId]: number } — persisted unread counts
       setLinkSafetyEnabled: (v) => set({ linkSafetyEnabled: v }),
       setLinkSafetyClickConfirm: (v) => set({ linkSafetyClickConfirm: v }),
-      setLinkAlert: (uid, level) => set(s => ({ linkAlerts: { ...s.linkAlerts, [uid]: level } })),
+      // `key` comes from emailScopeKey(email, mailState). Unresolvable message
+      // → no key → no write: a warning stored under the wrong message is worse
+      // than one that has to be rescanned.
+      setLinkAlert: (key, level) => set(s => (key ? { linkAlerts: { ...s.linkAlerts, [key]: level } } : s)),
       setUnreadPerAccount: (counts) => set({ unreadPerAccount: counts }),
       setUnreadForAccount: (accountId, count) => set(s => ({ unreadPerAccount: { ...s.unreadPerAccount, [accountId]: count } })),
 
@@ -769,8 +776,15 @@ export const useSettingsStore = create(
     }),
     {
       name: 'mailvault-settings',
-      version: 3,
+      version: 4,
       storage: createJSONStorage(() => safeStorage),
+      // v3 → v4: linkAlerts moved from bare-UID keys to `accountId-mailbox-uid`.
+      // The old keys can't be upgraded — a UID alone doesn't say which mailbox
+      // or account it belonged to — so drop the map. Alerts come back as each
+      // message is opened.
+      migrate: (persisted, version) => (
+        version < 4 && persisted ? { ...persisted, linkAlerts: {} } : persisted
+      ),
       merge: (persisted, current) => ({ ...current, ...(persisted || {}) }),
       // Migrate existing users from old defaults (5GB or 512MB) down to 128MB
       onRehydrateStorage: () => (state) => {

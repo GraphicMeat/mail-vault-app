@@ -2,6 +2,8 @@ import React from 'react';
 import { getAccountColor } from '../stores/settingsStore';
 import { getSenderName } from '../utils/emailParser';
 import { getCachedAlerts } from '../utils/linkSafety';
+import { useMailStore } from '../stores/mailStore';
+import { emailScopeKey } from '../stores/slices/unifiedHelpers';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon } from './SenderAlertIcon';
 import { ReplyToAlertIcon } from './ReplyToAlertIcon';
@@ -17,6 +19,9 @@ import {
 
 export const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
   const { saveEmailLocally } = actions;
+  // Scan results are cached per `accountId-mailbox-uid`; a bare uid would pull
+  // another account's links into this row's tooltip.
+  const alerts = getCachedAlerts(emailScopeKey(email, useMailStore.getState()));
 
   const handleSave = async (e) => {
     e.stopPropagation();
@@ -77,7 +82,7 @@ export const EmailRow = React.memo(function EmailRow({ email, isSelected, onSele
       <div className="flex-1 min-w-[120px] flex items-center gap-2">
         <SenderAlertIcon level={email._senderAlert} email={email} />
         <ReplyToAlertIcon mismatch={email._replyToMismatch} />
-        <LinkAlertIcon level={email._linkAlert} alerts={getCachedAlerts(email.uid)} />
+        <LinkAlertIcon level={email._linkAlert} alerts={alerts} />
         <span className={`flex-1 min-w-0 truncate ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
           {email.subject}
         </span>
@@ -115,6 +120,9 @@ export const EmailRow = React.memo(function EmailRow({ email, isSelected, onSele
 
 export const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSelected, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
   const { saveEmailLocally } = actions;
+  // Scan results are cached per `accountId-mailbox-uid`; a bare uid would pull
+  // another account's links into this row's tooltip.
+  const alerts = getCachedAlerts(emailScopeKey(email, useMailStore.getState()));
 
   const handleSave = async (e) => {
     e.stopPropagation();
@@ -166,7 +174,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSe
         <div className="flex items-center gap-1.5">
           <SenderAlertIcon level={email._senderAlert} email={email} size={12} />
           <ReplyToAlertIcon mismatch={email._replyToMismatch} size={12} />
-          <LinkAlertIcon level={email._linkAlert} size={12} alerts={getCachedAlerts(email.uid)} />
+          <LinkAlertIcon level={email._linkAlert} size={12} alerts={alerts} />
           {/* flex-1 min-w-0: same shrink-to-nothing hazard as the row above. */}
           <span className={`flex-1 min-w-0 truncate text-sm leading-snug ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
             {email.subject}

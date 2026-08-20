@@ -53,3 +53,52 @@ describe('changeServer modal state', () => {
     expect(useSettingsStore.getState().changeServerAccountId).toBe(null);
   });
 });
+
+// A link alert is a phishing warning. Keyed by bare UID it was a warning about
+// whichever message happened to hold that number in the mailbox you were
+// looking at — account A's UID 41 lit a red flag on account B's UID 41.
+describe('linkAlerts are keyed per account + mailbox', () => {
+  it('keeps two accounts sharing a UID apart', () => {
+    const store = useSettingsStore.getState();
+    store.setLinkAlert('acct-1-INBOX-41', 'red');
+    store.setLinkAlert('acct-2-INBOX-41', 'yellow');
+
+    const { linkAlerts } = useSettingsStore.getState();
+    expect(linkAlerts['acct-1-INBOX-41']).toBe('red');
+    expect(linkAlerts['acct-2-INBOX-41']).toBe('yellow');
+    // The old shape must not be readable any more, under any key.
+    expect(linkAlerts[41]).toBeUndefined();
+  });
+
+  it('keeps two mailboxes of one account apart', () => {
+    useSettingsStore.getState().setLinkAlert('acct-1-Sent-41', 'yellow');
+    const { linkAlerts } = useSettingsStore.getState();
+    expect(linkAlerts['acct-1-INBOX-41']).toBe('red');
+    expect(linkAlerts['acct-1-Sent-41']).toBe('yellow');
+  });
+
+  it('drops the write when the message could not be located', () => {
+    const before = useSettingsStore.getState().linkAlerts;
+    useSettingsStore.getState().setLinkAlert(null, 'red');
+    // Same object: no entry, and no key called "null" either.
+    expect(useSettingsStore.getState().linkAlerts).toBe(before);
+  });
+});
+
+describe('persist migration v3 → v4', () => {
+  const migrate = useSettingsStore.persist.getOptions().migrate;
+
+  it('drops UID-keyed alerts instead of carrying them into the new shape', () => {
+    // A bare UID cannot be upgraded — it does not say which mailbox or account
+    // it came from — so an existing map is dropped, not translated. The alerts
+    // come back as each message is opened.
+    const migrated = migrate({ linkAlerts: { 41: 'red', 42: 'yellow' }, cacheLimitMB: 256 }, 3);
+    expect(migrated.linkAlerts).toEqual({});
+    expect(migrated.cacheLimitMB).toBe(256);
+  });
+
+  it('leaves an already-migrated map alone', () => {
+    const persisted = { linkAlerts: { 'acct-1-INBOX-41': 'red' } };
+    expect(migrate(persisted, 4)).toBe(persisted);
+  });
+});

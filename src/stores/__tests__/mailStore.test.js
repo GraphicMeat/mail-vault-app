@@ -61,14 +61,18 @@ vi.mock('../../services/attachmentUtils', () => ({
 vi.mock('../../utils/emailParser', () => ({
   buildThreads: () => new Map(),
 }));
+// Mutable so a test can seed persisted link alerts; `mock` prefix is what lets
+// the hoisted factory below reference it.
+const mockSettingsState = {
+  cacheLimitMB: 128,
+  hiddenAccounts: {},
+  getLastMailbox: () => 'INBOX',
+  emailListStyle: 'default',
+  linkAlerts: {},
+};
 vi.mock('../settingsStore', () => ({
   useSettingsStore: {
-    getState: () => ({
-      cacheLimitMB: 128,
-      hiddenAccounts: {},
-      getLastMailbox: () => 'INBOX',
-      emailListStyle: 'default',
-    }),
+    getState: () => mockSettingsState,
   },
 }));
 vi.mock('../safeStorage', () => ({
@@ -748,5 +752,55 @@ describe('refreshBackedUpUids', () => {
     const keys = useMailStore.getState().backedUpKeys;
     expect(keys.has('acct-1:99')).toBe(true);
     expect(keys.has('acct-1:11')).toBe(false);
+  });
+});
+
+// A persisted link alert is a phishing warning. Applied by bare UID it landed
+// on whichever message held that number in the mailbox being rendered, so
+// account A's flagged UID 41 lit a red warning on account B's unrelated UID 41.
+describe('persisted link alerts are applied per account + mailbox', () => {
+  const row = (uid) => ({
+    uid,
+    subject: `Message ${uid}`,
+    date: 'Sun, 04 Jan 2026 12:00:00 +0000',
+  });
+
+  const render = (accountId, mailbox, emails) => {
+    useMailStore.setState({
+      activeAccountId: accountId,
+      activeMailbox: mailbox,
+      viewMode: 'all',
+      unifiedInbox: false,
+      emails,
+      localEmails: [],
+      archivedEmailIds: new Set(),
+      savedEmailIds: new Set(),
+      serverUids: serverUids(new Set(emails.map(e => e.uid)), { complete: true }),
+      deleteTombstones: new Set(),
+      _sortedEmailsFingerprint: '',
+    });
+    useMailStore.getState().updateSortedEmails();
+    return useMailStore.getState().sortedEmails;
+  };
+
+  afterEach(() => { mockSettingsState.linkAlerts = {}; });
+
+  it('flags the message the alert was stored for', () => {
+    mockSettingsState.linkAlerts = { 'acct-1-INBOX-41': 'red' };
+    expect(render('acct-1', 'INBOX', [row(41)])[0]._linkAlert).toBe('red');
+  });
+
+  // Both cases seed a leftover bare-UID entry alongside the scoped one. The
+  // migration drops those, but a reader that still falls back to `e.uid` would
+  // find it — which is exactly the leak, and what makes these tests fail
+  // against the old code instead of merely passing against the new.
+  it('leaves another account\'s message with the same UID unflagged', () => {
+    mockSettingsState.linkAlerts = { 41: 'red', 'acct-1-INBOX-41': 'red' };
+    expect(render('acct-2', 'INBOX', [row(41)])[0]._linkAlert).toBeUndefined();
+  });
+
+  it('leaves another mailbox\'s message with the same UID unflagged', () => {
+    mockSettingsState.linkAlerts = { 41: 'red', 'acct-1-INBOX-41': 'red' };
+    expect(render('acct-1', 'Archive', [row(41)])[0]._linkAlert).toBeUndefined();
   });
 });

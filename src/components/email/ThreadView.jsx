@@ -23,6 +23,7 @@ import { EmailSenderInfo } from './EmailSenderInfo';
 import { EmailActionBar } from './EmailActionBar';
 import { AttachmentItem } from './AttachmentBar';
 import { scanEmailLinks, checkLinkAlert } from '../../utils/linkSafety';
+import { emailScopeKey } from '../../stores/slices/unifiedHelpers';
 import { getSenderName } from '../../utils/emailParser';
 import { LinkSafetyModal } from '../LinkSafetyModal';
 import { LinkAlertIcon } from '../LinkAlertIcon';
@@ -55,6 +56,8 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
   const showSigInline = signatureDisplay === 'always-show'
     || (signatureDisplay === 'smart' && shouldShowSignature);
 
+  const scopeKey = emailScopeKey(email, useMailStore.getState());
+
   const { iframeContent, scanAlertLevel: threadScanAlert } = useMemo(() => {
     if (!loadedEmail?.html) return { iframeContent: '', scanAlertLevel: null };
     const htmlWithCid = replaceCidUrls(loadedEmail.html, loadedEmail.attachments);
@@ -65,7 +68,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
     let indicatorStyle = '';
     let alertLevel = null;
     if (linkSafetyEnabled) {
-      const scan = scanEmailLinks(bodyHtml, email.uid);
+      const scan = scanEmailLinks(bodyHtml, scopeKey);
       renderedBody = scan.modifiedBodyHtml;
       indicatorStyle = scan.indicatorStyle;
       alertLevel = scan.maxAlertLevel;
@@ -80,7 +83,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
       extraBody: `${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}`,
     });
     return { iframeContent: html, scanAlertLevel: alertLevel };
-  }, [loadedEmail?.html, signatureDisplay, linkSafetyEnabled, theme]);
+  }, [loadedEmail?.html, scopeKey, signatureDisplay, linkSafetyEnabled, theme]);
 
   // Persist link alert outside render
   useEffect(() => {
@@ -90,9 +93,9 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
         emails: state.emails.map(e => e.uid === email.uid ? { ...e, _linkAlert: threadScanAlert } : e),
         sortedEmails: state.sortedEmails.map(e => e.uid === email.uid ? { ...e, _linkAlert: threadScanAlert } : e),
       }));
-      useSettingsStore.getState().setLinkAlert(email.uid, threadScanAlert);
+      useSettingsStore.getState().setLinkAlert(scopeKey, threadScanAlert);
     }
-  }, [threadScanAlert, email.uid]);
+  }, [threadScanAlert, scopeKey]);
 
   // Auto-resize iframe and intercept links
   useEffect(() => {
