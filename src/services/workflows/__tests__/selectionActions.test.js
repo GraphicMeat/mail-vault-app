@@ -24,6 +24,7 @@ const mockClearPendingDeletes = vi.fn().mockResolvedValue(undefined);
 const mockSetUnreadForAccount = vi.fn();
 const mockGetGraphMessageId = vi.fn().mockReturnValue(null);
 const mockIsGraphAccount = vi.fn().mockReturnValue(false);
+const mockGraphDeleteMessage = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../../db', () => ({
   getLocalEmailLight: vi.fn().mockResolvedValue(null),
@@ -50,6 +51,7 @@ vi.mock('../../api', () => ({
   updateEmailFlags: (...a) => mockUpdateEmailFlags(...a),
   graphSetRead: (...a) => mockGraphSetRead(...a),
   deleteEmail: (...a) => mockDeleteEmail(...a),
+  graphDeleteMessage: (...a) => mockGraphDeleteMessage(...a),
   moveEmails: (...a) => mockMoveEmails(...a),
   removeFromLocalIndex: vi.fn().mockResolvedValue(undefined),
 }));
@@ -74,6 +76,7 @@ vi.mock('../../cacheManager', () => ({
   getAccountCacheMailboxes: () => null,
   setGraphIdMap: () => {},
   getGraphMessageId: (...a) => mockGetGraphMessageId(...a),
+  resolveGraphMessageId: async (acct, mb, uid, opts) => opts?.row?._graphId || mockGetGraphMessageId(acct, mb, uid),
   clearGraphIdMap: () => {},
 }));
 
@@ -149,6 +152,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockIsGraphAccount.mockReturnValue(false);
   mockGetGraphMessageId.mockReturnValue(null);
+  mockGraphDeleteMessage.mockResolvedValue(undefined);
 });
 
 describe('markSelectedAsRead', () => {
@@ -289,6 +293,38 @@ describe('deleteSelectedFromServer', () => {
 
     // The tombstone is lifted so the loadEmails() reconcile can restore it.
     expect(useMailStore.getState().deleteTombstones.size).toBe(0);
+  });
+
+  // A Graph "uid" is the message's POSITION in the folder listing, so the
+  // uid → Graph id map is only right while the folder has not changed since it
+  // was written. An unresolvable id used to be logged as "skipping" and then
+  // fall straight through to the success bookkeeping: the row disappeared, the
+  // sidecar was pruned, and the message stayed on the server until the next
+  // reload put it back. That is a delete that reports success and does nothing.
+  it('treats an unresolvable Graph id as a failed delete, not a silent success', async () => {
+    mockIsGraphAccount.mockReturnValue(true);
+    mockGetGraphMessageId.mockReturnValue(null);
+    primeStore(seedThread(), [1]);
+
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    expect(mockGraphDeleteMessage).not.toHaveBeenCalled();
+    // Tombstone lifted, sidecar unpruned — the reconcile puts the row back.
+    expect(useMailStore.getState().deleteTombstones.size).toBe(0);
+    expect(mockSaveEmailHeaders.mock.calls.some(c => c[4]?.removedUids?.includes(1))).toBe(false);
+  });
+
+  it('deletes the Graph message the row itself names, not the one the stale map names', async () => {
+    mockIsGraphAccount.mockReturnValue(true);
+    mockGetGraphMessageId.mockReturnValue('id-from-stale-map');
+    const emails = seedThread();
+    emails[0]._graphId = 'id-on-the-row';
+    primeStore(emails, [1]);
+
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    expect(mockGraphDeleteMessage).toHaveBeenCalledTimes(1);
+    expect(mockGraphDeleteMessage.mock.calls[0][1]).toBe('id-on-the-row');
   });
 
   // The tombstone that hides a deleted row is store state, so a reload wipes it.

@@ -92,6 +92,7 @@ vi.mock('../../services/cacheManager', () => ({
   getAccountCacheMailboxes: () => null,
   setGraphIdMap: () => {},
   getGraphMessageId: () => null,
+  resolveGraphMessageId: async () => null,
   clearGraphIdMap: () => {},
 }));
 

@@ -68,6 +68,7 @@ vi.mock('../../graphConfig', () => ({
 // getGraphMessageId is imported from cacheManager, not graphConfig.
 vi.mock('../../cacheManager', () => ({
   getGraphMessageId: (...a) => mockGetGraphMessageId(...a),
+  resolveGraphMessageId: async (acct, mb, uid, opts) => opts?.row?._graphId || mockGetGraphMessageId(acct, mb, uid),
 }));
 
 vi.mock('../../safeStorage', () => ({
@@ -541,5 +542,36 @@ describe('purgeEverywhere — UIDVALIDITY guard', () => {
     expect(res.deleted).toBe(1);
     expect(res.failed).toBe(0);
     expect(res.needsResync).toBe(0);
+  });
+
+  // A Graph uid is the message's position in the folder listing, so the
+  // persisted uid → Graph id map names the right message only while the folder
+  // has not changed since it was written. The row carries `_graphId` stamped
+  // from the same listing that gave it its position, so it cannot disagree
+  // with its own header — Delete Everywhere must spend that one.
+  it('Graph account: targets the id on the row over the one in the stale map', async () => {
+    mockIsGraphAccount.mockReturnValue(true);
+    mockGetGraphMessageId.mockReturnValue('id-from-stale-map');
+    prime({ emails: [{ ...serverMsg(1), _graphId: 'id-on-the-row' }] });
+
+    await purgeEverywhere([1]);
+
+    expect(mockGraphDeleteMessage).toHaveBeenCalledTimes(1);
+    expect(mockGraphDeleteMessage.mock.calls[0][1]).toBe('id-on-the-row');
+  });
+
+  it('Graph account: an unresolvable id fails the purge instead of purging the local copies', async () => {
+    mockIsGraphAccount.mockReturnValue(true);
+    mockGetGraphMessageId.mockReturnValue(null);
+    prime({ emails: [serverMsg(1)], archived: [1] });
+
+    const res = await purgeEverywhere([1]);
+
+    expect(mockGraphDeleteMessage).not.toHaveBeenCalled();
+    // Server copy survived, so the vault and backup copies must survive too.
+    expect(mockMaildirDeleteMany).not.toHaveBeenCalled();
+    expect(mockBackupPurgeUids).not.toHaveBeenCalled();
+    expect(res.deleted).toBe(0);
+    expect(res.failed).toBe(1);
   });
 });

@@ -64,6 +64,11 @@ export function getAccountCacheMailboxes(accountId) {
 // ── Graph ID map (UID → Graph message ID) ────
 const _graphIdMap = new Map();
 
+// When each `accountId:mailbox` last paid for a relist, so a loop over many
+// uids cannot pay for one each.
+const _graphIdRebuiltAt = new Map();
+const GRAPH_REBUILD_COOLDOWN_MS = 30_000;
+
 export function setGraphIdMap(accountId, mailbox, uidToGraphId) {
   _graphIdMap.set(`${accountId}:${mailbox}`, uidToGraphId);
   import('./db.js').then(db => {
@@ -76,6 +81,65 @@ export function setGraphIdMap(accountId, mailbox, uidToGraphId) {
 export function getGraphMessageId(accountId, mailbox, uid) {
   const map = _graphIdMap.get(`${accountId}:${mailbox}`);
   return map?.get(uid) || null;
+}
+
+/**
+ * The Graph message id for a row, in decreasing order of trust.
+ *
+ * A Graph "UID" is not an identifier: `graph_list_messages` hands out the
+ * message's 1-based POSITION in the folder listing (commands.rs), so every
+ * arrival or deletion renumbers the whole mailbox. The map below is that
+ * numbering frozen at the last list call and persisted to disk, which makes a
+ * uid lookup wrong exactly when the folder has changed since — and a wrong
+ * lookup on a delete path spends the user's intent on somebody else's message.
+ *
+ * `row._graphId` is stamped onto the header from the same response that
+ * assigned its position (loadEmails / activateAccount), so header and id
+ * cannot disagree. Prefer it. Fall back to the map, and when that misses,
+ * relist the folder rather than guessing — the same recovery selectEmail has
+ * always done for bodies, now shared with the mutation paths.
+ *
+ * Returns null when the id cannot be established. Callers must treat null as a
+ * failure: doing the operation anyway is how a delete reports success while
+ * the message stays on the server.
+ */
+export async function resolveGraphMessageId(accountId, mailbox, uid, { row, token } = {}) {
+  if (row?._graphId) return row._graphId;
+
+  const known = getGraphMessageId(accountId, mailbox, uid);
+  if (known) return known;
+  if (!token) return null;
+
+  // One relist per folder, not per message. A bulk delete walks its uids in a
+  // loop, and a uid genuinely absent from the folder misses the refreshed map
+  // as surely as it missed the stale one — without this, 500 selected messages
+  // against an emptied folder is 500 round trips.
+  const rebuildKey = `${accountId}:${mailbox}`;
+  const lastRebuild = _graphIdRebuiltAt.get(rebuildKey) || 0;
+  if (Date.now() - lastRebuild < GRAPH_REBUILD_COOLDOWN_MS) return null;
+  _graphIdRebuiltAt.set(rebuildKey, Date.now());
+
+  try {
+    const [api, { normalizeGraphFolderName }] = await Promise.all([
+      import('./api.js'),
+      import('./graphConfig.js'),
+    ]);
+    const folders = await api.graphListFolders(token);
+    const folder = folders.find(f => {
+      const normalized = normalizeGraphFolderName(f.displayName);
+      return normalized === mailbox || f.displayName === mailbox;
+    });
+    if (!folder) return null;
+
+    const { headers, graphMessageIds } = await api.graphListMessages(token, folder.id, 200, 0);
+    const uidMap = new Map();
+    headers.forEach((h, i) => uidMap.set(h.uid, graphMessageIds[i]));
+    setGraphIdMap(accountId, mailbox, uidMap);
+    return uidMap.get(uid) || null;
+  } catch (e) {
+    console.warn('[graphIdMap] Rebuild failed for %s:%s', accountId, mailbox, e);
+    return null;
+  }
 }
 
 export function clearGraphIdMap(accountId) {

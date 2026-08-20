@@ -60,6 +60,7 @@ vi.mock('../../cacheManager', () => ({
   getRestoreDescriptor: vi.fn().mockReturnValue(null),
   setGraphIdMap: vi.fn(),
   getGraphMessageId: vi.fn().mockReturnValue(null),
+  resolveGraphMessageId: vi.fn().mockResolvedValue(null),
   restoreGraphIdMap: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('../../../stores/settingsStore', () => ({

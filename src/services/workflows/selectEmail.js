@@ -5,14 +5,42 @@ import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ensureFreshToken } from '../authUtils';
 import { hasRealAttachments, hydrateInlineImages } from '../attachmentUtils';
-import { isGraphAccount, normalizeGraphFolderName, graphMessageToEmail } from '../graphConfig';
-import { setGraphIdMap as _setGraphIdMap, getGraphMessageId } from '../cacheManager';
-import { _resolveUnifiedContext } from '../../stores/slices/unifiedHelpers';
+import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
+import { getGraphMessageId, resolveGraphMessageId } from '../cacheManager';
+import { _resolveUnifiedContext, bodyMatchesHeader } from '../../stores/slices/unifiedHelpers';
 import { _shouldPrefetch, getCacheCurrentSizeMB } from '../../stores/slices/cacheSlice';
 import { applySeenLocally, _setSeenOnServer } from './messageMutations';
 
 // Module-level mark-as-read timer
 let _markAsReadTimer = null;
+
+
+// ── vault read, verified against the row it was read for ──
+//
+// The vault Maildir is keyed (accountId, mailbox, uid) and carries no
+// UIDVALIDITY stamp, so a uid it archived under one generation of a mailbox
+// names a different message once the server reissues its UID space — a
+// change-server migration, or a reissue the server does on its own. The read
+// still lands on a real message, so nothing errors and nothing looks wrong:
+// the viewer renders that message whole, header included, under the row the
+// user clicked.
+//
+// A Message-ID that contradicts the row's is proof the copy is not this
+// message. Missing on either side proves nothing, so it is allowed through —
+// same contract as useChatBodyLoader, which has guarded its own vault read
+// since the thread-view instance of this bug.
+async function _readVerifiedLocal(accountId, mailbox, uid, headerRow) {
+  const localEmail = await db.getLocalEmailLight(accountId, mailbox, uid);
+  if (localEmail && !bodyMatchesHeader(headerRow, localEmail)) {
+    console.warn('[selectEmail] Vault copy belongs to another message — discarding', {
+      accountId, mailbox, uid,
+      rowMessageId: headerRow?.messageId,
+      vaultMessageId: localEmail?.messageId || localEmail?.message_id,
+    });
+    return undefined;
+  }
+  return localEmail;
+}
 
 
 // ── auto mark-as-read on open ──
@@ -86,7 +114,7 @@ export async function _prefetchAdjacentEmails(currentUid) {
     if (emailCache.has(cacheKey)) continue;
 
     try {
-      const localEmail = await db.getLocalEmailLight(prefetchAccountId, prefetchMailbox, nextEmail.uid);
+      const localEmail = await _readVerifiedLocal(prefetchAccountId, prefetchMailbox, nextEmail.uid, nextEmail);
       if (localEmail && localEmail.html !== undefined) {
         get().addToCache(cacheKey, localEmail, cacheLimitMB, { prefetch: true });
         continue;
@@ -96,7 +124,9 @@ export async function _prefetchAdjacentEmails(currentUid) {
       if (!account) break;
 
       if (isGraphAccount(account)) {
-        const graphId = getGraphMessageId(prefetchAccountId, prefetchMailbox, nextEmail.uid);
+        // No relist here: a prefetch is speculative, and a miss just means the
+        // body loads on click instead.
+        const graphId = nextEmail._graphId || getGraphMessageId(prefetchAccountId, prefetchMailbox, nextEmail.uid);
         if (!graphId) continue;
         const freshAccount = await ensureFreshToken(account);
         const graphMsg = await api.graphGetMessage(freshAccount.oauth2AccessToken, graphId);
@@ -158,45 +188,29 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
     }
 
     // 2. Check Maildir for cached .eml file
-    const localEmail = await db.getLocalEmailLight(accountId, mailbox, uid);
+    const headerRow = get().emails.find(e => isUnified ? (e._accountId === accountId && e.uid === uid) : e.uid === uid)
+      || get().sortedEmails.find(e => e.uid === uid);
+    const localEmail = await _readVerifiedLocal(accountId, mailbox, uid, headerRow);
 
-    if (source === 'local-only' || (localEmail && localEmail.html !== undefined)) {
+    if (localEmail && (source === 'local-only' || localEmail.html !== undefined)) {
       email = localEmail;
       actualSource = source === 'local-only' ? 'local-only' : 'local';
       get().addToCache(cacheKey, email, cacheLimitMB);
+    } else if (source === 'local-only') {
+      // Local-only means there is no server copy to fall back to, so a vault
+      // copy that failed the check above leaves nothing to render. Throwing
+      // hands the catch below its header-only path, which shows the row with
+      // an explicit body error — the one honest option left.
+      throw new Error('No local copy for this message (the vault entry under this UID is another message)');
     } else if (account && isGraphAccount(account)) {
       // 3a. Graph API: fetch full message by Graph message ID
       const freshAccount = await ensureFreshToken(account);
       const token = freshAccount.oauth2AccessToken;
 
-      // Prefer _graphId embedded on the email header (stable across refreshes).
-      // Fall back to the positional map, then rebuild as last resort.
-      const emailHeader = get().emails.find(e => e.uid === uid)
-        || get().sortedEmails.find(e => e.uid === uid);
-      let graphId = emailHeader?._graphId || getGraphMessageId(accountId, mailbox, uid);
-
-      if (!graphId) {
-        console.log('[selectEmail] Graph ID not found for UID', uid, '— rebuilding map');
-        try {
-          const folders = await api.graphListFolders(token);
-          const folder = folders.find(f => {
-            const normalized = normalizeGraphFolderName(f.displayName);
-            return normalized === mailbox || f.displayName === mailbox;
-          });
-          if (folder) {
-            const { headers: rebuildHeaders, graphMessageIds } = await api.graphListMessages(token, folder.id, 200, 0);
-            const uidMap = new Map();
-            // Use headers' UIDs (not positional index) to match correctly
-            rebuildHeaders.forEach((h, i) => {
-              uidMap.set(h.uid, graphMessageIds[i]);
-            });
-            _setGraphIdMap(accountId, mailbox, uidMap);
-            graphId = uidMap.get(uid);
-          }
-        } catch (e) {
-          console.warn('[selectEmail] Failed to rebuild Graph ID map:', e);
-        }
-      }
+      // Row `_graphId` first, then the positional map, then a relist — the
+      // ladder now lives in cacheManager and is shared with the delete, move
+      // and mark-read paths, which used to read the map raw.
+      const graphId = await resolveGraphMessageId(accountId, mailbox, uid, { row: headerRow, token });
 
       if (graphId) {
         const graphMsg = await api.graphGetMessage(token, graphId);
@@ -270,7 +284,9 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
     };
 
     try {
-      const localEmail = await db.getLocalEmailLight(accountId, mailbox, uid);
+      // Same check as the primary read: a fallback is still a render, and the
+      // wrong message is worse here than an honest "body did not load".
+      const localEmail = await _readVerifiedLocal(accountId, mailbox, uid, get().emails.find(e => e.uid === uid));
       if (localEmail) {
         useMailStore.setState({ selectedEmail: localEmail, selectedEmailSource: 'local-only' });
       } else {

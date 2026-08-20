@@ -5,7 +5,7 @@ import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ensureFreshToken } from '../authUtils';
 import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
-import { getGraphMessageId } from '../cacheManager';
+import { resolveGraphMessageId } from '../cacheManager';
 import { _resolveUnifiedContext, _selKey, _parseSelKey } from '../../stores/slices/unifiedHelpers';
 import { bumpFlagChangeCounter } from '../../stores/slices/messageListSlice';
 import { withoutUids } from '../../stores/slices/serverUids';
@@ -288,7 +288,9 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
     console.log(`[deleteEmail] Deleting UID ${uid} from mailbox "${mailbox}" (account: ${account.email}, isGraph: ${isGraphAccount(account)}, override: ${mailboxOverride})`);
     try {
       if (isGraphAccount(account)) {
-        const graphId = getGraphMessageId(accountId, mailbox, uid);
+        const graphId = await resolveGraphMessageId(accountId, mailbox, uid, {
+          row: candidate, token: account.oauth2AccessToken,
+        });
         if (!graphId) throw new Error('Cannot delete: no Graph message ID found for this email.');
         await api.graphDeleteMessage(account.oauth2AccessToken, graphId);
       } else {
@@ -343,7 +345,7 @@ const _withSeen = (flags, read) => read
 // the bulk path used to skip this branch, so mark-as-read silently failed there.
 export async function _setSeenOnServer(account, accountId, mailbox, uid, read) {
   if (isGraphAccount(account)) {
-    const graphId = getGraphMessageId(accountId, mailbox, uid);
+    const graphId = await resolveGraphMessageId(accountId, mailbox, uid, { token: account.oauth2AccessToken });
     if (!graphId) {
       console.warn('[setSeenOnServer] No Graph message ID for UID', uid);
       return;
@@ -639,12 +641,17 @@ export async function deleteSelectedFromServer() {
       const account = await ensureFreshToken(ctxAccount);
 
       if (isGraphAccount(account)) {
-        const graphId = getGraphMessageId(accountId, mailbox, realUid);
-        if (graphId) {
-          await api.graphDeleteMessage(account.oauth2AccessToken, graphId);
-        } else {
-          console.warn(`[deleteSelectedFromServer] No Graph ID for UID ${realUid}, skipping`);
-        }
+        // Not "skipping" — a Graph id we cannot establish means the delete did
+        // not happen, and falling through to `deletedRealUids.add()` below
+        // reported it as done: the row went away, the sidecar was pruned, and
+        // the message sat on the server until the next reload put it back.
+        // Throw into the catch, which lifts the tombstone and lets the
+        // reconcile restore the row — the same contract as any failed delete.
+        const graphId = await resolveGraphMessageId(accountId, mailbox, realUid, {
+          row: emailObj, token: account.oauth2AccessToken,
+        });
+        if (!graphId) throw new Error(`No Graph message ID for UID ${realUid}`);
+        await api.graphDeleteMessage(account.oauth2AccessToken, graphId);
       } else {
         await api.deleteEmail(account, realUid, mailbox);
       }
@@ -803,7 +810,9 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
     // entry has no index row yet.
     const provenance = provenanceByGroup.get(groupKey(accountId, mailbox))?.get(uid);
     const localOnly = emailObj?._localStaged === true || LOCALLY_CREATED.has(provenance);
-    return { uid, accountId, mailbox, account, localOnly, tombstone };
+    // `row` rides along for Graph: it carries `_graphId`, the only id stamped
+    // from the same listing that assigned this uid its position.
+    return { uid, accountId, mailbox, account, localOnly, tombstone, row: emailObj };
   }).filter(t => t.account || t.localOnly);
 
   // Optimistic removal, same shape as deleteSelectedFromServer — the deletes
@@ -840,7 +849,7 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
   // reissued out from under it; gating it too would make deleting an
   // offline-composed message a permanent failure for an operation that
   // touches no server at all. Graph accounts are exempt outright: Graph
-  // deletes address messages by Graph id (getGraphMessageId), never by IMAP
+  // deletes address messages by Graph id (resolveGraphMessageId), never by IMAP
   // uid, so there is no UID space here to poison in the first place.
   //
   // One STATUS round trip per (accountId, mailbox) group, not per message.
@@ -898,7 +907,9 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
       try {
         const account = await ensureFreshToken(t.account);
         if (isGraphAccount(account)) {
-          const graphId = getGraphMessageId(t.accountId, t.mailbox, t.uid);
+          const graphId = await resolveGraphMessageId(t.accountId, t.mailbox, t.uid, {
+            row: t.row, token: account.oauth2AccessToken,
+          });
           if (!graphId) throw new Error(`No Graph ID for UID ${t.uid}`);
           await api.graphDeleteMessage(account.oauth2AccessToken, graphId);
         } else {
@@ -1035,10 +1046,13 @@ export async function moveEmails(uids, targetMailbox) {
     account = await ensureFreshToken(account);
 
     if (isGraphAccount(account)) {
-      const messageIds = uids
-        .map(uid => getGraphMessageId(activeAccountId, activeMailbox, uid))
-        .filter(Boolean);
-      if (messageIds.length === 0) throw new Error('Cannot move: no Graph message IDs found for selected emails.');
+      const rowOf = (uid) => state.emails.find(e => e.uid === uid) || state.sentEmails.find(e => e.uid === uid);
+      const messageIds = (await Promise.all(uids.map(uid => resolveGraphMessageId(
+        activeAccountId, activeMailbox, uid, { row: rowOf(uid), token: account.oauth2AccessToken },
+      )))).filter(Boolean);
+      if (messageIds.length !== uids.length) {
+        throw new Error('Cannot move: no Graph message ID for some of the selected emails.');
+      }
 
       const targetFolder = mailboxes.find(m => m.path === targetMailbox || m.name === targetMailbox);
       if (!targetFolder || !targetFolder._graphFolderId) {
