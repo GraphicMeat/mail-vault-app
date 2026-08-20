@@ -109,3 +109,29 @@ describe('SelectionActionBar delete confirmation', () => {
     expect(useMailStoreMock.getState().purgeSelectedEverywhere).not.toHaveBeenCalled();
   });
 });
+
+// The bar and the bulk modal read the same selection and must not disagree
+// about it on screen. The modal says "65 emails selected"; the bar led with
+// the conversation count, so the pair read "52 selected (65 emails)" over an
+// archive that processed 65.
+describe('SelectionActionBar selection count', () => {
+  beforeEach(() => {
+    useMailStoreMock.setState({
+      selectedEmailIds: new Set(Array.from({ length: 65 }, (_, i) => i + 1)),
+      archivedEmailIds: new Set(),
+      getSelectionSummary: vi.fn(() => ({ threads: 52, emails: 65 })),
+    });
+  });
+  afterEach(() => cleanup());
+
+  it('leads with the message count the actions operate on', () => {
+    render(<SelectionActionBar />);
+    expect(screen.getByText('65 selected (52 conversations)')).toBeTruthy();
+  });
+
+  it('drops the parenthetical when no messages share a conversation', () => {
+    useMailStoreMock.setState({ getSelectionSummary: vi.fn(() => ({ threads: 65, emails: 65 })) });
+    render(<SelectionActionBar />);
+    expect(screen.getByText('65 selected')).toBeTruthy();
+  });
+});

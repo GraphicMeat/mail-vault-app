@@ -87,14 +87,33 @@ export const createSelectionSlice = (set, get) => ({
 
     const isUnified = activeMailbox === 'UNIFIED';
     const threads = buildThreads(sortedEmails);
+    // `sortedEmails` is the paginated render window; the selection is not
+    // bound to it — the bulk modal resolves a date range against the whole
+    // sidecar cache (BulkOperationsModal's `cachedRows`), so it can select
+    // messages that were never rendered. Threading only knows the window, so
+    // track which selected keys a loaded thread actually covers.
+    const covered = new Set();
     let threadCount = 0;
 
     for (const [, thread] of threads) {
-      const hasSelected = thread.emails.some(e => selectedEmailIds.has(isUnified ? _selKey(e) : e.uid));
+      let hasSelected = false;
+      for (const e of thread.emails) {
+        const key = isUnified ? _selKey(e) : e.uid;
+        if (selectedEmailIds.has(key)) {
+          covered.add(key);
+          hasSelected = true;
+        }
+      }
       if (hasSelected) threadCount++;
     }
 
-    return { threads: threadCount, emails: selectedEmailIds.size };
+    // Anything the window couldn't thread counts as its own unit — dropping
+    // it made the action bar report fewer than the operation acts on (bar
+    // "52 selected (65 emails)" against the modal's 65, archiving 65).
+    let unwindowed = 0;
+    for (const key of selectedEmailIds) if (!covered.has(key)) unwindowed++;
+
+    return { threads: threadCount + unwindowed, emails: selectedEmailIds.size };
   },
 
   // ── Passthrough wrappers to workflow functions ──

@@ -109,4 +109,35 @@ describe('bulk session', () => {
     expect(s.bulkSession.mailbox).toBe('INBOX.Spam');
     expect(s.bulkSession.viewMode).toBe('local');
   });
+
+  // The bar and the bulk modal must agree: the modal selects against the whole
+  // sidecar cache, so most of a range selection can sit outside the paginated
+  // render window. Threading only sees the window — those rows used to count
+  // as zero, so the bar read "52 selected (65 emails)" while the modal (and
+  // the archive that followed) worked on 65.
+  it('counts selected messages that are outside the render window', () => {
+    useMailStore.setState({
+      activeMailbox: 'INBOX',
+      sortedEmails: [
+        { uid: 1, messageId: '<a@x>' },
+        { uid: 2, messageId: '<b@x>' },
+      ],
+    });
+    useMailStore.getState().setSelection([1, 2, 3, 4]);
+
+    expect(useMailStore.getState().getSelectionSummary()).toEqual({ threads: 4, emails: 4 });
+  });
+
+  it('still collapses a loaded thread to one unit', () => {
+    useMailStore.setState({
+      activeMailbox: 'INBOX',
+      sortedEmails: [
+        { uid: 1, messageId: '<a@x>' },
+        { uid: 2, messageId: '<b@x>', inReplyTo: '<a@x>' },
+      ],
+    });
+    useMailStore.getState().setSelection([1, 2]);
+
+    expect(useMailStore.getState().getSelectionSummary()).toEqual({ threads: 1, emails: 2 });
+  });
 });

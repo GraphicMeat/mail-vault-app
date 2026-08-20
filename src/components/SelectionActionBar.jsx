@@ -96,9 +96,13 @@ export function SelectionActionBar() {
     }
   };
 
+  // Lead with the message count, not the conversation count: every button on
+  // this bar acts per message, and so does the bulk modal — which reads "65
+  // emails selected" off the same selection. Leading with threads made the two
+  // disagree on screen ("52 selected (65 emails)") about a run that touches 65.
   const selectionLabel = summary.threads === summary.emails
-    ? `${summary.threads} selected`
-    : `${summary.threads} selected (${summary.emails} emails)`;
+    ? `${summary.emails} selected`
+    : `${summary.emails} selected (${summary.threads} conversations)`;
 
   return (
     <AnimatePresence>
