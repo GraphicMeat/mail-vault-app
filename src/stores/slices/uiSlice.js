@@ -9,6 +9,11 @@ export const createUiSlice = (set, get) => ({
   // View mode: 'all' | 'server' | 'local'
   viewMode: 'all',
 
+  // Unread-only list filter. Session-scoped on purpose — same as viewMode,
+  // and a persisted flag that hides most of a mailbox across restarts reads
+  // as lost mail, not as a filter.
+  unreadOnly: false,
+
   // Incremented on flag changes (read/unread) — allows thread caches to invalidate
   _flagSeq: 0,
 
@@ -126,6 +131,8 @@ export const createUiSlice = (set, get) => ({
       }
     }
   },
+
+  toggleUnreadOnly: () => set(state => ({ unreadOnly: !state.unreadOnly })),
 
   setExportProgress: (progress) => {
     set({ exportProgress: progress });

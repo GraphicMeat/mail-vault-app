@@ -9,9 +9,9 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
   };
 }
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 
 // Track useVirtualizer calls
 let lastVirtualizerConfig = null;
@@ -48,7 +48,8 @@ vi.mock('lucide-react', () => {
     Paperclip: icon('Paperclip'), MoreHorizontal: icon('MoreHorizontal'), Trash2: icon('Trash2'),
     CheckSquare: icon('CheckSquare'), Square: icon('Square'), Archive: icon('Archive'),
     X: icon('X'), Layers: icon('Layers'), Search: icon('Search'),
-    MessageSquare: icon('MessageSquare'), Users: icon('Users'),
+    MessageSquare: icon('MessageSquare'), Users: icon('Users'), Mail: icon('Mail'),
+    AlertTriangle: icon('AlertTriangle'),
   };
 });
 
@@ -126,6 +127,8 @@ vi.mock('../../stores/mailStore', () => {
     getChatEmails: vi.fn(() => []),
     getSentMailboxPath: vi.fn(() => 'Sent'),
     refreshBackedUpUids: vi.fn(),
+    unreadOnly: false,
+    toggleUnreadOnly: vi.fn(),
     saveEmailLocally: vi.fn(),
     removeLocalEmail: vi.fn(),
     deleteEmailFromServer: vi.fn(),
@@ -165,7 +168,8 @@ vi.mock('../../stores/settingsStore', () => ({
   hashColor: () => '#888',
 }));
 
-vi.mock('../../utils/emailParser', () => ({
+vi.mock('../../utils/emailParser', async (importOriginal) => ({
+  ...(await importOriginal()),
   buildThreads: (emails) => {
     // Return a simple Map: each email is its own thread
     const map = new Map();
@@ -423,5 +427,139 @@ describe('formatPurgeEverywhereOutcome', () => {
     expect(msg).toContain('1 could not be deleted from the server and was left untouched locally');
     expect(msg).toContain('1 backup copy will be removed');
     expect(msg).toContain('1 was skipped because this mailbox needs to resync');
+  });
+});
+
+// ── Unread-only filter ────────────────────────────────────────────────────
+// The filter is a view concern: the store keeps handing out the full window
+// (bulk operations, the viewer's own lookups and the unread badges all read
+// it), and the list narrows what it draws. These drive the real component so
+// a filter that is never wired to the virtualizer cannot pass.
+describe('unread-only filter', () => {
+  const mixed = (count) =>
+    Array.from({ length: count }, (_, i) => ({
+      uid: i + 1,
+      subject: `Email ${i + 1}`,
+      from: [{ address: `sender${i}@test.com`, name: `Sender ${i}` }],
+      to: [{ address: 'me@test.com' }],
+      date: new Date(2024, 0, 1, 0, 0, i).toISOString(),
+      // Odd uids unread, even read — the same split the mock IMAP server uses.
+      flags: (i + 1) % 2 === 0 ? ['\\Seen'] : [],
+      source: 'server',
+      snippet: 'test snippet',
+      has_attachments: false,
+      isArchived: false,
+    }));
+
+  afterEach(async () => {
+    cleanup();
+    const { useMailStore } = await import('../../stores/mailStore');
+    useMailStore.setState({
+      unreadOnly: false,
+      sortedEmails: mockEmails,
+      totalEmails: 500,
+      selectedEmailId: null,
+    });
+  });
+
+  it('draws every row when the filter is off', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    useMailStore.setState({ sortedEmails: mixed(10), totalEmails: 10, unreadOnly: false });
+
+    const { EmailList } = await import('../EmailList.jsx');
+    render(React.createElement(EmailList));
+
+    expect(lastVirtualizerConfig.count).toBe(10);
+  });
+
+  it('draws only unread rows when the filter is on', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    useMailStore.setState({ sortedEmails: mixed(10), totalEmails: 10, unreadOnly: true });
+
+    const { EmailList } = await import('../EmailList.jsx');
+    render(React.createElement(EmailList));
+
+    expect(lastVirtualizerConfig.count).toBe(5);
+  });
+
+  // Opening an unread message marks it read a beat later. Dropping its row at
+  // that moment yanks the message out from under the reader, so the open one
+  // stays until the selection moves on.
+  it('keeps the open message on screen after it turns read', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    // uid 2 is read — it only survives because it is the selected message.
+    useMailStore.setState({ sortedEmails: mixed(10), totalEmails: 10, unreadOnly: true, selectedEmailId: 2 });
+
+    const { EmailList } = await import('../EmailList.jsx');
+    render(React.createElement(EmailList));
+
+    expect(lastVirtualizerConfig.count).toBe(6);
+  });
+
+  it('counts the unread rows in the header, not the whole window', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    useMailStore.setState({ sortedEmails: mixed(10), totalEmails: 10, unreadOnly: true });
+
+    const { EmailList } = await import('../EmailList.jsx');
+    render(React.createElement(EmailList));
+
+    expect(screen.getByTestId('email-list-count').textContent).toBe('5 unread');
+  });
+
+  it('toggles the filter from the list header', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    useMailStore.getState().toggleUnreadOnly.mockClear();
+    useMailStore.setState({ sortedEmails: mixed(10), totalEmails: 10, unreadOnly: false });
+
+    const { EmailList } = await import('../EmailList.jsx');
+    render(React.createElement(EmailList));
+
+    fireEvent.click(screen.getByTestId('unread-filter-toggle'));
+    expect(useMailStore.getState().toggleUnreadOnly).toHaveBeenCalled();
+  });
+
+  // A filter that hides everything must say so, and offer the way back —
+  // otherwise a filtered list is indistinguishable from lost mail.
+  it('offers a way out when the filter empties the list', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    useMailStore.getState().toggleUnreadOnly.mockClear();
+    useMailStore.setState({
+      sortedEmails: mockEmails.slice(0, 4), // every fixture email carries \\Seen
+      totalEmails: 4,
+      unreadOnly: true,
+    });
+
+    const { EmailList } = await import('../EmailList.jsx');
+    render(React.createElement(EmailList));
+
+    expect(screen.getByText(/No unread messages/i)).toBeTruthy();
+    fireEvent.click(screen.getByText(/Show all messages/i));
+    expect(useMailStore.getState().toggleUnreadOnly).toHaveBeenCalled();
+  });
+});
+
+// The header line is the only place that says how much of the mailbox the
+// list is actually showing. It has to stay honest in both directions: the
+// filter only sees the loaded window, so "12 unread" on a half-loaded 15k
+// mailbox would be a claim the app cannot back.
+describe('formatListCount', () => {
+  it('reports the mailbox total once the window covers it', async () => {
+    const { formatListCount } = await import('../EmailList.jsx');
+    expect(formatListCount({ shown: 500, loaded: 500, total: 500, unreadOnly: false })).toBe('500 emails');
+  });
+
+  it('reports how much of the mailbox is loaded while it is short', async () => {
+    const { formatListCount } = await import('../EmailList.jsx');
+    expect(formatListCount({ shown: 741, loaded: 741, total: 15067, unreadOnly: false })).toBe('741 of 15,067 emails');
+  });
+
+  it('counts unread when the filter is on and the window is complete', async () => {
+    const { formatListCount } = await import('../EmailList.jsx');
+    expect(formatListCount({ shown: 12, loaded: 500, total: 500, unreadOnly: true })).toBe('12 unread');
+  });
+
+  it('names the loaded window when the filter can only see part of the mailbox', async () => {
+    const { formatListCount } = await import('../EmailList.jsx');
+    expect(formatListCount({ shown: 12, loaded: 741, total: 15067, unreadOnly: true })).toBe('12 unread of 741 loaded');
   });
 });

@@ -971,3 +971,29 @@ export function isFromUser(email, userEmail) {
   const fromAddress = email.from?.address?.toLowerCase() || '';
   return fromAddress === userEmail?.toLowerCase();
 }
+
+/**
+ * Read state lives in the IMAP flags array. A message carrying no flags at all
+ * — a local-only Maildir restore, a header that landed before its flags did —
+ * has never been marked seen either, so absence reads as unread.
+ */
+export function isUnread(email) {
+  return !email?.flags?.includes('\\Seen');
+}
+
+/**
+ * The unread-only list filter.
+ *
+ * `keepUid` is the message the user currently has open: opening an unread
+ * message marks it read, and dropping it the instant that lands would pull the
+ * row out from under the reader mid-sentence. It stays until the selection
+ * moves on.
+ *
+ * Returns the input array itself when the filter is off — callers memoize on
+ * identity, and a fresh array there would rebuild every row for nothing.
+ */
+export function filterUnread(emails, unreadOnly, keepUid) {
+  if (!unreadOnly) return emails || [];
+  if (!emails) return [];
+  return emails.filter(e => isUnread(e) || (keepUid != null && e.uid === keepUid));
+}

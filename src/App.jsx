@@ -40,6 +40,7 @@ import * as bulkApi from './services/api';
 import { bulkOperationManager } from './services/BulkOperationManager';
 import { resolveErrorToastProps } from './utils/errorToast';
 import { resolveEscapeAction } from './utils/escapeAction';
+import { filterUnread } from './utils/emailParser';
 import { migrationManager } from './services/migrationManager.js';
 import { restoreManager } from './services/restoreManager.js';
 import { version } from '../package.json';
@@ -251,19 +252,24 @@ function App() {
       const uid = useMailStore.getState().selectedEmailId;
       if (uid) useMailStore.getState().deleteEmailFromServer(uid);
     },
+    // j/k walk the list the user can actually see: with the unread filter on,
+    // the store still holds every loaded message, so navigating the raw
+    // sortedEmails would select rows that aren't on screen.
     nextEmail: () => {
-      const { sortedEmails, selectedEmailId, selectEmail } = useMailStore.getState();
-      if (!sortedEmails.length) return;
-      const idx = sortedEmails.findIndex(e => e.uid === selectedEmailId);
-      const next = idx < sortedEmails.length - 1 ? idx + 1 : idx;
-      if (sortedEmails[next]) selectEmail(sortedEmails[next].uid);
+      const { sortedEmails, selectedEmailId, selectEmail, unreadOnly } = useMailStore.getState();
+      const visible = filterUnread(sortedEmails, unreadOnly, selectedEmailId);
+      if (!visible.length) return;
+      const idx = visible.findIndex(e => e.uid === selectedEmailId);
+      const next = idx < visible.length - 1 ? idx + 1 : idx;
+      if (visible[next]) selectEmail(visible[next].uid);
     },
     prevEmail: () => {
-      const { sortedEmails, selectedEmailId, selectEmail } = useMailStore.getState();
-      if (!sortedEmails.length) return;
-      const idx = sortedEmails.findIndex(e => e.uid === selectedEmailId);
+      const { sortedEmails, selectedEmailId, selectEmail, unreadOnly } = useMailStore.getState();
+      const visible = filterUnread(sortedEmails, unreadOnly, selectedEmailId);
+      if (!visible.length) return;
+      const idx = visible.findIndex(e => e.uid === selectedEmailId);
       const prev = idx > 0 ? idx - 1 : 0;
-      if (sortedEmails[prev]) selectEmail(sortedEmails[prev].uid);
+      if (visible[prev]) selectEmail(visible[prev].uid);
     },
     goToInbox: () => { const s = useMailStore.getState(); s.activateAccount(s.activeAccountId, 'INBOX'); },
     goToSent: () => { const s = useMailStore.getState(); s.activateAccount(s.activeAccountId, 'Sent'); },

@@ -9,7 +9,7 @@ import { useUiStore } from '../stores/uiStore';
 import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore, getAccountInitial, hashColor } from '../stores/settingsStore';
 import { shouldPrefetch } from '../services/cachePressure';
-import { buildThreads, groupBySender, getSenderName } from '../utils/emailParser';
+import { buildThreads, groupBySender, getSenderName, filterUnread } from '../utils/emailParser';
 import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
@@ -31,6 +31,7 @@ import {
   Users,
   AlertTriangle,
   Trash2,
+  Mail,
 } from 'lucide-react';
 import { BulkOperationsModal } from './BulkOperationsModal';
 import { BulkSelectionBubble } from './BulkSelectionBubble';
@@ -123,6 +124,24 @@ export function formatPurgeEverywhereOutcome(result) {
   return clauses.join(' ');
 }
 
+// The header's one line about how much of the mailbox is on screen.
+//
+// `shown` is what the list draws, `loaded` the window the store holds, `total`
+// what the server says the mailbox has. With the unread filter on, the honest
+// claim is about the loaded window only — the filter cannot see a message that
+// was never fetched, so "12 unread" on a half-loaded 15k mailbox would be a
+// promise the app can't keep.
+export function formatListCount({ shown, loaded, total, unreadOnly }) {
+  if (unreadOnly) {
+    return loaded < total
+      ? `${shown.toLocaleString()} unread of ${loaded.toLocaleString()} loaded`
+      : `${shown.toLocaleString()} unread`;
+  }
+  return shown < total
+    ? `${shown.toLocaleString()} of ${total.toLocaleString()} emails`
+    : `${total.toLocaleString()} emails`;
+}
+
 function EmailListComponent() {
   // Individual selectors — component only re-renders when these specific fields change
   const loading = useSyncStore(s => s.loading);
@@ -136,6 +155,8 @@ function EmailListComponent() {
   const sortedEmails = useMessageListStore(s => s.sortedEmails);
   const sentEmails = useMessageListStore(s => s.sentEmails);
   const hasMoreEmails = useMessageListStore(s => s.hasMoreEmails);
+  const unreadOnly = useUiStore(s => s.unreadOnly);
+  const toggleUnreadOnly = useUiStore(s => s.toggleUnreadOnly);
   const searchActive = useSearchStore(s => s.searchActive);
   const searchResults = useSearchStore(s => s.searchResults);
   const flagSeq = useUiStore(s => s._flagSeq);
@@ -353,9 +374,11 @@ function EmailListComponent() {
 
   // sortedEmails is already combined (server + local-only), flagged (isLocal, isArchived, source),
   // and sorted by updateSortedEmails(). Use directly to avoid redundant 17k-object spread + sort.
+  // filterUnread hands back the very same array when the filter is off, so the
+  // identity checks downstream (row cache, thread cache) stay hot.
   const displayEmails = useMemo(
-    () => searchActive ? searchResults : sortedEmails,
-    [searchActive, searchResults, sortedEmails]
+    () => filterUnread(searchActive ? searchResults : sortedEmails, unreadOnly, selectedEmailId),
+    [searchActive, searchResults, sortedEmails, unreadOnly, selectedEmailId]
   );
 
   // Exit skeleton mode once loading finishes for the current view (even if empty)
@@ -426,8 +449,8 @@ function EmailListComponent() {
 
     // Only merge INBOX + Sent when viewing INBOX; other folders use their own emails
     const usesMerged = activeAccountEmail && activeMailbox === 'INBOX';
-    const emails = usesMerged ? getChatEmails() : displayEmails;
-    const fp = `sender-${activeAccountId}-${activeMailbox}-${emails.length}-${emails[0]?.uid}-${emails[emails.length - 1]?.uid}-${archivedSize}-${activeAccountEmail}-${sentEmails.length}-${alertCount}`;
+    const emails = usesMerged ? filterUnread(getChatEmails(), unreadOnly, selectedEmailId) : displayEmails;
+    const fp = `sender-${activeAccountId}-${activeMailbox}-${emails.length}-${emails[0]?.uid}-${emails[emails.length - 1]?.uid}-${archivedSize}-${activeAccountEmail}-${sentEmails.length}-${alertCount}-${unreadOnly}`;
 
     if (senderGroupCacheRef.current.fingerprint === fp) {
       if (senderGroups !== senderGroupCacheRef.current.groups) {
@@ -445,7 +468,7 @@ function EmailListComponent() {
     }, 0);
 
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [displayEmails, sentEmails, emailListGrouping, archivedSize, activeAccountEmail, activeMailbox, alertCount]);
+  }, [displayEmails, sentEmails, emailListGrouping, archivedSize, activeAccountEmail, activeMailbox, alertCount, unreadOnly, selectedEmailId]);
 
   // ── Cached display-row builder ──
   // Separates structural rebuilds (membership/order) from lightweight flag-freshening passes.
@@ -797,9 +820,12 @@ function EmailListComponent() {
                     half-loaded window looked identical to a full one. Say what the
                     list actually holds whenever it's short of the total. */}
                 <span data-testid="email-list-count">
-                  {displayEmails.length < totalEmails
-                    ? `${displayEmails.length.toLocaleString()} of ${totalEmails.toLocaleString()} emails`
-                    : `${totalEmails.toLocaleString()} emails`}
+                  {formatListCount({
+                    shown: displayEmails.length,
+                    loaded: sortedEmails.length,
+                    total: totalEmails,
+                    unreadOnly,
+                  })}
                 </span>
                 <span>·</span>
                 <span className="capitalize">{viewMode}</span>
@@ -815,6 +841,20 @@ function EmailListComponent() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Unread-only filter */}
+          <button
+            data-testid="unread-filter-toggle"
+            onClick={toggleUnreadOnly}
+            className={`p-1.5 rounded-lg transition-colors ${
+              unreadOnly
+                ? 'bg-mail-accent/10 text-mail-accent'
+                : 'text-mail-text-muted hover:bg-mail-border'
+            }`}
+            title={unreadOnly ? 'Show all messages' : 'Show unread only'}
+            aria-pressed={unreadOnly}
+          >
+            <Mail size={16} />
+          </button>
           {/* Sender grouping toggle */}
           <button
             onClick={() => setEmailListGrouping(
@@ -901,7 +941,24 @@ function EmailListComponent() {
             data-testid="email-list-empty-state"
             className="flex flex-col items-center justify-center h-full text-mail-text-muted"
           >
-            {searchActive ? (
+            {unreadOnly && !searchActive ? (
+              <>
+                <Mail size={48} className="mb-4 opacity-50" />
+                <p>No unread messages</p>
+                <p className="text-sm mt-2">
+                  {sortedEmails.length > 0
+                    ? `${sortedEmails.length.toLocaleString()} loaded ${sortedEmails.length === 1 ? 'message has' : 'messages have'} all been read`
+                    : 'This folder is empty'}
+                </p>
+                <button
+                  onClick={toggleUnreadOnly}
+                  className="mt-4 px-4 py-2 bg-mail-surface border border-mail-border rounded-lg
+                            text-sm hover:border-mail-accent transition-colors"
+                >
+                  Show all messages
+                </button>
+              </>
+            ) : searchActive ? (
               <>
                 <Search size={48} className="mb-4 opacity-50" />
                 <p>No results found</p>
