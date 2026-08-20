@@ -898,6 +898,12 @@ fn delete_mailbox_cache(app_handle: tauri::AppHandle, account_id: String) -> Res
 
 // ── Graph ID map cache (UID → Graph message ID) ────────────────────────
 
+/// Lives in the mailbox's sidecar directory alongside the `<uid>.json` files.
+/// Its presence is what tells a reader that this mailbox's UIDs were allocated
+/// by us over a date-ordered Graph listing rather than issued by an IMAP server
+/// in arrival order — see `load_from_sidecars`.
+const GRAPH_ID_MAP_FILE: &str = "graph_id_map.json";
+
 #[tauri::command]
 fn save_graph_id_map(app_handle: tauri::AppHandle, account_id: String, mailbox: String, data: String) -> Result<(), String> {
     let base_name = cache_base_name(&account_id, &mailbox);
@@ -908,7 +914,7 @@ fn save_graph_id_map(app_handle: tauri::AppHandle, account_id: String, mailbox: 
     fs::create_dir_all(&dir)
         .map_err(|e| format!("save_graph_id_map: failed to create dir: {}", e))?;
 
-    fs::write(dir.join("graph_id_map.json"), data.as_bytes())
+    fs::write(dir.join(GRAPH_ID_MAP_FILE), data.as_bytes())
         .map_err(|e| format!("save_graph_id_map: failed to write: {}", e))?;
 
     Ok(())
@@ -920,7 +926,7 @@ fn load_graph_id_map(app_handle: tauri::AppHandle, account_id: String, mailbox: 
     let file = vault::root(&app_handle)?
         .join("email_cache")
         .join(&base_name)
-        .join("graph_id_map.json");
+        .join(GRAPH_ID_MAP_FILE);
 
     if !file.exists() {
         return Ok(None);
@@ -1105,7 +1111,59 @@ async fn list_cached_uids(
     }).await.map_err(|e| format!("Task join error: {}", e))?
 }
 
-/// Read emails from sidecar directory. If limit is Some(n), only read the N most recent (highest UIDs).
+/// Read and parse the named sidecars, skipping any that are missing or corrupt.
+fn read_sidecars(sidecar_dir: &Path, uids: &[u64]) -> Vec<serde_json::Value> {
+    let mut emails = Vec::with_capacity(uids.len());
+    for uid in uids {
+        let file_path = sidecar_dir.join(format!("{}.json", uid));
+        if let Ok(data) = fs::read_to_string(&file_path) {
+            if let Ok(email) = serde_json::from_str(&data) {
+                emails.push(email);
+            }
+        }
+    }
+    emails
+}
+
+/// A cached header's received time in epoch milliseconds, or `i64::MIN` when it
+/// carries no date we can parse. Undated rows sort last: a header we can't place
+/// in time must never displace one we can.
+fn header_date_ms(email: &serde_json::Value) -> i64 {
+    ["internalDate", "date"]
+        .iter()
+        .filter_map(|key| email.get(*key).and_then(|v| v.as_str()))
+        .find_map(|s| {
+            chrono::DateTime::parse_from_rfc3339(s)
+                .or_else(|_| chrono::DateTime::parse_from_rfc2822(s))
+                .map(|d| d.timestamp_millis())
+                .ok()
+        })
+        .unwrap_or(i64::MIN)
+}
+
+fn header_uid(email: &serde_json::Value) -> u64 {
+    email.get("uid").and_then(|u| u.as_u64()).unwrap_or(0)
+}
+
+/// Read `limit` sidecars' worth of the newest cached headers, or all of them
+/// when `limit` is None.
+///
+/// "Newest" is the N highest UIDs for IMAP, where the server issues UIDs in
+/// arrival order — the readdir alone picks them, and no file is opened that
+/// isn't returned.
+///
+/// Graph offers no such guarantee, so those mailboxes are ordered by the header
+/// date instead. Its listing is `receivedDateTime desc`, so the seed handed uid
+/// 1 to the NEWEST message and counted upward into the past; messages that
+/// arrive after the seed then take the highest numbers of all. UID order there
+/// runs descending by date and then ascending, which is not an order at all —
+/// sorting by it served up the OLDEST cached messages. `graph_id_map.json` is
+/// the marker: it is written by the same allocator that hands out those uids,
+/// so it exists for exactly the mailboxes whose uids can't be trusted to sort.
+///
+/// ponytail: the date path reads every sidecar, not `limit` of them — one read
+/// per cached message on a Graph mailbox. If that shows up on the startup path,
+/// index uid → date in `_meta.json` on write and sort from that instead.
 fn load_from_sidecars(sidecar_dir: &Path, meta_file: &Path, limit: Option<usize>) -> Result<Option<String>, String> {
     // Read metadata
     let meta_data = fs::read_to_string(meta_file)
@@ -1128,25 +1186,38 @@ fn load_from_sidecars(sidecar_dir: &Path, meta_file: &Path, limit: Option<usize>
     }
 
     let total_cached = uids.len();
+    let uid_tracks_arrival = !sidecar_dir.join(GRAPH_ID_MAP_FILE).exists();
 
-    // Sort descending (newest first) and apply limit
-    uids.sort_unstable_by(|a, b| b.cmp(a));
-    if let Some(limit) = limit {
-        uids.truncate(limit);
-    }
-
-    // Read selected email files
-    let mut emails: Vec<serde_json::Value> = Vec::with_capacity(uids.len());
-    for uid in &uids {
-        let file_path = sidecar_dir.join(format!("{}.json", uid));
-        if let Ok(data) = fs::read_to_string(&file_path) {
-            if let Ok(email) = serde_json::from_str(&data) {
-                emails.push(email);
-            }
+    let emails: Vec<serde_json::Value> = if uid_tracks_arrival {
+        // Highest UIDs are the newest — pick them off the readdir, then read
+        // only those files.
+        uids.sort_unstable_by(|a, b| b.cmp(a));
+        if let Some(limit) = limit {
+            uids.truncate(limit);
         }
-    }
+        read_sidecars(sidecar_dir, &uids)
+    } else {
+        // UID says nothing about age here, so every header has to be read
+        // before the newest can be named. Ties break on UID only to keep the
+        // result stable across filesystems — same-second arrivals have no
+        // meaningful order.
+        let mut all = read_sidecars(sidecar_dir, &uids);
+        all.sort_by(|a, b| {
+            header_date_ms(b)
+                .cmp(&header_date_ms(a))
+                .then_with(|| header_uid(b).cmp(&header_uid(a)))
+        });
+        if let Some(limit) = limit {
+            all.truncate(limit);
+        }
+        all
+    };
 
-    info!("Sidecar cache loaded: {} of {} emails (limit: {:?})", emails.len(), total_cached, limit);
+    info!(
+        "Sidecar cache loaded: {} of {} emails (limit: {:?}, order: {})",
+        emails.len(), total_cached, limit,
+        if uid_tracks_arrival { "uid" } else { "date" }
+    );
 
     // Build response in the same format as the old monolithic cache
     let result = serde_json::json!({
@@ -1183,11 +1254,13 @@ fn load_email_cache_meta(app_handle: tauri::AppHandle, account_id: String, mailb
         let mut meta: serde_json::Value = serde_json::from_str(&meta_data)
             .map_err(|e| format!("Failed to parse _meta.json: {}", e))?;
 
-        // Count UID files for totalCached
+        // Count message sidecars only. `_meta.json` and `graph_id_map.json` sit
+        // in the same directory and are not messages; counting them reported a
+        // mailbox with nothing cached as holding one.
         let total_cached = fs::read_dir(&sidecar_dir)
             .map(|entries| entries.flatten().filter(|e| {
                 let name = e.file_name().to_string_lossy().to_string();
-                name != "_meta.json" && name.ends_with(".json")
+                name.strip_suffix(".json").is_some_and(|s| s.parse::<u64>().is_ok())
             }).count())
             .unwrap_or(0);
 
@@ -5751,5 +5824,124 @@ mod purge_tests {
         let mut uids = HashSet::new();
         uids.insert(1u32);
         assert!(prune_local_index(&tmp.path().join("nope.json"), &uids).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod sidecar_order_tests {
+    use super::*;
+
+    fn write_meta(dir: &Path) {
+        fs::write(dir.join("_meta.json"), br#"{"totalEmails":9}"#).unwrap();
+    }
+
+    /// One header sidecar, carrying only the fields the ordering reads.
+    fn write_header(dir: &Path, uid: u64, internal_date: &str) {
+        let body = serde_json::json!({
+            "uid": uid,
+            "subject": format!("msg {}", uid),
+            "internalDate": internal_date,
+        });
+        fs::write(dir.join(format!("{}.json", uid)), body.to_string()).unwrap();
+    }
+
+    fn returned_uids(json: &str) -> Vec<u64> {
+        let parsed: serde_json::Value = serde_json::from_str(json).unwrap();
+        parsed["emails"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e["uid"].as_u64().unwrap())
+            .collect()
+    }
+
+    /// An IMAP mailbox: the server issued the uids in arrival order, so the
+    /// highest are the newest and the cheap readdir sort is right.
+    #[test]
+    fn imap_mailbox_takes_the_highest_uids() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        write_meta(dir);
+        write_header(dir, 1, "2026-01-01T00:00:00Z");
+        write_header(dir, 2, "2026-02-01T00:00:00Z");
+        write_header(dir, 3, "2026-03-01T00:00:00Z");
+
+        let out = load_from_sidecars(dir, &dir.join("_meta.json"), Some(2))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(returned_uids(&out), vec![3, 2]);
+    }
+
+    /// A Graph mailbox: uid 1 is the NEWEST message (the seed walked a
+    /// `receivedDateTime desc` listing) and uid 4 is the oldest, while uid 5
+    /// arrived after the seed and is newer than all of them. Sorting by uid
+    /// returns the oldest cached mail — this is the bug.
+    #[test]
+    fn graph_mailbox_takes_the_newest_dates_not_the_highest_uids() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        write_meta(dir);
+        fs::write(dir.join(GRAPH_ID_MAP_FILE), br#"{"1":"AAA"}"#).unwrap();
+        write_header(dir, 1, "2026-08-01T00:00:00Z"); // newest at seed time
+        write_header(dir, 2, "2026-07-01T00:00:00Z");
+        write_header(dir, 3, "2026-06-01T00:00:00Z");
+        write_header(dir, 4, "2026-05-01T00:00:00Z"); // oldest at seed time
+        write_header(dir, 5, "2026-08-15T00:00:00Z"); // arrived after the seed
+
+        let out = load_from_sidecars(dir, &dir.join("_meta.json"), Some(3))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(returned_uids(&out), vec![5, 1, 2]);
+    }
+
+    /// `graph_id_map.json` is not a message: it must not be counted, read, or
+    /// returned as one.
+    #[test]
+    fn graph_id_map_is_not_counted_as_a_message() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        write_meta(dir);
+        fs::write(dir.join(GRAPH_ID_MAP_FILE), br#"{"1":"AAA"}"#).unwrap();
+        write_header(dir, 1, "2026-08-01T00:00:00Z");
+
+        let out = load_from_sidecars(dir, &dir.join("_meta.json"), None)
+            .unwrap()
+            .unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&out).unwrap();
+
+        assert_eq!(returned_uids(&out), vec![1]);
+        assert_eq!(parsed["totalCached"].as_u64(), Some(1));
+    }
+
+    /// A header with no date can't be placed in time, so it must never take a
+    /// slot from one that can.
+    #[test]
+    fn undated_graph_header_sorts_last() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        write_meta(dir);
+        fs::write(dir.join(GRAPH_ID_MAP_FILE), br#"{"1":"AAA"}"#).unwrap();
+        fs::write(dir.join("7.json"), br#"{"uid":7,"subject":"no date"}"#).unwrap();
+        write_header(dir, 1, "2026-08-01T00:00:00Z");
+        write_header(dir, 2, "2026-07-01T00:00:00Z");
+
+        let out = load_from_sidecars(dir, &dir.join("_meta.json"), Some(2))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(returned_uids(&out), vec![1, 2]);
+    }
+
+    /// IMAP headers carry RFC 2822 dates; Graph carries RFC 3339. Both parse.
+    #[test]
+    fn header_date_ms_reads_both_date_formats() {
+        let rfc3339 = serde_json::json!({ "internalDate": "2026-08-01T00:00:00Z" });
+        let rfc2822 = serde_json::json!({ "date": "Sat, 1 Aug 2026 00:00:00 +0000" });
+        let undated = serde_json::json!({ "subject": "x" });
+
+        assert_eq!(header_date_ms(&rfc3339), header_date_ms(&rfc2822));
+        assert_eq!(header_date_ms(&undated), i64::MIN);
     }
 }

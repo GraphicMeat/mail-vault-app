@@ -674,6 +674,11 @@ export async function loadEmails() {
 
 // ── _loadEmailsViaGraph workflow ──
 
+/** A header's received time in ms, or NaN when it carries no parseable date. */
+function _headerDateMs(email) {
+  return Date.parse(email?.internalDate || email?.date || '');
+}
+
 export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbox, generation) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
@@ -783,11 +788,21 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
     // Graph has no UIDVALIDITY/UID SEARCH, so the only expunge signal is a
     // message vanishing from this listing. Name the gone UIDs explicitly —
     // nothing else prunes Graph sidecars, and a leftover one resurrects.
-    // Only the window this page covers is authoritative; below it, unknown.
+    // Only the window this page covers is authoritative; outside it, unknown.
+    //
+    // That window is a range of DATES, not of uids. Graph uids are allocated
+    // first-seen over a `receivedDateTime desc` listing, so the seed counted
+    // uid 1 down into the past and later arrivals took the highest numbers of
+    // all — uid 1 is on page 1 of every mailbox, which made the old
+    // `uid >= lowestGraphUid` test true for every prior row and let a
+    // 200-message page delete the rest of a warm cache as server-expunged.
     const graphUids = new Set(mergedEmails.map(e => e.uid));
-    const lowestGraphUid = mergedEmails.reduce((min, e) => Math.min(min, e.uid), Infinity);
+    const pageDates = mergedEmails.map(_headerDateMs).filter(Number.isFinite);
+    const pageOldestMs = pageDates.length ? Math.min(...pageDates) : Infinity;
+    // NaN fails every comparison, so a row we can't date is never inside the
+    // window and never deleted on a guess.
     const removedUids = priorEmails
-      .filter(e => e.uid >= lowestGraphUid && !graphUids.has(e.uid))
+      .filter(e => !graphUids.has(e.uid) && _headerDateMs(e) >= pageOldestMs)
       .map(e => e.uid);
 
     // Descriptor saved on switch-away, not after every load
