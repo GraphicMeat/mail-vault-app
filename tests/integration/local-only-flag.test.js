@@ -13,12 +13,18 @@ import { serverUids } from '../../src/stores/slices/serverUids.js';
 // `display()` is a fixture, not a second implementation — it only supplies the
 // inputs the old signature left implicit. When a case passes no uid set, it
 // means "the emails I passed ARE the whole server", and now says so.
-function display({ emails = [], localEmails = [], archivedEmailIds = new Set(), viewMode = 'all', savedEmailIds = new Set(), serverUidSet, serverUidsKnown, ...rest }) {
+function display({ emails = [], localEmails = [], archivedEmailIds = new Set(), viewMode = 'all', savedEmailIds = new Set(), serverUidSet, serverUidsKnown, serverUids: explicitServerUids, ...rest }) {
+  // A caller that builds the pair itself wins. It used to lose: the key was
+  // overwritten below and the fallback claimed COMPLETE, so the one case that
+  // passed an unverified empty set was handed the strongest possible claim —
+  // "the server holds nothing" — and asserted the opposite of what it read.
+  const resolved = explicitServerUids
+    || (serverUidSet
+      ? serverUids(serverUidSet, { complete: !!serverUidsKnown })
+      : serverUids(emails.map(e => e.uid), { complete: true }));
   return deriveDisplayRows({
     emails, localEmails, archivedEmailIds, viewMode, savedEmailIds, ...rest,
-    serverUids: serverUidSet
-      ? serverUids(serverUidSet, { complete: !!serverUidsKnown })
-      : serverUids(emails.map(e => e.uid), { complete: true }),
+    serverUids: resolved,
   });
 }
 
@@ -183,10 +189,29 @@ describe('Local-Only Flag Detection (send → archive → delete → verify)', (
       localEmails,
       archivedEmailIds: new Set([uidA, uidB]),
       viewMode: 'local',
-      serverUids: serverUids(new Set(), { complete: false }),
+      // Nothing has enumerated the mailbox yet: an empty set with no
+      // completeness claim, which is not the same as "the server is empty".
+      serverUidSet: new Set(),
+      serverUidsKnown: false,
     });
 
     // Server set is unverified — never flag local-only without proof.
+    expect(result.length).toBe(2);
     expect(result.every((e) => e.source === 'local')).toBe(true);
+
+    // The assertion above only means something if the same rows DO flip once
+    // the set is a proven enumeration — otherwise it would pass on a
+    // derivation that can never say 'local-only' at all.
+    const proven = display({
+      searchActive: false,
+      searchResults: [],
+      emails: [],
+      localEmails,
+      archivedEmailIds: new Set([uidA, uidB]),
+      viewMode: 'local',
+      serverUidSet: new Set(),
+      serverUidsKnown: true,
+    });
+    expect(proven.every((e) => e.source === 'local-only')).toBe(true);
   });
 });
