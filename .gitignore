@@ -65,3 +65,8 @@ tests/visual/.tmp/
 
 # OMC state
 .omc/
+
+# Screenshot harness — local build artefacts (scripts/screenshots/prepare-build.sh)
+scripts/screenshots/.windowid
+src-tauri/capabilities/screenshots.json
+src-tauri/tauri.conf.json.screenshots-backup

@@ -963,6 +963,7 @@ function EmailListComponent() {
                   >
                     {item.type === 'sender' && (
                       <button
+                        data-testid="sender-group-row"
                         onClick={() => {
                           setExpandedSender(expandedSender === item.sender.senderEmail ? null : item.sender.senderEmail);
                           setExpandedTopics(new Set());
