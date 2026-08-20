@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **An open message no longer shows another message's contents.** The reading pane could render a completely unrelated email — from another folder, or another account — underneath the right sender and subject. A message is identified by a number that is unique only inside one folder, and the link checker filed each message's prepared body under that number alone, so the next message to reuse it was handed the earlier one's body. Every prepared body is now tied to the message it was built from.
+
 ## [2.10.0] - 2026-08-18
 
 ### Added
