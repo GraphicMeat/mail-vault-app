@@ -75,6 +75,7 @@
     "webdriverio": "^9.24.0"
   },
   "overrides": {
-    "serialize-javascript": "^7.0.5"
+    "serialize-javascript": "^7.0.5",
+    "@puppeteer/browsers": "^3.2.1"
   }
 }
