@@ -43,3 +43,43 @@ describe('signInFailureNotice', () => {
     expect(signInFailureNotice(null)).toBeNull();
   });
 });
+
+describe('signInFailureNotice — App Store build', () => {
+  const mas = { appStore: true };
+
+  it('never points at plan cards that a MAS build does not render', () => {
+    const results = [
+      { hasSubscription: false, customerId: null },
+      { hasSubscription: false, customerId: 'cus_123' },
+      { hasSubscription: true, status: 'canceled' },
+      { hasSubscription: true, status: 'incomplete' },
+    ];
+    for (const result of results) {
+      expect(signInFailureNotice(result, mas)).not.toMatch(/plan below/i);
+    }
+  });
+
+  it('still explains what went wrong', () => {
+    expect(signInFailureNotice({ hasSubscription: false, customerId: 'cus_1' }, mas))
+      .toMatch(/no active subscription/i);
+    expect(signInFailureNotice({ hasSubscription: false, customerId: null }, mas))
+      .toMatch(/sign in with the email/i);
+    expect(signInFailureNotice({ hasSubscription: true, status: 'canceled' }, mas))
+      .toMatch(/ended/i);
+  });
+
+  it('never points at the Stripe portal button either', () => {
+    const results = [
+      { hasSubscription: true, status: 'past_due' },
+      { hasSubscription: true, status: 'paused' },
+    ];
+    for (const result of results) {
+      expect(signInFailureNotice(result, mas)).not.toMatch(/Manage Subscription/i);
+    }
+  });
+
+  it('leaves the default (non-MAS) copy alone', () => {
+    expect(signInFailureNotice({ hasSubscription: false, customerId: 'cus_1' }))
+      .toMatch(/plan below/i);
+  });
+});

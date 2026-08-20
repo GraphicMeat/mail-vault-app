@@ -44,9 +44,16 @@ function formatDate(dateStr) {
  * Pure — the server always answers 200 for an unknown email, so this is the
  * only thing standing between "nothing happened" and an explanation.
  */
-export function signInFailureNotice(result) {
+export function signInFailureNotice(result, { appStore = IS_APPSTORE_BUILD } = {}) {
   if (!result) return null;
+  // App Store builds show no plan cards, so copy must not point at them or
+  // otherwise steer the user toward buying outside the App Store.
   if (!result.hasSubscription) {
+    if (appStore) {
+      return result.customerId
+        ? 'No active subscription on this email.'
+        : 'No subscription found for this email. Sign in with the email you used when you subscribed.';
+    }
     return result.customerId
       ? 'No active subscription on this email. Pick a plan below to start one.'
       : 'No subscription found for this email. Pick a plan below, or sign in with the email you used at checkout.';
@@ -56,15 +63,23 @@ export function signInFailureNotice(result) {
   }
   switch (result.status) {
     case 'canceled':
-      return 'This subscription has ended. Pick a plan below to resubscribe.';
+      return appStore
+        ? 'This subscription has ended.'
+        : 'This subscription has ended. Pick a plan below to resubscribe.';
     case 'past_due':
     case 'unpaid':
-      return 'Payment failed on this subscription. Update your payment method in Manage Subscription.';
+      return appStore
+        ? 'Payment failed on this subscription. Update your payment method where you manage it.'
+        : 'Payment failed on this subscription. Update your payment method in Manage Subscription.';
     case 'incomplete':
     case 'incomplete_expired':
-      return 'Checkout was never completed for this email. Pick a plan below to finish signing up.';
+      return appStore
+        ? 'Checkout was never completed for this email.'
+        : 'Checkout was never completed for this email. Pick a plan below to finish signing up.';
     default:
-      return `Subscription status "${result.status || 'unknown'}" does not grant premium access. Check Manage Subscription.`;
+      return appStore
+        ? `Subscription status "${result.status || 'unknown'}" does not grant premium access.`
+        : `Subscription status "${result.status || 'unknown'}" does not grant premium access. Check Manage Subscription.`;
   }
 }
 
@@ -176,7 +191,7 @@ export function BillingSettings() {
 
   // Fetch pricing on mount (only when not premium — plan cards are hidden for premium users)
   useEffect(() => {
-    if (!isPremium && !pricing && !pricingLoading) loadPricing();
+    if (!IS_APPSTORE_BUILD && !isPremium && !pricing && !pricingLoading) loadPricing();
   }, [isPremium]);
 
   // Cooldown ticker — count down when rate-limited or in manual cooldown
@@ -273,8 +288,8 @@ export function BillingSettings() {
       setBillingEmail('');
       setSignInNotice(signInFailureNotice(result));
       // Re-price for this email — trial eligibility is per customer, and the
-      // mount fetch ran before we knew who they were.
-      loadPricing(resolvedEmail);
+      // mount fetch ran before we knew who they were. No cards in MAS, no fetch.
+      if (!IS_APPSTORE_BUILD) loadPricing(resolvedEmail);
     }
   }, [billingRequest, setBillingProfile, setBillingEmail, loadPricing]);
 
@@ -484,8 +499,8 @@ export function BillingSettings() {
         {billingLastChecked && isSignedIn && <p className="text-xs text-mail-text-muted mt-1">Last synced: {formatTime(billingLastChecked)}</p>}
       </div>
 
-      {/* Early Bird Pricing */}
-      {!isPremium && (
+      {/* Early Bird Pricing — non-MAS only, it pitches the web subscription */}
+      {!IS_APPSTORE_BUILD && !isPremium && (
         <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 border border-amber-500/20 rounded-xl p-5">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-lg">🐣</span>
@@ -511,8 +526,11 @@ export function BillingSettings() {
         </div>
       )}
 
-      {/* Plan Cards — data-driven from /api/billing/pricing */}
-      {!isPremium && pricing?.plans && (() => {
+      {/* Plan Cards — data-driven from /api/billing/pricing.
+          App Store builds must not offer a purchase path outside IAP, so every
+          plan surface below is non-MAS only. Existing subscribers still sign in
+          above and keep premium. */}
+      {!IS_APPSTORE_BUILD && !isPremium && pricing?.plans && (() => {
         const monthlyPlan = pricing.plans.find(p => p.interval === 'month');
         const yearlyPlan = pricing.plans.find(p => p.interval === 'year');
         const mode = pricing.pricingMode;
@@ -569,13 +587,13 @@ export function BillingSettings() {
           </>
         );
       })()}
-      {!isPremium && !pricing && pricingLoading && (
+      {!IS_APPSTORE_BUILD && !isPremium && !pricing && pricingLoading && (
         <div className="flex items-center justify-center py-8 text-mail-text-muted text-xs gap-2">
           <Loader size={14} className="animate-spin" /> Loading plans...
         </div>
       )}
       {/* Plans unreachable — never leave the user without a way to subscribe */}
-      {!isPremium && !pricing && !pricingLoading && pricingError && (
+      {!IS_APPSTORE_BUILD && !isPremium && !pricing && !pricingLoading && pricingError && (
         <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
           <h4 className="text-sm font-semibold text-mail-text mb-1">Plans could not be loaded</h4>
           <p className="text-xs text-mail-text-muted mb-3">{pricingError}</p>
@@ -589,6 +607,17 @@ export function BillingSettings() {
               <ExternalLink size={14} /> View plans in browser
             </button>
           </div>
+        </div>
+      )}
+
+      {/* MAS, no subscription: say where premium comes from without pitching a
+          purchase — otherwise the tab is a dead end for an existing subscriber. */}
+      {IS_APPSTORE_BUILD && !isPremium && (
+        <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+          <h4 className="text-sm font-semibold text-mail-text mb-1">Premium</h4>
+          <p className="text-xs text-mail-text-muted">
+            Premium features come with a MailVault subscription. If you already have one, sign in above with the email it was bought under.
+          </p>
         </div>
       )}
 
@@ -606,8 +635,9 @@ export function BillingSettings() {
         </button>
       )}
 
-      {/* Manage Billing */}
-      {billingProfile?.hasSubscription && customerId && (
+      {/* Manage Billing — the Stripe portal can change or restart a plan, which
+          makes it a purchase mechanism App Review will not accept in-app. */}
+      {!IS_APPSTORE_BUILD && billingProfile?.hasSubscription && customerId && (
         <button onClick={handleManageBilling}
           className="w-full py-2.5 text-sm font-medium bg-mail-surface border border-mail-border rounded-lg hover:bg-mail-surface-hover transition-colors flex items-center justify-center gap-2 text-mail-text">
           <ExternalLink size={14} />
