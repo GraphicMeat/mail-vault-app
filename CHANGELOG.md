@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Mail saved before you changed email providers is no longer mistaken for other messages.** Each saved message is filed under the number its server gave it, and those numbers belong to one server: when you move to a different provider — or a provider renumbers a mailbox on its own — the number on a saved message points at whatever the new server put there instead. MailVault stopped showing the wrong message when you opened one, but everything else still went by the number: messages were marked as saved to this computer when the saved copy was a different email, "delete everywhere" and bulk actions aimed at it, and the old copies sat in your storage unreachable and uncounted. MailVault now records which server generation a mailbox's saved mail belongs to. When that changes, it matches every saved message to the new server by its Message-ID and files it under its new number, so your saved mail, and the marks that go with it, come back intact. Anything the new server does not have is set aside instead — never deleted, since your copy may be the only one left — and Settings → Storage offers to remove it once you have seen what it is. Messages you wrote here that never reached a server are left alone.
+
 ## [2.10.0] - 2026-08-18
 
 ### Added
