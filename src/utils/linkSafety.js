@@ -13,9 +13,28 @@ const SHORTENER_ALLOWLIST = new Set([
 // Patterns indicating URL redirect/tracking in query params
 const REDIRECT_PARAMS = /[?&](url|redirect|goto|target|link|dest|destination)=/i;
 
-// Cache scan results by email UID to avoid re-scanning
+// Cache scan results by email UID to avoid re-scanning. Entries carry a
+// fingerprint of the body they were computed from — see `bodyStamp`.
 const _scanCache = new Map();
 const MAX_CACHE = 500;
+
+/**
+ * FNV-1a over the body HTML, plus its length.
+ *
+ * A UID identifies a message inside ONE mailbox: INBOX 41 and Sent 41 are
+ * different messages, as are UID 41 in two accounts. Keying the scan cache on
+ * the bare UID meant the second message rendered the first one's
+ * `modifiedBodyHtml` — the right header over a stranger's body. The stamp is
+ * what makes a hit prove it belongs to the body being scanned; hashing keeps
+ * the entry small instead of parking a second copy of every body in memory.
+ */
+function bodyStamp(html) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < html.length; i++) {
+    h = Math.imul(h ^ html.charCodeAt(i), 0x01000193);
+  }
+  return `${html.length}:${(h >>> 0).toString(36)}`;
+}
 
 /**
  * Extract domain from a URL string. Returns lowercase domain or null.
@@ -69,17 +88,23 @@ const INDICATOR_STYLE_CONTENT = `
  * Scan email body HTML for suspicious links.
  * Returns { alerts, modifiedBodyHtml, indicatorStyle, maxAlertLevel }.
  *
- * Cache is keyed by uid only: the input (body HTML) is stable per email, so
- * the cached result is reusable across theme toggles and re-renders. Callers
- * wrap the modified body with their own iframe template and place
- * `indicatorStyle` into <head> (as a <style>…</style> block) when non-empty.
+ * Cached by uid + a fingerprint of the body: the input is stable per email, so
+ * the result is reusable across theme toggles and re-renders, while a UID
+ * reused by another mailbox or account rescans instead of serving that other
+ * message's body. Callers wrap the modified body with their own iframe
+ * template and place `indicatorStyle` into <head> (as a <style>…</style>
+ * block) when non-empty.
  */
 export function scanEmailLinks(bodyHtml, uid) {
   if (!bodyHtml) {
     return { alerts: [], modifiedBodyHtml: bodyHtml, indicatorStyle: '', maxAlertLevel: null };
   }
 
-  if (uid && _scanCache.has(uid)) return _scanCache.get(uid);
+  const stamp = uid ? bodyStamp(bodyHtml) : null;
+  if (stamp) {
+    const hit = _scanCache.get(uid);
+    if (hit && hit.stamp === stamp) return hit.result;
+  }
 
   // Wrap as a full document so DOMParser gives us a predictable body.
   const parser = new DOMParser();
@@ -155,9 +180,9 @@ export function scanEmailLinks(bodyHtml, uid) {
   const indicatorStyle = alerts.length > 0 ? INDICATOR_STYLE_CONTENT : '';
   const result = { alerts, modifiedBodyHtml, indicatorStyle, maxAlertLevel };
 
-  if (uid) {
+  if (stamp) {
     if (_scanCache.size > MAX_CACHE) _scanCache.clear();
-    _scanCache.set(uid, result);
+    _scanCache.set(uid, { stamp, result });
   }
 
   return result;
@@ -186,8 +211,8 @@ export function checkLinkAlert(linkElement) {
  * Get cached scan alerts for an email UID. Returns alerts array or null.
  */
 export function getCachedAlerts(uid) {
-  if (!uid || !_scanCache.has(uid)) return null;
-  return _scanCache.get(uid).alerts;
+  if (!uid) return null;
+  return _scanCache.get(uid)?.result.alerts ?? null;
 }
 
 /**

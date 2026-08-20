@@ -6,6 +6,12 @@
  */
 
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
+import {
+  HTML_QUOTED_SUBJECT,
+  HTML_COLLISION_SUBJECT,
+  HTML_COLLISION_MARKER,
+  DARK_HEADING_ID,
+} from './mockImap.js';
 
 /**
  * Close every open compose modal via its own Close button, dismissing any
@@ -282,5 +288,85 @@ describe('Email Viewer — body that never loads', function () {
       interval: 300,
       timeoutMsg: 'Retry never resolved back to the failure state',
     });
+  });
+});
+
+describe('Email Viewer — one body per message', function () {
+  this.timeout(90_000);
+
+  const LUKE = 'luke@mock.test';
+
+  // Two HTML messages on the same UID, one in INBOX and one in Sent (see
+  // mockImap.js). Rendering the second used to hand back the first one's body:
+  // the link-safety scanner cached each rewritten body under the bare UID, and
+  // a UID is unique per mailbox only. Nothing about the header changed, so it
+  // read as the right message quietly showing a stranger's content.
+
+  const clickRow = (subject) => browser.execute((needle) => {
+    const row = [...document.querySelectorAll('[data-testid="email-row"]')]
+      .find((r) => (r.innerText || '').includes(needle) && r.offsetHeight > 0);
+    if (!row) return false;
+    row.click();
+    return true;
+  }, subject);
+
+  /** What the viewer is showing: its header subject, and the frame's content. */
+  const readViewer = (headingId) => browser.execute((probeId) => {
+    const iframe = document.querySelector('iframe[sandbox]');
+    let doc = null;
+    try { doc = iframe?.contentDocument || null; } catch { doc = null; }
+    return {
+      // Not the first h1 on the page — that one is the sidebar's "MailVault".
+      subject: [...document.querySelectorAll('h1')]
+        .filter((h) => !h.closest('[data-testid="sidebar"]'))
+        .map((h) => (h.textContent || '').trim())
+        .join(' | '),
+      frameText: doc?.body ? (doc.body.innerText || doc.body.textContent || '').trim() : null,
+      hasCollisionBody: !!doc?.getElementById('mv-collision-body'),
+      hasQuotedProbe: !!doc?.getElementById(probeId),
+    };
+  }, headingId);
+
+  const waitForFrame = async (subject, timeoutMsg) => {
+    await browser.waitUntil(async () => {
+      const v = await readViewer(DARK_HEADING_ID);
+      return v.subject.includes(subject) && !!v.frameText;
+    }, {
+      timeout: 30_000,
+      interval: 300,
+      timeoutMsg: `${timeoutMsg}; viewer: ${JSON.stringify(await readViewer(DARK_HEADING_ID))}`,
+    });
+    // The frame reloads when its srcDoc changes; let that land before reading.
+    await browser.pause(1500);
+    return readViewer(DARK_HEADING_ID);
+  };
+
+  before(async function () {
+    await waitForApp();
+    await waitForEmails();
+    await switchToFolder(LUKE, 'INBOX');
+  });
+
+  it('renders the INBOX HTML message', async function () {
+    expect(await clickRow(HTML_QUOTED_SUBJECT)).toBe(true);
+
+    // Positive control, and the step that fills the scan cache for this UID —
+    // without it the assertion below could pass on an empty cache alone.
+    const viewer = await waitForFrame(HTML_QUOTED_SUBJECT, 'INBOX HTML message never rendered');
+    expect(viewer.hasQuotedProbe).toBe(true);
+    expect(viewer.hasCollisionBody).toBe(false);
+  });
+
+  it('renders the Sent message that shares that UID, not the INBOX body', async function () {
+    await switchToFolder(LUKE, 'Sent');
+    expect(await clickRow(HTML_COLLISION_SUBJECT)).toBe(true);
+
+    const viewer = await waitForFrame(HTML_COLLISION_SUBJECT, 'Sent HTML message never rendered');
+
+    // The header was always right — the body was the lie.
+    expect(viewer.subject).toContain(HTML_COLLISION_SUBJECT);
+    expect(viewer.frameText).toContain(HTML_COLLISION_MARKER);
+    expect(viewer.hasCollisionBody).toBe(true);
+    expect(viewer.hasQuotedProbe).toBe(false);
   });
 });

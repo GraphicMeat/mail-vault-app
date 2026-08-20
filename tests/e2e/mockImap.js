@@ -234,6 +234,54 @@ export const HTML_QUOTED_SUBJECT = 'HTML render check';
 export const DARK_HEADING_ID = 'mv-dark-important-heading';
 export const DARK_BRAND_LINK_ID = 'mv-dark-brand-link';
 
+// ── The same UID in two mailboxes, both HTML ────────────────────────────────
+// `HTML_QUOTED_SUBJECT` sits in INBOX; this one sits in Sent on the SAME UID.
+// A UID is unique per mailbox, so anything that keys a body — or a derived
+// copy of one, as the link-safety scan cache did — on the bare UID serves this
+// message the INBOX message's body under this message's header. Both have to
+// be HTML: only the iframe path carries the rewritten body.
+
+/** Subject of the Sent-folder HTML message that shares the INBOX message's UID. */
+export const HTML_COLLISION_SUBJECT = 'HTML uid collision check';
+
+/** Text that appears in that message's body and nowhere else. */
+export const HTML_COLLISION_MARKER = 'Body that belongs to the Sent message';
+
+/** An HTML message whose body says which message it is. */
+function htmlMarkerMessage({ uid, owner, from, subject, marker, day }) {
+  const { internalDate, header } = stamp(day);
+  const boundary = 'MockMvMarker';
+  return {
+    uid,
+    flags: ['\\Seen'],
+    internal_date: internalDate,
+    modseq: uid,
+    raw: [
+      `From: ${from}`,
+      `To: ${owner}`,
+      `Subject: ${subject}`,
+      `Date: ${header}`,
+      `Message-ID: <mock-marker-${uid}-${owner}>`,
+      'MIME-Version: 1.0',
+      `Content-Type: multipart/alternative; boundary="${boundary}"`,
+      '',
+      `--${boundary}`,
+      'Content-Type: text/plain; charset=UTF-8',
+      '',
+      marker,
+      '',
+      `--${boundary}`,
+      'Content-Type: text/html; charset=UTF-8',
+      '',
+      `<p id="mv-collision-body">${marker}</p>`
+        + '<a href="https://example.com/collision">A link, so the scanner runs</a>',
+      '',
+      `--${boundary}--`,
+      '',
+    ].join('\n'),
+  };
+}
+
 // ── Threaded messages for the wrong-mailbox regression ──────────────────────
 // A UID identifies a message only inside one mailbox: Sent UID 6 and INBOX UID
 // 6 are different messages. These conversations put a message in a folder that
@@ -322,6 +370,19 @@ export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, 
         }),
       ]);
     }
+  }
+
+  // Same UID as the INBOX's HTML message, different folder — see
+  // HTML_COLLISION_SUBJECT. mailbox() puts the HTML message at uidStart+count.
+  if (htmlQuoted) {
+    append(sentBox, [htmlMarkerMessage({
+      uid: inboxUidStart + inbox,
+      owner,
+      from: 'Collision Sender <collide@example.com>',
+      subject: HTML_COLLISION_SUBJECT,
+      marker: HTML_COLLISION_MARKER,
+      day: 64,
+    })]);
   }
 
   const mailboxes = [
