@@ -6,6 +6,7 @@ import { getDaemonHealth } from './transport';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { isGraphAccount, GRAPH_FOLDER_NAME_MAP, normalizeGraphFolderName } from './graphConfig';
+import { listGraphMessages } from './cacheManager';
 
 export { hasValidCredentials };
 
@@ -181,21 +182,19 @@ export class AccountPipeline {
 
     // 2. Paginate through all messages
     const allHeaders = [];
-    const allGraphIds = [];
     const PAGE_SIZE = 200;
     let skip = 0;
     let hasMore = true;
 
     while (hasMore && !this._destroyed && !this._paused) {
       this.account = await ensureFreshToken(this.account);
-      const result = await api.graphListMessages(
-        this.account.oauth2AccessToken, targetFolder.id, PAGE_SIZE, skip
+      const result = await listGraphMessages(
+        this.accountId, mailbox, this.account.oauth2AccessToken, targetFolder.id,
+        { top: PAGE_SIZE, skip }
       );
 
       const headers = result.headers || [];
-      const graphMessageIds = result.graphMessageIds || [];
       allHeaders.push(...headers);
-      allGraphIds.push(...graphMessageIds);
 
       hasMore = !!result.nextLink && headers.length === PAGE_SIZE;
       skip += headers.length;
@@ -207,11 +206,13 @@ export class AccountPipeline {
       await db.saveEmailHeaders(this.accountId, mailbox, allHeaders, allHeaders.length);
       this._lastLoadedEmails = allHeaders;
 
-      // Build UID → Graph message ID mapping for content caching phase
+      // UID → Graph message ID for the content caching phase. Read off the
+      // rows, which listGraphMessages stamped from the same response that
+      // allocated their uids — no second array to keep in step.
       const idMap = new Map();
-      allHeaders.forEach((h, i) => {
-        if (allGraphIds[i]) idMap.set(h.uid, allGraphIds[i]);
-      });
+      for (const h of allHeaders) {
+        if (h._graphId) idMap.set(h.uid, h._graphId);
+      }
       this._graphIdMap = idMap;
 
       console.log(`[Pipeline:${this.account.email}] Cached ${allHeaders.length} Graph headers for ${mailbox}`);

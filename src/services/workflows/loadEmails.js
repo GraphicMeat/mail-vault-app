@@ -5,7 +5,7 @@ import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ensureFreshToken, hasValidCredentials, resolveServerAccount } from '../authUtils';
 import { isGraphAccount, normalizeGraphFolderName, graphFoldersToMailboxes, graphMessageToEmail } from '../graphConfig';
-import { saveRestoreDescriptor as _saveRestore, setGraphIdMap as _setGraphIdMap, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap } from '../cacheManager';
+import { saveRestoreDescriptor as _saveRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap } from '../cacheManager';
 import { _buildRestoreDescriptor } from '../../stores/slices/unifiedHelpers';
 import { serverUids } from '../../stores/slices/serverUids';
 import { createPerfTrace } from '../../utils/perfTrace';
@@ -742,18 +742,12 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
       return;
     }
 
-    const result = await api.graphListMessages(account.oauth2AccessToken, targetFolder._graphFolderId, 200, 0);
+    const result = await _listGraphMessages(
+      activeAccountId, activeMailbox, account.oauth2AccessToken, targetFolder._graphFolderId
+    );
     if (isStale()) return;
 
     const headers = result.headers || [];
-    const graphMessageIds = result.graphMessageIds || [];
-
-    const uidToGraphId = new Map();
-    headers.forEach((h, i) => {
-      h._graphId = graphMessageIds[i];
-      uidToGraphId.set(h.uid, graphMessageIds[i]);
-    });
-    _setGraphIdMap(activeAccountId, activeMailbox, uidToGraphId);
 
     const mergedEmails = headers.map((email, idx) => ({
       ...email,
@@ -889,7 +883,9 @@ export async function loadSentHeaders(accountId) {
       if (sentFolder?._graphFolderId) {
         const freshAccount = await ensureFreshToken(account);
         console.log('[loadSentHeaders:graph_fetch_start]', { accountId, folderId: sentFolder._graphFolderId });
-        const result = await api.graphListMessages(freshAccount.oauth2AccessToken, sentFolder._graphFolderId, 200, 0);
+        const result = await _listGraphMessages(
+          accountId, sentPath, freshAccount.oauth2AccessToken, sentFolder._graphFolderId
+        );
         if (get().activeAccountId !== accountId) return;
         const sentHeaders = result.headers || [];
         console.log('[loadSentHeaders:graph_fetch_ok]', {

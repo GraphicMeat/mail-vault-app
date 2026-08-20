@@ -80,7 +80,7 @@ vi.mock('../../cacheManager', () => ({
   saveRestoreDescriptor: vi.fn(),
   invalidateRestoreDescriptors: () => {},
   getAccountCacheMailboxes: () => null,
-  setGraphIdMap: () => {},
+  listGraphMessages: vi.fn().mockResolvedValue({ headers: [], graphMessageIds: [] }),
   getGraphMessageId: () => null,
   resolveGraphMessageId: async () => null,
   clearGraphIdMap: () => {},

@@ -246,27 +246,20 @@ export async function getEmailHeaders(accountId, mailbox) {
 
 // ── Graph ID map persistence (UID → Graph message ID) ───────────────────
 
+// Neither of these swallows its error, unlike the header caches above. This
+// file is the uid allocation ledger for a Graph mailbox: a read that fails
+// quietly reads as "nothing allocated yet" and renumbers the mailbox from 1,
+// and a write that fails quietly leaves uids handed out in memory but free on
+// disk, so the next launch gives the same numbers to different messages. A
+// failed load is a broken mailbox load; a corrupted vault is forever.
 export async function saveGraphIdMap(accountId, mailbox, mapObj) {
-  if (invoke) {
-    try {
-      const data = JSON.stringify(mapObj);
-      await invoke('save_graph_id_map', { accountId, mailbox, data });
-    } catch (error) {
-      console.warn('[db.js] Failed to save graph ID map:', error);
-    }
-  }
+  if (!invoke) return;
+  const data = JSON.stringify(mapObj);
+  await invoke('save_graph_id_map', { accountId, mailbox, data });
 }
 
 export async function loadGraphIdMap(accountId, mailbox) {
-  if (invoke) {
-    try {
-      const data = await invoke('load_graph_id_map', { accountId, mailbox });
-      if (data) {
-        return safeParse(data);
-      }
-    } catch (error) {
-      console.warn('[db.js] Failed to load graph ID map:', error);
-    }
-  }
-  return null;
+  if (!invoke) return null;
+  const data = await invoke('load_graph_id_map', { accountId, mailbox });
+  return data ? safeParse(data) : null;
 }

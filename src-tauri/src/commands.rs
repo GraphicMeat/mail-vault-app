@@ -838,6 +838,13 @@ pub async fn graph_list_messages(
 ) -> Result<serde_json::Value, String> {
     let client = crate::graph::GraphClient::new(&access_token);
     let (messages, next_link) = client.list_messages(&folder_id, top, skip).await?;
+    // The uid here is provisional — the message's position in a
+    // `receivedDateTime desc` listing, which moves every time mail arrives or
+    // leaves. It is not an identifier and nothing may persist by it.
+    // cacheManager.listGraphMessages replaces it with an allocated uid before
+    // any caller sees these rows, and is the only supported way to read this
+    // command; the pairing with `graphMessageIds` below is what makes that
+    // possible, so the two arrays must stay the same length and order.
     let headers: Vec<_> = messages
         .iter()
         .enumerate()

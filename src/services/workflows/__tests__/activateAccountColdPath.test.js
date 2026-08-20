@@ -71,7 +71,7 @@ const mockGetRestoreDescriptor = vi.fn().mockReturnValue(null);
 vi.mock('../../cacheManager', () => ({
   saveRestoreDescriptor: vi.fn(),
   getRestoreDescriptor: (...a) => mockGetRestoreDescriptor(...a),
-  setGraphIdMap: vi.fn(),
+  listGraphMessages: vi.fn().mockResolvedValue({ headers: [], graphMessageIds: [] }),
   getGraphMessageId: vi.fn().mockReturnValue(null),
   resolveGraphMessageId: vi.fn().mockResolvedValue(null),
   restoreGraphIdMap: vi.fn().mockResolvedValue(undefined),

@@ -5,7 +5,7 @@ import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { hasValidCredentials, ensureFreshToken } from '../authUtils';
 import { isGraphAccount, APP_TO_GRAPH_FOLDER_MAP, normalizeGraphFolderName } from '../graphConfig';
-import { invalidateRestoreDescriptors as _invalidateRestore, getAccountCacheMailboxes as _getAccountMailboxes } from '../cacheManager';
+import { invalidateRestoreDescriptors as _invalidateRestore, getAccountCacheMailboxes as _getAccountMailboxes, listGraphMessages } from '../cacheManager';
 import { invalidate as _invalidateProbe } from '../syncProbe';
 import { _resolveMailboxPath } from '../../stores/slices/unifiedHelpers';
 
@@ -109,7 +109,7 @@ export async function refreshAllAccounts(options = {}) {
             const cached = await db.getEmailHeaders(account.id, normalizedMailbox).catch(() => null);
             const cachedUids = new Set(cached?.emails?.map(e => e.uid) || []);
 
-            const { headers } = await api.graphListMessages(token, targetFolder.id, 200, 0);
+            const { headers } = await listGraphMessages(account.id, normalizedMailbox, token, targetFolder.id);
             if (headers.length > 0) {
               await db.saveEmailHeaders(account.id, normalizedMailbox, headers, targetFolder.totalItemCount);
               console.log(`[mailStore] Graph: cached ${headers.length} ${normalizedMailbox} headers for ${account.email}`);

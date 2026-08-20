@@ -12,7 +12,7 @@ import { mailboxIsUnchanged, markVerified } from '../syncProbe';
 import { recall as memoRecall, remember as memoRemember, peek as memoPeek } from '../headerMemo';
 import { checkRestoreNeeded } from '../restoreDetection';
 import { isGraphAccount, GRAPH_FOLDER_NAME_MAP, graphFoldersToMailboxes, inferSpecialUse, graphMessageToEmail } from '../graphConfig';
-import { saveRestoreDescriptor as _saveRestore, getRestoreDescriptor as _getRestore, setGraphIdMap as _setGraphIdMap, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap } from '../cacheManager';
+import { saveRestoreDescriptor as _saveRestore, getRestoreDescriptor as _getRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap } from '../cacheManager';
 import { createPerfTrace } from '../../utils/perfTrace';
 import { countMailboxes, isMailboxTreeComplete, pickMailboxList, INBOX_PLACEHOLDER, retryOnce } from './mailboxTree';
 import { _buildRestoreDescriptor, _resolveUnifiedContext, _selKey, _parseSelKey } from '../../stores/slices/unifiedHelpers';
@@ -235,20 +235,12 @@ async function _loadServerEmailsViaGraph(account, accountId, activeMailbox, uidM
     return;
   }
 
-  const result = await api.graphListMessages(account.oauth2AccessToken, targetFolder._graphFolderId, 200, 0);
+  const result = await _listGraphMessages(
+    accountId, activeMailbox, account.oauth2AccessToken, targetFolder._graphFolderId
+  );
   if (signal.aborted) return;
 
   const headers = result.headers || [];
-  const graphMessageIds = result.graphMessageIds || [];
-
-  // Embed Graph message ID directly on each header — avoids fragile positional
-  // UID→GraphID map that breaks when email order changes between fetches.
-  const uidToGraphId = new Map();
-  headers.forEach((h, i) => {
-    h._graphId = graphMessageIds[i];
-    uidToGraphId.set(h.uid, graphMessageIds[i]);
-  });
-  _setGraphIdMap(accountId, activeMailbox, uidToGraphId);
 
   const serverEmails = headers.map((email, idx) => ({
     ...email,
