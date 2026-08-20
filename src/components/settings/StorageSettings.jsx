@@ -4,6 +4,8 @@ import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { runCleanupRules } from '../../services/cleanupEngine';
 import { ToggleSwitch } from './ToggleSwitch';
+import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
+import { PREMIUM_PRICE_BLURB } from '../../utils/pricing';
 import {
   FolderOpen,
   HardDrive,
@@ -410,9 +412,13 @@ export function StorageSettings({ accounts, onUpgrade }) {
                   <p className="text-xs text-mail-text-muted max-w-[280px]">
                     Automatically clean up old emails with custom rules. Set per-folder age thresholds, choose to archive or delete, and keep your mailbox tidy.
                   </p>
-                  <p className="text-xs text-mail-text-muted mt-1">$3/month or $25/year</p>
+                  {/* MAS builds must not advertise the web subscription — no external
+                      purchase price, no path to Stripe checkout. */}
+                  {!IS_APPSTORE_BUILD && (
+                    <p className="text-xs text-mail-text-muted mt-1">{PREMIUM_PRICE_BLURB}</p>
+                  )}
                 </div>
-                {onUpgrade && (
+                {!IS_APPSTORE_BUILD && onUpgrade && (
                   <button onClick={onUpgrade} className="px-4 py-1.5 text-xs font-semibold bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full hover:opacity-90 transition-opacity">
                     Upgrade
                   </button>

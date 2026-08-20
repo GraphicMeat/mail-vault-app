@@ -598,7 +598,10 @@ function resolvePricing(reqCurrency, country, acceptLanguage) {
 
 function formatAmount(amount, currency) {
   try {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: currency.toUpperCase(), minimumFractionDigits: 0, maximumFractionDigits: 2 })
+    // Whole amounts drop the decimals (€4, not €4.00); anything with cents keeps
+    // both digits — a flat minimumFractionDigits: 0 renders £3.50 as "£3.5".
+    const digits = amount % 100 === 0 ? 0 : 2;
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: currency.toUpperCase(), minimumFractionDigits: digits, maximumFractionDigits: digits })
       .format(amount / 100);
   } catch { return `${(amount / 100).toFixed(2)} ${currency.toUpperCase()}`; }
 }
