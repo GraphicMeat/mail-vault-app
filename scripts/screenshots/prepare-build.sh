@@ -53,4 +53,6 @@ cat > "$CAP" <<'JSON'
 }
 JSON
 echo "wrote $CAP"
-echo "now: cargo build -p mailvault --features webdriver"
+echo "now: VITE_E2E=1 npm run build && SPARKLE_FRAMEWORK_PATH=\$PWD/src-tauri cargo build -p mailvault --features webdriver"
+echo "     VITE_E2E=1 is required on a headless runner — without it every"
+echo "     framer-motion overlay photographs invisible (src/e2eMotion.js)."

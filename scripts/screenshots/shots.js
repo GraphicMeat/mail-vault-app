@@ -3,8 +3,18 @@
  * captures the native window at each stop.
  *
  *   scripts/screenshots/prepare-build.sh
- *   cargo build -p mailvault --features webdriver
+ *   VITE_E2E=1 npm run build
+ *   SPARKLE_FRAMEWORK_PATH=$PWD/src-tauri cargo build -p mailvault --features webdriver
  *   npx wdio run wdio.screenshots.conf.js
+ *
+ * `VITE_E2E=1` is the insurance. A runner with no display can have the window
+ * marked occluded — `visibilityState: 'hidden'` — and WKWebView then stops
+ * firing requestAnimationFrame. Every framer-motion overlay (compose, settings,
+ * both bulk modals, the shortcuts sheet) sits on its first frame at
+ * `opacity: 0` and never unmounts on exit, so the run photographs a bare inbox
+ * 27 times while every DOM assertion in this file passes. That is exactly the
+ * case src/e2eMotion.js exists for, and the flag is what compiles it in.
+ * `before()` counts rAF ticks and refuses to shoot a build that would lie.
  *
  * Two rules earned the hard way:
  *
@@ -20,8 +30,14 @@ import { MARKERS } from './demoData.js';
 
 const SETTLE = 900;
 
-// SHOTS_ONLY=email-list-view,thread-view narrows a run while iterating.
+// SHOTS_ONLY=email-list-view,thread-view narrows a run while iterating. It
+// narrows what is CAPTURED, not what is driven: archive-progress needs the two
+// selection-dialog steps to have opened the modal, chat-view-thread needs
+// chat-view to have switched layout. Skipping those made the run fail in a
+// different place than the full run does, which is worse than slow. The run
+// stops as soon as the last requested shot is in the can.
 const ONLY = (process.env.SHOTS_ONLY || '').split(',').map((s) => s.trim()).filter(Boolean);
+const wanted = ONLY.length ? new Set(ONLY) : null;
 
 // ── DOM helpers ─────────────────────────────────────────────────────────────
 
@@ -131,6 +147,24 @@ async function raiseWindow() {
   }, 1440, 900);
 }
 
+/**
+ * Count animation frames. A headless runner marks the window occluded,
+ * `visibilityState` sticks at 'hidden', and WKWebView answers 0 — framer-motion
+ * then leaves every overlay on its first frame (`opacity: 0`) and never unmounts
+ * an exiting one. Nothing downstream can see that: the nodes are in the DOM,
+ * `offsetHeight` is non-zero, `innerText` reads right, so every assertion in this
+ * file passes while the captures show a bare inbox. Build with VITE_E2E=1 and
+ * src/e2eMotion.js drives rAF off a timer instead.
+ */
+async function animationFrames(ms = 500) {
+  return browser.executeAsync((d, done) => {
+    let ticks = 0;
+    const tick = () => { ticks += 1; requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+    setTimeout(() => done({ ticks, visibility: document.visibilityState }), d);
+  }, ms);
+}
+
 // ── Shot plumbing ───────────────────────────────────────────────────────────
 
 async function shot(name, settle = SETTLE) {
@@ -141,13 +175,15 @@ async function shot(name, settle = SETTLE) {
 }
 
 async function step(name, fn, settle) {
-  if (ONLY.length && !ONLY.includes(name)) return;
+  if (wanted && wanted.size === 0) return;
+  const shoot = !wanted || wanted.has(name);
   try {
     await fn();
-    await shot(name, settle);
+    if (shoot) await shot(name, settle);
   } catch (e) {
     console.error(`[shot] SKIPPED ${name}: ${e.message}`);
   }
+  if (wanted) wanted.delete(name);
 }
 
 // ── App-state helpers ───────────────────────────────────────────────────────
@@ -218,7 +254,17 @@ async function resetToInbox() {
     const search = document.querySelector('input[placeholder*="Search"], input[placeholder*="search"]');
     if (search && search.offsetHeight > 0) document.querySelector('button[title="Search emails"]')?.click();
   });
-  await pressKey('Escape');
+  // `browser.keys('Escape')` never reaches the page in this harness (the same
+  // gap tests/e2e/helpers.js closeSettings works around), so the shortcuts
+  // sheet sat on top of the final shot. Dispatch on `document`: the path is
+  // [window, document], which covers both the capture-phase window listeners
+  // (ShortcutsModal) and the document ones. Compose is already closed by here —
+  // an Escape it can see only minimises it into the outbox tray.
+  await browser.execute(() => {
+    document.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true,
+    }));
+  });
   await browser.pause(400);
   await browser.execute(() => {
     for (const b of document.querySelectorAll('button')) {
@@ -240,6 +286,14 @@ describe('MailVault marketing screenshots', function () {
       inner: [window.innerWidth, window.innerHeight],
       dpr: window.devicePixelRatio,
     }))));
+    const frames = await animationFrames();
+    console.log('[shots] rAF:', JSON.stringify(frames));
+    if (frames.ticks === 0) {
+      throw new Error(`this build paints no animation frames (visibility: ${frames.visibility}) — `
+        + 'every framer-motion overlay would photograph invisible. Rebuild with '
+        + 'VITE_E2E=1 npm run build && cargo build -p mailvault --features webdriver');
+    }
+
     await waitForEmails();
     await browser.pause(2500); // first sync settles: counts, state icons, alerts
     console.log('[shots] rows:', JSON.stringify(await browser.execute(() =>
@@ -375,15 +429,21 @@ describe('MailVault marketing screenshots', function () {
 
     await step('archive-progress', async () => {
       if (!(await clickTestId('bulk-step2-confirm'))) throw new Error('confirm not clickable');
+      // Confirming MINIMISES the modal (BulkOperationsModal.handleConfirm), so
+      // progress lives in the bubble bottom-right: "Downloading … 3 of 65 emails
+      // … 5%". Match that shape and never a count — the demo mailbox is
+      // date-relative, so a hardcoded "of 66 emails" expires overnight and this
+      // shot then burns the whole operation waiting for a string that cannot
+      // appear, taking archive-success down with it.
       // "Operation" also matches "Operation Complete" — the shot then shows a
       // finished bar every time, which is what archive-success is for.
-      await expectState((s) => /Phase \d|Archiving|Saving|of 66 emails/i.test(s.text)
+      await expectState((s) => /\b\d+ of \d+ emails\b/i.test(s.text)
         && !/Operation Complete/i.test(s.text), 'no in-flight progress UI', 30000);
     }, 150);
 
     await step('archive-success', async () => {
       await expectState((s) => /Operation Complete/i.test(s.text), 'archive never completed', 180000);
-    });
+    }, 150); // the completion bubble dismisses itself after a few seconds
 
     // ── Vault ─────────────────────────────────────────────────────────────
     await step('local-vault', async () => {
@@ -511,9 +571,11 @@ describe('MailVault marketing screenshots', function () {
     });
 
     await step('final-inbox', async () => {
-      await pressKey('Escape');
       await resetToInbox();
-      await expectState((s) => s.rows > 0 && !s.settings, 'did not land back on the inbox');
+      // Name every layer that can photobomb: the old assertion checked rows and
+      // settings only, so it passed with the shortcuts sheet still open over it.
+      await expectState((s) => s.rows > 0 && !s.settings && !s.shortcuts && !s.compose,
+        'did not land back on a clean inbox');
     });
   });
 });
