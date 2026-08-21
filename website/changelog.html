@@ -146,6 +146,10 @@
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Send from a different address than the one you log in with.</strong> Settings → Accounts now has a "Send Mail As" field: leave it blank to send from your login address, or enter an alias your provider lets the account send from — useful on Fastmail and anywhere the sign-in address is not the address you hand out. Only the "From" address on outgoing mail changes; your username and password stay exactly as they were, and no Reply-To header is added. MailVault suggests addresses it has seen in your own mail (ones you have sent as before, and ones mail addressed to you arrives on), and a Verify button sends a single test message from the address — to your own mailbox by default — so you can confirm your server accepts it before you rely on it. If the server refuses the address, the error now says so plainly instead of reading as a password problem.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
               <span><strong>An unread-only filter for the message list.</strong> The envelope button in the list header hides everything you have already read; press it again to bring it back. Conversations stay in the list while any message in them is unread, the message you currently have open stays put even once it is marked read, and the header says how many unread messages it is counting — including how much of a large mailbox has been loaded so far, since the filter can only see mail MailVault has already fetched. When nothing is unread the list says so and offers a way back to all messages.</span>
             </li>
             <li class="flex items-start gap-3">
