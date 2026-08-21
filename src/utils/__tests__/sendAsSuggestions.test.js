@@ -3,8 +3,7 @@ import { rankSendAsCandidates } from '../sendAsSuggestions';
 
 const LOGIN = 'ABC@fastmail.fm';
 
-const sent = (from) => ({ from: { address: from }, to: [], cc: [] });
-const received = (from, to = [], cc = []) => ({
+const sent = (from, to = [], cc = []) => ({
   from: { address: from },
   to: to.map(address => ({ address })),
   cc: cc.map(address => ({ address })),
@@ -12,57 +11,46 @@ const received = (from, to = [], cc = []) => ({
 
 describe('rankSendAsCandidates', () => {
   it('surfaces an address the mailbox has already sent as', () => {
-    const out = rankSendAsCandidates({ sent: [sent('DEF@fastmail.fm')] }, LOGIN);
-    expect(out).toEqual([{ address: 'def@fastmail.fm', source: 'sent', count: 1 }]);
+    const out = rankSendAsCandidates([sent('DEF@fastmail.fm')], LOGIN);
+    expect(out).toEqual([{ address: 'def@fastmail.fm', count: 1 }]);
   });
 
   it('never suggests the login address itself', () => {
+    const out = rankSendAsCandidates([sent(LOGIN), sent('abc@fastmail.fm')], LOGIN);
+    expect(out).toEqual([]);
+  });
+
+  it('ranks the most-used address first', () => {
     const out = rankSendAsCandidates(
-      { sent: [sent(LOGIN), sent('abc@fastmail.fm')] },
+      [sent('rare@fastmail.fm'), sent('often@fastmail.fm'), sent('often@fastmail.fm')],
+      LOGIN
+    );
+    expect(out.map(e => e.address)).toEqual(['often@fastmail.fm', 'rare@fastmail.fm']);
+  });
+
+  it('never suggests a co-recipient — To/Cc is not evidence of delivery', () => {
+    // The bug this source deletion fixed: a logistics mailbox was offered its
+    // counterparties' staff because they were Cc'd by many different senders.
+    const out = rankSendAsCandidates(
+      [
+        sent(LOGIN, ['a@corp.com'], ['crew@partner.com']),
+        sent(LOGIN, ['b@corp.com'], ['crew@partner.com']),
+        sent(LOGIN, ['c@corp.com'], ['crew@partner.com']),
+      ],
       LOGIN
     );
     expect(out).toEqual([]);
-  });
-
-  it('ignores a To/Cc address that only ever appears from one sender', () => {
-    // A co-recipient on one thread is not a delivery address for this mailbox.
-    const out = rankSendAsCandidates({
-      inbox: [
-        received('boss@corp.com', [LOGIN, 'colleague@corp.com']),
-        received('boss@corp.com', [LOGIN, 'colleague@corp.com']),
-      ],
-    }, LOGIN);
-    expect(out).toEqual([]);
-  });
-
-  it('surfaces a To address seen from three or more distinct senders', () => {
-    const out = rankSendAsCandidates({
-      inbox: [
-        received('a@x.com', ['DEF@fastmail.fm']),
-        received('b@y.com', ['DEF@fastmail.fm']),
-        received('c@z.com', ['def@fastmail.fm']),
-      ],
-    }, LOGIN);
-    expect(out).toEqual([{ address: 'def@fastmail.fm', source: 'inbox', count: 3 }]);
-  });
-
-  it('ranks sent-proven addresses above inbox-inferred ones', () => {
-    const out = rankSendAsCandidates({
-      sent: [sent('proven@fastmail.fm')],
-      inbox: [
-        received('a@x.com', ['guess@fastmail.fm']),
-        received('b@y.com', ['guess@fastmail.fm']),
-        received('c@z.com', ['guess@fastmail.fm']),
-      ],
-    }, LOGIN);
-    expect(out.map(e => e.address)).toEqual(['proven@fastmail.fm', 'guess@fastmail.fm']);
   });
 
   it('skips malformed and empty addresses', () => {
     const out = rankSendAsCandidates(
-      { sent: [sent(''), sent('not-an-address'), { from: null }] },
+      [sent(''), sent('not-an-address'), { from: null }],
       LOGIN
     );
     expect(out).toEqual([]);
+  });
+
+  it('tolerates a missing Sent cache', () => {
+    expect(rankSendAsCandidates(null, LOGIN)).toEqual([]);
   });
 });

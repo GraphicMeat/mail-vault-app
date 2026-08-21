@@ -120,9 +120,10 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
     }
   }, [selectedAccountId]);
 
-  // Alias candidates mined from this account's own cached mail. Providers give
-  // us no alias list under the credentials we hold, so these are suggestions —
-  // the SMTP server stays the authority (that's what Verify is for).
+  // Alias candidates mined from this account's cached Sent headers. Providers
+  // give us no alias list under the credentials we hold, so these are
+  // suggestions — the SMTP server stays the authority (that's what Verify is
+  // for).
   useEffect(() => {
     let cancelled = false;
     setSendAsSuggestions([]);
@@ -536,7 +537,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                   </div>
                   {sendAsSuggestions.length > 0 && (
                     <div className="flex items-center gap-2 flex-wrap mt-2" data-testid="send-as-suggestions">
-                      <span className="text-xs text-mail-text-muted">Seen in your mail:</span>
+                      <span className="text-xs text-mail-text-muted">You've sent as:</span>
                       {sendAsSuggestions.map(s => (
                         <button
                           key={s.address}
@@ -544,7 +545,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                           className="text-xs font-mono px-2 py-1 rounded-md border border-mail-border
                                     text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover
                                     transition-colors"
-                          title={s.source === 'sent' ? 'You have sent as this address before' : 'Mail addressed to you arrives here'}
+                          title="You have sent as this address before"
                         >
                           {s.address}
                         </button>
