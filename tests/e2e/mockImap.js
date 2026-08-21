@@ -308,8 +308,22 @@ export const CROSS_FOLDER_SUBJECT = 'Cross folder thread check';
 export const CROSS_FOLDER_INBOX_BODY = 'Cross folder inbox body';
 export const CROSS_FOLDER_SENT_BODY = 'Cross folder sent reply body';
 
-/** One message with an explicit Message-ID / In-Reply-To, so threads form. */
-function threadMessage({ uid, owner, from, subject, body, messageId, inReplyTo, day }) {
+// ── A conversation whose References chain is truncated mid-way ──────────────
+// The shape that turned one conversation into three rows: our reply carried
+// only its parent's id, and the recipient's client then extended THAT chain,
+// so its answer rooted on our reply instead of the conversation. Five messages
+// split into 3 + 2 when the thread root is read as `references[0]`.
+export const FRAGMENTED_SUBJECT = 'Fragmented thread check';
+export const FRAGMENTED_COUNT = 5;
+
+/**
+ * One message with an explicit Message-ID / In-Reply-To, so threads form.
+ *
+ * `references` (bare ids, oldest first) overrides the default, which repeats
+ * In-Reply-To — a client that sends only its parent's id. Pass it to model a
+ * client that keeps the whole chain, or one that truncates it mid-conversation.
+ */
+function threadMessage({ uid, owner, from, subject, body, messageId, inReplyTo, references, day }) {
   const { internalDate, header } = stamp(day);
   const lines = [
     `From: ${from}`,
@@ -319,7 +333,8 @@ function threadMessage({ uid, owner, from, subject, body, messageId, inReplyTo, 
     `Message-ID: <${messageId}>`,
   ];
   if (inReplyTo) {
-    lines.push(`In-Reply-To: <${inReplyTo}>`, `References: <${inReplyTo}>`);
+    const refs = references || [inReplyTo];
+    lines.push(`In-Reply-To: <${inReplyTo}>`, `References: ${refs.map(r => `<${r}>`).join(' ')}`);
   }
   lines.push('MIME-Version: 1.0', 'Content-Type: text/plain; charset=UTF-8', '', body, '');
   return {
@@ -381,6 +396,41 @@ export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, 
           uid: 8, owner, from: owner, subject: `Re: ${CROSS_FOLDER_SUBJECT}`,
           body: `${CROSS_FOLDER_SENT_BODY}.`, messageId: `cross-folder-reply@${owner}`,
           inReplyTo: `cross-folder-root@${owner}`, day: 63,
+        }),
+      ]);
+
+      // The truncated-chain conversation: incoming in INBOX, our replies in
+      // Sent. Only `frag-3` truncates — everything before it names the full
+      // chain, which is exactly why the split starts in the middle.
+      const frag = (n) => `frag-${n}@${owner}`;
+      const partner = 'Partner <partner@example.com>';
+      append(inboxBox, [
+        threadMessage({
+          uid: rootUid + 1, owner, from: partner, subject: FRAGMENTED_SUBJECT,
+          body: 'Fragmented body one.', messageId: frag(0), day: 65,
+        }),
+        threadMessage({
+          uid: rootUid + 2, owner, from: partner, subject: `Re: ${FRAGMENTED_SUBJECT}`,
+          body: 'Fragmented body three.', messageId: frag(2),
+          inReplyTo: frag(1), references: [frag(0), frag(1)], day: 67,
+        }),
+        threadMessage({
+          uid: rootUid + 3, owner, from: partner, subject: `Re: ${FRAGMENTED_SUBJECT}`,
+          body: 'Fragmented body five.', messageId: frag(4),
+          inReplyTo: frag(3), references: [frag(2), frag(3)], day: 69,
+        }),
+      ]);
+      append(sentBox, [
+        threadMessage({
+          uid: 9, owner, from: owner, subject: `Re: ${FRAGMENTED_SUBJECT}`,
+          body: 'Fragmented body two.', messageId: frag(1),
+          inReplyTo: frag(0), references: [frag(0)], day: 66,
+        }),
+        threadMessage({
+          uid: 10, owner, from: owner, subject: `Re: ${FRAGMENTED_SUBJECT}`,
+          body: 'Fragmented body four.', messageId: frag(3),
+          // Truncated: the parent alone, dropping frag-0 and frag-1.
+          inReplyTo: frag(2), references: [frag(2)], day: 68,
         }),
       ]);
     }

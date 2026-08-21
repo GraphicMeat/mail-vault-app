@@ -31,8 +31,14 @@ describe('Move to Folder', function () {
   it('should select the first email in the list', async function () {
     // Click the first email row
     const clicked = await browser.execute(() => {
-      // Try data-testid first
-      const row = document.querySelector('[data-testid="email-row"]');
+      // A SINGLE message, never a thread: the thread view's action bar passes
+      // onMove={null} by design, so the toolbar case below has no button to
+      // find when a thread is selected. Threads appear only after the deferred
+      // threading pass, which is why picking row 0 blindly raced it.
+      const rows = [...document.querySelectorAll('[data-testid="email-row"]')];
+      const single = rows.find(r => Number(r.getAttribute('data-thread-count') || 1) === 1);
+      if (single) { single.click(); return true; }
+      const row = rows[0];
       if (row) { row.click(); return true; }
 
       // Fallback: virtualized rows

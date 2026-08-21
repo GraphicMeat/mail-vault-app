@@ -12,6 +12,7 @@ import { RichTextEditor, textToHtml, htmlToText } from './RichTextEditor';
 import { ContactsPickerButton, ContactsAutocomplete } from './ContactsPicker';
 import { findSentMailboxPath } from '../utils/sentFolder';
 import { extractInlineImages } from '../utils/inlineImages';
+import { buildReplyHeaders, parseReferenceList } from '../utils/emailParser';
 
 // Find the Sent mailbox path for a specific account.
 // Tiers: account.sentFolderOverride → disk/store mailbox tree via SPECIAL-USE
@@ -238,8 +239,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         bcc: '',
         subject: originalSubject.startsWith('Re:') ? originalSubject : `Re: ${originalSubject}`,
         body: replyBody,
-        inReplyTo: replyTo.messageId || '',
-        references: replyTo.messageId || ''
+        ...buildReplyHeaders(replyTo)
       });
     } else if (mode === 'replyAll') {
       const allRecipients = [
@@ -256,8 +256,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         bcc: '',
         subject: originalSubject.startsWith('Re:') ? originalSubject : `Re: ${originalSubject}`,
         body: replyBody,
-        inReplyTo: replyTo.messageId || '',
-        references: replyTo.messageId || ''
+        ...buildReplyHeaders(replyTo)
       });
     } else if (mode === 'forward') {
       initForm({
@@ -540,7 +539,10 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           has_attachments: attachments.length > 0,
           message_id: builtMime?.messageId || null,
           in_reply_to: formData.inReplyTo || null,
-          references: formData.references || null,
+          // Array shape, like every other local-index producer.
+          references: parseReferenceList(formData.references).length
+            ? parseReferenceList(formData.references)
+            : null,
           snippet: (plainTextRef.current || htmlToText(formData.body)).slice(0, 200),
         };
         if (invoke) {

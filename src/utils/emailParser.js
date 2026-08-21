@@ -393,6 +393,80 @@ export function groupBySender(emails, userEmail) {
 }
 
 /**
+ * Canonical form of a Message-ID: trimmed, bracketed, or null.
+ *
+ * IMAP envelopes, Maildir headers and the local index disagree about brackets,
+ * and an id that differs from its twin only by `<>` splits a conversation.
+ */
+export function normalizeMessageId(id) {
+  if (!id) return null;
+  const bare = String(id).trim().replace(/^<+|>+$/g, '').trim();
+  return bare ? `<${bare}>` : null;
+}
+
+/**
+ * Message-IDs inside a References / In-Reply-To value, oldest ancestor first.
+ *
+ * Accepts the array the IMAP and Maildir parsers produce AND the raw header
+ * string the local index writes for a locally-sent message — indexing a string
+ * gave `refs[0] === '<'`, which made every such message share one bogus thread.
+ */
+export function parseReferenceList(value) {
+  if (!value) return [];
+  const parts = Array.isArray(value) ? value : [value];
+  const ids = [];
+  for (const part of parts) {
+    for (const token of String(part).split(/\s+/)) {
+      const id = normalizeMessageId(token);
+      if (id && !ids.includes(id)) ids.push(id);
+    }
+  }
+  return ids;
+}
+
+/**
+ * Threading headers for a reply to `parent`, per RFC 5322 §3.6.4: In-Reply-To
+ * is the parent's Message-ID; References is the parent's own References chain
+ * PLUS that id.
+ *
+ * Sending only the parent's id throws away the conversation's history. The
+ * other client then extends the truncated chain faithfully, so its answer roots
+ * at our reply instead of the original — which is how one thread became three,
+ * one per reply.
+ */
+export function buildReplyHeaders(parent) {
+  if (!parent) return { inReplyTo: '', references: '' };
+  const parentId = normalizeMessageId(parent.messageId || parent.message_id);
+  const chain = parseReferenceList(parent.references);
+  if (parentId && !chain.includes(parentId)) chain.push(parentId);
+  return { inReplyTo: parentId || '', references: chain.join(' ') };
+}
+
+/** Synthetic id for a message that carries no Message-ID. Never referenced. */
+function fallbackId(email) {
+  return `uid-${email._accountId || ''}:${email.uid}`;
+}
+
+/** A message's own Message-ID in canonical form (camelCase or snake_case). */
+function ownMessageId(email) {
+  return normalizeMessageId(email.messageId || email.message_id);
+}
+
+/**
+ * One message's ancestry, oldest first and ending in the message itself:
+ * References, then In-Reply-To (the direct parent), then its own id.
+ */
+function ancestryChain(email) {
+  const chain = parseReferenceList(email.references);
+  for (const id of parseReferenceList(email.inReplyTo || email.in_reply_to)) {
+    if (!chain.includes(id)) chain.push(id);
+  }
+  const own = ownMessageId(email) || fallbackId(email);
+  if (!chain.includes(own)) chain.push(own);
+  return chain;
+}
+
+/**
  * Build email threads using RFC 2822 header chains (References, In-Reply-To)
  * with normalized subject as fallback.
  *
@@ -408,59 +482,85 @@ export function groupBySender(emails, userEmail) {
 export function buildThreads(emails) {
   if (!emails || emails.length === 0) return new Map();
 
-  // Step 1: Index by messageId
-  const byMessageId = new Map(); // messageId → email
+  // Step 1: union every id a message names — its own, its In-Reply-To and its
+  // whole References chain — so one conversation is one set.
+  //
+  // Taking `references[0]` as the thread root (what this did before) trusts
+  // every client to send the full chain. A reply carrying only its parent's id
+  // — MailVault's own did, see buildReplyHeaders — roots at the parent rather
+  // than the conversation, and the answer to THAT reply extends the truncated
+  // chain, so each reply splits off a new thread. Union-find joins a chain from
+  // either end, which also heals the messages already sitting on the server.
+  const parent = new Map(); // id → parent id
+  const add = (id) => { if (!parent.has(id)) parent.set(id, id); return id; };
+  const find = (id) => {
+    let root = id;
+    while (parent.get(root) !== root) root = parent.get(root);
+    let cur = id;
+    while (parent.get(cur) !== root) {
+      const next = parent.get(cur);
+      parent.set(cur, root);
+      cur = next;
+    }
+    return root;
+  };
+  const union = (a, b) => {
+    const ra = find(add(a));
+    const rb = find(add(b));
+    if (ra !== rb) parent.set(rb, ra);
+  };
+
+  const chains = new Map();      // email → ancestry chain
+  const hasAncestor = new Set(); // ids some chain names as a descendant
+
   for (const email of emails) {
-    if (email.messageId) {
-      byMessageId.set(email.messageId, email);
+    const chain = ancestryChain(email);
+    chains.set(email, chain);
+    add(chain[0]);
+    for (let i = 1; i < chain.length; i++) {
+      hasAncestor.add(chain[i]);
+      union(chain[0], chain[i]);
     }
   }
 
-  // Step 2: Find the thread root for each email by walking the reference chain
-  const emailToThreadId = new Map(); // email → threadId (root messageId)
-
-  const rootCache = new Map(); // messageId → threadRoot (memoization to avoid O(N²) chain walks)
-
-  const findRoot = (email, visited = new Set()) => {
-    const id = email.messageId || (email.uid ? `uid-${email._accountId || ''}:${email.uid}` : null);
-    if (id && rootCache.has(id)) return rootCache.get(id);
-    if (id && visited.has(id)) return id;
-    if (id) visited.add(id);
-
-    let root;
-    // Walk the references chain (oldest ancestor first)
-    const refs = email.references || [];
-    if (refs.length > 0) {
-      // The first reference is the oldest ancestor = thread root
-      root = refs[0];
-    } else if (email.inReplyTo) {
-      // Check if that parent has its own root
-      const parent = byMessageId.get(email.inReplyTo);
-      if (parent) {
-        root = findRoot(parent, visited);
-      } else {
-        // Parent not in our set — use inReplyTo as the thread root
-        root = email.inReplyTo;
-      }
-    } else {
-      // No threading headers — this email is its own root
-      root = email.messageId || `uid-${email._accountId || ''}:${email.uid}`;
-    }
-
-    if (id) rootCache.set(id, root);
-    return root;
+  // Step 2: name each conversation after its root — the one id no chain calls a
+  // descendant. Ties and reference cycles fall back to the oldest message, then
+  // to the id itself, so the same emails always produce the same threadId
+  // whatever order they arrive in.
+  const emailById = new Map();
+  for (const email of emails) {
+    const id = ownMessageId(email) || fallbackId(email);
+    if (!emailById.has(id)) emailById.set(id, email);
+  }
+  const ts = (id) => {
+    const e = emailById.get(id);
+    if (!e) return Infinity; // referenced but not in our set — never the root we show
+    const d = new Date(e.date || e.internalDate || 0).getTime();
+    return Number.isNaN(d) ? Infinity : d;
   };
 
-  // Step 3: Assign thread IDs
-  for (const email of emails) {
-    const threadId = findRoot(email);
-    emailToThreadId.set(email, threadId);
+  const componentIds = new Map(); // representative → id[]
+  for (const id of parent.keys()) {
+    const rep = find(id);
+    if (!componentIds.has(rep)) componentIds.set(rep, []);
+    componentIds.get(rep).push(id);
+  }
+
+  const rootOf = new Map(); // representative → threadId
+  for (const [rep, ids] of componentIds) {
+    const roots = ids.filter(id => !hasAncestor.has(id));
+    const pool = roots.length > 0 ? roots : ids;
+    let best = pool[0];
+    for (const id of pool) {
+      if (ts(id) < ts(best) || (ts(id) === ts(best) && id < best)) best = id;
+    }
+    rootOf.set(rep, best);
   }
 
   // Step 4: Group emails by thread ID
   const threadGroups = new Map(); // threadId → email[]
   for (const email of emails) {
-    const threadId = emailToThreadId.get(email);
+    const threadId = rootOf.get(find(chains.get(email)[0]));
     if (!threadGroups.has(threadId)) {
       threadGroups.set(threadId, []);
     }
@@ -494,7 +594,8 @@ export function buildThreads(emails) {
 
   for (const [threadId, threadEmails] of threadGroups) {
     const email = threadEmails[0];
-    const hasRfcHeaders = email.inReplyTo || (email.references && email.references.length > 0);
+    // Chain length 1 means the message named no ancestor at all.
+    const hasRfcHeaders = chains.get(email).length > 1;
     const isReplyLike = REPLY_PREFIX.test((email.subject || '').trim());
 
     if (threadEmails.length === 1 && !hasRfcHeaders && isReplyLike) {
@@ -577,149 +678,28 @@ export function buildThreads(emails) {
 }
 
 /**
- * Find the thread root for a single email given a messageId index.
- * Extracted from buildThreads() for reuse in incremental updates.
- */
-function findThreadRoot(email, byMessageId, visited = new Set()) {
-  if (email.messageId && visited.has(email.messageId)) return email.messageId;
-  if (email.messageId) visited.add(email.messageId);
-
-  const refs = email.references || [];
-  if (refs.length > 0) return refs[0];
-
-  if (email.inReplyTo) {
-    const parent = byMessageId.get(email.inReplyTo);
-    if (parent) return findThreadRoot(parent, byMessageId, visited);
-    return email.inReplyTo;
-  }
-
-  return email.messageId || `uid-${email._accountId || ''}:${email.uid}`;
-}
-
-/**
  * Incrementally update an existing thread map with added/removed emails.
- * Only touches affected threads instead of rebuilding the entire map.
+ *
+ * Threading is a property of the whole set — one arriving message can bridge
+ * two threads that already exist — so this rebuilds from the resulting emails
+ * instead of placing each new message on its own.
  *
  * @param {Map} existingThreads - previous buildThreads() result
  * @param {Array} newEmails - emails to add
  * @param {Set} removedUids - UIDs to remove
- * @param {Array} allEmails - full current email list (for messageId index)
- * @returns {Map} updated threads map (shallow copy with mutations)
+ * @param {Array} allEmails - full current email list
+ * @returns {Map} updated threads map
  */
 export function updateThreads(existingThreads, newEmails, removedUids, allEmails) {
   if (newEmails.length === 0 && removedUids.size === 0) return existingThreads;
 
-  // Build messageId index from all emails for thread root lookups
-  const byMessageId = new Map();
-  for (const email of allEmails) {
-    if (email.messageId) byMessageId.set(email.messageId, email);
+  // Compound identity: a UID means nothing outside its account.
+  const byKey = new Map();
+  for (const email of [...(allEmails || []), ...newEmails]) {
+    byKey.set(`${email._accountId || ''}\0${email.uid}`, email);
   }
 
-  // Shallow copy the threads map so React detects the change
-  const threads = new Map(existingThreads);
-
-  // Helper: pre-parse date for sorting
-  const getTs = (email) => {
-    if (email._threadTs !== undefined) return email._threadTs;
-    email._threadTs = new Date(email.date || email.internalDate || 0).getTime();
-    return email._threadTs;
-  };
-
-  // Helper: rebuild thread metadata after mutation
-  const rebuildThreadMeta = (threadId, threadEmails) => {
-    if (threadEmails.length === 0) {
-      threads.delete(threadId);
-      return;
-    }
-    threadEmails.sort((a, b) => getTs(a) - getTs(b));
-    const firstEmail = threadEmails[0];
-    const lastEmail = threadEmails[threadEmails.length - 1];
-    const lastDate = new Date(getTs(lastEmail));
-
-    const participantSet = new Set();
-    for (const e of threadEmails) {
-      if (e.from?.address) participantSet.add(e.from.address.toLowerCase());
-      if (e.to) for (const to of e.to) if (to.address) participantSet.add(to.address.toLowerCase());
-    }
-
-    const unreadCount = threadEmails.filter(e => !e.flags?.includes('\\Seen')).length;
-
-    threads.set(threadId, {
-      threadId,
-      subject: normalizeSubject(firstEmail.subject),
-      originalSubject: firstEmail.subject || '(No subject)',
-      emails: threadEmails,
-      lastDate,
-      lastEmail,
-      participants: Array.from(participantSet),
-      unreadCount,
-      messageCount: threadEmails.length,
-      dateRange: { start: new Date(getTs(firstEmail)), end: lastDate }
-    });
-  };
-
-  // Remove emails by UID
-  if (removedUids.size > 0) {
-    for (const [threadId, thread] of existingThreads) {
-      const filtered = thread.emails.filter(e => !removedUids.has(e.uid));
-      if (filtered.length !== thread.emails.length) {
-        rebuildThreadMeta(threadId, filtered);
-      }
-    }
-  }
-
-  // Add new emails
-  if (newEmails.length > 0) {
-    // Build subject-to-threadId index for orphan merging (scoped per account)
-    const subjectToThreadId = new Map(); // "accountId\0subject" → threadId
-    for (const [threadId, thread] of threads) {
-      const subj = normalizeSubject(thread.emails[0]?.subject);
-      const acct = thread.emails[0]?._accountId || '';
-      const key = `${acct}\0${subj}`;
-      if (!subjectToThreadId.has(key) || thread.emails.length > 1) {
-        subjectToThreadId.set(key, threadId);
-      }
-    }
-
-    for (const email of newEmails) {
-      const threadId = findThreadRoot(email, byMessageId);
-      const hasRfcHeaders = email.inReplyTo || (email.references && email.references.length > 0);
-
-      // Try to find existing thread
-      let targetThreadId = threadId;
-      if (!threads.has(targetThreadId)) {
-        // Orphan: try subject-based merge if no RFC headers (within same account)
-        if (!hasRfcHeaders) {
-          const subj = normalizeSubject(email.subject);
-          const key = `${email._accountId || ''}\0${subj}`;
-          const canonical = subjectToThreadId.get(key);
-          if (canonical && threads.has(canonical)) {
-            targetThreadId = canonical;
-          }
-        }
-      }
-
-      if (threads.has(targetThreadId)) {
-        const existing = threads.get(targetThreadId);
-        // Avoid duplicates (compound identity: account + uid)
-        if (!existing.emails.some(e => e.uid === email.uid && (e._accountId || '') === (email._accountId || ''))) {
-          const updatedEmails = [...existing.emails, email];
-          rebuildThreadMeta(targetThreadId, updatedEmails);
-        }
-      } else {
-        // New thread
-        rebuildThreadMeta(threadId, [email]);
-        // Register subject for future orphan merging
-        const subj = normalizeSubject(email.subject);
-        const key = `${email._accountId || ''}\0${subj}`;
-        if (!subjectToThreadId.has(key)) {
-          subjectToThreadId.set(key, threadId);
-        }
-      }
-    }
-  }
-
-  return threads;
+  return buildThreads([...byKey.values()].filter(e => !removedUids.has(e.uid)));
 }
 
 /**
