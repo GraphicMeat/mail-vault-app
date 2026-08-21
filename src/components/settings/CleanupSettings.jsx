@@ -7,6 +7,8 @@ import { useLearningStore } from '../../stores/learningStore';
 import * as classificationService from '../../services/classificationService';
 import { bulkOperationManager } from '../../services/BulkOperationManager';
 import { ensureFreshToken } from '../../services/authUtils';
+import { IS_APPSTORE_BUILD } from '../../utils/buildFlags.js';
+import { usePremiumPriceBlurb } from '../../hooks/usePremiumPricing.js';
 // Lazy-loaded in openPreview to avoid circular import at startup
 let _getRealAttachments = null;
 let _replaceCidUrls = null;
@@ -253,7 +255,8 @@ const CleanupRow = React.memo(function CleanupRow({
 
 // ── Exported Modal ────────────────────────────────────────────────────────
 
-export function CleanupView({ accountId, onDetailChange }) {
+export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
+  const priceBlurb = usePremiumPriceBlurb();
   const activeAccountId = accountId || useAccountStore(s => s.activeAccountId);
   const activeMailbox = useAccountStore(s => s.activeMailbox);
   const billingProfile = useSettingsStore(s => s.billingProfile);
@@ -527,6 +530,16 @@ export function CleanupView({ accountId, onDetailChange }) {
         <Lock className="w-10 h-10 text-mail-text-muted mb-4" />
         <h3 className="font-semibold text-lg mb-2">Email Cleanup is a Premium Feature</h3>
         <p className="text-sm text-mail-text-muted max-w-sm">Automatically classify your emails into categories like newsletters, promotions, and notifications — then clean up in bulk with smart keep, archive, and delete suggestions.</p>
+        {/* MAS builds must not advertise the web subscription — no external
+            purchase price, no path to Stripe checkout. */}
+        {!IS_APPSTORE_BUILD && (
+          <p className="text-xs text-mail-text-muted mt-3">{priceBlurb}</p>
+        )}
+        {!IS_APPSTORE_BUILD && onUpgrade && (
+          <button onClick={onUpgrade} className="mt-4 px-4 py-1.5 text-xs font-semibold bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full hover:opacity-90 transition-opacity">
+            Upgrade
+          </button>
+        )}
       </div>
     );
   } else if (summaryLoading && !hasResults && !isClassifying) {

@@ -10,13 +10,15 @@ import {
   Cloud, HardDrive,
 } from 'lucide-react';
 import { formatDateTime, formatDateOnly } from '../utils/dateFormat';
+import { IS_APPSTORE_BUILD } from '../utils/buildFlags.js';
+import { usePremiumPriceBlurb } from '../hooks/usePremiumPricing.js';
 
 const ROW_HEIGHT = 56;
 
 /**
  * Time Capsule — settings-style modal for browsing point-in-time mailbox snapshots.
  */
-export function TimeCapsuleView({ accountId, onDetailChange }) {
+export function TimeCapsuleView({ accountId, onDetailChange, onUpgrade }) {
   const store = useSnapshotStore();
   const resolvedAccountId = accountId || useAccountStore(s => s.activeAccountId);
   const accounts = useAccountStore(s => s.accounts);
@@ -73,7 +75,7 @@ export function TimeCapsuleView({ accountId, onDetailChange }) {
       {/* Content */}
       <div className="flex-1 overflow-hidden">
         {!isPremium ? (
-          <PremiumGate />
+          <PremiumGate onUpgrade={onUpgrade} />
         ) : page === 'viewer' ? (
           <SnapshotViewer email={store.viewerEmail} loading={store.loadingViewer} accountId={resolvedAccountId} mailbox={store.mailboxMap[store.selectedMailbox] || store.selectedMailbox} />
         ) : page === 'browser' ? (
@@ -97,7 +99,8 @@ export function TimeCapsuleView({ accountId, onDetailChange }) {
 
 // ── Premium Gate ──────────────────────────────────────────────────────────
 
-function PremiumGate() {
+function PremiumGate({ onUpgrade }) {
+  const priceBlurb = usePremiumPriceBlurb();
   return (
     <div className="flex flex-col items-center justify-center h-full px-8 text-center">
       <Lock size={40} className="text-mail-text-muted mb-4" />
@@ -106,6 +109,16 @@ function PremiumGate() {
         Browse your mailbox as it was at any point in time. Restore deleted emails with one click.
         Snapshots are created automatically after each backup.
       </p>
+      {/* MAS builds must not advertise the web subscription — no external
+          purchase price, no path to Stripe checkout. */}
+        {!IS_APPSTORE_BUILD && (
+          <p className="text-xs text-mail-text-muted mt-3">{priceBlurb}</p>
+        )}
+        {!IS_APPSTORE_BUILD && onUpgrade && (
+          <button onClick={onUpgrade} className="mt-4 px-4 py-1.5 text-xs font-semibold bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full hover:opacity-90 transition-opacity">
+            Upgrade
+          </button>
+        )}
     </div>
   );
 }

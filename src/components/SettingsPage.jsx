@@ -214,13 +214,13 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
             {activeTab === 'cleanup' && (
               subView === 'config'
                 ? <AISettings />
-                : <CleanupView accountId={selectedFeatureAccountId} onDetailChange={setFeatureDetailActive} />
+                : <CleanupView accountId={selectedFeatureAccountId} onDetailChange={setFeatureDetailActive} onUpgrade={() => handleTabChange('billing')} />
             )}
 
             {activeTab === 'time-capsule' && (
               subView === 'config'
                 ? <TimeCapsuleSettings />
-                : <TimeCapsuleView accountId={selectedFeatureAccountId} onDetailChange={setFeatureDetailActive} />
+                : <TimeCapsuleView accountId={selectedFeatureAccountId} onDetailChange={setFeatureDetailActive} onUpgrade={() => handleTabChange('billing')} />
             )}
 
             {activeTab === 'general' && (

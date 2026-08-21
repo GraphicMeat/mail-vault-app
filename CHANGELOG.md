@@ -4,6 +4,7 @@
 
 ### Added
 - **Drop a picture into the message, or a file onto the strip below it.** While you drag a file over a new message, two drop zones light up: let go of an image on the message body and it goes inline right where you dropped it; let go of anything on the dashed strip below the body — or anywhere else in the window — and it is attached as a file. Pasting an image from the clipboard puts it inline too. Inline pictures are sent the way other mail apps send them, as embedded parts the message refers to, so Gmail and Outlook.com show them instead of stripping them out.
+- **Time Capsule and Email Cleanup now say what Premium costs, and offer a way to get it.** Both panels explained the locked feature and stopped there — no price, no button — while the other three locked panels showed both. They now carry the same price line and Upgrade button, which opens Settings → Billing.
 
 ### Fixed
 - **Replying no longer breaks a conversation into new threads.** Every reply MailVault sent named only the message it answered and not the conversation behind it, so the other person's mail app carried on from that shortened history: their answer started a thread of its own, and three replies left three rows for one conversation. Replies now carry the whole conversation, and the list groups messages whose history was cut short by any mail app — so the conversations already split in your mailbox come back together as one.
