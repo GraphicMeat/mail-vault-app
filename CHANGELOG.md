@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+- **Drop a picture into the message, or a file onto the strip below it.** While you drag a file over a new message, two drop zones light up: let go of an image on the message body and it goes inline right where you dropped it; let go of anything on the dashed strip below the body — or anywhere else in the window — and it is attached as a file. Pasting an image from the clipboard puts it inline too. Inline pictures are sent the way other mail apps send them, as embedded parts the message refers to, so Gmail and Outlook.com show them instead of stripping them out.
+
+### Fixed
+- **Dragging a file from Finder onto a new message does something again.** The drop never reached the compose window — the desktop layer accepted the file and kept it — so nothing was attached and nothing said why. Dropped files now land in the message or its attachments, as above.
+- **Forwarding no longer sends the original message twice.** A forward put the original into the body and also kept a second copy behind the "Show original message" toggle, and both went out. The forward now carries the original once, in the body where you can edit it.
+- **Closing an untouched message no longer asks whether to discard your changes.** A new message that held only your signature, or a forward you had not typed into, counted as unsaved work: Close asked to discard it and Escape minimized it to a bubble instead of closing. Only what you actually typed, added or attached counts now.
+- **Escape inside the "Discard message?" prompt keeps the draft.** Pressing Escape there closed the prompt — and, in the same keypress, closed the message behind it and threw the draft away. Escape now only dismisses the prompt.
+- **Undo in a new message is no longer lit before you have typed anything.**
+
 ## [2.10.0] - 2026-08-18
 
 ### Added

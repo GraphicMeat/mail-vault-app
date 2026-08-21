@@ -26,6 +26,18 @@ if (navigator.platform?.startsWith('Mac') || navigator.userAgent?.includes('Mac'
   document.documentElement.classList.add('platform-mac');
 }
 
+// tauri.conf.json sets dragDropEnabled:false so Finder drops reach the page as HTML5
+// drag events — Tauri's native handler otherwise swallows them (tauri-runtime-wry
+// returns true from its drag-drop handler, and wry then never lets WebKit see the drop).
+// The cost: WebKit's default for a file dropped where no handler claimed it is to
+// NAVIGATE the webview to that file. Refuse anything no drop zone accepted.
+document.addEventListener('dragover', (e) => {
+  if (e.defaultPrevented) return;
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'none';
+});
+document.addEventListener('drop', (e) => { if (!e.defaultPrevented) e.preventDefault(); });
+
 // Debug: Log Tauri API availability at startup
 console.log('=== MailVault Frontend Initializing ===');
 console.log('[main.jsx] window.__TAURI__:', window.__TAURI__);

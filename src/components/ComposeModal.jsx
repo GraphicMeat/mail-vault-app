@@ -11,6 +11,7 @@ import * as db from '../services/db';
 import { RichTextEditor, textToHtml, htmlToText } from './RichTextEditor';
 import { ContactsPickerButton, ContactsAutocomplete } from './ContactsPicker';
 import { findSentMailboxPath } from '../utils/sentFolder';
+import { extractInlineImages } from '../utils/inlineImages';
 
 // Find the Sent mailbox path for a specific account.
 // Tiers: account.sentFolderOverride → disk/store mailbox tree via SPECIAL-USE
@@ -92,12 +93,17 @@ function AttachmentPreview({ attachment, onRemove }) {
   };
   
   return (
-    <div className="flex items-center gap-2 px-3 py-2 bg-mail-surface-hover rounded-lg">
+    <div
+      data-testid="compose-attachment"
+      data-filename={attachment.filename}
+      className="flex items-center gap-2 px-3 py-2 bg-mail-surface-hover rounded-lg"
+    >
       <FileText size={16} className="text-mail-accent" />
       <span className="text-sm text-mail-text truncate flex-1">{attachment.filename}</span>
       <span className="text-xs text-mail-text-muted">{formatSize(attachment.size)}</span>
       <button
         onClick={onRemove}
+        title="Remove attachment"
         className="p-1 hover:bg-mail-border rounded transition-colors"
       >
         <X size={14} className="text-mail-text-muted" />
@@ -105,6 +111,10 @@ function AttachmentPreview({ attachment, onRemove }) {
     </div>
   );
 }
+
+// Only a FILE drag arms the drop zones — dragging selected text inside the
+// editor must not paint the modal as a drop target.
+const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
 
 export function ComposeModal({ mode = 'new', replyTo = null, initialData = null, onClose, onMinimize, onSaveState }) {
   const rawAccounts = useAccountStore(s => s.accounts);
@@ -134,7 +144,10 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const [templateName, setTemplateName] = useState('');
   const [quotedExpanded, setQuotedExpanded] = useState(false);
   const [quotedHtml, setQuotedHtml] = useState('');
-  const [dragOver, setDragOver] = useState(false);
+  // WebKit reports a null relatedTarget on dragleave, so the old
+  // `contains(relatedTarget)` check never worked — count enter/leave instead.
+  const dragDepth = useRef(0);
+  const [dragging, setDragging] = useState(false);
   const [composeDelay, setComposeDelay] = useState(null); // null = use global
   const fileInputRef = useRef(null);
   const editorRef = useRef(null);
@@ -151,8 +164,18 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     references: ''
   });
   
+  // Baseline for the dirty check (hasUserContent). Recorded by the init effect
+  // from the form it actually produces — a snapshot taken from the render that
+  // scheduled the effect holds the EMPTY pre-init form, so a signature-only
+  // draft or an untouched forward reads as "unsaved changes".
+  const initialSnapshot = useRef(null);
+
   // Initialize form based on mode and replyTo email
   useEffect(() => {
+    const initForm = (next) => {
+      initialSnapshot.current = { to: next.to, subject: next.subject, body: next.body };
+      setFormData(next);
+    };
     let signatureHtml = '';
 
     // Add signature if enabled
@@ -166,8 +189,8 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       if (initialData) {
         // Restore from undo-send or minimize: body is already HTML
         const bodyHtml = initialData.body || '';
-        setFormData(prev => ({
-          ...prev,
+        initForm({
+          ...formData,
           to: initialData.to || '',
           cc: initialData.cc || '',
           bcc: initialData.bcc || '',
@@ -175,7 +198,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           body: bodyHtml || signatureHtml,
           inReplyTo: initialData.inReplyTo || '',
           references: initialData.references || '',
-        }));
+        });
         if (initialData.attachments?.length) {
           setAttachments(initialData.attachments);
         }
@@ -184,7 +207,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           setQuotedHtml(initialData._quotedHtml);
         }
       } else {
-        setFormData(prev => ({ ...prev, body: signatureHtml }));
+        initForm({ ...formData, body: signatureHtml });
       }
       return;
     }
@@ -201,12 +224,15 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       ? replyTo.html
       : textToHtml(replyTo.text || '');
 
-    setQuotedHtml(quotedHeaderHtml + quotedBodyHtml);
+    // Replies keep the original behind the collapsible toggle. A forward puts
+    // it inline in the body, so storing it here as well would render the
+    // toggle AND append the original a second time at send.
+    if (mode !== 'forward') setQuotedHtml(quotedHeaderHtml + quotedBodyHtml);
 
     const replyBody = signatureHtml;
 
     if (mode === 'reply') {
-      setFormData({
+      initForm({
         to: replyTo.replyTo?.[0]?.address || fromAddress,
         cc: '',
         bcc: '',
@@ -224,7 +250,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       const ccRecipients = (replyTo.cc?.map(c => c.address) || [])
         .filter(addr => addr !== selectedAccount?.email);
 
-      setFormData({
+      initForm({
         to: allRecipients.join(', '),
         cc: ccRecipients.join(', '),
         bcc: '',
@@ -234,7 +260,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         references: replyTo.messageId || ''
       });
     } else if (mode === 'forward') {
-      setFormData({
+      initForm({
         to: '',
         cc: '',
         bcc: '',
@@ -262,9 +288,9 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     setError(null);
   };
   
-  const handleFileSelect = async (e) => {
-    const files = Array.from(e.target.files || []);
-    
+  // Shared by the file picker, the modal-wide drop fallback, the dashed attach
+  // strip, and non-image files dropped on the editor.
+  const addFiles = (files) => {
     for (const file of files) {
       // Read file as base64
       const reader = new FileReader();
@@ -280,7 +306,10 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       };
       reader.readAsDataURL(file);
     }
-    
+  };
+
+  const handleFileSelect = (e) => {
+    addFiles(Array.from(e.target.files || []));
     // Reset input
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -290,11 +319,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const handleDrop = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    setDragOver(false);
-    const files = Array.from(e.dataTransfer?.files || []);
-    if (files.length > 0) {
-      handleFileSelect({ target: { files } });
-    }
+    addFiles(Array.from(e.dataTransfer?.files || []));
   };
 
   const removeAttachment = (index) => {
@@ -398,18 +423,32 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         const sendAsEmail = getSendAsAddress(selectedAccountId);
         const fromAddress = sendAsEmail || freshAccount.email;
 
+        // Inline pictures leave as cid: parts — Gmail/Outlook.com strip data: URIs.
+        // Only the outgoing copy is rewritten; composeState.initialData.body keeps
+        // the data URIs so an undone/minimized draft still renders the picture.
+        const inline = extractInlineImages(formData.body);
+
         // Prepare attachments for nodemailer
-        const emailAttachments = attachments.map(att => ({
-          filename: att.filename,
-          content: att.content,
-          encoding: 'base64',
-          contentType: att.contentType
-        }));
+        const emailAttachments = [
+          ...attachments.map(att => ({
+            filename: att.filename,
+            content: att.content,
+            encoding: 'base64',
+            contentType: att.contentType
+          })),
+          ...inline.attachments.map(a => ({
+            filename: a.filename,
+            content: a.content,
+            encoding: 'base64',
+            contentType: a.contentType,
+            cid: a.cid,
+          })),
+        ];
 
         // Combine compose body with quoted content for the sent email
         const fullHtml = quotedHtml
-          ? formData.body + '<hr><blockquote>' + quotedHtml + '</blockquote>'
-          : formData.body;
+          ? inline.html + '<hr><blockquote>' + quotedHtml + '</blockquote>'
+          : inline.html;
         const fullText = quotedHtml
           ? (plainTextRef.current || htmlToText(formData.body)) + '\n\n-------- Original Message --------\n' + htmlToText(quotedHtml)
           : (plainTextRef.current || htmlToText(formData.body));
@@ -496,7 +535,9 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           to: parseAddresses(formData.to),
           subject: formData.subject,
           date: new Date().toISOString(),
-          has_attachments: emailAttachments.length > 0,
+          // Regular attachments only — an inline picture must not give the
+          // Sent row a paperclip.
+          has_attachments: attachments.length > 0,
           message_id: builtMime?.messageId || null,
           in_reply_to: formData.inReplyTo || null,
           references: formData.references || null,
@@ -528,8 +569,8 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           internal_date: new Date().toISOString(),
           internalDate: new Date().toISOString(),
           messageId: builtMime?.messageId || null,
-          hasAttachments: emailAttachments.length > 0,
-          has_attachments: emailAttachments.length > 0,
+          hasAttachments: attachments.length > 0,
+          has_attachments: attachments.length > 0,
           read: true,
           flags: ['\\Seen', '\\Draft'],
           _accountId: freshAccount.id,
@@ -749,20 +790,6 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     }
   };
   
-  // Track the initial form state to detect user edits
-  const initialSnapshot = useRef(null);
-  useEffect(() => {
-    // Capture the form right after initialization (next tick)
-    const timer = setTimeout(() => {
-      initialSnapshot.current = {
-        to: formData.to,
-        subject: formData.subject,
-        body: formData.body,
-      };
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [mode, replyTo, initialData, selectedAccountId]);
-
   const hasUserContent = initialSnapshot.current
     ? (formData.to !== initialSnapshot.current.to ||
        formData.subject !== initialSnapshot.current.subject ||
@@ -788,6 +815,12 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   useEffect(() => {
     const handleKey = (e) => {
       if (e.key !== 'Escape') return;
+      // This modal owns Escape while it is mounted. App's global shortcut
+      // (window, bubble phase — runs after this document listener) would
+      // otherwise also resolve 'close-compose' and unmount the window: harmless
+      // after a minimize, fatal with the discard dialog open — the dialog
+      // closes and the draft is thrown away in the same keypress.
+      e.stopPropagation();
       if (showDiscardDialog) {
         e.preventDefault();
         setShowDiscardDialog(false);
@@ -849,12 +882,17 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         data-testid="compose-modal"
+        data-dragging={dragging ? 'true' : 'false'}
         className={`bg-mail-surface border rounded-xl shadow-2xl
                    w-full max-w-4xl max-h-[90vh] h-[min(80vh,700px)] min-h-[320px] flex flex-col overflow-hidden
-                   ${dragOver ? 'border-mail-accent border-2' : 'border-mail-border'}`}
+                   ${dragging ? 'border-mail-accent border-2' : 'border-mail-border'}`}
         onClick={(e) => e.stopPropagation()}
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false); }}
+        onDragEnter={(e) => { if (!hasFiles(e)) return; dragDepth.current += 1; setDragging(true); }}
+        onDragOver={(e) => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
+        onDragLeave={() => { dragDepth.current = Math.max(0, dragDepth.current - 1); if (dragDepth.current === 0) setDragging(false); }}
+        // Capture phase: the editor's handleDrop stops propagation in the bubble
+        // phase, so a bubble-phase reset would never run for editor drops.
+        onDropCapture={() => { dragDepth.current = 0; setDragging(false); }}
         onDrop={handleDrop}
       >
         {/* Header */}
@@ -906,6 +944,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                 <label className="w-12 text-sm text-mail-text-muted">From:</label>
                 <div className="relative flex-1">
                   <select
+                    data-testid="compose-from"
                     value={selectedAccountId}
                     onChange={(e) => setSelectedAccountId(e.target.value)}
                     className="w-full bg-transparent text-mail-text text-sm py-1 pr-6
@@ -949,6 +988,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               value={formData.cc}
               onChange={handleChange}
               setValue={(v) => setFormData(prev => ({ ...prev, cc: v }))}
+              testid="compose-cc"
               boostAccountId={selectedAccountId}
             />
 
@@ -960,6 +1000,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               value={formData.bcc}
               onChange={handleChange}
               setValue={(v) => setFormData(prev => ({ ...prev, bcc: v }))}
+              testid="compose-bcc"
               boostAccountId={selectedAccountId}
             />
             
@@ -981,7 +1022,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           
           {/* Attachments */}
           {attachments.length > 0 && (
-            <div className="px-4 py-2 border-b border-mail-border">
+            <div data-testid="compose-attachments" className="px-4 py-2 border-b border-mail-border">
               <div className="flex items-center gap-2 mb-2 text-sm text-mail-text-muted">
                 <Paperclip size={14} />
                 <span>{attachments.length} Attachment(s)</span>
@@ -999,10 +1040,24 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           )}
           
           {/* Body — Rich Text Editor */}
-          <div className="flex-1 overflow-hidden flex flex-col" data-testid="compose-body">
+          <div
+            className={`relative flex-1 overflow-hidden flex flex-col ${dragging ? 'ring-2 ring-inset ring-mail-accent' : ''}`}
+            data-testid="compose-body"
+          >
+            {dragging && (
+              // pointer-events-none so the drop lands on the editor underneath —
+              // ProseMirror's posAtCoords needs the real target.
+              <div data-testid="compose-inline-dropzone-hint"
+                   className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center pt-2">
+                <span className="rounded-full bg-mail-accent px-3 py-1 text-xs font-medium text-white shadow">
+                  Drop an image to place it in the message
+                </span>
+              </div>
+            )}
             <RichTextEditor
               content={formData.body}
               editorRef={editorRef}
+              onFiles={addFiles}
               onUpdate={(html, text) => {
                 setFormData(prev => ({ ...prev, body: html }));
                 plainTextRef.current = text;
@@ -1011,12 +1066,29 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               placeholder="Write your message..."
             />
           </div>
-          
+
+          {/* React runs capture then bubble within one dispatch and flushes state
+              afterwards, so this strip's onDrop still runs even though
+              onDropCapture on the modal already flipped `dragging`. */}
+          {dragging && (
+            <div
+              data-testid="compose-attach-dropzone"
+              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
+              onDrop={(e) => { e.preventDefault(); e.stopPropagation(); addFiles(Array.from(e.dataTransfer?.files || [])); }}
+              className="mx-4 my-2 flex items-center justify-center gap-2 rounded-lg border-2 border-dashed
+                         border-mail-accent/60 bg-mail-accent/5 py-3 text-sm text-mail-text-muted"
+            >
+              <Paperclip size={16} />
+              <span>Drop here to attach as a file</span>
+            </div>
+          )}
+
           {/* Collapsible quoted original message */}
           {quotedHtml && (
             <div className="border-t border-mail-border">
               <button
                 type="button"
+                data-testid="compose-quoted-toggle"
                 onClick={() => setQuotedExpanded(prev => !prev)}
                 className="w-full flex items-center gap-2 px-4 py-2 text-xs text-mail-text-muted
                           hover:bg-mail-surface-hover transition-colors"
@@ -1028,7 +1100,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                 <span>{quotedExpanded ? 'Hide' : 'Show'} original message</span>
               </button>
               {quotedExpanded && (
-                <div className="px-4 pb-3 max-h-[300px] overflow-y-auto">
+                <div data-testid="compose-quoted" className="px-4 pb-3 max-h-[300px] overflow-y-auto">
                   <div
                     className="text-xs text-mail-text-muted border-l-2 border-mail-border pl-3
                               [&_p]:my-1 [&_a]:text-mail-accent [&_img]:max-w-full"
@@ -1041,7 +1113,8 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
 
           {/* Error */}
           {error && (
-            <div className="px-4 py-2 bg-mail-danger/10 border-t border-mail-danger/20 
+            <div data-testid="compose-error"
+                 className="px-4 py-2 bg-mail-danger/10 border-t border-mail-danger/20
                            text-mail-danger text-sm">
               {error}
             </div>
@@ -1052,6 +1125,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             <div className="flex items-center gap-2">
               <input
                 type="file"
+                data-testid="compose-attach-input"
                 ref={fileInputRef}
                 onChange={handleFileSelect}
                 multiple
@@ -1084,6 +1158,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                           <button
                             key={t.id}
                             type="button"
+                            data-testid="compose-template-item"
                             onClick={() => insertTemplate(t)}
                             className="w-full text-left px-3 py-2 text-sm text-mail-text
                                       hover:bg-mail-surface-hover transition-colors truncate"
@@ -1094,7 +1169,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                       </div>
                     )}
                     {emailTemplates.length === 0 && (
-                      <div className="px-3 py-2 text-xs text-mail-text-muted">
+                      <div data-testid="compose-templates-empty" className="px-3 py-2 text-xs text-mail-text-muted">
                         No templates yet
                       </div>
                     )}
@@ -1103,6 +1178,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                         <div className="flex items-center gap-1 p-2">
                           <input
                             type="text"
+                            data-testid="compose-template-name"
                             value={templateName}
                             onChange={(e) => setTemplateName(e.target.value)}
                             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSaveTemplate(); } }}
@@ -1113,6 +1189,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                           />
                           <button
                             type="button"
+                            data-testid="compose-template-save"
                             onClick={handleSaveTemplate}
                             disabled={!templateName.trim()}
                             className="px-2 py-1 text-xs bg-mail-accent text-white rounded
@@ -1124,6 +1201,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                       ) : (
                         <button
                           type="button"
+                          data-testid="compose-template-save-as"
                           onClick={() => setSavingTemplate(true)}
                           className="w-full text-left px-3 py-2 text-sm text-mail-accent
                                     hover:bg-mail-surface-hover transition-colors"
@@ -1147,6 +1225,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                 Discard
               </button>
               <select
+                data-testid="compose-delay"
                 value={composeDelay ?? globalSendDelay}
                 onChange={(e) => setComposeDelay(Number(e.target.value))}
                 className="px-2 py-2 bg-mail-bg border border-mail-border rounded-lg
@@ -1201,6 +1280,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
+              data-testid="compose-discard-dialog"
               className="bg-mail-surface border border-mail-border rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4"
               onClick={(e) => e.stopPropagation()}
             >

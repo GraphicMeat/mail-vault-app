@@ -17,6 +17,10 @@ pub struct OutgoingAttachment {
     pub content: String,
     #[serde(rename = "contentType")]
     pub content_type: Option<String>,
+    /// Bare Content-ID for an inline image the HTML references as `cid:<value>`.
+    /// Absent (or blank) means a regular attachment.
+    #[serde(default)]
+    pub cid: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -145,8 +149,25 @@ pub fn build_mime(account: &ImapConfig, email: &OutgoingEmail) -> Result<BuiltMi
         }
     }
 
-    // Build body multipart (alternative: text + html) or singlepart.
-    let has_attachments = email.attachments.as_ref().map_or(false, |a| !a.is_empty());
+    // Inline images (cid set) nest with the body inside multipart/related;
+    // everything else hangs off multipart/mixed. A blank cid is a regular
+    // attachment — the HTML has nothing to reference it by.
+    let all_attachments: &[OutgoingAttachment] = email.attachments.as_deref().unwrap_or(&[]);
+    let (inline, regular): (Vec<&OutgoingAttachment>, Vec<&OutgoingAttachment>) = all_attachments
+        .iter()
+        .partition(|a| a.cid.as_deref().map_or(false, |c| !c.trim().is_empty()));
+
+    let decoded = |att: &OutgoingAttachment| -> Result<(Vec<u8>, ContentType), String> {
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(att.content.as_bytes())
+            .map_err(|e| format!("Invalid base64 for attachment '{}': {}", att.filename, e))?;
+        let ct = att
+            .content_type
+            .as_deref()
+            .and_then(|s| ContentType::parse(s).ok())
+            .unwrap_or_else(|| ContentType::parse("application/octet-stream").unwrap());
+        Ok((bytes, ct))
+    };
 
     // Helper: assemble the body-only section (what the reader sees as the message).
     let body_multipart = if email.html.is_some() && email.text.is_some() {
@@ -167,54 +188,84 @@ pub fn build_mime(account: &ImapConfig, email: &OutgoingEmail) -> Result<BuiltMi
         None
     };
 
-    let message = if has_attachments {
-        // multipart/mixed: body + each attachment.
-        let mut mixed = MultiPart::mixed().build();
+    // The body as it gets wrapped: related() and mixed() need `.multipart()` for
+    // one and `.singlepart()` for the other.
+    enum Body {
+        Single(SinglePart),
+        Multi(MultiPart),
+    }
+
+    let message = if inline.is_empty() && regular.is_empty() {
+        // No attachments: unchanged top-level shape.
         if let Some(body) = body_multipart {
-            mixed = mixed.multipart(body);
+            builder
+                .multipart(body)
+                .map_err(|e| format!("Failed to build multipart message: {}", e))?
         } else if let Some(ref html) = email.html {
-            mixed = mixed.singlepart(
-                SinglePart::builder()
+            builder
+                .header(ContentType::TEXT_HTML)
+                .body(html.clone())
+                .map_err(|e| format!("Failed to build HTML message: {}", e))?
+        } else {
+            builder
+                .header(ContentType::TEXT_PLAIN)
+                .body(email.text.clone().unwrap_or_default())
+                .map_err(|e| format!("Failed to build text message: {}", e))?
+        }
+    } else {
+        let mut body = match body_multipart {
+            Some(m) => Body::Multi(m),
+            None => Body::Single(match email.html {
+                Some(ref html) => SinglePart::builder()
                     .header(ContentType::TEXT_HTML)
                     .body(html.clone()),
-            );
-        } else {
-            mixed = mixed.singlepart(
-                SinglePart::builder()
+                None => SinglePart::builder()
                     .header(ContentType::TEXT_PLAIN)
                     .body(email.text.clone().unwrap_or_default()),
-            );
+            }),
+        };
+
+        if !inline.is_empty() {
+            // multipart/related: body + each inline image, so the HTML's
+            // `cid:` references resolve against siblings, not attachments.
+            let mut related = MultiPart::related().build();
+            related = match body {
+                Body::Multi(m) => related.multipart(m),
+                Body::Single(s) => related.singlepart(s),
+            };
+            for att in &inline {
+                let (bytes, ct) = decoded(att)?;
+                let cid = att.cid.as_deref().unwrap_or_default().trim().to_string();
+                related = related.singlepart(
+                    Attachment::new_inline_with_name(cid, att.filename.clone()).body(bytes, ct),
+                );
+            }
+            body = Body::Multi(related);
         }
 
-        for att in email.attachments.as_ref().unwrap() {
-            let bytes = base64::engine::general_purpose::STANDARD
-                .decode(att.content.as_bytes())
-                .map_err(|e| format!("Invalid base64 for attachment '{}': {}", att.filename, e))?;
-            let ct = att
-                .content_type
-                .as_deref()
-                .and_then(|s| ContentType::parse(s).ok())
-                .unwrap_or_else(|| ContentType::parse("application/octet-stream").unwrap());
-            mixed = mixed.singlepart(Attachment::new(att.filename.clone()).body(bytes, ct));
+        if !regular.is_empty() {
+            // multipart/mixed: body (possibly the related part) + each attachment.
+            let mut mixed = MultiPart::mixed().build();
+            mixed = match body {
+                Body::Multi(m) => mixed.multipart(m),
+                Body::Single(s) => mixed.singlepart(s),
+            };
+            for att in &regular {
+                let (bytes, ct) = decoded(att)?;
+                mixed = mixed.singlepart(Attachment::new(att.filename.clone()).body(bytes, ct));
+            }
+            body = Body::Multi(mixed);
         }
 
-        builder
-            .multipart(mixed)
-            .map_err(|e| format!("Failed to build multipart message: {}", e))?
-    } else if let Some(body) = body_multipart {
-        builder
-            .multipart(body)
-            .map_err(|e| format!("Failed to build multipart message: {}", e))?
-    } else if let Some(ref html) = email.html {
-        builder
-            .header(ContentType::TEXT_HTML)
-            .body(html.clone())
-            .map_err(|e| format!("Failed to build HTML message: {}", e))?
-    } else {
-        builder
-            .header(ContentType::TEXT_PLAIN)
-            .body(email.text.clone().unwrap_or_default())
-            .map_err(|e| format!("Failed to build text message: {}", e))?
+        match body {
+            Body::Multi(m) => builder
+                .multipart(m)
+                .map_err(|e| format!("Failed to build multipart message: {}", e))?,
+            // Unreachable — one of the two lists is non-empty in this branch.
+            Body::Single(s) => builder
+                .singlepart(s)
+                .map_err(|e| format!("Failed to build message: {}", e))?,
+        }
     };
 
     let raw_rfc2822 = message.formatted();
@@ -591,6 +642,74 @@ mod tests {
             let msg = friendly_smtp_error("smtp.x.com", 587, "DEF@fastmail.fm", raw);
             assert!(msg.contains("refused to send as DEF@fastmail.fm"), "{} → {}", raw, msg);
         }
+    }
+
+    // ── inline images (cid:) ─────────────────────────────────────────────
+
+    fn attachment(filename: &str, content_type: &str, cid: Option<&str>) -> OutgoingAttachment {
+        OutgoingAttachment {
+            filename: filename.to_string(),
+            // Valid base64; the bytes themselves don't matter here.
+            content: "iVBORw0KGgo=".to_string(),
+            content_type: Some(content_type.to_string()),
+            cid: cid.map(String::from),
+        }
+    }
+
+    fn raw_with(html: Option<&str>, attachments: Vec<OutgoingAttachment>) -> String {
+        let mut email = outgoing();
+        email.html = html.map(String::from);
+        email.attachments = Some(attachments);
+        let built = build_mime(&account("me@x.com", None), &email).expect("build_mime");
+        String::from_utf8_lossy(&built.raw_rfc2822).to_string()
+    }
+
+    #[test]
+    fn inline_attachment_builds_multipart_related() {
+        let raw = raw_with(
+            Some("<p>hi</p><img src=\"cid:logo1\">"),
+            vec![attachment("logo.png", "image/png", Some("logo1"))],
+        );
+        assert!(raw.contains("multipart/related"), "{}", raw);
+        assert!(raw.contains("Content-ID: <logo1>"), "{}", raw);
+        assert!(raw.contains("Content-Disposition: inline"), "{}", raw);
+        // The HTML must survive verbatim or the cid reference dangles.
+        assert!(raw.contains("cid:logo1"), "{}", raw);
+        // No regular attachments — nothing to wrap in mixed.
+        assert!(!raw.contains("multipart/mixed"), "{}", raw);
+    }
+
+    #[test]
+    fn inline_and_regular_attachments_nest_related_inside_mixed() {
+        let raw = raw_with(
+            Some("<p>hi</p><img src=\"cid:logo1\">"),
+            vec![
+                attachment("logo.png", "image/png", Some("logo1")),
+                attachment("notes.pdf", "application/pdf", None),
+            ],
+        );
+        let mixed = raw.find("multipart/mixed").expect("multipart/mixed missing");
+        let related = raw.find("multipart/related").expect("multipart/related missing");
+        assert!(mixed < related, "related must nest inside mixed: {}", raw);
+        assert!(
+            raw.contains("Content-Disposition: attachment; filename=\"notes.pdf\""),
+            "{}",
+            raw
+        );
+    }
+
+    #[test]
+    fn regular_attachment_without_cid_keeps_mixed_shape() {
+        let raw = raw_with(None, vec![attachment("notes.pdf", "application/pdf", None)]);
+        assert!(raw.contains("multipart/mixed"), "{}", raw);
+        assert!(!raw.contains("multipart/related"), "{}", raw);
+    }
+
+    #[test]
+    fn blank_cid_is_a_regular_attachment() {
+        let raw = raw_with(None, vec![attachment("notes.pdf", "application/pdf", Some("  "))]);
+        assert!(!raw.contains("multipart/related"), "{}", raw);
+        assert!(raw.contains("Content-Disposition: attachment"), "{}", raw);
     }
 
     #[test]

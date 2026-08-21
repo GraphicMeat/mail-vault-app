@@ -4,6 +4,7 @@ import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
+import Image from '@tiptap/extension-image';
 import {
   Bold, Italic, Underline as UnderlineIcon, Strikethrough,
   List, ListOrdered, Quote, Code, Link as LinkIcon, Undo, Redo, RemoveFormatting
@@ -98,7 +99,25 @@ function Toolbar({ editor }) {
   );
 }
 
-export function RichTextEditor({ content, onUpdate, placeholder = 'Write your message...', editorRef }) {
+const isImageFile = (f) => /^image\//.test(f.type || '');
+
+const readAsDataUrl = (file) => new Promise((resolve, reject) => {
+  const r = new FileReader();
+  r.onload = () => resolve(r.result);
+  r.onerror = () => reject(r.error);
+  r.readAsDataURL(file);
+});
+
+// ponytail: full-size data URIs in the document; resize/compress if large photos make typing lag.
+async function insertImageFiles(editor, files, pos) {
+  if (!files.length || !editor) return;
+  const srcs = await Promise.all(files.map(readAsDataUrl));   // keep drop order
+  // `alt` is the filename on purpose: the send-time extractor uses it as the MIME part filename.
+  const nodes = srcs.map((src, i) => ({ type: 'image', attrs: { src, alt: files[i].name, title: files[i].name } }));
+  editor.chain().focus().insertContentAt(pos, nodes).run();
+}
+
+export function RichTextEditor({ content, onUpdate, placeholder = 'Write your message...', editorRef, onFiles }) {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -110,6 +129,9 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
         HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' },
       }),
       Placeholder.configure({ placeholder }),
+      // allowBase64: compose restores initialData.body HTML after minimize /
+      // undo-send, and the inline picture must parse back out of that string.
+      Image.configure({ allowBase64: true }),
     ],
     content,
     onUpdate: ({ editor }) => {
@@ -119,6 +141,27 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
       attributes: {
         class: 'prose prose-sm max-w-none focus:outline-none h-full p-4 text-mail-text',
       },
+      handleDrop: (view, event, _slice, moved) => {
+        if (moved) return false;                                   // ProseMirror moving its own node — leave it alone
+        const files = Array.from(event.dataTransfer?.files || []);
+        if (!files.length) return false;                           // text/html drags: default ProseMirror handling
+        // Claim the drop here: the compose modal has a fallback onDrop that attaches
+        // anything that bubbles to it, and the images must not arrive there a second time.
+        event.preventDefault();
+        event.stopPropagation();
+        const images = files.filter(isImageFile);
+        const others = files.filter((f) => !isImageFile(f));
+        const at = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos ?? view.state.selection.to;
+        insertImageFiles(editor, images, at);
+        if (others.length) onFiles?.(others);
+        return true;
+      },
+      handlePaste: (_view, event) => {
+        const images = Array.from(event.clipboardData?.files || []).filter(isImageFile);
+        if (!images.length) return false;
+        insertImageFiles(editor, images, editor.state.selection.to);
+        return true;
+      },
     },
   });
 
@@ -127,10 +170,13 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
     if (editorRef) editorRef.current = editor;
   }, [editor, editorRef]);
 
-  // Sync content from parent when it changes externally (e.g., template insertion)
+  // Sync content from parent when it changes externally (mount, minimize/restore,
+  // signature swap on account change, template fallback). None of that is a user
+  // edit, so keep it out of the undo history — recorded, it lights Undo on an
+  // empty message and makes the first Undo press a no-op.
   useEffect(() => {
     if (editor && content !== undefined && editor.getHTML() !== content) {
-      editor.commands.setContent(content, false);
+      editor.chain().setMeta('addToHistory', false).setContent(content).run();
     }
   }, [content, editor]);
 
