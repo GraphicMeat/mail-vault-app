@@ -217,7 +217,7 @@
           <h2 class="text-xl font-semibold mb-1">Free — forever</h2>
           <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">No trial, no time limit, no catch.</p>
           <div class="mb-6">
-            <span class="text-5xl font-extrabold">$0</span>
+            <span class="text-5xl font-extrabold" data-mv-price="{zero}">$0</span>
           </div>
           <ul class="space-y-3 mb-8 flex-1">
             <li class="flex items-start gap-2">
@@ -254,10 +254,10 @@
           <h2 class="text-xl font-semibold mb-1 mt-2">Yearly</h2>
           <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">Billed annually. Cheapest way to go Premium.</p>
           <div class="mb-1">
-            <span class="text-5xl font-extrabold gradient-text">$25</span>
+            <span class="text-5xl font-extrabold gradient-text" data-mv-price="{yearly}">$25</span>
             <span class="text-slate-500 dark:text-slate-400">/year</span>
           </div>
-          <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">~$2/month</p>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mb-6" data-mv-price="~{monthlyEquivalent}/month">~$2/month</p>
           <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium mb-6 w-fit">
             14-day free trial
           </div>
@@ -297,7 +297,7 @@
           <h2 class="text-xl font-semibold mb-1">Monthly</h2>
           <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">Billed monthly. Cancel whenever you like.</p>
           <div class="mb-1">
-            <span class="text-5xl font-extrabold">$4</span>
+            <span class="text-5xl font-extrabold" data-mv-price="{monthly}">$4</span>
             <span class="text-slate-500 dark:text-slate-400">/month</span>
           </div>
           <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">&nbsp;</p>
@@ -471,6 +471,7 @@
       navigator.sendBeacon('/api/metrics/e', 'pricing_view');
     } catch (e) {}
   </script>
+  <script defer src="/pricing-localize.js?v=1"></script>
   <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
 </body>
 </html>

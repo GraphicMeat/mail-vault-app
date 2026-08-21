@@ -1177,7 +1177,7 @@
         <!-- Free -->
         <div class="rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 text-center">
           <h3 class="font-semibold mb-1">Free</h3>
-          <div class="text-3xl font-extrabold mb-2">$0</div>
+          <div class="text-3xl font-extrabold mb-2" data-mv-price="{zero}">$0</div>
           <p class="text-sm text-slate-500 dark:text-slate-400">Full mail client &amp; unlimited manual backups, forever</p>
         </div>
 
@@ -1185,14 +1185,14 @@
         <div class="relative rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-primary-500 p-6 text-center shadow-lg shadow-primary-500/10">
           <span class="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full gradient-bg text-white text-xs font-bold uppercase tracking-wide whitespace-nowrap">Most Popular</span>
           <h3 class="font-semibold mb-1">Yearly</h3>
-          <div class="text-3xl font-extrabold gradient-text mb-2">$25<span class="text-base font-medium text-slate-500 dark:text-slate-400">/yr</span></div>
-          <p class="text-sm text-slate-500 dark:text-slate-400">~$2/month &middot; 14-day free trial</p>
+          <div class="text-3xl font-extrabold gradient-text mb-2"><span data-mv-price="{yearly}">$25</span><span class="text-base font-medium text-slate-500 dark:text-slate-400">/yr</span></div>
+          <p class="text-sm text-slate-500 dark:text-slate-400" data-mv-price="~{monthlyEquivalent}/month &middot; 14-day free trial">~$2/month &middot; 14-day free trial</p>
         </div>
 
         <!-- Monthly -->
         <div class="rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 text-center">
           <h3 class="font-semibold mb-1">Monthly</h3>
-          <div class="text-3xl font-extrabold mb-2">$4<span class="text-base font-medium text-slate-500 dark:text-slate-400">/mo</span></div>
+          <div class="text-3xl font-extrabold mb-2"><span data-mv-price="{monthly}">$4</span><span class="text-base font-medium text-slate-500 dark:text-slate-400">/mo</span></div>
           <p class="text-sm text-slate-500 dark:text-slate-400">Cancel anytime</p>
         </div>
       </div>
@@ -1738,6 +1738,7 @@
       });
     })();
   </script>
+  <script defer src="/pricing-localize.js?v=1"></script>
   <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
 </body>
 </html>
