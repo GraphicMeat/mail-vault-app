@@ -38,6 +38,10 @@ pub struct ImapConfig {
     pub name: Option<String>,
     #[serde(rename = "oauth2Transport")]
     pub oauth2_transport: Option<String>,
+    /// Optional "send mail as" override. Affects the outgoing identity only —
+    /// IMAP/SMTP still authenticate as `email`, which stays the account key.
+    #[serde(rename = "fromEmail", default)]
+    pub from_email: Option<String>,
 }
 
 impl ImapConfig {
@@ -47,6 +51,16 @@ impl ImapConfig {
 
     pub fn is_oauth2(&self) -> bool {
         self.auth_type.as_deref() == Some("oauth2")
+    }
+
+    /// The outgoing identity: the send-as override when set, else the login
+    /// address. Every From/Message-ID consumer goes through here so no caller
+    /// can accidentally reach for the login address instead.
+    pub fn from_address(&self) -> &str {
+        match self.from_email.as_deref() {
+            Some(addr) if !addr.trim().is_empty() => addr.trim(),
+            _ => &self.email,
+        }
     }
 
     /// Resolve the transport security mode. `imapSecurity` wins when set
@@ -2191,6 +2205,7 @@ mod tests {
             smtp_secure: None,
             name: None,
             oauth2_transport: None,
+            from_email: None,
         }
     }
 

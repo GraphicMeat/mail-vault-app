@@ -5,6 +5,8 @@ import { useSettingsStore, AVATAR_COLORS, getAccountInitial, getAccountColor, ha
 import { motion, AnimatePresence } from 'framer-motion';
 import { getOAuth2AuthUrl, exchangeOAuth2Code, ensureSentMailbox, fetchMailboxes } from '../../services/api';
 import { findSentMailboxPath } from '../../utils/sentFolder';
+import { suggestSendAsAddresses } from '../../utils/sendAsSuggestions';
+import { SendAsVerifyModal } from './SendAsVerifyModal';
 import { Send } from 'lucide-react';
 import { ToggleSwitch } from './ToggleSwitch';
 import { RichTextEditor, textToHtml, htmlToText } from '../RichTextEditor';
@@ -57,6 +59,8 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
     displayNames,
     setDisplayName,
     getDisplayName,
+    setSendAsAddress,
+    getSendAsAddress,
     accountOrder,
     getOrderedAccounts,
     setAccountOrder,
@@ -72,6 +76,9 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
   const [selectedAccountId, setSelectedAccountId] = useState(initialAccountId || accounts[0]?.id || null);
   const [signatureHtml, setSignatureHtml] = useState('');
   const [accountDisplayName, setAccountDisplayName] = useState('');
+  const [sendAs, setSendAs] = useState('');
+  const [sendAsSuggestions, setSendAsSuggestions] = useState([]);
+  const [verifyOpen, setVerifyOpen] = useState(false);
   const [saved, setSaved] = useState(false);
   const [autoSaved, setAutoSaved] = useState(false);
   const autoSaveTimer = useRef(null);
@@ -88,6 +95,8 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
 
   const orderedAccounts = getOrderedAccounts(accounts);
   const selectedAccount = accounts.find(a => a.id === selectedAccountId);
+  // Shape check only — whether the server will accept it is what Verify answers.
+  const sendAsIsValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sendAs.trim());
   const invoke = window.__TAURI__?.core?.invoke;
 
   const moveAccount = (accountId, direction) => {
@@ -106,23 +115,40 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
       const sig = getSignature(selectedAccountId);
       setSignatureHtml(sig.html || textToHtml(sig.text || ''));
       setAccountDisplayName(getDisplayName(selectedAccountId) || '');
+      setSendAs(getSendAsAddress(selectedAccountId) || '');
       setShowRemoveConfirm(false);
     }
   }, [selectedAccountId]);
 
-  // Autosave display name + signature — no Save button
-  const pendingEdits = useRef({ html: '', name: '' });
-  pendingEdits.current = { html: signatureHtml, name: accountDisplayName };
+  // Alias candidates mined from this account's own cached mail. Providers give
+  // us no alias list under the credentials we hold, so these are suggestions —
+  // the SMTP server stays the authority (that's what Verify is for).
+  useEffect(() => {
+    let cancelled = false;
+    setSendAsSuggestions([]);
+    if (!selectedAccount) return undefined;
+    suggestSendAsAddresses(selectedAccount).then(list => {
+      if (!cancelled) setSendAsSuggestions(list);
+    });
+    return () => { cancelled = true; };
+  }, [selectedAccountId]);
 
-  const persistAccountSettings = (accountId, rawHtml, name) => {
+  // Autosave display name + signature — no Save button
+  const pendingEdits = useRef({ html: '', name: '', sendAs: '' });
+  pendingEdits.current = { html: signatureHtml, name: accountDisplayName, sendAs };
+
+  const persistAccountSettings = (accountId, rawHtml, name, sendAsValue = '') => {
     if (!accountId) return;
     const sig = getSignature(accountId);
     const text = htmlToText(rawHtml);
     const html = text ? rawHtml : '';
     const nameChanged = (getDisplayName(accountId) || '') !== name;
     const sigChanged = (sig.html || '') !== html || (sig.text || '') !== text;
-    if (!nameChanged && !sigChanged) return;
+    const trimmedSendAs = (sendAsValue || '').trim();
+    const sendAsChanged = (getSendAsAddress(accountId) || '') !== trimmedSendAs;
+    if (!nameChanged && !sigChanged && !sendAsChanged) return;
 
+    if (sendAsChanged) setSendAsAddress(accountId, trimmedSendAs);
     if (nameChanged) setDisplayName(accountId, name);
     if (sigChanged) {
       setSignature(accountId, {
@@ -143,18 +169,23 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
     const accountId = selectedAccountId;
     clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(
-      () => persistAccountSettings(accountId, signatureHtml, accountDisplayName),
+      () => persistAccountSettings(accountId, signatureHtml, accountDisplayName, sendAs),
       400
     );
     return () => clearTimeout(autoSaveTimer.current);
-  }, [signatureHtml, accountDisplayName, selectedAccountId]);
+  }, [signatureHtml, accountDisplayName, sendAs, selectedAccountId]);
 
   // Flush pending edits when switching accounts or leaving Settings
   useEffect(() => {
     const accountId = selectedAccountId;
     return () => {
       clearTimeout(autoSaveTimer.current);
-      persistAccountSettings(accountId, pendingEdits.current.html, pendingEdits.current.name);
+      persistAccountSettings(
+        accountId,
+        pendingEdits.current.html,
+        pendingEdits.current.name,
+        pendingEdits.current.sendAs
+      );
     };
   }, [selectedAccountId]);
 
@@ -461,6 +492,65 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                               text-mail-text placeholder-mail-text-muted
                               focus:border-mail-accent transition-all"
                   />
+                </div>
+
+                {/* Send mail as */}
+                <div>
+                  <label className="block text-sm font-medium text-mail-text mb-2">
+                    Send Mail As
+                  </label>
+                  <p className="text-sm text-mail-text-muted mb-2">
+                    Address used in the "From" header when sending. Leave blank to send from{' '}
+                    <span className="font-mono">{selectedAccount.email}</span>. Your login and
+                    password are unchanged — the address must be an alias your provider lets this
+                    account send from.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="email"
+                      value={sendAs}
+                      onChange={(e) => setSendAs(e.target.value)}
+                      placeholder={selectedAccount.email}
+                      list={`send-as-suggestions-${selectedAccountId}`}
+                      data-testid="send-as-input"
+                      className="flex-1 px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
+                                text-mail-text placeholder-mail-text-muted
+                                focus:border-mail-accent transition-all"
+                    />
+                    <datalist id={`send-as-suggestions-${selectedAccountId}`}>
+                      {sendAsSuggestions.map(s => (
+                        <option key={s.address} value={s.address} />
+                      ))}
+                    </datalist>
+                    <button
+                      onClick={() => setVerifyOpen(true)}
+                      disabled={!sendAsIsValid}
+                      data-testid="send-as-verify-btn"
+                      className="px-4 py-2.5 rounded-lg text-sm border border-mail-border
+                                text-mail-text hover:bg-mail-surface-hover transition-colors
+                                disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                      title={sendAsIsValid ? 'Send a test message from this address' : 'Enter a valid address first'}
+                    >
+                      Verify
+                    </button>
+                  </div>
+                  {sendAsSuggestions.length > 0 && (
+                    <div className="flex items-center gap-2 flex-wrap mt-2" data-testid="send-as-suggestions">
+                      <span className="text-xs text-mail-text-muted">Seen in your mail:</span>
+                      {sendAsSuggestions.map(s => (
+                        <button
+                          key={s.address}
+                          onClick={() => setSendAs(s.address)}
+                          className="text-xs font-mono px-2 py-1 rounded-md border border-mail-border
+                                    text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover
+                                    transition-colors"
+                          title={s.source === 'sent' ? 'You have sent as this address before' : 'Mail addressed to you arrives here'}
+                        >
+                          {s.address}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Avatar Color */}
@@ -931,6 +1021,16 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
           </div>
         )}
       </div>
+
+      {verifyOpen && selectedAccount && (
+        <SendAsVerifyModal
+          isOpen={verifyOpen}
+          account={selectedAccount}
+          sendAsAddress={sendAs.trim()}
+          displayName={accountDisplayName}
+          onClose={() => setVerifyOpen(false)}
+        />
+      )}
 
       {billingWarning && (
         <Toast

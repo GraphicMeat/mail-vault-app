@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- **Send from a different address than the one you log in with.** Settings → Accounts now has a "Send Mail As" field: leave it blank to send from your login address, or enter an alias your provider lets the account send from — useful on Fastmail and anywhere the sign-in address is not the address you hand out. Only the "From" address on outgoing mail changes; your username and password stay exactly as they were, and no Reply-To header is added. MailVault suggests addresses it has seen in your own mail (ones you have sent as before, and ones mail addressed to you arrives on), and a Verify button sends a single test message from the address — to your own mailbox by default — so you can confirm your server accepts it before you rely on it. If the server refuses the address, the error now says so plainly instead of reading as a password problem.
+
 ## [2.10.0] - 2026-08-18
 
 ### Added

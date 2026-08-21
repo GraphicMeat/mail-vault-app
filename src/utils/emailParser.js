@@ -6,12 +6,26 @@
 import { formatTime, formatDateOnly, formatDateLong } from './dateFormat.js';
 
 /**
+ * Normalize the caller's identity argument to a lowercase Set.
+ * An account can send under more than one address (the per-account send-as
+ * override), so every "is this mine?" check takes a string OR a list.
+ */
+export function identitySet(userEmail) {
+  const list = Array.isArray(userEmail) ? userEmail : [userEmail];
+  return new Set(
+    list
+      .map(v => (typeof v === 'string' ? v.toLowerCase().trim() : ''))
+      .filter(Boolean)
+  );
+}
+
+/**
  * Get the correspondent (the "other party") from an email
  * If email is from user, return the "to" address; otherwise return "from"
  */
 export function getCorrespondent(email, userEmail) {
   const fromAddress = email.from?.address?.toLowerCase() || '';
-  const userEmailLower = userEmail?.toLowerCase() || '';
+  const identities = identitySet(userEmail);
 
   // Helper: clean up display name — strip quotes/escapes, if it's an email use local part
   const cleanName = (name, address) => {
@@ -26,7 +40,7 @@ export function getCorrespondent(email, userEmail) {
   };
 
   // If the email is from the user, the correspondent is the recipient
-  if (fromAddress === userEmailLower) {
+  if (identities.has(fromAddress)) {
     const to = email.to?.[0];
     return {
       email: to?.address?.toLowerCase() || '',
@@ -215,9 +229,10 @@ export function groupBySender(emails, userEmail) {
       // Determine correspondent from the thread's emails
       // Use the first non-user email to find the external party
       let correspondent = null;
+      const identities = identitySet(userEmail);
       for (const email of thread.emails) {
         const c = getCorrespondent(email, userEmail);
-        if (c.email && c.email !== userEmail.toLowerCase()) {
+        if (c.email && !identities.has(c.email)) {
           correspondent = c;
           break;
         }
@@ -969,7 +984,8 @@ export function isDifferentDay(date1Str, date2Str) {
  */
 export function isFromUser(email, userEmail) {
   const fromAddress = email.from?.address?.toLowerCase() || '';
-  return fromAddress === userEmail?.toLowerCase();
+  if (!fromAddress) return false;
+  return identitySet(userEmail).has(fromAddress);
 }
 
 /**

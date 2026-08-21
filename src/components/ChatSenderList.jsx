@@ -13,6 +13,7 @@ import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
 import { useMailStore } from '../stores/mailStore';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
+import { useSettingsStore } from '../stores/settingsStore';
 
 const INITIAL_VISIBLE = 50;
 const LOAD_MORE_COUNT = 50;
@@ -30,11 +31,14 @@ export function ChatSenderList({ onSelectSender }) {
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
   const scrollContainerRef = useRef(null);
 
-  // Get current user's email
+  // Every address this account sends under — the login plus any send-as
+  // override. Without the override the user's own sent mail reads as a
+  // stranger's and gets grouped under the wrong correspondent.
+  const sendAs = useSettingsStore(s => s.sendAsAddresses?.[activeAccountId] || '');
   const userEmail = useMemo(() => {
     const activeAccount = accounts.find(a => a.id === activeAccountId);
-    return activeAccount?.email || '';
-  }, [accounts, activeAccountId]);
+    return [activeAccount?.email, sendAs].filter(Boolean);
+  }, [accounts, activeAccountId, sendAs]);
 
   // Get merged emails — parent ChatViewWrapper subscribes to underlying state slices
   const combinedEmails = getChatEmails();

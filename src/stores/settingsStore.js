@@ -93,6 +93,7 @@ export const useSettingsStore = create(
 
       // Display settings
       displayNames: {}, // { [accountId]: string }
+      sendAsAddresses: {}, // { [accountId]: string } — outgoing From override; login is unchanged
       accountColors: {}, // { [accountId]: string (hex color) } — user overrides for avatar color
       
       // Default settings
@@ -463,6 +464,21 @@ export const useSettingsStore = create(
         return get().displayNames[accountId] || '';
       },
 
+      // Send-as address management — the outgoing identity only. IMAP/SMTP
+      // still authenticate as account.email, which stays the account key.
+      setSendAsAddress: (accountId, address) => {
+        set(state => ({
+          sendAsAddresses: {
+            ...state.sendAsAddresses,
+            [accountId]: (address || '').trim()
+          }
+        }));
+      },
+
+      getSendAsAddress: (accountId) => {
+        return get().sendAsAddresses?.[accountId] || '';
+      },
+
       // Account color management
       setAccountColor: (accountId, color) => {
         set(state => ({
@@ -715,6 +731,7 @@ export const useSettingsStore = create(
           lastMailboxPerAccount: {},
           signatures: {},
           displayNames: {},
+          sendAsAddresses: {},
           accountColors: {},
           defaultSignatureEnabled: true,
           undoSendEnabled: false,

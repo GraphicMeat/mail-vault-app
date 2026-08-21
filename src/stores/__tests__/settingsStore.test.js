@@ -102,3 +102,18 @@ describe('persist migration v3 → v4', () => {
     expect(migrate(persisted, 4)).toBe(persisted);
   });
 });
+
+describe('send-as address', () => {
+  it('defaults to empty and round-trips per account', () => {
+    const store = useSettingsStore.getState();
+    expect(store.getSendAsAddress('acct-1')).toBe('');
+
+    store.setSendAsAddress('acct-1', '  DEF@fastmail.fm  ');
+    expect(useSettingsStore.getState().getSendAsAddress('acct-1')).toBe('DEF@fastmail.fm');
+    // Scoped per account — a second account is untouched.
+    expect(useSettingsStore.getState().getSendAsAddress('acct-2')).toBe('');
+
+    useSettingsStore.getState().setSendAsAddress('acct-1', '');
+    expect(useSettingsStore.getState().getSendAsAddress('acct-1')).toBe('');
+  });
+});

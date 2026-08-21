@@ -111,6 +111,10 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   const getSignature = useSettingsStore(s => s.getSignature);
   const getDisplayName = useSettingsStore(s => s.getDisplayName);
+  const getSendAsAddress = useSettingsStore(s => s.getSendAsAddress);
+  // Subscribed (not read through the getter) so the From row re-renders when
+  // the override changes while compose is open.
+  const sendAsAddresses = useSettingsStore(s => s.sendAsAddresses);
   const globalSendDelay = useSettingsStore(s => s.sendDelay) ?? 0;
   const emailTemplates = useSettingsStore(s => s.emailTemplates);
   const addEmailTemplate = useSettingsStore(s => s.addEmailTemplate);
@@ -120,6 +124,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const initialAccountId = replyTo?._accountId || activeAccountId;
   const [selectedAccountId, setSelectedAccountId] = useState(initialAccountId);
   const selectedAccount = accounts.find(a => a.id === selectedAccountId) || accounts[0];
+  const composeSendAs = sendAsAddresses?.[selectedAccountId] || '';
 
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
@@ -386,6 +391,12 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
 
         // Get display name from settings or account
         const displayName = getDisplayName(selectedAccountId) || freshAccount.name || freshAccount.email;
+        // Send-as override: the outgoing identity only. Credentials stay bound
+        // to freshAccount.email, so this never touches auth. Applied to BOTH
+        // the build_mime and the send call — if they drift, the staged .eml
+        // and the message that actually leaves carry different From headers.
+        const sendAsEmail = getSendAsAddress(selectedAccountId);
+        const fromAddress = sendAsEmail || freshAccount.email;
 
         // Prepare attachments for nodemailer
         const emailAttachments = attachments.map(att => ({
@@ -444,7 +455,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         let builtMime;
         try {
           builtMime = await api.buildOutgoingMime(
-            { ...accountForSend, name: displayName },
+            { ...accountForSend, name: displayName, fromEmail: sendAsEmail || undefined },
             outgoingPayload
           );
         } catch (err) {
@@ -481,7 +492,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
 
         const indexBase = {
           uid: pseudoUid,
-          from: { address: freshAccount.email, name: displayName },
+          from: { address: fromAddress, name: displayName },
           to: parseAddresses(formData.to),
           subject: formData.subject,
           date: new Date().toISOString(),
@@ -509,7 +520,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         const optimistic = {
           uid: pseudoUid,
           subject: formData.subject,
-          from: { address: freshAccount.email, name: displayName },
+          from: { address: fromAddress, name: displayName },
           to: parseAddresses(formData.to),
           cc: parseAddresses(formData.cc),
           bcc: parseAddresses(formData.bcc),
@@ -551,7 +562,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         let sendResult;
         try {
           sendResult = await api.sendEmail(
-            { ...accountForSend, name: displayName },
+            { ...accountForSend, name: displayName, fromEmail: sendAsEmail || undefined },
             outgoingPayload,
             sentMailbox
           );
@@ -888,8 +899,9 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           className="flex-1 flex flex-col overflow-hidden"
         >
           <div className="px-4 py-2 space-y-2 border-b border-mail-border">
-            {/* From */}
-            {accounts.length > 1 && (
+            {/* From — also shown on a single account when a send-as override
+                is set, so the user can see what they are sending as. */}
+            {(accounts.length > 1 || composeSendAs) && (
               <div className="flex items-center gap-2">
                 <label className="w-12 text-sm text-mail-text-muted">From:</label>
                 <div className="relative flex-1">
@@ -899,11 +911,17 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                     className="w-full bg-transparent text-mail-text text-sm py-1 pr-6
                               outline-none appearance-none cursor-pointer"
                   >
-                    {accounts.map(acc => (
-                      <option key={acc.id} value={acc.id}>
-                        {acc.name ? `${acc.name} <${acc.email}>` : acc.email}
-                      </option>
-                    ))}
+                    {accounts.map(acc => {
+                      const outgoing = getSendAsAddress(acc.id) || acc.email;
+                      // A name that IS the address adds nothing and, with an
+                      // override set, would show both addresses at once.
+                      const label = acc.name && acc.name !== acc.email
+                        ? `${acc.name} <${outgoing}>`
+                        : outgoing;
+                      return (
+                        <option key={acc.id} value={acc.id}>{label}</option>
+                      );
+                    })}
                   </select>
                   <ChevronDown size={14} className="absolute right-0 top-1/2 -translate-y-1/2
                                                      text-mail-text-muted pointer-events-none" />

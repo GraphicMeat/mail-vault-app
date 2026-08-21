@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChatSenderList } from './ChatSenderList';
 import { ChatTopicsList } from './ChatTopicsList';
 import { ChatBubbleView } from './ChatBubbleView';
+import { useSettingsStore } from '../stores/settingsStore';
 
 function ChatViewWrapperComponent({ onComposeReply }) {
   const { accounts, activeAccountId, getChatEmails } = useAccountStore(
@@ -22,11 +23,14 @@ function ChatViewWrapperComponent({ onComposeReply }) {
   // { accountId: { correspondentEmail: string, threadId: string } }
   const [accountNavState, setAccountNavState] = useState({});
 
-  // Get current user's email
+  // Every address this account sends under — the login plus any send-as
+  // override. Without the override the user's own sent mail reads as a
+  // stranger's and gets grouped under the wrong correspondent.
+  const sendAs = useSettingsStore(s => s.sendAsAddresses?.[activeAccountId] || '');
   const userEmail = useMemo(() => {
     const activeAccount = accounts.find(a => a.id === activeAccountId);
-    return activeAccount?.email || '';
-  }, [accounts, activeAccountId]);
+    return [activeAccount?.email, sendAs].filter(Boolean);
+  }, [accounts, activeAccountId, sendAs]);
 
   // Get current account's navigation state (identifiers only)
   const currentNavState = accountNavState[activeAccountId] || {};
