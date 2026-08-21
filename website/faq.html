@@ -196,6 +196,14 @@
       },
       {
         "@type": "Question",
+        "name": "Can I send from a different address than the one I log in with?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. In Settings \u2192 Accounts, fill in the Send Mail As field for the account, or leave it blank to send from your login address. Only the From address on outgoing mail changes \u2014 your username and password stay the same, MailVault still signs in to IMAP and SMTP as the account you set up, and no Reply-To header is added. MailVault suggests addresses it has seen in your own mail, and a Verify button sends a single test message from the address so you can confirm your provider accepts it. The address must be an alias your provider lets that login send from: Fastmail accepts any alias on the account, Gmail requires it under \"Send mail as\" in Gmail settings, and Microsoft 365 requires Send As permission."
+        }
+      },
+      {
+        "@type": "Question",
         "name": "What are the system requirements?",
         "acceptedAnswer": {
           "@type": "Answer",
@@ -540,6 +548,29 @@
               </ol>
               <p class="mb-4">Proton Mail Bridge must be running in the background whenever MailVault syncs — if Bridge is closed, MailVault can't reach the mailbox. Mail you've already archived stays fully readable and searchable in MailVault even while Bridge is closed, since MailVault is local-first and reads from its own <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code> store rather than live from Bridge.</p>
               <p>Bridge secures its local IMAP/SMTP server with a self-signed TLS certificate. MailVault handles this automatically for local (<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code>) connections, so no manual certificate installation is required.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- FAQ: Send from a different address -->
+        <div id="send-from-different-address" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">Can I send from a different address than the one I log in with?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4">Yes. Open <strong>Settings &rarr; Accounts</strong>, pick the account, and fill in <strong>Send Mail As</strong>. Leave it blank to send from your login address. This is common on Fastmail and on any provider where the address you sign in with is not the address you hand out.</p>
+              <p class="mb-4">Only the <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">From</code> address on outgoing mail changes. Your username and password stay exactly as they are, MailVault still signs in to IMAP and SMTP as the account you set up, and <strong>no Reply-To header is added</strong> &mdash; replies go to the address you send as.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Finding and checking the address:</p>
+              <ul class="list-disc list-inside space-y-2 mb-4">
+                <li><strong>Suggestions</strong> &mdash; MailVault offers addresses it has already seen in your own mail: ones you have sent as before, and ones that mail addressed to you arrives on.</li>
+                <li><strong>Verify</strong> &mdash; sends a single test message from the address, to your own mailbox by default, so you can confirm your provider accepts it before you rely on it.</li>
+                <li><strong>If it is refused</strong> &mdash; the address has to be an alias or identity your provider lets that login send from. Fastmail accepts any alias on the account; Gmail needs the address added under "Send mail as" in Gmail settings, and Microsoft 365 needs Send As permission from an administrator.</li>
+              </ul>
+              <p>Aliases are configured with your email provider, not in MailVault &mdash; MailVault sends as an address your provider has already authorised.</p>
             </div>
           </div>
         </div>
