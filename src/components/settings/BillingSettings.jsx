@@ -11,6 +11,7 @@ import {
 import { ConfirmDialog } from '../ConfirmDialog';
 import { Toast } from '../Toast';
 import { formatDateLong, formatTime } from '../../utils/dateFormat';
+import { pricingRecord } from '../../utils/pricing';
 import {
   CreditCard,
   CheckCircle2,
@@ -179,7 +180,12 @@ export function BillingSettings() {
     setPricingLoading(true);
     setPricingError(null);
     try {
-      setPricing(await fetchPricing({ email: email || billingEmail, customerId }));
+      const res = await fetchPricing({ email: email || billingEmail, customerId });
+      setPricing(res);
+      // Share the resolved currency with the feature overlays — they must never
+      // quote a different one than the plan cards right here.
+      const record = pricingRecord(res);
+      if (record) useSettingsStore.getState().setPremiumPricing(record);
     } catch (e) {
       // The API answers 503 with a bare code (`pricing_unavailable`) and no prose.
       const msg = e.message || '';

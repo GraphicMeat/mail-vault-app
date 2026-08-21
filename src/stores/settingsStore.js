@@ -176,6 +176,12 @@ export const useSettingsStore = create(
       setBillingProfile: (profile) => set({ billingProfile: profile, billingLastChecked: Date.now() }),
       clearBillingProfile: () => set({ billingProfile: null, billingLastChecked: null, billingEmail: '' }),
 
+      // Server-resolved premium pricing, shared by every paywall so the Billing
+      // tab and the feature overlays can never quote different currencies.
+      // { currency, monthly, yearly, pricingMode, fetchedAt } — minor units.
+      premiumPricing: null,
+      setPremiumPricing: (p) => set({ premiumPricing: p ? { ...p, fetchedAt: Date.now() } : null }),
+
       // Share-to-unlock reward (non-MAS): premium granted for starring/sharing.
       // expiresAt is the running unlock deadline; each action grants days once.
       shareGrant: { expiresAt: null, github: false, x: false, linkedin: false, githubUser: null },

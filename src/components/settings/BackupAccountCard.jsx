@@ -7,7 +7,7 @@ import { ToggleSwitch } from './ToggleSwitch';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatDateTime } from '../../utils/dateFormat';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
-import { PREMIUM_PRICE_BLURB } from '../../utils/pricing';
+import { usePremiumPriceBlurb } from '../../hooks/usePremiumPricing.js';
 import BackupVerificationTree from './BackupVerificationTree';
 import {
   Clock,
@@ -62,6 +62,7 @@ function formatTimestamp(ts) {
 const selectClass = 'w-full px-4 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent';
 
 const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account, isPaidUser, globalEnabled, highlighted, onUpgrade }, ref) {
+  const priceBlurb = usePremiumPriceBlurb();
   const backupSchedules = useSettingsStore(s => s.backupSchedules);
   const backupState = useSettingsStore(s => s.backupState);
   const backupHistory = useSettingsStore(s => s.backupHistory);
@@ -452,7 +453,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
                 {/* MAS builds must not advertise the web subscription — no external
                     purchase price, no path to Stripe checkout. */}
                 {!IS_APPSTORE_BUILD && (
-                  <p className="text-xs text-mail-text-muted mt-1">{PREMIUM_PRICE_BLURB}</p>
+                  <p className="text-xs text-mail-text-muted mt-1">{priceBlurb}</p>
                 )}
               </div>
               {!IS_APPSTORE_BUILD && onUpgrade && (

@@ -1,11 +1,11 @@
 /**
  * Premium price copy shown in upsell overlays.
  *
- * The Billing tab renders real prices from /api/billing/pricing, which resolves
- * currency server-side from the request country (see BillingSettings). These
- * teaser blurbs sit in feature overlays that have no pricing state and must not
- * fire a network request, so they mirror that resolution locally off the
- * machine's region.
+ * Every price surface renders /api/billing/pricing, which resolves currency
+ * server-side from the request country — the same signal Stripe uses to pick a
+ * presentment currency at checkout (see usePremiumPricing). The locale-derived
+ * blurb below is the fallback shown until that answer lands, and it is only a
+ * guess: a machine set to en-GB inside the eurozone bills in EUR, not GBP.
  *
  * Amounts and the region→currency map mirror MANUAL_AMOUNTS / COUNTRY_CURRENCY
  * in website/api/server.js — keep both sides in sync when prices change.
@@ -69,11 +69,36 @@ export function formatAmount(minorUnits, currency) {
   }
 }
 
-export function priceBlurb(currency = BASE_CURRENCY) {
-  const amounts = AMOUNTS[currency] || AMOUNTS[BASE_CURRENCY];
-  const cur = AMOUNTS[currency] ? currency : BASE_CURRENCY;
-  return `${formatAmount(amounts.monthly, cur)}/month or ${formatAmount(amounts.yearly, cur)}/year`;
+/** The one blurb shape. Amounts are minor units in `currency`. */
+export function blurbFromAmounts(monthly, yearly, currency) {
+  return `${formatAmount(monthly, currency)}/month or ${formatAmount(yearly, currency)}/year`;
 }
 
-/** Resolved once — the machine's region does not change mid-session. */
+export function priceBlurb(currency = BASE_CURRENCY) {
+  const cur = AMOUNTS[currency] ? currency : BASE_CURRENCY;
+  const amounts = AMOUNTS[cur];
+  return blurbFromAmounts(amounts.monthly, amounts.yearly, cur);
+}
+
+/**
+ * A /api/billing/pricing response → the record every paywall renders.
+ * Null when the payload carries no usable plan pair, so a malformed answer
+ * leaves the locale fallback in place instead of blanking the price.
+ */
+export function pricingRecord(response) {
+  const monthly = response?.plans?.find((p) => p.interval === 'month');
+  const yearly = response?.plans?.find((p) => p.interval === 'year');
+  if (!response?.currency || monthly?.amount == null || yearly?.amount == null) return null;
+  return {
+    currency: response.currency,
+    monthly: monthly.amount,
+    yearly: yearly.amount,
+    pricingMode: response.pricingMode || null,
+  };
+}
+
+/**
+ * Locale-derived fallback, resolved once — the machine's region does not change
+ * mid-session. Only shown until the server answers; see usePremiumPricing.
+ */
 export const PREMIUM_PRICE_BLURB = priceBlurb(currencyForRegion(detectRegion()));

@@ -13,7 +13,7 @@ import { ensureFreshToken } from '../../services/authUtils.js';
 import { migrationManager } from '../../services/migrationManager.js';
 import { formatDateTime } from '../../utils/dateFormat.js';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags.js';
-import { PREMIUM_PRICE_BLURB } from '../../utils/pricing.js';
+import { usePremiumPriceBlurb } from '../../hooks/usePremiumPricing.js';
 
 function formatDuration(secs) {
   if (!secs || secs < 1) return '< 1s';
@@ -105,6 +105,7 @@ function AccountRow({ account, selected, disabled, disabledLabel, accountColors,
 }
 
 export default function MigrationSettings({ onUpgrade }) {
+  const priceBlurb = usePremiumPriceBlurb();
   const billingProfile = useSettingsStore(s => s.billingProfile);
   const isPaidUser = hasPremiumAccess(billingProfile);
   const activeMigration = useSettingsStore(s => s.activeMigration);
@@ -657,7 +658,7 @@ export default function MigrationSettings({ onUpgrade }) {
                 {/* MAS builds must not advertise the web subscription — no external
                     purchase price, no path to Stripe checkout. */}
                 {!IS_APPSTORE_BUILD && (
-                  <p className="text-xs text-mail-text-muted mt-1">{PREMIUM_PRICE_BLURB}</p>
+                  <p className="text-xs text-mail-text-muted mt-1">{priceBlurb}</p>
                 )}
               </div>
               {!IS_APPSTORE_BUILD && onUpgrade && (
