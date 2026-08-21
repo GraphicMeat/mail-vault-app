@@ -497,13 +497,16 @@ pub async fn smtp_build_mime(
     let built = smtp::build_mime(&account, &email)?;
     let raw_base64 = base64::engine::general_purpose::STANDARD.encode(&built.raw_rfc2822);
 
-    // Extract Message-ID header from raw bytes for later server-side dedupe.
+    // Extract the Message-ID header from raw bytes for later server-side dedupe.
+    // Returned with its angle brackets intact: the compose flow compares this
+    // against `messageId` on rows that came back through `parse_header`, which
+    // keeps `<...>`. Stripping here makes the optimistic Sent entry unmatchable.
     let message_id = {
         let text = String::from_utf8_lossy(&built.raw_rfc2822);
         text.lines()
             .take_while(|line| !line.is_empty())
             .find(|line| line.to_lowercase().starts_with("message-id:"))
-            .map(|line| line.splitn(2, ':').nth(1).unwrap_or("").trim().trim_matches(|c| c == '<' || c == '>').to_string())
+            .map(|line| line.splitn(2, ':').nth(1).unwrap_or("").trim().to_string())
             .filter(|s| !s.is_empty())
     };
 
@@ -565,6 +568,9 @@ pub async fn smtp_send_email(
     // post-APPEND UID SEARCH so we can prove the server indexed the message.
     // Handle both LF and CRLF line endings, folded header continuations, and
     // optional whitespace around the `:`.
+    // Brackets are stripped here on purpose, unlike in `smtp_build_mime`:
+    // `SEARCH HEADER` matches a substring of the field value, so the bare id
+    // hits `<id>` on servers that store the brackets and on those that don't.
     let message_id_header: Option<String> = {
         let text = String::from_utf8_lossy(&result.raw_rfc2822);
         let header_block = match text.find("\r\n\r\n") {

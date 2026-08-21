@@ -91,9 +91,13 @@ pub fn build_mime(account: &ImapConfig, email: &OutgoingEmail) -> Result<BuiltMi
     // optimistic local Sent entry against the server copy by Message-ID header.
     // Message-ID domain follows the From address, not the login — receivers'
     // DMARC/spam heuristics read the From domain.
+    //
+    // The angle brackets are ours to add: `Message::builder().message_id(Some(v))`
+    // is a raw passthrough (lettre only wraps on the `None` branch, where it
+    // generates its own id), and RFC 5322 §3.6.4 requires `msg-id = "<" ... ">"`.
     let domain = from_address.splitn(2, '@').nth(1).unwrap_or("mailvault.local");
     let msg_id_value = format!(
-        "{}.{}@{}",
+        "<{}.{}@{}>",
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos())
@@ -533,17 +537,39 @@ mod tests {
         }
     }
 
+    fn message_id_line(raw: &str) -> String {
+        raw.lines()
+            .find(|l| l.to_lowercase().starts_with("message-id:"))
+            .unwrap_or_else(|| panic!("no Message-ID header in: {}", raw))
+            .to_string()
+    }
+
     #[test]
     fn message_id_domain_follows_from_address() {
         let raw = headers_of(&account("ABC@fastmail.fm", Some("hello@graphicmeat.com")));
-        let msg_id = raw
-            .lines()
-            .find(|l| l.to_lowercase().starts_with("message-id:"))
-            .expect("message-id header");
-        // NB: lettre emits the value unbracketed here (pre-existing behavior,
-        // unrelated to send-as) — assert on the domain, not the framing.
+        let msg_id = message_id_line(&raw);
         assert!(msg_id.contains("@graphicmeat.com"), "message-id was: {}", msg_id);
         assert!(!msg_id.contains("@fastmail.fm"), "message-id was: {}", msg_id);
+    }
+
+    #[test]
+    fn message_id_is_bracketed() {
+        // RFC 5322 §3.6.4: `msg-id = "<" id-left "@" id-right ">"`. lettre's
+        // `.message_id(Some(v))` passes the value through verbatim, so an
+        // unbracketed `v` ships an unbracketed — malformed — header.
+        let raw = headers_of(&account("ABC@fastmail.fm", Some("hello@graphicmeat.com")));
+        let value = message_id_line(&raw)
+            .splitn(2, ':')
+            .nth(1)
+            .expect("message-id value")
+            .trim()
+            .to_string();
+        assert!(value.starts_with('<'), "message-id was: {}", value);
+        assert!(value.ends_with('>'), "message-id was: {}", value);
+        // Brackets must wrap the whole addr-spec, not just decorate one end.
+        let inner = &value[1..value.len() - 1];
+        assert!(!inner.contains('<') && !inner.contains('>'), "message-id was: {}", value);
+        assert!(inner.contains('@'), "message-id was: {}", value);
     }
 
     #[test]

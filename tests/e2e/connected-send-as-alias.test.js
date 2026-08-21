@@ -113,8 +113,23 @@ describe('Connected Send-As Alias', function () {
       // stamped with the login domain is a cross-domain mismatch.
       const { headers } = await buildHeaders(account, { fromEmail: OTHER_DOMAIN_ALIAS });
       const msgId = headerLine(headers, 'Message-ID');
-      expect(msgId).toContain('@graphicmeat.com');
+      // Bracketed per RFC 5322 §3.6.4 — the closing `>` is part of the assert
+      // because lettre passes the value through verbatim and will happily emit
+      // a malformed header if we hand it one.
+      expect(msgId).toContain('@graphicmeat.com>');
       expect(msgId).not.toContain(account.email.split('@')[1]);
+    });
+
+    it('returns the Message-ID in the same form the header carries', async function () {
+      // The compose flow puts this value on the optimistic Sent entry and later
+      // dedupes it against the server's copy, whose `messageId` comes from
+      // `parse_header` — which keeps the angle brackets. Normalising here (in
+      // either direction) makes the optimistic row unmatchable and it never
+      // clears. Byte-equality with the header is the contract.
+      const { headers, messageId } = await buildHeaders(account);
+      const headerValue = headerLine(headers, 'Message-ID').replace(/^Message-ID:\s*/i, '');
+      expect(headerValue).not.toBe('');
+      expect(messageId).toBe(headerValue);
     });
   });
 
