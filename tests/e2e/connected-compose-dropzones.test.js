@@ -27,10 +27,7 @@
  * plain conditional renders and the modal unmounts outright on close/minimize.
  */
 
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { waitForApp, waitForEmails } from './helpers.js';
-import { appDataDir } from './mockImap.js';
 import {
   MODAL,
   EDITOR,
@@ -56,7 +53,11 @@ import {
   clickBubble,
   closeComposeHard,
   openComposeFresh,
-  outboxItems,
+  listSent,
+  clickSend,
+  readStagedEml,
+  flatten,
+  waitForOutboxError,
 } from './composeHelpers.js';
 
 const HINT = 'compose-inline-dropzone-hint';
@@ -151,90 +152,9 @@ describe('Connected Compose Drop Zones', function () {
   }
 
   // ── the staged .eml on disk ──────────────────────────────────────────────
-
-  const sentDir = (accountId) =>
-    join(appDataDir(browser.testDataDir), 'Maildir', accountId, 'Sent', 'cur');
-
-  const listSent = (accountId) => {
-    const dir = sentDir(accountId);
-    return existsSync(dir) ? readdirSync(dir) : [];
-  };
-
-  /** Every mailbox the vault holds for this account — names the layer when Sent is empty. */
-  const vaultTree = (accountId) => {
-    const root = join(appDataDir(browser.testDataDir), 'Maildir', accountId);
-    if (!existsSync(root)) return `<no Maildir for ${accountId} at ${root}>`;
-    return JSON.stringify(readdirSync(root));
-  };
-
-  /** Click the real Send button (submit) — not the form, so the disabled state counts. */
-  const clickSend = () => browser.execute(() => {
-    const btn = document.querySelector('[data-testid="compose-send"]');
-    if (!btn || btn.disabled) return false;
-    btn.click();
-    return true;
-  });
-
-  /**
-   * Wait for the `.eml` this send staged and return its raw text.
-   *
-   * Matched on the unique subject rather than "some new file": a file that
-   * exists is not necessarily written through, and another case in this file
-   * stages into the same directory.
-   */
-  async function readStagedEml(accountId, before, subject) {
-    let raw = null;
-    try {
-      await browser.waitUntil(() => {
-        for (const name of listSent(accountId)) {
-          if (before.has(name)) continue;
-          let text = '';
-          try {
-            text = readFileSync(join(sentDir(accountId), name), 'utf8');
-          } catch { continue; }
-          if (text.includes(subject)) { raw = text; return true; }
-        }
-        return false;
-      }, {
-        timeout: 30_000,
-        interval: 500,
-        timeoutMsg: `no staged .eml for "${subject}" appeared in ${sentDir(accountId)}`,
-      });
-    } catch {
-      throw new Error(
-        `Send never staged a .eml for "${subject}" in ${sentDir(accountId)} — the ` +
-        `compose flow died before maildir_store (build_mime failure, or the Sent ` +
-        `mailbox resolved elsewhere). Dir holds ${JSON.stringify(listSent(accountId))}; ` +
-        `account mailboxes: ${vaultTree(accountId)}`,
-      );
-    }
-    return raw;
-  }
-
-  /**
-   * Undo quoted-printable soft line breaks before searching the body.
-   * lettre picks QP for any part with a line ≥ 76 chars, and a soft break can
-   * land in the middle of `cid:` or `data:image` — a raw substring search
-   * would then quietly report the wrong answer.
-   */
-  const flatten = (raw) => raw.replace(/=\r?\n/g, '');
-
-  /** The harness has no SMTP server, so every real send ends in the outbox as an error. */
-  async function waitForOutboxError(subject) {
-    try {
-      await browser.waitUntil(async () => (await outboxItems()).some((i) => i.status === 'error'), {
-        timeout: 90_000,
-        interval: 1000,
-        timeoutMsg: `outbox never reported an error for "${subject}"`,
-      });
-    } catch {
-      throw new Error(
-        `The send of "${subject}" never resolved in the outbox — SMTP is ` +
-        `unreachable by design here, so a send that neither fails nor succeeds ` +
-        `means the outbox never ran it. Items: ${JSON.stringify(await outboxItems())}`,
-      );
-    }
-  }
+  // sentDir/listSent/readStagedEml/flatten/waitForOutboxError live in
+  // composeHelpers.js — connected-compose-from-identities asserts on the same
+  // staged file, and one copy of the "no SMTP here" knowledge is enough.
 
   /**
    * Send from account[0] (luke@mock.test) and hand back the staged MIME.

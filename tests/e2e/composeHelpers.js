@@ -18,7 +18,10 @@
  *    animated element's absence.
  *  - `expect(value, 'message')` throws in this runner — one argument only.
  */
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { pressKey } from './helpers.js';
+import { appDataDir } from './mockImap.js';
 
 export const MODAL = '[data-testid="compose-modal"]';
 export const EDITOR = `${MODAL} .ProseMirror`;
@@ -467,6 +470,99 @@ export async function openComposeFresh() {
     timeout: 10_000, interval: 200, timeoutMsg: 'compose modal did not open on "c"',
   });
   await browser.pause(300);
+}
+
+// ---------------------------------------------------------------------------
+// The staged .eml on disk — what compose actually hands to the wire
+// ---------------------------------------------------------------------------
+//
+// The harness has NO SMTP server (mockImap points smtpHost at the mock IMAP
+// port), so a real Send builds the MIME, stages a `.eml` under
+// `Maildir/<accountId>/Sent/cur/`, and only then fails on SMTP. That staged
+// file is the one end-to-end proof of what left the compose window.
+
+export const sentDir = (accountId) =>
+  join(appDataDir(browser.testDataDir), 'Maildir', accountId, 'Sent', 'cur');
+
+export const listSent = (accountId) => {
+  const dir = sentDir(accountId);
+  return existsSync(dir) ? readdirSync(dir) : [];
+};
+
+/** Every mailbox the vault holds for this account — names the layer when Sent is empty. */
+export const vaultTree = (accountId) => {
+  const root = join(appDataDir(browser.testDataDir), 'Maildir', accountId);
+  if (!existsSync(root)) return `<no Maildir for ${accountId} at ${root}>`;
+  return JSON.stringify(readdirSync(root));
+};
+
+/** Click the real Send button (submit) — not the form, so the disabled state counts. */
+export const clickSend = () => browser.execute(() => {
+  const btn = document.querySelector('[data-testid="compose-send"]');
+  if (!btn || btn.disabled) return false;
+  btn.click();
+  return true;
+});
+
+/**
+ * Wait for the `.eml` this send staged and return its raw text.
+ *
+ * Matched on the unique subject rather than "some new file": a file that
+ * exists is not necessarily written through, and sibling cases stage into the
+ * same directory.
+ */
+export async function readStagedEml(accountId, before, subject) {
+  let raw = null;
+  try {
+    await browser.waitUntil(() => {
+      for (const name of listSent(accountId)) {
+        if (before.has(name)) continue;
+        let text = '';
+        try {
+          text = readFileSync(join(sentDir(accountId), name), 'utf8');
+        } catch { continue; }
+        if (text.includes(subject)) { raw = text; return true; }
+      }
+      return false;
+    }, {
+      timeout: 30_000,
+      interval: 500,
+      timeoutMsg: `no staged .eml for "${subject}" appeared in ${sentDir(accountId)}`,
+    });
+  } catch {
+    throw new Error(
+      `Send never staged a .eml for "${subject}" in ${sentDir(accountId)} — the ` +
+      `compose flow died before maildir_store (build_mime failure, or the Sent ` +
+      `mailbox resolved elsewhere). Dir holds ${JSON.stringify(listSent(accountId))}; ` +
+      `account mailboxes: ${vaultTree(accountId)}`,
+    );
+  }
+  return raw;
+}
+
+/**
+ * Undo quoted-printable soft line breaks before searching the body.
+ * lettre picks QP for any part with a line >= 76 chars, and a soft break can
+ * land in the middle of a token — a raw substring search would then quietly
+ * report the wrong answer.
+ */
+export const flatten = (raw) => raw.replace(/=\r?\n/g, '');
+
+/** The harness has no SMTP server, so every real send ends in the outbox as an error. */
+export async function waitForOutboxError(subject) {
+  try {
+    await browser.waitUntil(async () => (await outboxItems()).some((i) => i.status === 'error'), {
+      timeout: 90_000,
+      interval: 1000,
+      timeoutMsg: `outbox never reported an error for "${subject}"`,
+    });
+  } catch {
+    throw new Error(
+      `The send of "${subject}" never resolved in the outbox — SMTP is ` +
+      `unreachable by design here, so a send that neither fails nor succeeds ` +
+      `means the outbox never ran it. Items: ${JSON.stringify(await outboxItems())}`,
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
