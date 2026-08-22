@@ -131,9 +131,82 @@
 
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.10.1</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">August 22, 2026</span>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            </span>
+            Added
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Drop a picture into the message, or a file onto the strip below it.</strong> While you drag a file over a new message, two drop zones light up: let go of an image on the message body and it goes inline right where you dropped it; let go of anything on the dashed strip below the body — or anywhere else in the window — and it is attached as a file. Pasting an image from the clipboard puts it inline too. Inline pictures are sent the way other mail apps send them, as embedded parts the message refers to, so Gmail and Outlook.com show them instead of stripping them out.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Time Capsule and Email Cleanup now say what Premium costs, and offer a way to get it.</strong> Both panels explained the locked feature and stopped there — no price, no button — while the other three locked panels showed both. They now carry the same price line and Upgrade button, which opens Settings → Billing.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            </span>
+            Fixed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Replying no longer breaks a conversation into new threads.</strong> Every reply MailVault sent named only the message it answered and not the conversation behind it, so the other person's mail app carried on from that shortened history: their answer started a thread of its own, and three replies left three rows for one conversation. Replies now carry the whole conversation, and the list groups messages whose history was cut short by any mail app — so the conversations already split in your mailbox come back together as one.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Outgoing mail now carries a properly formed Message-ID.</strong> Every message MailVault sent was missing the angle brackets the mail standard requires around its Message-ID. Some receiving servers and spam filters count a malformed header against a message, and other mail apps key replies to that header, so the conversation could fail to line up on the other end. The header now goes out in the standard form, and the copy filed in Sent still matches it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>"Send Mail As" no longer suggests people you were merely copied alongside.</strong> The suggestion chips under the field mined the To and Cc lines of received mail, so a mailbox that is often copied with the same colleagues was offered their addresses as aliases. Being on a thread is no proof that mail to an address lands in this mailbox, so that source is gone: the chips now list only addresses this account has actually sent from, under "You've sent as:".</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Premium prices are quoted in the currency you will actually be charged, on every screen.</strong> The panels for locked features worked the currency out from your computer's language settings, while the Billing tab — and the checkout that takes the money — works it out from where you are. A machine set to British English inside the eurozone was offered "£3.50/month or £21/year" on the Migration panel and "€4/mo" on the plan card two clicks later, then billed in euro. Every price in the app now comes from the same place as the charge, and is remembered so it is right the moment a panel opens. The pricing, home, features and FAQ pages on the website do the same, instead of quoting US dollars to everyone.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Dragging a file from Finder onto a new message does something again.</strong> The drop never reached the compose window — the desktop layer accepted the file and kept it — so nothing was attached and nothing said why. Dropped files now land in the message or its attachments, as above.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Forwarding no longer sends the original message twice.</strong> A forward put the original into the body and also kept a second copy behind the "Show original message" toggle, and both went out. The forward now carries the original once, in the body where you can edit it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Closing an untouched message no longer asks whether to discard your changes.</strong> A new message that held only your signature, or a forward you had not typed into, counted as unsaved work: Close asked to discard it and Escape minimized it to a bubble instead of closing. Only what you actually typed, added or attached counts now.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Escape inside the "Discard message?" prompt keeps the draft.</strong> Pressing Escape there closed the prompt — and, in the same keypress, closed the message behind it and threw the draft away. Escape now only dismisses the prompt.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Undo in a new message is no longer lit before you have typed anything.</strong></span>
+            </li>
+          </ul>
+        </div>
+
+      </article>
+      <article class="mb-16">
+        <div class="flex items-center gap-3 mb-6">
           <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.10.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">August 18, 2026</span>
-          <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
         </div>
 
         <div class="mb-8">
