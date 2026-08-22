@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { rankSendAsCandidates } from '../sendAsSuggestions';
+import { rankSendAsCandidates, composeIdentities } from '../sendAsSuggestions';
 
 const LOGIN = 'ABC@fastmail.fm';
 
@@ -52,5 +52,62 @@ describe('rankSendAsCandidates', () => {
 
   it('tolerates a missing Sent cache', () => {
     expect(rankSendAsCandidates(null, LOGIN)).toEqual([]);
+  });
+});
+
+describe('composeIdentities', () => {
+  const accounts = [
+    { id: 'a1', email: 'one@fastmail.fm' },
+    { id: 'a2', email: 'two@corp.com' },
+  ];
+
+  it('offers each account its login when nothing else is known', () => {
+    expect(composeIdentities(accounts)).toEqual([
+      { key: 'a1 one@fastmail.fm', accountId: 'a1', address: 'one@fastmail.fm' },
+      { key: 'a2 two@corp.com', accountId: 'a2', address: 'two@corp.com' },
+    ]);
+  });
+
+  it('leads with the send-as override, then the login', () => {
+    const out = composeIdentities([accounts[0]], { a1: 'alias@fastmail.fm' });
+    expect(out.map(i => i.address)).toEqual(['alias@fastmail.fm', 'one@fastmail.fm']);
+  });
+
+  it('never repeats the override or the login, whatever their case', () => {
+    const out = composeIdentities([accounts[0]], { a1: 'alias@fastmail.fm' }, {
+      a1: [{ address: 'ALIAS@fastmail.fm' }, { address: 'One@Fastmail.fm' }],
+    });
+    expect(out.map(i => i.address)).toEqual(['alias@fastmail.fm', 'one@fastmail.fm']);
+  });
+
+  it('appends mined addresses in the order given', () => {
+    const out = composeIdentities([accounts[0]], {}, {
+      a1: [{ address: 'often@fastmail.fm' }, { address: 'rare@fastmail.fm' }],
+    });
+    expect(out.map(i => i.address)).toEqual([
+      'one@fastmail.fm',
+      'often@fastmail.fm',
+      'rare@fastmail.fm',
+    ]);
+  });
+
+  it('treats a blank override as no override', () => {
+    const out = composeIdentities([accounts[0]], { a1: '   ' });
+    expect(out).toEqual([
+      { key: 'a1 one@fastmail.fm', accountId: 'a1', address: 'one@fastmail.fm' },
+    ]);
+  });
+
+  it('keeps accounts in input order, each account contiguous', () => {
+    const out = composeIdentities(accounts, { a1: 'alias@fastmail.fm' }, {
+      a2: [{ address: 'mined@corp.com' }],
+    });
+    expect(out.map(i => i.accountId)).toEqual(['a1', 'a1', 'a2', 'a2']);
+    expect(out.map(i => i.address)).toEqual([
+      'alias@fastmail.fm',
+      'one@fastmail.fm',
+      'two@corp.com',
+      'mined@corp.com',
+    ]);
   });
 });

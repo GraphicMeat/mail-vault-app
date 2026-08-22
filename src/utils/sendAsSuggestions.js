@@ -49,6 +49,37 @@ export function rankSendAsCandidates(sent, loginAddress) {
     .slice(0, MAX_SUGGESTIONS);
 }
 
+/**
+ * Every address compose may send from, one entry per (account, address):
+ * the account's default first (its send-as override, else the login), then
+ * the login, then addresses it has provably sent as. Case-insensitive dedupe.
+ * `key` is what the From <select> carries; split on the first space.
+ *
+ * @param {object[]} accounts
+ * @param {Record<string, string>} sendAsAddresses per-account From override
+ * @param {Record<string, {address: string}[]>} sentAsByAccount mined candidates
+ * @returns {{ key: string, accountId: string, address: string }[]}
+ */
+export function composeIdentities(accounts, sendAsAddresses = {}, sentAsByAccount = {}) {
+  const out = [];
+
+  for (const account of accounts || []) {
+    if (!account?.id) continue;
+    const seen = new Set();
+    const override = (sendAsAddresses[account.id] || '').trim();
+    const mined = (sentAsByAccount[account.id] || []).map(entry => entry.address);
+
+    for (const address of [override, account.email, ...mined]) {
+      const clean = (address || '').trim();
+      if (!clean || seen.has(clean.toLowerCase())) continue;
+      seen.add(clean.toLowerCase());
+      out.push({ key: `${account.id} ${clean}`, accountId: account.id, address: clean });
+    }
+  }
+
+  return out;
+}
+
 /** Read this account's cached Sent headers and rank the candidates. */
 export async function suggestSendAsAddresses(account) {
   if (!account?.id) return [];

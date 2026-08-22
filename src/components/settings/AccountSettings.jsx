@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { getOAuth2AuthUrl, exchangeOAuth2Code, ensureSentMailbox, fetchMailboxes } from '../../services/api';
 import { findSentMailboxPath } from '../../utils/sentFolder';
 import { suggestSendAsAddresses } from '../../utils/sendAsSuggestions';
+import { isFastmailAccount } from '../AccountModal.jsx';
 import { SendAsVerifyModal } from './SendAsVerifyModal';
 import { Send } from 'lucide-react';
 import { ToggleSwitch } from './ToggleSwitch';
@@ -466,7 +467,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-mail-text mb-2">
-                    Email Address
+                    {isFastmailAccount(selectedAccount) ? 'Login Address' : 'Email Address'}
                   </label>
                   <input
                     type="text"

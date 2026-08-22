@@ -52,6 +52,35 @@ describe('Connected Send-As Alias', function () {
   const readSendAs = (accountId) => browser.execute((id) =>
     window.__SETTINGS_STORE__.getState().getSendAsAddress(id), accountId);
 
+  // Both the settings suggestions and the compose From list mine this cache.
+  const SEEDED = 'previously-used@mock.test';
+
+  /**
+   * Seed the Sent header cache directly: alias discovery reads the cached
+   * headers, and waiting for a Sent sync would make the assertion depend on
+   * prefetch timing.
+   */
+  const seedSentCache = () => invoke('save_email_cache', {
+    accountId: account.id,
+    mailbox: 'Sent',
+    data: JSON.stringify({
+      accountId: account.id,
+      mailbox: 'Sent',
+      totalEmails: 1,
+      lastSynced: Date.now(),
+      emails: [{
+        uid: 90001,
+        subject: 'Earlier message',
+        from: { address: SEEDED, name: 'Me' },
+        to: [{ address: 'friend@example.com', name: '' }],
+        cc: [],
+        bcc: [],
+        date: '2026-08-01T10:00:00.000Z',
+        flags: ['\\Seen'],
+      }],
+    }),
+  });
+
   /** Decode the staged MIME and pull out its header block. */
   async function buildHeaders(account, extra = {}) {
     const res = await invoke('smtp_build_mime', {
@@ -190,30 +219,7 @@ describe('Connected Send-As Alias', function () {
 
   describe('suggestions', function () {
     it('offers an address this mailbox has already sent as', async function () {
-      // Seed the Sent header cache directly: alias discovery reads the cached
-      // headers, and waiting for a Sent sync would make the assertion depend on
-      // prefetch timing.
-      const seeded = 'previously-used@mock.test';
-      const seedSentCache = () => invoke('save_email_cache', {
-        accountId: account.id,
-        mailbox: 'Sent',
-        data: JSON.stringify({
-          accountId: account.id,
-          mailbox: 'Sent',
-          totalEmails: 1,
-          lastSynced: Date.now(),
-          emails: [{
-            uid: 90001,
-            subject: 'Earlier message',
-            from: { address: seeded, name: 'Me' },
-            to: [{ address: 'friend@example.com', name: '' }],
-            cc: [],
-            bcc: [],
-            date: '2026-08-01T10:00:00.000Z',
-            flags: ['\\Seen'],
-          }],
-        }),
-      });
+      const seeded = SEEDED;
       expect((await seedSentCache()).ok).toBe(true);
 
       await openSettings();
@@ -311,6 +317,37 @@ describe('Connected Send-As Alias', function () {
   });
 
   describe('compose', function () {
+    /** The From `<select>`: every option plus which one is selected. */
+    const fromSelect = () => browser.execute(() => {
+      const el = document.querySelector('[data-testid="compose-from"]');
+      if (!el) return null;
+      return {
+        selectedIndex: el.selectedIndex,
+        options: [...el.options].map(o => ({ value: o.value, text: o.text.trim() })),
+      };
+    });
+
+    const selectFrom = (value) => browser.execute((v) => {
+      const el = document.querySelector('[data-testid="compose-from"]');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      setter.call(el, v);
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    }, value);
+
+    async function closeCompose() {
+      await pressKey('Escape');
+      await browser.pause(300);
+      await browser.execute(() => {
+        for (const btn of document.querySelectorAll('button')) {
+          if ((btn.textContent || '').trim() === 'Discard' && btn.offsetHeight > 0) btn.click();
+        }
+        for (const bubble of document.querySelectorAll('[data-testid="compose-bubble"]')) {
+          bubble.querySelector('button')?.click();
+        }
+      });
+      await browser.pause(300);
+    }
+
     it('shows the send-as address in the From row', async function () {
       await setSendAs(account.id, ALIAS);
       await openCompose();
@@ -326,17 +363,47 @@ describe('Connected Send-As Alias', function () {
       expect(fromText).toContain(ALIAS);
       expect(fromText).not.toContain(account.email);
 
-      await pressKey('Escape');
-      await browser.pause(300);
-      await browser.execute(() => {
-        for (const btn of document.querySelectorAll('button')) {
-          if ((btn.textContent || '').trim() === 'Discard' && btn.offsetHeight > 0) btn.click();
-        }
-        for (const bubble of document.querySelectorAll('[data-testid="compose-bubble"]')) {
-          bubble.querySelector('button')?.click();
-        }
+      await closeCompose();
+    });
+
+    it('offers the login address under the alias so one message can leave from either', async function () {
+      await setSendAs(account.id, ALIAS);
+      await openCompose();
+      await browser.pause(400);
+
+      const from = await fromSelect();
+      expect(from).not.toBe(null);
+      expect(from.options[from.selectedIndex].text).toBe(ALIAS);
+      // The override leads, the login follows — both belong to this account, so
+      // one message can leave as either without touching settings.
+      expect(from.options.map(o => o.text).slice(0, 2)).toEqual([ALIAS, account.email]);
+      // Every option value is "<account id> <address>"; the two above carry THIS
+      // account's id, so picking the login never switches the sending account.
+      expect(from.options.slice(0, 2).every(o => o.value.startsWith(`${account.id} `))).toBe(true);
+
+      await selectFrom(`${account.id} ${account.email}`);
+      await browser.pause(200);
+      const after = await fromSelect();
+      expect(after.options[after.selectedIndex].text).toBe(account.email);
+
+      await closeCompose();
+    });
+
+    it('lists an address this mailbox has sent as before', async function () {
+      expect((await seedSentCache()).ok).toBe(true);
+      await openCompose();
+
+      // The Sent cache is mined after mount, so the option arrives late.
+      await browser.waitUntil(async () => {
+        const from = await fromSelect();
+        return !!from && from.options.some(o => o.text === SEEDED);
+      }, {
+        timeout: 10_000,
+        interval: 300,
+        timeoutMsg: `compose From never offered ${SEEDED} — the mined Sent addresses did not reach the selector`,
       });
-      await browser.pause(300);
+
+      await closeCompose();
     });
   });
 });

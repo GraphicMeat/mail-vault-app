@@ -249,9 +249,10 @@ describe('Connected Compose Drop Zones', function () {
 
     await openComposeFresh();
 
-    const fromSet = await setField('compose-from', account.id);
+    const fromKey = `${account.id} ${account.email}`;
+    const fromSet = await setField('compose-from', fromKey);
     if (!fromSet) throw new Error('compose-from select is missing — cannot pin the sending account');
-    if ((await fieldValue('compose-from')) !== account.id) {
+    if ((await fieldValue('compose-from')) !== fromKey) {
       throw new Error(
         `compose-from did not settle on ${account.email} (${account.id}); it reads ` +
         `${await fieldValue('compose-from')} — the staged .eml would land under another account`,

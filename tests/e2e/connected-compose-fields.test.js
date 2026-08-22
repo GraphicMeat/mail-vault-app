@@ -132,13 +132,14 @@ describe('Connected Compose Fields', function () {
     // compare as sets.
     expect(from.options.map((o) => o.text).sort()).toEqual([...emails].sort());
     expect(from.options.map((o) => o.value).sort())
-      .toEqual((browser.mockAccounts || []).map((a) => a.id).sort());
+      .toEqual((browser.mockAccounts || []).map((a) => `${a.id} ${a.email}`).sort());
 
     const storeActive = await browser.execute(() => window.__MAIL_STORE__.getState().activeAccountId);
-    // The selector value is an account id, and a new compose starts on the
-    // active account — which is account 0 on a fresh spec file.
-    expect(from.value).toBe(storeActive);
-    expect(from.value).toBe(browser.mockAccounts[0].id);
+    // The selector value is "<account id> <address>" — one account can offer
+    // several addresses — and a new compose starts on the active account,
+    // which is account 0 on a fresh spec file.
+    expect(from.value.split(' ')[0]).toBe(storeActive);
+    expect(from.value).toBe(`${browser.mockAccounts[0].id} ${browser.mockAccounts[0].email}`);
   });
 
   it('swaps the signature in and out when the From account changes', async function () {
@@ -152,7 +153,7 @@ describe('Connected Compose Fields', function () {
     // Account 1 has no signature, so the body opens empty.
     expect((await editorText()) || '').not.toContain('Sig Two');
 
-    expect(await setField('compose-from', accountTwo.id)).toBe(true);
+    expect(await setField('compose-from', `${accountTwo.id} ${accountTwo.email}`)).toBe(true);
     await browser.waitUntil(async () => ((await editorText()) || '').includes('Sig Two'), {
       timeout: 15_000,
       interval: 300,
@@ -161,7 +162,7 @@ describe('Connected Compose Fields', function () {
     // The signature is inserted behind the standard "--" separator.
     expect(await editorText()).toContain('--');
 
-    expect(await setField('compose-from', accountOne.id)).toBe(true);
+    expect(await setField('compose-from', `${accountOne.id} ${accountOne.email}`)).toBe(true);
     await browser.waitUntil(async () => !((await editorText()) || '').includes('Sig Two'), {
       timeout: 15_000,
       interval: 300,

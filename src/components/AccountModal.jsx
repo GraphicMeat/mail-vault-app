@@ -90,7 +90,7 @@ export const PROVIDER_CONFIGS = {
     imapPort: 993,
     smtpHost: 'smtp.fastmail.com',
     smtpPort: 587,
-    note: 'Use an App Password'
+    note: 'Use an App Password and sign in with your Fastmail login address. To send from an alias, set "Send Mail As" in Settings → Accounts after the account is added.'
   }
 };
 
@@ -106,6 +106,14 @@ export function detectProvider(email) {
   }
 
   return null;
+}
+
+// Fastmail signs in with the @fastmail.com address and sends from aliases,
+// so its forms call the field what it is. Matched on the IMAP host (shared
+// by custom-domain logins); the domain check covers the add form before a
+// host is filled in.
+export function isFastmailAccount({ email = '', imapHost = '' } = {}) {
+  return /(^|\.)fastmail\.com$/i.test(imapHost) || detectProvider(email)?.key === 'fastmail';
 }
 
 // Try common server patterns for unknown domains
@@ -493,6 +501,7 @@ export function AccountModal({ onClose }) {
 
   const providerConfig = provider && PROVIDER_CONFIGS[provider];
   const showOAuth2Option = providerConfig?.supportsOAuth2;
+  const isFastmail = provider === 'fastmail' || isFastmailAccount(formData);
 
   return (
     <motion.div
@@ -734,7 +743,7 @@ export function AccountModal({ onClose }) {
               {!(showOAuth2Option && authType === 'oauth2') && (
                 <div>
                   <label className="block text-sm text-mail-text-muted mb-1.5">
-                    Email Address *
+                    {isFastmail ? 'Login Address' : 'Email Address'} *
                   </label>
                   <div className="relative">
                     <Mail size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-mail-text-muted" />
@@ -743,7 +752,7 @@ export function AccountModal({ onClose }) {
                       name="email"
                       value={formData.email}
                       onChange={handleInputChange}
-                      placeholder="you@example.com"
+                      placeholder={isFastmail ? 'you@fastmail.com' : 'you@example.com'}
                       required
                       className="w-full pl-10 pr-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
                                 text-mail-text placeholder-mail-text-muted

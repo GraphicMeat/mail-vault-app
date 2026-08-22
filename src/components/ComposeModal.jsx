@@ -13,6 +13,7 @@ import { ContactsPickerButton, ContactsAutocomplete } from './ContactsPicker';
 import { findSentMailboxPath } from '../utils/sentFolder';
 import { extractInlineImages } from '../utils/inlineImages';
 import { buildReplyHeaders, parseReferenceList } from '../utils/emailParser';
+import { suggestSendAsAddresses, composeIdentities } from '../utils/sendAsSuggestions';
 
 // Find the Sent mailbox path for a specific account.
 // Tiers: account.sentFolderOverride → disk/store mailbox tree via SPECIAL-USE
@@ -122,7 +123,6 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   const getSignature = useSettingsStore(s => s.getSignature);
   const getDisplayName = useSettingsStore(s => s.getDisplayName);
-  const getSendAsAddress = useSettingsStore(s => s.getSendAsAddress);
   // Subscribed (not read through the getter) so the From row re-renders when
   // the override changes while compose is open.
   const sendAsAddresses = useSettingsStore(s => s.sendAsAddresses);
@@ -136,6 +136,13 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const [selectedAccountId, setSelectedAccountId] = useState(initialAccountId);
   const selectedAccount = accounts.find(a => a.id === selectedAccountId) || accounts[0];
   const composeSendAs = sendAsAddresses?.[selectedAccountId] || '';
+  // Addresses each account has provably sent as, mined from its Sent cache.
+  const [sentAsByAccount, setSentAsByAccount] = useState({});
+  // '' = whatever the selected account sends as by default.
+  const [pickedFrom, setPickedFrom] = useState('');
+  // Not memo'd: `accounts` is a fresh array every render anyway.
+  const identities = composeIdentities(accounts, sendAsAddresses, sentAsByAccount);
+  const composeFrom = pickedFrom || composeSendAs || selectedAccount?.email || '';
 
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
@@ -280,7 +287,20 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       }
     }
   }, [mode, replyTo, initialData, selectedAccountId]);
-  
+
+  // Mine each account's Sent cache so the From list offers every address the
+  // mailbox can actually send from, not just its login.
+  useEffect(() => {
+    let cancelled = false;
+    for (const acc of rawAccounts || []) {
+      suggestSendAsAddresses(acc).then(list => {
+        if (cancelled || !list.length) return;
+        setSentAsByAccount(prev => ({ ...prev, [acc.id]: list }));
+      });
+    }
+    return () => { cancelled = true; };
+  }, [rawAccounts]);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -419,8 +439,8 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         // to freshAccount.email, so this never touches auth. Applied to BOTH
         // the build_mime and the send call — if they drift, the staged .eml
         // and the message that actually leaves carry different From headers.
-        const sendAsEmail = getSendAsAddress(selectedAccountId);
-        const fromAddress = sendAsEmail || freshAccount.email;
+        const fromAddress = composeFrom || freshAccount.email;
+        const sendAsEmail = fromAddress !== freshAccount.email ? fromAddress : '';
 
         // Inline pictures leave as cid: parts — Gmail/Outlook.com strip data: URIs.
         // Only the outgoing copy is rewritten; composeState.initialData.body keeps
@@ -939,28 +959,39 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           className="flex-1 flex flex-col overflow-hidden"
         >
           <div className="px-4 py-2 space-y-2 border-b border-mail-border">
-            {/* From — also shown on a single account when a send-as override
-                is set, so the user can see what they are sending as. */}
-            {(accounts.length > 1 || composeSendAs) && (
+            {/* From — shown whenever there is a choice to make, which on a
+                single account means it has an override or a mined alias. */}
+            {identities.length > 1 && (
               <div className="flex items-center gap-2">
                 <label className="w-12 text-sm text-mail-text-muted">From:</label>
                 <div className="relative flex-1">
                   <select
                     data-testid="compose-from"
-                    value={selectedAccountId}
-                    onChange={(e) => setSelectedAccountId(e.target.value)}
+                    value={`${selectedAccountId} ${composeFrom}`}
+                    onChange={(e) => {
+                      const [accountId, address] = e.target.value.split(' ');
+                      setSelectedAccountId(accountId);
+                      setPickedFrom(address);
+                    }}
                     className="w-full bg-transparent text-mail-text text-sm py-1 pr-6
                               outline-none appearance-none cursor-pointer"
                   >
                     {accounts.map(acc => {
-                      const outgoing = getSendAsAddress(acc.id) || acc.email;
+                      const ids = identities.filter(i => i.accountId === acc.id);
                       // A name that IS the address adds nothing and, with an
                       // override set, would show both addresses at once.
-                      const label = acc.name && acc.name !== acc.email
-                        ? `${acc.name} <${outgoing}>`
-                        : outgoing;
+                      const named = acc.name && acc.name !== acc.email;
+                      if (ids.length === 1) {
+                        const label = named ? `${acc.name} <${ids[0].address}>` : ids[0].address;
+                        return <option key={acc.id} value={ids[0].key}>{label}</option>;
+                      }
+                      // The native optgroup indents the addresses under the account.
                       return (
-                        <option key={acc.id} value={acc.id}>{label}</option>
+                        <optgroup key={acc.id} label={named ? acc.name : acc.email}>
+                          {ids.map(i => (
+                            <option key={i.key} value={i.key}>{i.address}</option>
+                          ))}
+                        </optgroup>
                       );
                     })}
                   </select>

@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+- **Pick the address a message leaves from, right in the From row.** Settings → Accounts still sets the address an account sends from by default, but the From row of a new message now lists every address the account can use — the login address, the "Send Mail As" address, and any address the account has sent from before — grouped under the account. One message can go out from a different alias without changing the setting. An account with a single address shows as before.
+
+### Changed
+- **Fastmail forms call the sign-in field "Login Address".** Fastmail signs in with the @fastmail.com address and sends from aliases, so the add-account form and Settings → Accounts now label that field "Login Address" and point to "Send Mail As" for the address you hand out. Other providers are unchanged.
+
 ## [2.10.1] - 2026-08-22
 
 ### Added
