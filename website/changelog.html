@@ -132,7 +132,7 @@
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
           <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.10.1</span>
-          <span class="text-slate-500 dark:text-slate-400 text-sm">August 22, 2026</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">August 23, 2026</span>
           <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
         </div>
 
@@ -146,11 +146,30 @@
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Pick the address a message leaves from, right in the From row.</strong> Settings → Accounts still sets the address an account sends from by default, but the From row of a new message now lists every address the account can use — the login address, the "Send Mail As" address, and any address the account has sent from before — grouped under the account. One message can go out from a different alias without changing the setting. An account with a single address shows as before.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
               <span><strong>Drop a picture into the message, or a file onto the strip below it.</strong> While you drag a file over a new message, two drop zones light up: let go of an image on the message body and it goes inline right where you dropped it; let go of anything on the dashed strip below the body — or anywhere else in the window — and it is attached as a file. Pasting an image from the clipboard puts it inline too. Inline pictures are sent the way other mail apps send them, as embedded parts the message refers to, so Gmail and Outlook.com show them instead of stripping them out.</span>
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
               <span><strong>Time Capsule and Email Cleanup now say what Premium costs, and offer a way to get it.</strong> Both panels explained the locked feature and stopped there — no price, no button — while the other three locked panels showed both. They now carry the same price line and Upgrade button, which opens Settings → Billing.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </span>
+            Changed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Fastmail forms call the sign-in field "Login Address".</strong> Fastmail signs in with the @fastmail.com address and sends from aliases, so the add-account form and Settings → Accounts now label that field "Login Address" and point to "Send Mail As" for the address you hand out. Other providers are unchanged.</span>
             </li>
           </ul>
         </div>
