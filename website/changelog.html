@@ -188,6 +188,18 @@
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message with a very long subject no longer pushes the app off the screen.</strong> Opening a conversation whose subject runs on in one unbroken line — a delivery report, say — stretched the app wider than its own window: the right-hand side of the message was cut off with no way to reach it, and selecting any text slid the whole window sideways and would not slide back, leaving the message list off-screen so nothing else could be opened. The layout now fits the window whatever the subject, an over-long subject is shortened with an ellipsis as it always should have been, and no part of the app can be scrolled out of reach.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message deleted somewhere else no longer leaves a dead row behind.</strong> Deleting a message from another mail app, a phone, or a webmail tab left its row in MailVault's list — at the top, if it was the newest — and every click on it failed. It came back after every restart too, because the local header cache still had it. When the server states the message is not in the folder, the row now goes with it, and the reading pane says why rather than the row just disappearing. Nothing is removed from your archive: a message you had saved locally stays, and simply switches to "Local only". A failed or refused fetch never removes anything — only the server saying the message is gone does.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A server that will not hand over a message no longer reports it as deleted.</strong> When a server refused to send a message's contents, MailVault asked once more whether the message was still there — using the same question the server had just refused, so the second silence read as "this message is gone" and the reading pane said "Email not found" for mail sitting right there in the list. Clicking it again changed nothing. The check now only accepts an explicit answer from the server, so a refusal, a dropped connection or a stalled one is reported as what it is — with the server's own wording — and a message is called missing only when the server says so, naming the message and the folder.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
               <span><strong>Replying to a message you sent now addresses the people you wrote to, not you.</strong> Replying to your own message — from Sent, or the copy delivered back to you — put your own address on the To line, so the reply went to yourself and the actual conversation partner never saw it. When the message being answered came from any of your own addresses, including a "Send Mail As" alias, the reply now goes to its recipients instead; Reply All also stops re-adding your own aliases to the To and Cc lines. A note genuinely sent to yourself still replies to you.</span>
             </li>
             <li class="flex items-start gap-3">
