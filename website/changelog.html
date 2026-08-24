@@ -132,7 +132,7 @@
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
           <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.10.1</span>
-          <span class="text-slate-500 dark:text-slate-400 text-sm">August 23, 2026</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">August 24, 2026</span>
           <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
         </div>
 
@@ -144,6 +144,10 @@
             Added
           </h3>
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A new message opens from the account you last sent with.</strong> With several accounts set up, a new message always opened from whichever account happened to be active, and the address had to be corrected every time. Compose now remembers the account — and the exact From address, if an alias was picked — of the last message that went out, and starts the next new message from it. Replies are unaffected: they still go out from the account that received the message, and a draft reopened from its bubble, or brought back by Undo, keeps the identity it was being written with.</span>
+            </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
               <span><strong>Pick the address a message leaves from, right in the From row.</strong> Settings → Accounts still sets the address an account sends from by default, but the From row of a new message now lists every address the account can use — the login address, the "Send Mail As" address, and any address the account has sent from before — grouped under the account. One message can go out from a different alias without changing the setting. An account with a single address shows as before.</span>
@@ -182,6 +186,18 @@
             Fixed
           </h3>
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Replying to a message you sent now addresses the people you wrote to, not you.</strong> Replying to your own message — from Sent, or the copy delivered back to you — put your own address on the To line, so the reply went to yourself and the actual conversation partner never saw it. When the message being answered came from any of your own addresses, including a "Send Mail As" alias, the reply now goes to its recipients instead; Reply All also stops re-adding your own aliases to the To and Cc lines. A note genuinely sent to yourself still replies to you.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A comma in a contact's name no longer breaks sending.</strong> Picking an address-book contact named "Doe, John" put that name on the To line unquoted, and everything after the comma was read as a second, broken recipient — the send failed with an error about an invalid address. Names with commas are now written the way the mail standard requires ("Doe, John" in quotes), and the sending side no longer splits a recipient list inside quotes or inside an address, so stray and trailing commas are ignored rather than fatal.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The "/" key can be typed into a message again.</strong> "/" is the shortcut that jumps to search, and it fired even while typing — in the message body, the subject, or any address line, the character never appeared and the cursor jumped to the search box instead. Shortcuts bound to printable keys now stay out of every place you type; "/" from the message list still jumps to search.</span>
+            </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
               <span><strong>Replying no longer breaks a conversation into new threads.</strong> Every reply MailVault sent named only the message it answered and not the conversation behind it, so the other person's mail app carried on from that shortened history: their answer started a thread of its own, and three replies left three rows for one conversation. Replies now carry the whole conversation, and the list groups messages whose history was cut short by any mail app — so the conversations already split in your mailbox come back together as one.</span>
