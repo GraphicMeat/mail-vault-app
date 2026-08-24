@@ -442,6 +442,76 @@ export function buildReplyHeaders(parent) {
   return { inReplyTo: parentId || '', references: chain.join(' ') };
 }
 
+/**
+ * Split a comma-separated recipient line into trimmed entries, ignoring
+ * commas inside quoted display names ("Doe, John" <j@d.com>) and inside
+ * angle brackets. Empty segments (trailing/double commas) are dropped.
+ */
+export function splitRecipients(raw) {
+  if (!raw) return [];
+  const out = [];
+  let current = '';
+  let inQuotes = false;
+  let inAngle = false;
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i];
+    if (ch === '\\' && inQuotes) {
+      current += ch + (raw[i + 1] || '');
+      i++;
+      continue;
+    }
+    if (ch === '"') inQuotes = !inQuotes;
+    else if (ch === '<' && !inQuotes) inAngle = true;
+    else if (ch === '>' && !inQuotes) inAngle = false;
+    if (ch === ',' && !inQuotes && !inAngle) {
+      if (current.trim()) out.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim()) out.push(current.trim());
+  return out;
+}
+
+/**
+ * Reply recipients for `mode` ('reply' | 'replyAll'), aware of the user's own
+ * identities. Replying to your own message (from Sent, or a self-copy) must
+ * target the people you wrote to, not you; reply-all must never re-add any of
+ * your own aliases.
+ */
+export function computeReplyRecipients(replyTo, mode, ownAddresses = []) {
+  const own = identitySet(ownAddresses);
+  const isOwn = a => own.has((a || '').toLowerCase());
+  const sender = replyTo?.replyTo?.[0]?.address || replyTo?.from?.address || '';
+  const toList = (replyTo?.to || []).map(t => t.address).filter(Boolean);
+  const ccList = (replyTo?.cc || []).map(c => c.address).filter(Boolean);
+
+  const dedupe = (list) => {
+    const seen = new Set();
+    return list.filter(a => {
+      const key = (a || '').toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
+  if (mode === 'reply') {
+    if (isOwn(sender)) {
+      const others = dedupe(toList.filter(a => !isOwn(a)));
+      return { to: (others.length ? others : [sender]).join(', '), cc: '' };
+    }
+    return { to: sender, cc: '' };
+  }
+
+  // replyAll
+  const to = dedupe([sender, ...toList].filter(a => a && !isOwn(a)));
+  const cc = dedupe(ccList.filter(a => !isOwn(a)));
+  if (!to.length) to.push(sender); // every participant was me — note to self
+  return { to: to.join(', '), cc: cc.join(', ') };
+}
+
 /** Synthetic id for a message that carries no Message-ID. Never referenced. */
 function fallbackId(email) {
   return `uid-${email._accountId || ''}:${email.uid}`;

@@ -3,9 +3,11 @@ import { useSettingsStore } from '../stores/settingsStore';
 
 /**
  * Actions that should still fire when the user is focused on an
- * input / textarea / contenteditable element.
+ * input / textarea / contenteditable element. Only Escape: anything bound to
+ * a printable key (focusSearch = "/") would otherwise steal that character
+ * from every text field, including the compose editor.
  */
-const ALLOWED_IN_INPUT = new Set(['escape', 'focusSearch']);
+const ALLOWED_IN_INPUT = new Set(['escape']);
 
 /**
  * Returns true when the active element is a text-input control.

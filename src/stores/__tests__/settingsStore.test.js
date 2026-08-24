@@ -117,3 +117,23 @@ describe('send-as address', () => {
     expect(useSettingsStore.getState().getSendAsAddress('acct-1')).toBe('');
   });
 });
+
+describe('lastComposeIdentity', () => {
+  it('defaults to null', () => {
+    expect(useSettingsStore.getState().lastComposeIdentity).toBeNull();
+  });
+
+  it('setLastComposeIdentity records the sending account and address', () => {
+    useSettingsStore.getState().setLastComposeIdentity('acc-1', 'alias@x.com');
+    expect(useSettingsStore.getState().lastComposeIdentity).toEqual({
+      accountId: 'acc-1',
+      address: 'alias@x.com',
+    });
+  });
+
+  it('resetSettings clears it', () => {
+    useSettingsStore.getState().setLastComposeIdentity('acc-1', 'alias@x.com');
+    useSettingsStore.getState().resetSettings();
+    expect(useSettingsStore.getState().lastComposeIdentity).toBeNull();
+  });
+});

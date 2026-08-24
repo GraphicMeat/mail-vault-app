@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+- **A new message opens from the account you last sent with.** With several accounts set up, a new message always opened from whichever account happened to be active, and the address had to be corrected every time. Compose now remembers the account — and the exact From address, if an alias was picked — of the last message that went out, and starts the next new message from it. Replies are unaffected: they still go out from the account that received the message, and a draft reopened from its bubble, or brought back by Undo, keeps the identity it was being written with.
+
+### Fixed
+- **Replying to a message you sent now addresses the people you wrote to, not you.** Replying to your own message — from Sent, or the copy delivered back to you — put your own address on the To line, so the reply went to yourself and the actual conversation partner never saw it. When the message being answered came from any of your own addresses, including a "Send Mail As" alias, the reply now goes to its recipients instead; Reply All also stops re-adding your own aliases to the To and Cc lines. A note genuinely sent to yourself still replies to you.
+- **A comma in a contact's name no longer breaks sending.** Picking an address-book contact named "Doe, John" put that name on the To line unquoted, and everything after the comma was read as a second, broken recipient — the send failed with an error about an invalid address. Names with commas are now written the way the mail standard requires ("Doe, John" in quotes), and the sending side no longer splits a recipient list inside quotes or inside an address, so stray and trailing commas are ignored rather than fatal.
+- **The "/" key can be typed into a message again.** "/" is the shortcut that jumps to search, and it fired even while typing — in the message body, the subject, or any address line, the character never appeared and the cursor jumped to the search box instead. Shortcuts bound to printable keys now stay out of every place you type; "/" from the message list still jumps to search.
+
 ## [2.10.1] - 2026-08-23
 
 ### Added

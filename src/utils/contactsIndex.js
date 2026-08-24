@@ -301,5 +301,12 @@ export function searchContacts(index, query, limit = 8, activeAccountId = null) 
 }
 
 export function formatContact(c) {
-  return c.name ? `${c.name} <${c.address}>` : c.address;
+  if (!c.name) return c.address;
+  // RFC 5322: a display name containing specials must be a quoted-string,
+  // or the comma reads as a recipient separator ("Doe, John" from an
+  // address book would otherwise split into two broken recipients).
+  const name = /[",;<>()@:[\]\\]/.test(c.name)
+    ? `"${c.name.replace(/([\\"])/g, '\\$1')}"`
+    : c.name;
+  return `${name} <${c.address}>`;
 }

@@ -51,16 +51,56 @@ pub struct BuiltMime {
     pub raw_rfc2822: Vec<u8>,
 }
 
+/// Split a recipient line on commas, but never inside a quoted display name
+/// (`"Doe, John" <j@d.com>`) or inside angle brackets. A naive split turns an
+/// address-book name with a comma into two broken recipients.
+fn split_address_line(raw: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut current = String::new();
+    let mut in_quotes = false;
+    let mut in_angle = false;
+    let mut chars = raw.chars();
+    while let Some(ch) = chars.next() {
+        match ch {
+            '\\' if in_quotes => {
+                current.push(ch);
+                if let Some(next) = chars.next() {
+                    current.push(next);
+                }
+            }
+            '"' => {
+                in_quotes = !in_quotes;
+                current.push(ch);
+            }
+            '<' if !in_quotes => {
+                in_angle = true;
+                current.push(ch);
+            }
+            '>' if !in_quotes => {
+                in_angle = false;
+                current.push(ch);
+            }
+            ',' if !in_quotes && !in_angle => {
+                if !current.trim().is_empty() {
+                    out.push(current.trim().to_string());
+                }
+                current.clear();
+            }
+            _ => current.push(ch),
+        }
+    }
+    if !current.trim().is_empty() {
+        out.push(current.trim().to_string());
+    }
+    out
+}
+
 /// Parse a comma-separated recipient string into a list of mailboxes.
 /// Empty entries (e.g. trailing commas, "a, ,b") are skipped so a stray
 /// comma doesn't cause a send failure.
 fn parse_address_list(raw: &str) -> Result<Vec<Mailbox>, String> {
     let mut out = Vec::new();
-    for part in raw.split(',') {
-        let trimmed = part.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
+    for trimmed in split_address_line(raw) {
         let mb: Mailbox = trimmed
             .parse()
             .map_err(|e| format!("{} ({})", e, trimmed))?;
@@ -557,6 +597,39 @@ mod tests {
     fn headers_of(cfg: &ImapConfig) -> String {
         let built = build_mime(cfg, &outgoing()).expect("build_mime");
         String::from_utf8_lossy(&built.raw_rfc2822).to_string()
+    }
+
+    #[test]
+    fn address_list_skips_empty_segments() {
+        let out = parse_address_list("a@b.com, , c@d.com,").unwrap();
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].email.to_string(), "a@b.com");
+        assert_eq!(out[1].email.to_string(), "c@d.com");
+    }
+
+    #[test]
+    fn address_list_keeps_commas_inside_quoted_display_names() {
+        let out = parse_address_list("\"Doe, John\" <j@d.com>, a@b.com").unwrap();
+        assert_eq!(out.len(), 2, "got: {:?}", out);
+        assert_eq!(out[0].email.to_string(), "j@d.com");
+        assert_eq!(out[0].name.as_deref(), Some("Doe, John"));
+        assert_eq!(out[1].email.to_string(), "a@b.com");
+    }
+
+    #[test]
+    fn address_list_keeps_commas_inside_angle_brackets() {
+        // Malformed but unambiguous — never split a <...> group.
+        let out = parse_address_list("John <j@d.com>, Jane <jane@d.com>").unwrap();
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[1].email.to_string(), "jane@d.com");
+    }
+
+    #[test]
+    fn address_list_names_the_broken_fragment_on_error() {
+        // Unquoted comma in a display name is still an error — the message
+        // must name the fragment so the user can see what to fix.
+        let err = parse_address_list("Doe, John <j@d.com>").unwrap_err();
+        assert!(err.contains("Doe"), "error was: {}", err);
     }
 
     fn from_line(raw: &str) -> String {

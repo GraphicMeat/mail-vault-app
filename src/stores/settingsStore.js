@@ -94,6 +94,7 @@ export const useSettingsStore = create(
       // Display settings
       displayNames: {}, // { [accountId]: string }
       sendAsAddresses: {}, // { [accountId]: string } — outgoing From override; login is unchanged
+      lastComposeIdentity: null, // { accountId, address } — identity of the last sent message; new composes default to it
       accountColors: {}, // { [accountId]: string (hex color) } — user overrides for avatar color
       
       // Default settings
@@ -485,6 +486,10 @@ export const useSettingsStore = create(
         return get().sendAsAddresses?.[accountId] || '';
       },
 
+      setLastComposeIdentity: (accountId, address) => {
+        set({ lastComposeIdentity: { accountId, address: (address || '').trim() } });
+      },
+
       // Account color management
       setAccountColor: (accountId, color) => {
         set(state => ({
@@ -738,6 +743,7 @@ export const useSettingsStore = create(
           signatures: {},
           displayNames: {},
           sendAsAddresses: {},
+          lastComposeIdentity: null,
           accountColors: {},
           defaultSignatureEnabled: true,
           undoSendEnabled: false,

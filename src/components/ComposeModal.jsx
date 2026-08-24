@@ -12,8 +12,8 @@ import { RichTextEditor, textToHtml, htmlToText } from './RichTextEditor';
 import { ContactsPickerButton, ContactsAutocomplete } from './ContactsPicker';
 import { findSentMailboxPath } from '../utils/sentFolder';
 import { extractInlineImages } from '../utils/inlineImages';
-import { buildReplyHeaders, parseReferenceList } from '../utils/emailParser';
-import { suggestSendAsAddresses, composeIdentities } from '../utils/sendAsSuggestions';
+import { buildReplyHeaders, parseReferenceList, computeReplyRecipients, splitRecipients } from '../utils/emailParser';
+import { suggestSendAsAddresses, composeIdentities, resolveInitialComposeIdentity } from '../utils/sendAsSuggestions';
 
 // Find the Sent mailbox path for a specific account.
 // Tiers: account.sentFolderOverride → disk/store mailbox tree via SPECIAL-USE
@@ -131,17 +131,29 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const addEmailTemplate = useSettingsStore(s => s.addEmailTemplate);
   const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
   const accounts = getOrderedAccounts(rawAccounts);
-  // In unified inbox, prefer the email's source account for replies
-  const initialAccountId = replyTo?._accountId || activeAccountId;
-  const [selectedAccountId, setSelectedAccountId] = useState(initialAccountId);
+  // Replies stay on the email's source account; a restored draft keeps its
+  // saved identity; a fresh compose defaults to whoever sent the last message.
+  const initialIdentity = resolveInitialComposeIdentity({
+    replyTo,
+    initialData,
+    lastIdentity: useSettingsStore.getState().lastComposeIdentity,
+    accounts,
+    activeAccountId,
+  });
+  const [selectedAccountId, setSelectedAccountId] = useState(initialIdentity.accountId);
   const selectedAccount = accounts.find(a => a.id === selectedAccountId) || accounts[0];
   const composeSendAs = sendAsAddresses?.[selectedAccountId] || '';
   // Addresses each account has provably sent as, mined from its Sent cache.
   const [sentAsByAccount, setSentAsByAccount] = useState({});
   // '' = whatever the selected account sends as by default.
-  const [pickedFrom, setPickedFrom] = useState('');
+  const [pickedFrom, setPickedFrom] = useState(initialIdentity.address);
   // Not memo'd: `accounts` is a fresh array every render anyway.
-  const identities = composeIdentities(accounts, sendAsAddresses, sentAsByAccount);
+  let identities = composeIdentities(accounts, sendAsAddresses, sentAsByAccount);
+  // A restored/remembered From may not be minable yet (async) or any more —
+  // the row must still show the address the message will actually leave from.
+  if (pickedFrom && !identities.some(i => i.accountId === selectedAccountId && i.address.toLowerCase() === pickedFrom.toLowerCase())) {
+    identities = [...identities, { key: `${selectedAccountId} ${pickedFrom}`, accountId: selectedAccountId, address: pickedFrom }];
+  }
   const composeFrom = pickedFrom || composeSendAs || selectedAccount?.email || '';
 
   const [sending, setSending] = useState(false);
@@ -239,27 +251,18 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
 
     const replyBody = signatureHtml;
 
-    if (mode === 'reply') {
-      initForm({
-        to: replyTo.replyTo?.[0]?.address || fromAddress,
-        cc: '',
-        bcc: '',
-        subject: originalSubject.startsWith('Re:') ? originalSubject : `Re: ${originalSubject}`,
-        body: replyBody,
-        ...buildReplyHeaders(replyTo)
-      });
-    } else if (mode === 'replyAll') {
-      const allRecipients = [
-        replyTo.replyTo?.[0]?.address || fromAddress,
-        ...(replyTo.to?.map(t => t.address) || []),
-      ].filter(addr => addr !== selectedAccount?.email);
+    // Every identity of every account: replying to a message *I* sent (from
+    // any account or alias) must target its recipients, not me — and
+    // reply-all must never re-add one of my own aliases.
+    // ponytail: identities mined async from Sent may not have landed yet;
+    // logins + configured send-as (the common self-reply cases) always have.
+    const ownAddresses = identities.map(i => i.address);
 
-      const ccRecipients = (replyTo.cc?.map(c => c.address) || [])
-        .filter(addr => addr !== selectedAccount?.email);
-
+    if (mode === 'reply' || mode === 'replyAll') {
+      const recipients = computeReplyRecipients(replyTo, mode, ownAddresses);
       initForm({
-        to: allRecipients.join(', '),
-        cc: ccRecipients.join(', '),
+        to: recipients.to,
+        cc: recipients.cc,
         bcc: '',
         subject: originalSubject.startsWith('Re:') ? originalSubject : `Re: ${originalSubject}`,
         body: replyBody,
@@ -424,6 +427,9 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           inReplyTo: formData.inReplyTo,
           references: formData.references,
           attachments: [...attachments],
+          // Undo-send reopens compose: keep the account + From it was sent as.
+          _accountId: selectedAccountId,
+          _fromAddress: pickedFrom,
         },
       };
 
@@ -482,11 +488,8 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         const accountForSend = resolved.account;
         const sentMailbox = isGraph ? null : sentFolderPath;
 
-        const parseAddresses = (raw) => (raw || '')
-          .split(',')
-          .map(s => s.trim())
-          .filter(Boolean)
-          .map(s => ({ address: s, name: '' }));
+        // Quote/angle-aware: '"Doe, John" <j@d.com>' is ONE recipient.
+        const parseAddresses = (raw) => splitRecipients(raw).map(s => ({ address: s, name: '' }));
 
         const outgoingPayload = {
           to: formData.to,
@@ -633,6 +636,8 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             account: freshAccount.email,
             smtpMessageId: sendResult?.messageId,
           });
+          // New composes default to the identity that actually sent last.
+          useSettingsStore.getState().setLastComposeIdentity(freshAccount.id, fromAddress);
         } catch (err) {
           console.error('[compose:smtp_fail]', err);
           // Local draft survives — user can retry via outbox bubble.
@@ -886,6 +891,8 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         references: formData.references,
         attachments: [...attachments],
         _quotedHtml: quotedHtml,
+        _accountId: selectedAccountId,
+        _fromAddress: pickedFrom,
       });
     }
     if (onMinimize) onMinimize();

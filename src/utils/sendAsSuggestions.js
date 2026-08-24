@@ -80,6 +80,28 @@ export function composeIdentities(accounts, sendAsAddresses = {}, sentAsByAccoun
   return out;
 }
 
+/**
+ * Which identity a compose window opens with. Precedence:
+ * restored draft's saved identity → the replied-to message's account →
+ * the identity that sent the last message → the active account.
+ * `address: ''` means "the account's default From".
+ */
+export function resolveInitialComposeIdentity({ replyTo, initialData, lastIdentity, accounts, activeAccountId }) {
+  const exists = (id) => (accounts || []).some(a => a.id === id);
+  if (initialData) {
+    if (initialData._accountId && exists(initialData._accountId)) {
+      return { accountId: initialData._accountId, address: initialData._fromAddress || '' };
+    }
+    // Draft saved before identities were persisted — keep the old behavior.
+    return { accountId: activeAccountId, address: '' };
+  }
+  if (replyTo?._accountId) return { accountId: replyTo._accountId, address: '' };
+  if (lastIdentity && exists(lastIdentity.accountId)) {
+    return { accountId: lastIdentity.accountId, address: lastIdentity.address || '' };
+  }
+  return { accountId: activeAccountId, address: '' };
+}
+
 /** Read this account's cached Sent headers and rank the candidates. */
 export async function suggestSendAsAddresses(account) {
   if (!account?.id) return [];
