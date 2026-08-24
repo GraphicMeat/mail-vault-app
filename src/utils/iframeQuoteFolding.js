@@ -6,27 +6,12 @@ export function getQuoteFoldingScript() {
   return `
 <script>
 (function() {
-  var selectors = [
-    'blockquote',
-    '.gmail_quote',
-    '#appendonsend',
-    'div[class*="moz-cite"]',
-    '.yahoo_quoted',
-  ];
-  var found = [];
-  for (var i = 0; i < selectors.length; i++) {
-    var els = document.querySelectorAll(selectors[i]);
-    for (var j = 0; j < els.length; j++) {
-      if (!els[j].dataset.quoteFolded && !els[j].closest('[data-quote-folded]')) {
-        found.push(els[j]);
-      }
-    }
-  }
-  found.forEach(function(el) {
+  function fold(el) {
     el.dataset.quoteFolded = 'true';
     el.style.display = 'none';
 
     var toggle = document.createElement('div');
+    toggle.dataset.quoteToggle = 'true';
     toggle.textContent = '\\u22EF';
     toggle.title = 'Show quoted text';
     toggle.style.cssText = 'cursor:pointer;color:#6b7280;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:4px;padding:2px 10px;margin:6px 0;display:inline-block;font-size:13px;user-select:none;';
@@ -49,7 +34,77 @@ export function getQuoteFoldingScript() {
       }
     });
     el.parentNode.insertBefore(toggle, el);
-  });
+  }
+
+  // 1. Structural quotes — the wrapper a client puts the quote in.
+  var selectors = [
+    'blockquote',
+    '.gmail_quote',
+    '#appendonsend',
+    'div[class*="moz-cite"]',
+    '.yahoo_quoted',
+  ];
+  var found = [];
+  for (var i = 0; i < selectors.length; i++) {
+    var els = document.querySelectorAll(selectors[i]);
+    for (var j = 0; j < els.length; j++) {
+      if (!els[j].dataset.quoteFolded && !els[j].closest('[data-quote-folded]')) {
+        found.push(els[j]);
+      }
+    }
+  }
+  found.forEach(fold);
+
+  // 2. Marker quotes — Fastmail (replying to a message) and Outlook write the
+  //    attribution as a plain <div> and leave the quoted message as its
+  //    SIBLINGS. There is no wrapper to select, so read the header text and
+  //    fold everything after it.
+  var MARKERS = [
+    /^\\s*-{2,}\\s*original message\\s*-{2,}/i,
+    /^\\s*original message/i,
+    /^\\s*on\\b[\\s\\S]{5,200}\\bwrote:\\s*$/i,
+    /^\\s*from:[\\s\\S]{1,200}\\bsent:\\s/i,
+  ];
+  function isMarker(el) {
+    var text = (el.textContent || '').replace(/\\u00a0/g, ' ');
+    for (var k = 0; k < MARKERS.length; k++) {
+      if (MARKERS[k].test(text)) return true;
+    }
+    return false;
+  }
+
+  var candidates = [].slice.call(document.querySelectorAll('div,p,td')).filter(isMarker);
+  var marker = null;
+  for (var c = 0; c < candidates.length && !marker; c++) {
+    var el = candidates[c];
+    if (el.closest('[data-quote-folded]')) continue;
+    // A wrapper holding only the quote matches too — keep the tightest header.
+    var wrapsAnother = candidates.some(function(other) {
+      return other !== el && el.contains(other);
+    });
+    if (!wrapsAnother) marker = el;
+  }
+  if (!marker) return;
+
+  // Leave the "On … wrote:" line alone when its blockquote already folded:
+  // the attribution stays readable above the toggle, which is the shape the
+  // structural pass produces.
+  var next = marker.nextElementSibling;
+  while (next && next.dataset.quoteToggle) next = next.nextElementSibling;
+  if (next && next.dataset.quoteFolded) return;
+
+  var nodes = [];
+  for (var n = marker.nextSibling; n; n = n.nextSibling) {
+    if (n.nodeType === 1 && (n.nodeName === 'SCRIPT' || n.nodeName === 'STYLE')) continue;
+    nodes.push(n);
+  }
+  var quoted = nodes.map(function(node) { return node.textContent || ''; }).join('').trim();
+  if (!quoted) return;
+
+  var wrap = document.createElement('div');
+  marker.parentNode.insertBefore(wrap, marker.nextSibling);
+  nodes.forEach(function(node) { wrap.appendChild(node); });
+  fold(wrap);
 })();
 <\/script>`;
 }

@@ -123,6 +123,10 @@ function rfc822({ uid, to, from, subject, body, date }) {
  * No In-Reply-To — this one stands alone so it opens in the single-email
  * viewer regardless of the threading setting.
  *
+ * It carries BOTH quote shapes on purpose: the <blockquote> every selector
+ * already saw, and Fastmail's flat one (a plain <div> header with the quoted
+ * mail as its siblings), which used to render inline under the reply.
+ *
  * The body also carries the two inline-style shapes newsletters ship, which
  * decide whether dark mode is readable:
  *   - a heading with `color: … !important`, which outranks Dark Reader's
@@ -134,6 +138,10 @@ export function htmlQuotedMessage({ uid, to, from, subject, date }) {
   const quoteLines = Array.from(
     { length: 24 },
     (_, i) => `<p>Quoted line ${i + 1} of the message being answered.</p>`,
+  ).join('');
+  const flatQuoteLines = Array.from(
+    { length: 6 },
+    (_, i) => `<div>${FLAT_QUOTE_MARKER} ${i + 1}.</div>`,
   ).join('');
   return [
     `From: ${from}`,
@@ -156,7 +164,12 @@ export function htmlQuotedMessage({ uid, to, from, subject, date }) {
       + `<h2 id="${DARK_HEADING_ID}" style="color:hsl(0, 0%, 0%) !important; font-size:1.3em !important; font-weight:600 !important;">Heading that ships its own colour</h2>`
       + `<a id="${DARK_BRAND_LINK_ID}" href="https://example.com/brand" style="color:#e6375a; font-weight:600;">Brand coloured link</a>`
       + '<hr>'
-      + `<blockquote><p><strong>Original Message</strong></p>${quoteLines}</blockquote>`,
+      + `<blockquote><p><strong>Original Message</strong></p>${quoteLines}</blockquote>`
+      // Fastmail's shape when the sender replies to a message: the attribution
+      // is a plain <div> and the quoted mail is its SIBLINGS — no blockquote,
+      // no quote class, nothing the fold selectors can see.
+      + `<div id="${FLAT_QUOTE_HEADER_ID}"><b>Original Message</b><br>From: Ben &lt;ben@fea.st&gt;<br>Date: Aug 22, 2026, 9:47 AM<br>Subject: Re: ${subject}<br>To: ${to}</div>`
+      + flatQuoteLines,
     '',
     `--${boundary}--`,
     '',
@@ -229,6 +242,10 @@ export function mailbox(name, count, { owner = 'user@example.com', attrs, subjec
 
 /** Subject of the HTML-quoted message, so specs can find its row. */
 export const HTML_QUOTED_SUBJECT = 'HTML render check';
+
+/** The blockquote-free quote inside that message: its header, and its text. */
+export const FLAT_QUOTE_HEADER_ID = 'mv-flat-quote-header';
+export const FLAT_QUOTE_MARKER = 'Fastmail-shaped quoted line';
 
 /** Ids of the two dark-mode probes inside that message's HTML body. */
 export const DARK_HEADING_ID = 'mv-dark-important-heading';

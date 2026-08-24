@@ -8,7 +8,7 @@ import { X, Send, Paperclip, Loader, Minimize2, FileText, Trash2, ChevronDown, B
 import * as api from '../services/api';
 import { ensureFreshToken } from '../services/authUtils';
 import * as db from '../services/db';
-import { RichTextEditor, textToHtml, htmlToText } from './RichTextEditor';
+import { RichTextEditor, textToHtml, htmlToText, inlineComposeSpacing } from './RichTextEditor';
 import { ContactsPickerButton, ContactsAutocomplete } from './ContactsPicker';
 import { findSentMailboxPath } from '../utils/sentFolder';
 import { extractInlineImages } from '../utils/inlineImages';
@@ -470,10 +470,13 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           })),
         ];
 
-        // Combine compose body with quoted content for the sent email
+        // Combine compose body with quoted content for the sent email.
+        // Only what was typed here gets the editor's spacing inlined — the
+        // quoted part is someone else's markup and keeps its own.
+        const composed = inlineComposeSpacing(inline.html);
         const fullHtml = quotedHtml
-          ? inline.html + '<hr><blockquote>' + quotedHtml + '</blockquote>'
-          : inline.html;
+          ? composed + '<hr><blockquote>' + quotedHtml + '</blockquote>'
+          : composed;
         const fullText = quotedHtml
           ? (plainTextRef.current || htmlToText(formData.body)) + '\n\n-------- Original Message --------\n' + htmlToText(quotedHtml)
           : (plainTextRef.current || htmlToText(formData.body));

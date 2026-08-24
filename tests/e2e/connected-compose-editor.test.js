@@ -32,6 +32,11 @@ import {
   closeComposeHard,
   openComposeFresh,
   settingsCall,
+  clickSend,
+  listSent,
+  readStagedEml,
+  flatten,
+  waitForOutboxError,
 } from './composeHelpers.js';
 
 const TEMPLATE_NAME = 'E2E Dropzone Template';
@@ -382,5 +387,37 @@ describe('Connected Compose Editor', function () {
 
     expect(await dropdownOpen()).toBe(false);
     expect(await modalOpen()).toBe(true);
+  });
+
+  // ── spacing that survives the send ───────────────────────────────────────
+
+  it('sends paragraphs with the spacing the compose window showed', async function () {
+    // The editor renders `.tiptap p { margin: 0 0 0.25em }` but used to ship
+    // bare <p> tags, so every reader applied its own `p { margin: 1em 0 }` and
+    // the message arrived with a blank line more between every paragraph than
+    // was typed. Reported by a beta user against his own reply.
+    const [luke] = browser.mockAccounts || [];
+    expect(luke?.id).toBeDefined();
+
+    const subject = 'E2E paragraph spacing';
+    await openComposeFresh();
+    await typeInBody('Spacing check body');
+
+    const before = new Set(listSent(luke.id));
+    await setField('compose-to', 'someone@example.com');
+    await setField('compose-subject', subject);
+    await setField('compose-delay', 0);
+    expect(await clickSend()).toBe(true);
+    await browser.pause(400);
+    const formError = await testidText('compose-error');
+    if (formError) throw new Error(`Send was rejected by the compose form: "${formError}"`);
+
+    const raw = flatten(await readStagedEml(luke.id, before, subject));
+    // Positive control: this is the message that was just typed.
+    expect(raw).toContain('Spacing check body');
+    // The editor's own paragraph spacing, inlined — <style> blocks do not
+    // survive a mail client, so it has to ride on the tag.
+    expect(raw).toMatch(/margin: 0px 0px 0\.25em/);
+    await waitForOutboxError(subject);
   });
 });

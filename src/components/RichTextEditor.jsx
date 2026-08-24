@@ -209,3 +209,29 @@ export function htmlToText(html) {
     .replace(/<\/(p|div|li|h[1-6]|blockquote|pre|tr)>/gi, '\n');
   return (div.textContent || div.innerText || '').replace(/\n{3,}/g, '\n\n').trim();
 }
+
+// The compose window renders paragraphs nearly flush (`.tiptap p { margin: 0 0
+// 0.25em }` in index.css) but ships bare tags. Every reader — our own viewer
+// included — then applies its default `p { margin: 1em 0 }`, so the message
+// arrives with a blank line more between paragraphs than the window showed.
+// Carry the editor's own spacing out with the message; inline, because mail
+// clients drop <style> blocks. Blockquote is left out on purpose: its default
+// `margin: 1em 40px` is the indent that makes a quote read as a quote.
+const EDITOR_SPACING = {
+  P: '0 0 0.25em',
+  UL: '0.5em 0',
+  OL: '0.5em 0',
+  LI: '0.15em 0',
+  PRE: '0.5em 0',
+};
+
+export function inlineComposeSpacing(html) {
+  if (!html) return html;
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  doc.body.querySelectorAll(Object.keys(EDITOR_SPACING).join(',')).forEach((el) => {
+    // A margin the message already carries is the author's, not ours.
+    if (el.style.margin || el.style.marginTop || el.style.marginBottom) return;
+    el.style.margin = EDITOR_SPACING[el.tagName];
+  });
+  return doc.body.innerHTML;
+}

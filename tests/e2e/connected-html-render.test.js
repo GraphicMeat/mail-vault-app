@@ -21,12 +21,20 @@
  *    background — invisible. buildEmailIframeHtml now drops the priority from
  *    colour declarations (dark only), so DR wins.
  *
+ * 4. Folding only ever looked for a wrapper (`blockquote`, `.gmail_quote`, …).
+ *    Fastmail replying to its own message writes the attribution as a plain
+ *    <div> and leaves the quoted mail as its SIBLINGS, so the whole quote
+ *    rendered inline under the reply with nothing to collapse it.
+ *
  * The fixture is the newest message in account 1's INBOX (see
- * `htmlQuotedMessage` in mockImap.js).
+ * `htmlQuotedMessage` in mockImap.js). It carries both quote shapes.
  */
 
 import { waitForApp, waitForEmails } from './helpers.js';
-import { HTML_QUOTED_SUBJECT, DARK_HEADING_ID, DARK_BRAND_LINK_ID } from './mockImap.js';
+import {
+  HTML_QUOTED_SUBJECT, DARK_HEADING_ID, DARK_BRAND_LINK_ID,
+  FLAT_QUOTE_HEADER_ID, FLAT_QUOTE_MARKER,
+} from './mockImap.js';
 
 /** Everything the assertions need, read from inside the email iframe. */
 async function readFrame() {
@@ -174,6 +182,50 @@ describe('HTML email rendering', function () {
     expect(frame.quotes).toBeGreaterThan(0);
     expect(frame.quotesHidden).toBe(true);
     expect(frame.hasToggle).toBe(true);
+  });
+
+  it('folds a quote that has no blockquote to select', async function () {
+    // Fastmail writes the attribution as a plain <div> and leaves the quoted
+    // mail as its siblings. The selector list saw nothing to fold, so the whole
+    // quoted message rendered inline under the reply.
+    const flat = await browser.execute((headerId, needle) => {
+      const doc = document.querySelector('iframe[sandbox]')?.contentDocument;
+      if (!doc || !doc.body) return null;
+      const header = doc.getElementById(headerId);
+      const toggle = header ? header.nextElementSibling : null;
+      return {
+        headerFound: !!header,
+        // The attribution stays readable — only what follows it is put away.
+        headerShown: !!header && header.offsetHeight > 0,
+        toggleAfterHeader: !!toggle && toggle.dataset.quoteToggle === 'true',
+        quotedVisible: (doc.body.innerText || '').includes(needle),
+        folded: doc.querySelectorAll('[data-quote-folded]').length,
+      };
+    }, FLAT_QUOTE_HEADER_ID, FLAT_QUOTE_MARKER);
+
+    expect(flat).not.toBe(null);
+    expect(flat.headerFound).toBe(true);
+    expect(flat.headerShown).toBe(true);
+    expect(flat.toggleAfterHeader).toBe(true);
+    expect(flat.quotedVisible).toBe(false);
+    // Both quotes in this message: the blockquote one and the flat one.
+    expect(flat.folded).toBe(2);
+
+    // And it opens on its own toggle, without touching the blockquote's.
+    const opened = await browser.execute((headerId, needle) => {
+      const doc = document.querySelector('iframe[sandbox]')?.contentDocument;
+      const toggle = doc.getElementById(headerId).nextElementSibling;
+      toggle.click();
+      return (doc.body.innerText || '').includes(needle);
+    }, FLAT_QUOTE_HEADER_ID, FLAT_QUOTE_MARKER);
+    expect(opened).toBe(true);
+
+    // Put it back: the height assertions below measure a fully folded message.
+    await browser.execute((headerId) => {
+      document.querySelector('iframe[sandbox]').contentDocument
+        .getElementById(headerId).nextElementSibling.click();
+    }, FLAT_QUOTE_HEADER_ID);
+    await browser.pause(400);
   });
 
   it('renders on the app background, not a lighter box', async function () {

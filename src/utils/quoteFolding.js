@@ -6,6 +6,9 @@
 const QUOTE_START_PATTERNS = [
   /^On .+wrote:\s*$/im,
   /^-{4,}\s*Original Message\s*-{4,}/im,
+  // Fastmail's text part writes the header on its own line, bolded with
+  // asterisks and no dashes at all.
+  /^\*?\s*Original Message\s*\*?\s*$/im,
   /^From:\s*.+\nSent:\s*.+\nTo:\s*.+/im,
   /^_{4,}/m,
 ];
