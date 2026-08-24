@@ -8,6 +8,8 @@ import {
   scenario,
   slowCommand,
   unreadableBody,
+  unreachableMessage,
+  vanishedMessage,
   mockAccount,
   seedAccounts,
   resetAppState,
@@ -99,6 +101,16 @@ const MOCK_ACCOUNTS = [
   //     has to show a loader while the body is on the wire and a named error
   //     with a retry when it never arrives, instead of quietly printing the
   //     subject line as if it were the body.
+  //   - Message 908 is refused OUTRIGHT — its body fetch AND the `(UID)` probe
+  //     that follows an empty one. That is what Gmail did to a real INBOX
+  //     message on 2026-08-24, and because both refusals arrive as an empty
+  //     stream with no error, the app called a message sitting in the list
+  //     deleted. The viewer has to carry the server's own words instead.
+  //   - Message 909 answers OK-with-no-rows to both, which is what a server
+  //     says about a uid it does not have. The other half of the same
+  //     2026-08-24 report: the message really had been deleted from the
+  //     mailbox elsewhere, and its row sat at the top of the list erroring on
+  //     every click. A proven absence has to take the row with it.
   //
   // Cost: the sidebar gains a third account avatar, which shifts every
   // visual-* baseline. Those specs are `local-manual` and never run in CI;
@@ -107,10 +119,16 @@ const MOCK_ACCOUNTS = [
     id: '33333333-3333-4333-8333-333333333333',
     email: 'yoda@mock.test',
     subjectPrefix: 'Yoda message',
-    inbox: 8,
+    inbox: 9,
     inboxUidStart: 901,
     crossFolderThread: false,
-    faults: [slowCommand('MOVE', 4000), slowCommand('EXPUNGE', 4000), ...unreadableBody(907, 3000)],
+    faults: [
+      slowCommand('MOVE', 4000),
+      slowCommand('EXPUNGE', 4000),
+      ...unreadableBody(907, 3000),
+      ...unreachableMessage(908),
+      ...vanishedMessage(909),
+    ],
   },
 ];
 

@@ -291,6 +291,149 @@ describe('Email Viewer — body that never loads', function () {
   });
 });
 
+/**
+ * A message the server refuses OUTRIGHT.
+ *
+ * yoda's uid 908 answers `NO` to its body fetch and to the `UID FETCH 908
+ * (UID)` probe that follows it (wdio.conf.js). Both refusals reach the client
+ * as an empty stream with no error — async-imap ends a fetch on the tagged
+ * response without reading its status — so the app used to conclude the
+ * message was gone and print "Email not found" for mail sitting in the list.
+ * Gmail did exactly this to a real INBOX message on 2026-08-24: eight clicks,
+ * eight "not found", the row never moving.
+ *
+ * Absence is now a claim the server has to make, and the reason the pane shows
+ * has to be the server's own.
+ */
+describe('Email Viewer — a message the server refuses', function () {
+  this.timeout(90_000);
+
+  const YODA = 'yoda@mock.test';
+  const SUBJECT = 'Yoda message 908';
+
+  const clickRow = (subject) => browser.execute((needle) => {
+    const row = [...document.querySelectorAll('[data-testid="email-row"]')]
+      .find((r) => (r.innerText || '').includes(needle));
+    if (!row || row.offsetHeight === 0) return false;
+    row.click();
+    return true;
+  }, subject);
+
+  const bodyErrorText = () => browser.execute(() => {
+    const el = document.querySelector('[data-testid="email-body-error"]');
+    return el ? el.innerText : null;
+  });
+
+  before(async function () {
+    await waitForApp();
+    await waitForEmails();
+    await switchToFolder(YODA, 'INBOX');
+  });
+
+  it('reports the refusal instead of calling the message deleted', async function () {
+    expect(await clickRow(SUBJECT)).toBe(true);
+
+    await browser.waitUntil(async () => (await bodyErrorText()) !== null, {
+      timeout: 30_000,
+      interval: 300,
+      timeoutMsg: 'Viewer never rendered the body-failure state for a message the server refused',
+    });
+
+    const text = await bodyErrorText();
+    const lower = text.toLowerCase();
+
+    // The regression: a refusal must never be read as absence.
+    expect(lower).not.toContain('not found');
+    expect(lower).not.toContain('no longer in');
+
+    // And the reason has to be the server's, not one the client invented.
+    expect(lower).toContain('refused');
+    expect(text).toContain('Server cannot read that message');
+  });
+
+  it('keeps the row in the list — nothing was proven gone', async function () {
+    const stillListed = await browser.execute((needle) => {
+      return [...document.querySelectorAll('[data-testid="email-row"]')]
+        .some((r) => (r.innerText || '').includes(needle));
+    }, SUBJECT);
+    expect(stillListed).toBe(true);
+  });
+});
+
+/**
+ * A message that really is gone.
+ *
+ * yoda's uid 909 is in the header page but every fetch of it answers OK with
+ * no rows (wdio.conf.js) — what a server says about a uid it does not hold.
+ * This is the other half of the 2026-08-24 report: the Autodesk message had
+ * been deleted from the Gmail INBOX elsewhere, so its row sat at the top of
+ * the list failing on every click, and came back on every reload because the
+ * header sidecar still held it.
+ *
+ * A proven absence — and only a proven one — takes the row with it.
+ */
+describe('Email Viewer — a message the server no longer holds', function () {
+  this.timeout(90_000);
+
+  const YODA = 'yoda@mock.test';
+  const SUBJECT = 'Yoda message 909';
+
+  const rowExists = (subject) => browser.execute((needle) => {
+    return [...document.querySelectorAll('[data-testid="email-row"]')]
+      .some((r) => (r.innerText || '').includes(needle));
+  }, subject);
+
+  const clickRow = (subject) => browser.execute((needle) => {
+    const row = [...document.querySelectorAll('[data-testid="email-row"]')]
+      .find((r) => (r.innerText || '').includes(needle));
+    if (!row || row.offsetHeight === 0) return false;
+    row.click();
+    return true;
+  }, subject);
+
+  before(async function () {
+    await waitForApp();
+    await waitForEmails();
+    await switchToFolder(YODA, 'INBOX');
+  });
+
+  it('drops the row once the server proves the message is gone', async function () {
+    // Positive control: the header page really does list it, so the removal
+    // below is the app acting on the server's answer and not an empty list.
+    await browser.waitUntil(async () => await rowExists(SUBJECT), {
+      timeout: 30_000,
+      interval: 300,
+      timeoutMsg: `"${SUBJECT}" never appeared in yoda's INBOX`,
+    });
+
+    expect(await clickRow(SUBJECT)).toBe(true);
+
+    await browser.waitUntil(async () => !(await rowExists(SUBJECT)), {
+      timeout: 30_000,
+      interval: 300,
+      timeoutMsg: `"${SUBJECT}" is still listed after the server said it is not in the mailbox`,
+    });
+  });
+
+  it('says why, instead of removing the row silently', async function () {
+    const text = await browser.execute(() => {
+      const el = document.querySelector('[data-testid="email-body-error"]');
+      return el ? el.innerText : null;
+    });
+    expect(text).not.toBe(null);
+    expect(text.toLowerCase()).toContain('no longer in inbox');
+  });
+
+  // Durability across a reload is NOT asserted here, and the omission is
+  // deliberate: this mock still lists uid 909 on the header page — only the
+  // uid-scoped fetches are faulted — so a reload re-adds the row, correctly,
+  // because the server is still claiming it. A real deleted message leaves
+  // the header page too. The header-cache half of the removal is covered
+  // where it can be stated honestly: selectEmailVanishedRow.test.js asserts
+  // the `removedUids` write, and connected-storage-matrix already proves a
+  // removed uid does not repaint from a stale sidecar on reload.
+});
+
 describe('Email Viewer — one body per message', function () {
   this.timeout(90_000);
 

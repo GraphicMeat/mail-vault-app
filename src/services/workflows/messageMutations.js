@@ -303,6 +303,33 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
     }
   }
 
+  await applyServerRemoval(uid, {
+    accountId, mailbox, isUnified, skipRefresh,
+    clearSelection: selectedEmailId === uid,
+  });
+}
+
+
+// ── applyServerRemoval ──
+//
+// "The server does not hold this uid." Two callers with the same fact from
+// different directions: the delete above, which just made it true, and
+// selectEmail, which finds it out when a body fetch proves the message gone —
+// a message deleted from another client leaves a row behind that errors on
+// every click, and the row outlives the session because the header sidecar
+// still has it.
+//
+// NOT a delete: nothing leaves the vault. An archived copy simply stops being
+// shadowed by the server row and re-derives as `local-only` — "deleted from
+// server" is a state this list already renders. Dropping the uid from a
+// COMPLETE enumeration is what enables it (see withoutUids), and
+// `removedUids` is what stops the sidecar re-hydrating the row on reload.
+export async function applyServerRemoval(uid, {
+  accountId, mailbox, isUnified = false, skipRefresh = false, clearSelection = true,
+} = {}) {
+  const { useMailStore } = await import('../../stores/mailStore');
+  const get = () => useMailStore.getState();
+
   const filteredEmails = get().emails.filter(e => e.uid !== uid);
   const filteredSent = get().sentEmails.filter(e => e.uid !== uid);
   const newTotal = Math.max(0, (get().totalEmails || 0) - 1);
@@ -311,7 +338,7 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
     sentEmails: filteredSent,
     totalEmails: newTotal,
   };
-  if (selectedEmailId === uid) {
+  if (clearSelection) {
     updates.selectedEmailId = null;
     updates.selectedEmail = null;
     updates.selectedEmailSource = null;

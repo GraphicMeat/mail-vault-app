@@ -9,7 +9,7 @@ import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
 import { getGraphMessageId, resolveGraphMessageId } from '../cacheManager';
 import { _resolveUnifiedContext, bodyMatchesHeader } from '../../stores/slices/unifiedHelpers';
 import { _shouldPrefetch, getCacheCurrentSizeMB } from '../../stores/slices/cacheSlice';
-import { applySeenLocally, _setSeenOnServer } from './messageMutations';
+import { applySeenLocally, _setSeenOnServer, applyServerRemoval } from './messageMutations';
 
 // Module-level mark-as-read timer
 let _markAsReadTimer = null;
@@ -295,6 +295,23 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
     } catch (fallbackError) {
       console.error('[selectEmail] Fallback also failed:', fallbackError);
       headerOnly();
+    }
+
+    // The server proved this uid is not in the mailbox (MessageGoneError is
+    // thrown only after a tagged OK with no rows — see uid_still_present).
+    // Deleting the message from another client used to leave the row behind
+    // for good: it errored on every click and came back on every reload,
+    // because the header sidecar still held it. Last, so the viewer keeps
+    // whatever it just rendered — an archived copy, or the header with the
+    // reason on it — and the row's disappearance is explained rather than
+    // silent. `skipRefresh` because loadEmails() is a whole mailbox reload
+    // and the caller only clicked a row.
+    if (error?.messageGone) {
+      try {
+        await applyServerRemoval(uid, { accountId, mailbox, isUnified, skipRefresh: true, clearSelection: false });
+      } catch (pruneError) {
+        console.warn('[selectEmail] Could not prune the vanished row:', pruneError);
+      }
     }
   } finally {
     useMailStore.setState({ loadingEmail: false });

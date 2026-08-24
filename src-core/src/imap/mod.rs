@@ -1029,7 +1029,9 @@ pub async fn fetch_email_by_uid(
         Some(f) => f,
         None => {
             // Empty here is not proof of absence — see `uid_still_present`.
-            if uid_still_present(session, uid).await {
+            // Its own error is not proof either, so it propagates rather than
+            // collapsing into "gone".
+            if uid_still_present(session, uid).await? {
                 return Err(format!(
                     "Server returned no body for UID {}, but the message is still in {}",
                     uid, mailbox
@@ -1994,14 +1996,45 @@ fn walk_mime_parts_light(
 /// second, much cheaper question is the independent claim that tells the two
 /// apart — the caller reports absence only when the uid really is gone.
 ///
-/// Ambiguous the same way if it also comes back empty, and that is fine: two
-/// empty answers in a row is the case where "not found" is the honest report.
-async fn uid_still_present(session: &mut ImapSession, uid: u32) -> bool {
-    let Ok(stream) = session.uid_fetch(uid.to_string(), "(UID)").await else {
-        return false;
-    };
-    let found = stream.collect::<Vec<_>>().await.into_iter().any(|r| r.is_ok());
-    found
+/// A second empty answer is NOT the honest "not found", which is what this
+/// used to assume: it is the same blind observation as the first. `filter_sync`
+/// drops the tagged `Done` without ever reading its status, so a refusal that
+/// covers the whole uid — not just its body — comes back through `uid_fetch`
+/// (and through `uid_search`, which parses ids the same way) as an empty
+/// stream; and a pooled session whose socket has died yields an empty stream
+/// with no error at all, in under a millisecond. Both were reported to the
+/// reading pane as `Email not found`, for mail sitting right there in the list.
+///
+/// So the last question goes through `run_command_and_check_ok` — the one
+/// entry point in async-imap that inspects the tagged status. It errors on
+/// `NO`/`BAD` and on a lost connection, which leaves exactly one way to reach
+/// `Ok(false)`: the server answered `OK` and had no such uid. Absence is a
+/// claim the server has to make; the client no longer infers it from silence.
+async fn uid_still_present(session: &mut ImapSession, uid: u32) -> Result<bool, String> {
+    let items = session
+        .uid_fetch(uid.to_string(), "(UID)")
+        .await
+        .map_err(|e| format!("UID FETCH {} (UID) failed: {}", uid, e))?
+        .collect::<Vec<_>>()
+        .await;
+
+    let mut found = false;
+    for item in items {
+        match item {
+            Ok(_) => found = true,
+            Err(e) => return Err(format!("UID FETCH {} (UID) failed: {}", uid, e)),
+        }
+    }
+    if found {
+        return Ok(true);
+    }
+
+    session
+        .run_command_and_check_ok(format!("UID FETCH {} (UID)", uid))
+        .await
+        .map_err(|e| format!("Server refused UID FETCH {}: {}", uid, e))?;
+
+    Ok(false)
 }
 
 /// Fetch a single email by UID with light content (no attachment binaries, no rawSource)
@@ -2035,7 +2068,9 @@ pub async fn fetch_email_by_uid_light(
         Some(f) => f,
         None => {
             // Empty here is not proof of absence — see `uid_still_present`.
-            if uid_still_present(session, uid).await {
+            // Its own error is not proof either, so it propagates rather than
+            // collapsing into "gone".
+            if uid_still_present(session, uid).await? {
                 return Err(format!(
                     "Server returned no body for UID {}, but the message is still in {}",
                     uid, mailbox

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+- **A message deleted somewhere else no longer leaves a dead row behind.** Deleting a message from another mail app, a phone, or a webmail tab left its row in MailVault's list — at the top, if it was the newest — and every click on it failed. It came back after every restart too, because the local header cache still had it. When the server states the message is not in the folder, the row now goes with it, and the reading pane says why rather than the row just disappearing. Nothing is removed from your archive: a message you had saved locally stays, and simply switches to "Local only". A failed or refused fetch never removes anything — only the server saying the message is gone does.
+- **A server that will not hand over a message no longer reports it as deleted.** When a server refused to send a message's contents, MailVault asked once more whether the message was still there — using the same question the server had just refused, so the second silence read as "this message is gone" and the reading pane said "Email not found" for mail sitting right there in the list. Clicking it again changed nothing. The check now only accepts an explicit answer from the server, so a refusal, a dropped connection or a stalled one is reported as what it is — with the server's own wording — and a message is called missing only when the server says so, naming the message and the folder.
+
 ## [2.10.1] - 2026-08-24
 
 ### Added

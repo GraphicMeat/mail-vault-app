@@ -513,6 +513,52 @@ export function bodyFetchOfUid(uid) {
   return { OnCommandWith: ['FETCH', `${uid} (UID FLAGS ENVELOPE INTERNALDATE BODY.PEEK[])`] };
 }
 
+/**
+ * The cheap probe that follows an empty body fetch: `UID FETCH <uid> (UID)`.
+ *
+ * The closing paren is what keeps this off the header pages — a delta sync
+ * asks `UID FETCH 901:908 (UID FLAGS BODY.PEEK[HEADER.FIELDS …])`, which
+ * contains `908 (UID` but never `908 (UID)`.
+ */
+export function uidProbeOfUid(uid) {
+  return { OnCommandWith: ['FETCH', `${uid} (UID)`] };
+}
+
+/**
+ * One message the server refuses to hand over AT ALL — body fetch and probe
+ * alike, the shape Gmail produced in production on 2026-08-24.
+ *
+ * Distinct from `unreadableBody`, where only the body is refused and the probe
+ * still finds the uid. Both refusals arrive as an empty stream with no error
+ * (async-imap drops the tagged response without reading its status), so this
+ * is the case that used to be reported as a deleted message.
+ */
+export function unreachableMessage(uid) {
+  const refuse = { Respond: ['NO', 'Server cannot read that message'] };
+  return [
+    { trigger: bodyFetchOfUid(uid), action: refuse },
+    { trigger: uidProbeOfUid(uid), action: refuse },
+  ];
+}
+
+/**
+ * One message the header page lists but the server no longer holds: every
+ * fetch of that uid answers `OK` with no rows, which is what a real server
+ * does for a uid that is not in the mailbox.
+ *
+ * The production shape after a message is deleted from another client — the
+ * row survives in the list and in the header sidecar, and every click on it
+ * fails. Distinct from `unreachableMessage`: a tagged OK is the server
+ * *proving* absence, and only that may prune the row.
+ */
+export function vanishedMessage(uid) {
+  const empty = { Respond: ['OK', 'FETCH completed'] };
+  return [
+    { trigger: bodyFetchOfUid(uid), action: empty },
+    { trigger: uidProbeOfUid(uid), action: empty },
+  ];
+}
+
 /** Stall one message's body fetch by `ms`, then fail it with a tagged NO. */
 export function unreadableBody(uid, ms) {
   return [

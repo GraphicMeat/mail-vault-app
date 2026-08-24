@@ -308,6 +308,7 @@ pub async fn imap_get_email(
     mailbox: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let mailbox = mailbox.unwrap_or_else(|| "INBOX".to_string());
+    let mb_name = mailbox.clone();
 
     let email = with_priority(&pool, &account, |mut session| async move {
         let result = imap::fetch_email_by_uid(&mut session, &mailbox, uid).await
@@ -320,7 +321,11 @@ pub async fn imap_get_email(
             "success": true,
             "email": e
         })),
-        None => Err("Email not found".to_string()),
+        // `Ok(None)` now costs the server an explicit `OK` on a second probe
+        // (see `uid_still_present`), so it is a claim the server made and not
+        // an empty stream we read as absence. Say which uid and which mailbox:
+        // "Email not found" told the reader nothing they could act on.
+        None => Err(format!("Message UID {} is no longer in {}", uid, mb_name)),
     }
 }
 
@@ -414,7 +419,16 @@ pub async fn imap_get_email_light(
                 "email": e
             }))
         }
-        None => Err("Email not found".to_string()),
+        // Not an `Err`: absence is an answer, and now a proven one — the probe
+        // in `uid_still_present` only reaches it on a tagged OK. The caller
+        // needs to tell it apart from a refusal to act on it (prune the row),
+        // and an error string is not something to branch on.
+        None => Ok(serde_json::json!({
+            "success": false,
+            "gone": true,
+            "uid": uid,
+            "mailbox": mb_clone,
+        })),
     }
 }
 

@@ -5,7 +5,7 @@ mod common;
 use common::{config_for, eml, pool, session};
 use mailvault_core::imap::*;
 use mock_imap::state::{synthetic_mailbox, Mailbox, Message};
-use mock_imap::{MockImap, Scenario};
+use mock_imap::{Action, MockImap, Scenario, Trigger};
 
 #[async_std::test]
 async fn connects_lists_and_fetches_a_small_inbox() {
@@ -197,4 +197,93 @@ async fn reports_a_useful_error_when_login_is_rejected() {
         .await
         .expect_err("login must fail");
     assert!(err.contains("Login failed"), "got: {err}");
+}
+
+// ── An empty FETCH result is not a missing message ──────────────────────────
+//
+// `filter_sync` in async-imap drops the tagged response without reading its
+// status, so every one of the refusals below reaches the client as a stream
+// that ends with no rows and no error — the same observation a genuinely
+// deleted uid produces. The reading pane turned that into "Email not found"
+// for mail sitting right there in the list. Each test here pins one refusal
+// shape to an error; the last one pins the honest absence, so a fix that just
+// stops saying "gone" cannot pass.
+
+/// The body FETCH is refused, a plain `(UID)` fetch is not: the cheap probe
+/// finds the uid and the caller says the message is still on the server.
+#[async_std::test]
+async fn a_refused_body_fetch_says_the_message_is_still_there() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX").push(eml("Hello", "sam@example.com", "Body")))
+            .fault(
+                Trigger::with("FETCH", "BODY.PEEK[]"),
+                Action::Respond("NO".into(), "Server cannot read that message".into()),
+            ),
+    );
+    let mut sess = session(&server).await;
+
+    let err = fetch_email_by_uid_light(&mut sess, "INBOX", 1)
+        .await
+        .expect_err("a refused body must not read as a deleted message");
+    assert!(err.contains("still in INBOX"), "got: {err}");
+}
+
+/// The refusal covers the uid, not just its body — Gmail did exactly this in
+/// production (2026-08-24, uid 31056, eight attempts, `found=false` every
+/// time). The old probe re-asked with a second `UID FETCH`, which is the same
+/// blind question, so both came back empty and the app reported the message
+/// as gone. Only a tagged `OK` may prove absence.
+#[async_std::test]
+async fn a_uid_the_server_refuses_outright_is_an_error_not_an_absence() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX").push(eml("Hello", "sam@example.com", "Body")))
+            .fault(
+                Trigger::on("FETCH"),
+                Action::Respond("NO".into(), "Bandwidth limit exceeded".into()),
+            ),
+    );
+    let mut sess = session(&server).await;
+
+    let err = fetch_email_by_uid_light(&mut sess, "INBOX", 1)
+        .await
+        .expect_err("a server that refuses every FETCH has not said the message is gone");
+    assert!(
+        err.to_lowercase().contains("refused") || err.contains("Bandwidth limit exceeded"),
+        "the reason must carry the server's own answer, got: {err}",
+    );
+}
+
+/// A pooled session whose socket has died answers a fetch in under a
+/// millisecond with nothing at all — no rows, no error. Production log,
+/// 06:02:28: `imap_get_email_light: uid=31045 found=false in 0ms`.
+#[async_std::test]
+async fn a_dead_socket_is_an_error_not_an_absence() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX").push(eml("Hello", "sam@example.com", "Body")))
+            .fault(Trigger::on("FETCH"), Action::DropConnection),
+    );
+    let mut sess = session(&server).await;
+
+    let err = fetch_email_by_uid_light(&mut sess, "INBOX", 1)
+        .await
+        .expect_err("a closed socket must not read as a deleted message");
+    assert!(!err.is_empty());
+}
+
+/// The other half of the contract: when the server answers normally and has no
+/// such uid, absence is the honest report and must still be reachable.
+#[async_std::test]
+async fn a_uid_the_server_really_does_not_have_is_reported_absent() {
+    let server = MockImap::start(
+        Scenario::new().mailbox(Mailbox::new("INBOX").push(eml("Hello", "sam@example.com", "Body"))),
+    );
+    let mut sess = session(&server).await;
+
+    let missing = fetch_email_by_uid_light(&mut sess, "INBOX", 4242)
+        .await
+        .expect("an honest empty answer is not an error");
+    assert!(missing.is_none(), "uid 4242 was never in this mailbox");
 }

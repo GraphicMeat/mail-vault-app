@@ -186,11 +186,30 @@ export async function fetchEmail(account, uid, mailbox = 'INBOX') {
   return data.email;
 }
 
+/**
+ * The server proved this uid is not in the mailbox — a tagged OK with no rows,
+ * twice (see `uid_still_present` in src-core/src/imap/mod.rs). Distinct from
+ * every other body-fetch failure, which proves only that the fetch failed.
+ *
+ * Thrown rather than returned so the four existing callers keep the contract
+ * they already have; only `selectEmail` reads the flag, to prune the row.
+ */
+export class MessageGoneError extends Error {
+  constructor(uid, mailbox) {
+    super(`Message UID ${uid} is no longer in ${mailbox}`);
+    this.name = 'MessageGoneError';
+    this.messageGone = true;
+    this.uid = uid;
+    this.mailbox = mailbox;
+  }
+}
+
 export async function fetchEmailLight(account, uid, mailbox = 'INBOX', accountId = null, { background = false } = {}) {
   if (IS_TAURI) {
     const params = { account, uid, mailbox, background };
     if (accountId) params.accountId = accountId;
     const data = await tauriInvoke('imap_get_email_light', params);
+    if (data?.gone) throw new MessageGoneError(data.uid ?? uid, data.mailbox ?? mailbox);
     return data.email;
   }
   // Dev mode fallback — fetch full email, strip heavy fields client-side
