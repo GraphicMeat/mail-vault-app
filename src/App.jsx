@@ -5,6 +5,7 @@ import { useSyncStore } from './stores/syncStore';
 import { useUiStore } from './stores/uiStore';
 import { useThemeStore } from './stores/themeStore';
 import { useSettingsStore } from './stores/settingsStore';
+import { clampListPaneWidth, maxListPaneWidth, MIN_LIST_WIDTH } from './utils/paneLayout';
 import { Sidebar } from './components/Sidebar';
 import { EmailList } from './components/EmailList';
 import { EmailViewer } from './components/EmailViewer';
@@ -200,14 +201,14 @@ function App() {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [showMoveDropdown, setShowMoveDropdown] = useState(false);
   const mainContainerRef = useRef(null);
-  // Clamp list pane width so the viewer always has at least 300px
+  // Clamp list pane width so the viewer always has at least MIN_VIEWER_WIDTH.
   const sidebarWidth = sidebarCollapsed ? 56 : 256;
   const availableWidth = windowWidth - sidebarWidth;
-  const maxListWidth = Math.min(600, Math.max(240, availableWidth - 300));
-  const clampedListWidth = Math.max(240, Math.min(maxListWidth, listPaneSize));
+  const maxListWidth = maxListPaneWidth(availableWidth);
+  const clampedListWidth = clampListPaneWidth(listPaneSize, availableWidth);
 
   const listPaneStyle = layoutMode === 'three-column'
-    ? { width: clampedListWidth, minWidth: 240, maxWidth: maxListWidth }
+    ? { width: clampedListWidth, minWidth: MIN_LIST_WIDTH, maxWidth: maxListWidth }
     : { height: listPaneSize, minHeight: 100 };
 
   // Initialize email scheduler
@@ -319,9 +320,7 @@ function App() {
     if (layoutMode === 'three-column') {
       // In 3-column mode, position is X coordinate — clamp to keep viewer usable
       const sw = sidebarCollapsed ? 56 : 256;
-      const maxW = Math.min(600, containerRect.width - 300);
-      const newSize = Math.max(240, Math.min(maxW, position - sw));
-      setListPaneSize(newSize);
+      setListPaneSize(clampListPaneWidth(position - sw, containerRect.width));
     } else {
       // In 2-column mode, position is Y coordinate
       // Minimum 100px for both top and bottom sections
@@ -647,10 +646,14 @@ function App() {
   }
   
   return (
-    <div className="h-screen bg-mail-bg flex flex-col overflow-hidden">
+    <div className="h-screen bg-mail-bg flex flex-col overflow-clip">
       {/* Storage folder unreachable — blocks sync, so it sits above everything */}
       <VaultAlertBanner />
-      <div className="flex-1 flex min-h-0 overflow-hidden">
+      {/* overflow-CLIP, not hidden: an overflow-hidden box is still a scroll
+          container, and WebKit scrolls one sideways to reveal a text selection.
+          With no scrollbar the offset sticks and the sidebar and list end up
+          off-screen for good. `clip` cannot scroll at all. */}
+      <div className="flex-1 flex min-w-0 min-h-0 overflow-clip">
       <div data-testid="sidebar">
         <Sidebar
           onAddAccount={() => setShowAccountModal(true)}
@@ -663,10 +666,17 @@ function App() {
         />
       </div>
 
-      {/* Main content area with layout support */}
+      {/* Main content area with layout support.
+
+          min-w-0 is load-bearing: without it this flex item keeps
+          `min-width: auto` and refuses to shrink below its min-content width.
+          A thread header subject is `truncate` (white-space: nowrap), so its
+          min-content is the WHOLE subject line — a DMARC report subject blew
+          this row out to ~1670px inside a 900px window and pushed the list and
+          sidebar off-screen. */}
       <div
         ref={mainContainerRef}
-        className={`flex-1 flex min-h-0 ${layoutMode === 'two-column' ? 'flex-col' : 'flex-row'}`}
+        className={`flex-1 flex min-w-0 min-h-0 ${layoutMode === 'two-column' ? 'flex-col' : 'flex-row'}`}
       >
         {viewStyle === 'chat' ? (
           /* Chat View */

@@ -91,6 +91,16 @@ html.platform-mac .overflow-x-scroll {
   overflow-x: overlay;
 }
 
+/* Truncated text must clip, never scroll.
+   Tailwind's `truncate` is `overflow: hidden`, which still makes the element a
+   scroll container: WebKit scrolls one sideways to bring a text selection or a
+   caret into view, and because there is no scrollbar the offset is permanent —
+   a row's subject slides out of its own box and the row renders blank.
+   `overflow: clip` clips identically (ellipsis included) and cannot scroll. */
+.truncate {
+  overflow: clip;
+}
+
 body {
   font-family: 'Instrument Sans', system-ui, sans-serif;
   background-color: var(--mail-bg);

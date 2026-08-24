@@ -316,6 +316,16 @@ export const CROSS_FOLDER_SENT_BODY = 'Cross folder sent reply body';
 export const FRAGMENTED_SUBJECT = 'Fragmented thread check';
 export const FRAGMENTED_COUNT = 5;
 
+// ── A conversation whose subject is one very long unbreakable line ──────────
+// Shaped after a real DMARC aggregate report. The thread header renders the
+// subject with `truncate` (white-space: nowrap), whose min-content width is the
+// WHOLE line — so a row that keeps `min-width: auto` inflates to it and pushes
+// the list and sidebar out of the window. See connected-viewer-layout.test.js.
+export const LONG_SUBJECT =
+  '[Preview] Report Domain: mock.test Submitter: enterprise.protection.outlook.com '
+  + 'Report-ID: a3b6ba3daeba4a75916ca27de7eb0f1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a';
+export const LONG_SUBJECT_COUNT = 2;
+
 /**
  * One message with an explicit Message-ID / In-Reply-To, so threads form.
  *
@@ -420,6 +430,22 @@ export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, 
           inReplyTo: frag(3), references: [frag(2), frag(3)], day: 69,
         }),
       ]);
+      // Both halves live in INBOX so the thread is complete without waiting on
+      // the Sent merge — this fixture is about layout, not about threading.
+      const long = (n) => `long-subject-${n}@${owner}`;
+      append(inboxBox, [
+        threadMessage({
+          uid: rootUid + 4, owner, from: partner, subject: LONG_SUBJECT,
+          body: 'This is a DMARC aggregate report from Microsoft Corporation.',
+          messageId: long(0), day: 70,
+        }),
+        threadMessage({
+          uid: rootUid + 5, owner, from: partner, subject: LONG_SUBJECT,
+          body: 'This is a DMARC aggregate report from Microsoft Corporation.',
+          messageId: long(1), inReplyTo: long(0), references: [long(0)], day: 71,
+        }),
+      ]);
+
       append(sentBox, [
         threadMessage({
           uid: 9, owner, from: owner, subject: `Re: ${FRAGMENTED_SUBJECT}`,
