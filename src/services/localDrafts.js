@@ -41,8 +41,19 @@ export async function resolveDraftsMailbox(accountId) {
   return _resolveMailboxPath(list, 'Drafts') || 'Drafts';
 }
 
-/** A stable synthetic uid for one compose window. Same convention as the staged Sent copy. */
-export const newDraftUid = () => Math.floor(Date.now() / 1000);
+/**
+ * A stable synthetic uid for one compose window. Same second-resolution shape
+ * as the staged Sent copy — but a uid IDENTIFIES a draft, so it cannot be a
+ * bare clock reading: two windows opened in the same second were handed the
+ * same one, and the second save then overwrote the first draft's .eml and its
+ * index entry. Only ever moves forward.
+ */
+let _lastDraftUid = 0;
+export const newDraftUid = () => {
+  const now = Math.floor(Date.now() / 1000);
+  _lastDraftUid = now > _lastDraftUid ? now : _lastDraftUid + 1;
+  return _lastDraftUid;
+};
 
 /**
  * Write the draft to disk and make it visible in the Drafts list.

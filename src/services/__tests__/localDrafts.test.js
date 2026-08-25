@@ -335,4 +335,16 @@ describe('newDraftUid', () => {
     expect(Number.isInteger(uid)).toBe(true);
     expect(Math.abs(uid - Math.floor(Date.now() / 1000))).toBeLessThan(5);
   });
+
+  it('never hands the same uid to two windows', () => {
+    // Two compose windows opened in the same second used to be given the same
+    // uid, and one draft's .eml and index entry then overwrote the other's —
+    // silent loss of a message the user was still writing. A uid identifies a
+    // draft, so it cannot be a bare clock reading.
+    const uids = new Set([newDraftUid(), newDraftUid(), newDraftUid()]);
+    expect(uids.size).toBe(3);
+    const ordered = [...uids];
+    expect(ordered[1]).toBeGreaterThan(ordered[0]);
+    expect(ordered[2]).toBeGreaterThan(ordered[1]);
+  });
 });

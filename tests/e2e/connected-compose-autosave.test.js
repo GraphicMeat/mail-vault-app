@@ -342,6 +342,62 @@ describe('Connected Compose Autosave — drafts land in the vault', function () 
     expect(readDrafts(account.id).some((t) => flatten(t).includes('Draft outlives a failed send'))).toBe(true);
   });
 
+  it('keeps two open messages as two separate drafts', async function () {
+    await freshCompose();
+    await setField('compose-subject', 'First window draft');
+    await waitForLocalDraft(account.id, 'First window draft');
+
+    expect(await clickButtonTitle('Minimize')).toBe(true);
+    await browser.waitUntil(async () => (await bubbles()).length === 1, {
+      timeout: 15_000, interval: 200, timeoutMsg: 'Minimize did not produce a draft bubble',
+    });
+    await browser.execute(() => document.activeElement?.blur());
+    await browser.keys('c');
+    await browser.waitUntil(modalOpen, {
+      timeout: 15_000, interval: 200, timeoutMsg: '"c" did not open a second compose window',
+    });
+
+    await setField('compose-subject', 'Second window draft');
+    await waitForLocalDraft(account.id, 'Second window draft');
+
+    // Two messages being written are two drafts.
+    //
+    // SCOPE — this is a CONTRACT test, not a discriminating one. The bug it
+    // describes (a uid read straight off the clock hands both windows the same
+    // one, and the second save overwrites the first draft's .eml and its index
+    // entry) only bites when both first saves land inside the same second, and
+    // the steps above reliably straddle a second boundary: verified on the mini
+    // by reverting `newDraftUid` to the bare timestamp and rebuilding — this
+    // spec stayed 15/15 green. What pins the fix is the unit test
+    // `never hands the same uid to two windows` in
+    // src/services/__tests__/localDrafts.test.js, which was red before it.
+    // What this case is worth: it fails if two open windows ever stop being two
+    // rows for any other reason.
+    const subs = draftSubjects();
+    expect(subs).toContain('First window draft');
+    expect(subs).toContain('Second window draft');
+    const uids = localIndex(account.id, 'Drafts')
+      .filter((e) => (e.subject || '').endsWith('window draft'))
+      .map((e) => e.uid);
+    expect(new Set(uids).size).toBe(2);
+  });
+
+  it('writes the draft into the composing account and nowhere else', async function () {
+    const other = (browser.mockAccounts || [])[1];
+    if (!other) throw new Error('This case needs a second seeded account');
+
+    await freshCompose();
+    await setField('compose-to', 'someone@example.com');
+    await setField('compose-subject', 'Only in the composing account');
+    await waitForLocalDraft(account.id, 'Only in the composing account');
+
+    // "On the same mailbox" is the whole contract: a draft belongs to the
+    // account the message will leave from, and to no other account's vault.
+    expect(readDrafts(other.id).some((t) => flatten(t).includes('Only in the composing account'))).toBe(false);
+    expect(localIndex(other.id, 'Drafts').map((e) => e.subject))
+      .not.toContain('Only in the composing account');
+  });
+
   it('removes the draft from the vault when the message is discarded', async function () {
     await freshCompose();
     await setField('compose-to', 'nobody@example.com');
