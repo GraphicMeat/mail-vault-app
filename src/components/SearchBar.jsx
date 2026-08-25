@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useAccountStore } from '../stores/accountStore';
 import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import { flattenMailboxes } from '../stores/slices/unifiedHelpers';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
@@ -31,6 +32,7 @@ export function SearchBar() {
   const searchFilters = useSearchStore(s => s.searchFilters);
   const searchActive = useSearchStore(s => s.searchActive);
   const isSearching = useSearchStore(s => s.isSearching);
+  const searchProgress = useSearchStore(s => s.searchProgress);
   const searchResults = useSearchStore(s => s.searchResults);
   const setSearchQuery = useSearchStore(s => s.setSearchQuery);
   const setSearchFilters = useSearchStore(s => s.setSearchFilters);
@@ -263,10 +265,13 @@ export function SearchBar() {
                     >
                       <option value="current">Current folder ({activeMailbox})</option>
                       <option value="all">All folders</option>
-                      {mailboxes
-                        .filter(mb => mb.path !== activeMailbox)
+                      {/* Flattened: a nested folder is a search target like any
+                          other, and the top-level list left 50 of bson73's 59
+                          unpickable. */}
+                      {flattenMailboxes(mailboxes)
+                        .filter(mb => !mb.noselect && mb.path !== activeMailbox)
                         .map(mb => (
-                          <option key={mb.path} value={mb.path}>{mb.name}</option>
+                          <option key={mb.path} value={mb.path}>{mb.path}</option>
                         ))
                       }
                     </select>
@@ -531,7 +536,9 @@ export function SearchBar() {
               >
                 <Search size={12} />
               </motion.div>
-              Searching local cache, archived emails, and server...
+              {searchProgress
+                ? `Searching server folder ${searchProgress.done} of ${searchProgress.total}...`
+                : 'Searching local cache, archived emails, and server...'}
             </span>
           ) : (
             <>

@@ -4,7 +4,57 @@ import * as api from '../services/api';
 import { hasValidCredentials, ensureFreshToken } from '../services/authUtils';
 import { useMailStore } from './mailStore';
 import { useSettingsStore } from './settingsStore';
-import { emailKey } from './slices/unifiedHelpers';
+import { emailKey, flattenMailboxes } from './slices/unifiedHelpers';
+
+// The folders a server-side "all folders" search has to visit. \Noselect boxes
+// are pure containers — SELECT fails on them — and a path can appear twice once
+// the tree is flattened. INBOX goes first so the folder most searches want
+// answers before the other 58 round trips.
+export function serverSearchTargets(mailboxes) {
+  const paths = [];
+  const seen = new Set();
+  for (const box of flattenMailboxes(mailboxes)) {
+    if (box.noselect || !box.path || seen.has(box.path)) continue;
+    seen.add(box.path);
+    paths.push(box.path);
+  }
+  paths.sort((a, b) => (/^inbox$/i.test(a) ? -1 : 0) - (/^inbox$/i.test(b) ? -1 : 0));
+  return paths;
+}
+
+// Merge the three sources into the list the UI shows: one row per
+// (account, mailbox, uid), newest first, preferring the copy that knows most
+// about where it lives. Called once per finished folder during a fan-out, so
+// it has to stay pure.
+function finalize(allResults) {
+  const seen = new Map();
+  const sourcePriority = { 'local': 3, 'local-only': 3, 'server-search': 2, 'server': 1 };
+
+  for (const email of allResults) {
+    // A bare uid is not a key: folder A's uid 34 and folder B's uid 34 are
+    // two different messages, and this loop kept exactly one of them —
+    // by source priority, so the row on screen could already be a message
+    // other than the one that matched.
+    // `emailKey` always returns a string, so the messageId fallback has to
+    // be chosen on the uid, not on a falsy key that never comes.
+    const key = email.uid != null ? emailKey(email) : `mid:${email.messageId}`;
+    const existing = seen.get(key);
+    if (!existing || (sourcePriority[email.source] || 0) > (sourcePriority[existing.source] || 0)) {
+      seen.set(key, email);
+    }
+  }
+
+  return Array.from(seen.values()).sort((a, b) => {
+    const dateA = new Date(a.date || a.internalDate || 0);
+    const dateB = new Date(b.date || b.internalDate || 0);
+    return dateB - dateA;
+  });
+}
+
+// A fan-out across 59 folders outlives the query that started it: the user
+// retypes, and the old loop is still writing rows for the old words. Every
+// write past the first await is stamped with the run that made it.
+let searchRun = 0;
 
 export const useSearchStore = create((set, get) => ({
   searchActive: false,
@@ -19,6 +69,8 @@ export const useSearchStore = create((set, get) => ({
   },
   searchResults: [],
   isSearching: false,
+  // { done, total } while a multi-folder server search is in flight, else null.
+  searchProgress: null,
 
   setSearchQuery: (query) => set({ searchQuery: query }),
 
@@ -27,15 +79,17 @@ export const useSearchStore = create((set, get) => ({
   })),
 
   performSearch: async () => {
+    const runId = ++searchRun;
+    const superseded = () => runId !== searchRun;
     const { searchQuery, searchFilters } = get();
     const { emails, localEmails, activeMailbox, activeAccountId, accounts, savedEmailIds, mailboxes } = useMailStore.getState();
 
     if (!searchQuery.trim() && !searchFilters.sender && !searchFilters.dateFrom && !searchFilters.dateTo) {
-      set({ searchActive: false, searchResults: [], isSearching: false });
+      set({ searchActive: false, searchResults: [], isSearching: false, searchProgress: null });
       return;
     }
 
-    set({ isSearching: true, searchActive: true });
+    set({ isSearching: true, searchActive: true, searchProgress: null });
 
     let account = accounts.find(a => a.id === activeAccountId);
     account = await ensureFreshToken(account);
@@ -109,69 +163,69 @@ export const useSearchStore = create((set, get) => ({
 
       // 3. Search on server via IMAP (if online and not local-only search)
       if (searchFilters.location !== 'local' && account && hasValidCredentials(account)) {
-        try {
-          const serverFilters = {};
-          if (searchFilters.sender) serverFilters.from = searchFilters.sender;
-          if (searchFilters.dateFrom) serverFilters.since = searchFilters.dateFrom;
-          if (searchFilters.dateTo) serverFilters.before = searchFilters.dateTo;
+        const serverFilters = {};
+        if (searchFilters.sender) serverFilters.from = searchFilters.sender;
+        if (searchFilters.dateFrom) serverFilters.since = searchFilters.dateFrom;
+        if (searchFilters.dateTo) serverFilters.before = searchFilters.dateTo;
 
-          const mailboxToSearch = searchFilters.folder === 'current' ? activeMailbox :
-                                  searchFilters.folder === 'all' ? 'INBOX' : searchFilters.folder;
+        // "All folders" has to mean the same thing on both halves of this
+        // search. Step 2 walks every vault folder; this used to SELECT INBOX
+        // and nothing else, so a user with 59 folders got INBOX's server hits
+        // under a header that said "in all folders" — the one reading that
+        // makes a message the vault never backed up look like it isn't there.
+        // 'UNIFIED' is a view, not a mailbox: SELECTing it fails, and the view
+        // it names is every folder anyway.
+        const everyFolder = () => serverSearchTargets(mailboxes);
+        const targets = searchFilters.folder === 'all' ? everyFolder()
+          : searchFilters.folder === 'current'
+            ? (activeMailbox && activeMailbox !== 'UNIFIED' ? [activeMailbox] : everyFolder())
+            : [searchFilters.folder];
 
-          const serverResponse = await api.searchEmails(account, mailboxToSearch, searchQuery, serverFilters);
+        for (const [i, mailboxToSearch] of targets.entries()) {
+          if (superseded()) return;
+          if (targets.length > 1) set({ searchProgress: { done: i, total: targets.length } });
 
-          if (serverResponse.emails && serverResponse.emails.length > 0) {
-            const serverResults = serverResponse.emails.map(e => ({
-              ...e,
-              _accountId: activeAccountId,
-              _mailbox: mailboxToSearch,
-              isLocal: savedEmailIds.has(e.uid),
-              source: 'server-search'
-            }));
-            allResults.push(...serverResults);
-            console.log(`[Search] Found ${serverResults.length} server matches (total on server: ${serverResponse.total})`);
+          try {
+            const serverResponse = await api.searchEmails(account, mailboxToSearch, searchQuery, serverFilters);
+
+            if (serverResponse.emails && serverResponse.emails.length > 0) {
+              const serverResults = serverResponse.emails.map(e => ({
+                ...e,
+                _accountId: activeAccountId,
+                _mailbox: mailboxToSearch,
+                isLocal: savedEmailIds.has(e.uid),
+                source: 'server-search'
+              }));
+              allResults.push(...serverResults);
+              console.log(`[Search] Found ${serverResults.length} server matches in ${mailboxToSearch} (total on server: ${serverResponse.total})`);
+            }
+          } catch (error) {
+            // 58 readable folders must not be lost to one that isn't.
+            console.warn(`[Search] Server search failed in ${mailboxToSearch}:`, error);
           }
-        } catch (error) {
-          console.warn('[Search] Server search failed:', error);
+
+          // Publish as we go: a 59-folder sweep is long enough that a list
+          // which only fills at the end reads as a search that found nothing.
+          if (targets.length > 1) {
+            if (superseded()) return;
+            set({ searchResults: finalize(allResults), searchProgress: { done: i + 1, total: targets.length } });
+          }
         }
       }
 
-      // 4. Deduplicate by (account, mailbox, uid) — prefer local > server-search > server
-      const seen = new Map();
-      const sourcePriority = { 'local': 3, 'local-only': 3, 'server-search': 2, 'server': 1 };
+      const deduplicatedResults = finalize(allResults);
 
-      for (const email of allResults) {
-        // A bare uid is not a key: folder A's uid 34 and folder B's uid 34 are
-        // two different messages, and this loop kept exactly one of them —
-        // by source priority, so the row on screen could already be a message
-        // other than the one that matched.
-        // `emailKey` always returns a string, so the messageId fallback has to
-        // be chosen on the uid, not on a falsy key that never comes.
-        const key = email.uid != null ? emailKey(email) : `mid:${email.messageId}`;
-        const existing = seen.get(key);
-        if (!existing || (sourcePriority[email.source] || 0) > (sourcePriority[existing.source] || 0)) {
-          seen.set(key, email);
-        }
-      }
-
-      const deduplicatedResults = Array.from(seen.values());
-
-      // 5. Sort by date (newest first)
-      deduplicatedResults.sort((a, b) => {
-        const dateA = new Date(a.date || a.internalDate || 0);
-        const dateB = new Date(b.date || b.internalDate || 0);
-        return dateB - dateA;
-      });
-
+      if (superseded()) return;
       console.log(`[Search] Total unique results: ${deduplicatedResults.length}`);
-      set({ searchResults: deduplicatedResults, isSearching: false });
+      set({ searchResults: deduplicatedResults, isSearching: false, searchProgress: null });
 
       if (searchQuery.trim()) {
         useSettingsStore.getState().addSearchToHistory(searchQuery.trim());
       }
     } catch (error) {
       console.error('[searchStore] Search failed:', error);
-      set({ isSearching: false, searchResults: [] });
+      if (superseded()) return;
+      set({ isSearching: false, searchResults: [], searchProgress: null });
     }
   },
 
@@ -187,6 +241,7 @@ export const useSearchStore = create((set, get) => ({
       hasAttachments: false,
     },
     searchResults: [],
-    isSearching: false
+    isSearching: false,
+    searchProgress: null
   })
 }));
