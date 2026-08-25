@@ -131,9 +131,54 @@
 
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.10.2</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">August 25, 2026</span>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            </span>
+            Added
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message you are writing is saved to Drafts as you type.</strong> Until now a half-written message existed only in the window it was being typed in, so anything that closed that window took the text with it. Three tenths of a second after you stop typing, the message is now written to the Drafts folder of the account it will be sent from, on this computer — recipients, subject, body and attachments — and it shows up in that folder like any other message. It is one draft, not one per pause: each save replaces the last. Change the From address to another account and the draft moves to that account's Drafts. Send the message, or discard it, and the draft goes away with it. A message with no recipient yet is saved too — that is the point. Nothing is uploaded to the mail server yet; this is the local copy only.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A draft in the Drafts folder opens back up for writing.</strong> A message saved as you typed could be read back but not continued: clicking its row opened it in the reading pane, like any other message, and the only way to carry on was to start again. Clicking a draft you wrote now reopens it in a message window — recipients, subject, body and attachments as you left them, sent from the account it belongs to — and carrying on updates that same draft instead of leaving the half-written one behind. A reply you had started keeps its place in the conversation. Mail archived from a server is unaffected: it still opens in the reading pane.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            </span>
+            Fixed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A search result opens the message you searched for, not another one on the same number.</strong> Search looks across every folder, but a result carried no record of which folder it came from — so opening one went looking in the folder the sidebar happened to have selected. Two things followed. If that folder held a message with the same internal number, that message opened instead, under the header of the one you clicked. If it did not, the message would not open at all and MailVault reported it as no longer on the server. Results now carry their own folder, and two messages that share a number in different folders stay two separate results.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Selecting text in a message you are writing no longer folds it away — or loses it.</strong> Sweeping a selection past the edge of the compose window counted as clicking away from the window: the message collapsed into a draft bubble. Opening the bubble and doing it again was worse, because a message brought back from a bubble was treated as untouched — so that second time it closed for good, with no "Discard message?" prompt, and everything typed was gone. A selection that begins inside the window is now only a selection; clicking away still minimizes, but only when the click both starts and ends outside. A message restored from a bubble is unsaved work again: clicking away minimizes it, and Close asks first.</span>
+            </li>
+          </ul>
+        </div>
+
+      </article>
+      <article class="mb-16">
+        <div class="flex items-center gap-3 mb-6">
           <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.10.1</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">August 24, 2026</span>
-          <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
         </div>
 
         <div class="mb-8">

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.10.2] - 2026-08-25
+
 ### Added
 - **A message you are writing is saved to Drafts as you type.** Until now a half-written message existed only in the window it was being typed in, so anything that closed that window took the text with it. Three tenths of a second after you stop typing, the message is now written to the Drafts folder of the account it will be sent from, on this computer — recipients, subject, body and attachments — and it shows up in that folder like any other message. It is one draft, not one per pause: each save replaces the last. Change the From address to another account and the draft moves to that account's Drafts. Send the message, or discard it, and the draft goes away with it. A message with no recipient yet is saved too — that is the point. Nothing is uploaded to the mail server yet; this is the local copy only.
 - **A draft in the Drafts folder opens back up for writing.** A message saved as you typed could be read back but not continued: clicking its row opened it in the reading pane, like any other message, and the only way to carry on was to start again. Clicking a draft you wrote now reopens it in a message window — recipients, subject, body and attachments as you left them, sent from the account it belongs to — and carrying on updates that same draft instead of leaving the half-written one behind. A reply you had started keeps its place in the conversation. Mail archived from a server is unaffected: it still opens in the reading pane.
