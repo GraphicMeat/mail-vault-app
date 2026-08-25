@@ -3,6 +3,7 @@
 import { readDir, exists, BaseDirectory } from '@tauri-apps/plugin-fs';
 import { send as transportSend } from '../transport.js';
 import { initDB, initBasic, accountDir } from './accounts.js';
+import { mailboxPathFromVaultDir } from '../../stores/slices/unifiedHelpers.js';
 
 // Transport-aware invoke: tries daemon socket first, falls back to Tauri invoke
 const invoke = (cmd, args) => transportSend(cmd, args);
@@ -152,6 +153,14 @@ export async function getLocalEmails(accountId, mailbox) {
         emails.push({
           ...results[i],
           localId: `${accountId}-${mailbox}-${uids[i]}`,
+          // Provenance travels with the message. A UID names a message only
+          // inside one (account, mailbox); a row that reaches a view without
+          // these gets its location guessed from the ACTIVE folder, which is
+          // right until the moment it isn't — search results span folders by
+          // design, so every one of them was being fetched from whatever
+          // folder happened to be selected.
+          _accountId: accountId,
+          _mailbox: mailbox,
           isArchived: archivedUids.has(uids[i])
         });
       }
@@ -386,7 +395,7 @@ export async function getArchivedEmails(accountId, mailbox, archivedUidSet, onBa
   }
 }
 
-export async function getAllLocalEmails(accountId) {
+export async function getAllLocalEmails(accountId, mailboxes = []) {
   await initDB();
   if (!invoke) return [];
 
@@ -399,7 +408,10 @@ export async function getAllLocalEmails(accountId) {
     const allEmails = [];
     for (const mbEntry of mailboxDirs) {
       if (!mbEntry.name || !mbEntry.isDirectory) continue;
-      const emails = await getLocalEmails(accountId, mbEntry.name);
+      // The directory name is sanitised and lossy — pass the SERVER path it
+      // came from, so `_mailbox` on these rows is something IMAP can SELECT.
+      const mailbox = mailboxPathFromVaultDir(mbEntry.name, mailboxes);
+      const emails = await getLocalEmails(accountId, mailbox);
       allEmails.push(...emails);
     }
     return allEmails;
@@ -544,7 +556,7 @@ export async function searchLocalEmails(accountId, query, filters = {}) {
   if (filters.mailbox && filters.mailbox !== 'all') {
     emails = await getLocalEmails(accountId, filters.mailbox);
   } else {
-    emails = await getAllLocalEmails(accountId);
+    emails = await getAllLocalEmails(accountId, filters.mailboxes);
   }
 
   const queryLower = query?.toLowerCase().trim() || '';

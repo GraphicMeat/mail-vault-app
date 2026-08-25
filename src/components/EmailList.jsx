@@ -325,7 +325,7 @@ function EmailListComponent() {
             const sender = groups.find(s => s.senderEmail === fr.senderEmail);
             const topic = sender?.topics.find(t => `${fr.senderEmail}-${t.subject}` === fr.topicKey);
             const email = topic?.emails.find(e => e.uid === fr.emailUid);
-            if (email) selectEmail(email.uid, email.source);
+            if (email) selectEmail(email.uid, email.source, email._mailbox);
           }
         }
       }
@@ -1105,7 +1105,11 @@ function EmailListComponent() {
                     {item.type === 'sender-email' && (
                       <button
                         onClick={() => {
-                          const mailbox = item.email._fromSentFolder ? getSentMailboxPath() : null;
+                          // The message's own tag first — `_fromSentFolder` is a
+                          // guess about which folder a Sent row came from, and a
+                          // stamped `_mailbox` is the answer.
+                          const mailbox = item.email._mailbox
+                            || (item.email._fromSentFolder ? getSentMailboxPath() : null);
                           selectEmail(item.email.uid, item.email.source, mailbox);
                           if (layoutMode !== 'three-column') {
                             setExpandedEmail(expandedEmail === selKey(item.email) ? null : selKey(item.email));

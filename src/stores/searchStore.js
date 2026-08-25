@@ -4,6 +4,7 @@ import * as api from '../services/api';
 import { hasValidCredentials, ensureFreshToken } from '../services/authUtils';
 import { useMailStore } from './mailStore';
 import { useSettingsStore } from './settingsStore';
+import { emailKey } from './slices/unifiedHelpers';
 
 export const useSearchStore = create((set, get) => ({
   searchActive: false,
@@ -27,7 +28,7 @@ export const useSearchStore = create((set, get) => ({
 
   performSearch: async () => {
     const { searchQuery, searchFilters } = get();
-    const { emails, localEmails, activeMailbox, activeAccountId, accounts, savedEmailIds } = useMailStore.getState();
+    const { emails, localEmails, activeMailbox, activeAccountId, accounts, savedEmailIds, mailboxes } = useMailStore.getState();
 
     if (!searchQuery.trim() && !searchFilters.sender && !searchFilters.dateFrom && !searchFilters.dateTo) {
       set({ searchActive: false, searchResults: [], isSearching: false });
@@ -65,6 +66,13 @@ export const useSearchStore = create((set, get) => ({
         return queryMatch && senderFilterMatch && dateFromMatch && dateToMatch && attachmentMatch;
       }).map(e => ({
         ...e,
+        // Stamp where this row came from at the one point that knows. Leaving
+        // it off does not fail — `resolveEmailLocation` falls back to the
+        // ACTIVE mailbox, so a hit from another folder is fetched from the
+        // folder the sidebar happens to have selected and the server correctly
+        // reports the uid missing. 'UNIFIED' is a view, not a mailbox.
+        _accountId: e._accountId || e._srcAccountId || activeAccountId,
+        _mailbox: e._mailbox || (activeMailbox && activeMailbox !== 'UNIFIED' ? activeMailbox : undefined),
         isLocal: markSource === 'local' || savedEmailIds.has(e.uid),
         source: markSource || e.source || 'server'
       }));
@@ -89,6 +97,7 @@ export const useSearchStore = create((set, get) => ({
             dateTo: searchFilters.dateTo,
             mailbox: searchFilters.folder === 'current' ? activeMailbox :
                      searchFilters.folder === 'all' ? null : searchFilters.folder,
+            mailboxes,
             hasAttachments: searchFilters.hasAttachments
           });
           allResults.push(...localResults);
@@ -114,6 +123,8 @@ export const useSearchStore = create((set, get) => ({
           if (serverResponse.emails && serverResponse.emails.length > 0) {
             const serverResults = serverResponse.emails.map(e => ({
               ...e,
+              _accountId: activeAccountId,
+              _mailbox: mailboxToSearch,
               isLocal: savedEmailIds.has(e.uid),
               source: 'server-search'
             }));
@@ -125,12 +136,18 @@ export const useSearchStore = create((set, get) => ({
         }
       }
 
-      // 4. Deduplicate results by UID (prefer local > server-search > server)
+      // 4. Deduplicate by (account, mailbox, uid) — prefer local > server-search > server
       const seen = new Map();
       const sourcePriority = { 'local': 3, 'local-only': 3, 'server-search': 2, 'server': 1 };
 
       for (const email of allResults) {
-        const key = email.uid || email.messageId;
+        // A bare uid is not a key: folder A's uid 34 and folder B's uid 34 are
+        // two different messages, and this loop kept exactly one of them —
+        // by source priority, so the row on screen could already be a message
+        // other than the one that matched.
+        // `emailKey` always returns a string, so the messageId fallback has to
+        // be chosen on the uid, not on a falsy key that never comes.
+        const key = email.uid != null ? emailKey(email) : `mid:${email.messageId}`;
         const existing = seen.get(key);
         if (!existing || (sourcePriority[email.source] || 0) > (sourcePriority[existing.source] || 0)) {
           seen.set(key, email);

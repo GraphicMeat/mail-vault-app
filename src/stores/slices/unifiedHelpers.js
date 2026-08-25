@@ -176,3 +176,39 @@ export function _resolveMailboxPath(accountMailboxes, folderId) {
   };
   return findBox(accountMailboxes) || folderId;
 }
+
+// ── Vault directory names ──────────────────────────────────────────────────
+// `maildir_cur_path` (src-tauri/src/main.rs) stores a mailbox under a name with
+// every char outside [alphanumeric . - _] replaced by '_'. That mapping is
+// many-to-one — "Projekt Nystart" and "Projekt_Nystart" share a directory — so
+// a directory name read back off disk is NOT a server mailbox path. SELECTing
+// it fails, or worse lands somewhere else. Recover the real path by sanitising
+// the mailbox paths the server told us about and matching.
+// Rust's `char::is_alphanumeric` is Unicode-aware, so this regex must be too:
+// an "Entwürfe" folder is not stored as "Entw_rfe".
+const VAULT_UNSAFE_RE = /[^\p{Alphabetic}\p{N}.\-_]/gu;
+
+export function vaultDirName(mailbox) {
+  return String(mailbox ?? '').replace(VAULT_UNSAFE_RE, '_');
+}
+
+export function flattenMailboxes(mailboxes, out = []) {
+  for (const box of mailboxes || []) {
+    if (box?.path) out.push(box);
+    if (box?.children?.length) flattenMailboxes(box.children, out);
+  }
+  return out;
+}
+
+// dir name → the server mailbox path that produced it. Unknown dirs come back
+// as themselves: a stale vault folder for a mailbox the server no longer lists
+// still has readable mail in it, and reading is all this name is used for.
+// Ambiguity resolves to the first match, which is the only honest option — the
+// sanitiser threw the distinguishing character away.
+export function mailboxPathFromVaultDir(dir, mailboxes) {
+  if (!dir) return dir;
+  for (const box of flattenMailboxes(mailboxes)) {
+    if (vaultDirName(box.path) === dir) return box.path;
+  }
+  return dir;
+}

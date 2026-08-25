@@ -20,6 +20,12 @@ if (import.meta.env.VITE_E2E === '1') {
   import('./stores/settingsStore').then(({ useSettingsStore }) => {
     window.__SETTINGS_STORE__ = useSettingsStore;
   });
+  // And one layer over again: a search result is the only row guaranteed not
+  // to belong to the folder on screen, and the DOM cannot say which mailbox a
+  // row claims. `_mailbox` on the result IS the assertion.
+  import('./stores/searchStore').then(({ useSearchStore }) => {
+    window.__SEARCH_STORE__ = useSearchStore;
+  });
 }
 
 if (navigator.platform?.startsWith('Mac') || navigator.userAgent?.includes('Mac')) {

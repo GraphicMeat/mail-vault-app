@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveEmailLocation, bodyMatchesHeader, emailKey } from '../slices/unifiedHelpers';
+import { resolveEmailLocation, bodyMatchesHeader, emailKey, vaultDirName, mailboxPathFromVaultDir } from '../slices/unifiedHelpers';
 
 // A UID is unique only within one (account, mailbox). Every case here is a way
 // the old "guess from the active view" resolution read a real but different
@@ -68,5 +68,29 @@ describe('bodyMatchesHeader', () => {
   it('allows the pairing when either side has no Message-ID', () => {
     expect(bodyMatchesHeader({ messageId: '<a@x>' }, {})).toBe(true);
     expect(bodyMatchesHeader({}, { messageId: '<a@x>' })).toBe(true);
+  });
+});
+
+describe('vault directory names', () => {
+  const SERVER_PATH = 'INBOX.Archive.Projekt Nystart.Lieferanten.CRM Centralstation';
+  const VAULT_DIR = 'INBOX.Archive.Projekt_Nystart.Lieferanten.CRM_Centralstation';
+  const boxes = [{ path: 'INBOX', children: [{ path: SERVER_PATH, children: [] }] }];
+
+  it('sanitises the way maildir_cur_path does — spaces out, dots kept', () => {
+    expect(vaultDirName(SERVER_PATH)).toBe(VAULT_DIR);
+    expect(vaultDirName('[Gmail]/Sent Mail')).toBe('_Gmail__Sent_Mail');
+  });
+
+  it('keeps non-ASCII letters, because Rust is_alphanumeric does', () => {
+    // "Entw_rfe" would be a different directory from the one Rust writes.
+    expect(vaultDirName('INBOX.Entwürfe')).toBe('INBOX.Entwürfe');
+  });
+
+  it('recovers the server path from a directory name', () => {
+    expect(mailboxPathFromVaultDir(VAULT_DIR, boxes)).toBe(SERVER_PATH);
+  });
+
+  it('returns an unmatched directory unchanged rather than guessing', () => {
+    expect(mailboxPathFromVaultDir('INBOX.Gone', boxes)).toBe('INBOX.Gone');
   });
 });
