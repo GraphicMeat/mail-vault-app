@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, UploadCloud, Loader2, CheckCircle2 } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore.js';
 import { restoreManager } from '../services/restoreManager.js';
+import { decodeImapUtf7 } from '../utils/imapUtf7';
 
 export default function RestoreModal() {
   const detected = useSettingsStore((s) => s.restoreDetected);
@@ -54,7 +55,7 @@ export default function RestoreModal() {
             <ul className="text-sm text-mail-text mb-4 max-h-40 overflow-auto">
               {detected.folders.map((f) => (
                 <li key={f.mailbox} className="flex justify-between py-0.5">
-                  <span>{f.mailbox}</span><span className="text-mail-text-muted">{f.localCount}</span>
+                  <span>{decodeImapUtf7(f.mailbox)}</span><span className="text-mail-text-muted">{f.localCount}</span>
                 </li>
               ))}
             </ul>
@@ -79,7 +80,7 @@ export default function RestoreModal() {
           <div className="text-sm">
             <div className="flex items-center gap-2 mb-2 text-mail-text">
               <Loader2 className="animate-spin" size={16} />
-              <span>Uploading{active.current_folder ? ` — ${active.current_folder}` : ''}…</span>
+              <span>Uploading{active.current_folder ? ` — ${decodeImapUtf7(active.current_folder)}` : ''}…</span>
             </div>
             <div className="text-mail-text-muted">
               {active.uploaded_emails} uploaded · {active.skipped_emails} skipped · {active.failed_emails} failed

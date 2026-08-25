@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { mailboxLabel, decodeImapUtf7 } from '../../utils/imapUtf7';
 import {
   CheckCircle2,
   AlertCircle,
@@ -34,7 +35,7 @@ function FolderRow({ folder, depth = 0, hasExternal, defaultExpanded = false }) 
               <span className="w-4" />
             )}
             <span className={`truncate ${isContainer ? 'text-mail-text-muted italic' : 'text-mail-text'}`}>
-              {folder.name || folder.path}
+              {mailboxLabel(folder.name) || decodeImapUtf7(folder.path)}
             </span>
           </div>
         </td>

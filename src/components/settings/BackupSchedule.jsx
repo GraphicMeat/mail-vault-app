@@ -10,6 +10,7 @@ import {
   Loader,
   HardDrive,
 } from 'lucide-react';
+import { decodeImapUtf7 } from '../../utils/imapUtf7';
 
 const selectClass = 'w-full px-4 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent';
 
@@ -99,7 +100,7 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
                 )}
               </div>
               <div className="flex items-center justify-between text-xs text-mail-text-muted">
-                <span>{activeBackup.folder || 'Starting...'} {activeBackup.totalFolders > 0 && `(${activeBackup.completedFolders}/${activeBackup.totalFolders})`}</span>
+                <span>{decodeImapUtf7(activeBackup.folder) || 'Starting...'} {activeBackup.totalFolders > 0 && `(${activeBackup.completedFolders}/${activeBackup.totalFolders})`}</span>
                 <span>{activeBackup.completedEmails > 0 && `${activeBackup.completedEmails} emails`}</span>
               </div>
               {activeBackup.totalFolders > 0 && (

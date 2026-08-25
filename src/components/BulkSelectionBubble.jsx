@@ -2,6 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ListChecks } from 'lucide-react';
 import { useMailStore } from '../stores/mailStore';
+import { decodeImapUtf7 } from '../utils/imapUtf7';
 
 /**
  * Minimized bulk-operations session.
@@ -60,7 +61,7 @@ export function BulkSelectionBubble() {
               <span className="text-sm text-mail-text whitespace-nowrap">
                 <span className="text-mail-text-muted">{email}</span>
                 <span className="text-mail-text-muted mx-1.5">·</span>
-                <span className="text-mail-text-muted">{folder}</span>
+                <span className="text-mail-text-muted">{decodeImapUtf7(folder)}</span>
                 <span className="text-mail-text-muted mx-1.5">·</span>
                 <span className="font-medium">{count.toLocaleString()} selected</span>
               </span>

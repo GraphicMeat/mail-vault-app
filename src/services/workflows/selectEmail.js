@@ -10,6 +10,7 @@ import { getGraphMessageId, resolveGraphMessageId } from '../cacheManager';
 import { _resolveUnifiedContext, bodyMatchesHeader } from '../../stores/slices/unifiedHelpers';
 import { _shouldPrefetch, getCacheCurrentSizeMB } from '../../stores/slices/cacheSlice';
 import { applySeenLocally, _setSeenOnServer, applyServerRemoval } from './messageMutations';
+import { decodeImapUtf7 } from '../../utils/imapUtf7';
 
 // Module-level mark-as-read timer
 let _markAsReadTimer = null;
@@ -288,7 +289,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
     const headerOnly = () => {
       const headerEmail = get().emails.find(e => e.uid === uid);
       if (!headerEmail) {
-        useMailStore.setState({ error: `Failed to load email (UID ${uid}, ${mailbox}): ${detail}` });
+        useMailStore.setState({ error: decodeImapUtf7(`Failed to load email (UID ${uid}, ${mailbox}): ${detail}`) });
         return;
       }
       useMailStore.setState({

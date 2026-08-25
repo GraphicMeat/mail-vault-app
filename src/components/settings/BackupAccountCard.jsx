@@ -18,6 +18,7 @@ import {
   Shield,
   HardDrive,
 } from 'lucide-react';
+import { decodeImapUtf7 } from '../../utils/imapUtf7';
 
 function formatRelativeTime(timestamp) {
   if (!timestamp) return '--';
@@ -267,7 +268,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
                           }}
                           className="accent-mail-accent"
                         />
-                        {folder}
+                        {decodeImapUtf7(folder)}
                       </label>
                     ))}
                   </div>
@@ -343,7 +344,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs">
               <span className="text-mail-text font-medium">
-                {backupProgress.folder || 'Starting...'} ({backupProgress.completed_folders}/{backupProgress.total_folders} folders)
+                {decodeImapUtf7(backupProgress.folder) || 'Starting...'} ({backupProgress.completed_folders}/{backupProgress.total_folders} folders)
               </span>
               <span className="text-mail-text-muted">
                 {backupProgress.completed_emails} emails backed up
@@ -489,7 +490,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
             {runningManual && backupProgress && (
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-mail-text">{backupProgress.folder} ({backupProgress.completed_folders}/{backupProgress.total_folders})</span>
+                  <span className="text-mail-text">{decodeImapUtf7(backupProgress.folder)} ({backupProgress.completed_folders}/{backupProgress.total_folders})</span>
                   <span className="text-mail-text-muted">{backupProgress.completed_emails} emails</span>
                 </div>
                 <div className="h-1 rounded-full bg-mail-border overflow-hidden">

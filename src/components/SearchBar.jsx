@@ -3,6 +3,7 @@ import { useAccountStore } from '../stores/accountStore';
 import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { flattenMailboxes } from '../stores/slices/unifiedHelpers';
+import { decodeImapUtf7 } from '../utils/imapUtf7';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
@@ -263,7 +264,7 @@ export function SearchBar() {
                       className="w-full px-3 py-1.5 bg-mail-bg border border-mail-border rounded-lg
                                 text-sm text-mail-text focus:border-mail-accent focus:outline-none"
                     >
-                      <option value="current">Current folder ({activeMailbox})</option>
+                      <option value="current">Current folder ({decodeImapUtf7(activeMailbox)})</option>
                       <option value="all">All folders</option>
                       {/* Flattened: a nested folder is a search target like any
                           other, and the top-level list left 50 of bson73's 59
@@ -271,7 +272,7 @@ export function SearchBar() {
                       {flattenMailboxes(mailboxes)
                         .filter(mb => !mb.noselect && mb.path !== activeMailbox)
                         .map(mb => (
-                          <option key={mb.path} value={mb.path}>{mb.path}</option>
+                          <option key={mb.path} value={mb.path}>{decodeImapUtf7(mb.path)}</option>
                         ))
                       }
                     </select>
@@ -543,7 +544,7 @@ export function SearchBar() {
           ) : (
             <>
               Found <span className="font-medium text-mail-text">{searchResults.length}</span> results
-              {searchFilters.folder === 'current' && ` in ${activeMailbox}`}
+              {searchFilters.folder === 'current' && ` in ${decodeImapUtf7(activeMailbox)}`}
               {searchFilters.folder === 'all' && ' in all folders'}
               {searchResults.length > 0 && (
                 <span className="ml-2 text-[10px]">

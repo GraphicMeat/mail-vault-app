@@ -11,6 +11,7 @@ import { useSettingsStore, getAccountInitial, hashColor } from '../stores/settin
 import { shouldPrefetch } from '../services/cachePressure';
 import { buildThreads, groupBySender, getSenderName, filterUnread } from '../utils/emailParser';
 import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
+import { decodeImapUtf7 } from '../utils/imapUtf7';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -813,7 +814,7 @@ function EmailListComponent() {
           ) : (
             <div className="flex flex-col">
               <h2 className="text-lg font-semibold text-mail-text">
-                {activeMailbox === 'UNIFIED' ? 'All Inboxes' : (activeMailbox.includes('.') ? activeMailbox.split('.').pop() : activeMailbox.includes('/') ? activeMailbox.split('/').pop() : activeMailbox)}
+                {activeMailbox === 'UNIFIED' ? 'All Inboxes' : decodeImapUtf7(activeMailbox.includes('.') ? activeMailbox.split('.').pop() : activeMailbox.includes('/') ? activeMailbox.split('/').pop() : activeMailbox)}
               </h2>
               <div className="text-xs text-mail-text-muted mt-0.5 flex items-center gap-1.5">
                 {/* ponytail: the header used to always show the server total, so a

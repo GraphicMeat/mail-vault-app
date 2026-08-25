@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { HardDrive, Loader2 } from 'lucide-react';
 import { useBackupStore } from '../stores/backupStore.js';
+import { decodeImapUtf7 } from '../utils/imapUtf7';
 
 export function BackupToast({ showSettings, onOpenBackup }) {
   const activeBackup = useBackupStore(s => s.activeBackup);
@@ -31,7 +32,7 @@ export function BackupToast({ showSettings, onOpenBackup }) {
               </span>
             </div>
             <span className="text-[10px] text-mail-text-muted">
-              {activeBackup.folder} {activeBackup.totalFolders > 0 && `(${activeBackup.completedFolders}/${activeBackup.totalFolders})`}
+              {decodeImapUtf7(activeBackup.folder)} {activeBackup.totalFolders > 0 && `(${activeBackup.completedFolders}/${activeBackup.totalFolders})`}
               {activeBackup.completedEmails > 0 && ` · ${activeBackup.completedEmails} emails`}
               {activeBackup.queueLength > 0 && ` · ${activeBackup.queueLength} more queued`}
             </span>

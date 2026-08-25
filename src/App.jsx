@@ -47,6 +47,7 @@ import { migrationManager } from './services/migrationManager.js';
 import { restoreManager } from './services/restoreManager.js';
 import { setComposeOpener } from './services/localDrafts';
 import { version } from '../package.json';
+import { decodeImapUtf7 } from './utils/imapUtf7';
 
 // Resizable divider component
 function ResizeDivider({ orientation, onResize, onResizeEnd }) {
@@ -878,7 +879,7 @@ function App() {
           <p className="text-sm text-mail-text mb-3">
             You have an unfinished operation: {pendingOperation.type.replace(/_/g, ' ')} {
               ((pendingOperation.totalUids || []).length - (pendingOperation.completedUids || []).length).toLocaleString()
-            } remaining emails in {pendingOperation.mailbox}.
+            } remaining emails in {decodeImapUtf7(pendingOperation.mailbox)}.
           </p>
           <div className="flex gap-2">
             <button

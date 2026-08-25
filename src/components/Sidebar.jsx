@@ -12,6 +12,7 @@ import { useBackupStore } from '../stores/backupStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as api from '../services/api';
 import { formatBytes } from '../utils/formatBytes';
+import { mailboxLabel } from '../utils/imapUtf7';
 import { lastDaysSeries } from '../utils/transferLimits';
 import {
   Inbox,
@@ -60,13 +61,6 @@ const MAILBOX_ICONS = {
 function getMailboxIcon(mailbox) {
   const Icon = MAILBOX_ICONS[mailbox.specialUse] || MAILBOX_ICONS[mailbox.path] || Inbox;
   return Icon;
-}
-
-function getMailboxDisplayName(name) {
-  if (!name) return name;
-  const match = name.match(/^inbox\./i);
-  if (match) return name.slice(match[0].length);
-  return name;
 }
 
 const UNIFIED_FOLDERS = [
@@ -884,7 +878,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                       if (hasChildren) toggleFolder(mailbox.path);
                     }
                   }}
-                  title={getMailboxDisplayName(mailbox.name)}
+                  title={mailboxLabel(mailbox.name)}
                 >
                   <Icon size={16} />
                 </button>
@@ -899,7 +893,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                                    ? 'bg-mail-accent/10 text-mail-accent'
                                    : 'text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover'}`}
                       onClick={() => activateAccount(activeAccountId, child.path)}
-                      title={getMailboxDisplayName(child.name)}
+                      title={mailboxLabel(child.name)}
                     >
                       <ChildIcon size={13} />
                     </button>
@@ -1285,14 +1279,14 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                   <button
                     key={mailbox.path}
                     onClick={() => activateAccount(activeAccountId, mailbox.path)}
-                    title={getMailboxDisplayName(mailbox.name)}
+                    title={mailboxLabel(mailbox.name)}
                     className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs transition-colors border
                                ${isActive
                                  ? 'bg-mail-accent text-white border-mail-accent'
                                  : 'text-mail-text border-mail-border hover:bg-mail-surface-hover'}`}
                   >
                     <Icon size={12} />
-                    <span className="truncate max-w-[140px]">{getMailboxDisplayName(mailbox.name)}</span>
+                    <span className="truncate max-w-[140px]">{mailboxLabel(mailbox.name)}</span>
                   </button>
                 );
               }
@@ -1305,14 +1299,14 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                     <button
                       key={child.path}
                       onClick={() => activateAccount(activeAccountId, child.path)}
-                      title={getMailboxDisplayName(child.name)}
+                      title={mailboxLabel(child.name)}
                       className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs transition-colors border
                                  ${isChildActive
                                    ? 'bg-mail-accent text-white border-mail-accent'
                                    : 'text-mail-text-muted border-mail-border hover:bg-mail-surface-hover hover:text-mail-text'}`}
                     >
                       <ChildIcon size={12} />
-                      <span className="truncate max-w-[140px]">{getMailboxDisplayName(child.name)}</span>
+                      <span className="truncate max-w-[140px]">{mailboxLabel(child.name)}</span>
                     </button>
                   );
                 });
@@ -1366,7 +1360,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                 )}
                 {!hasChildren && <div className="w-5" />}
                 <Icon size={16} />
-                <span className="text-sm flex-1 truncate">{getMailboxDisplayName(mailbox.name)}</span>
+                <span className="text-sm flex-1 truncate">{mailboxLabel(mailbox.name)}</span>
               </div>
 
               {hasChildren && isExpanded && (
@@ -1386,7 +1380,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                       >
                         <div className="w-5" />
                         <ChildIcon size={14} />
-                        <span className="text-sm truncate">{getMailboxDisplayName(child.name)}</span>
+                        <span className="text-sm truncate">{mailboxLabel(child.name)}</span>
                       </div>
                     );
                   })}

@@ -3,6 +3,7 @@ import { useAccountStore } from '../stores/accountStore';
 import { useSelectionStore } from '../stores/selectionStore';
 import { FolderSymlink, Search, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { mailboxLabel, decodeImapUtf7 } from '../utils/imapUtf7';
 
 /**
  * Flatten a mailbox tree into a flat list, skipping noselect folders.
@@ -71,7 +72,9 @@ export function MoveToFolderDropdown({ uids, onClose, anchorRect }) {
     const filtered = flat.filter(mb => mb.path !== activeMailbox);
     if (!filter.trim()) return filtered;
     const q = filter.toLowerCase();
-    return filtered.filter(mb => mb.name.toLowerCase().includes(q) || mb.path.toLowerCase().includes(q));
+    return filtered.filter(mb => mailboxLabel(mb.name).toLowerCase().includes(q)
+      || decodeImapUtf7(mb.path).toLowerCase().includes(q)
+      || mb.path.toLowerCase().includes(q));
   }, [mailboxes, activeMailbox, filter]);
 
   const handleMove = async (targetPath) => {
@@ -141,7 +144,7 @@ export function MoveToFolderDropdown({ uids, onClose, anchorRect }) {
               style={{ paddingLeft: `${12 + folder.depth * 16}px` }}
             >
               <FolderSymlink size={14} className="text-mail-text-muted flex-shrink-0" />
-              <span className="truncate">{folder.name}</span>
+              <span className="truncate">{mailboxLabel(folder.name)}</span>
             </button>
           ))
         )}

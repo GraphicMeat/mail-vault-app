@@ -122,6 +122,12 @@ const MOCK_ACCOUNTS = [
     inbox: 9,
     inboxUidStart: 901,
     crossFolderThread: false,
+    // A folder name in IMAP modified UTF-7 (RFC 3501 §5.1.3) — "Bokelmühle"
+    // exactly as bson73's server sends it (discussion #1). His server stores
+    // the name decomposed, so only the combining diaeresis is escaped and the
+    // plain "u" stays literal, which is why the app printed
+    // "Bokelmu&Awg-hle". Parked on yoda: nothing else reads its folder list.
+    extraMailbox: { name: 'Bokelmu&Awg-hle', count: 3, subjectPrefix: 'Yoda umlaut' },
     faults: [
       slowCommand('MOVE', 4000),
       slowCommand('EXPUNGE', 4000),

@@ -2,6 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader, Check, AlertTriangle, UploadCloud, X } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore.js';
+import { decodeImapUtf7 } from '../utils/imapUtf7';
 
 // Corner bubble for a minimized change-server restore. Mirrors the OutboxTray
 // bubble style: shows live upload progress while the restore runs in the
@@ -47,7 +48,7 @@ export function RestoreTray() {
               {running && (
                 <>
                   {activeRestore.uploaded_emails} uploaded
-                  {activeRestore.current_folder ? ` · ${activeRestore.current_folder}` : ''}
+                  {activeRestore.current_folder ? ` · ${decodeImapUtf7(activeRestore.current_folder)}` : ''}
                   {activeRestore.folder_progress ? ` · ${activeRestore.folder_progress}` : ''}
                 </>
               )}

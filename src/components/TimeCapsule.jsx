@@ -12,6 +12,7 @@ import {
 import { formatDateTime, formatDateOnly } from '../utils/dateFormat';
 import { IS_APPSTORE_BUILD } from '../utils/buildFlags.js';
 import { usePremiumPriceBlurb } from '../hooks/usePremiumPricing.js';
+import { mailboxLabel } from '../utils/imapUtf7';
 
 const ROW_HEIGHT = 56;
 
@@ -259,7 +260,7 @@ function SnapshotBrowser({ accountId }) {
               }`}
             >
               <MailboxIcon name={name} />
-              <span className="text-sm font-medium flex-1 truncate">{name}</span>
+              <span className="text-sm font-medium flex-1 truncate">{mailboxLabel(name)}</span>
               <span className="text-[11px] opacity-60">{totalEmails}</span>
             </button>
           ))}

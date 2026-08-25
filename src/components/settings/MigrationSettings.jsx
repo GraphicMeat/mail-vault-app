@@ -14,6 +14,7 @@ import { migrationManager } from '../../services/migrationManager.js';
 import { formatDateTime } from '../../utils/dateFormat.js';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags.js';
 import { usePremiumPriceBlurb } from '../../hooks/usePremiumPricing.js';
+import { decodeImapUtf7 } from '../../utils/imapUtf7';
 
 function formatDuration(secs) {
   if (!secs || secs < 1) return '< 1s';
@@ -558,7 +559,7 @@ export default function MigrationSettings({ onUpgrade }) {
                   </div>
                   {selectedMappings.map((mapping, i) => (
                     <div key={i} className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center text-sm px-2 py-1.5 rounded hover:bg-mail-surface-hover">
-                      <span className="text-mail-text truncate">{mapping.source_path}</span>
+                      <span className="text-mail-text truncate">{decodeImapUtf7(mapping.source_path)}</span>
                       <ArrowRight size={14} className="text-mail-text-muted flex-shrink-0" />
                       <span className="text-mail-text truncate flex items-center gap-1">
                         {mapping.dest_path}
@@ -852,7 +853,7 @@ function ProgressView({ migration, accounts, accountColors, onPause, onResume, o
       {/* Current folder */}
       {migration.current_folder && (
         <div>
-          <p className="text-sm text-mail-text">Current folder: {migration.current_folder}</p>
+          <p className="text-sm text-mail-text">Current folder: {decodeImapUtf7(migration.current_folder)}</p>
         </div>
       )}
 
@@ -873,7 +874,7 @@ function ProgressView({ migration, accounts, accountColors, onPause, onResume, o
             }
             else if (folder.status === 'failed') { Icon = XCircle; iconClass = 'text-mail-danger'; }
 
-            const folderName = folder.source_path || folder.name || folder.dest_path || 'Unknown';
+            const folderName = decodeImapUtf7(folder.source_path || folder.name || folder.dest_path) || 'Unknown';
 
             return (
               <div key={i} className="flex items-center gap-2 text-sm py-1">

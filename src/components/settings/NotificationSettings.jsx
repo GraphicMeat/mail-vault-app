@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useSettingsStore, getAccountInitial, getAccountColor } from '../../stores/settingsStore';
 import { ToggleSwitch } from './ToggleSwitch';
 import { Bell, ChevronUp, ChevronDown, HardDrive, Mail } from 'lucide-react';
+import { decodeImapUtf7 } from '../../utils/imapUtf7';
 
 export function NotificationSettings({ accounts }) {
   const {
@@ -144,7 +145,7 @@ export function NotificationSettings({ accounts }) {
                                       className="rounded border-mail-border text-mail-accent focus:ring-mail-accent"
                                     />
                                     <span className="text-sm text-mail-text group-hover:text-mail-accent transition-colors">
-                                      {folder}
+                                      {decodeImapUtf7(folder)}
                                     </span>
                                   </label>
                                 );

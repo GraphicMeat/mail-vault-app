@@ -8,6 +8,7 @@ import { gatherLocalFolders } from '../services/restoreDetection.js';
 import { resolveEmailSettings, dnsMailHealth } from '../services/api.js';
 import { detectProvider } from './AccountModal.jsx';
 import { deriveSuggestion, classifyVerifyError, nextStepAfterVerify } from './changeServer/helpers.js';
+import { decodeImapUtf7 } from '../utils/imapUtf7';
 
 const inputClass = 'w-full px-3 py-2 bg-mail-bg border border-mail-border rounded-lg text-sm text-mail-text placeholder-mail-text-muted focus:outline-none focus:border-mail-accent';
 
@@ -299,7 +300,7 @@ export default function ChangeServerModal() {
                 <ul className="text-sm text-mail-text mb-4 max-h-40 overflow-auto">
                   {folders.map((f) => (
                     <li key={f.mailbox} className="flex justify-between py-0.5">
-                      <span>{f.mailbox}</span><span className="text-mail-text-muted">{f.localCount}</span>
+                      <span>{decodeImapUtf7(f.mailbox)}</span><span className="text-mail-text-muted">{f.localCount}</span>
                     </li>
                   ))}
                 </ul>
@@ -324,7 +325,7 @@ export default function ChangeServerModal() {
               <div>
                 <div className="flex items-center gap-2 mb-2 text-mail-text">
                   <Loader2 className="animate-spin" size={16} />
-                  <span>Uploading{activeRestore.current_folder ? ` — ${activeRestore.current_folder}` : ''}…</span>
+                  <span>Uploading{activeRestore.current_folder ? ` — ${decodeImapUtf7(activeRestore.current_folder)}` : ''}…</span>
                 </div>
                 <div className="text-mail-text-muted">
                   {activeRestore.uploaded_emails} uploaded · {activeRestore.skipped_emails} skipped · {activeRestore.failed_emails} failed

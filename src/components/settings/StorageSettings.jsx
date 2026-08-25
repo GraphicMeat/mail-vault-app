@@ -19,6 +19,7 @@ import {
   Pencil,
   AlertTriangle,
 } from 'lucide-react';
+import { decodeImapUtf7 } from '../../utils/imapUtf7';
 
 export function StorageSettings({ accounts, onUpgrade }) {
   const priceBlurb = usePremiumPriceBlurb();
@@ -440,7 +441,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                 {cleanupRules.map((rule) => (
                   <div key={rule.id} className="flex items-center justify-between p-3 bg-mail-bg rounded-lg group">
                     <div className="flex items-center gap-3 text-sm min-w-0 flex-1">
-                      <span className="font-medium text-mail-text">{rule.folder}</span>
+                      <span className="font-medium text-mail-text">{decodeImapUtf7(rule.folder)}</span>
                       <span className="text-mail-text-muted truncate">
                         {rule.account === 'all' ? 'All accounts' : rule.account}
                       </span>
@@ -558,7 +559,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                       className="w-full px-3 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent"
                     >
                       {['INBOX', 'Sent', 'Drafts', 'Trash', 'Junk', 'Archive'].map(f => (
-                        <option key={f} value={f}>{f}</option>
+                        <option key={f} value={f}>{decodeImapUtf7(f)}</option>
                       ))}
                     </select>
                   </div>
