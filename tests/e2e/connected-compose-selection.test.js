@@ -83,6 +83,46 @@ describe('Connected Compose — text selection must not dismiss the window', fun
     expect(await fieldValue('compose-subject')).toBe('Selection must not minimize');
   });
 
+  it('survives a real mouse drag out of the window, not just a synthetic one', async function () {
+    await freshCompose();
+    await fillDraft('Native drag must not minimize');
+
+    // The case above builds the event sequence by hand. This one hands the
+    // gesture to the driver — press inside the subject field, drag out over the
+    // backdrop, release — so the browser decides for itself which element the
+    // click lands on. If WebKit ever changed that rule, this is the case that
+    // would notice.
+    const points = await browser.execute(() => {
+      const modal = document.querySelector('[data-testid="compose-modal"]');
+      const field = document.querySelector('[data-testid="compose-subject"]');
+      if (!modal || !field) return null;
+      const f = field.getBoundingClientRect();
+      const m = modal.getBoundingClientRect();
+      return {
+        from: { x: Math.round(f.left + 20), y: Math.round(f.top + f.height / 2) },
+        to: { x: Math.round(Math.max(4, m.left / 2)), y: Math.round(m.top + m.height / 2) },
+      };
+    });
+    expect(points).not.toBe(null);
+
+    await browser.performActions([{
+      type: 'pointer',
+      id: 'mouse',
+      parameters: { pointerType: 'mouse' },
+      actions: [
+        { type: 'pointerMove', duration: 0, x: points.from.x, y: points.from.y },
+        { type: 'pointerDown', button: 0 },
+        { type: 'pointerMove', duration: 120, x: points.to.x, y: points.to.y },
+        { type: 'pointerUp', button: 0 },
+      ],
+    }]);
+    await browser.releaseActions();
+    await browser.pause(500);
+
+    expect((await bubbles()).length).toBe(0);
+    expect(await modalOpen()).toBe(true);
+  });
+
   it('still minimizes when the click really starts on the backdrop', async function () {
     await freshCompose();
     await fillDraft('Backdrop still minimizes');

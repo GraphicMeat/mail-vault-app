@@ -24,8 +24,16 @@ import {
   closeComposeHard,
   setField,
   typeInBody,
+  attachViaInput,
+  attachments,
+  pdfFile,
   clickButtonTitle,
   clickButtonText,
+  clickBubble,
+  closeBubble,
+  clickSend,
+  waitForOutboxError,
+  mailStoreSet,
   modalOpen,
   bubbles,
   listDrafts,
@@ -173,6 +181,165 @@ describe('Connected Compose Autosave — drafts land in the vault', function () 
         timeoutMsg: 'The autosaved draft never appeared as a row in the Drafts folder',
       },
     );
+  });
+
+  it('still has the draft after the app window is thrown away', async function () {
+    await freshCompose();
+    await setField('compose-to', 'survivor@example.com');
+    await setField('compose-subject', 'Draft outlives the window');
+    await typeInBody('Text that only the vault will have');
+    await waitForLocalDraft(account.id, 'Draft outlives the window');
+
+    // Nothing is closed, minimized or saved by hand: the window is destroyed
+    // with the message still open in it. That is what a crash, a quit, or a
+    // reload looks like from the draft's point of view, and it is the case the
+    // whole feature exists for — every in-memory copy goes at once.
+    await browser.execute(() => window.location.reload());
+    await waitForApp();
+    await waitForEmails();
+
+    await switchToFolder(account.email, 'Drafts', { requireRows: false });
+    await browser.waitUntil(
+      async () => (await visibleRowSubjects()).some((r) => r.includes('Draft outlives the window')),
+      {
+        timeout: 20_000,
+        interval: 500,
+        timeoutMsg: 'The draft did not come back after the window was reloaded — it lived only in the compose window after all',
+      },
+    );
+    // And it is the message, not just a row: the body is on disk too.
+    expect(readDrafts(account.id).some((t) => flatten(t).includes('Text that only the vault will have'))).toBe(true);
+  });
+
+  it('keeps one draft across minimize and restore', async function () {
+    await freshCompose();
+    await setField('compose-to', 'roundtrip@example.com');
+    await setField('compose-subject', 'Draft before the bubble');
+    await waitForLocalDraft(account.id, 'Draft before the bubble');
+    const before = listDrafts(account.id).length;
+
+    expect(await clickButtonTitle('Minimize')).toBe(true);
+    await browser.waitUntil(async () => (await bubbles()).length === 1, {
+      timeout: 15_000, interval: 200, timeoutMsg: 'Minimize did not produce a draft bubble',
+    });
+    expect(await clickBubble(0)).toBe(true);
+    await browser.waitUntil(modalOpen, {
+      timeout: 15_000, interval: 200, timeoutMsg: 'The bubble did not restore the compose window',
+    });
+
+    await setField('compose-subject', 'Draft after the bubble');
+    await waitForLocalDraft(account.id, 'Draft after the bubble');
+
+    // The restored window is still editing the SAME vault draft: the uid it was
+    // given travels through the unmount. Allocating a new one here would leave
+    // the pre-minimize version behind as a second, stale row.
+    expect(listDrafts(account.id).length).toBe(before);
+    expect(draftSubjects()).toContain('Draft after the bubble');
+    expect(draftSubjects()).not.toContain('Draft before the bubble');
+  });
+
+  it('takes the draft out of the vault when its bubble is dismissed', async function () {
+    await freshCompose();
+    await setField('compose-to', 'gone@example.com');
+    await setField('compose-subject', 'Bubble X discards this');
+    await waitForLocalDraft(account.id, 'Bubble X discards this');
+
+    expect(await clickButtonTitle('Minimize')).toBe(true);
+    await browser.waitUntil(async () => (await bubbles()).length === 1, {
+      timeout: 15_000, interval: 200, timeoutMsg: 'Minimize did not produce a draft bubble',
+    });
+
+    // The X on a bubble is a discard, same as the one in the window — and it is
+    // the only discard that happens with the compose window already unmounted.
+    expect(await closeBubble(0)).toBe(true);
+    await browser.waitUntil(
+      async () => !draftSubjects().includes('Bubble X discards this'),
+      {
+        timeout: 15_000,
+        interval: 300,
+        timeoutMsg: 'Dismissing the bubble left its draft behind in the vault',
+      },
+    );
+    expect(readDrafts(account.id).some((t) => flatten(t).includes('Bubble X discards this'))).toBe(false);
+  });
+
+  it('saves an attached file into the draft, not just its name', async function () {
+    await freshCompose();
+    await setField('compose-to', 'attach@example.com');
+    await setField('compose-subject', 'Draft with an attachment');
+    expect(await attachViaInput([pdfFile()])).toBe(true);
+    await browser.waitUntil(async () => (await attachments()).includes('notes.pdf'), {
+      timeout: 15_000, interval: 300, timeoutMsg: 'The attachment never landed in the compose window',
+    });
+
+    // Waited on the FILE, not the subject: the subject is saved a pause earlier,
+    // so a wait on it can return the pre-attachment version of the same draft.
+    const raw = flatten(await waitForLocalDraft(account.id, 'notes.pdf'));
+    // The file is IN the saved message — a draft that lists an attachment it
+    // cannot produce is the same lie as a row with no body behind it.
+    expect(raw).toContain('Draft with an attachment');
+    // The bytes themselves, not a base64 prefix: this stub is pure ASCII, so
+    // lettre files it as 7bit rather than base64.
+    expect(raw).toContain('%PDF-1.4');
+    const entry = localIndex(account.id, 'Drafts').find((e) => e.subject === 'Draft with an attachment');
+    expect(entry?.has_attachments).toBe(true);
+  });
+
+  it('saves a reply draft with the quoted original and its threading headers', async function () {
+    const original = {
+      uid: 515151,
+      subject: 'Autosave reply source',
+      from: { name: 'Ann Sender', address: 'ann@example.com' },
+      to: [{ address: account.email }],
+      cc: [],
+      replyTo: [],
+      date: '2026-08-01T10:00:00.000Z',
+      messageId: '<autosave-orig-515151@example.com>',
+      text: 'Original body being replied to',
+      html: '<p>Original body being replied to</p>',
+      flags: ['\\Seen'],
+      _accountId: account.id,
+    };
+    await closeComposeHard();
+    const selection = { selectedEmail: original, selectedEmailId: original.uid, selectedThread: null };
+    await mailStoreSet(selection);
+    await browser.execute(() => document.activeElement?.blur());
+    await mailStoreSet(selection);
+    await browser.keys('r');
+    await browser.waitUntil(modalOpen, {
+      timeout: 15_000, interval: 200, timeoutMsg: 'Reply did not open on "r"',
+    });
+    await typeInBody('My half of the reply');
+
+    const raw = flatten(await waitForLocalDraft(account.id, 'Re: Autosave reply source'));
+    expect(raw).toContain('My half of the reply');
+    // A reply draft that loses the quote or the headers comes back as a new
+    // conversation — the same way a reply used to fragment a thread.
+    expect(raw).toContain('Original body being replied to');
+    expect(raw).toContain('<autosave-orig-515151@example.com>');
+    expect(raw.toLowerCase()).toContain('in-reply-to:');
+
+    await mailStoreSet({ selectedEmail: null, selectedEmailId: null, selectedThread: null });
+  });
+
+  it('keeps the draft when the send fails', async function () {
+    // A real SMTP attempt against a port that does not speak SMTP; one failure
+    // is slower than the spec-level budget.
+    this.timeout(240_000);
+
+    await freshCompose();
+    await setField('compose-to', 'nobody@example.com');
+    await setField('compose-subject', 'Draft outlives a failed send');
+    await setField('compose-delay', 0);
+    await waitForLocalDraft(account.id, 'Draft outlives a failed send');
+
+    expect(await clickSend()).toBe(true);
+    await waitForOutboxError('Draft outlives a failed send');
+
+    // The message never left, so it is still a draft. Deleting it here would
+    // put the only copy in an outbox bubble the user can dismiss.
+    expect(draftSubjects()).toContain('Draft outlives a failed send');
+    expect(readDrafts(account.id).some((t) => flatten(t).includes('Draft outlives a failed send'))).toBe(true);
   });
 
   it('removes the draft from the vault when the message is discarded', async function () {
