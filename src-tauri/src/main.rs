@@ -4406,7 +4406,7 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
             error!("Failed to create updater: {}", e);
             if show_no_update {
                 handle.dialog()
-                    .message("Auto-update is not available for this installation type.\nVisit https://mailvault.app to check for new versions.")
+                    .message("Auto-update is not available for this installation type.\nVisit https://mailvaultapp.com to check for new versions.")
                     .title("Updates")
                     .show(|_| {});
             }
@@ -4446,7 +4446,7 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
             error!("Update check failed: {}", e);
             if show_no_update {
                 handle.dialog()
-                    .message("Could not check for updates.\nVisit https://mailvault.app to check for new versions.")
+                    .message("Could not check for updates.\nVisit https://mailvaultapp.com to check for new versions.")
                     .title("Update Error")
                     .show(|_| {});
             }
@@ -5081,6 +5081,8 @@ fn main() {
             let export_logs = MenuItem::with_id(app, "export_logs", "Export Logs...", true, None::<&str>)?;
             let logs_submenu = Submenu::with_id(app, "logs_submenu", "Logs", true)?;
             logs_submenu.append(&export_logs)?;
+            let website_item = MenuItem::with_id(app, "open_website", "MailVault Website", true, None::<&str>)?;
+            let more_apps_item = MenuItem::with_id(app, "open_more_apps", "More Apps by GraphicMeat", true, None::<&str>)?;
 
             #[cfg(target_os = "macos")]
             {
@@ -5112,13 +5114,13 @@ fn main() {
                 menu.append(&logs_submenu)?;
 
                 // Populate the Help menu (default menu creates it empty)
-                let website_item = MenuItem::with_id(app, "open_website", "MailVault Website", true, None::<&str>)?;
                 let shortcuts_item = MenuItem::with_id(app, "open_shortcuts", "Keyboard Shortcuts", true, Some("cmd+/"))?;
                 if let Ok(items) = menu.items() {
                     for item in &items {
                         if let Some(sub) = item.as_submenu() {
                             if sub.text().unwrap_or_default() == "Help" {
                                 let _ = sub.append(&website_item);
+                                let _ = sub.append(&more_apps_item);
                                 let _ = sub.append(&shortcuts_item);
                                 break;
                             }
@@ -5136,6 +5138,8 @@ fn main() {
                 file_submenu.append(&check_updates)?;
                 file_submenu.append(&open_settings)?;
                 file_submenu.append(&report_bug)?;
+                file_submenu.append(&website_item)?;
+                file_submenu.append(&more_apps_item)?;
                 file_submenu.append(&sep)?;
                 file_submenu.append(&quit_item)?;
 
@@ -5177,7 +5181,10 @@ fn main() {
                         });
                 } else if event.id().as_ref() == "open_website" {
                     use tauri_plugin_shell::ShellExt;
-                    let _ = app_handle_for_menu.shell().open("https://mailvault.app", None::<tauri_plugin_shell::open::Program>);
+                    let _ = app_handle_for_menu.shell().open("https://mailvaultapp.com", None::<tauri_plugin_shell::open::Program>);
+                } else if event.id().as_ref() == "open_more_apps" {
+                    use tauri_plugin_shell::ShellExt;
+                    let _ = app_handle_for_menu.shell().open("https://graphicmeat.com", None::<tauri_plugin_shell::open::Program>);
                 } else if event.id().as_ref() == "open_shortcuts" {
                     let _ = app_handle_for_menu.emit("open-shortcuts", ());
                 } else if event.id().as_ref() == "quit_app" {

@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+- **A link to the other apps from the same maker.** Help → "More Apps by GraphicMeat", and a matching row in Settings → Help & Support, open graphicmeat.com.
+
+### Fixed
+- **Help → "MailVault Website" opens the site that is actually there.** The menu item, and the two update dialogs that name the website, pointed at mailvault.app, which is offline. All three now open mailvaultapp.com. The same link is in Settings → Help & Support, where Windows and Linux can reach it too.
+
 ## [2.10.2] - 2026-08-25
 
 ### Added

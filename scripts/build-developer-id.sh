@@ -486,7 +486,7 @@ if [ "$SPARKLE_SIGN" = true ]; then
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
   <channel>
     <title>MailVault Updates</title>
-    <link>https://mailvault.app</link>
+    <link>https://mailvaultapp.com</link>
     <description>Most recent changes with links to updates.</description>
     <language>en</language>
     <item>
