@@ -2,21 +2,18 @@
 
 ## [Unreleased]
 
-### Added
-- **A link to the other apps from the same maker.** Help → "More Apps by GraphicMeat", and a matching row in Settings → Help & Support, open graphicmeat.com.
-
-### Fixed
-- **Help → "MailVault Website" opens the site that is actually there.** The menu item, and the two update dialogs that name the website, pointed at mailvault.app, which is offline. All three now open mailvaultapp.com. The same link is in Settings → Help & Support, where Windows and Linux can reach it too.
-
 ## [2.10.2] - 2026-08-25
 
 ### Added
 - **A message you are writing is saved to Drafts as you type.** Until now a half-written message existed only in the window it was being typed in, so anything that closed that window took the text with it. Three tenths of a second after you stop typing, the message is now written to the Drafts folder of the account it will be sent from, on this computer — recipients, subject, body and attachments — and it shows up in that folder like any other message. It is one draft, not one per pause: each save replaces the last. Change the From address to another account and the draft moves to that account's Drafts. Send the message, or discard it, and the draft goes away with it. A message with no recipient yet is saved too — that is the point. Nothing is uploaded to the mail server yet; this is the local copy only.
 - **A draft in the Drafts folder opens back up for writing.** A message saved as you typed could be read back but not continued: clicking its row opened it in the reading pane, like any other message, and the only way to carry on was to start again. Clicking a draft you wrote now reopens it in a message window — recipients, subject, body and attachments as you left them, sent from the account it belongs to — and carrying on updates that same draft instead of leaving the half-written one behind. A reply you had started keeps its place in the conversation. Mail archived from a server is unaffected: it still opens in the reading pane.
+- **A link to the other apps from the same maker.** Help → "More Apps by GraphicMeat", and a matching row in Settings → Help & Support, open graphicmeat.com.
 
 ### Fixed
 - **A search result opens the message you searched for, not another one on the same number.** Search looks across every folder, but a result carried no record of which folder it came from — so opening one went looking in the folder the sidebar happened to have selected. Two things followed. If that folder held a message with the same internal number, that message opened instead, under the header of the one you clicked. If it did not, the message would not open at all and MailVault reported it as no longer on the server. Results now carry their own folder, and two messages that share a number in different folders stay two separate results.
 - **Selecting text in a message you are writing no longer folds it away — or loses it.** Sweeping a selection past the edge of the compose window counted as clicking away from the window: the message collapsed into a draft bubble. Opening the bubble and doing it again was worse, because a message brought back from a bubble was treated as untouched — so that second time it closed for good, with no "Discard message?" prompt, and everything typed was gone. A selection that begins inside the window is now only a selection; clicking away still minimizes, but only when the click both starts and ends outside. A message restored from a bubble is unsaved work again: clicking away minimizes it, and Close asks first.
+- **A search across "all folders" now really searches every folder on the server.** The results header said all folders, but a search of the server only ever looked in the Inbox — so a message sitting in any other folder came back as a message that does not exist, which is exactly the check people make when a backup looks smaller than the mailbox it came from. The search now walks every folder the account has, Inbox first, filling the results in as it goes and showing which folder it is on, so a sweep of sixty folders no longer reads as a search that found nothing. A folder that refuses to open is skipped instead of ending the search, retyping the query abandons the old sweep, and the folder picker now lists folders nested inside other folders, which were unselectable before.
+- **Help → "MailVault Website" opens the site that is actually there.** The menu item, and the two update dialogs that name the website, pointed at mailvault.app, which is offline. All three now open mailvaultapp.com. The same link is in Settings → Help & Support, where Windows and Linux can reach it too.
 
 ## [2.10.1] - 2026-08-24
 

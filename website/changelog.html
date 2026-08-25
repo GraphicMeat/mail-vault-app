@@ -152,6 +152,10 @@
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
               <span><strong>A draft in the Drafts folder opens back up for writing.</strong> A message saved as you typed could be read back but not continued: clicking its row opened it in the reading pane, like any other message, and the only way to carry on was to start again. Clicking a draft you wrote now reopens it in a message window — recipients, subject, body and attachments as you left them, sent from the account it belongs to — and carrying on updates that same draft instead of leaving the half-written one behind. A reply you had started keeps its place in the conversation. Mail archived from a server is unaffected: it still opens in the reading pane.</span>
             </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A link to the other apps from the same maker.</strong> Help → "More Apps by GraphicMeat", and a matching row in Settings → Help & Support, open graphicmeat.com.</span>
+            </li>
           </ul>
         </div>
 
@@ -170,6 +174,14 @@
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
               <span><strong>Selecting text in a message you are writing no longer folds it away — or loses it.</strong> Sweeping a selection past the edge of the compose window counted as clicking away from the window: the message collapsed into a draft bubble. Opening the bubble and doing it again was worse, because a message brought back from a bubble was treated as untouched — so that second time it closed for good, with no "Discard message?" prompt, and everything typed was gone. A selection that begins inside the window is now only a selection; clicking away still minimizes, but only when the click both starts and ends outside. A message restored from a bubble is unsaved work again: clicking away minimizes it, and Close asks first.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A search across "all folders" now really searches every folder on the server.</strong> The results header said all folders, but a search of the server only ever looked in the Inbox — so a message sitting in any other folder came back as a message that does not exist, which is exactly the check people make when a backup looks smaller than the mailbox it came from. The search now walks every folder the account has, Inbox first, filling the results in as it goes and showing which folder it is on, so a sweep of sixty folders no longer reads as a search that found nothing. A folder that refuses to open is skipped instead of ending the search, retyping the query abandons the old sweep, and the folder picker now lists folders nested inside other folders, which were unselectable before.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Help → "MailVault Website" opens the site that is actually there.</strong> The menu item, and the two update dialogs that name the website, pointed at mailvault.app, which is offline. All three now open mailvaultapp.com. The same link is in Settings → Help & Support, where Windows and Linux can reach it too.</span>
             </li>
           </ul>
         </div>
