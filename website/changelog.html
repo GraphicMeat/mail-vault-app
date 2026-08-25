@@ -183,6 +183,10 @@
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
               <span><strong>Help → "MailVault Website" opens the site that is actually there.</strong> The menu item, and the two update dialogs that name the website, pointed at mailvault.app, which is offline. All three now open mailvaultapp.com. The same link is in Settings → Help & Support, where Windows and Linux can reach it too.</span>
             </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Folder names with accented letters read the way they are spelled.</strong> A folder called "Bokelmühle" showed up as "Bokelmu&Awg-hle" — in the sidebar, above the message list, in the folder pickers, and in the backup coverage list. Mail servers send folder names in an escaped form, and MailVault was printing that form as-is instead of turning it back into letters. Every place a folder is named now shows the real name, whatever alphabet it is written in: äöüå, accents, Cyrillic, Japanese. Nothing on disk changed — a folder in your archive is still stored under the name the server gives it, so a backup made before this update restores exactly as it did.</span>
+            </li>
           </ul>
         </div>
 
