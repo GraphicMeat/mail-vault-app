@@ -663,6 +663,53 @@ export function localIndex(accountId, mailbox) {
 }
 
 /**
+ * Everything the app wrote for one draft: its index entry and the raw bytes of
+ * its .eml, base64'd the way `maildir_store` takes them back.
+ *
+ * Nothing here is a fixture — the .eml is whatever `smtp_build_draft_mime`
+ * actually produced, so a spec that puts it back is not asserting against a
+ * hand-written MIME that can drift away from the real one.
+ */
+export function snapshotDraft(accountId, subject) {
+  const entry = localIndex(accountId, 'Drafts').find((e) => e.subject === subject);
+  if (!entry) {
+    throw new Error(
+      `No local-index entry for draft "${subject}" in ${accountId} — index holds ` +
+      JSON.stringify(localIndex(accountId, 'Drafts').map((e) => e.subject)),
+    );
+  }
+  const name = listDrafts(accountId).find((f) =>
+    flatten(readFileSync(join(draftsDir(accountId), f), 'utf8')).includes(subject));
+  if (!name) {
+    throw new Error(`Draft "${subject}" is indexed for ${accountId} but has no .eml in ${draftsDir(accountId)}`);
+  }
+  return { entry, rawBase64: readFileSync(join(draftsDir(accountId), name)).toString('base64') };
+}
+
+/**
+ * Put a snapshotted draft back into the vault with no compose window owning it
+ * — the state the app boots into when a draft outlives the session that wrote
+ * it. Bytes and index entry are the originals, so this reconstructs a restart
+ * rather than imitating one.
+ */
+export async function restoreDraft(accountId, { entry, rawBase64 }) {
+  const stored = await invoke('maildir_store', {
+    accountId,
+    mailbox: 'Drafts',
+    uid: entry.uid,
+    rawSourceBase64: rawBase64,
+    flags: ['archived', 'seen', 'draft'],
+  });
+  if (!stored.ok) throw new Error(`maildir_store failed re-seeding draft ${entry.uid}: ${stored.error}`);
+  const indexed = await invoke('local_index_append', {
+    accountId,
+    mailbox: 'Drafts',
+    entriesJson: JSON.stringify([entry]),
+  });
+  if (!indexed.ok) throw new Error(`local_index_append failed re-seeding draft ${entry.uid}: ${indexed.error}`);
+}
+
+/**
  * Wait for the autosave to put `subject` in the account's local Drafts vault.
  * Returns the raw .eml text.
  */

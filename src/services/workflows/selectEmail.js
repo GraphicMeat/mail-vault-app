@@ -155,6 +155,20 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
   const accountId = unified?.accountId || state.activeAccountId;
   const rawMailbox = mailboxOverride || unified?.mailbox || state.activeMailbox;
   const mailbox = rawMailbox === 'UNIFIED' ? 'INBOX' : rawMailbox;
+  // A draft the user wrote here reopens in compose, not the viewer — before
+  // the token refresh below, because continuing a local draft needs no server
+  // at all. The index read that proves provenance is gated on the flag the
+  // autosave writes (bare 'draft'; an IMAP draft carries '\Draft'), so
+  // opening an ordinary message costs nothing extra. Imported here rather than
+  // at the top for the same reason mailStore is: localDrafts reaches back into
+  // the store this workflow is reached FROM.
+  const clickedRow = state.emails.find(e => isUnified ? (e._accountId === accountId && e.uid === uid) : e.uid === uid)
+    || state.sortedEmails.find(e => e.uid === uid);
+  if (clickedRow?.flags?.includes('draft')) {
+    const { openLocalDraft } = await import('../localDrafts');
+    if (await openLocalDraft(accountId, mailbox, uid)) return;
+  }
+
   let account = unified?.account || state.accounts.find(a => a.id === accountId);
   account = await ensureFreshToken(account);
   const cacheKey = `${accountId}-${mailbox}-${uid}`;

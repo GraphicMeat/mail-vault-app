@@ -216,6 +216,48 @@ export async function getLocalIndexProvenance(accountId, mailbox) {
 }
 
 /**
+ * One local-index entry, raw, for a single uid — or null when there is none.
+ *
+ * `getLocalIndexProvenance` above keeps only `source`, which answers "where did
+ * this come from" and nothing else. Reopening a draft also needs the headers
+ * the .eml parse does not surface (In-Reply-To, References live in the index,
+ * not in `ParsedEmail`), so this returns the whole entry rather than reading
+ * the same file twice for two halves of one answer.
+ */
+export async function getLocalIndexEntry(accountId, mailbox, uid) {
+  await initBasic();
+  if (!invoke) return null;
+  await ensureVaultGeneration(accountId, mailbox);
+  try {
+    const data = await invoke('local_index_read', { accountId, mailbox });
+    if (!data) return null;
+    const entries = JSON.parse(data);
+    return entries.find(e => e && e.uid != null && Number(e.uid) === Number(uid)) || null;
+  } catch (e) {
+    console.warn('[db] Failed to read local index entry:', e);
+    return null;
+  }
+}
+
+/**
+ * The whole parsed .eml, attachment bytes included.
+ *
+ * `getLocalEmailLight` deliberately leaves attachment content on disk, which is
+ * right for rendering a message and wrong for reopening one in compose: an
+ * editor has to be able to send the files back out again.
+ */
+export async function getLocalEmailFull(accountId, mailbox, uid) {
+  await initDB();
+  if (!invoke) return undefined;
+  try {
+    const email = await invoke('maildir_read', { accountId, mailbox, uid: parseInt(uid, 10) });
+    return email || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Load only archived emails from Maildir (fast — reads only archived .eml files, not all).
  * Uses archivedEmailIds (already loaded via fast maildir_list) to read only the subset.
  */

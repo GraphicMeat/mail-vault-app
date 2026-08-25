@@ -45,6 +45,7 @@ import { resolveEscapeAction } from './utils/escapeAction';
 import { filterUnread } from './utils/emailParser';
 import { migrationManager } from './services/migrationManager.js';
 import { restoreManager } from './services/restoreManager.js';
+import { setComposeOpener } from './services/localDrafts';
 import { version } from '../package.json';
 
 // Resizable divider component
@@ -182,6 +183,29 @@ function App() {
   const restoreCompose = useCallback((id) => {
     setComposeWindows(prev => prev.map(w => w.id === id ? { ...w, minimized: false } : w));
   }, []);
+
+  // Clicking a draft row in the Drafts folder reopens it here rather than in
+  // the viewer (services/localDrafts.js does the reading; a service cannot
+  // reach this state, so it is handed the opener).
+  //
+  // A draft already open comes forward instead of opening a second window on
+  // it: two windows autosaving one vault uid interleave their writes, and the
+  // loser's text is gone.
+  const openDraftCompose = useCallback((initialData) => {
+    const already = composeWindows.find(w =>
+      w.initialData?._draftUid === initialData._draftUid &&
+      w.initialData?._draftMailbox === initialData._draftMailbox);
+    if (already) {
+      restoreCompose(already.id);
+      return;
+    }
+    openCompose({ initialData });
+  }, [composeWindows, openCompose, restoreCompose]);
+
+  useEffect(() => {
+    setComposeOpener(openDraftCompose);
+    return () => setComposeOpener(null);
+  }, [openDraftCompose]);
 
   // Backwards-compatible helpers
   const composeState = composeWindows.find(w => !w.minimized) || null;

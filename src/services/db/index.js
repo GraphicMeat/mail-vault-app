@@ -31,6 +31,8 @@ export {
   getLocalEmails,
   readLocalEmailIndex,
   getLocalIndexProvenance,
+  getLocalIndexEntry,
+  getLocalEmailFull,
   getArchivedEmails,
   getAllLocalEmails,
   deleteLocalEmail,

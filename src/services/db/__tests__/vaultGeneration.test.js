@@ -74,6 +74,13 @@ describe('vault generation repair', () => {
     expect(calls).toEqual(['maildir_repair_generation', 'local_index_read']);
   });
 
+  it('repairs before reading the single index entry a reopen needs', async () => {
+    // Same reason as provenance: a uid only means anything inside one
+    // generation, and this entry decides whether a row opens in compose.
+    await db.getLocalIndexEntry(ACCOUNT, 'INBOX', 3);
+    expect(calls).toEqual(['maildir_repair_generation', 'local_index_read']);
+  });
+
   it('runs one repair when both getters are awaited together', async () => {
     // The real load path awaits these in a single Promise.all. Two concurrent
     // repairs would be two concurrent rename passes over the same directory.
@@ -117,5 +124,21 @@ describe('vault generation repair', () => {
   it('skips the repair when there is no mailbox to repair', async () => {
     await db.getArchivedEmailIds(ACCOUNT, '');
     expect(calls).toEqual(['maildir_list']);
+  });
+});
+
+describe('getLocalIndexEntry', () => {
+  it('returns the entry for that uid', async () => {
+    expect(await db.getLocalIndexEntry(ACCOUNT, 'INBOX', 3)).toEqual({ uid: 3, source: 'local' });
+  });
+
+  it('matches a uid the caller passed as a string', async () => {
+    // Row uids arrive from the DOM and from Maildir filenames — one side is a
+    // string often enough that a === comparison would answer "no such draft".
+    expect(await db.getLocalIndexEntry(ACCOUNT, 'INBOX', '3')).toEqual({ uid: 3, source: 'local' });
+  });
+
+  it('returns null for a uid the index does not carry', async () => {
+    expect(await db.getLocalIndexEntry(ACCOUNT, 'INBOX', 99)).toBe(null);
   });
 });

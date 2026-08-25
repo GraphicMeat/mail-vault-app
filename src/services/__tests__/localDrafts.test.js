@@ -14,8 +14,12 @@ vi.mock('../api', () => ({
 }));
 
 const mockGetCachedMailboxes = vi.fn().mockResolvedValue(null);
+const mockGetLocalIndexEntry = vi.fn();
+const mockGetLocalEmailFull = vi.fn();
 vi.mock('../db', () => ({
   getCachedMailboxes: (...a) => mockGetCachedMailboxes(...a),
+  getLocalIndexEntry: (...a) => mockGetLocalIndexEntry(...a),
+  getLocalEmailFull: (...a) => mockGetLocalEmailFull(...a),
 }));
 
 let storeState;
@@ -29,8 +33,10 @@ vi.mock('../../stores/mailStore', () => ({
   },
 }));
 
-const { resolveDraftsMailbox, saveLocalDraft, deleteLocalDraft, discardDraftFor, newDraftUid } =
-  await import('../localDrafts');
+const {
+  resolveDraftsMailbox, saveLocalDraft, deleteLocalDraft, discardDraftFor, newDraftUid,
+  setComposeOpener, openLocalDraft, draftToInitialData,
+} = await import('../localDrafts');
 
 const ACCOUNT = { id: 'acct-1', email: 'me@example.com' };
 const invoke = vi.fn().mockResolvedValue(undefined);
@@ -188,6 +194,138 @@ describe('discardDraftFor', () => {
     await discardDraftFor({ _accountId: 'acct-1' });
     await discardDraftFor(null);
     expect(invoke).not.toHaveBeenCalled();
+  });
+});
+
+describe('saveLocalDraft — threading headers survive the round trip', () => {
+  it('indexes both In-Reply-To and References', async () => {
+    const entry = await save({
+      payload: {
+        to: 'a@example.com',
+        subject: 'Re: something',
+        html: '<p>hi</p>',
+        inReplyTo: '<parent@example.com>',
+        references: '<root@example.com> <parent@example.com>',
+      },
+    });
+    // The .eml carries both, but the vault parse surfaces neither, so the
+    // index is the only place a reopened draft can read them back from —
+    // dropping References here is what turns a continued reply into a new
+    // thread on the recipient's side.
+    expect(entry.in_reply_to).toBe('<parent@example.com>');
+    expect(entry.references).toBe('<root@example.com> <parent@example.com>');
+  });
+});
+
+describe('draftToInitialData', () => {
+  const eml = {
+    subject: 'Half written',
+    from: { address: 'me@example.com', name: 'Me' },
+    to: [{ address: 'a@example.com' }, { address: 'b@example.com' }],
+    cc: [{ address: 'c@example.com' }],
+    bcc: [],
+    html: '<p>the body I was writing</p>',
+    text: 'the body I was writing',
+    attachments: [
+      { filename: 'notes.pdf', contentType: 'application/pdf', size: 12, content: 'JVBERi0=' },
+    ],
+  };
+  const entry = {
+    uid: 42,
+    source: 'local_draft',
+    from: { address: 'alias@example.com', name: 'Me' },
+    in_reply_to: '<parent@example.com>',
+    references: '<root@example.com> <parent@example.com>',
+  };
+  const shape = (over = {}) => draftToInitialData({
+    accountId: 'acct-1', mailbox: 'Drafts', uid: 42, entry, eml, ...over,
+  });
+
+  it('rebuilds the compose fields the draft was written from', () => {
+    const data = shape();
+    expect(data.to).toBe('a@example.com, b@example.com');
+    expect(data.cc).toBe('c@example.com');
+    expect(data.bcc).toBe('');
+    expect(data.subject).toBe('Half written');
+    expect(data.body).toBe('<p>the body I was writing</p>');
+  });
+
+  it('carries the attachment bytes, not just its name', () => {
+    // A reopened draft has to be sendable. Attachment metadata with no content
+    // is a draft that silently loses its files at send.
+    expect(shape().attachments).toEqual([
+      { filename: 'notes.pdf', contentType: 'application/pdf', size: 12, content: 'JVBERi0=' },
+    ]);
+  });
+
+  it('binds the window to the SAME vault draft', () => {
+    const data = shape();
+    expect(data._draftUid).toBe(42);
+    expect(data._draftMailbox).toBe('Drafts');
+    expect(data._accountId).toBe('acct-1');
+    // The identity it was being written as, not the account login — a draft
+    // started from an alias must not silently change its From on reopen.
+    expect(data._fromAddress).toBe('alias@example.com');
+  });
+
+  it('restores the threading headers from the index', () => {
+    const data = shape();
+    expect(data.inReplyTo).toBe('<parent@example.com>');
+    expect(data.references).toBe('<root@example.com> <parent@example.com>');
+  });
+
+  it('falls back to the text part when the HTML one is unreadable', () => {
+    const data = shape({ eml: { ...eml, html: null, text: 'line one\n<b>not markup</b>' } });
+    // Escaped, not injected — and the line breaks the user typed are kept.
+    expect(data.body).toBe('line one<br>&lt;b&gt;not markup&lt;/b&gt;');
+  });
+});
+
+describe('openLocalDraft', () => {
+  const eml = { subject: 'Continue me', to: [{ address: 'a@example.com' }], html: '<p>x</p>', attachments: [] };
+  let opened;
+
+  beforeEach(() => {
+    opened = [];
+    setComposeOpener((data) => opened.push(data));
+    mockGetLocalIndexEntry.mockResolvedValue({ uid: 42, source: 'local_draft' });
+    mockGetLocalEmailFull.mockResolvedValue(eml);
+  });
+
+  it('opens a draft this app wrote', async () => {
+    expect(await openLocalDraft('acct-1', 'Drafts', 42)).toBe(true);
+    expect(opened.length).toBe(1);
+    expect(opened[0].subject).toBe('Continue me');
+    expect(opened[0]._draftUid).toBe(42);
+  });
+
+  it('leaves a message archived from a server to the viewer', async () => {
+    // 'local' and 'local_draft' render identically as rows — provenance is the
+    // only thing that separates a saved message from an unfinished one.
+    mockGetLocalIndexEntry.mockResolvedValue({ uid: 42, source: 'local' });
+    expect(await openLocalDraft('acct-1', 'INBOX', 42)).toBe(false);
+    expect(opened.length).toBe(0);
+    expect(mockGetLocalEmailFull).not.toHaveBeenCalled();
+  });
+
+  it('leaves a row with no index entry alone', async () => {
+    mockGetLocalIndexEntry.mockResolvedValue(null);
+    expect(await openLocalDraft('acct-1', 'INBOX', 42)).toBe(false);
+    expect(opened.length).toBe(0);
+  });
+
+  it('refuses to open an empty window when the vault has no bytes', async () => {
+    // Indexed as a draft, nothing on disk: an empty compose would look like
+    // the draft was always blank. The viewer says "missing" honestly.
+    mockGetLocalEmailFull.mockResolvedValue(undefined);
+    expect(await openLocalDraft('acct-1', 'Drafts', 42)).toBe(false);
+    expect(opened.length).toBe(0);
+  });
+
+  it('does nothing before App has registered a way to open compose', async () => {
+    setComposeOpener(null);
+    expect(await openLocalDraft('acct-1', 'Drafts', 42)).toBe(false);
+    expect(mockGetLocalIndexEntry).not.toHaveBeenCalled();
   });
 });
 
