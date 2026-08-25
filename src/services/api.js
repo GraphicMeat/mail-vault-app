@@ -283,6 +283,15 @@ export async function buildOutgoingMime(account, email) {
   throw new Error('buildOutgoingMime: not supported outside Tauri');
 }
 
+// Same bytes for a message that is not going anywhere yet — a draft may still
+// have no recipient, which the send-side builder rejects.
+export async function buildDraftMime(account, email) {
+  if (IS_TAURI) {
+    return tauriInvoke('smtp_build_draft_mime', { account, email });
+  }
+  throw new Error('buildDraftMime: not supported outside Tauri');
+}
+
 export async function disconnect(account) {
   if (IS_TAURI) {
     return tauriInvoke('imap_disconnect', { account });

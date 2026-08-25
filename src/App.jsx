@@ -11,6 +11,7 @@ import { EmailList } from './components/EmailList';
 import { EmailViewer } from './components/EmailViewer';
 import { AccountModal } from './components/AccountModal';
 import { ComposeModal } from './components/ComposeModal';
+import { discardDraftFor } from './services/localDrafts';
 import { SettingsPage } from './components/SettingsPage';
 import { Toast } from './components/Toast';
 import { BulkSaveProgress } from './components/BulkSaveProgress';
@@ -763,7 +764,12 @@ function App() {
                   {recipient && <p className="text-[10px] text-mail-text-muted truncate">{recipient}</p>}
                 </div>
                 <button
-                  onClick={(e) => { e.stopPropagation(); closeCompose(w.id); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // The bubble's X is a discard, so the vault draft goes too.
+                    discardDraftFor(w.initialData);
+                    closeCompose(w.id);
+                  }}
                   className="p-0.5 hover:bg-mail-border rounded opacity-0 group-hover:opacity-100 transition-opacity"
                 >
                   <X size={12} className="text-mail-text-muted" />

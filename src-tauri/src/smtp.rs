@@ -112,6 +112,27 @@ fn parse_address_list(raw: &str) -> Result<Vec<Mailbox>, String> {
 /// Build the MIME message without sending. Lets callers stage raw bytes in
 /// Drafts via IMAP APPEND before the SMTP submission.
 pub fn build_mime(account: &ImapConfig, email: &OutgoingEmail) -> Result<BuiltMime, String> {
+    build_mime_opts(account, email, false)
+}
+
+/// Same bytes, for a message that is not going anywhere yet.
+///
+/// A draft is usually recipient-less for a while — most people write the body
+/// before the address — and `build_mime` refuses that, both here and inside
+/// lettre, which derives an SMTP envelope at build time and rejects an empty
+/// one. Autosave passes `allow_no_recipients: true`: the envelope is forced to
+/// the sender (it is never submitted, and it is not part of the bytes), and
+/// with no recipients there is simply no `To:` header — an honest draft rather
+/// than one addressed to a placeholder.
+pub fn build_draft_mime(account: &ImapConfig, email: &OutgoingEmail) -> Result<BuiltMime, String> {
+    build_mime_opts(account, email, true)
+}
+
+fn build_mime_opts(
+    account: &ImapConfig,
+    email: &OutgoingEmail,
+    allow_no_recipients: bool,
+) -> Result<BuiltMime, String> {
     // Identity, not credentials: `from_address()` honours the per-account
     // send-as override. Authentication still uses `account.email`.
     let from_address = account.from_address();
@@ -126,7 +147,10 @@ pub fn build_mime(account: &ImapConfig, email: &OutgoingEmail) -> Result<BuiltMi
 
     let to_mailboxes = parse_address_list(&email.to)
         .map_err(|e| format!("Invalid to address: {}", e))?;
-    if to_mailboxes.is_empty() {
+    let no_recipients =
+        to_mailboxes.is_empty() && email.cc.as_deref().unwrap_or("").trim().is_empty()
+            && email.bcc.as_deref().unwrap_or("").trim().is_empty();
+    if to_mailboxes.is_empty() && !allow_no_recipients {
         return Err("Invalid to address: no recipients".to_string());
     }
 
@@ -151,9 +175,18 @@ pub fn build_mime(account: &ImapConfig, email: &OutgoingEmail) -> Result<BuiltMi
     );
 
     let mut builder = Message::builder()
-        .from(from_mailbox)
+        .from(from_mailbox.clone())
         .subject(&email.subject)
         .message_id(Some(msg_id_value.clone()));
+    if no_recipients {
+        // lettre derives the envelope from the headers and refuses an empty
+        // one. Force it to the sender: a draft is never submitted, and the
+        // envelope never reaches the bytes we write to the vault.
+        builder = builder.envelope(
+            lettre::address::Envelope::new(Some(from_mailbox.email.clone()), vec![from_mailbox.email.clone()])
+                .map_err(|e| format!("Failed to build draft envelope: {}", e))?,
+        );
+    }
     for mb in to_mailboxes {
         builder = builder.to(mb);
     }
@@ -557,6 +590,36 @@ mod tests {
         let msg = friendly_smtp_error("smtp.x.com", 465, "me@x.com", "some weird io error");
         assert!(msg.contains("smtp.x.com:465"));
         assert!(msg.contains("some weird io error"));
+    }
+
+    // ── draft MIME ───────────────────────────────────────────────────────
+
+    #[test]
+    fn draft_mime_builds_without_a_recipient() {
+        let mut email = outgoing();
+        email.to = String::new();
+        email.subject = "Half written".to_string();
+
+        // The send-side builder refuses it — a message with nowhere to go must
+        // never reach SMTP.
+        assert!(build_mime(&account("me@x.com", None), &email).is_err());
+
+        // The draft builder writes it anyway: most drafts are recipient-less
+        // for a while. No `To:` header rather than a placeholder one.
+        let built = build_draft_mime(&account("me@x.com", None), &email).expect("build_draft_mime");
+        let raw = String::from_utf8_lossy(&built.raw_rfc2822);
+        let headers = raw.split("\r\n\r\n").next().unwrap_or("");
+        assert!(!headers.to_lowercase().contains("\nto:"));
+        assert!(headers.contains("From: \"Test User\" <me@x.com>"));
+        assert!(headers.contains("Subject: Half written"));
+        assert!(raw.contains("body"));
+    }
+
+    #[test]
+    fn draft_mime_keeps_the_recipients_it_has() {
+        let built = build_draft_mime(&account("me@x.com", None), &outgoing()).expect("build_draft_mime");
+        let raw = String::from_utf8_lossy(&built.raw_rfc2822);
+        assert!(raw.contains("To: someone@example.com"));
     }
 
     // ── send-as identity ─────────────────────────────────────────────────

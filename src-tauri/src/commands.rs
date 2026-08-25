@@ -507,8 +507,21 @@ pub async fn smtp_build_mime(
     account: ImapConfig,
     email: smtp::OutgoingEmail,
 ) -> Result<serde_json::Value, String> {
+    built_mime_json(smtp::build_mime(&account, &email)?, &account)
+}
+
+/// Same, for the compose autosave: a draft is allowed to have no recipient yet.
+/// See `smtp::build_draft_mime`.
+#[tauri::command]
+pub async fn smtp_build_draft_mime(
+    account: ImapConfig,
+    email: smtp::OutgoingEmail,
+) -> Result<serde_json::Value, String> {
+    built_mime_json(smtp::build_draft_mime(&account, &email)?, &account)
+}
+
+fn built_mime_json(built: smtp::BuiltMime, account: &ImapConfig) -> Result<serde_json::Value, String> {
     use base64::Engine;
-    let built = smtp::build_mime(&account, &email)?;
     let raw_base64 = base64::engine::general_purpose::STANDARD.encode(&built.raw_rfc2822);
 
     // Extract the Message-ID header from raw bytes for later server-side dedupe.

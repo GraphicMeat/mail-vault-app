@@ -14,6 +14,7 @@ import { findSentMailboxPath } from '../utils/sentFolder';
 import { extractInlineImages } from '../utils/inlineImages';
 import { buildReplyHeaders, parseReferenceList, computeReplyRecipients, splitRecipients } from '../utils/emailParser';
 import { suggestSendAsAddresses, composeIdentities, resolveInitialComposeIdentity } from '../utils/sendAsSuggestions';
+import { resolveDraftsMailbox, saveLocalDraft, deleteLocalDraft, newDraftUid } from '../services/localDrafts';
 
 // Find the Sent mailbox path for a specific account.
 // Tiers: account.sentFolderOverride → disk/store mailbox tree via SPECIAL-USE
@@ -174,6 +175,20 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const templatesRef = useRef(null);
   const plainTextRef = useRef('');
 
+  // ── Autosaved draft (see services/localDrafts.js) ──
+  // The vault draft this window owns. The uid is allocated on the first save
+  // and threaded through minimize/restore, so one compose window is always one
+  // draft, however many times it is put away and taken out again.
+  const draftUidRef = useRef(initialData?._draftUid || null);
+  const draftMailboxRef = useRef(initialData?._draftMailbox || null);
+  // Which account currently holds it: picking a different From moves the draft
+  // to that account's Drafts folder instead of leaving a copy behind.
+  const draftAccountRef = useRef(initialData?._accountId || null);
+  const lastSavedRef = useRef(null);
+  // Saves are serialised: maildir_store deletes-then-writes one uid, so two
+  // overlapping saves of the same draft can interleave into a lost write.
+  const saveChainRef = useRef(Promise.resolve());
+
   const [formData, setFormData] = useState({
     to: '',
     cc: '',
@@ -209,7 +224,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       if (initialData) {
         // Restore from undo-send or minimize: body is already HTML
         const bodyHtml = initialData.body || '';
-        initForm({
+        setFormData({
           ...formData,
           to: initialData.to || '',
           cc: initialData.cc || '',
@@ -219,6 +234,15 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           inReplyTo: initialData.inReplyTo || '',
           references: initialData.references || '',
         });
+        // A restored window continues the SAME draft, so it keeps the baseline
+        // recorded when that draft was first opened — carried through the
+        // unmount by handleMinimize. Recording it from the restored content
+        // instead made every restored draft read as pristine, and the next
+        // dismissal took the "empty compose" branch: closed, no discard
+        // confirmation, content gone. Restores that carry no baseline
+        // (undo-send, outbox) had real content by definition — null means
+        // "compare against empty", which reads them as dirty.
+        initialSnapshot.current = initialData._baseline || null;
         if (initialData.attachments?.length) {
           setAttachments(initialData.attachments);
         }
@@ -430,6 +454,11 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           // Undo-send reopens compose: keep the account + From it was sent as.
           _accountId: selectedAccountId,
           _fromAddress: pickedFrom,
+          // An undone or failed send comes back to the same vault draft rather
+          // than starting a second one.
+          _baseline: initialSnapshot.current,
+          _draftUid: draftUidRef.current,
+          _draftMailbox: draftMailboxRef.current,
         },
       };
 
@@ -641,6 +670,21 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           });
           // New composes default to the identity that actually sent last.
           useSettingsStore.getState().setLastComposeIdentity(freshAccount.id, fromAddress);
+          // It left the building: the Drafts copy is not a draft any more.
+          // Only after SMTP succeeded — a failed send keeps its draft, which is
+          // what the outbox bubble restores from.
+          // The refs outlive the unmounted window. Read AFTER the last
+          // autosave settles, or a message sent seconds after it was typed
+          // deletes a draft the save is still writing.
+          await saveChainRef.current.catch(() => {});
+          if (draftUidRef.current && draftMailboxRef.current) {
+            await deleteLocalDraft({
+              accountId: draftAccountRef.current || freshAccount.id,
+              mailbox: draftMailboxRef.current,
+              uid: draftUidRef.current,
+            });
+            draftUidRef.current = null;
+          }
         } catch (err) {
           console.error('[compose:smtp_fail]', err);
           // Local draft survives — user can retry via outbox bubble.
@@ -828,6 +872,110 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     : (formData.to.trim() !== '' || formData.subject.trim() !== '' ||
        htmlToText(formData.body).trim() !== '' || attachments.length > 0);
 
+  // ── Autosave into the vault's Drafts folder, 0.3s after typing stops ──
+  //
+  // The window is no longer the only copy of what the user wrote. Local only:
+  // no SMTP, no IMAP APPEND, so this costs nothing and works offline. The draft
+  // is removed again when the message is sent or discarded.
+  useEffect(() => {
+    if (!hasUserContent || sending || !selectedAccount) return;
+    const timer = setTimeout(() => {
+      const files = attachments.map(att => ({
+        filename: att.filename,
+        content: att.content,
+        encoding: 'base64',
+        contentType: att.contentType,
+      }));
+      const signature = JSON.stringify([
+        selectedAccountId, composeFrom, formData.to, formData.cc, formData.bcc,
+        formData.subject, formData.body, quotedHtml.length,
+        attachments.map(a => `${a.filename}:${a.size}`),
+      ]);
+      if (signature === lastSavedRef.current) return;
+      lastSavedRef.current = signature;
+      // Allocated here, not inside the async chain below: Send reads these to
+      // clean the draft up, and a short message can be sent before the first
+      // save has finished.
+      if (!draftUidRef.current) draftUidRef.current = newDraftUid();
+      const movedAccount = draftAccountRef.current && draftAccountRef.current !== selectedAccountId
+        ? { accountId: draftAccountRef.current, mailbox: draftMailboxRef.current, uid: draftUidRef.current }
+        : null;
+      if (movedAccount) draftMailboxRef.current = null;
+      draftAccountRef.current = selectedAccountId;
+
+      // Inline pictures keep their data: URIs here — a draft is read back by
+      // this app, and cid: parts would only pay off on the wire.
+      const html = quotedHtml
+        ? formData.body + '<hr><blockquote>' + quotedHtml + '</blockquote>'
+        : formData.body;
+      const text = plainTextRef.current || htmlToText(formData.body);
+      const payload = {
+        to: formData.to,
+        cc: formData.cc || undefined,
+        bcc: formData.bcc || undefined,
+        subject: formData.subject,
+        text: quotedHtml
+          ? text + '\n\n-------- Original Message --------\n' + htmlToText(quotedHtml)
+          : text,
+        html,
+        inReplyTo: formData.inReplyTo || undefined,
+        references: formData.references || undefined,
+        attachments: files.length ? files : undefined,
+      };
+      // ponytail: the whole message is re-encoded on every pause, attachments
+      // included. Fine at mail sizes; if a 20 MB attachment ever makes this
+      // stutter, save the body and the files separately.
+      saveChainRef.current = saveChainRef.current.then(async () => {
+        try {
+          if (movedAccount?.mailbox) await deleteLocalDraft(movedAccount);
+          if (!draftMailboxRef.current) {
+            draftMailboxRef.current = await resolveDraftsMailbox(selectedAccountId);
+          }
+          await saveLocalDraft({
+            account: selectedAccount,
+            accountId: selectedAccountId,
+            mailbox: draftMailboxRef.current,
+            uid: draftUidRef.current,
+            fromAddress: composeFrom,
+            displayName: getDisplayName(selectedAccountId) || selectedAccount.name || selectedAccount.email,
+            payload,
+            snippet: text,
+            hasAttachments: attachments.length > 0,
+          });
+        } catch (err) {
+          // Typing must never be interrupted by a failed save. Clearing the
+          // signature makes the next pause try again instead of assuming the
+          // draft on disk is current.
+          lastSavedRef.current = null;
+          console.warn('[compose:autosave_fail]', err);
+        }
+      });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [formData, attachments, quotedHtml, hasUserContent, sending, selectedAccountId, composeFrom]);
+
+  /** Drop the vault draft this window owns — the message is being thrown away. */
+  const discardDraft = useCallback(() => {
+    const accountId = draftAccountRef.current || selectedAccountId;
+    // Behind the same chain the saves run on, and reading the refs only once
+    // it gets there: a discard that overtakes a save in flight would either
+    // delete a file that is about to be rewritten, or run before the save has
+    // even resolved which folder the draft went to.
+    saveChainRef.current = saveChainRef.current.then(() => {
+      const uid = draftUidRef.current;
+      const mailbox = draftMailboxRef.current;
+      draftUidRef.current = null;
+      if (!uid || !mailbox) return undefined;
+      return deleteLocalDraft({ accountId, mailbox, uid });
+    });
+  }, [selectedAccountId]);
+
+  /** Close for good: the vault copy goes with the window. */
+  const closeDiscarding = useCallback(() => {
+    discardDraft();
+    onClose();
+  }, [discardDraft, onClose]);
+
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
 
   const confirmClose = () => {
@@ -835,7 +983,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       setShowDiscardDialog(true);
       return;
     }
-    onClose();
+    closeDiscarding();
   };
 
   // Modal-level Escape: mirror the backdrop click — minimize to a draft
@@ -863,12 +1011,21 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     return () => document.removeEventListener('keydown', handleKey);
   }, [showDiscardDialog, hasUserContent, onClose, onMinimize]);
 
+  // Did the gesture that produced this click START on the backdrop?
+  //
+  // `click` is dispatched on the nearest common ancestor of the mousedown and
+  // mouseup targets, so sweeping a text selection from the editor out past the
+  // window edge fires `click` ON THE BACKDROP — the modal's own stopPropagation
+  // is never in that event's path. Selecting text was therefore minimizing the
+  // compose. A dismissal has to be pressed and released outside.
+  const pressedOnBackdrop = useRef(false);
+
   // Backdrop click: minimize if has content, close if empty
   const handleBackdropClick = () => {
     if (hasUserContent && onMinimize) {
       handleMinimize();
     } else {
-      onClose();
+      closeDiscarding();
     }
   };
 
@@ -896,6 +1053,12 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         _quotedHtml: quotedHtml,
         _accountId: selectedAccountId,
         _fromAddress: pickedFrom,
+        // The dirty baseline and the vault draft this window owns. Both have
+        // to survive the unmount, or the restored window forgets that it is
+        // still editing an existing draft.
+        _baseline: initialSnapshot.current,
+        _draftUid: draftUidRef.current,
+        _draftMailbox: draftMailboxRef.current,
       });
     }
     if (onMinimize) onMinimize();
@@ -907,7 +1070,11 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-      onClick={handleBackdropClick}
+      onMouseDown={(e) => { pressedOnBackdrop.current = e.target === e.currentTarget; }}
+      onClick={(e) => {
+        if (e.target !== e.currentTarget || !pressedOnBackdrop.current) return;
+        handleBackdropClick();
+      }}
     >
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
@@ -1340,7 +1507,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                   Cancel
                 </button>
                 <button
-                  onClick={() => { setShowDiscardDialog(false); onClose(); }}
+                  onClick={() => { setShowDiscardDialog(false); closeDiscarding(); }}
                   className="px-4 py-2 text-sm bg-red-500/90 hover:bg-red-500 text-white
                             rounded-lg transition-colors font-medium"
                 >

@@ -364,8 +364,18 @@ export async function clickButtonTitle(title, scope = MODAL) {
 /** Click the translucent backdrop (outside the modal box). */
 export async function clickBackdrop() {
   await browser.execute((sel) => {
-    const modal = document.querySelector(sel);
-    modal?.parentElement?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const backdrop = document.querySelector(sel)?.parentElement;
+    if (!backdrop) return;
+    const r = backdrop.getBoundingClientRect();
+    const at = { clientX: r.left + 8, clientY: r.top + r.height / 2, bubbles: true, cancelable: true };
+    // The mousedown is load-bearing, not decoration: the modal only treats a
+    // click as "clicked away" when the gesture also STARTED on the backdrop,
+    // which is what keeps a text selection dragged out of the window from
+    // dismissing it. A click with no press behind it is not a gesture a mouse
+    // can produce.
+    backdrop.dispatchEvent(new MouseEvent('mousedown', at));
+    backdrop.dispatchEvent(new MouseEvent('mouseup', at));
+    backdrop.dispatchEvent(new MouseEvent('click', at));
   }, MODAL);
   await browser.pause(300);
 }
@@ -595,3 +605,80 @@ export const firstAccount = () => browser.execute(() => {
   const a = window.__MAIL_STORE__.getState().accounts[0];
   return a ? JSON.parse(JSON.stringify(a)) : null;
 });
+
+// ---------------------------------------------------------------------------
+// Selection drags, and the local Drafts vault
+// ---------------------------------------------------------------------------
+
+/**
+ * A text drag-selection that starts inside the modal and releases on the
+ * backdrop — what a user does when they sweep past the window edge to select
+ * a line.
+ *
+ * The event sequence is the browser's, not an invention: `click` is dispatched
+ * on the nearest common ancestor of the mousedown and mouseup targets, so a
+ * press inside the modal released over the backdrop fires `click` ON THE
+ * BACKDROP. The modal's own `onClick` stopPropagation never runs — the event
+ * is not dispatched inside it at all.
+ */
+export async function dragSelectOntoBackdrop(startSelector = EDITOR) {
+  const done = await browser.execute((start, modalSel) => {
+    const from = document.querySelector(start);
+    const backdrop = document.querySelector(modalSel)?.parentElement;
+    if (!from || !backdrop) return false;
+    const r = backdrop.getBoundingClientRect();
+    const out = { clientX: r.left + 8, clientY: r.top + r.height / 2, bubbles: true, cancelable: true };
+    from.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    backdrop.dispatchEvent(new MouseEvent('mousemove', out));
+    backdrop.dispatchEvent(new MouseEvent('mouseup', out));
+    backdrop.dispatchEvent(new MouseEvent('click', out));
+    return true;
+  }, startSelector, MODAL);
+  if (!done) throw new Error(`dragSelectOntoBackdrop: no element at ${startSelector} or no backdrop`);
+  await browser.pause(400);
+}
+
+/** The account's local Drafts vault — where the autosaved draft has to land. */
+export const draftsDir = (accountId) =>
+  join(appDataDir(browser.testDataDir), 'Maildir', accountId, 'Drafts', 'cur');
+
+export const listDrafts = (accountId) => {
+  const dir = draftsDir(accountId);
+  return existsSync(dir) ? readdirSync(dir).filter((n) => !n.startsWith('.')) : [];
+};
+
+/** Raw text of every .eml in the account's local Drafts vault. */
+export const readDrafts = (accountId) =>
+  listDrafts(accountId).map((name) => readFileSync(join(draftsDir(accountId), name), 'utf8'));
+
+/** local-index.json for a mailbox — the metadata the Drafts list renders from. */
+export function localIndex(accountId, mailbox) {
+  const path = join(appDataDir(browser.testDataDir), 'Maildir', accountId, mailbox, 'local-index.json');
+  if (!existsSync(path)) return [];
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Wait for the autosave to put `subject` in the account's local Drafts vault.
+ * Returns the raw .eml text.
+ */
+export async function waitForLocalDraft(accountId, subject, timeout = 15_000) {
+  let raw = null;
+  try {
+    await browser.waitUntil(() => {
+      raw = readDrafts(accountId).find((text) => flatten(text).includes(subject)) || null;
+      return !!raw;
+    }, { timeout, interval: 300, timeoutMsg: 'not yet' });
+  } catch {
+    throw new Error(
+      `No autosaved draft for "${subject}" in ${draftsDir(accountId)} — ` +
+      `dir holds ${JSON.stringify(listDrafts(accountId))}; ` +
+      `account mailboxes: ${vaultTree(accountId)}`,
+    );
+  }
+  return raw;
+}

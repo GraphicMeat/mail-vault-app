@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **A message you are writing is saved to Drafts as you type.** Until now a half-written message existed only in the window it was being typed in, so anything that closed that window took the text with it. Three tenths of a second after you stop typing, the message is now written to the Drafts folder of the account it will be sent from, on this computer — recipients, subject, body and attachments — and it shows up in that folder like any other message. It is one draft, not one per pause: each save replaces the last. Change the From address to another account and the draft moves to that account's Drafts. Send the message, or discard it, and the draft goes away with it. A message with no recipient yet is saved too — that is the point. Nothing is uploaded to the mail server yet; this is the local copy only.
+
+### Fixed
+- **Selecting text in a message you are writing no longer folds it away — or loses it.** Sweeping a selection past the edge of the compose window counted as clicking away from the window: the message collapsed into a draft bubble. Opening the bubble and doing it again was worse, because a message brought back from a bubble was treated as untouched — so that second time it closed for good, with no "Discard message?" prompt, and everything typed was gone. A selection that begins inside the window is now only a selection; clicking away still minimizes, but only when the click both starts and ends outside. A message restored from a bubble is unsaved work again: clicking away minimizes it, and Close asks first.
+
 ## [2.10.1] - 2026-08-24
 
 ### Added
