@@ -338,11 +338,24 @@ describe('Bulk delete everywhere', function () {
 
     expect(await toggleRow(localOnlySubject)).toBe(true);
     expect(await clickBarButton('Delete from server')).toBe(true);
-    await waitForBodyText('cannot be undone', 'Delete-from-server confirmation never appeared');
+    // This row is archived, so the vault holds a copy and the confirmation
+    // deliberately does NOT say "cannot be undone" — over-warning about the
+    // safe case is the bug the custody copy pass fixed. The permanent wording
+    // is asserted where nothing is in the vault (connected-selection-actions).
+    await waitForBodyText(
+      'Your vault keeps the copy',
+      'Delete-from-server confirmation never appeared',
+    );
 
     const confirmed = await browser.execute(() => {
       for (const btn of document.querySelectorAll('button')) {
-        if ((btn.textContent || '').trim() === 'Delete' && btn.offsetHeight > 0 && !btn.getAttribute('title')) {
+        // The popover's confirm button names which delete it is — 'Delete from
+        // server' / 'Delete everywhere' — since the ui extraction; a naked
+        // 'Delete' beside 'Cancel' did not say which one. The bar's own buttons
+        // carry a title, so the title check still tells popover from bar.
+        const label = (btn.textContent || '').trim();
+        const isConfirm = label === 'Delete' || label === 'Delete from server' || label === 'Delete everywhere';
+        if (isConfirm && btn.offsetHeight > 0 && !btn.getAttribute('title')) {
           btn.click();
           return true;
         }

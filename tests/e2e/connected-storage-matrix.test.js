@@ -358,7 +358,13 @@ describe('Storage matrix diagnostics', function () {
   function confirmDeletePopover() {
     return browser.execute(() => {
       for (const btn of document.querySelectorAll('button')) {
-        if ((btn.textContent || '').trim() === 'Delete' && btn.offsetHeight > 0 && !btn.getAttribute('title')) {
+        // The popover's confirm button names which delete it is — 'Delete from
+        // server' / 'Delete everywhere' — since the ui extraction; a naked
+        // 'Delete' beside 'Cancel' did not say which one. The bar's own buttons
+        // carry a title, so the title check still tells popover from bar.
+        const label = (btn.textContent || '').trim();
+        const isConfirm = label === 'Delete' || label === 'Delete from server' || label === 'Delete everywhere';
+        if (isConfirm && btn.offsetHeight > 0 && !btn.getAttribute('title')) {
           btn.click();
           return true;
         }
@@ -630,7 +636,13 @@ describe('Storage matrix diagnostics', function () {
 
       expect(await toggleRowExact(subject)).toBe(true);
       expect(await clickBarButton('Delete from server')).toBe(true);
-      await waitForBodyText('cannot be undone', 'Delete-from-server confirmation never appeared');
+      // This row is archived, so the vault holds a copy and the confirmation
+      // deliberately does NOT say "cannot be undone" — over-warning about the
+      // safe case is the bug the custody copy pass fixed.
+      await waitForBodyText(
+        'Your vault keeps the copy',
+        'Delete-from-server confirmation never appeared',
+      );
       expect(await confirmDeletePopover()).toBe(true);
 
       await browser.waitUntil(async () => (await rowFor(subject))?.localOnly === true, {
@@ -724,7 +736,13 @@ describe('Storage matrix diagnostics', function () {
 
       expect(await toggleRowExact(subject)).toBe(true);
       expect(await clickBarButton('Delete from server')).toBe(true);
-      await waitForBodyText('cannot be undone', 'Delete-from-server confirmation never appeared');
+      // This row is archived, so the vault holds a copy and the confirmation
+      // deliberately does NOT say "cannot be undone" — over-warning about the
+      // safe case is the bug the custody copy pass fixed.
+      await waitForBodyText(
+        'Your vault keeps the copy',
+        'Delete-from-server confirmation never appeared',
+      );
       expect(await confirmDeletePopover()).toBe(true);
 
       await browser.waitUntil(async () => (await rowFor(subject))?.localOnly === true, {
@@ -818,7 +836,7 @@ describe('Storage matrix diagnostics', function () {
       const vaderSubject = 'Vader matrix 6';
       expect(await toggleRowExact(vaderSubject)).toBe(true);
       expect(await clickBarButton('Delete from server')).toBe(true);
-      await waitForBodyText('cannot be undone', 'Delete-from-server confirmation never appeared (vader)');
+      await waitForBodyText('from the server?', 'Delete-from-server confirmation never appeared (vader)');
       expect(await confirmDeletePopover()).toBe(true);
 
       // Move the view immediately, three times, without waiting for vader's
@@ -845,7 +863,7 @@ describe('Storage matrix diagnostics', function () {
 
       expect(await toggleRowExact(lukeSubject)).toBe(true);
       expect(await clickBarButton('Delete from server')).toBe(true);
-      await waitForBodyText('cannot be undone', 'Delete-from-server confirmation never appeared (luke)');
+      await waitForBodyText('from the server?', 'Delete-from-server confirmation never appeared (luke)');
       expect(await confirmDeletePopover()).toBe(true);
 
       await browser.waitUntil(async () => !(await rowFor(lukeSubject)), {
@@ -962,7 +980,7 @@ describe('Storage matrix diagnostics', function () {
 
       expect(await toggleRowExact(subject)).toBe(true);
       expect(await clickBarButton('Delete from server')).toBe(true);
-      await waitForBodyText('cannot be undone', 'Delete-from-server confirmation never appeared (yoda)');
+      await waitForBodyText('from the server?', 'Delete-from-server confirmation never appeared (yoda)');
       expect(await confirmDeletePopover()).toBe(true);
 
       // No wait: the server is sitting on the MOVE for 4s. Move the view twice
@@ -1029,7 +1047,7 @@ describe('Storage matrix diagnostics', function () {
 
       expect(await toggleRowExact(subject)).toBe(true);
       expect(await clickBarButton('Delete from server')).toBe(true);
-      await waitForBodyText('cannot be undone', 'Delete-from-server confirmation never appeared (yoda reload)');
+      await waitForBodyText('from the server?', 'Delete-from-server confirmation never appeared (yoda reload)');
       expect(await confirmDeletePopover()).toBe(true);
 
       // Wait for the row to disappear, then reload — that moment is the whole
@@ -1133,7 +1151,7 @@ describe('Storage matrix diagnostics', function () {
 
       expect(await toggleRowExact(subject)).toBe(true);
       expect(await clickBarButton('Delete from server')).toBe(true);
-      await waitForBodyText('cannot be undone', 'Delete-from-server confirmation never appeared (unified)');
+      await waitForBodyText('from the server?', 'Delete-from-server confirmation never appeared (unified)');
       expect(await confirmDeletePopover()).toBe(true);
 
       console.log('[unified] row right after confirming delete:', JSON.stringify(await rowFor(subject)));
