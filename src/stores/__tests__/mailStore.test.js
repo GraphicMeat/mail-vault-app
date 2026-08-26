@@ -647,6 +647,31 @@ describe('unified inbox — server uid completeness never carries a stale true',
   });
 });
 
+describe('lastSelectedAccountId — which account a fresh compose sends from', () => {
+  // In the unified inbox activeAccountId is only whichever account was last
+  // opened, so the account of the message being read is the only honest
+  // default for compose's From row (utils/sendAsSuggestions).
+  const thread = (lastEmail) => ({ lastEmail, emails: [lastEmail], messageCount: 1 });
+
+  it('a unified thread row carries its account', () => {
+    useMailStore.setState({ lastSelectedAccountId: null });
+
+    useMailStore.getState().selectThread(thread({ uid: 7, _accountId: 'acct-2' }));
+
+    expect(useMailStore.getState().lastSelectedAccountId).toBe('acct-2');
+  });
+
+  it('a single-account thread row leaves the last account standing', () => {
+    // Rows outside the unified list are untagged — overwriting with undefined
+    // would erase the answer every time the user opened a thread.
+    useMailStore.setState({ lastSelectedAccountId: 'acct-2' });
+
+    useMailStore.getState().selectThread(thread({ uid: 7 }));
+
+    expect(useMailStore.getState().lastSelectedAccountId).toBe('acct-2');
+  });
+});
+
 describe('refreshBackedUpUids', () => {
   // Renamed from "...so unified inbox cannot collide" — unifiedInbox is false
   // and only one account is registered here, so no collision is exercised.

@@ -68,6 +68,8 @@ describe('Connected Compose From Identities', function () {
     for (const a of browser.mockAccounts || []) {
       await settingsCall('setSendAsAddress', a.id, '');
     }
+    // Same for the remembered identity — there is no setter that clears it.
+    await browser.execute(() => window.__SETTINGS_STORE__.setState({ lastComposeIdentity: null }));
   });
 
   /** The From `<select>` as rendered: optgroups keep their children, bare options don't. */
@@ -208,6 +210,116 @@ describe('Connected Compose From Identities', function () {
     // readStagedEml only ever looked in vader's Maildir, so the file being there
     // is half the proof; luke's Sent staying untouched is the other half.
     expect(listSent(luke.id).length).toBe(lukeSentBefore);
+  });
+
+  // ── the account being read ───────────────────────────────────────────────
+  //
+  // A fresh compose used to open on the identity that last SENT, so composing
+  // right after switching account wrote from the account just left behind. The
+  // mailbox on screen decides now; the remembered identity is an address, and
+  // only survives on the account that sent as it.
+
+  it('opens on the account being read, not the one that sent last', async function () {
+    await settingsCall('setLastComposeIdentity', vader.id, vader.email);
+
+    await openComposeFresh();
+
+    // luke is the active account for this run — vader sent last.
+    expect(await fieldValue('compose-from')).toBe(`${luke.id} ${luke.email}`);
+  });
+
+  it('keeps the remembered address within the account being read', async function () {
+    // The alias is luke's account default; the login is what he last sent as.
+    await settingsCall('setSendAsAddress', luke.id, ALIAS);
+    await settingsCall('setLastComposeIdentity', luke.id, luke.email);
+
+    await openComposeFresh();
+
+    expect(await fieldValue('compose-from')).toBe(`${luke.id} ${luke.email}`);
+  });
+
+  it('opens on the account of the message being read in the unified inbox', async function () {
+    const yoda = (browser.mockAccounts || [])[2];
+    expect(yoda?.id).toBeDefined();
+    // In All Inboxes every account's mail is on screen at once and the active
+    // account is only whichever one was last opened — so it must not decide.
+    await settingsCall('setLastComposeIdentity', luke.id, luke.email);
+
+    // yoda's UIDs start at 901, which dates its mail newest in the suite, so its
+    // rows sort to the top of the unified list without scrolling a virtualized
+    // 700-row list (see MOCK_ACCOUNTS in wdio.conf.js). 906 is picked over the
+    // top three: 907/908/909 carry the body-fetch faults.
+    const SUBJECT = 'Yoda message 906';
+    const activate = (id) => browser.execute((accountId) => {
+      window.__MAIL_STORE__.getState().activateAccount(accountId, 'INBOX');
+    }, id);
+
+    try {
+      // The unified list is built from each account's header cache, so yoda's
+      // mail can only reach it once yoda has been opened in this run. Solo, this
+      // spec never opens it and the unified list is luke's mail alone — which
+      // the active account would get right for the wrong reason.
+      await activate(yoda.id);
+      await browser.waitUntil(
+        async () => browser.execute((needle) => (window.__MAIL_STORE__.getState().emails || [])
+          .some((e) => (e.subject || '').includes(needle)), SUBJECT),
+        { timeout: 60_000, interval: 500, timeoutMsg: `yoda's INBOX never loaded "${SUBJECT}"` },
+      );
+      await activate(luke.id);
+      await browser.waitUntil(
+        async () => (await browser.execute(() => {
+          const s = window.__MAIL_STORE__.getState();
+          return s.activeAccountId;
+        })) === luke.id,
+        { timeout: 60_000, interval: 500, timeoutMsg: 'never came back to luke' },
+      );
+
+      expect(await browser.execute(() => {
+        const btn = document.querySelector('[data-testid="all-inboxes-btn"]');
+        if (!btn || btn.offsetHeight === 0) return false;
+        btn.click();
+        return true;
+      })).toBe(true);
+
+      await browser.waitUntil(
+        async () => browser.execute((needle) => [...document.querySelectorAll('[data-testid="email-row"]')]
+          .some((r) => (r.textContent || '').includes(needle)), SUBJECT),
+        {
+          timeout: 60_000,
+          interval: 300,
+          timeoutMsg: `"${SUBJECT}" never rendered in the unified inbox`,
+        },
+      );
+      expect(await browser.execute((needle) => {
+        const row = [...document.querySelectorAll('[data-testid="email-row"]')]
+          .find((r) => (r.textContent || '').includes(needle));
+        if (!row) return false;
+        row.click();
+        return true;
+      }, SUBJECT)).toBe(true);
+
+      // The click resolves the row's real account — assert that landed before
+      // reading the From row, or a failure here can't name which half broke.
+      await browser.waitUntil(
+        async () => (await browser.execute(() => window.__MAIL_STORE__.getState().lastSelectedAccountId)) === yoda.id,
+        { timeout: 20_000, interval: 200, timeoutMsg: 'clicking a yoda row did not resolve to yoda' },
+      );
+
+      await openComposeFresh();
+
+      expect(await fieldValue('compose-from')).toBe(`${yoda.id} ${yoda.email}`);
+    } finally {
+      // One app instance for the whole run: leaving it in All Inboxes on
+      // yoda's mail would greet every later spec with the wrong list.
+      await closeComposeHard();
+      await browser.execute((id) => {
+        window.__MAIL_STORE__.getState().activateAccount(id, 'INBOX');
+      }, luke.id);
+      await browser.waitUntil(
+        async () => (await browser.execute(() => window.__MAIL_STORE__.getState().activeMailbox)) === 'INBOX',
+        { timeout: 30_000, interval: 300, timeoutMsg: 'never came back out of the unified inbox' },
+      );
+    }
   });
 
   // ── the Fastmail label ───────────────────────────────────────────────────

@@ -23,6 +23,13 @@ export const createSelectionSlice = (set, get) => ({
   selectedThread: null, // thread object from buildThreads, or null for single email
   loadingEmail: false,
 
+  // Account of the last message opened. Only meaningful in the unified inbox,
+  // where activeAccountId is just whichever account was last activated and the
+  // list mixes them all: a fresh compose sends from the account whose message
+  // the user was last reading. `selectedEmail` can't answer this — a body
+  // fetched from the server carries no _accountId (see selectEmail workflow).
+  lastSelectedAccountId: null,
+
   // Selection for bulk actions
   selectedEmailIds: new Set(),
 
@@ -34,13 +41,15 @@ export const createSelectionSlice = (set, get) => ({
 
   // Select a thread (shows all emails in the thread in the viewer)
   selectThread: (thread) => {
-    set({
+    set(state => ({
       selectedThread: thread,
       selectedEmailId: thread.lastEmail.uid,
       selectedEmail: null,
       selectedEmailSource: null,
       loadingEmail: false,
-    });
+      // Only unified rows are tagged; a single-account row leaves it standing.
+      lastSelectedAccountId: thread.lastEmail._accountId || state.lastSelectedAccountId,
+    }));
   },
 
   // ── Passthrough wrappers to workflow functions ──

@@ -83,10 +83,10 @@ export function composeIdentities(accounts, sendAsAddresses = {}, sentAsByAccoun
 /**
  * Which identity a compose window opens with. Precedence:
  * restored draft's saved identity → the replied-to message's account →
- * the identity that sent the last message → the active account.
+ * the mailbox being read → the active account.
  * `address: ''` means "the account's default From".
  */
-export function resolveInitialComposeIdentity({ replyTo, initialData, lastIdentity, accounts, activeAccountId }) {
+export function resolveInitialComposeIdentity({ replyTo, initialData, lastIdentity, accounts, activeAccountId, selectedAccountId }) {
   const exists = (id) => (accounts || []).some(a => a.id === id);
   if (initialData) {
     if (initialData._accountId && exists(initialData._accountId)) {
@@ -96,10 +96,15 @@ export function resolveInitialComposeIdentity({ replyTo, initialData, lastIdenti
     return { accountId: activeAccountId, address: '' };
   }
   if (replyTo?._accountId) return { accountId: replyTo._accountId, address: '' };
-  if (lastIdentity && exists(lastIdentity.accountId)) {
-    return { accountId: lastIdentity.accountId, address: lastIdentity.address || '' };
-  }
-  return { accountId: activeAccountId, address: '' };
+  // A fresh compose sends from the mailbox the user is reading — the selected
+  // account, or in the unified inbox the account of the last message opened
+  // there. The last *sent* identity used to win here, so composing right after
+  // switching account opened on the other account's address.
+  const accountId = exists(selectedAccountId) ? selectedAccountId : activeAccountId;
+  // The remembered identity is an address, not an account: it only carries over
+  // when the account being read is the one that sent as it.
+  const address = lastIdentity?.accountId === accountId ? (lastIdentity.address || '') : '';
+  return { accountId, address };
 }
 
 /** Read this account's cached Sent headers and rank the candidates. */

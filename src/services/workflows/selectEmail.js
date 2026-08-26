@@ -179,7 +179,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
   if (_markAsReadTimer) { clearTimeout(_markAsReadTimer); _markAsReadTimer = null; }
 
   const selectedEmailId = isUnified ? `${accountId}:${uid}` : uid;
-  useMailStore.setState({ selectedThread: null, selectedEmailId, loadingEmail: true, selectedEmail: null, selectedEmailSource: source });
+  useMailStore.setState({ selectedThread: null, selectedEmailId, loadingEmail: true, selectedEmail: null, selectedEmailSource: source, lastSelectedAccountId: accountId });
 
   try {
     let email;

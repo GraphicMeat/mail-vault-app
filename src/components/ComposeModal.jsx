@@ -123,6 +123,11 @@ const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files'
 export function ComposeModal({ mode = 'new', replyTo = null, initialData = null, onClose, onMinimize, onSaveState }) {
   const rawAccounts = useAccountStore(s => s.accounts);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
+  // Which mailbox the user is reading, which is who a fresh compose is from.
+  // In the unified inbox every account's mail is on screen at once, so the
+  // account of the last message opened is the only honest answer there.
+  const readingAccountId = useAccountStore(s =>
+    s.activeMailbox === 'UNIFIED' ? s.lastSelectedAccountId : s.activeAccountId);
   const getSignature = useSettingsStore(s => s.getSignature);
   const getDisplayName = useSettingsStore(s => s.getDisplayName);
   // Subscribed (not read through the getter) so the From row re-renders when
@@ -135,13 +140,14 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
   const accounts = getOrderedAccounts(rawAccounts);
   // Replies stay on the email's source account; a restored draft keeps its
-  // saved identity; a fresh compose defaults to whoever sent the last message.
+  // saved identity; a fresh compose defaults to the account being read.
   const initialIdentity = resolveInitialComposeIdentity({
     replyTo,
     initialData,
     lastIdentity: useSettingsStore.getState().lastComposeIdentity,
     accounts,
     activeAccountId,
+    selectedAccountId: readingAccountId,
   });
   const [selectedAccountId, setSelectedAccountId] = useState(initialIdentity.accountId);
   const selectedAccount = accounts.find(a => a.id === selectedAccountId) || accounts[0];
