@@ -25,6 +25,13 @@ vi.mock('framer-motion', () => ({
   // forwardRef, like the real motion.div: ui/Dialog puts its focus-trap ref on
   // the panel, and a plain function component swallows it — the trap and the
   // Escape handler then never arm, silently.
+  //
+  // What this double does NOT cover: it also spreads `initial`/`animate`/`exit`
+  // onto a plain div, so they become DOM attributes. A spec asserting a visual
+  // state under this mock is asserting an attribute and believing it is the
+  // animation — jsdom runs no CSS and framer's transforms never happen. Assert
+  // attributes and structure here; anything about how it MOVES belongs in a
+  // spec that does not mock framer-motion at all.
   motion: new Proxy({}, {
     get: () => React.forwardRef(({ children, ...props }, ref) =>
       React.createElement('div', { ...props, ref }, children)),
