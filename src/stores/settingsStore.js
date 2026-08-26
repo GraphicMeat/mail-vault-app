@@ -156,7 +156,7 @@ export const useSettingsStore = create(
       // Display settings
       displayNames: {}, // { [accountId]: string }
       sendAsAddresses: {}, // { [accountId]: string } — outgoing From override; login is unchanged
-      lastComposeIdentity: null, // { accountId, address } — identity of the last sent message; new composes default to it
+      lastComposeIdentity: null, // { accountId, address } — identity of the last sent message; a new compose keeps the address when it is reading that same account
       accountColors: {}, // { [accountId]: string (hex color) } — user overrides for avatar color
       
       // Default settings

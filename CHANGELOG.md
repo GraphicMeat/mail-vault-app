@@ -46,6 +46,9 @@
 - **The line under the mailbox name says what it is counting.** It read "1,213 of 1,630 loaded in your vault", which reads like something still loading, and it sat directly under another count whose "of" meant the whole mailbox on the server — two lines, two meanings, one word. It now reads "Vault: 1,213 of 1,630 loaded": of the messages MailVault has loaded into the list so far, that many are saved in your vault.
 - **The whole app no longer slides out of its own window.** MailVault fills the window exactly — nothing sits above the sidebar and nothing below the message list — so there is nothing to scroll. A firm two-finger flick on the trackpad dragged the whole app downwards anyway, leaving a band of empty black where the panes had been and no scrollbar anywhere to pull them back. The window itself now stays put. The message list, the open message and the folder list scroll exactly as before.
 
+### Fixed
+- **A new message is sent from the account whose mail you are reading.** Compose opened on whichever account sent the last message, so switching account in the sidebar and clicking Compose wrote from the account you had just left — a difference visible only in the From row, if you thought to look at it before pressing Send. A new message now starts on the account on screen, and in All Inboxes, where every account's mail is in one list, on the account of the last message you opened. An address you have chosen to send as is still remembered, on the account it belongs to. Replies, forwards and saved drafts keep the account they always had.
+
 ## [2.10.3] - 2026-08-26
 
 ### Fixed

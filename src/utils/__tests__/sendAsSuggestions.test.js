@@ -116,9 +116,32 @@ describe('resolveInitialComposeIdentity', () => {
   const accounts = [{ id: 'a1', email: 'one@x.com' }, { id: 'a2', email: 'two@y.com' }];
   const base = { replyTo: null, initialData: null, accounts, activeAccountId: 'a1', lastIdentity: null };
 
-  it('defaults a fresh compose to the last identity that sent a message', () => {
+  it('opens on the account being read, not the one that last sent', () => {
     const out = resolveInitialComposeIdentity({ ...base, lastIdentity: { accountId: 'a2', address: 'alias@y.com' } });
+    expect(out).toEqual({ accountId: 'a1', address: '' });
+  });
+
+  it('opens on the last message\'s account in the unified inbox', () => {
+    const out = resolveInitialComposeIdentity({ ...base, selectedAccountId: 'a2' });
+    expect(out).toEqual({ accountId: 'a2', address: '' });
+  });
+
+  it('keeps the remembered alias when it belongs to the account being read', () => {
+    const out = resolveInitialComposeIdentity({
+      ...base,
+      selectedAccountId: 'a2',
+      lastIdentity: { accountId: 'a2', address: 'alias@y.com' },
+    });
     expect(out).toEqual({ accountId: 'a2', address: 'alias@y.com' });
+  });
+
+  it('drops a remembered alias that belongs to another account', () => {
+    const out = resolveInitialComposeIdentity({
+      ...base,
+      selectedAccountId: 'a2',
+      lastIdentity: { accountId: 'a1', address: 'alias@x.com' },
+    });
+    expect(out).toEqual({ accountId: 'a2', address: '' });
   });
 
   it('ignores a last identity whose account no longer exists', () => {
@@ -126,14 +149,20 @@ describe('resolveInitialComposeIdentity', () => {
     expect(out).toEqual({ accountId: 'a1', address: '' });
   });
 
-  it('falls back to the active account with no last identity', () => {
+  it('falls back to the active account with nothing selected', () => {
     expect(resolveInitialComposeIdentity(base)).toEqual({ accountId: 'a1', address: '' });
+  });
+
+  it('falls back to the active account when the selected account is gone', () => {
+    const out = resolveInitialComposeIdentity({ ...base, selectedAccountId: 'gone' });
+    expect(out).toEqual({ accountId: 'a1', address: '' });
   });
 
   it('a reply stays on the account that received the message', () => {
     const out = resolveInitialComposeIdentity({
       ...base,
       replyTo: { _accountId: 'a1' },
+      selectedAccountId: 'a2',
       lastIdentity: { accountId: 'a2', address: 'alias@y.com' },
     });
     expect(out).toEqual({ accountId: 'a1', address: '' });
