@@ -29,10 +29,37 @@
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 
-  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/assets/tailwind.css?v=7">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc',
+              400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca',
+              800: '#3730a3', 900: '#312e81',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
   <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .gradient-text {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .gradient-bg { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); }
     .glass {
       background: rgba(255, 255, 255, 0.05);
       backdrop-filter: blur(10px);
@@ -52,7 +79,7 @@
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16">
         <a href="/" class="flex items-center gap-3">
-          <img src="icon-128.webp" alt="MailVault logo" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <img src="icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
           <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
         </a>
 
@@ -64,7 +91,7 @@
         </div>
 
         <div class="flex items-center gap-4">
-          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
             <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
               <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/>
             </svg>
@@ -72,10 +99,10 @@
               <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
             </svg>
           </button>
-          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex gradient-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
             Download
           </a>
-          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
               <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -90,7 +117,7 @@
           <a href="/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Use Cases</a>
           <a href="/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Docs</a>
           <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
-          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg gradient-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
         </div>
       </div>
     </div>
@@ -104,15 +131,69 @@
 
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v2.10.2</span>
-          <span class="text-slate-500 dark:text-slate-400 text-sm">August 25, 2026</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.10.3</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">August 26, 2026</span>
           <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
         </div>
 
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            </span>
+            Fixed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message in a conversation stops showing its subject where its text should be.</strong> MailVault keeps a copy of every message you open on this computer, filed under the number its mail server gave it. Those numbers are only meaningful to one server: move a domain to a new mail host and the new server hands the same numbers to different messages, so the copy filed under a number is somebody else's mail. MailVault noticed that and gave up — and the conversation then printed the message's own subject line, in italics, exactly where the message should have been. It reads as an email one line long. MailVault now asks the server for the message you actually clicked, and if that fails too it says the message could not be loaded rather than quietly showing you something that looks like the real thing.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>"View Source" shows the message you are looking at.</strong> The raw source was read straight out of the stored copy filed under that number, with nothing checking it was the right message — so after a change of mail host it could hand over another message's headers and body under the header of the one on screen. The source is now checked against the message it claims to be, and MailVault says so plainly instead of showing the wrong one.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A backup no longer undoes MailVault's own repair of your archive.</strong> When a mail server reissues its message numbers, MailVault repairs the archive on this computer: mail the server still has is refiled under its new number, and mail it does not have is set aside — kept on disk, never deleted. The next backup then copied those set-aside messages back off the backup drive into the archive, under the numbers they used to have, undoing the repair. Every backup did it again, and nothing showed that it had happened. Messages the repair set aside now stay set aside, while a copy it never ruled out still comes back from the backup drive as before. An archive that was already affected keeps its wrong copies until the next repair runs.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A bulk archive or delete now says what it is doing to a screen reader.</strong> Moving thousands of messages off a server reported its progress in a bar and nowhere else, so with a screen reader on, the longest and least reversible operation in MailVault ran in silence. Bulk save, bulk operations and the selection bar now announce the phase, each quarter of the way through, and how it ended — including how many failed — without reading out every percent for the length of the run.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A narrow window no longer pushes the message out of sight.</strong> Below 768px wide the list and the message stack one above the other, and the height of the list came from the same setting as its width in the three-column layout. Widen the list with the divider, then make the window narrow — half a screen, or the smallest size MailVault opens at — and that width became a height taller than the window: the message you clicked was rendered below the bottom edge, along with the divider that would have brought it back, so clicking a message showed nothing and there was no way to undo it from inside the app. The two layouts now keep their own sizes, neither can be dragged past what the window can hold, and the stacked layout gives the whole window to the list until you open something — instead of holding half of it for a pane that says "Select an email to read".</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Settings stops hiding its own tabs in a narrow window.</strong> In General and in Backup & Restore, the row of tabs ran off the right-hand edge — "Notifications" and "Keyboard Shortcuts" were simply not on screen, in a strip that scrolled sideways with nothing to show that it could. The tabs now wrap onto a second line, and the settings list on the left takes less room when the window is small.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A narrow message list keeps more of the subject.</strong> The sender column was a fixed width whatever the list was doing, so in a half-screen window it took nearly as much room as the subject beside it. It is now a share of the row: unchanged at the widths it has always had, and it gives way first when the list is narrow, because a subject is what a list is read for.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The layout picker says when three columns will not fit.</strong> Choosing "Three Columns" in a window too narrow to hold them did nothing at all, with nothing to explain why. Settings → General → Layout now says the panes are stacked until the window is widened, and that the choice is remembered.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>"Subject:" fits its label in the compose window.</strong> The label was five pixels narrower than the word.</span>
+            </li>
+          </ul>
+        </div>
+
+      </article>
+      <article class="mb-16">
+        <div class="flex items-center gap-3 mb-6">
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.10.2</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">August 25, 2026</span>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -166,14 +247,14 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v2.10.1</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.10.1</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">August 24, 2026</span>
         </div>
 
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -294,14 +375,14 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v2.10.0</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.10.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">August 18, 2026</span>
         </div>
 
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -442,14 +523,14 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v2.9.2</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.9.2</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">August 8, 2026</span>
         </div>
 
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -535,14 +616,14 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v2.9.1</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.9.1</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">August 6, 2026</span>
         </div>
 
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -600,14 +681,14 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v2.9.0</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.9.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">August 4, 2026</span>
         </div>
 
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -645,7 +726,7 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v2.8.0</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.8.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">July 26, 2026</span>
         </div>
 
@@ -814,14 +895,14 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v2.7.0</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.7.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">July 24, 2026</span>
         </div>
 
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -984,7 +1065,7 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v2.6.0</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.6.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">May 4, 2026</span>
         </div>
 
@@ -1021,14 +1102,14 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v2.5.0</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.5.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">April 27, 2026</span>
         </div>
 
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -1129,14 +1210,14 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v2.4.0</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.4.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">April 16, 2026</span>
         </div>
 
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -1241,7 +1322,7 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v2.3.2</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.3.2</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">March 29, 2026</span>
         </div>
 
@@ -1267,14 +1348,14 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v2.3.1</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.3.1</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">March 29, 2026</span>
         </div>
 
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -1336,14 +1417,14 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v2.3.0</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.3.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">March 28, 2026</span>
         </div>
 
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -1464,14 +1545,14 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v2.2.1</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.2.1</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">March 13, 2026</span>
         </div>
 
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -1528,7 +1609,7 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v2.2.0</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.2.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">March 11, 2026</span>
         </div>
 
@@ -1554,7 +1635,7 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v2.1.5</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.1.5</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">March 11, 2026</span>
         </div>
 
@@ -1591,7 +1672,7 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v2.1.4</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.1.4</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">March 11, 2026</span>
         </div>
 
@@ -1613,7 +1694,7 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v2.1.3</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.1.3</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">March 11, 2026</span>
         </div>
 
@@ -1643,7 +1724,7 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v2.1.2</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.1.2</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">March 11, 2026</span>
         </div>
 
@@ -1673,7 +1754,7 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v2.1.1</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.1.1</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">March 10, 2026</span>
         </div>
 
@@ -1695,14 +1776,14 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v2.1.0</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.1.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">March 10, 2026</span>
         </div>
 
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -1803,7 +1884,7 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v2.0.3</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.0.3</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">March 8, 2026</span>
         </div>
 
@@ -1829,14 +1910,14 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v2.0.2</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.0.2</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">March 8, 2026</span>
         </div>
 
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -1902,7 +1983,7 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v2.0.1</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.0.1</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">March 7, 2026</span>
         </div>
 
@@ -1928,14 +2009,14 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v2.0.0</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.0.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">March 7, 2026</span>
         </div>
 
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -1981,14 +2062,14 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v1.9.2</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.9.2</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">March 4, 2026</span>
         </div>
 
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -2046,14 +2127,14 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v1.9.1</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.9.1</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">February 28, 2026</span>
         </div>
 
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -2091,7 +2172,7 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v1.9.0</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.9.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">February 26, 2026</span>
         </div>
 
@@ -2117,7 +2198,7 @@
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -2171,14 +2252,14 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v1.8.0</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.8.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">February 25, 2026</span>
         </div>
 
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -2416,14 +2497,14 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v1.7.0</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.7.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">February 21, 2026</span>
         </div>
 
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -2488,14 +2569,14 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v1.6.0</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.6.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">February 20, 2026</span>
         </div>
 
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -2609,7 +2690,7 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v1.5.0</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.5.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">February 19, 2026</span>
         </div>
 
@@ -2758,7 +2839,7 @@
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -2836,7 +2917,7 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v1.4.11</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.4.11</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">February 19, 2026</span>
         </div>
 
@@ -2858,7 +2939,7 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v1.4.10</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.4.10</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">February 19, 2026</span>
         </div>
 
@@ -2884,7 +2965,7 @@
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -2899,7 +2980,7 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v1.4.9</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.4.9</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">February 19, 2026</span>
         </div>
 
@@ -2937,7 +3018,7 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v1.4.8</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.4.8</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">February 19, 2026</span>
         </div>
 
@@ -2975,7 +3056,7 @@
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -3005,7 +3086,7 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v1.4.5</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.4.5</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">February 18, 2026</span>
         </div>
 
@@ -3027,7 +3108,7 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v1.4.4</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.4.4</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">February 18, 2026</span>
         </div>
 
@@ -3057,7 +3138,7 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v1.4.3</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.4.3</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">February 18, 2026</span>
         </div>
 
@@ -3079,7 +3160,7 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v1.4.2</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.4.2</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">February 18, 2026</span>
         </div>
 
@@ -3101,7 +3182,7 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v1.4.1</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.4.1</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">February 18, 2026</span>
         </div>
 
@@ -3123,7 +3204,7 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v1.4.0</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.4.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">February 18, 2026</span>
         </div>
 
@@ -3145,14 +3226,14 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v1.3.0</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.3.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">February 18, 2026</span>
         </div>
 
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -3179,14 +3260,14 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v1.2.0</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.2.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">February 18, 2026</span>
         </div>
 
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -3303,7 +3384,7 @@
       </article>
       <article class="mb-16">
         <div class="flex items-center gap-3 mb-6">
-          <span class="inline-flex items-center px-3 py-1 rounded-full lamp-bg text-white text-sm font-semibold">v1.1.0</span>
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v1.1.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">February 16, 2026</span>
         </div>
 
@@ -3365,7 +3446,7 @@
         <div class="mb-8">
           <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
             <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
-              <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
             </span>
             Added
           </h3>
@@ -3533,7 +3614,7 @@
       <div class="mt-12 text-center">
         <p class="text-slate-600 dark:text-slate-400 mb-4">Want to try the latest version?</p>
         <div class="flex flex-col sm:flex-row gap-4 justify-center">
-          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="lamp-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="gradient-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
             <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
               <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
             </svg>
@@ -3552,10 +3633,10 @@
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex flex-col md:flex-row items-center justify-between gap-6">
         <a href="/" class="flex items-center gap-2">
-          <img src="icon-128.webp" alt="MailVault logo" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <img src="icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
           <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
         </a>
-        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+        <div class="flex items-center gap-6 text-sm text-slate-600 dark:text-slate-400">
           <a href="/docs.html" class="hover:text-primary-500 transition-colors">Docs</a>
           <a href="/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
           <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacy</a>
