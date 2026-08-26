@@ -260,3 +260,88 @@
 .custody-rule > i:nth-child(1) { flex: 5; background: var(--server); }
 .custody-rule > i:nth-child(2) { flex: 8; background: var(--vault); }
 .custody-rule > i:nth-child(3) { flex: 2; background: var(--only-copy); }
+
+/* ============================================================================
+   PHONE ADAPTATION
+   The site is read on phones as often as on desks, and two habits of desktop
+   CSS break there in ways no desktop pass can see.
+   ========================================================================= */
+
+/* iOS Safari zooms the page whenever a focused control's text is under 16px —
+   so a tap on the newsletter email field jumped the layout and left the
+   visitor scrolled sideways in a form they had not finished. Every form on
+   this site uses `text-sm`; on a phone that becomes 16px and nothing zooms. */
+@media (max-width: 640px) {
+  /* `input[class]` on purpose: every control here carries `text-sm`, and a
+     bare element selector loses to a class. 16px is a floor, not a size. */
+  input[class],
+  select[class],
+  textarea[class],
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* A horizontally scrollable region on a phone has no scrollbar to say so: the
+   comparison tables and the features anchor strip simply looked as if they
+   ended at the screen edge. `background-attachment: local` does the detection
+   for free — the two cover panels scroll away with the content and uncover a
+   shadow only on the side that still has more, and both stay hidden when
+   there is nothing to scroll. `--paper` is the surface the region sits on. */
+.scroll-x {
+  overflow-x: auto;
+  --paper: #f8fafc;                 /* slate-50, the page ground */
+  background-image:
+    linear-gradient(to right, var(--paper), rgba(248, 250, 252, 0)),
+    linear-gradient(to left, var(--paper), rgba(248, 250, 252, 0)),
+    linear-gradient(to right, rgba(15, 23, 42, 0.16), rgba(15, 23, 42, 0)),
+    linear-gradient(to left, rgba(15, 23, 42, 0.16), rgba(15, 23, 42, 0));
+  background-position: left center, right center, left center, right center;
+  background-repeat: no-repeat;
+  background-size: 32px 100%, 32px 100%, 12px 100%, 12px 100%;
+  background-attachment: local, local, scroll, scroll;
+}
+.dark .scroll-x {
+  --paper: #0f172a;                 /* slate-900 */
+  background-image:
+    linear-gradient(to right, var(--paper), rgba(15, 23, 42, 0)),
+    linear-gradient(to left, var(--paper), rgba(15, 23, 42, 0)),
+    linear-gradient(to right, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0)),
+    linear-gradient(to left, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0));
+}
+/* A region sitting on white rather than on the page ground says so. */
+.scroll-x-on-card { --paper: #ffffff; }
+.dark .scroll-x-on-card { --paper: #1e293b; }
+
+/* The header is `.glass`: 5% white over a 10px blur. Right for a sticky bar
+   floating over content, wrong for the menu it expands into — five nav items
+   and a Download button sat over a ghosted page. While the menu is open the
+   bar stops being a filter and becomes a panel. Specificity, not order: the
+   `.glass` rule is inline on every page and would otherwise win. */
+nav.glass:has(#mobile-menu:not(.hidden)) {
+  background: #f8fafc;
+  backdrop-filter: none;
+}
+.dark nav.glass:has(#mobile-menu:not(.hidden)) {
+  background: #0f172a;
+}
+
+/* Mobile nav rows are the one place on this site where every item is a target
+   for a thumb rather than a cursor. `px-3 py-2` is a 40px row. */
+#mobile-menu a {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+/* A file path or a command in a `pre` scrolls sideways on a phone with no
+   scrollbar to say so — the FAQ's storage path ran 255px past the screen.
+   Wrapping shows all of it; on a phone that beats a hidden scroll. */
+@media (max-width: 640px) {
+  pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+}
