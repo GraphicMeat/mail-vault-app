@@ -114,6 +114,18 @@ export function useChatBodyLoader(topicEmails) {
         // 1. Check Maildir .eml (fast disk read)
         let emailBody = await db.getLocalEmailLight(resolvedAccountId, resolvedMailbox, uid);
 
+        // The vault is keyed (accountId, mailbox, uid) and carries no per-file
+        // generation proof, so a uid it archived under an older UIDVALIDITY
+        // names a different message. Discard that copy and fall through to the
+        // server, which owns the uid the row was built from. Treating it as a
+        // dead end printed the row's subject where its body belongs.
+        if (emailBody && !bodyMatchesHeader(email, emailBody)) {
+          console.warn('[useChatBodyLoader] Vault copy belongs to another message — asking the server', {
+            uid, mailbox: resolvedMailbox, account: resolvedAccountId,
+          });
+          emailBody = null;
+        }
+
         // 2. Fetch from server if not on disk
         if (!emailBody && freshAccount) {
           if (freshAccount.oauth2Transport === 'graph') {
@@ -132,13 +144,15 @@ export function useChatBodyLoader(topicEmails) {
         if (cancelled) return;
 
         // Last line of defence: a body whose Message-ID contradicts the header
-        // belongs to another message. Drop it rather than render it.
+        // belongs to another message. Drop it rather than render it. This one
+        // is the server's own answer for this uid, so a retry only asks the
+        // same question again.
         if (emailBody && !bodyMatchesHeader(email, emailBody)) {
           console.warn('[useChatBodyLoader] Body/header Message-ID mismatch — discarding', {
             uid, mailbox: resolvedMailbox, account: resolvedAccountId,
           });
           emailBody = null;
-          retryCount = MAX_RETRIES; // a retry reads the same wrong location
+          retryCount = MAX_RETRIES;
         }
 
         if (emailBody) {

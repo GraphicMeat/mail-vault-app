@@ -5,6 +5,7 @@ import { useSelectionStore } from '../../stores/selectionStore';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { AnimatePresence } from 'framer-motion';
 import { useChatBodyLoader, emailKey } from '../../hooks/useChatBodyLoader';
+import * as db from '../../services/db';
 import { resolveEmailLocation } from '../../stores/slices/unifiedHelpers';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../../utils/iframeQuoteFolding';
 import { splitQuotedContent } from '../../utils/quoteFolding';
@@ -31,7 +32,7 @@ import { MAIL_DARK_BG, MAIL_DARK_TEXT } from '../../utils/mailChrome';
 
 // ── Thread Email Item Content ────────────────────────────────────────────────
 
-function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDisplay, shouldShowSignature, effectiveTheme }) {
+function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, signatureDisplay, shouldShowSignature, effectiveTheme }) {
   const iframeRef = useRef(null);
   const [quotesExpanded, setQuotesExpanded] = useState(false);
   const [sigExpanded, setSigExpanded] = useState(false);
@@ -171,8 +172,15 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
     );
   }
 
+  // A failed load used to print the row's own subject/snippet in italics, which
+  // is pixel-identical to a message whose body really is one line — the reader
+  // has no way to tell "this is the mail" from "this never arrived".
   if (!loadedEmail) {
-    return (
+    return loadError ? (
+      <div className="py-3 text-sm text-mail-text-muted" data-testid="thread-body-error">
+        Couldn't load this message from the vault or the server.
+      </div>
+    ) : (
       <div className="py-3 text-sm text-mail-text-muted italic">
         {email.text || email.textBody || email.snippet || email.subject || 'No content available'}
       </div>
@@ -265,6 +273,7 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, arch
   const [headerExpanded, setHeaderExpanded] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
   const [rawSource, setRawSource] = useState(null);
+  const [rawError, setRawError] = useState(null);
   const [loadingRaw, setLoadingRaw] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
   const [emailThemeOverride, setEmailThemeOverride] = useState(null);
@@ -288,6 +297,26 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, arch
   const bodyEntry = bodiesMapRef.current.get(key);
   const loadedEmail = bodyEntry?.status === 'loaded' ? bodyEntry.email : null;
   const isLoading = bodyEntry?.status === 'loading';
+  const loadError = bodyEntry?.status === 'error';
+
+  // Both the header's "View Source" and the action bar's open the same panel.
+  const toggleRawSource = async () => {
+    if (showRaw) { setShowRaw(false); return; }
+    if (!rawSource && !rawError && location) {
+      setLoadingRaw(true);
+      try {
+        const { b64, error } = await db.getVerifiedRawSource(location.accountId, location.mailbox, email.uid, email);
+        setRawSource(b64);
+        setRawError(error);
+      } catch (err) {
+        console.error('[ThreadEmailItem] Failed to load raw source:', err);
+        setRawError('Could not read this message from the vault.');
+      } finally {
+        setLoadingRaw(false);
+      }
+    }
+    setShowRaw(true);
+  };
 
   const realAttachments = loadedEmail ? getRealAttachments(loadedEmail.attachments, loadedEmail.html) : [];
 
@@ -301,29 +330,7 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, arch
           expanded={expanded}
           onToggle={() => setExpanded(!expanded)}
           showRaw={showRaw}
-          onToggleRaw={async () => {
-            if (showRaw) { setShowRaw(false); return; }
-            if (!rawSource && location) {
-              setLoadingRaw(true);
-              try {
-                const isTauri = !!window.__TAURI__;
-                if (isTauri) {
-                  const { invoke } = window.__TAURI__.core;
-                  const b64 = await invoke('maildir_read_raw_source', {
-                    accountId: location.accountId,
-                    mailbox: location.mailbox,
-                    uid: email.uid,
-                  });
-                  setRawSource(b64);
-                }
-              } catch (err) {
-                console.error('[ThreadEmailItem] Failed to load raw source:', err);
-              } finally {
-                setLoadingRaw(false);
-              }
-            }
-            setShowRaw(true);
-          }}
+          onToggleRaw={toggleRawSource}
           loadingRaw={loadingRaw}
           showInsights={showInsights}
           onToggleInsights={() => setShowInsights(!showInsights)}
@@ -364,29 +371,7 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, arch
               });
               invoke('open_email_window', { html: popupHtml, title: email.subject || 'Email' });
             }}
-            onViewSource={async () => {
-              if (showRaw) { setShowRaw(false); return; }
-              if (!rawSource && location) {
-                setLoadingRaw(true);
-                try {
-                  const isTauri = !!window.__TAURI__;
-                  if (isTauri) {
-                    const { invoke } = window.__TAURI__.core;
-                    const b64 = await invoke('maildir_read_raw_source', {
-                      accountId: location.accountId,
-                      mailbox: location.mailbox,
-                      uid: email.uid,
-                    });
-                    setRawSource(b64);
-                  }
-                } catch (err) {
-                  console.error('[ThreadEmailItem] Failed to load raw source:', err);
-                } finally {
-                  setLoadingRaw(false);
-                }
-              }
-              setShowRaw(true);
-            }}
+            onViewSource={toggleRawSource}
             onToggleEmailTheme={() => setEmailThemeOverride(emailDarkMode ? 'light' : 'dark')}
             emailThemeDark={emailDarkMode}
             isArchived={archivedEmailIds?.has(email.uid)}
@@ -410,12 +395,12 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, arch
         <div className="px-3 pb-3 overflow-hidden" style={{ contain: 'inline-size' }}>
           {/* Body */}
           <div className="pl-9 overflow-hidden" style={{ contain: 'inline-size' }}>
-            {showRaw && rawSource ? (
-              <pre className="text-xs font-mono text-mail-text bg-mail-surface rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-all">
-                {atob(rawSource)}
+            {showRaw && (rawSource || rawError) ? (
+              <pre className="text-xs font-mono text-mail-text bg-mail-surface rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-all" data-testid={rawError ? 'thread-raw-error' : undefined}>
+                {rawError || atob(rawSource)}
               </pre>
             ) : (
-              <ThreadEmailItemContent email={email} loadedEmail={loadedEmail} isLoading={isLoading} signatureDisplay={signatureDisplay} shouldShowSignature={shouldShowSignature} effectiveTheme={effectiveTheme} />
+              <ThreadEmailItemContent email={email} loadedEmail={loadedEmail} isLoading={isLoading} loadError={loadError} signatureDisplay={signatureDisplay} shouldShowSignature={shouldShowSignature} effectiveTheme={effectiveTheme} />
             )}
           </div>
 

@@ -4,6 +4,7 @@ import { readDir, exists, BaseDirectory } from '@tauri-apps/plugin-fs';
 import { send as transportSend } from '../transport.js';
 import { initDB, initBasic, accountDir } from './accounts.js';
 import { mailboxPathFromVaultDir } from '../../stores/slices/unifiedHelpers.js';
+import { normalizeMessageId } from '../../utils/emailParser.js';
 
 // Transport-aware invoke: tries daemon socket first, falls back to Tauri invoke
 const invoke = (cmd, args) => transportSend(cmd, args);
@@ -130,6 +131,44 @@ export async function getLocalEmailLight(accountId, mailbox, uid) {
   } catch {
     return undefined;
   }
+}
+
+// The Message-ID of the vault file itself. Header block only: a quoted reply
+// carries its parent's Message-ID further down the body.
+function readRawMessageId(raw) {
+  const head = raw.split(/\r?\n\r?\n/, 1)[0];
+  const m = head.match(/^message-id:[ \t]*(.+(?:\r?\n[ \t]+.+)*)/im);
+  return m ? m[1].replace(/\s+/g, '') : null;
+}
+
+// Raw source is the one view that shows the vault file verbatim, so it needs
+// the same Message-ID proof every other vault read takes. Without it a uid the
+// vault archived under an older UIDVALIDITY hands the reader another message's
+// full source under this row's header — which is exactly how the March
+// StrictSeal mail turned up under an August Zendesk row.
+//
+// Returns { b64, error }: never a file that contradicts the row. A missing id
+// on either side proves nothing and is allowed through, same contract as
+// bodyMatchesHeader.
+export async function getVerifiedRawSource(accountId, mailbox, uid, headerRow) {
+  await initDB();
+  if (!invoke) return { b64: null, error: null };
+
+  const b64 = await invoke('maildir_read_raw_source', { accountId, mailbox, uid: parseInt(uid, 10) });
+  if (!b64) return { b64: null, error: null };
+
+  const rowId = normalizeMessageId(headerRow?.messageId || headerRow?.message_id);
+  const rawId = normalizeMessageId(readRawMessageId(atob(b64)));
+  if (rowId && rawId && rowId !== rawId) {
+    console.warn('[db] Raw source belongs to another message — refusing', {
+      accountId, mailbox, uid, rowId, rawId,
+    });
+    return {
+      b64: null,
+      error: 'The vault file stored under this UID is a different message, so its source is not shown.',
+    };
+  }
+  return { b64, error: null };
 }
 
 export async function getLocalEmails(accountId, mailbox) {

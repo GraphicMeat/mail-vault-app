@@ -39,6 +39,7 @@ export {
   isEmailSaved,
   getSavedEmailIds,
   getArchivedEmailIds,
+  getVerifiedRawSource,
   ensureVaultGeneration,
   getVaultOrphanStats,
   purgeVaultOrphans,

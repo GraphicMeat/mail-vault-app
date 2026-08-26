@@ -16,6 +16,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { getRealAttachments, replaceCidUrls } from '../services/attachmentUtils';
+import * as db from '../services/db';
 import { describeMessageState } from './email/MessageStateIcon';
 import { useCustodyLanding } from '../hooks/useCustodyLanding';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
@@ -79,6 +80,7 @@ function EmailViewerComponent({ onComposeReply }) {
   const [confirmUnarchive, setConfirmUnarchive] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
   const [rawSource, setRawSource] = useState(null);
+  const [rawError, setRawError] = useState(null);
   const [loadingRaw, setLoadingRaw] = useState(false);
   const [showMoveDropdown, setShowMoveDropdown] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
@@ -120,11 +122,33 @@ function EmailViewerComponent({ onComposeReply }) {
   useEffect(() => {
     setShowRaw(false);
     setRawSource(null);
+    setRawError(null);
     setConfirmDelete(false);
     setConfirmUnarchive(false);
     setShowInsights(false);
     setEmailThemeOverride(null);
   }, [selectedEmail?.uid]);
+
+  // The header's "View Source" and the action bar's open the same panel, and
+  // both used to read the vault file for this uid unverified — see
+  // db.getVerifiedRawSource for why that hands over another message.
+  const toggleRawSource = async () => {
+    if (showRaw) { setShowRaw(false); return; }
+    if (!rawSource && !rawError) {
+      setLoadingRaw(true);
+      try {
+        const { b64, error } = await db.getVerifiedRawSource(activeAccountId, activeMailbox, selectedEmail.uid, selectedEmail);
+        setRawSource(b64);
+        setRawError(error);
+      } catch (err) {
+        console.error('[EmailViewer] Failed to load raw source:', err);
+        setRawError('Could not read this message from the vault.');
+      } finally {
+        setLoadingRaw(false);
+      }
+    }
+    setShowRaw(true);
+  };
 
   const handleSave = async () => {
     if (!selectedEmail) return;
@@ -451,32 +475,7 @@ function EmailViewerComponent({ onComposeReply }) {
         expanded={headerExpanded}
         onToggle={() => setHeaderExpanded(!headerExpanded)}
         showRaw={showRaw}
-        onToggleRaw={async () => {
-          if (showRaw) {
-            setShowRaw(false);
-            return;
-          }
-          if (!rawSource) {
-            setLoadingRaw(true);
-            try {
-              const isTauri = !!window.__TAURI__;
-              if (isTauri) {
-                const { invoke } = window.__TAURI__.core;
-                const b64 = await invoke('maildir_read_raw_source', {
-                  accountId: activeAccountId,
-                  mailbox: activeMailbox,
-                  uid: selectedEmail.uid,
-                });
-                setRawSource(b64);
-              }
-            } catch (err) {
-              console.error('[EmailViewer] Failed to load raw source:', err);
-            } finally {
-              setLoadingRaw(false);
-            }
-          }
-          setShowRaw(true);
-        }}
+        onToggleRaw={toggleRawSource}
         loadingRaw={loadingRaw}
         showInsights={showInsights}
         onToggleInsights={() => setShowInsights(!showInsights)}
@@ -508,29 +507,7 @@ function EmailViewerComponent({ onComposeReply }) {
               });
               invoke('open_email_window', { html: popupHtml, title: selectedEmail.subject || 'Email' });
             }}
-            onViewSource={async () => {
-              if (showRaw) { setShowRaw(false); return; }
-              if (!rawSource) {
-                setLoadingRaw(true);
-                try {
-                  const isTauri = !!window.__TAURI__;
-                  if (isTauri) {
-                    const { invoke } = window.__TAURI__.core;
-                    const b64 = await invoke('maildir_read_raw_source', {
-                      accountId: activeAccountId,
-                      mailbox: activeMailbox,
-                      uid: selectedEmail.uid,
-                    });
-                    setRawSource(b64);
-                  }
-                } catch (err) {
-                  console.error('[EmailViewer] Failed to load raw source:', err);
-                } finally {
-                  setLoadingRaw(false);
-                }
-              }
-              setShowRaw(true);
-            }}
+            onViewSource={toggleRawSource}
             onToggleEmailTheme={() => setEmailThemeOverride(emailDarkMode ? 'light' : 'dark')}
             emailThemeDark={emailDarkMode}
             isArchived={isArchived}
@@ -561,9 +538,9 @@ function EmailViewerComponent({ onComposeReply }) {
       {/* Content */}
       <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">
         <div className="p-4 flex-1 flex flex-col">
-          {showRaw && rawSource ? (
-            <pre className="text-xs font-mono text-mail-text bg-mail-surface rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-all">
-              {atob(rawSource)}
+          {showRaw && (rawSource || rawError) ? (
+            <pre className="text-xs font-mono text-mail-text bg-mail-surface rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-all" data-testid={rawError ? 'email-raw-error' : undefined}>
+              {rawError || atob(rawSource)}
             </pre>
           ) : selectedEmail.html ? (
             // Outer wrapper matches app theme so DR-inverted iframe content
