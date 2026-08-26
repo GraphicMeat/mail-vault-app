@@ -1183,7 +1183,7 @@
         <h2 class="text-3xl sm:text-4xl font-bold mb-4">
           What's New?
         </h2>
-        <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
+        <p class="text-lg text-slate-600 dark:text-slate-400 mb-8" data-whats-new data-version="2.10.3">
           v2.10.3 is a fix release, and the fixes are about one thing: MailVault filing your mail under numbers that only ever meant something to the server that issued them. Move a domain to a new mail host and those numbers get handed to different messages — so a message in a conversation showed its own subject line where its text should have been, "View Source" could hand you a different message entirely, and every backup quietly undid MailVault's own repair of the archive by copying the outdated copies back in. It also stops a narrow window from pushing the message you clicked below the bottom edge, brings the hidden Settings tabs back onto the screen, and gives a screen reader a running commentary on bulk archive and delete.
         </p>
         <a href="/changelog.html" class="inline-flex items-center gap-2 px-8 py-4 rounded-xl font-semibold text-lg border-2 border-primary-500 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">
@@ -1804,6 +1804,7 @@
     })();
   </script>
   <script defer src="/pricing-localize.js?v=1"></script>
+  <script defer src="/version-gate.js?v=1"></script>
   <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
 </body>
 </html>

@@ -106,11 +106,14 @@ function renderSection(section) {
 
 function renderVersion(version, isLatest) {
   const formattedDate = formatDate(version.date);
+  // The badge ships on the newest entry, but version-gate.js moves it to the
+  // last PUBLISHED release at view time — this file is generated during the
+  // release cut, when the newest version is still an unpublished draft.
   const latestBadge = isLatest
-    ? '\n          <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>'
+    ? '\n          <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>'
     : '';
 
-  let html = `      <article class="mb-16">
+  let html = `      <article class="mb-16" data-version="${version.version}">
         <div class="flex items-center gap-3 mb-6">
           <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v${version.version}</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">${formattedDate}</span>${latestBadge}
@@ -338,6 +341,7 @@ ${articles}
       });
     });
   </script>
+  <script defer src="/version-gate.js?v=1"></script>
 </body>
 </html>
 `;

@@ -513,6 +513,52 @@ const checkoutLimiter = rateLimit({
   message: { error: 'rate_limited', message: 'Too many checkout requests. Please try again later.' },
 });
 
+// -------------------------------------------
+// Latest released version
+// -------------------------------------------
+// The site ships every version's changelog entry and "What's New" copy at commit
+// time — before the GitHub release leaves draft. This endpoint decides which of
+// them a visitor actually sees: the last PUBLISHED release. Draft releases are
+// invisible to an unauthenticated call, which is exactly the point. Publishing
+// the release moves the site, with no deploy and no workflow in between.
+const GITHUB_LATEST_RELEASE = 'https://api.github.com/repos/GraphicMeat/mail-vault-app/releases/latest';
+const VERSION_CACHE_TTL = 10 * 60_000;   // 6 upstream calls/hour; GitHub allows 60 unauthenticated
+let _versionCache = null;                // { version, tag, publishedAt, ts } — kept past its TTL to serve stale
+
+async function fetchLatestVersion() {
+  if (_versionCache && Date.now() - _versionCache.ts < VERSION_CACHE_TTL) return _versionCache;
+  const r = await fetch(GITHUB_LATEST_RELEASE, {
+    headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'mailvaultapp.com' },
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!r.ok) throw new Error(`github ${r.status}`);
+  const body = await r.json();
+  const tag = String(body.tag_name || '');
+  const version = tag.replace(/^v/, '');
+  // A tag that isn't a plain semver means the upstream shape changed: keep the
+  // last known-good answer rather than feeding the page something it can't match.
+  if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error(`unexpected tag ${tag}`);
+  _versionCache = { version, tag, publishedAt: body.published_at, ts: Date.now() };
+  return _versionCache;
+}
+
+app.get('/api/latest-version', statusLimiter, async (req, res) => {
+  try {
+    const { version, tag, publishedAt } = await fetchLatestVersion();
+    res.set('Cache-Control', 'public, max-age=300');
+    res.json({ version, tag, publishedAt });
+  } catch (err) {
+    // Stale-if-error: a GitHub blip must never blank the homepage's copy. With no
+    // cached answer at all we 503, and the page keeps the version it shipped with.
+    if (_versionCache) {
+      res.set('Cache-Control', 'public, max-age=60');
+      return res.json({ version: _versionCache.version, tag: _versionCache.tag, publishedAt: _versionCache.publishedAt, stale: true });
+    }
+    console.error('latest-version:', err.message);
+    res.status(503).json({ error: 'unavailable' });
+  }
+});
+
 // In-memory billing status cache (key: customerId or email, TTL: 15s)
 const _billingCache = new Map();
 const BILLING_CACHE_TTL = 15_000;
