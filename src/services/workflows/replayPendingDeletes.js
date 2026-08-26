@@ -4,6 +4,7 @@ import * as db from '../db';
 import * as api from '../api';
 import { ensureFreshToken } from '../authUtils';
 import { isGraphAccount } from '../graphConfig';
+import { markServerDeleted } from './messageMutations';
 
 /**
  * Relay to the Rust log as well as the console.
@@ -127,6 +128,12 @@ export async function replayPendingDeletes() {
       }
     }
     if (done.length) await db.clearPendingDeletes(accountId, mailbox, done);
+
+    // A replayed delete is still this app deleting the server copy, so a
+    // surviving vault copy earns the same stamp the live paths write — without
+    // it, a delete that finished after a crash leaves the row saying "also
+    // still on the server" for good. See stores/slices/custody.js.
+    for (const uid of removed) await markServerDeleted(accountId, mailbox, uid);
 
     if (removed.length) {
       // Prune the header sidecar too, or the row comes straight back.

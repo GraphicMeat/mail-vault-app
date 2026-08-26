@@ -7,6 +7,7 @@ import { useSettingsStore } from '../settingsStore';
 import { buildThreads } from '../../utils/emailParser';
 import { detectReplyToMismatch } from '../../utils/replyToCheck';
 import { NO_SERVER_UIDS } from './serverUids';
+import { custodySource } from './custody';
 import {
   loadEmails as _loadEmails,
   _loadEmailsViaGraph,
@@ -119,6 +120,9 @@ export function deriveDisplayRows({
   viewMode = 'all',
   savedEmailIds = new Set(),
   archivedEmailIds = new Set(),
+  // Kept in the signature (and in updateSortedEmails' memo key) so a caller
+  // cannot quietly stop passing it: custody no longer reads it, but the set
+  // still changes what the LIST holds, and callers pass both together.
   serverUids = NO_SERVER_UIDS,
   unifiedInbox = false,
   activeAccountId = null,
@@ -145,7 +149,7 @@ export function deriveDisplayRows({
       if (archivedEmailIds.has(e.uid)) {
         e.isLocal = true;
         e.isArchived = true;
-        e.source = !serverUids.complete || serverUids.uids.has(e.uid) ? 'local' : 'local-only';
+        e.source = custodySource(e);
         result.push(e);
       }
     }
@@ -162,7 +166,9 @@ export function deriveDisplayRows({
       if (!loadedKeys.has(uidKey(localEmail)) && archivedEmailIds.has(localEmail.uid)) {
         localEmail.isLocal = true;
         localEmail.isArchived = true;
-        localEmail.source = !serverUids.complete || serverUids.uids.has(localEmail.uid) ? 'local' : 'local-only';
+        // Not "missing from this mailbox" — see custodySource. A vault row the
+        // server list does not shadow is an ordinary vault row.
+        localEmail.source = custodySource(localEmail);
         result.push(localEmail);
       }
     }

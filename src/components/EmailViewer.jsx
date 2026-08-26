@@ -18,6 +18,7 @@ import {
 import { getRealAttachments, replaceCidUrls } from '../services/attachmentUtils';
 import * as db from '../services/db';
 import { describeMessageState } from './email/MessageStateIcon';
+import { custodyRowFor } from '../stores/slices/custody';
 import { useCustodyLanding } from '../hooks/useCustodyLanding';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { SenderInsightsPanel } from './SenderInsightsPanel';
@@ -60,9 +61,9 @@ function EmailViewerComponent({ onComposeReply }) {
   const deleteEmailFromServer = useSelectionStore(s => s.deleteEmailFromServer);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   const activeMailbox = useAccountStore(s => s.activeMailbox);
-  // Gold requires proof of server absence, so the band reads the same
-  // uid-set completeness flag ConnectedStateIcon does — never `isLocalOnly`
-  // on its own, which is only "the list didn't have it".
+  // Only the archived wording depends on this now ("server copy not verified
+  // yet" vs "also still on the server"). Gold is decided by custodySource,
+  // which never asks a uid set — see stores/slices/custody.js.
   const serverKnown = useMailStore(s => s.serverUids.complete);
 
   const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
@@ -97,25 +98,27 @@ function EmailViewerComponent({ onComposeReply }) {
   const isArchived = selectedEmail && archivedEmailIds.has(selectedEmail.uid);
   const isLocalOnly = selectedEmailSource === 'local-only';
   const isRead = selectedEmail?.flags?.includes('\\Seen');
-  // One custody statement per message, in the vocabulary the rows already use.
+  // One custody statement per message — and it is the ROW's, not a second
+  // opinion computed here.
   //
-  // The row's chip and this band are two visible claims about the same message,
-  // so they have to read the same fields or they will contradict each other on
-  // screen. The row goes through `describeMessageState(email, …)` — the email's
-  // own `isArchived`/`source`. This band was reading two *store* sets instead
-  // (`archivedEmailIds`, and the selection store's `selectedEmailSource`), a
-  // third carrier of provenance that a click has to keep populated. Read the
-  // message first and let the optimistic sets only ADD archived state, which is
-  // the one direction they ever move within a session.
+  // Two previous attempts each picked a different field on a different object
+  // and each shipped the same contradiction: a green "Saved in your vault —
+  // also still on the server" band over a gold "your only copy" row.
+  // `selectedEmailSource` failed because selectEmail.js also writes
+  // 'header-only' into it (a loading state in a provenance field);
+  // `selectedEmail.source` failed because this component never holds the row —
+  // its copy comes from the in-memory cache, the vault `.eml` or a server
+  // fetch, and every vault read stamps `source: 'local'` on the way out, so
+  // 'local-only' was unreachable here by construction.
   //
-  // NOT `selectedEmailSource`. That field's declared contract is
-  // `'server' | 'local' | 'local-only'` (selectionSlice.js), but
-  // selectEmail.js also writes `'header-only'` into it to mean the BODY has not
-  // been fetched — a loading state wearing a provenance field's name. Reading
-  // it here rendered "Saved in your vault" over a row whose own glyph said
-  // "your only copy", because 'header-only' is simply not 'local-only'.
+  // The third field would have failed too. Read the row the list derived.
+  const custodyRow = useMailStore(s => custodyRowFor(selectedEmail, s));
   const custody = describeMessageState(
-    { isArchived: isArchived || !!selectedEmail?.isArchived, source: selectedEmail?.source },
+    custodyRow || {
+      isArchived: isArchived || !!selectedEmail?.isArchived,
+      _origin: selectedEmail?._origin,
+      serverDeleted: selectedEmail?.serverDeleted,
+    },
     { serverKnown }
   );
 

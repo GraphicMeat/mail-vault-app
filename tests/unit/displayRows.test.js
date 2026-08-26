@@ -41,6 +41,13 @@ const localEmail = (uid, subject, date) => ({
   flags: ['\\Seen'],
 });
 
+// A vault copy whose server copy this app deleted — `applyServerRemoval` writes
+// `serverDeleted` onto the local-index entry and `db.getArchivedEmails` reads it
+// back onto the row. This, not "absent from the uid set", is what makes a row
+// local-only: a uid set enumerates ONE mailbox, and a message that left INBOX
+// for All Mail, a label or the Bin is still on the server.
+const deletedFromServer = (uid, subject, date) => ({ ...localEmail(uid, subject, date), serverDeleted: true });
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -139,18 +146,31 @@ describe('deriveDisplayRows', () => {
       expect(result.every((e) => e.isArchived === true)).toBe(true);
     });
 
-    it('flags local emails as "local-only" when their UID is NOT on the server', () => {
+    it('flags local emails as "local-only" when this app deleted the server copy', () => {
       const result = display({
         searchActive: false,
         searchResults: [],
         emails: [serverEmail(1, 'Still on server')],
-        localEmails: [localEmail(1, 'Still on server'), localEmail(99, 'Deleted from server')],
+        localEmails: [localEmail(1, 'Still on server'), deletedFromServer(99, 'Deleted from server')],
         archivedEmailIds: new Set([1, 99]),
         viewMode: 'local',
       });
       expect(result).toHaveLength(2);
       expect(result.find((e) => e.uid === 1).source).toBe('local');
       expect(result.find((e) => e.uid === 99).source).toBe('local-only');
+    });
+
+    it('does NOT flag a vault row local-only merely for missing from the mailbox', () => {
+      // The false-gold regression: a complete UID SEARCH covers one mailbox.
+      const result = display({
+        searchActive: false,
+        searchResults: [],
+        emails: [serverEmail(1, 'Still in INBOX')],
+        localEmails: [localEmail(1, 'Still in INBOX'), localEmail(99, 'Archived into All Mail')],
+        archivedEmailIds: new Set([1, 99]),
+        viewMode: 'local',
+      });
+      expect(result.find((e) => e.uid === 99).source).toBe('local');
     });
 
     it('does NOT flag local emails as "local-only" when server emails are empty (not loaded yet)', () => {
@@ -183,12 +203,12 @@ describe('deriveDisplayRows', () => {
       expect(result[0].uid).toBe(1);
     });
 
-    it('flags ALL local emails as "local-only" when none match server UIDs', () => {
+    it('flags ALL local emails as "local-only" when every server copy was deleted here', () => {
       const result = display({
         searchActive: false,
         searchResults: [],
         emails: [serverEmail(100, 'Different email')],
-        localEmails: [localEmail(1, 'Deleted A'), localEmail(2, 'Deleted B')],
+        localEmails: [deletedFromServer(1, 'Deleted A'), deletedFromServer(2, 'Deleted B')],
         archivedEmailIds: new Set([1, 2]),
         viewMode: 'local',
       });
@@ -206,7 +226,7 @@ describe('deriveDisplayRows', () => {
         searchActive: false,
         searchResults: [],
         emails: [serverEmail(1, 'On server')],
-        localEmails: [localEmail(1, 'On server'), localEmail(99, 'Deleted from server')],
+        localEmails: [localEmail(1, 'On server'), deletedFromServer(99, 'Deleted from server')],
         archivedEmailIds: new Set([1, 99]),
         viewMode: 'all',
       });
@@ -308,7 +328,7 @@ describe('deriveDisplayRows', () => {
   // Delete from server → local-only transition
   // -----------------------------------------------------------------------
   describe('delete from server triggers local-only', () => {
-    it('email becomes "local-only" after being removed from server emails array (all mode)', () => {
+    it('email becomes "local-only" after the delete stamps the vault copy (all mode)', () => {
       const archived = localEmail(5, 'Archived email');
       const serverEmails = [serverEmail(5, 'Archived email'), serverEmail(10, 'Other')];
 
@@ -323,12 +343,13 @@ describe('deriveDisplayRows', () => {
       });
       expect(before.find((e) => e.uid === 5).source).toBe('server');
 
-      // After delete: email 5 removed from server array → source "local-only"
+      // After delete: the row leaves the server array AND the vault entry is
+      // stamped — both halves of what applyServerRemoval does.
       const after = display({
         searchActive: false,
         searchResults: [],
         emails: serverEmails.filter((e) => e.uid !== 5),
-        localEmails: [archived],
+        localEmails: [deletedFromServer(5, 'Archived email')],
         archivedEmailIds: new Set([5]),
         viewMode: 'all',
       });
@@ -336,7 +357,7 @@ describe('deriveDisplayRows', () => {
       expect(after.find((e) => e.uid === 5).isArchived).toBe(true);
     });
 
-    it('email becomes "local-only" after being removed from server emails array (local mode)', () => {
+    it('email becomes "local-only" after the delete stamps the vault copy (local mode)', () => {
       const archived = localEmail(5, 'Archived email');
       const serverEmails = [serverEmail(5, 'Archived email'), serverEmail(10, 'Other')];
 
@@ -351,12 +372,12 @@ describe('deriveDisplayRows', () => {
       });
       expect(before.find((e) => e.uid === 5).source).toBe('local');
 
-      // After delete: email 5 removed from server array → source "local-only"
+      // After delete: removed from the server array AND stamped on disk.
       const after = display({
         searchActive: false,
         searchResults: [],
         emails: serverEmails.filter((e) => e.uid !== 5),
-        localEmails: [archived],
+        localEmails: [deletedFromServer(5, 'Archived email')],
         archivedEmailIds: new Set([5]),
         viewMode: 'local',
       });
@@ -365,7 +386,7 @@ describe('deriveDisplayRows', () => {
 
     it('view mode switch produces correct results without stale data', () => {
       const emails = [serverEmail(1, 'A'), serverEmail(2, 'B')];
-      const locals = [localEmail(1, 'A'), localEmail(99, 'Deleted')];
+      const locals = [localEmail(1, 'A'), deletedFromServer(99, 'Deleted')];
       const archived = new Set([1, 99]);
 
       // In "server" mode: only server emails, no local-only

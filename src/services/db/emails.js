@@ -224,6 +224,10 @@ export async function readLocalEmailIndex(accountId, mailbox) {
       const entries = JSON.parse(data);
       return entries.map(e => ({
         ...e,
+        // The raw entry's own `source` is the only record of where a message
+        // came from, and the rewrite below destroys it. Custody reads
+        // `_origin` (see stores/slices/custody.js), so keep it.
+        _origin: e.source,
         source: 'local',
         isLocal: true,
         isArchived: true,
@@ -244,6 +248,33 @@ export async function readLocalEmailIndex(accountId, mailbox) {
  * `'local_draft'` mean it was created here and never existed on one. A
  * destructive path needs that distinction, so it reads the raw entries.
  */
+/**
+ * uid → `{ origin, serverDeleted }` for one mailbox's index.
+ *
+ * The two facts custody needs, read together because they come from the same
+ * file: `origin` is the entry's raw `source` (`local_sent` / `local_draft`
+ * meaning the message never had a server copy) and `serverDeleted` is stamped
+ * by applyServerRemoval when this app deletes the server copy. Both are on
+ * disk, so a gold row survives a reload — the uid set it used to be derived
+ * from does not.
+ */
+export async function getLocalIndexMeta(accountId, mailbox) {
+  await initBasic();
+  if (!invoke) return new Map();
+  await ensureVaultGeneration(accountId, mailbox);
+  try {
+    const data = await invoke('local_index_read', { accountId, mailbox });
+    if (!data) return new Map();
+    const entries = JSON.parse(data);
+    return new Map(entries
+      .filter(e => e && e.uid != null)
+      .map(e => [Number(e.uid), { origin: e.source, serverDeleted: e.serverDeleted === true }]));
+  } catch (e) {
+    console.warn('[db] Failed to read local index meta:', e);
+    return new Map();
+  }
+}
+
 export async function getLocalIndexProvenance(accountId, mailbox) {
   await initBasic();
   if (!invoke) return new Map();
@@ -326,6 +357,17 @@ export async function getArchivedEmails(accountId, mailbox, archivedUidSet, onBa
   const uids = Array.from(archivedUidSet).sort((a, b) => b - a); // newest first
   console.log('[db] getArchivedEmails: %d UIDs', uids.length);
 
+  // Custody rides along with the row, from the same read for the whole mailbox.
+  // These rows ARE `localEmails`, and every branch below builds them from a
+  // body/header source that knows nothing about provenance — without this the
+  // list has no way to tell a staged send from an archived server message, and
+  // custodySource correctly refuses to call either one gold.
+  const meta = await getLocalIndexMeta(accountId, mailbox);
+  const withCustody = (e) => {
+    const m = meta.get(Number(e.uid));
+    return m ? { ...e, _origin: m.origin, serverDeleted: m.serverDeleted } : e;
+  };
+
   // 1. Fast path: read from sidecar cache (email_cache/{uid}.json)
   // These are already written by IMAP sync — no .eml parsing needed
   let sidecarEmails = [];
@@ -338,7 +380,7 @@ export async function getArchivedEmails(accountId, mailbox, archivedUidSet, onBa
   }
 
   if (sidecarEmails.length > 0) {
-    const emails = sidecarEmails.map(e => ({
+    const emails = sidecarEmails.map(e => withCustody({
       ...e,
       localId: `${accountId}-${mailbox}-${e.uid}`,
       isArchived: true
@@ -365,11 +407,11 @@ export async function getArchivedEmails(accountId, mailbox, archivedUidSet, onBa
         const results = await invoke('maildir_read_light_batch', { accountId, mailbox, uids: batchUids });
         for (let j = 0; j < results.length; j++) {
           if (results[j]) {
-            emails.push({
+            emails.push(withCustody({
               ...results[j],
               localId: `${accountId}-${mailbox}-${batchUids[j]}`,
               isArchived: true
-            });
+            }));
           }
         }
         if (onBatch) onBatch([...emails]);
@@ -386,7 +428,7 @@ export async function getArchivedEmails(accountId, mailbox, archivedUidSet, onBa
       accountId, mailbox, expectedCount: uids.length
     });
     if (cached && cached.length > 0) {
-      const emails = cached.map(e => ({
+      const emails = cached.map(e => withCustody({
         ...e,
         localId: `${accountId}-${mailbox}-${e.uid}`,
         isArchived: true
@@ -409,11 +451,11 @@ export async function getArchivedEmails(accountId, mailbox, archivedUidSet, onBa
       const results = await invoke('maildir_read_light_batch', { accountId, mailbox, uids: batchUids });
       for (let j = 0; j < results.length; j++) {
         if (results[j]) {
-          allEmails.push({
+          allEmails.push(withCustody({
             ...results[j],
             localId: `${accountId}-${mailbox}-${batchUids[j]}`,
             isArchived: true
-          });
+          }));
         }
       }
       console.log('[db] getArchivedEmails: batch %d/%d, loaded: %d', Math.floor(i / BATCH_SIZE) + 1, Math.ceil(uids.length / BATCH_SIZE), allEmails.length);
@@ -422,7 +464,7 @@ export async function getArchivedEmails(accountId, mailbox, archivedUidSet, onBa
 
     // Save to archived_headers.json for next load
     if (allEmails.length > 0) {
-      const forCache = allEmails.map(({ localId, isArchived, ...rest }) => rest);
+      const forCache = allEmails.map(({ localId, isArchived, _origin, serverDeleted, ...rest }) => rest);
       invoke('maildir_save_archived_cache', { accountId, mailbox, emails: forCache }).catch(() => {});
     }
 

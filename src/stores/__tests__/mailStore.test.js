@@ -471,7 +471,7 @@ describe('updateSortedEmails memoization', () => {
   // the row never appears. Reproduced as an archived + server-deleted message
   // that would not come back as "Local only" after a reload.
   it('re-derives when a set keeps its size but changes contents', () => {
-    const local = { uid: 3, subject: 'Archived message 3', date: 'Sun, 04 Jan 2026 12:00:00 +0000' };
+    const local = { uid: 3, subject: 'Archived message 3', date: 'Sun, 04 Jan 2026 12:00:00 +0000', serverDeleted: true };
 
     useMailStore.setState({
       activeAccountId: 'acct-1',
@@ -511,9 +511,11 @@ describe('updateSortedEmails memoization', () => {
     expect(serverUids(new Set([1]), { complete: false }).complete).toBe(false);
   });
 
-  it('never stamps local-only while the server uid set is unverified', () => {
+  it('never stamps local-only from a uid set, verified or not', () => {
     // The account-switch paint: archivedEmailIds restored from cache, server
-    // list not back yet. An empty uid set is "not asked", not "not there".
+    // list not back yet. An empty uid set is "not asked", not "not there" —
+    // and even a COMPLETE set only speaks for one mailbox, so it never
+    // promotes a row to local-only either (see the next test).
     useMailStore.setState({
       activeAccountId: 'acct-1',
       activeMailbox: 'INBOX',
@@ -533,7 +535,11 @@ describe('updateSortedEmails memoization', () => {
     expect(sorted[0].source).toBe('local');
   });
 
-  it('stamps local-only once the server uid set is verified complete', () => {
+  it('leaves a vault row missing from a COMPLETE uid set as an ordinary vault row', () => {
+    // The false-gold regression. A complete UID SEARCH enumerates ONE mailbox;
+    // a message archived out of INBOX on Gmail, moved to a label, or sitting
+    // in the Bin is absent from it and very much on the server. The row used
+    // to go gold and claim "deleted from the server, nothing else has it".
     useMailStore.setState({
       activeAccountId: 'acct-1',
       activeMailbox: 'INBOX',
@@ -543,6 +549,26 @@ describe('updateSortedEmails memoization', () => {
       archivedEmailIds: new Set([3]),
       savedEmailIds: new Set([3]),
       serverUids: serverUids(new Set([7]), { complete: true }),
+      deleteTombstones: new Set(),
+      _sortedEmailsFingerprint: '',
+    });
+    useMailStore.getState().updateSortedEmails();
+
+    expect(useMailStore.getState().sortedEmails[0].source).toBe('local');
+  });
+
+  it('stamps local-only once the vault entry records that we deleted the server copy', () => {
+    useMailStore.setState({
+      activeAccountId: 'acct-1',
+      activeMailbox: 'INBOX',
+      viewMode: 'all',
+      emails: [],
+      localEmails: [{ uid: 3, subject: 'Archived message 3', date: 'Sun, 04 Jan 2026 12:00:00 +0000', serverDeleted: true }],
+      archivedEmailIds: new Set([3]),
+      savedEmailIds: new Set([3]),
+      // Deliberately the state that used to be required and now proves
+      // nothing: an unverified set. The stamp on the message is the evidence.
+      serverUids: serverUids(new Set(), { complete: false }),
       deleteTombstones: new Set(),
       _sortedEmailsFingerprint: '',
     });

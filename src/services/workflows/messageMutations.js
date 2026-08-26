@@ -11,6 +11,28 @@ import { bumpFlagChangeCounter } from '../../stores/slices/messageListSlice';
 import { withoutUids } from '../../stores/slices/serverUids';
 
 
+// One message as local-index.json stores it. `local_index_append` upserts by
+// uid, so this doubles as the shape any later writer has to preserve — see
+// markServerDeleted, which re-appends an entry to add one field.
+export function indexEntryFor(email, extra = {}) {
+  return {
+    uid: email.uid,
+    from: email.from,
+    to: email.to,
+    subject: email.subject,
+    date: email.date,
+    flags: email.flags || [],
+    has_attachments: email.hasAttachments || email.has_attachments || false,
+    message_id: email.messageId || email.message_id || null,
+    in_reply_to: email.inReplyTo || email.in_reply_to || null,
+    references: email.references || null,
+    snippet: email.snippet || '',
+    source: 'local',
+    ...extra,
+  };
+}
+
+
 // ── saveEmailLocally workflow ──
 
 export async function saveEmailLocally(uid) {
@@ -52,21 +74,7 @@ export async function saveEmailLocally(uid) {
     try {
       const emailData = get().emails?.find(e => e.uid === uid) || get().sortedEmails?.find(e => e.uid === uid);
       if (emailData) {
-        const indexEntry = {
-          uid: emailData.uid,
-          from: emailData.from,
-          to: emailData.to,
-          subject: emailData.subject,
-          date: emailData.date,
-          flags: emailData.flags || [],
-          has_attachments: emailData.hasAttachments || emailData.has_attachments || false,
-          message_id: emailData.messageId || emailData.message_id || null,
-          in_reply_to: emailData.inReplyTo || emailData.in_reply_to || null,
-          references: emailData.references || null,
-          snippet: emailData.snippet || '',
-          source: 'local',
-        };
-        await api.appendLocalIndex(accountId, mailbox, [indexEntry]);
+        await api.appendLocalIndex(accountId, mailbox, [indexEntryFor(emailData)]);
       }
     } catch (e) {
       console.warn('[mailStore] Failed to update local-index.json:', e);
@@ -357,9 +365,42 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
   await applyServerRemoval(uid, {
     accountId, mailbox, isUnified, skipRefresh,
     clearSelection: selectedEmailId === uid,
+    deletedByUs: true,
   });
 }
 
+
+// Stamp `serverDeleted` on the vault's index entry for one message.
+//
+// `local_index_append` upserts by uid, so re-appending the existing entry with
+// the extra field is the whole write — no Rust change, and the entry keeps its
+// own `source` ('local' / 'local_sent' / 'local_draft'), which custody reads
+// separately as `_origin`.
+export async function markServerDeleted(accountId, mailbox, uid) {
+  if (!accountId || !mailbox || uid == null) return;
+  try {
+    const entry = await db.getLocalIndexEntry(accountId, mailbox, uid);
+    if (entry) {
+      await api.appendLocalIndex(accountId, mailbox, [{ ...entry, serverDeleted: true }]);
+      return;
+    }
+    // No entry yet. The bulk archive path stores the .eml through Rust and
+    // never writes one, so without this a bulk-archived message loses its gold
+    // the moment the app restarts — the in-memory stamp dies with the session.
+    //
+    // Only for a message the vault actually holds: writing an entry for one it
+    // does not would put a row on screen with nothing behind it.
+    const { useMailStore } = await import('../../stores/mailStore');
+    const state = useMailStore.getState();
+    if (!state.archivedEmailIds?.has(uid)) return;
+    const row = [...(state.localEmails || []), ...(state.emails || []), ...(state.sortedEmails || [])]
+      .find(e => e.uid === uid && (e._mailbox == null || e._mailbox === mailbox));
+    if (!row?.subject) return;
+    await api.appendLocalIndex(accountId, mailbox, [indexEntryFor(row, { serverDeleted: true })]);
+  } catch (e) {
+    console.warn('[markServerDeleted] Failed to mark serverDeleted for uid', uid, e);
+  }
+}
 
 // ── applyServerRemoval ──
 //
@@ -377,9 +418,23 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
 // `removedUids` is what stops the sidecar re-hydrating the row on reload.
 export async function applyServerRemoval(uid, {
   accountId, mailbox, isUnified = false, skipRefresh = false, clearSelection = true,
+  deletedByUs = false,
 } = {}) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
+
+  // Record the removal on the vault entry before touching the store: this is
+  // the only durable proof that the server copy is gone by our own hand, and
+  // it is what makes the row gold. Derivation used to infer it from "uid not
+  // in the active mailbox's set", which is a mailbox fact wearing a server
+  // fact's clothes — see stores/slices/custody.js. Best-effort: a message with
+  // no vault copy has no entry to stamp, and its row leaves the list anyway.
+  //
+  // ONLY for a delete this app issued. The other caller (selectEmail, on a
+  // fetch that proves the uid is not in the mailbox) knows one mailbox lost
+  // the message and nothing more — the message may well be sitting in All Mail
+  // or the Bin, and that is precisely the guess this whole change removes.
+  if (deletedByUs) await markServerDeleted(accountId, mailbox, uid);
 
   const filteredEmails = get().emails.filter(e => e.uid !== uid);
   const filteredSent = get().sentEmails.filter(e => e.uid !== uid);
@@ -402,6 +457,15 @@ export async function applyServerRemoval(uid, {
   if (!isUnified && accountId === get().activeAccountId && mailbox === get().activeMailbox) {
     updates.serverUids = withoutUids(get().serverUids, new Set([uid]));
   }
+  // The vault rows already in memory carry custody with them (db.getArchivedEmails
+  // stamps it at read time), so stamp them here too rather than waiting for the
+  // next disk read — the row must go gold in this paint, not the one after.
+  if (deletedByUs) updates.localEmails = get().localEmails.map(e => (
+    e.uid === uid && (e._mailbox == null || e._mailbox === mailbox) && (e._accountId == null || e._accountId === accountId)
+      ? { ...e, serverDeleted: true }
+      : e
+  ));
+
   useMailStore.setState(updates);
   get().updateSortedEmails();
 
@@ -738,6 +802,10 @@ export async function deleteSelectedFromServer() {
       if (!isUnified && get().archivedEmailIds.has(realUid)) {
         survivingLocalTombstones.add(tombstone);
       }
+      // Same durable stamp the single delete writes — a surviving vault copy is
+      // gold because WE removed the server copy, never because a uid set is
+      // missing it. See stores/slices/custody.js.
+      await markServerDeleted(accountId, mailbox, realUid);
     } catch (e) {
       console.error(`Failed to delete email ${key}:`, e);
       // Lift the tombstone so the reconcile below can restore this email.
@@ -816,7 +884,15 @@ export async function deleteSelectedFromServer() {
     if (survivingLocalTombstones.size > 0) {
       const ts = new Set(get().deleteTombstones);
       for (const t of survivingLocalTombstones) ts.delete(t);
-      useMailStore.setState({ deleteTombstones: ts });
+      // The vault rows in memory were read before the delete, so they still say
+      // "also on the server". The index on disk is already stamped; carry the
+      // same fact into this paint rather than waiting for a cold read that only
+      // happens when localEmails is empty.
+      const survived = new Set([...survivingLocalTombstones].map(t => Number(t.split('|')[2])));
+      useMailStore.setState({
+        deleteTombstones: ts,
+        localEmails: get().localEmails.map(e => (survived.has(Number(e.uid)) ? { ...e, serverDeleted: true } : e)),
+      });
       get().updateSortedEmails();
     }
   }

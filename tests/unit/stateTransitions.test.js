@@ -57,10 +57,15 @@ describe('archive → delete from server → local-only', () => {
     archivedEmailIds: new Set([uid]),
   };
 
-  // Step 3: Email deleted from server (removed from emails array)
+  // Step 3: Email deleted from server. Two things change, and BOTH are what
+  // applyServerRemoval does: the row leaves the server array, and the vault
+  // entry is stamped `serverDeleted`. The stamp is the part that makes the row
+  // gold — "absent from the mailbox's uid set" never did, because that set
+  // enumerates one mailbox and a message can leave INBOX and live.
   const step3_deletedFromServer = {
     ...step2_archived,
     emails: step2_archived.emails.filter((e) => e.uid !== uid),
+    localEmails: [{ ...email, serverDeleted: true }],
   };
 
   it('Step 1: email shows as "server" before archiving', () => {
@@ -116,12 +121,13 @@ describe('cache restoration should not undo local-only status', () => {
     const uid = 42;
     const email = mkEmail(uid, 'Archived email');
 
-    // State after delete: email removed from emails, still in localEmails
+    // State after delete: email removed from emails, still in localEmails,
+    // and its vault entry stamped by applyServerRemoval.
     const afterDelete = display({
       searchActive: false,
       searchResults: [],
       emails: [mkEmail(100, 'Other')], // uid 42 removed
-      localEmails: [email],
+      localEmails: [{ ...email, serverDeleted: true }],
       archivedEmailIds: new Set([uid]),
       viewMode: 'all',
     });
@@ -144,7 +150,7 @@ describe('cache restoration should not undo local-only status', () => {
       searchActive: false,
       searchResults: [],
       emails: [mkEmail(100, 'Other')], // uid 42 NOT restored (cache was updated)
-      localEmails: [email],
+      localEmails: [{ ...email, serverDeleted: true }],
       archivedEmailIds: new Set([uid]),
       viewMode: 'all',
     });

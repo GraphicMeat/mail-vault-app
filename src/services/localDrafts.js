@@ -220,7 +220,11 @@ export async function openLocalDraft(accountId, mailbox, uid) {
 function _showInList(accountId, mailbox, entry) {
   const s = useMailStore.getState();
   if (s.activeAccountId !== accountId || s.activeMailbox !== mailbox) return;
-  const row = { ...entry, source: 'local', isLocal: true, isArchived: true, _accountId: accountId };
+  // `_origin` is what `readLocalEmailIndex` preserves from the entry's own
+  // `source` before overwriting it, and custody reads it — without it the
+  // optimistic row and the reloaded one disagree about whether this message
+  // ever had a server copy (it never did).
+  const row = { ...entry, _origin: entry.source, source: 'local', isLocal: true, isArchived: true, _accountId: accountId };
   useMailStore.setState(st => ({
     localEmails: [row, ...(st.localEmails || []).filter(e => e.uid !== entry.uid)],
     // A local row is only rendered when its uid is in this set — a new Set

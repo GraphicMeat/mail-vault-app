@@ -60,11 +60,18 @@ describe('describeMessageState', () => {
     });
   }
 
-  it('never renders the only-copy tone when the server is unverified', () => {
-    // The whole point: amber is a claim that needs proof.
+  it('never renders the only-copy tone for a vault row with no proof on it', () => {
+    // The whole point: gold is a claim that needs proof, and the proof rides
+    // on the message (see stores/slices/custody.js). Completeness of the
+    // active mailbox's uid set is not proof in either direction — it speaks
+    // for one mailbox, and a message archived out of INBOX is still there.
     for (const backedUp of [true, false, null]) {
-      const s = describeMessageState(localOnly, { backedUp, serverKnown: false });
-      expect(s.tone).not.toBe('only-copy');
+      for (const serverKnown of [true, false]) {
+        const s = describeMessageState({ isArchived: true }, { backedUp, serverKnown });
+        expect(s.tone).not.toBe('only-copy');
+        const stamped = describeMessageState({ isArchived: true, serverDeleted: true }, { backedUp, serverKnown });
+        expect(stamped.tone).toBe('only-copy');
+      }
     }
   });
 
@@ -74,11 +81,15 @@ describe('describeMessageState', () => {
       .toBe('server-only');
   });
 
-  it('fails closed: no options object means no proof, so never amber', () => {
-    // The gate exists to require proof. A caller that forgets to pass
-    // serverKnown must not get the alarm by default.
-    expect(describeMessageState(localOnly).tone).not.toBe('only-copy');
-    expect(describeMessageState(localOnly, { backedUp: false }).tone).not.toBe('only-copy');
+  it('fails closed: an unstamped message is never amber, options or not', () => {
+    // The gate still requires proof — the proof just lives on the message now
+    // rather than in the caller's options, because a uid set could only ever
+    // speak for one mailbox. A caller passing nothing gets the quiet state.
+    const unstamped = { isArchived: true };
+    expect(describeMessageState(unstamped).tone).not.toBe('only-copy');
+    expect(describeMessageState(unstamped, { backedUp: false }).tone).not.toBe('only-copy');
+    // And a stamped one is amber without being told anything about the server.
+    expect(describeMessageState({ isArchived: true, serverDeleted: true }).tone).toBe('only-copy');
   });
 });
 
@@ -199,9 +210,15 @@ describe('ConnectedStateIcon', () => {
     expect(document.querySelector('[data-dot="filled"]')).not.toBeNull();
   });
 
-  it('passes server uid completeness through so a local-only row proven gone renders the only-copy tone', () => {
+  it('renders the only-copy tone for a row the list stamped local-only', () => {
     mockStoreState = { backedUpKeys: new Set(), serverUids: { uids: new Set(), complete: true }, activeAccountId: 'acc1' };
     render(<ConnectedStateIcon email={{ uid: 5, _accountId: 'acc1', source: 'local-only', isArchived: true }} />);
     expect(screen.getByTestId('msg-state-icon').getAttribute('data-state')).toBe('local-only');
+  });
+
+  it('leaves an archived row alone when the only thing missing is the uid set', () => {
+    mockStoreState = { backedUpKeys: new Set(), serverUids: { uids: new Set(), complete: true }, activeAccountId: 'acc1' };
+    render(<ConnectedStateIcon email={{ uid: 5, _accountId: 'acc1', source: 'local', isArchived: true }} />);
+    expect(screen.getByTestId('msg-state-icon').getAttribute('data-state')).toBe('archived');
   });
 });

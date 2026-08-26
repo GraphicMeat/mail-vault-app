@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Cloud, CloudOff, HardDrive } from 'lucide-react';
 import { useMailStore } from '../../stores/mailStore';
+import { custodySource } from '../../stores/slices/custody';
 
 /**
  * Where a message lives, as one glyph.
@@ -12,11 +13,13 @@ import { useMailStore } from '../../stores/mailStore';
  * and `archived-server-unknown` share a glyph and differ only in wording,
  * because the visual claim they make is genuinely the same one.
  *
- * The rule the whole file exists to enforce: Only-Copy Gold — "deleted from the
- * server, this is your only copy" — requires PROOF of server absence. An unverified
- * server uid set means "not asked yet", so it renders as a plain archived row
- * and says so in the tooltip. Rendering the alarm on an unanswered question
- * made every account switch flash "deleted from server" across the list.
+ * The rule the whole file exists to enforce: Only-Copy Gold — "the vault is the
+ * copy you have left" — requires PROOF, and `custodySource` is the only place
+ * that decides what counts as proof. It is never derived from the active
+ * mailbox's uid set: a message missing from INBOX is routinely alive in All
+ * Mail, a label, or the Bin, and stamping the alarm on that made the list gold
+ * for ordinary archived mail. Two proofs qualify — the message was created here
+ * and never had a server copy, or this app deleted the server copy.
  */
 
 export function describeMessageState(email, { backedUp = false, serverKnown = false } = {}) {
@@ -40,9 +43,17 @@ export function describeMessageState(email, { backedUp = false, serverKnown = fa
     };
   }
 
-  const provenGone = email.source === 'local-only' && serverKnown;
+  // `email.source` is what the list derived, and the list derives it here —
+  // custodySource, not a uid set. Recomputed rather than trusted when the
+  // caller handed over a copy the derivation never touched (the viewer's).
+  const provenGone = (email.source ?? custodySource(email)) === 'local-only';
 
   if (provenGone) {
+    // Never on a server at all (staged send, local draft) reads differently
+    // from a server copy this app deleted, and the difference is the whole
+    // reason the row is gold — say which one it is.
+    const neverOnServer = email.serverDeleted !== true;
+    const gone = neverOnServer ? 'It was never on the server.' : 'You deleted the server copy.';
     return {
       // Its own glyph, not the vault's. Emerald and gold converge under
       // deuteranopia and the tooltip is hover/focus-only, so with a shared
@@ -56,10 +67,13 @@ export function describeMessageState(email, { backedUp = false, serverKnown = fa
         ? 'In your vault and backup drive'
         : dot === 'hollow' ? 'Your only known copy' : 'Your only copy',
       detail: dot === 'filled'
-        ? 'Deleted from the server. Two copies left.'
+        ? `${gone} Two copies left.`
         : dot === 'hollow'
-          ? "Deleted from the server. Backup drive not connected — can't verify."
-          : 'Deleted from the server. Nothing else has it.',
+          ? `${gone} Backup drive not connected — can't verify.`
+          // "Nothing else has it" is only sayable about a message that never
+          // reached a server. A delete this app issued clears one mailbox; a
+          // label store (Gmail) keeps its own copy under All Mail or the Bin.
+          : neverOnServer ? `${gone} Nothing else has it.` : gone,
     };
   }
 

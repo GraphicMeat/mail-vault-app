@@ -226,7 +226,8 @@ describe('quick-load display emails', () => {
 
   it('combines cached headers + local emails during quick-load (all mode)', () => {
     const cachedHeaders = [mkEmail(1, 'Server A'), mkEmail(2, 'Server B')];
-    const localEmails = [mkEmail(1, 'Also local'), mkEmail(99, 'Deleted from server')];
+    // uid 99's vault entry carries the delete this app made — see custody.js.
+    const localEmails = [mkEmail(1, 'Also local'), { ...mkEmail(99, 'Deleted from server'), serverDeleted: true }];
     const result = display({
       searchActive: false,
       searchResults: [],
