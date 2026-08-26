@@ -833,11 +833,43 @@ async fn run_imap_backup_inner(
     })
 }
 
+/// Message-IDs the generation repair moved out of the uid namespace.
+///
+/// `orphaned/` is the repair's own record that a file is not this generation's:
+/// it read the Message-ID, found no uid the current server gives it, and set the
+/// file aside rather than delete it. The backup mirror still holds that same
+/// message under its OLD uid, and the restore direction below would copy it
+/// straight back into `cur/` — undoing the repair on every backup run, forever,
+/// because `.uidvalidity` now matches the server and `repair_generation` no-ops.
+///
+/// That is not hypothetical: rare@graphicmeat.com's INBOX had four March files
+/// byte-identical in `cur/` and `orphaned/`, and the vault's uid 4 was serving a
+/// StrictSeal mail under an August Zendesk row.
+///
+/// Built lazily by the caller — a sync with nothing to restore never reads it.
+fn orphaned_message_ids(app_dir: &std::path::Path) -> HashSet<String> {
+    let orphan_dir = match app_dir.parent() {
+        Some(p) => p.join(mailvault_core::maildir::ORPHAN_DIR),
+        None => return HashSet::new(),
+    };
+    let mut ids = HashSet::new();
+    if let Ok(entries) = std::fs::read_dir(&orphan_dir) {
+        for entry in entries.flatten() {
+            if entry.path().is_dir() { continue; }
+            if let Some(id) = mailvault_core::maildir::read_message_id(&entry.path()) {
+                ids.insert(id);
+            }
+        }
+    }
+    ids
+}
+
 /// Sync files between app Maildir and backup location (bidirectional).
 /// - App dir files missing from backup → copy to backup keeping the Maildir
 ///   name (`<uid>:2,<flags>.eml`) so flags survive the round trip
 /// - Backup files missing from app dir → copy to app dir, restoring the flags
-///   encoded in the backup filename (legacy `<uid>.eml` copies have none)
+///   encoded in the backup filename (legacy `<uid>.eml` copies have none), and
+///   never re-importing a message the generation repair already set aside
 /// Returns total files synced.
 fn sync_locations(app_dir: &std::path::Path, backup_dir: &std::path::Path) -> usize {
     use std::fs;
@@ -865,6 +897,7 @@ fn sync_locations(app_dir: &std::path::Path, backup_dir: &std::path::Path) -> us
 
     // Backup → App: copy backup .eml files that don't exist in app dir,
     // restoring flags from the backup filename (legacy `<uid>.eml` has none).
+    let mut orphaned_ids: Option<HashSet<String>> = None;
     if let Ok(entries) = fs::read_dir(backup_dir) {
         for entry in entries.flatten() {
             if entry.path().is_dir() { continue; }
@@ -873,6 +906,22 @@ fn sync_locations(app_dir: &std::path::Path, backup_dir: &std::path::Path) -> us
             let uid_str = name.split(|c: char| c == ':' || c == '.' || c == '_').next().unwrap_or(&name);
             let uid: u32 = match uid_str.parse() { Ok(u) => u, Err(_) => continue };
             if super::find_file_by_uid(app_dir, uid).is_some() { continue; }
+            // The mirror is keyed by uid and carries no generation of its own, so
+            // a uid it holds is only as good as the generation that wrote it.
+            // `orphaned/` is the one local record of which messages this
+            // generation does NOT have — see orphaned_message_ids.
+            let ids = orphaned_ids.get_or_insert_with(|| orphaned_message_ids(app_dir));
+            if !ids.is_empty() {
+                if let Some(id) = mailvault_core::maildir::read_message_id(&entry.path()) {
+                    if ids.contains(&id) {
+                        warn!(
+                            "backup: not restoring {} — the generation repair set this message aside",
+                            name
+                        );
+                        continue;
+                    }
+                }
+            }
             let flags = super::parse_flags_from_filename(&name);
             let dst = app_dir.join(format!("{}.eml", super::build_maildir_filename(uid, &flags)));
             if fs::copy(entry.path(), &dst).is_ok() { synced += 1; }
@@ -1205,6 +1254,94 @@ mod tests {
 
         // Second pass must be a no-op — no duplicates under either naming scheme.
         assert_eq!(sync_locations(&app, &ext), 0);
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    fn eml(message_id: &str) -> Vec<u8> {
+        format!(
+            "From: a@b.test\r\nSubject: s\r\nMessage-ID: <{}>\r\n\r\nbody\r\n",
+            message_id
+        )
+        .into_bytes()
+    }
+
+    /// The mirror keeps a message under the uid the PREVIOUS generation gave it.
+    /// Once `repair_generation` has set that message aside, the restore
+    /// direction must not hand it back — otherwise every backup run undoes the
+    /// repair, and `.uidvalidity` already matches so nothing re-checks.
+    #[test]
+    fn sync_locations_does_not_resurrect_orphans() {
+        let base = std::env::temp_dir().join("mv-sync-orphan-test");
+        let _ = fs::remove_dir_all(&base);
+        let mailbox = base.join("INBOX");
+        let app = mailbox.join("cur");
+        let orphaned = mailbox.join("orphaned");
+        let ext = base.join("ext");
+        fs::create_dir_all(&app).unwrap();
+        fs::create_dir_all(&orphaned).unwrap();
+        fs::create_dir_all(&ext).unwrap();
+
+        // The repair read this message, found no uid for it on the current
+        // server, and moved it aside.
+        fs::write(orphaned.join("4:2,.eml"), eml("strictseal@old-host.test")).unwrap();
+        // The mirror still holds the same message under the same old uid.
+        fs::write(ext.join("4:2,.eml"), eml("strictseal@old-host.test")).unwrap();
+        // ...and a genuinely missing message the restore SHOULD bring back.
+        fs::write(ext.join("7:2,S.eml"), eml("still-on-this-server@mock.test")).unwrap();
+
+        assert_eq!(sync_locations(&app, &ext), 1, "exactly one file should restore");
+
+        assert!(
+            super::super::find_file_by_uid(&app, 4).is_none(),
+            "an orphaned message came back into cur/ under its old uid"
+        );
+        assert!(
+            super::super::find_file_by_uid(&app, 7).is_some(),
+            "a legitimate restore was blocked"
+        );
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// A mirror file with no Message-ID cannot be shown to be an orphan, and
+    /// absence of proof is not proof — it still restores.
+    #[test]
+    fn sync_locations_restores_a_file_with_no_message_id() {
+        let base = std::env::temp_dir().join("mv-sync-noid-test");
+        let _ = fs::remove_dir_all(&base);
+        let mailbox = base.join("INBOX");
+        let app = mailbox.join("cur");
+        let orphaned = mailbox.join("orphaned");
+        let ext = base.join("ext");
+        fs::create_dir_all(&app).unwrap();
+        fs::create_dir_all(&orphaned).unwrap();
+        fs::create_dir_all(&ext).unwrap();
+
+        fs::write(orphaned.join("4:2,.eml"), eml("set-aside@old-host.test")).unwrap();
+        fs::write(ext.join("9:2,.eml"), b"From: a@b.test\r\nSubject: no id\r\n\r\nbody".to_vec()).unwrap();
+
+        assert_eq!(sync_locations(&app, &ext), 1);
+        assert!(super::super::find_file_by_uid(&app, 9).is_some());
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// With no `orphaned/` dir at all — a vault that has never been repaired —
+    /// the guard costs nothing and blocks nothing.
+    #[test]
+    fn sync_locations_restores_when_nothing_was_ever_orphaned() {
+        let base = std::env::temp_dir().join("mv-sync-noorphan-test");
+        let _ = fs::remove_dir_all(&base);
+        let app = base.join("INBOX").join("cur");
+        let ext = base.join("ext");
+        fs::create_dir_all(&app).unwrap();
+        fs::create_dir_all(&ext).unwrap();
+
+        fs::write(ext.join("11:2,S.eml"), eml("fresh@mock.test")).unwrap();
+
+        assert_eq!(sync_locations(&app, &ext), 1);
+        assert!(super::super::find_file_by_uid(&app, 11).is_some());
 
         let _ = fs::remove_dir_all(&base);
     }
