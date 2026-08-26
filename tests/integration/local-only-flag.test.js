@@ -133,11 +133,18 @@ describe('Local-Only Flag Detection (send → archive → delete → verify)', (
     expect(emailBHeader).toBeDefined();
 
     // Simulate "archive locally" — save both email headers as local emails
-    const localEmails = [emailAHeader, emailBHeader];
     const archivedEmailIds = new Set([uidA, uidB]);
 
     // Delete email A from server
     await deleteByUid(server, uidA);
+
+    // …and record it on the vault copy, which is the other half of what the
+    // app's delete does (`applyServerRemoval` → `markServerDeleted`, written
+    // into local-index.json and read back onto the row). That stamp is what
+    // makes the row local-only now: "absent from this mailbox's uid set" is a
+    // mailbox fact, and a message can leave INBOX for All Mail, a label or the
+    // Bin and still be on the server. See stores/slices/custody.js.
+    const localEmails = [{ ...emailAHeader, serverDeleted: true }, emailBHeader];
 
     // Re-fetch server email list (A is now gone)
     const serverEmailsAfterDelete = await fetchHeaders(server);
@@ -199,10 +206,12 @@ describe('Local-Only Flag Detection (send → archive → delete → verify)', (
     expect(result.length).toBe(2);
     expect(result.every((e) => e.source === 'local')).toBe(true);
 
-    // The assertion above only means something if the same rows DO flip once
-    // the set is a proven enumeration — otherwise it would pass on a
-    // derivation that can never say 'local-only' at all.
-    const proven = display({
+    // The assertion above only means something if the same rows DO flip when
+    // there is real proof — otherwise it would pass on a derivation that can
+    // never say 'local-only' at all. Proof is the stamp on the message, not a
+    // completeness flag on a uid set: a COMPLETE enumeration of one mailbox
+    // still says nothing about the rest of the account.
+    const stillUnproven = display({
       searchActive: false,
       searchResults: [],
       emails: [],
@@ -211,6 +220,18 @@ describe('Local-Only Flag Detection (send → archive → delete → verify)', (
       viewMode: 'local',
       serverUidSet: new Set(),
       serverUidsKnown: true,
+    });
+    expect(stillUnproven.every((e) => e.source === 'local')).toBe(true);
+
+    const proven = display({
+      searchActive: false,
+      searchResults: [],
+      emails: [],
+      localEmails: localEmails.map((e) => ({ ...e, serverDeleted: true })),
+      archivedEmailIds: new Set([uidA, uidB]),
+      viewMode: 'local',
+      serverUidSet: new Set(),
+      serverUidsKnown: false,
     });
     expect(proven.every((e) => e.source === 'local-only')).toBe(true);
   });
