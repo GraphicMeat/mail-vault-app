@@ -74,7 +74,7 @@
         "name": "What is MailVault?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "MailVault is a free, open-source desktop email client for macOS that stores your emails locally. It connects to your email accounts via IMAP and saves all messages as standard .eml files (RFC 5322) in Maildir format on your computer, giving you a permanent offline backup with no vendor lock-in."
+          "text": "MailVault is a free, open-source desktop email client for macOS and Linux that stores your emails in a vault on your own disk. It connects to your email accounts via IMAP and saves all messages as standard .eml files (RFC 5322) in Maildir format on your computer, giving you a permanent offline backup with no vendor lock-in."
         }
       },
       {
@@ -82,7 +82,7 @@
         "name": "How does MailVault back up emails?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "MailVault connects to your email server using the IMAP protocol and downloads each email as a standard .eml file stored in Maildir format on your Mac. Each email is one file on disk — human-readable, portable, and compatible with any mail client. Once synced, you can safely delete emails from the server to free up space while keeping them accessible locally."
+          "text": "MailVault connects to your email server using the IMAP protocol and downloads each email into your vault as a standard .eml file in Maildir format. Each email is one file on disk — human-readable, portable, and compatible with any mail client. Once a message is in your vault you can delete the server copy to free up space; the local one is unaffected."
         }
       },
       {
@@ -106,7 +106,7 @@
         "name": "Where are my emails stored?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "All emails are stored locally on your Mac as standard .eml files organized in Maildir format — one file per email, no database required. Your data never leaves your computer and is never uploaded to any cloud service. Because .eml is a universal standard, your emails can be opened by Apple Mail, Thunderbird, Outlook, or any other mail client — you are never locked in to MailVault."
+          "text": "Your vault is a folder of standard .eml files organized in Maildir format — on your Mac or Linux machine — one file per email, no database required. Your data never leaves your computer and is never uploaded to any cloud service. Because .eml is a universal standard, your emails can be opened by Apple Mail, Thunderbird, Outlook, or any other mail client — you are never locked in to MailVault."
         }
       },
       {
@@ -130,7 +130,7 @@
         "name": "Is my data secure?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "MailVault is designed with privacy first. Your email credentials are stored in the macOS Keychain, not in plain text. All data stays on your machine — there is no cloud sync, no tracking, no analytics, and no data mining. The app is open source so you can verify the code yourself."
+          "text": "MailVault is designed with privacy first. Your email credentials are stored in the macOS Keychain or the Linux Secret Service, never in a plain file. All data stays on your machine — there is no cloud sync, no tracking, no analytics, and no data mining. The app is open source so you can verify the code yourself."
         }
       },
       {
@@ -138,7 +138,7 @@
         "name": "What happens if I delete emails from the server?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "If you delete emails from your email server after MailVault has synced them, they remain safely stored in your local MailVault archive. This is one of the main use cases — back up locally, then free up server storage space without losing anything."
+          "text": "Anything you archived first stays in your vault, untouched by what the server does afterwards — that is the whole point of the product. Anything you did not archive is gone with the server copy, so MailVault shows the state of every message on its own row before you delete: on the server, in your vault, or both. The safe route is Archive & Delete, which copies each message into your vault and verifies it there before removing it from the server."
         }
       },
       {
@@ -178,7 +178,7 @@
         "name": "What are the system requirements?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "MailVault requires macOS 10.15 (Catalina) or later. It runs natively on both Intel and Apple Silicon Macs. The app is lightweight and runs in the background from your menu bar with minimal resource usage."
+          "text": "MailVault requires macOS 11 (Big Sur) or later, and runs natively on both Intel and Apple Silicon. On Linux it ships as .deb, AppImage, Snap and Flatpak for Ubuntu 22.04+ / Debian 12+. It stays in the menu bar and keeps syncing with the window closed."
         }
       },
       {
@@ -202,7 +202,7 @@
         "name": "What happens when I archive and delete from server?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "When you choose Archive & Delete from Server, MailVault first archives the email locally, then sets the IMAP \\Deleted flag on the server copy. The email becomes local-only — it only exists on your machine. This is the recommended workflow for freeing up server storage while keeping a permanent local backup."
+          "text": "Archive & Delete runs three steps in order: it copies the message into your vault as an .eml file, checks that the copy is really there, and only then deletes it from the server. Anything that fails the check stays on the server. Afterwards the row shows the only-copy state — your vault is the one place that message still exists, which is also the cue to keep a backup drive attached."
         }
       },
       {
@@ -315,7 +315,7 @@
           </button>
           <div class="faq-answer">
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVault is a free, open-source desktop email client for macOS that stores your emails locally. It connects to your email accounts via IMAP and saves all messages as standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml files (RFC 5322)</a> in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format on your computer, giving you a permanent offline backup with no vendor lock-in.
+              MailVault is a free, open-source desktop email client for macOS and Linux that stores your emails in a vault on your own disk. It connects to your email accounts via IMAP and saves all messages as standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml files (RFC 5322)</a> in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format on your computer, giving you a permanent offline backup with no vendor lock-in.
             </p>
           </div>
         </div>
@@ -330,7 +330,7 @@
           </button>
           <div class="faq-answer">
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVault connects to your email server using the IMAP protocol and downloads each email as a standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml file</a> stored in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format on your Mac. Each email is one file on disk — human-readable, portable, and compatible with any mail client. Once synced, you can safely delete emails from the server to free up space while keeping them accessible locally.
+              MailVault connects to your email server using the IMAP protocol and downloads each email as a standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml file</a> stored in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format on your Mac or Linux machine. Each email is one file on disk — human-readable, portable, and compatible with any mail client. Once a message is in your vault you can delete the server copy to free up space; the local one is unaffected.
             </p>
           </div>
         </div>
@@ -375,7 +375,7 @@
           </button>
           <div class="faq-answer">
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">All emails are stored locally on your Mac as standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml files</a> organized in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format — one file per email, no database required. Your data never leaves your computer and is never uploaded to any cloud service. Because .eml is a universal standard, your emails can be opened by Apple Mail, Thunderbird, Outlook, or any other mail client — you're never locked in to MailVault.</p>
+              <p class="mb-4">Your vault is a folder of standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml files</a> organized in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format on your Mac or Linux machine &mdash; one file per email, no database required. Your data never leaves your computer and is never uploaded to any cloud service. Because .eml is a universal standard, your emails can be opened by Apple Mail, Thunderbird, Outlook, or any other mail client — you're never locked in to MailVault.</p>
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Directory structure:</p>
               <pre class="bg-slate-100 dark:bg-slate-900 rounded-lg p-4 text-sm overflow-x-auto mb-2"><code>~/Library/Application Support/com.mailvault.app/
 └── maildir/
@@ -432,7 +432,7 @@
           </button>
           <div class="faq-answer">
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVault is designed with privacy first. Your email credentials are stored in the macOS Keychain, not in plain text. All data stays on your machine — there is no cloud sync, no tracking, no analytics, and no data mining. The app is open source so you can verify the code yourself.
+              MailVault is designed with privacy first. Your email credentials are stored in the macOS Keychain or the Linux Secret Service, never in a plain file. All data stays on your machine — there is no cloud sync, no tracking, no analytics, and no data mining. The app is open source so you can verify the code yourself.
             </p>
           </div>
         </div>
@@ -447,7 +447,7 @@
           </button>
           <div class="faq-answer">
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              If you delete emails from your email server after MailVault has synced them, they remain safely stored in your local MailVault archive. This is one of the main use cases — back up locally, then free up server storage space without losing anything.
+              Anything you archived first stays in your vault, untouched by what the server does afterwards — that is the whole point of the product. Anything you did <em>not</em> archive is gone with the server copy, so MailVault shows the state of every message on its own row before you delete: on the server, in your vault, or both. The safe route is <strong>Archive &amp; Delete</strong>, which copies each message into your vault and verifies it there before removing it from the server.
             </p>
           </div>
         </div>
@@ -501,7 +501,7 @@
           </button>
           <div class="faq-answer">
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">Proton Mail encrypts your mail end-to-end, so it doesn't expose IMAP directly. Connecting it to MailVault (or any third-party mail client) requires <a href="https://proton.me/mail/bridge" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton Mail Bridge</a> — a desktop app from Proton that runs locally on your Mac and exposes your encrypted mailbox as standard IMAP/SMTP on <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code>. Bridge requires a paid Proton Mail plan; it isn't available on Proton's free tier.</p>
+              <p class="mb-4">Proton Mail encrypts your mail end-to-end, so it doesn't expose IMAP directly. Connecting it to MailVault (or any third-party mail client) requires <a href="https://proton.me/mail/bridge" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton Mail Bridge</a> — a desktop app from Proton that runs on your own computer and exposes your encrypted mailbox as standard IMAP/SMTP on <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code>. Bridge requires a paid Proton Mail plan; it isn't available on Proton's free tier.</p>
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Setup steps:</p>
               <ol class="list-decimal list-inside space-y-2 mb-4">
                 <li>Install <a href="https://proton.me/mail/bridge" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton Mail Bridge</a> from Proton's website</li>
@@ -556,7 +556,7 @@
           </button>
           <div class="faq-answer">
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVault requires macOS 10.15 (Catalina) or later. It runs natively on both Intel and Apple Silicon Macs. The app is lightweight and runs in the background from your menu bar with minimal resource usage.
+              MailVault requires macOS 11 (Big Sur) or later, and runs natively on both Intel and Apple Silicon. On Linux it ships as .deb, AppImage, Snap and Flatpak for Ubuntu 22.04+ / Debian 12+. It stays in the menu bar and keeps syncing with the window closed.
             </p>
           </div>
         </div>
@@ -586,7 +586,7 @@
           </button>
           <div class="faq-answer">
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              Archiving downloads the full email from your server (if not already cached) and stores it as a .eml file on disk with the <strong>A</strong> (Archived) flag in the filename. If the email was already cached locally, MailVault simply renames the file to add the archive flag. Archived emails appear in the <strong>Local</strong> view mode and are included in backups. The email remains on your server unless you explicitly delete it.
+              Archiving downloads the full email from your server (if not already cached) and stores it as a .eml file on disk with the <strong>A</strong> (Archived) flag in the filename. If the email was already cached locally, MailVault simply renames the file to add the archive flag. Archived emails appear under the <strong>Vault</strong> view and are included in backups. The server copy is untouched until you delete it yourself.
             </p>
           </div>
         </div>
@@ -601,7 +601,7 @@
           </button>
           <div class="faq-answer">
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              When you choose "Archive &amp; Delete from Server," MailVault first archives the email locally (downloading and saving the .eml file with the archive flag), then sets the IMAP <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">\Deleted</code> flag on the server copy. The email becomes <strong>"local-only"</strong> — it only exists on your machine. This is the recommended workflow for freeing up server storage while keeping a permanent local backup.
+              <strong>Archive &amp; Delete</strong> runs three steps in order: it copies the message into your vault as an .eml file, checks that the copy is really there, and only then deletes it from the server. Anything that fails the check stays on the server &mdash; a failed copy never costs you the original. Afterwards the row shows <strong>your only copy</strong>: the vault is the one place that message still exists, which is also the cue to keep a backup drive attached.
             </p>
           </div>
         </div>
@@ -692,7 +692,7 @@
                 <li><strong>Written alongside the working copy.</strong> During a backup run each message is saved to both places, in the same <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code> + Maildir layout — so the second copy opens in Apple Mail, Thunderbird or any other client without MailVault.</li>
                 <li><strong>Cold storage, not a mirror.</strong> The app never reads it day to day. Emails deleted on the server, or removed inside MailVault, stay in the external copy.</li>
                 <li><strong>Read and write flags survive both directions.</strong> The copies are reconciled before a run, so a message you read stays read.</li>
-                <li><strong>Independent of the app.</strong> If your Mac dies or you uninstall MailVault, the external folder is still a complete, self-describing mail archive.</li>
+                <li><strong>Independent of the app.</strong> If that computer dies or you uninstall MailVault, the external folder is still a complete, self-describing mail archive.</li>
               </ul>
               <p>
                 Set it in <strong>Settings → Backup → “Second copy — external cold storage”</strong> and pick any folder. On macOS, MailVault saves a security-scoped bookmark for that folder, so access survives restarts and app updates — a raw path would not. A status badge shows <strong>Ready</strong>, <strong>Needs reauthorization</strong>, <strong>Unavailable</strong> or <strong>Access denied</strong>, and reauthorizing is one click.
