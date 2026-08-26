@@ -1203,6 +1203,20 @@ function EmailListComponent() {
           )
         ) : (
           /* Virtualized chronological scroll rendering */
+          /*
+            `derivedFrom` below is read by no row. It exists so React.memo can
+            see a change it structurally cannot: deriveDisplayRows writes
+            isLocal/isArchived/source onto the store's OWN email objects in place
+            (messageListSlice.js — copying every row on every derivation is what
+            this list cannot afford), so archiving a message, restoring it, or
+            proving it gone from the server never changes a row's `email`
+            identity. Every other row prop is referentially stable, so the memo
+            bails and the row paints its mount-time state forever. A comparator
+            cannot save this — with one shared object, prev.email.isArchived and
+            next.email.isArchived are the same read. `displayEmails` IS replaced
+            on every re-derivation, which makes its identity the honest stamp,
+            and covers any field the derivation starts mutating later.
+          */
           <div key={`${activeAccountId}-${viewMode}`} style={{ height: virtualizer.getTotalSize() + 'px', position: 'relative' }}>
             {virtualizer.getVirtualItems().map((vr) => {
               const item = threadedDisplay[vr.index];
@@ -1246,6 +1260,7 @@ function EmailListComponent() {
                       isSaving={savingRowIds.has(rowId)}
                       onStartSaving={startSaving}
                       onStopSaving={stopSaving}
+                      derivedFrom={displayEmails}
                     />
                   </div>
                 );
@@ -1282,6 +1297,7 @@ function EmailListComponent() {
                     isSaving={savingRowIds.has(item.email.uid)}
                     onStartSaving={startSaving}
                     onStopSaving={stopSaving}
+                    derivedFrom={displayEmails}
                   />
                 </div>
               );

@@ -152,21 +152,26 @@ vi.mock('../../stores/searchStore', () => {
   return { useSearchStore: hook };
 });
 
-vi.mock('../../stores/settingsStore', () => ({
-  useSettingsStore: vi.fn((selector) => {
-    const state = {
-      emailListStyle: 'default',
-      emailListGrouping: 'chronological',
-      setEmailListGrouping: vi.fn(),
-      layoutMode: 'three-column',
-      accountColors: {},
-    };
-    return selector(state);
-  }),
-  getAccountColor: () => '#888',
-  getAccountInitial: () => 'T',
-  hashColor: () => '#888',
-}));
+vi.mock('../../stores/settingsStore', () => {
+  // Hoisted, not rebuilt per call: a real Zustand store hands out the SAME
+  // `accountColors` object until something writes to it. Minting a fresh one on
+  // every read made every row's `accountColors` prop a new reference, which
+  // silently defeated React.memo on the rows — and a row that always re-renders
+  // cannot fail the memo-staleness test below.
+  const state = {
+    emailListStyle: 'default',
+    emailListGrouping: 'chronological',
+    setEmailListGrouping: vi.fn(),
+    layoutMode: 'three-column',
+    accountColors: {},
+  };
+  return {
+    useSettingsStore: vi.fn((selector) => selector(state)),
+    getAccountColor: () => '#888',
+    getAccountInitial: () => 'T',
+    hashColor: () => '#888',
+  };
+});
 
 vi.mock('../../utils/emailParser', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -535,6 +540,51 @@ describe('unread-only filter', () => {
     expect(screen.getByText(/No unread messages/i)).toBeTruthy();
     fireEvent.click(screen.getByText(/Show all messages/i));
     expect(useMailStore.getState().toggleUnreadOnly).toHaveBeenCalled();
+  });
+});
+
+// The rows a person sees ARE the store's own email objects: `deriveDisplayRows`
+// writes isLocal/isArchived/source onto them in place and hands the same objects
+// back (messageListSlice.js — copying every row on every derivation is what this
+// list cannot afford). Archiving therefore changes nothing about a row's `email`
+// identity. That was harmless while `style={{height}}` and inline row callbacks
+// made React.memo a no-op; b7dc706 made every row prop referentially stable, the
+// memo started working, and the state icon froze on "on the server" for the rest
+// of the session. Two connected-* e2e specs caught it. This pins it in CI.
+describe('rows repaint when the derivation mutates them in place', () => {
+  afterEach(cleanup);
+
+  it('flips the state icon after an in-place archive', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const rows = mockEmails.slice(0, 5);
+    for (const e of rows) { e.isArchived = false; e.source = 'server'; }
+    useMailStore.setState({
+      sortedEmails: rows,
+      totalEmails: rows.length,
+      unreadOnly: false,
+      archivedEmailIds: new Set(),
+    });
+
+    const { EmailList } = await import('../EmailList.jsx');
+    // EmailList is memo'd and takes no props, so a changing throwaway prop is
+    // what forces the re-render an archive would really cause.
+    const { rerender, container } = render(React.createElement(EmailList, { 'data-render': 1 }));
+
+    const stateOf = () => container.querySelector('[data-testid="msg-state-icon"]')?.getAttribute('data-state');
+    expect(stateOf()).toMatch(/^server-only/);
+
+    // Exactly what archiving does: the uid joins archivedEmailIds and the
+    // derivation stamps the SAME object, returning a fresh array around it.
+    rows[0].isArchived = true;
+    rows[0].source = 'local';
+    useMailStore.setState({
+      sortedEmails: [...rows],
+      archivedEmailIds: new Set([rows[0].uid]),
+    });
+    rerender(React.createElement(EmailList, { 'data-render': 2 }));
+
+    // Same assertion the e2e specs make: the id prefix, not the exact variant.
+    expect(stateOf()).toMatch(/^archived/);
   });
 });
 
