@@ -251,7 +251,7 @@ sudo spctl --master-disable
 ## Platform-Specific Notes
 
 ### macOS
-- Minimum supported version: macOS 10.15 (Catalina)
+- Minimum supported version: macOS 11 (Big Sur) — set by `minimumSystemVersion` in `src-tauri/tauri.conf.json`, which is what macOS enforces
 - Universal binary (Intel + Apple Silicon) can be built with:
   ```bash
   npm run tauri:build -- --target universal-apple-darwin
