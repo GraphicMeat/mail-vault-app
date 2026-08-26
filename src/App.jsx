@@ -45,6 +45,7 @@ import { filterUnread } from './utils/emailParser';
 import { migrationManager } from './services/migrationManager.js';
 import { restoreManager } from './services/restoreManager.js';
 import { setComposeOpener } from './services/localDrafts';
+import { setMailtoComposeOpener } from './utils/mailto';
 import { version } from '../package.json';
 import { decodeImapUtf7 } from './utils/imapUtf7';
 
@@ -236,6 +237,13 @@ function App() {
     setComposeOpener(openDraftCompose);
     return () => setComposeOpener(null);
   }, [openDraftCompose]);
+
+  // A mailto: link in a message body opens compose here rather than handing
+  // the address to the OS mail client (see utils/mailto.js).
+  useEffect(() => {
+    setMailtoComposeOpener(initialData => openCompose({ initialData }));
+    return () => setMailtoComposeOpener(null);
+  }, [openCompose]);
 
   // Backwards-compatible helpers
   const composeState = composeWindows.find(w => !w.minimized) || null;

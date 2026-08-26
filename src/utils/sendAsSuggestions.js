@@ -92,6 +92,9 @@ export function resolveInitialComposeIdentity({ replyTo, initialData, lastIdenti
     if (initialData._accountId && exists(initialData._accountId)) {
       return { accountId: initialData._accountId, address: initialData._fromAddress || '' };
     }
+    // A mailto: prefill carries no saved identity: it is a fresh compose and
+    // follows the same precedence as one opened from the Compose button.
+    if (initialData._prefill) return resolveInitialComposeIdentity({ lastIdentity, accounts, activeAccountId });
     // Draft saved before identities were persisted — keep the old behavior.
     return { accountId: activeAccountId, address: '' };
   }

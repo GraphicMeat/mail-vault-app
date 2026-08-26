@@ -38,6 +38,7 @@ import { scanEmailLinks, checkLinkAlert } from '../utils/linkSafety';
 import { emailScopeKey } from '../stores/slices/unifiedHelpers';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { MAIL_DARK_TEXT } from '../utils/mailChrome';
+import { openMailtoCompose } from '../utils/mailto';
 
 export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail, onBack, onReply }) {
   const scrollRef = useRef(null);
@@ -455,7 +456,15 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
             doc.addEventListener('click', (e) => {
               const link = e.target.closest('a');
               if (!link || !link.href) return;
-              if (link.href.startsWith('cid:') || link.href.startsWith('mailto:') || link.href.startsWith('tel:') || link.href.startsWith('#')) return;
+              // An address in the body composes here instead of waking the OS mail
+              // client, which is not the vault this message lives in.
+              if (link.href.startsWith('mailto:')) {
+                e.preventDefault();
+                e.stopPropagation();
+                openMailtoCompose(link.href, mergedEmail?._accountId);
+                return;
+              }
+              if (link.href.startsWith('cid:') || link.href.startsWith('tel:') || link.href.startsWith('#')) return;
               e.preventDefault();
               if (linkSafetyEnabled && linkSafetyClickConfirm) {
                 const alert = checkLinkAlert(link);

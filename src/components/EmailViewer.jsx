@@ -38,6 +38,7 @@ import { buildEmailIframeHtml, getEmailBodyContent, getContextMenuColors, measur
 import { getDarkReaderInlineScripts } from '../utils/darkReaderInject';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../utils/iframeQuoteFolding';
 import { MAIL_DARK_BG, MAIL_DARK_TEXT } from '../utils/mailChrome';
+import { openMailtoCompose } from '../utils/mailto';
 
 // Re-export AttachmentItem for any external consumers
 export { AttachmentItem } from './email/AttachmentBar';
@@ -295,7 +296,15 @@ function EmailViewerComponent({ onComposeReply }) {
     const handleClick = (e) => {
       const link = e.target.closest('a');
       if (!link || !link.href) return;
-      if (link.href.startsWith('cid:') || link.href.startsWith('mailto:') || link.href.startsWith('tel:') || link.href.startsWith('#')) return;
+      // An address in the body composes here instead of waking the OS mail
+      // client, which is not the vault this message lives in.
+      if (link.href.startsWith('mailto:')) {
+        e.preventDefault();
+        e.stopPropagation();
+        openMailtoCompose(link.href, selectedEmail?._accountId);
+        return;
+      }
+      if (link.href.startsWith('cid:') || link.href.startsWith('tel:') || link.href.startsWith('#')) return;
       e.preventDefault();
       e.stopPropagation();
       // Check link safety before opening

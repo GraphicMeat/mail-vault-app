@@ -226,16 +226,25 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       if (initialData) {
         // Restore from undo-send or minimize: body is already HTML
         const bodyHtml = initialData.body || '';
-        setFormData({
+        const next = {
           ...formData,
           to: initialData.to || '',
           cc: initialData.cc || '',
           bcc: initialData.bcc || '',
           subject: initialData.subject || '',
-          body: bodyHtml || signatureHtml,
+          // A prefill is the user's message to write, so the signature goes
+          // under it. A restore already carries its signature inside `body`.
+          body: initialData._prefill ? bodyHtml + signatureHtml : (bodyHtml || signatureHtml),
           inReplyTo: initialData.inReplyTo || '',
           references: initialData.references || '',
-        });
+        };
+        // A mailto: prefill is a fresh compose, not a restored draft: it
+        // records its own baseline, so closing it untouched asks nothing.
+        if (initialData._prefill) {
+          initForm(next);
+          return;
+        }
+        setFormData(next);
         // A restored window continues the SAME draft, so it keeps the baseline
         // recorded when that draft was first opened — carried through the
         // unmount by handleMinimize. Recording it from the restored content

@@ -13,6 +13,7 @@ import { AttachmentItem } from '../EmailViewer';
 import { getRealAttachments, replaceCidUrls } from '../../services/attachmentUtils';
 import { checkLinkAlert } from '../../utils/linkSafety';
 import { LinkSafetyModal } from '../LinkSafetyModal';
+import { openMailtoCompose } from '../../utils/mailto';
 
 // Full-screen modal for viewing complete email with HTML rendering
 export function FullViewEmailModal({ email: initialEmail, onClose }) {
@@ -142,7 +143,15 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
         doc.addEventListener('click', (e) => {
           const link = e.target.closest('a');
           if (!link || !link.href) return;
-          if (link.href.startsWith('cid:') || link.href.startsWith('mailto:') || link.href.startsWith('tel:') || link.href.startsWith('#')) return;
+          // An address in the body composes here instead of waking the OS mail
+          // client, which is not the vault this message lives in.
+          if (link.href.startsWith('mailto:')) {
+            e.preventDefault();
+            e.stopPropagation();
+            openMailtoCompose(link.href, email?._accountId);
+            return;
+          }
+          if (link.href.startsWith('cid:') || link.href.startsWith('tel:') || link.href.startsWith('#')) return;
           e.preventDefault();
           if (linkSafetyEnabled && linkSafetyClickConfirm) {
             const alert = checkLinkAlert(link);

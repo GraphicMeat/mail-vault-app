@@ -29,6 +29,7 @@ import { getSenderName } from '../../utils/emailParser';
 import { LinkSafetyModal } from '../LinkSafetyModal';
 import { LinkAlertIcon } from '../LinkAlertIcon';
 import { MAIL_DARK_BG, MAIL_DARK_TEXT } from '../../utils/mailChrome';
+import { openMailtoCompose } from '../../utils/mailto';
 
 // ── Thread Email Item Content ────────────────────────────────────────────────
 
@@ -119,7 +120,16 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
     const handleClick = (e) => {
       const link = e.target.closest('a');
       if (!link || !link.href) return;
-      if (link.href.startsWith('cid:') || link.href.startsWith('mailto:') || link.href.startsWith('tel:') || link.href.startsWith('#')) return;
+      // An address in the body composes here instead of waking the OS mail
+      // client, which is not the vault this message lives in.
+      if (link.href.startsWith('mailto:')) {
+        e.preventDefault();
+        e.stopPropagation();
+        // `loadedEmail` is the fetched body alone; the row is what carries the account.
+        openMailtoCompose(link.href, email?._accountId || loadedEmail?._accountId);
+        return;
+      }
+      if (link.href.startsWith('cid:') || link.href.startsWith('tel:') || link.href.startsWith('#')) return;
       e.preventDefault();
       e.stopPropagation();
       if (linkSafetyEnabled && linkSafetyClickConfirm) {

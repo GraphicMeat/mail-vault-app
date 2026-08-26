@@ -163,6 +163,7 @@ export function htmlQuotedMessage({ uid, to, from, subject, date }) {
     '<p>Short answer above the quote.</p>'
       + `<h2 id="${DARK_HEADING_ID}" style="color:hsl(0, 0%, 0%) !important; font-size:1.3em !important; font-weight:600 !important;">Heading that ships its own colour</h2>`
       + `<a id="${DARK_BRAND_LINK_ID}" href="https://example.com/brand" style="color:#e6375a; font-weight:600;">Brand coloured link</a>`
+      + `<a id="${MAILTO_LINK_ID}" href="${MAILTO_HREF}">${MAILTO_TEXT}</a>`
       + '<hr>'
       + `<blockquote><p><strong>Original Message</strong></p>${quoteLines}</blockquote>`
       // Fastmail's shape when the sender replies to a message: the attribution
@@ -250,6 +251,19 @@ export const FLAT_QUOTE_MARKER = 'Fastmail-shaped quoted line';
 /** Ids of the two dark-mode probes inside that message's HTML body. */
 export const DARK_HEADING_ID = 'mv-dark-important-heading';
 export const DARK_BRAND_LINK_ID = 'mv-dark-brand-link';
+
+// ── The mailto: link in that same message's body ────────────────────────────
+// An address in a message is not a place to navigate to: clicking it opens a
+// compose window here. The link scanner skips mailto: (utils/linkSafety.js),
+// so this anchor cannot change any alert level the other specs assert on.
+
+export const MAILTO_LINK_ID = 'mv-mailto-link';
+export const MAILTO_TEXT = 'Write to partners';
+export const MAILTO_TO = 'partners@mock.test';
+export const MAILTO_CC = 'desk@mock.test';
+export const MAILTO_SUBJECT = 'Ticket 2012599';
+export const MAILTO_HREF =
+  `mailto:${MAILTO_TO}?cc=${MAILTO_CC}&subject=${encodeURIComponent(MAILTO_SUBJECT)}`;
 
 // ── The same UID in two mailboxes, both HTML ────────────────────────────────
 // `HTML_QUOTED_SUBJECT` sits in INBOX; this one sits in Sent on the SAME UID.
