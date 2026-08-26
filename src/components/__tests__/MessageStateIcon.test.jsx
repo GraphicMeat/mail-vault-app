@@ -6,7 +6,9 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 
 vi.mock('lucide-react', () => {
   const icon = (name) => (props) => React.createElement('span', { 'data-icon': name, ...props });
-  return { Cloud: icon('Cloud'), HardDrive: icon('HardDrive') };
+  // Allowlist: every glyph the component can render must be listed, or vitest
+  // throws "No <name> export is defined on the lucide-react mock" at render.
+  return { Cloud: icon('Cloud'), CloudOff: icon('CloudOff'), HardDrive: icon('HardDrive') };
 });
 
 // Minimal zustand-like mock — mirrors the pattern EmailList.test.js uses for

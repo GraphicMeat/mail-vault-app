@@ -44,7 +44,7 @@ vi.mock('framer-motion', () => ({
 vi.mock('lucide-react', () => {
   const icon = (name) => (props) => React.createElement('span', { 'data-icon': name, ...props });
   return {
-    RefreshCw: icon('RefreshCw'), HardDrive: icon('HardDrive'), Cloud: icon('Cloud'),
+    RefreshCw: icon('RefreshCw'), HardDrive: icon('HardDrive'), Cloud: icon('Cloud'), CloudOff: icon('CloudOff'),
     Paperclip: icon('Paperclip'), MoreHorizontal: icon('MoreHorizontal'), Trash2: icon('Trash2'),
     CheckSquare: icon('CheckSquare'), Square: icon('Square'), Archive: icon('Archive'),
     X: icon('X'), Layers: icon('Layers'), Search: icon('Search'),

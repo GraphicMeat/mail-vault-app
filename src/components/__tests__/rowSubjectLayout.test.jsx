@@ -32,13 +32,25 @@ vi.mock('../SenderAlertIcon', () => ({ SenderAlertIcon: () => null, getSenderAle
 vi.mock('../ReplyToAlertIcon', () => ({ ReplyToAlertIcon: () => null, getThreadReplyToMismatch: () => null }));
 vi.mock('../RowActionMenu', () => ({ RowActionMenu: () => null }));
 vi.mock('../RowActionMenuItems', () => ({ RowActionMenuItems: () => null }));
-vi.mock('../email/MessageStateIcon', () => ({ ConnectedStateIcon: () => null }));
+vi.mock('../email/MessageStateIcon', () => ({
+  ConnectedStateIcon: () => null,
+  // EmailRow asks this whether the row is the only copy, to decide the gold
+  // row wash. These are layout tests, so answer with the ordinary vault tone.
+  describeMessageState: () => ({ tone: 'local' }),
+}));
 vi.mock('../../utils/linkSafety', () => ({
   getLinkAlertLevel: () => null,
   getAlertsForEmails: () => [],
   getCachedAlerts: () => [],
 }));
-vi.mock('../../stores/mailStore', () => ({ useMailStore: { getState: () => ({}) } }));
+vi.mock('../../stores/mailStore', () => {
+  // Callable as a hook AND carrying .getState() — EmailRow does both, and a
+  // bare object made every row throw before it could lay anything out.
+  const state = { serverUids: { complete: false } };
+  const hook = (selector) => (selector ? selector(state) : state);
+  hook.getState = () => state;
+  return { useMailStore: hook };
+});
 vi.mock('../../stores/slices/unifiedHelpers', () => ({ emailScopeKey: (e) => `acct-1:INBOX:${e.uid}` }));
 
 const { ThreadRow, CompactThreadRow } = await import('../ThreadRow');
