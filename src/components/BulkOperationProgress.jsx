@@ -93,17 +93,23 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
         exit={{ y: 100, opacity: 0 }}
         className="fixed bottom-4 right-4 z-50"
       >
-        <div className="bg-mail-surface border border-mail-border rounded-xl shadow-2xl
-                       overflow-hidden min-w-[320px]">
+        <div className={`bg-mail-surface border rounded-xl shadow-2xl overflow-hidden min-w-[320px]
+                        transition-[border-color] duration-[var(--mv-transition)]
+                        ${isError ? 'border-mail-danger' : isComplete && movesToVault ? 'border-mail-local' : 'border-mail-border'}`}>
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-mail-border">
             <div className="flex items-center gap-2">
               {isComplete ? (
-                <div className="w-6 h-6 bg-mail-success/20 rounded-full flex items-center justify-center">
-                  <Check size={14} className="text-mail-success" />
+                /* The last frame of a bulk run is the product's promise being
+                   kept — these messages are on your disk and the server can be
+                   emptied now. One beat, and in Vault Emerald when the run is
+                   the one that moved mail into the vault. */
+                <div className={`op-landed w-6 h-6 rounded-full flex items-center justify-center
+                                ${movesToVault ? 'bg-mail-local-tint' : 'bg-mail-success-tint'}`}>
+                  <Check size={14} className={movesToVault ? 'text-mail-local' : 'text-mail-success'} />
                 </div>
               ) : isError ? (
-                <div className="w-6 h-6 bg-mail-danger/20 rounded-full flex items-center justify-center">
+                <div className="op-landed w-6 h-6 bg-mail-danger-tint rounded-full flex items-center justify-center">
                   <AlertCircle size={14} className="text-mail-danger" />
                 </div>
               ) : (
@@ -196,7 +202,7 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${percentage}%` }}
-                transition={{ duration: 0.3, ease: 'easeOut' }}
+                transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
                 className={`h-full rounded-full ${isError ? 'bg-mail-danger' : movesToVault ? 'bg-mail-local' : 'bg-mail-accent'}`}
               />
             </div>

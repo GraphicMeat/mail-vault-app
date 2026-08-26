@@ -335,7 +335,7 @@ body {
   height: 20px;
   border-radius: 6px;
   flex-shrink: 0;
-  transition: background-color 0.15s ease;
+  transition: background-color var(--mv-state) var(--mv-ease-state);
 }
 .custody-chip[data-tone="local"] { background-color: var(--mail-local-tint); }
 .custody-chip[data-tone="server"] { background-color: var(--mail-server-tint); }
@@ -358,8 +358,13 @@ body {
 .custody-meter > span {
   display: block;
   height: 100%;
+  width: 100%;
+  transform-origin: left center;
   background-color: var(--mail-local);
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  /* scaleX, not width. This bar grows while a bulk archive runs, next to a
+     virtualized list that cannot give up a frame to layout — and the fill is a
+     solid colour, so a scaled paint is indistinguishable from a resized one. */
+  transition: transform var(--mv-transition) var(--mv-ease);
 }
 
 /* Custom checkbox */
@@ -676,6 +681,171 @@ input[type="range"]:focus::-webkit-slider-thumb {
 .tiptap u { text-decoration: underline; }
 .tiptap s { text-decoration: line-through; }
 
+/* ============================================================================
+   MOTION CONTRACT — "The Handoff"
+
+   THESIS: Colour says where your mail lives. Motion says WHEN it moved, and
+   proves it landed. Every animation in this client is a custody handoff, a
+   continuity cue, or the acknowledgment of a press. Nothing here is
+   decoration: a decorative frame in a virtualized list is a dropped one.
+
+   FOCAL MOMENT: a message becoming yours. The custody chip's tint crossfades
+   Server Blue -> Vault Emerald, the new glyph lands from 0.55 scale, and one
+   emerald light sweeps the row left to right. 620ms, once per message, and
+   never on a row the virtualizer merely recycled underneath a new message.
+
+   BUDGET: transform, opacity and background-color only. No layout property is
+   ever animated — a virtualized row's height is a constant the list knows
+   (The Fixed Row Rule), and `contain: content` on the row clips the sweep to
+   its own bounds. The sweep is a pseudo-element, so a landing row costs one
+   composited layer and the render window caps how many can exist at once: a
+   3,000-message bulk archive animates the twenty rows you can see, not 3,000.
+   ========================================================================= */
+
+:root {
+  /* Duration ladder. Distance and consequence pick the rung, not habit. */
+  --mv-press: 90ms;         /* the control moves under the finger */
+  --mv-feedback: 140ms;     /* something acknowledged you */
+  --mv-state: 220ms;        /* a value changed in place */
+  --mv-transition: 320ms;   /* something travelled or resized */
+  --mv-handoff: 620ms;      /* the one authored moment */
+
+  /* Confident arrival — fast out of the gate, long settle — for anything that
+     covered distance. The flatter curve is for tints and fills, which have no
+     distance to express and read as sluggish on an exponential ease. */
+  --mv-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --mv-ease-state: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Row ground. Carries hover AND the gold arrival of an only-copy row through
+   one property, at a duration short enough that hover still feels like hover. */
+.virtual-row {
+  transition: background-color var(--mv-feedback) var(--mv-ease-state);
+}
+
+/* --- The Handoff -------------------------------------------------------- */
+
+/* `data-landed` holds the new tone for one --mv-handoff. useCustodyLanding
+   sets it only when the SAME message changed custody: a recycled row showing
+   a different message has not handed anything over, and animating that would
+   turn a scroll into a light show. */
+.custody-glyph {
+  display: inline-flex;
+  position: relative;
+}
+
+[data-landed] .custody-glyph {
+  animation: custody-glyph-land var(--mv-state) var(--mv-ease) both;
+}
+
+@keyframes custody-glyph-land {
+  0%   { transform: scale(0.55); opacity: 0; }
+  60%  { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
+}
+
+/* The light. One band of the landing colour crossing the surface, once. */
+.virtual-row[data-landed]::after,
+.custody-band[data-landed]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    var(--mv-landed) 38%,
+    var(--mv-landed) 52%,
+    transparent 88%
+  );
+  animation: custody-sweep var(--mv-handoff) var(--mv-ease) both;
+}
+
+/* The sweep is a LIGHT, not a surface, and it needed two corrections that only
+   the running app could give:
+   1. Built from `--mail-*-tint` it was invisible. #0c3f33 over the #0a0a12
+      ground is about 1.15:1 — a tint is sized to sit still under a glyph and
+      clear hover, not to be seen crossing a row in half a second.
+   2. Built from the theme's own custody ink it went grey in light theme.
+      `--mail-local` there is #065f46 and `--mail-only-copy` is #854d0e: dark
+      inks chosen to carry text on white. Any alpha of a dark ink over a near
+      white ground is a shadow, and raising the alpha only made it a darker
+      shadow. A light needs chroma, not darkness.
+   So the custody LIGHT is its own value and, unlike every custody ink in this
+   system, it does NOT flip with the theme — the same luminous emerald reads as
+   emerald on ink and as mint on paper. Only its strength changes: a light
+   ground needs more of it to register. */
+:root,
+[data-theme="dark"] {
+  --mv-lit-local: #10b981;
+  --mv-lit-server: #3b82f6;
+  --mv-lit-only-copy: #fbbf24;
+  --mv-landed-strength: 26%;
+}
+
+[data-theme="light"] {
+  --mv-lit-local: #10b981;
+  --mv-lit-server: #3b82f6;
+  --mv-lit-only-copy: #fbbf24;
+  --mv-landed-strength: 40%;
+}
+
+[data-landed="local"]     { --mv-landed: color-mix(in srgb, var(--mv-lit-local) var(--mv-landed-strength), transparent); }
+[data-landed="only-copy"] { --mv-landed: color-mix(in srgb, var(--mv-lit-only-copy) var(--mv-landed-strength), transparent); }
+[data-landed="server"]    { --mv-landed: color-mix(in srgb, var(--mv-lit-server) var(--mv-landed-strength), transparent); }
+
+@keyframes custody-sweep {
+  0%   { opacity: 0; transform: translateX(-45%); }
+  18%  { opacity: 1; }
+  100% { opacity: 0; transform: translateX(100%); }
+}
+
+/* Same handoff at reading-pane scale: the band above the message you are
+   reading changes its claim while you read it. */
+.custody-band {
+  position: relative;
+  overflow: hidden;
+  transition: background-color var(--mv-state) var(--mv-ease-state);
+}
+
+/* --- Continuity --------------------------------------------------------- */
+
+/* The reading pane changes message thousands of times in a session. A hard cut
+   makes two different messages look like one that re-rendered. 140ms of fade
+   and 3px of rise says "different message" without anyone waiting for it —
+   the pane is interactive on the first frame. */
+.viewer-swap {
+  animation: viewer-swap var(--mv-feedback) var(--mv-ease) both;
+}
+
+@keyframes viewer-swap {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* --- Feedback ----------------------------------------------------------- */
+
+/* A press lands under the finger, not after it. Reserved for the controls that
+   actually move mail. */
+.press {
+  transition: transform var(--mv-press) var(--mv-ease-state);
+}
+.press:active:not(:disabled) {
+  transform: scale(0.93);
+}
+
+/* A bulk run's last frame is the product's promise being kept: these messages
+   are on your disk and the server can be emptied now. It gets one beat. */
+.op-landed {
+  animation: op-landed 420ms var(--mv-ease) both;
+}
+
+@keyframes op-landed {
+  0%   { transform: scale(0.4);  opacity: 0; }
+  55%  { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
+}
+
 /* Reduce motion.
  *
  * framer-motion is covered by <MotionConfig reducedMotion="user"> in main.jsx;
@@ -697,5 +867,15 @@ input[type="range"]:focus::-webkit-slider-thumb {
   .animate-pulse-soft {
     animation-duration: 1.5s !important;
     animation-iteration-count: infinite !important;
+  }
+
+  /* The custody sweep is a light crossing a surface. Collapsed to 0.01ms it is
+     a single-frame flash, which is worse than no sweep at all — so it is
+     removed outright and the tint crossfade carries the handoff alone. Every
+     other animation here uses `both` fill, so at 0.01ms each one lands on its
+     final frame, which is the correct resting state. */
+  .virtual-row[data-landed]::after,
+  .custody-band[data-landed]::after {
+    display: none;
   }
 }

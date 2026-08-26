@@ -5,6 +5,7 @@ import { getSenderName } from '../utils/emailParser';
 import { getCachedAlerts } from '../utils/linkSafety';
 import { useMailStore } from '../stores/mailStore';
 import { emailScopeKey } from '../stores/slices/unifiedHelpers';
+import { useCustodyLanding } from '../hooks/useCustodyLanding';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon } from './SenderAlertIcon';
 import { ReplyToAlertIcon } from './ReplyToAlertIcon';
@@ -22,8 +23,10 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
   const handleOpenMenu = React.useCallback(() => onOpenMenu(rowId), [onOpenMenu, rowId]);
   const { saveEmailLocally } = actions;
   // Scan results are cached per `accountId-mailbox-uid`; a bare uid would pull
-  // another account's links into this row's tooltip.
-  const alerts = getCachedAlerts(emailScopeKey(email, useMailStore.getState()));
+  // another account's links into this row's tooltip. The handoff below keys off
+  // the same string, for the same reason.
+  const scopeKey = emailScopeKey(email, useMailStore.getState());
+  const alerts = getCachedAlerts(scopeKey);
 
   const handleSave = async (e) => {
     e.stopPropagation();
@@ -42,11 +45,17 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
   // never disagree, and so the gold still requires proof of server absence.
   // Background only: a virtualized row's height is a constant the list knows.
   const serverKnown = useMailStore(s => s.serverUids.complete);
-  const isOnlyCopy = describeMessageState(email, { serverKnown }).tone === 'only-copy';
+  const custodyTone = describeMessageState(email, { serverKnown }).tone;
+  const isOnlyCopy = custodyTone === 'only-copy';
+  // The handoff belongs to the row, not to the 20px chip: when a message
+  // becomes yours, the row is what changed hands. Null except for the one
+  // ~620ms beat after this message's own custody changed.
+  const landed = useCustodyLanding(scopeKey, custodyTone);
 
   return (
     <div
       data-testid="email-row"
+      data-landed={landed || undefined}
       style={style}
       className={`virtual-row group relative flex items-center gap-3 px-4 border-b border-mail-border
                  cursor-pointer
@@ -108,7 +117,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
           <button
             onClick={handleSave}
             disabled={isSaving}
-            className="p-1.5 hover:bg-mail-border rounded transition-colors"
+            className="press p-1.5 hover:bg-mail-border rounded transition-colors"
             title="Archive"
           >
             {isSaving ? (
@@ -131,8 +140,10 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
   const handleOpenMenu = React.useCallback(() => onOpenMenu(rowId), [onOpenMenu, rowId]);
   const { saveEmailLocally } = actions;
   // Scan results are cached per `accountId-mailbox-uid`; a bare uid would pull
-  // another account's links into this row's tooltip.
-  const alerts = getCachedAlerts(emailScopeKey(email, useMailStore.getState()));
+  // another account's links into this row's tooltip. The handoff below keys off
+  // the same string, for the same reason.
+  const scopeKey = emailScopeKey(email, useMailStore.getState());
+  const alerts = getCachedAlerts(scopeKey);
 
   const handleSave = async (e) => {
     e.stopPropagation();
@@ -147,11 +158,17 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
   // never disagree, and so the gold still requires proof of server absence.
   // Background only: a virtualized row's height is a constant the list knows.
   const serverKnown = useMailStore(s => s.serverUids.complete);
-  const isOnlyCopy = describeMessageState(email, { serverKnown }).tone === 'only-copy';
+  const custodyTone = describeMessageState(email, { serverKnown }).tone;
+  const isOnlyCopy = custodyTone === 'only-copy';
+  // The handoff belongs to the row, not to the 20px chip: when a message
+  // becomes yours, the row is what changed hands. Null except for the one
+  // ~620ms beat after this message's own custody changed.
+  const landed = useCustodyLanding(scopeKey, custodyTone);
 
   return (
     <div
       data-testid="email-row"
+      data-landed={landed || undefined}
       style={style}
       className={`virtual-row group relative flex items-center gap-2 px-4 border-b border-mail-border
                  cursor-pointer
@@ -206,7 +223,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible bg-mail-surface-hover rounded-md px-1">
         {!email.isArchived && (
           <button onClick={handleSave} disabled={isSaving}
-            className="p-1 hover:bg-mail-border rounded transition-colors" title="Archive">
+            className="press p-1 hover:bg-mail-border rounded transition-colors" title="Archive">
             {isSaving ? <RefreshCw size={13} className="animate-spin text-mail-accent-text" />
               : <Archive size={13} className="text-mail-text-muted hover:text-mail-local" />}
           </button>

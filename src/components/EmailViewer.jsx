@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { getRealAttachments, replaceCidUrls } from '../services/attachmentUtils';
 import { describeMessageState } from './email/MessageStateIcon';
+import { useCustodyLanding } from '../hooks/useCustodyLanding';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { SenderInsightsPanel } from './SenderInsightsPanel';
 import { ThreadView } from './email/ThreadView';
@@ -200,6 +201,10 @@ function EmailViewerComponent({ onComposeReply }) {
   // `accountId-mailbox-uid`, not the bare uid: the scan cache and the persisted
   // alert map are both shared across accounts and folders.
   const scopeKey = selectedEmail ? emailScopeKey(selectedEmail, useMailStore.getState()) : null;
+  // The same handoff the row plays, at reading-pane scale: archive the message
+  // you are reading and the band above it hands over while you watch, instead
+  // of having quietly always said what it now says.
+  const custodyLanded = useCustodyLanding(scopeKey, custody.tone);
 
   const { iframeContent, scanAlertLevel } = useMemo(() => {
     if (!selectedEmail?.html) return { iframeContent: '', scanAlertLevel: null };
@@ -406,7 +411,7 @@ function EmailViewerComponent({ onComposeReply }) {
       <div data-tauri-drag-region className="h-2 border-b border-mail-border" />
 
       {/* Subject */}
-      <div className="px-3 py-2.5 border-b border-mail-border flex items-start gap-2">
+      <div key={scopeKey} className="viewer-swap px-3 py-2.5 border-b border-mail-border flex items-start gap-2">
         <h1 className="text-lg font-semibold text-mail-text flex-1 min-w-0 flex items-center gap-1.5">
           <SenderAlertIcon level={selectedEmail._senderAlert} email={selectedEmail} size={18} />
           <ReplyToAlertIcon mismatch={selectedEmail._replyToMismatch} size={18} />
@@ -421,7 +426,8 @@ function EmailViewerComponent({ onComposeReply }) {
       <div
         data-testid="email-custody-band"
         data-tone={custody.tone}
-        className={`flex items-center gap-2 px-3 py-1.5 border-b border-mail-border text-xs
+        data-landed={custodyLanded || undefined}
+        className={`custody-band flex items-center gap-2 px-3 py-1.5 border-b border-mail-border text-xs
                    ${custody.tone === 'only-copy'
                      ? 'bg-mail-only-copy-tint'
                      : custody.tone === 'local'

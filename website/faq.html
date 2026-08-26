@@ -31,7 +31,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 
   <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/assets/tailwind.css?v=6">
+  <link rel="stylesheet" href="/assets/tailwind.css?v=7">
 
   <style>
     .glass {
@@ -43,9 +43,7 @@
       background: rgba(0, 0, 0, 0.2);
       border: 1px solid rgba(255, 255, 255, 0.05);
     }
-    .faq-answer { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; }
-    .faq-answer.open { max-height: 3000px; }
-    .faq-chevron { transition: transform 0.3s ease; }
+    .faq-chevron { transition: transform var(--mv-state) var(--mv-ease); }
     .faq-chevron.open { transform: rotate(180deg); }
   </style>
 
@@ -828,15 +826,13 @@
         const isOpen = answer.classList.contains('open');
 
         // Close all others
-        document.querySelectorAll('.faq-answer.open').forEach(a => { a.classList.remove('open'); a.style.maxHeight = ''; });
+        document.querySelectorAll('.faq-answer.open').forEach(a => a.classList.remove('open'));
         document.querySelectorAll('.faq-chevron.open').forEach(c => c.classList.remove('open'));
         document.querySelectorAll('.faq-toggle[aria-expanded="true"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
 
         // Toggle current
         if (!isOpen) {
           answer.classList.add('open');
-          // Measured height, so tall answers (tables, lists) never clip.
-          answer.style.maxHeight = answer.scrollHeight + 'px';
           chevron.classList.add('open');
           button.setAttribute('aria-expanded', 'true');
         }
@@ -852,7 +848,6 @@
         const chevron = target.querySelector('.faq-chevron');
         if (button && answer) {
           answer.classList.add('open');
-          answer.style.maxHeight = answer.scrollHeight + 'px';
           if (chevron) chevron.classList.add('open');
           button.setAttribute('aria-expanded', 'true');
           target.scrollIntoView({ behavior: 'smooth', block: 'start' });

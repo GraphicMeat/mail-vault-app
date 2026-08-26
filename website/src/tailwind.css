@@ -41,6 +41,159 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+
+  /* Every animation on this site uses `both` fill, so at 0.01ms each lands on
+     its final frame — the drawn rule, the settled screenshot, the visible
+     count. Nothing here hides content when motion is off. */
+  .custody-intro .custody-rule > i {
+    animation: none;
+  }
+}
+
+/* ============================================================================
+   MOTION CONTRACT — "The Handoff, told once"
+
+   THESIS: The site has one thing to prove before anyone downloads anything —
+   that a message can leave a server and land on your disk, and that you can
+   always see which copies exist. That claim gets exactly one rehearsed
+   sequence, in the first viewport. Everything else that moves here is
+   acknowledgment of something the visitor actually did.
+
+   FOCAL SEQUENCE (~1.3s, once, on load): the custody rule draws itself —
+   Server Blue, then Vault Emerald, then Only-Copy Gold — while the product
+   arrives beside it. The three fields are the same claim the client's
+   message-state glyph makes, at page scale, so the site teaches the app's
+   colour before anyone installs it.
+
+   NO SCROLL CHOREOGRAPHY. Not one section reveal on any of the 41 pages: a
+   visitor scrolling past a paragraph did not ask for a performance, and a
+   fade-and-rise on every section is the tell of a site with nothing specific
+   to say. The retired `float` on the hero screenshot is the same failure in
+   miniature — an animation with no end and no meaning.
+
+   BUDGET: clip-path, transform, opacity, border-color. The hero image never
+   animates its opacity: an element painted at opacity 0 is not counted for
+   Largest Contentful Paint, and this page's LCP is that screenshot.
+   ========================================================================= */
+
+:root {
+  /* Confident arrival — fast out of the gate, long settle. */
+  --mv-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --mv-press: 90ms;
+  --mv-feedback: 150ms;
+  --mv-state: 260ms;
+}
+
+/* --- The focal sequence ------------------------------------------------- */
+
+/* Each field wipes open at its true width. clip-path, not width or scaleX, so
+   the rule's geometry never moves the sentence under it and the three fields
+   keep the 5 / 8 / 2 proportion that says how much of a mailbox is where.
+   Painted in full at rest: if this animation never runs — reduced motion, an
+   old engine, a stylesheet that arrived late — the visitor sees the finished
+   rule, which is the state that carries the meaning. */
+.custody-intro .custody-rule > i {
+  animation: custody-draw 520ms var(--mv-ease) both;
+}
+.custody-intro .custody-rule > i:nth-child(1) { animation-delay: 200ms; }
+.custody-intro .custody-rule > i:nth-child(2) { animation-delay: 480ms; }
+.custody-intro .custody-rule > i:nth-child(3) { animation-delay: 760ms; }
+
+@keyframes custody-draw {
+  from { clip-path: inset(0 100% 0 0); }
+  to   { clip-path: inset(0 0 0 0); }
+}
+
+/* The product arrives once and then holds still. Transform only — see the LCP
+   note above — and no infinite loop: the screenshot's job is to be looked at,
+   not to bob. */
+.hero-arrive {
+  animation: hero-arrive 760ms var(--mv-ease) both;
+  animation-delay: 80ms;
+}
+
+@keyframes hero-arrive {
+  from { transform: translateY(16px); }
+  to   { transform: none; }
+}
+
+/* --- Feedback ----------------------------------------------------------- */
+
+/* A card under the cursor takes the lamp's border. The 4px lift it replaces is
+   the gesture every card on the web makes; the lamp marking the live thing is
+   this product's own vocabulary. */
+.feature-card {
+  transition: border-color var(--mv-state) var(--mv-ease),
+              box-shadow var(--mv-state) var(--mv-ease);
+}
+.feature-card:hover {
+  border-color: var(--lamp);
+}
+
+/* A number that arrives from the network. `--` snapping to a value reads as a
+   glitch; 150ms says the answer came back. */
+.count-arrive {
+  animation: count-arrive var(--mv-feedback) var(--mv-ease) both;
+}
+
+@keyframes count-arrive {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* The one celebratory beat on the site, and it fires on a real outcome — a
+   vote the API actually recorded — never on load. */
+.vote-landed {
+  animation: vote-landed 420ms var(--mv-ease) both;
+}
+
+@keyframes vote-landed {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+
+/* A status line is announced by aria-live the moment it is written; the fade
+   is opacity only and short, so the reading and the hearing stay in step. */
+.status-arrive {
+  animation: count-arrive var(--mv-feedback) var(--mv-ease) both;
+}
+
+/* Controls that do something acknowledge the press under the finger. */
+.press {
+  transition: transform var(--mv-press) cubic-bezier(0.4, 0, 0.2, 1);
+}
+.press:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* --- State -------------------------------------------------------------- */
+
+/* The FAQ answer opens on a grid row instead of a max-height guess. A shared
+   `max-height: 3000px` gives every answer a different real speed, clips any
+   answer taller than the guess, and leaves a long one still growing after its
+   transition has ended. 0fr -> 1fr animates the answer's own height. */
+.faq-answer {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--mv-state) var(--mv-ease);
+}
+.faq-answer.open {
+  grid-template-rows: 1fr;
+}
+/* The grid track's automatic minimum is floored by the child's own padding —
+   `pb-5` on the answer paragraph left every closed answer 20px tall, leaking a
+   line of its text. Collapse that padding on the same curve as the row, so the
+   closed state is genuinely zero and the open one keeps its spacing. */
+.faq-answer > * {
+  overflow: hidden;
+  min-height: 0;
+  transition: padding-top var(--mv-state) var(--mv-ease),
+              padding-bottom var(--mv-state) var(--mv-ease);
+}
+.faq-answer:not(.open) > * {
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 /* ============================================================================

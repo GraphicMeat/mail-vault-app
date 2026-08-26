@@ -89,4 +89,4 @@ Backup tools do not read mail. Mail clients do not let you empty a server safely
 
 ## Accessibility & Inclusion
 
-No product-specific standard has been established. Existing surfaces already rely on light/dark theming via `[data-theme]`, `aria-label`s on icon-only controls, and `:focus-visible` styling; keyboard operation matters because the primary users work in long mail sessions. Reduced-motion handling is not currently implemented anywhere in the app.
+No product-specific standard has been established. Existing surfaces already rely on light/dark theming via `[data-theme]`, `aria-label`s on icon-only controls, and `:focus-visible` styling; keyboard operation matters because the primary users work in long mail sessions. `prefers-reduced-motion` is honoured on both surfaces — in CSS and, in the client, through `<MotionConfig reducedMotion="user">` — with spinners deliberately left turning slowly, because a frozen spinner reads as a hung operation.

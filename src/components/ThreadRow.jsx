@@ -9,7 +9,9 @@ import { ReplyToAlertIcon, getThreadReplyToMismatch } from './ReplyToAlertIcon';
 import { RowActionMenu } from './RowActionMenu';
 import { RowActionMenuItems } from './RowActionMenuItems';
 import { formatEmailDate } from '../utils/dateFormat';
-import { ConnectedStateIcon } from './email/MessageStateIcon';
+import { ConnectedStateIcon, describeMessageState } from './email/MessageStateIcon';
+import { emailScopeKey } from '../stores/slices/unifiedHelpers';
+import { useCustodyLanding } from '../hooks/useCustodyLanding';
 import {
   RefreshCw,
   Paperclip,
@@ -20,6 +22,16 @@ import {
 export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelected, onSelectThread, onSetSelection, anyChecked, style, actions, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
   const handleOpenMenu = React.useCallback(() => onOpenMenu(rowId), [onOpenMenu, rowId]);
   const { saveEmailsLocally } = actions;
+
+  // Hooks stay above the early return: a row that loses its lastEmail must not
+  // shift the hook order underneath it. A thread's custody is its newest
+  // message's custody, so that is what hands over.
+  const serverKnown = useMailStore(s => s.serverUids.complete);
+  const scopeKey = emailScopeKey(thread?.lastEmail, useMailStore.getState());
+  const custodyTone = thread?.lastEmail
+    ? describeMessageState(thread.lastEmail, { serverKnown }).tone
+    : null;
+  const landed = useCustodyLanding(scopeKey, custodyTone);
 
   if (!thread?.lastEmail) return null;
   const latestEmail = thread.lastEmail;
@@ -61,6 +73,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
     <div
       data-testid="email-row"
       data-thread-count={thread.messageCount}
+      data-landed={landed || undefined}
       style={style}
       className={`virtual-row group relative flex items-center gap-3 px-4 border-b border-mail-border
                  cursor-pointer
@@ -118,7 +131,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
           <button
             onClick={handleArchiveThread}
             disabled={isSaving}
-            className="p-1.5 hover:bg-mail-border rounded transition-colors"
+            className="press p-1.5 hover:bg-mail-border rounded transition-colors"
             title="Archive thread"
           >
             {isSaving ? (
@@ -141,6 +154,16 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
 export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, thread, isSelected, onSelectThread, onSetSelection, anyChecked, style, actions, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
   const handleOpenMenu = React.useCallback(() => onOpenMenu(rowId), [onOpenMenu, rowId]);
   const { saveEmailsLocally } = actions;
+
+  // Hooks stay above the early return: a row that loses its lastEmail must not
+  // shift the hook order underneath it. A thread's custody is its newest
+  // message's custody, so that is what hands over.
+  const serverKnown = useMailStore(s => s.serverUids.complete);
+  const scopeKey = emailScopeKey(thread?.lastEmail, useMailStore.getState());
+  const custodyTone = thread?.lastEmail
+    ? describeMessageState(thread.lastEmail, { serverKnown }).tone
+    : null;
+  const landed = useCustodyLanding(scopeKey, custodyTone);
 
   if (!thread?.lastEmail) return null;
   const latestEmail = thread.lastEmail;
@@ -180,6 +203,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
     <div
       data-testid="email-row"
       data-thread-count={thread.messageCount}
+      data-landed={landed || undefined}
       style={style}
       className={`virtual-row group relative flex items-center gap-2 px-4 border-b border-mail-border
                  cursor-pointer
@@ -228,7 +252,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible bg-mail-surface-hover rounded-md px-1">
         {!allArchived && (
           <button onClick={handleArchiveThread} disabled={isSaving}
-            className="p-1 hover:bg-mail-border rounded transition-colors" title="Archive thread">
+            className="press p-1 hover:bg-mail-border rounded transition-colors" title="Archive thread">
             {isSaving ? <RefreshCw size={13} className="animate-spin text-mail-accent-text" />
               : <Archive size={13} className="text-mail-text-muted hover:text-mail-local" />}
           </button>

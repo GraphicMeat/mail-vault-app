@@ -33,7 +33,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 
   <link rel="preload" href="website/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="website/assets/tailwind.css?v=6">
+  <link rel="stylesheet" href="website/assets/tailwind.css?v=7">
 
   <style>
     .glass {
@@ -45,12 +45,6 @@
       background: rgba(0, 0, 0, 0.2);
       border: 1px solid rgba(255, 255, 255, 0.05);
     }
-    @keyframes float {
-      0%, 100% { transform: translateY(0px); }
-      50% { transform: translateY(-10px); }
-    }
-    .float { animation: float 3s ease-in-out infinite; }
-    .feature-card:hover { transform: translateY(-4px); }
   </style>
 
   <!-- Structured Data -->
@@ -220,7 +214,7 @@
             MailVault keeps every email searchable and accessible offline as standard .eml files — forever.
           </p>
 
-          <div class="mb-8 max-w-md">
+          <div class="custody-intro mb-8 max-w-md">
             <div class="custody-rule mb-3" aria-hidden="true"><i></i><i></i><i></i></div>
             <p class="text-sm text-slate-600 dark:text-slate-300">
               Every message shows where it lives — <span class="c-server">on the server</span>,
@@ -230,7 +224,7 @@
           </div>
 
           <div class="flex flex-col gap-3 mb-5 max-w-xs">
-            <a id="hero-download" href="#download" class="lamp-bg text-white px-8 py-4 rounded-xl font-semibold text-lg hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 w-full shadow-lg shadow-primary-500/30">
+            <a id="hero-download" href="#download" class="lamp-bg text-white px-8 py-4 rounded-xl font-semibold text-lg hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 w-full shadow-lg shadow-primary-500/30 press">
               <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
               </svg>
@@ -240,15 +234,15 @@
           </div>
 
           <div class="flex flex-wrap items-center gap-3 mb-8">
-            <button id="want-this-btn" class="group inline-flex items-center gap-2.5 pl-4 pr-3 py-3 rounded-xl border-2 border-pink-400 text-pink-600 dark:text-pink-400 hover:bg-pink-50 dark:hover:bg-pink-900/20 transition-colors">
-              <svg class="w-6 h-6 shrink-0 text-pink-500 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 20 20">
+            <button id="want-this-btn" class="press group inline-flex items-center gap-2.5 pl-4 pr-3 py-3 rounded-xl border-2 border-pink-400 text-pink-600 dark:text-pink-400 hover:bg-pink-50 dark:hover:bg-pink-900/20 transition-colors">
+              <svg id="vote-heart" class="w-6 h-6 shrink-0 text-pink-500 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 20 20">
                 <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"/>
               </svg>
               <span class="font-semibold text-lg">I want this!</span>
               <span id="vote-count" class="min-w-[2.5rem] px-2.5 py-1 bg-pink-100 dark:bg-pink-900/50 rounded-lg text-lg font-bold tabular-nums">--</span>
             </button>
 
-            <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" class="group inline-flex items-center gap-2.5 pl-4 pr-3 py-3 rounded-xl border-2 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+            <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" class="press group inline-flex items-center gap-2.5 pl-4 pr-3 py-3 rounded-xl border-2 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
               <svg class="w-6 h-6 shrink-0 text-slate-500 dark:text-slate-400 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
               </svg>
@@ -280,7 +274,7 @@
         </div>
 
         <div class="relative">
-          <div class="float">
+          <div class="hero-arrive">
             <!-- App Screenshot -->
             <div class="relative rounded-2xl overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-700">
               <img id="app-screenshot" fetchpriority="high" src="screenshots/thread-view-1440.webp" srcset="screenshots/thread-view-720.webp 720w, screenshots/thread-view-1440.webp 1440w, screenshots/thread-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 518px" alt="MailVault email archiving app showing inbox with threaded conversations ready for local backup" class="w-full h-auto" data-expandable-image width="1440" height="928" decoding="async">
@@ -1365,6 +1359,25 @@
     });
 
     // ============================================
+    // Values that arrive from the network
+    // ============================================
+    // `--` snapping to a number reads as a rendering glitch. One short fade
+    // says the answer came back. Re-armed by hand because assigning a class
+    // that is already present does not restart a CSS animation.
+    function replay(el, className) {
+      if (!el) return;
+      el.classList.remove(className);
+      void el.offsetWidth;
+      el.classList.add(className);
+    }
+
+    function setArrivedText(el, text) {
+      if (!el) return;
+      el.textContent = text;
+      replay(el, 'count-arrive');
+    }
+
+    // ============================================
     // Platform-aware hero download button
     // ============================================
     const heroDownloadBtn = document.getElementById('hero-download');
@@ -1373,9 +1386,9 @@
     const isLinux = /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
 
     if (isMac) {
-      heroDownloadText.textContent = 'Download Free for macOS';
+      setArrivedText(heroDownloadText, 'Download Free for macOS');
     } else if (isLinux) {
-      heroDownloadText.textContent = 'Download Free for Linux';
+      setArrivedText(heroDownloadText, 'Download Free for Linux');
     }
 
     // ============================================
@@ -1399,7 +1412,7 @@
       try {
         const res = await fetch(`${API_BASE}/api/votes`);
         const data = await res.json();
-        voteCountEl.textContent = (data.count || 0).toLocaleString();
+        setArrivedText(voteCountEl, (data.count || 0).toLocaleString());
       } catch (e) {
         console.warn('Could not fetch vote count:', e);
       }
@@ -1407,8 +1420,9 @@
 
     wantThisBtn.addEventListener('click', async () => {
       if (hasVoted) {
-        wantThisBtn.classList.add('animate-pulse');
-        setTimeout(() => wantThisBtn.classList.remove('animate-pulse'), 500);
+        // Nudge the heart, not the whole button: pulsing a control that did
+        // nothing looks like it is still working on something.
+        replay(document.getElementById('vote-heart'), 'vote-landed');
         return;
       }
       try {
@@ -1417,7 +1431,8 @@
           headers: { 'Accept': 'application/json' }
         });
         const data = await res.json();
-        voteCountEl.textContent = (data.count || 0).toLocaleString();
+        setArrivedText(voteCountEl, (data.count || 0).toLocaleString());
+        replay(document.getElementById('vote-heart'), 'vote-landed');
         markAsVoted();
       } catch (e) {
         console.error('Vote failed:', e);
@@ -1463,6 +1478,7 @@
         ? ' text-red-600 dark:text-red-400'
         : ' text-green-600 dark:text-green-400');
       el.classList.remove('hidden');
+      replay(el, 'status-arrive');
     }
 
     // One sentence per failure the visitor can actually do something about.
@@ -1652,7 +1668,7 @@
       .then(repo => {
         const el = document.getElementById('github-stars');
         if (el && typeof repo.stargazers_count === 'number') {
-          el.textContent = repo.stargazers_count.toLocaleString();
+          setArrivedText(el, repo.stargazers_count.toLocaleString());
         }
       })
       .catch(() => {});

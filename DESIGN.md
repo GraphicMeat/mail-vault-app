@@ -224,6 +224,7 @@ It is explicitly **not** webmail (no promo chrome, no tabbed inbox, no Material 
 - Depth by tone and hairline, not by shadow.
 - 14px body, 12px label, 8px rhythm; high information density at rest.
 - Motion is short and functional: 150–200ms fades, spring-eased overlays, and `prefers-reduced-motion` is honoured in both CSS and Framer Motion.
+- One authored moment, and it is custody changing hands: the chip, the row and the reading-pane band hand over together when a message becomes yours.
 
 ## Colors
 
@@ -407,6 +408,31 @@ The one claim the whole palette exists to make, at three scales.
 - **Tooltip:** portals to `<body>` (rows clip their overflow), flips above the anchor within 120px of the window bottom, clamps to a 240px max width against both viewport edges, closes on capture-phase scroll, and always carries two lines: the claim and what it implies.
 
 ### Motion
+
+**Thesis: colour says where your mail lives; motion says when it moved.** A colour that swaps between two frames cannot claim that anything happened — a row that turns emerald mid-sync looks identical to a row that was always emerald. Motion exists here to make custody transfer legible, and for nothing else.
+
+**The duration ladder** (`--mv-*` in `src/styles/index.css`; distance and consequence pick the rung, never habit):
+
+| Token | Value | Use |
+|---|---|---|
+| `--mv-press` | 90ms | the control moves under the finger |
+| `--mv-feedback` | 140ms | something acknowledged you |
+| `--mv-state` | 220ms | a value changed in place |
+| `--mv-transition` | 320ms | something travelled or resized |
+| `--mv-handoff` | 620ms | the one authored moment |
+
+Two curves only: `--mv-ease` (`cubic-bezier(0.16, 1, 0.3, 1)`) for anything that covered distance, and `--mv-ease-state` (`cubic-bezier(0.4, 0, 0.2, 1)`) for tints and fills, which have no distance to express and read as sluggish on an exponential ease.
+
+**The Handoff — the focal moment.** A message becoming yours. The custody chip's tint crossfades, the new glyph lands from `scale(0.55)`, and one light in the landing colour sweeps the row left to right. `useCustodyLanding` sets `data-landed` on the row (and on the reading pane's custody band) for one `--mv-handoff`, and the CSS does the rest. Rows are recycled by the virtualizer, so the hook fires only when the **same scope key** changes tone — a reused row showing a different message has not handed anything over. A bulk archive of 3,000 messages animates the twenty rows in the render window, not 3,000.
+
+**The custody light is not the custody ink.** The sweep uses `--mv-lit-local` / `--mv-lit-server` / `--mv-lit-only-copy` — luminous values that, uniquely in this system, **do not flip with the theme**; only `--mv-landed-strength` does (26% dark, 40% light). Built from `--mail-*-tint` the sweep was invisible (`#0c3f33` over `#0a0a12` is ~1.15:1); built from the light theme's own custody ink it went grey, because any alpha of a dark ink over a near-white ground is a shadow. A tint sits still under a glyph; a light has to be seen crossing a row in half a second and then be gone.
+
+**Continuity.** The reading pane's subject block is keyed by scope key and plays `viewer-swap` (140ms fade, 3px rise) on every message change — thousands of times a session, and interactive on the first frame. The custody meter in the list header grows on `transform: scaleX()`, not `width`: it moves while a bulk archive runs, next to a virtualized list that cannot give up a frame to layout.
+
+**Feedback.** `.press` (90ms, `scale(0.93)`) on the controls that actually move mail. A completed bulk run gets one `op-landed` beat on its mark and turns the panel's edge Vault Emerald — the product's promise being kept, stated once.
+
+**The marketing site** carries the same thesis and one sequence: the hero's custody rule draws itself, Server Blue then Vault Emerald then Only-Copy Gold, while the product arrives beside it. There is **no scroll choreography on any of the 43 pages**, and the hero image never animates opacity — an element painted at opacity 0 is not counted for Largest Contentful Paint, and that screenshot is the page's LCP.
+
 Framer Motion under `<MotionConfig reducedMotion="user">`, used sparingly and always short. Fades 150–200ms; dialogs scale `0.95 → 1` with opacity; trays and panels use `spring, damping 25, stiffness 300`; spinners are 1s linear infinite; the ambient `pulse-soft` is 2s ease-in-out. `@media (prefers-reduced-motion: reduce)` collapses every CSS animation and transition to 0.01ms — **except spinners, which keep turning at 1.5s**, because a frozen spinner reads as a hung operation, which is worse than a slow one. Motion never gates an interaction; a click lands on the first frame.
 
 ## Do's and Don'ts
@@ -415,6 +441,7 @@ Framer Motion under `<MotionConfig reducedMotion="user">`, used sparingly and al
 - **Do** treat every saturated hue as one of the four roles — vault, server, only-copy, live (The Four Roles Rule).
 - **Do** route every custody claim through `describeMessageState`, so the chip, the wash, the tooltip and the band can never disagree (The One Claim Rule).
 - **Do** require verified server state before rendering gold, and say "not verified yet" when you do not have it (The Proof Rule).
+- **Do** let a custody change hand over visibly, keyed on the scope key so a recycled row never animates someone else's message (The Handoff Rule).
 - **Do** define a new tinted surface as a **solid** token, and check it against both its surface and `surface-hover` before shipping it (The Solid Tint Rule).
 - **Do** check `text-on-tint` on the gold hover row, not on a flat tint — that is the worst case in the system.
 - **Do** use `accent-fill` / `danger-fill` under white text and `accent-text` / `danger` for coloured text and icons.
@@ -436,7 +463,7 @@ Framer Motion under `<MotionConfig reducedMotion="user">`, used sparingly and al
 - **Don't** put white text on `bg-mail-accent`; that is 4.47:1 and `accent-fill` exists for it.
 - **Don't** use size for emphasis, or let any prose fall below 11px.
 - **Don't** let a custody state change a row's height, wrap, or margin — background, glyph, colour and weight only.
-- **Don't** animate anything that delays interaction, add a transition longer than 300ms, or freeze a spinner under reduced motion.
+- **Don't** animate anything that delays interaction, or freeze a spinner under reduced motion. Routine transitions stay at or under `--mv-transition` (320ms); `--mv-handoff` (620ms) is the single exception in the system and it belongs to The Handoff — a second thing at that length means one of them is decoration.
 - **Don't** put a pill on an action or a rectangle on a piece of state.
 - **Don't** import the marketing site's Inter, hero styling, or illustration style into the client — the two surfaces share the indigo and the custody trio, and nothing else.
 - **Don't** let a resting window look busy: if three elements are competing for attention, two are wrong.

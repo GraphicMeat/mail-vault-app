@@ -164,7 +164,7 @@ export function MessageStateIcon({ email, size = 14, backedUp = false, serverKno
   return (
     <StateTooltip label={state.label} detail={state.detail} state={state.id}>
       <span className="custody-chip" data-tone={state.tone}>
-        <span className="relative inline-flex">
+        <span className="custody-glyph">
           <Glyph size={size} className={TONE_CLASS[state.tone]} />
           {state.dot && (
             <span
