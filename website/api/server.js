@@ -114,13 +114,32 @@ app.use(cors({
 }));
 
 // Parse JSON bodies — skip for Stripe webhook (needs raw body for signature verification)
+// urlencoded is here so the newsletter and contact forms keep working with
+// JavaScript switched off: a plain <form method="post"> posts form-encoded, and
+// those requests get a redirect back to the page instead of a JSON body.
 app.use((req, res, next) => {
-  if (req.originalUrl === '/api/billing/webhook') {
-    next();
-  } else {
-    express.json()(req, res, next);
-  }
+  if (req.originalUrl === '/api/billing/webhook') return next();
+  express.json({ limit: '64kb' })(req, res, (err) => {
+    if (err) return next(err);
+    express.urlencoded({ extended: false, limit: '64kb' })(req, res, next);
+  });
 });
+
+// True when the request came from a plain form submit rather than fetch().
+// Those senders cannot read a JSON reply, so they get a redirect they can follow.
+const isFormPost = (req) => req.is('application/x-www-form-urlencoded');
+
+// Redirect targets are fixed strings, never built from request input — a form
+// field that reached the Location header would be an open redirect.
+const FORM_RESULTS = {
+  subscribe: { ok: '/?subscribed=1#newsletter', error: '/?subscribe_error=1#newsletter' },
+  contact: { ok: '/?contacted=1', error: '/?contact_error=1' },
+};
+const redirectForm = (res, kind, ok) => res.redirect(303, FORM_RESULTS[kind][ok ? 'ok' : 'error']);
+
+// Field caps. The client sets maxlength; a POST does not have to honour it.
+const LIMITS = { email: 254, name: 100, message: 5000, category: 32 };
+const tooLong = (value, max) => typeof value === 'string' && value.length > max;
 
 // Trust proxy (for rate limiting behind reverse proxy)
 app.set('trust proxy', 1);
@@ -291,7 +310,8 @@ app.post('/api/subscribe', async (req, res) => {
     const db = getPool();
     const { email } = req.body;
 
-    if (!email || !isValidEmail(email)) {
+    if (!email || !isValidEmail(email) || tooLong(email, LIMITS.email)) {
+      if (isFormPost(req)) return redirectForm(res, 'subscribe', false);
       return res.status(400).json({ error: 'Valid email is required' });
     }
 
@@ -299,6 +319,7 @@ app.post('/api/subscribe', async (req, res) => {
     const [existing] = await db.execute('SELECT id FROM subscribers WHERE email = ?', [email.toLowerCase()]);
 
     if (existing.length > 0) {
+      if (isFormPost(req)) return redirectForm(res, 'subscribe', true);
       return res.json({ success: true, message: 'Already subscribed' });
     }
 
@@ -330,9 +351,11 @@ app.post('/api/subscribe', async (req, res) => {
 </div>`,
     }).catch(err => console.error('Failed to mirror subscriber to GraphicMeat:', err.message));
 
+    if (isFormPost(req)) return redirectForm(res, 'subscribe', true);
     res.json({ success: true, message: 'Subscribed successfully' });
   } catch (error) {
     console.error('Error subscribing:', error);
+    if (isFormPost(req)) return redirectForm(res, 'subscribe', false);
     res.status(500).json({ error: 'Failed to subscribe' });
   }
 });
@@ -348,21 +371,32 @@ app.post('/api/contact', contactLimiter, async (req, res) => {
 
     // Honeypot: if the hidden field is filled, it's a bot
     if (honeypot) {
+      if (isFormPost(req)) return redirectForm(res, 'contact', true);
       return res.json({ success: true, message: 'Message sent successfully' });
     }
 
     // Timing: reject if submitted faster than 3 seconds
     if (_t && (Date.now() - parseInt(_t)) < 3000) {
+      if (isFormPost(req)) return redirectForm(res, 'contact', true);
       return res.json({ success: true, message: 'Message sent successfully' });
     }
 
     // Validation
     if (!name || !email || !message) {
+      if (isFormPost(req)) return redirectForm(res, 'contact', false);
       return res.status(400).json({ error: 'Name, email, and message are required' });
     }
 
-    if (!isValidEmail(email)) {
+    if (!isValidEmail(email) || tooLong(email, LIMITS.email)) {
+      if (isFormPost(req)) return redirectForm(res, 'contact', false);
       return res.status(400).json({ error: 'Valid email is required' });
+    }
+
+    if (tooLong(name, LIMITS.name) || tooLong(message, LIMITS.message) || tooLong(category, LIMITS.category)) {
+      if (isFormPost(req)) return redirectForm(res, 'contact', false);
+      return res.status(400).json({
+        error: `Name is limited to ${LIMITS.name} characters and the message to ${LIMITS.message}.`,
+      });
     }
 
     // Insert contact message
@@ -381,9 +415,11 @@ app.post('/api/contact', contactLimiter, async (req, res) => {
       message,
     }).catch(err => console.error('Failed to send contact notification:', err.message));
 
+    if (isFormPost(req)) return redirectForm(res, 'contact', true);
     res.json({ success: true, message: 'Message sent successfully' });
   } catch (error) {
     console.error('Error submitting contact:', error);
+    if (isFormPost(req)) return redirectForm(res, 'contact', false);
     res.status(500).json({ error: 'Failed to send message' });
   }
 });

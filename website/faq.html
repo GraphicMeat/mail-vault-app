@@ -30,30 +30,10 @@
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            primary: {
-              50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc',
-              400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca',
-              800: '#3730a3', 900: '#312e81',
-            }
-          }
-        }
-      }
-    }
-  </script>
-
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=1">
 
   <style>
-    body { font-family: 'Inter', system-ui, sans-serif; }
     .gradient-text {
       background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
       -webkit-background-clip: text;
@@ -278,7 +258,7 @@
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16">
         <a href="/" class="flex items-center gap-3">
-          <img src="icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
+          <img src="icon-128.webp" alt="MailVault logo" class="w-8 h-8 rounded-lg" width="32" height="32">
           <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
         </a>
 
@@ -787,7 +767,7 @@
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex flex-col md:flex-row items-center justify-between gap-6">
         <a href="/" class="flex items-center gap-2">
-          <img src="icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
+          <img src="icon-128.webp" alt="MailVault logo" class="w-8 h-8 rounded-lg" width="32" height="32">
           <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
         </a>
         <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
@@ -810,7 +790,7 @@
             <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
         <span>Cooked over an <span class="text-primary-500 font-semibold">open GPU</span> by</span>
         <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
-          <img src="/graphicmeat-logo.png?v=2" alt="Made by Graphic Meat" class="w-full max-w-[400px] h-auto">
+          <img src="/graphicmeat-logo.webp" alt="Made by Graphic Meat" class="w-full max-w-[400px] h-auto" width="512" height="512" loading="lazy" decoding="async">
         </a>
       </div>
     </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { displayText } from '../../utils/bidiText';
 import { useAccountStore } from '../../stores/accountStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -330,7 +331,7 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, account,
         </div>
         <div className="flex-1 min-w-0">
           <div className={`${compact ? 'text-xs' : 'text-sm'} font-medium text-mail-text truncate`}>
-            {attachment.filename || 'Unnamed attachment'}
+            {displayText(attachment.filename, 'Unnamed attachment')}
           </div>
           <div className={`${compact ? 'text-[10px]' : 'text-xs'} text-mail-text-muted`}>
             {error ? (

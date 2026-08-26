@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useId } from 'react';
+import { useDialogA11y } from '../hooks/useDialogA11y';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, AlertTriangle, Loader } from 'lucide-react';
 
@@ -29,6 +30,10 @@ export function ConfirmDialog({
   loading = false,
   icon,
 }) {
+  const titleId = useId();
+  const descId = useId();
+  const panelRef = useDialogA11y(isOpen, loading ? undefined : onClose);
+
   if (!isOpen) return null;
 
   const confirmColors = destructive
@@ -37,15 +42,21 @@ export function ConfirmDialog({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" onClick={loading ? undefined : onClose}>
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
+          aria-hidden="true"
           className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         />
 
         <motion.div
+          ref={panelRef}
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          aria-describedby={description ? descId : undefined}
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
@@ -56,6 +67,7 @@ export function ConfirmDialog({
           <button
             onClick={onClose}
             disabled={loading}
+            aria-label={cancelLabel}
             className="absolute top-4 right-4 p-1 rounded-lg hover:bg-mail-surface-hover transition-colors disabled:opacity-50"
           >
             <X size={18} className="text-mail-text-muted" />
@@ -68,12 +80,12 @@ export function ConfirmDialog({
                 <AlertTriangle size={20} className={destructive ? 'text-red-500' : 'text-mail-accent'} />
               </div>
             )}
-            <h3 className="text-lg font-semibold text-mail-text pr-8">{title}</h3>
+            <h3 id={titleId} className="text-lg font-semibold text-mail-text pr-8">{title}</h3>
           </div>
 
           {/* Description */}
           {description && (
-            <div className="text-sm text-mail-text-muted mb-6">
+            <div id={descId} className="text-sm text-mail-text-muted mb-6">
               {typeof description === 'string' ? <p>{description}</p> : description}
             </div>
           )}
@@ -83,6 +95,7 @@ export function ConfirmDialog({
             <button
               onClick={onClose}
               disabled={loading}
+              data-autofocus
               className="flex-1 px-4 py-2.5 rounded-lg bg-mail-surface border border-mail-border
                          text-mail-text font-medium hover:bg-mail-surface-hover transition-colors
                          disabled:opacity-50"

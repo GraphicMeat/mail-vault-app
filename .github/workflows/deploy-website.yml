@@ -56,10 +56,19 @@ jobs:
           echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
+      - name: Build site CSS
+        # The site is served as static files; Tailwind is compiled here so the
+        # committed website/assets/tailwind.css can never go stale in production.
+        run: npx -y tailwindcss@3.4.19 -c website/tailwind.config.js -i website/src/tailwind.css -o website/assets/tailwind.css --minify
+
       - name: Rsync static files (excluding api/)
         run: |
           rsync -avz --delete \
             --exclude='api/' \
+            --exclude='src/' \
+            --exclude='tailwind.config.js' \
+            --exclude='package.json' \
+            --exclude='package-lock.json' \
             --exclude='*.db' \
             --exclude='*.db-shm' \
             --exclude='*.db-wal' \

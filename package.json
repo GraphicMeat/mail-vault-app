@@ -8,6 +8,7 @@
     "client": "vite",
     "postinstall": "cd website/api && npm install",
     "build": "node scripts/write-env.cjs && vite build",
+    "build:website-css": "tailwindcss -c website/tailwind.config.js -i website/src/tailwind.css -o website/assets/tailwind.css --minify",
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",

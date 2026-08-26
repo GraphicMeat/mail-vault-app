@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, lazy, Suspense } from 'react';
 import { useMailStore } from './stores/mailStore';
 import { useAccountStore } from './stores/accountStore';
 import { useSyncStore } from './stores/syncStore';
@@ -6,20 +6,16 @@ import { useUiStore } from './stores/uiStore';
 import { useThemeStore } from './stores/themeStore';
 import { useSettingsStore } from './stores/settingsStore';
 import { clampListPaneWidth, maxListPaneWidth, MIN_LIST_WIDTH } from './utils/paneLayout';
+import { ChunkErrorBoundary } from './components/ChunkErrorBoundary';
 import { Sidebar } from './components/Sidebar';
 import { EmailList } from './components/EmailList';
 import { EmailViewer } from './components/EmailViewer';
-import { AccountModal } from './components/AccountModal';
-import { ComposeModal } from './components/ComposeModal';
 import { discardDraftFor } from './services/localDrafts';
-import { SettingsPage } from './components/SettingsPage';
 import { Toast } from './components/Toast';
 import { BulkSaveProgress } from './components/BulkSaveProgress';
 import { SelectionActionBar } from './components/SelectionActionBar';
 import { Onboarding } from './components/Onboarding';
 import { ChatViewWrapper } from './components/ChatViewWrapper';
-import { UpdateModal } from './components/UpdateModal';
-import { ShortcutsModal } from './components/ShortcutsModal';
 import { UndoSendToast } from './components/UndoSendToast';
 import { OutboxTray } from './components/OutboxTray';
 import { RestoreTray } from './components/RestoreTray';
@@ -48,6 +44,16 @@ import { restoreManager } from './services/restoreManager.js';
 import { setComposeOpener } from './services/localDrafts';
 import { version } from '../package.json';
 import { decodeImapUtf7 } from './utils/imapUtf7';
+
+// Surfaces that only exist once the user asks for them. Keeping them in the
+// startup chunk cost ~1.1 MB of JavaScript that has to parse before the first
+// message list can paint — ComposeModal alone drags in TipTap and ProseMirror.
+// Each one is warmed at idle below, so the first click still opens instantly.
+const AccountModal = lazy(() => import('./components/AccountModal').then(m => ({ default: m.AccountModal })));
+const ComposeModal = lazy(() => import('./components/ComposeModal').then(m => ({ default: m.ComposeModal })));
+const SettingsPage = lazy(() => import('./components/SettingsPage').then(m => ({ default: m.SettingsPage })));
+const UpdateModal = lazy(() => import('./components/UpdateModal').then(m => ({ default: m.UpdateModal })));
+const ShortcutsModal = lazy(() => import('./components/ShortcutsModal').then(m => ({ default: m.ShortcutsModal })));
 
 // Resizable divider component
 function ResizeDivider({ orientation, onResize, onResizeEnd }) {
@@ -130,6 +136,23 @@ function App() {
     const onResize = () => setWindowWidth(window.innerWidth);
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // Warm the deferred overlay chunks once the window is idle. They are off the
+  // startup path but a person clicking Compose should never wait on a fetch.
+  useEffect(() => {
+    const warm = () => {
+      import('./components/ComposeModal');
+      import('./components/SettingsPage');
+      import('./components/AccountModal');
+    };
+    const idle = window.requestIdleCallback;
+    if (idle) {
+      const handle = idle(warm, { timeout: 3000 });
+      return () => window.cancelIdleCallback?.(handle);
+    }
+    const t = setTimeout(warm, 1500);
+    return () => clearTimeout(t);
   }, []);
 
   // If user manually expands sidebar while auto-collapsed, clear the flag
@@ -661,11 +684,15 @@ function App() {
             Add Your First Account
           </button>
 
-          <AnimatePresence>
-            {showAccountModal && (
-              <AccountModal onClose={() => setShowAccountModal(false)} />
-            )}
-          </AnimatePresence>
+          <ChunkErrorBoundary name="Add account">
+          <Suspense fallback={null}>
+            <AnimatePresence>
+              {showAccountModal && (
+                <AccountModal onClose={() => setShowAccountModal(false)} />
+              )}
+            </AnimatePresence>
+          </Suspense>
+          </ChunkErrorBoundary>
         </motion.div>
       </div>
     );
@@ -735,13 +762,19 @@ function App() {
         )}
       </div>
 
-      <AnimatePresence>
-        {showAccountModal && (
-          <AccountModal onClose={() => setShowAccountModal(false)} />
-        )}
-      </AnimatePresence>
+      <ChunkErrorBoundary name="Add account">
+      <Suspense fallback={null}>
+        <AnimatePresence>
+          {showAccountModal && (
+            <AccountModal onClose={() => setShowAccountModal(false)} />
+          )}
+        </AnimatePresence>
+      </Suspense>
+      </ChunkErrorBoundary>
 
       {/* Active (non-minimized) compose windows */}
+      <ChunkErrorBoundary name="Compose">
+      <Suspense fallback={null}>
       <AnimatePresence>
         {composeWindows.filter(w => !w.minimized).map(w => (
           <ComposeModal
@@ -755,6 +788,8 @@ function App() {
           />
         ))}
       </AnimatePresence>
+      </Suspense>
+      </ChunkErrorBoundary>
 
       {/* Minimized compose bubbles — stacked top-right */}
       {composeWindows.filter(w => w.minimized).length > 0 && (
@@ -805,11 +840,15 @@ function App() {
         </div>
       )}
 
-      <AnimatePresence>
-        {showSettings && (
-          <SettingsPage onClose={() => { setShowSettings(false); setSettingsInitialTab(null); setSettingsInitialAccountId(null); }} onAddAccount={() => { setShowSettings(false); setShowAccountModal(true); }} onReportBug={handleReportBug} initialTab={settingsInitialTab} initialAccountId={settingsInitialAccountId} />
-        )}
-      </AnimatePresence>
+      <ChunkErrorBoundary name="Settings">
+      <Suspense fallback={null}>
+        <AnimatePresence>
+          {showSettings && (
+            <SettingsPage onClose={() => { setShowSettings(false); setSettingsInitialTab(null); setSettingsInitialAccountId(null); }} onAddAccount={() => { setShowSettings(false); setShowAccountModal(true); }} onReportBug={handleReportBug} initialTab={settingsInitialTab} initialAccountId={settingsInitialAccountId} />
+          )}
+        </AnimatePresence>
+      </Suspense>
+      </ChunkErrorBoundary>
 
       <AnimatePresence>
         {error && (
@@ -858,20 +897,28 @@ function App() {
         );
       })()}
 
-      <AnimatePresence>
-        {updateInfo && (
-          <UpdateModal
-            updateInfo={updateInfo}
-            onClose={() => setUpdateInfo(null)}
-          />
-        )}
-      </AnimatePresence>
+      <ChunkErrorBoundary name="Update">
+      <Suspense fallback={null}>
+        <AnimatePresence>
+          {updateInfo && (
+            <UpdateModal
+              updateInfo={updateInfo}
+              onClose={() => setUpdateInfo(null)}
+            />
+          )}
+        </AnimatePresence>
+      </Suspense>
+      </ChunkErrorBoundary>
 
-      <AnimatePresence>
-        {showShortcutsModal && (
-          <ShortcutsModal onClose={() => setShowShortcutsModal(false)} />
-        )}
-      </AnimatePresence>
+      <ChunkErrorBoundary name="Keyboard shortcuts">
+      <Suspense fallback={null}>
+        <AnimatePresence>
+          {showShortcutsModal && (
+            <ShortcutsModal onClose={() => setShowShortcutsModal(false)} />
+          )}
+        </AnimatePresence>
+      </Suspense>
+      </ChunkErrorBoundary>
 
       {/* Pending bulk operation resume banner */}
       {pendingOperation && (

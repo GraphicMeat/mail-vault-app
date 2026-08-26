@@ -1,6 +1,7 @@
 import './e2eMotion';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { MotionConfig } from 'framer-motion';
 import App from './App';
 import './styles/index.css';
 
@@ -138,9 +139,15 @@ function SplashDismisser({ children }) {
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <SplashDismisser>
-        <App />
-      </SplashDismisser>
+      {/* reducedMotion="user" makes every framer-motion animation in the app
+          honour the OS "Reduce motion" setting — transforms and scales are
+          dropped, opacity still crossfades. CSS-driven motion is handled by the
+          matching @media block in styles/index.css. */}
+      <MotionConfig reducedMotion="user">
+        <SplashDismisser>
+          <App />
+        </SplashDismisser>
+      </MotionConfig>
     </ErrorBoundary>
   </React.StrictMode>
 );

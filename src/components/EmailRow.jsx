@@ -1,4 +1,5 @@
 import React from 'react';
+import { displayText } from '../utils/bidiText';
 import { getAccountColor } from '../stores/settingsStore';
 import { getSenderName } from '../utils/emailParser';
 import { getCachedAlerts } from '../utils/linkSafety';
@@ -17,7 +18,8 @@ import {
   Archive,
 } from 'lucide-react';
 
-export const EmailRow = React.memo(function EmailRow({ email, isSelected, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
+export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
+  const handleOpenMenu = React.useCallback(() => onOpenMenu(rowId), [onOpenMenu, rowId]);
   const { saveEmailLocally } = actions;
   // Scan results are cached per `accountId-mailbox-uid`; a bare uid would pull
   // another account's links into this row's tooltip.
@@ -25,11 +27,11 @@ export const EmailRow = React.memo(function EmailRow({ email, isSelected, onSele
 
   const handleSave = async (e) => {
     e.stopPropagation();
-    onStartSaving();
+    onStartSaving(rowId);
     try {
       await saveEmailLocally(email.uid);
     } finally {
-      onStopSaving();
+      onStopSaving(rowId);
     }
   };
 
@@ -67,7 +69,7 @@ export const EmailRow = React.memo(function EmailRow({ email, isSelected, onSele
             title={email._accountEmail}
           />
         )}
-        <span className="truncate">{getSenderName(email)}</span>
+        <span className="truncate" dir="auto">{displayText(getSenderName(email))}</span>
       </div>
 
       {/*
@@ -83,8 +85,8 @@ export const EmailRow = React.memo(function EmailRow({ email, isSelected, onSele
         <SenderAlertIcon level={email._senderAlert} email={email} />
         <ReplyToAlertIcon mismatch={email._replyToMismatch} />
         <LinkAlertIcon level={email._linkAlert} alerts={alerts} />
-        <span className={`flex-1 min-w-0 truncate ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
-          {email.subject}
+        <span dir="auto" className={`flex-1 min-w-0 truncate ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
+          {displayText(email.subject, '(No subject)')}
         </span>
         {email.hasAttachments && (
           <Paperclip size={14} className="text-mail-text-muted flex-shrink-0" />
@@ -110,7 +112,7 @@ export const EmailRow = React.memo(function EmailRow({ email, isSelected, onSele
           </button>
         )}
 
-        <RowActionMenu open={menuOpen} onOpen={onOpenMenu} onClose={onCloseMenu}>
+        <RowActionMenu open={menuOpen} onOpen={handleOpenMenu} onClose={onCloseMenu}>
           <RowActionMenuItems emails={[email]} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} />
         </RowActionMenu>
       </div>
@@ -118,7 +120,8 @@ export const EmailRow = React.memo(function EmailRow({ email, isSelected, onSele
   );
 });
 
-export const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSelected, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
+export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, email, isSelected, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
+  const handleOpenMenu = React.useCallback(() => onOpenMenu(rowId), [onOpenMenu, rowId]);
   const { saveEmailLocally } = actions;
   // Scan results are cached per `accountId-mailbox-uid`; a bare uid would pull
   // another account's links into this row's tooltip.
@@ -126,8 +129,8 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSe
 
   const handleSave = async (e) => {
     e.stopPropagation();
-    onStartSaving();
-    try { await saveEmailLocally(email.uid); } finally { onStopSaving(); }
+    onStartSaving(rowId);
+    try { await saveEmailLocally(email.uid); } finally { onStopSaving(rowId); }
   };
 
   const isUnread = !email.flags?.includes('\\Seen');
@@ -163,8 +166,8 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSe
               title={email._accountEmail}
             />
           )}
-          <span className={`truncate text-xs ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
-            {getSenderName(email)}
+          <span dir="auto" className={`truncate text-xs ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
+            {displayText(getSenderName(email))}
           </span>
           <span className="text-xs text-mail-text-muted whitespace-nowrap ml-auto">
             {formatEmailDate(email.date)}
@@ -176,8 +179,8 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSe
           <ReplyToAlertIcon mismatch={email._replyToMismatch} size={12} />
           <LinkAlertIcon level={email._linkAlert} size={12} alerts={alerts} />
           {/* flex-1 min-w-0: same shrink-to-nothing hazard as the row above. */}
-          <span className={`flex-1 min-w-0 truncate text-sm leading-snug ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
-            {email.subject}
+          <span dir="auto" className={`flex-1 min-w-0 truncate text-sm leading-snug ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
+            {displayText(email.subject, '(No subject)')}
           </span>
           {email.hasAttachments && (
             <Paperclip size={12} className="text-mail-text-muted flex-shrink-0" />
@@ -194,7 +197,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ email, isSe
               : <Archive size={13} className="text-mail-text-muted hover:text-mail-local" />}
           </button>
         )}
-        <RowActionMenu open={menuOpen} onOpen={onOpenMenu} onClose={onCloseMenu} size={13}>
+        <RowActionMenu open={menuOpen} onOpen={handleOpenMenu} onClose={onCloseMenu} size={13}>
           <RowActionMenuItems emails={[email]} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} />
         </RowActionMenu>
       </div>

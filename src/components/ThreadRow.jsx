@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { displayText } from '../utils/bidiText';
 import { getSenderName } from '../utils/emailParser';
 import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
 import { useMailStore } from '../stores/mailStore';
@@ -16,7 +17,8 @@ import {
 } from 'lucide-react';
 
 // Thread row for default layout — shows collapsed thread with participant names and count
-export const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onSelectThread, onToggleSelection, anyChecked, style, actions, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
+export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelected, onSelectThread, onToggleSelection, anyChecked, style, actions, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
+  const handleOpenMenu = React.useCallback(() => onOpenMenu(rowId), [onOpenMenu, rowId]);
   const { saveEmailsLocally } = actions;
 
   if (!thread?.lastEmail) return null;
@@ -41,12 +43,12 @@ export const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onS
 
   const handleArchiveThread = async (e) => {
     e.stopPropagation();
-    onStartSaving();
+    onStartSaving(rowId);
     try {
       const uids = thread.emails.filter(em => !em.isArchived).map(em => em.uid);
       if (uids.length > 0) await saveEmailsLocally(uids);
     } finally {
-      onStopSaving();
+      onStopSaving(rowId);
     }
   };
 
@@ -89,8 +91,8 @@ export const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onS
         {(() => { const sa = getSenderAlertLevel(thread.emails); return sa ? <SenderAlertIcon level={sa.level} email={sa.email} /> : null; })()}
         <ReplyToAlertIcon mismatch={getThreadReplyToMismatch(thread.emails)} />
         <LinkAlertIcon level={getLinkAlertLevel(thread.emails)} alerts={getAlertsForEmails(thread.emails, useMailStore.getState())} />
-        <span className={`flex-1 min-w-0 truncate ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
-          {thread.subject}
+        <span dir="auto" className={`flex-1 min-w-0 truncate ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
+          {displayText(thread.subject, '(No subject)')}
         </span>
         {thread.messageCount > 1 && (
           <span className="flex-shrink-0 min-w-[20px] h-5 px-1.5 bg-mail-text-muted/15 rounded-full
@@ -122,7 +124,7 @@ export const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onS
           </button>
         )}
 
-        <RowActionMenu open={menuOpen} onOpen={onOpenMenu} onClose={onCloseMenu}>
+        <RowActionMenu open={menuOpen} onOpen={handleOpenMenu} onClose={onCloseMenu}>
           <RowActionMenuItems emails={thread.emails} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} />
         </RowActionMenu>
       </div>
@@ -131,7 +133,8 @@ export const ThreadRow = React.memo(function ThreadRow({ thread, isSelected, onS
 });
 
 // Compact thread row for compact layout
-export const CompactThreadRow = React.memo(function CompactThreadRow({ thread, isSelected, onSelectThread, onToggleSelection, anyChecked, style, actions, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
+export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, thread, isSelected, onSelectThread, onToggleSelection, anyChecked, style, actions, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
+  const handleOpenMenu = React.useCallback(() => onOpenMenu(rowId), [onOpenMenu, rowId]);
   const { saveEmailsLocally } = actions;
 
   if (!thread?.lastEmail) return null;
@@ -155,12 +158,12 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ thread, i
 
   const handleArchiveThread = async (e) => {
     e.stopPropagation();
-    onStartSaving();
+    onStartSaving(rowId);
     try {
       const uids = thread.emails.filter(em => !em.isArchived).map(em => em.uid);
       if (uids.length > 0) await saveEmailsLocally(uids);
     } finally {
-      onStopSaving();
+      onStopSaving(rowId);
     }
   };
 
@@ -203,8 +206,8 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ thread, i
           <ReplyToAlertIcon mismatch={getThreadReplyToMismatch(thread.emails)} size={12} />
           <LinkAlertIcon level={getLinkAlertLevel(thread.emails)} size={12} alerts={getAlertsForEmails(thread.emails, useMailStore.getState())} />
           {/* flex-1 min-w-0: same shrink-to-nothing hazard as the row above. */}
-          <span className={`flex-1 min-w-0 truncate text-sm leading-snug ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
-            {thread.subject}
+          <span dir="auto" className={`flex-1 min-w-0 truncate text-sm leading-snug ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
+            {displayText(thread.subject, '(No subject)')}
           </span>
           {latestEmail.hasAttachments && (
             <Paperclip size={12} className="text-mail-text-muted flex-shrink-0" />
@@ -221,7 +224,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ thread, i
               : <Archive size={13} className="text-mail-text-muted hover:text-mail-local" />}
           </button>
         )}
-        <RowActionMenu open={menuOpen} onOpen={onOpenMenu} onClose={onCloseMenu} size={13}>
+        <RowActionMenu open={menuOpen} onOpen={handleOpenMenu} onClose={onCloseMenu} size={13}>
           <RowActionMenuItems emails={thread.emails} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} />
         </RowActionMenu>
       </div>

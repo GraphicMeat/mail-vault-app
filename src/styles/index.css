@@ -1,3 +1,5 @@
+@import './fonts.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -517,3 +519,27 @@ input[type="range"]:focus::-webkit-slider-thumb {
 .tiptap em { font-style: italic; }
 .tiptap u { text-decoration: underline; }
 .tiptap s { text-decoration: line-through; }
+
+/* Reduce motion.
+ *
+ * framer-motion is covered by <MotionConfig reducedMotion="user"> in main.jsx;
+ * this covers the CSS side — the `pulse-soft` ambient animation, the spinners,
+ * and every `transition-*` utility. Spinners keep turning, slowly: a frozen
+ * spinner reads as a hung operation, which is worse than a slow one. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-spin,
+  .animate-pulse,
+  .animate-pulse-soft {
+    animation-duration: 1.5s !important;
+    animation-iteration-count: infinite !important;
+  }
+}

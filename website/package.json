@@ -7,7 +7,7 @@
     "dev:api": "cd api && npm run dev",
     "dev:web": "python3 -m http.server 3000",
     "start:api": "cd api && npm start",
-    "build": "echo 'Static site - no build needed'"
+    "build": "cd .. && npm run build:website-css"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

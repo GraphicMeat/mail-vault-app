@@ -264,3 +264,18 @@ sudo spctl --master-disable
 ### Linux (future)
 - Will require webkit2gtk and related libraries
 - Update `tauri.conf.json` targets to include "deb" or "appimage"
+
+## Website CSS
+
+`website/assets/tailwind.css` is compiled from `website/src/tailwind.css` — the
+marketing site no longer loads the Tailwind CDN compiler at runtime. Rebuild it
+after changing any class in `website/**/*.html`:
+
+```
+npm run build:website-css
+```
+
+The deploy workflow rebuilds it before rsync, so a stale commit can't reach
+production. When the stylesheet changes, bump the `?v=` on the
+`<link rel="stylesheet" href="/assets/tailwind.css?v=N">` in the pages so
+Cloudflare serves the new file.

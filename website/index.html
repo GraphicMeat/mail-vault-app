@@ -32,45 +32,10 @@
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 
-  <!-- DNS Prefetch -->
-  <link rel="dns-prefetch" href="https://cdn.tailwindcss.com">
-
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            primary: {
-              50: '#eef2ff',
-              100: '#e0e7ff',
-              200: '#c7d2fe',
-              300: '#a5b4fc',
-              400: '#818cf8',
-              500: '#6366f1',
-              600: '#4f46e5',
-              700: '#4338ca',
-              800: '#3730a3',
-              900: '#312e81',
-            }
-          },
-          fontFamily: {
-            display: ['Inter', 'system-ui', 'sans-serif'],
-          }
-        }
-      }
-    }
-  </script>
-
-  <!-- Inter Font -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=1">
 
   <style>
-    body { font-family: 'Inter', system-ui, sans-serif; }
     .gradient-text {
       background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
       -webkit-background-clip: text;
@@ -185,7 +150,7 @@
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16">
         <a href="#" onclick="window.scrollTo({top:0,behavior:'smooth'});return false;" class="flex items-center gap-3">
-          <img src="icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
+          <img src="icon-128.webp" alt="MailVault logo" class="w-8 h-8 rounded-lg" width="32" height="32">
           <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
         </a>
 
@@ -317,7 +282,7 @@
           <div class="float">
             <!-- App Screenshot -->
             <div class="relative rounded-2xl overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-700">
-              <img id="app-screenshot" src="screenshots/thread-view.png" alt="MailVault email archiving app showing inbox with threaded conversations ready for local backup" class="w-full h-auto" data-expandable-image width="1440" height="900">
+              <img id="app-screenshot" fetchpriority="high" src="screenshots/thread-view-1440.webp" srcset="screenshots/thread-view-720.webp 720w, screenshots/thread-view-1440.webp 1440w, screenshots/thread-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 518px" alt="MailVault email archiving app showing inbox with threaded conversations ready for local backup" class="w-full h-auto" data-expandable-image width="1440" height="928" decoding="async">
             </div>
           </div>
 
@@ -689,7 +654,7 @@
                 Topics
               </div>
               <div class="rounded-xl border-2 border-slate-200 dark:border-slate-600 overflow-hidden shadow-lg">
-                <img src="screenshots/chat-view.png" alt="MailVault chat view showing conversation topics grouped by contact" class="w-full h-auto" data-expandable-image loading="lazy">
+                <img src="screenshots/chat-view-1440.webp" srcset="screenshots/chat-view-720.webp 720w, screenshots/chat-view-1440.webp 1440w, screenshots/chat-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 248px" alt="MailVault chat view showing conversation topics grouped by contact" class="w-full h-auto" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
               </div>
             </div>
 
@@ -699,7 +664,7 @@
                 Chat View
               </div>
               <div class="rounded-xl border-2 border-primary-500 overflow-hidden ring-4 ring-primary-500/20 shadow-lg">
-                <img src="screenshots/chat-view-chat.png" alt="MailVault chat bubble view showing email conversation as messaging bubbles" class="w-full h-auto" data-expandable-image loading="lazy">
+                <img src="screenshots/chat-view-chat-1440.webp" srcset="screenshots/chat-view-chat-720.webp 720w, screenshots/chat-view-chat-1440.webp 1440w, screenshots/chat-view-chat-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 248px" alt="MailVault chat bubble view showing email conversation as messaging bubbles" class="w-full h-auto" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
               </div>
             </div>
           </div>
@@ -733,7 +698,7 @@
         <!-- Compose Email -->
         <div class="group">
           <div class="rounded-2xl overflow-hidden shadow-lg border border-slate-200 dark:border-slate-700 transition-all duration-300 group-hover:shadow-xl group-hover:-translate-y-1">
-            <img src="screenshots/compose-email.png" alt="MailVault compose and reply modal with rich text editing" class="w-full h-auto" data-expandable-image loading="lazy">
+            <img src="screenshots/compose-email-1440.webp" srcset="screenshots/compose-email-720.webp 720w, screenshots/compose-email-1440.webp 1440w, screenshots/compose-email-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 526px" alt="MailVault compose and reply modal with rich text editing" class="w-full h-auto" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
           </div>
           <div class="mt-4 px-1">
             <h3 class="text-lg font-semibold text-slate-900 dark:text-white">Compose & Reply</h3>
@@ -744,7 +709,7 @@
         <!-- Thread View -->
         <div class="group">
           <div class="rounded-2xl overflow-hidden shadow-lg border border-slate-200 dark:border-slate-700 transition-all duration-300 group-hover:shadow-xl group-hover:-translate-y-1">
-            <img src="screenshots/chat-view-thread.png" alt="MailVault thread conversation view showing email chain" class="w-full h-auto" data-expandable-image loading="lazy">
+            <img src="screenshots/chat-view-thread-1440.webp" srcset="screenshots/chat-view-thread-720.webp 720w, screenshots/chat-view-thread-1440.webp 1440w, screenshots/chat-view-thread-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 526px" alt="MailVault thread conversation view showing email chain" class="w-full h-auto" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
           </div>
           <div class="mt-4 px-1">
             <h3 class="text-lg font-semibold text-slate-900 dark:text-white">Threaded Conversations</h3>
@@ -755,7 +720,7 @@
         <!-- Bulk Selection -->
         <div class="group">
           <div class="rounded-2xl overflow-hidden shadow-lg border border-slate-200 dark:border-slate-700 transition-all duration-300 group-hover:shadow-xl group-hover:-translate-y-1">
-            <img src="screenshots/selection-dialog.png" alt="MailVault bulk selection dialog with date range picker for batch operations" class="w-full h-auto" data-expandable-image loading="lazy">
+            <img src="screenshots/selection-dialog-1440.webp" srcset="screenshots/selection-dialog-720.webp 720w, screenshots/selection-dialog-1440.webp 1440w, screenshots/selection-dialog-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 526px" alt="MailVault bulk selection dialog with date range picker for batch operations" class="w-full h-auto" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
           </div>
           <div class="mt-4 px-1">
             <h3 class="text-lg font-semibold text-slate-900 dark:text-white">Bulk Operations</h3>
@@ -766,7 +731,7 @@
         <!-- Archive Progress -->
         <div class="group">
           <div class="rounded-2xl overflow-hidden shadow-lg border border-slate-200 dark:border-slate-700 transition-all duration-300 group-hover:shadow-xl group-hover:-translate-y-1">
-            <img src="screenshots/archive-progress.png" alt="MailVault archive progress bar showing bulk email backup in progress" class="w-full h-auto" data-expandable-image loading="lazy">
+            <img src="screenshots/archive-progress-1440.webp" srcset="screenshots/archive-progress-720.webp 720w, screenshots/archive-progress-1440.webp 1440w, screenshots/archive-progress-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 526px" alt="MailVault archive progress bar showing bulk email backup in progress" class="w-full h-auto" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
           </div>
           <div class="mt-4 px-1">
             <h3 class="text-lg font-semibold text-slate-900 dark:text-white">Archive with Progress</h3>
@@ -1034,11 +999,13 @@
           Get notified about new releases, features, and tips. No spam, unsubscribe anytime.
         </p>
 
-        <form id="newsletter-form" class="flex flex-col sm:flex-row gap-3">
+        <form id="newsletter-form" method="post" action="/api/subscribe" class="flex flex-col sm:flex-row gap-3">
           <input
             type="email"
             name="email"
             placeholder="Enter your email"
+            autocomplete="email"
+            maxlength="254"
             required
             class="flex-1 px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all"
           >
@@ -1049,7 +1016,7 @@
             Subscribe
           </button>
         </form>
-        <p id="newsletter-message" class="mt-4 text-sm hidden"></p>
+        <p role="status" aria-live="polite" aria-atomic="true" id="newsletter-message" class="mt-4 text-sm hidden"></p>
       </div>
     </div>
   </section>
@@ -1151,11 +1118,11 @@
 
         <div class="max-w-md mx-auto">
           <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">Get notified when MailVault launches on Windows:</p>
-          <form id="platform-notify-form" class="flex gap-2">
-            <input type="email" name="email" placeholder="Your email" required class="flex-1 px-4 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all text-sm">
+          <form id="platform-notify-form" method="post" action="/api/subscribe" class="flex gap-2">
+            <input type="email" name="email" placeholder="Your email" autocomplete="email" maxlength="254" required class="flex-1 px-4 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all text-sm">
             <button type="submit" class="gradient-bg text-white px-5 py-2.5 rounded-lg font-medium text-sm hover:opacity-90 transition-opacity whitespace-nowrap">Notify Me</button>
           </form>
-          <p id="platform-notify-message" class="mt-2 text-sm hidden"></p>
+          <p role="status" aria-live="polite" aria-atomic="true" id="platform-notify-message" class="mt-2 text-sm hidden"></p>
         </div>
       </div>
     </div>
@@ -1241,7 +1208,7 @@
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex flex-col md:flex-row items-center justify-between gap-6">
         <div class="flex items-center gap-2">
-          <img src="icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
+          <img src="icon-128.webp" alt="MailVault logo" class="w-8 h-8 rounded-lg" width="32" height="32">
           <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
         </div>
 
@@ -1266,7 +1233,7 @@
             <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
         <span>Cooked over an <span class="text-primary-500 font-semibold">open GPU</span> by</span>
         <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
-          <img src="/graphicmeat-logo.png?v=2" alt="Made by Graphic Meat" class="w-full max-w-[400px] h-auto">
+          <img src="/graphicmeat-logo.webp" alt="Made by Graphic Meat" class="w-full max-w-[400px] h-auto" width="512" height="512" loading="lazy" decoding="async">
         </a>
       </div>
     </div>
@@ -1275,10 +1242,10 @@
 
   <!-- Contact Modal -->
   <div id="contact-modal" class="fixed inset-0 z-50 hidden">
-    <div id="contact-backdrop" class="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
+    <div id="contact-backdrop" aria-hidden="true" class="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
     <div class="absolute inset-0 flex items-center justify-center p-4">
-      <div class="relative w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 p-6">
-        <button id="close-contact-btn" class="absolute top-4 right-4 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+      <div id="contact-panel" role="dialog" aria-modal="true" aria-labelledby="contact-title" class="relative w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 p-6">
+        <button id="close-contact-btn" aria-label="Close" class="absolute top-4 right-4 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
           <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
           </svg>
@@ -1290,11 +1257,11 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
             </svg>
           </div>
-          <h3 class="text-xl font-bold">Send Us a Message</h3>
+          <h3 id="contact-title" class="text-xl font-bold">Send Us a Message</h3>
           <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">We'll get back to you as soon as possible.</p>
         </div>
 
-        <form id="contact-form" class="space-y-3">
+        <form id="contact-form" method="post" action="/api/contact" class="space-y-3">
           <!-- Honeypot: hidden from humans, bots fill it -->
           <input type="text" name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px;opacity:0;height:0;width:0;">
           <input type="hidden" name="_t" value="">
@@ -1303,6 +1270,8 @@
             type="text"
             name="name"
             placeholder="Your name"
+            autocomplete="name"
+            maxlength="100"
             required
             class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all text-sm"
           >
@@ -1310,6 +1279,8 @@
             type="email"
             name="email"
             placeholder="Your email"
+            autocomplete="email"
+            maxlength="254"
             required
             class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all text-sm"
           >
@@ -1325,6 +1296,7 @@
           <textarea
             name="message"
             placeholder="Your message"
+            maxlength="5000"
             required
             rows="4"
             class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all text-sm resize-none"
@@ -1336,7 +1308,7 @@
             Send Message
           </button>
         </form>
-        <p id="contact-message" class="mt-3 text-sm text-center hidden"></p>
+        <p role="status" aria-live="polite" aria-atomic="true" id="contact-message" class="mt-3 text-sm text-center hidden"></p>
       </div>
     </div>
   </div>
@@ -1453,41 +1425,88 @@
 
     fetchVoteCount();
 
-
     // ============================================
     // Newsletter Form
     // ============================================
     const newsletterForm = document.getElementById('newsletter-form');
     const newsletterMessage = document.getElementById('newsletter-message');
 
-    newsletterForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const email = newsletterForm.email.value;
+    // ============================================
+    // Form submission — shared behaviour
+    // ============================================
+    // Every form on this page posts to the API and reports back in the same
+    // way: the submit button goes busy and stays disabled until the request
+    // settles (a second click used to send a second message), and the status
+    // line says what actually happened. It previously reported success on
+    // every failure path — offline, 500, rate limit — which told people they
+    // were subscribed when no row had been written.
+    function setBusy(form, busy, busyLabel) {
+      form.dataset.busy = busy ? '1' : '';
+      const button = form.querySelector('[type="submit"]');
+      if (!button) return;
+      if (busy) {
+        button.dataset.idleLabel = button.dataset.idleLabel || button.textContent;
+        button.textContent = busyLabel || button.dataset.idleLabel;
+      } else if (button.dataset.idleLabel) {
+        button.textContent = button.dataset.idleLabel;
+      }
+      button.disabled = busy;
+      button.setAttribute('aria-busy', busy ? 'true' : 'false');
+      button.classList.toggle('opacity-60', busy);
+      button.classList.toggle('cursor-not-allowed', busy);
+    }
 
+    function showStatus(el, text, kind, baseClass) {
+      el.textContent = text;
+      el.className = baseClass + (kind === 'error'
+        ? ' text-red-600 dark:text-red-400'
+        : ' text-green-600 dark:text-green-400');
+      el.classList.remove('hidden');
+    }
+
+    // One sentence per failure the visitor can actually do something about.
+    async function postForm(url, body) {
+      if (navigator.onLine === false) {
+        throw new Error('You appear to be offline. Check your connection and try again.');
+      }
+      let res;
       try {
-        const res = await fetch(`${API_BASE}/api/subscribe`, {
+        res = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email })
+          body: JSON.stringify(body),
         });
-
-        if (res.ok) {
-          newsletterMessage.textContent = 'Thanks for subscribing! Check your email to confirm.';
-          newsletterMessage.className = 'mt-4 text-sm text-green-600 dark:text-green-400';
-          newsletterForm.reset();
-        } else {
-          throw new Error('Failed to subscribe');
-        }
-      } catch (e) {
-        newsletterMessage.textContent = 'Thanks for your interest! (Demo mode)';
-        newsletterMessage.className = 'mt-4 text-sm text-green-600 dark:text-green-400';
-        newsletterForm.reset();
+      } catch (networkError) {
+        throw new Error("Couldn't reach the server. Check your connection and try again.");
       }
+      if (res.ok) return res.json().catch(() => ({}));
 
-      newsletterMessage.classList.remove('hidden');
-      setTimeout(() => newsletterMessage.classList.add('hidden'), 5000);
+      if (res.status === 429) {
+        throw new Error('Too many attempts. Wait a minute and try again.');
+      }
+      if (res.status >= 500) {
+        throw new Error('Something went wrong on our end. Try again in a moment.');
+      }
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'That did not go through. Check the details and try again.');
+    }
+
+    const NEWSLETTER_STATUS_CLASS = 'mt-4 text-sm';
+
+    newsletterForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (newsletterForm.dataset.busy === '1') return;
+      setBusy(newsletterForm, true, 'Subscribing…');
+      try {
+        await postForm(`${API_BASE}/api/subscribe`, { email: newsletterForm.email.value });
+        showStatus(newsletterMessage, "You're on the list. Watch for the welcome email.", 'ok', NEWSLETTER_STATUS_CLASS);
+        newsletterForm.reset();
+      } catch (err) {
+        showStatus(newsletterMessage, err.message, 'error', NEWSLETTER_STATUS_CLASS);
+      } finally {
+        setBusy(newsletterForm, false);
+      }
     });
-
 
     // ============================================
     // Contact Modal
@@ -1499,11 +1518,18 @@
     const contactForm = document.getElementById('contact-form');
     const contactMessage = document.getElementById('contact-message');
 
+    const contactPanel = document.getElementById('contact-panel');
+    const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]):not([type="hidden"]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+    let contactReturnFocus = null;
+
     function openContactModal() {
+      contactReturnFocus = document.activeElement;
       contactModal.classList.remove('hidden');
       document.body.style.overflow = 'hidden';
       // Set timestamp when modal opens (for timing check)
       contactForm._t.value = Date.now().toString();
+      // The honeypot is off-screen but still focusable; skip it.
+      contactPanel.querySelector('input[name="name"]')?.focus();
     }
 
     function closeContactModal() {
@@ -1511,7 +1537,21 @@
       document.body.style.overflow = '';
       contactForm.reset();
       contactMessage.classList.add('hidden');
+      if (contactReturnFocus && document.contains(contactReturnFocus)) contactReturnFocus.focus();
+      contactReturnFocus = null;
     }
+
+    // Tab must not walk out of an open dialog into the page behind it.
+    contactPanel.addEventListener('keydown', (e) => {
+      if (e.key !== 'Tab') return;
+      const items = [...contactPanel.querySelectorAll(FOCUSABLE)]
+        .filter(el => el.offsetWidth > 0 || el.offsetHeight > 0);
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    });
 
     openContactBtn.addEventListener('click', openContactModal);
     closeContactBtn.addEventListener('click', closeContactModal);
@@ -1520,42 +1560,60 @@
       if (e.key === 'Escape' && !contactModal.classList.contains('hidden')) closeContactModal();
     });
 
+    const CONTACT_STATUS_CLASS = 'mt-3 text-sm text-center';
+
     contactForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const formData = {
-        name: contactForm.name.value,
-        email: contactForm.email.value,
-        category: contactForm.category.value,
-        message: contactForm.message.value,
-        website: contactForm.website.value,
-        _t: contactForm._t.value
-      };
-
+      if (contactForm.dataset.busy === '1') return;
+      setBusy(contactForm, true, 'Sending…');
       try {
-        const res = await fetch(`${API_BASE}/api/contact`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData)
+        await postForm(`${API_BASE}/api/contact`, {
+          name: contactForm.name.value,
+          email: contactForm.email.value,
+          category: contactForm.category.value,
+          message: contactForm.message.value,
+          website: contactForm.website.value,
+          _t: contactForm._t.value,
         });
-
-        if (res.ok) {
-          contactMessage.textContent = 'Message sent! We\'ll get back to you soon.';
-          contactMessage.className = 'mt-3 text-sm text-center text-green-600 dark:text-green-400';
-          contactMessage.classList.remove('hidden');
-          contactForm.reset();
-          setTimeout(() => closeContactModal(), 2000);
-        } else {
-          const data = await res.json();
-          throw new Error(data.error || 'Failed to send');
-        }
-      } catch (e) {
-        contactMessage.textContent = e.message || 'Something went wrong. Please try again.';
-        contactMessage.className = 'mt-3 text-sm text-center text-red-600 dark:text-red-400';
-        contactMessage.classList.remove('hidden');
-        setTimeout(() => contactMessage.classList.add('hidden'), 5000);
+        showStatus(contactMessage, "Message sent. We'll reply to the address you gave.", 'ok', CONTACT_STATUS_CLASS);
+        contactForm.reset();
+        // The form is cleared, so the text stays on screen long enough to read
+        // before the dialog goes away. Nothing is retried behind it.
+        setTimeout(() => closeContactModal(), 2500);
+      } catch (err) {
+        // Keep what they typed: a failed send must never cost the message.
+        showStatus(contactMessage, err.message, 'error', CONTACT_STATUS_CLASS);
+      } finally {
+        setBusy(contactForm, false);
       }
     });
 
+    // ============================================
+    // No-JavaScript form results
+    // ============================================
+    // With JS off the forms post directly and the API redirects back here with
+    // a flag. With JS on this runs too — harmless, and it means a visitor who
+    // submitted before the script finished parsing still sees an answer.
+    (function reportFormRedirect() {
+      const params = new URLSearchParams(window.location.search);
+      const results = [
+        ['subscribed', newsletterMessage, "You're on the list. Watch for the welcome email.", 'ok', NEWSLETTER_STATUS_CLASS],
+        ['subscribe_error', newsletterMessage, "That didn't go through. Check the address and try again.", 'error', NEWSLETTER_STATUS_CLASS],
+        ['contacted', contactMessage, "Message sent. We'll reply to the address you gave.", 'ok', CONTACT_STATUS_CLASS],
+        ['contact_error', contactMessage, "That didn't go through. Check the details and try again.", 'error', CONTACT_STATUS_CLASS],
+      ];
+      let matched = false;
+      for (const [flag, el, text, kind, baseClass] of results) {
+        if (!params.has(flag) || !el) continue;
+        matched = true;
+        showStatus(el, text, kind, baseClass);
+        if (flag === 'contacted' || flag === 'contact_error') openContactModal();
+      }
+      if (matched) {
+        // Drop the flag so a refresh doesn't re-announce a stale result.
+        window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+      }
+    })();
 
     // ============================================
     // Resolve latest download URLs from GitHub
@@ -1625,27 +1683,17 @@
     if (platformForm) {
       platformForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const email = platformForm.email.value;
+        if (platformForm.dataset.busy === '1') return;
+        setBusy(platformForm, true, 'Saving…');
         try {
-          const res = await fetch(`${API_BASE}/api/subscribe`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email })
-          });
-          if (res.ok) {
-            platformMessage.textContent = "We'll notify you when new platforms launch!";
-            platformMessage.className = 'mt-2 text-sm text-green-600 dark:text-green-400';
-            platformForm.reset();
-          } else {
-            throw new Error('Failed');
-          }
-        } catch (e) {
-          platformMessage.textContent = "Thanks for your interest! We'll keep you updated.";
-          platformMessage.className = 'mt-2 text-sm text-green-600 dark:text-green-400';
+          await postForm(`${API_BASE}/api/subscribe`, { email: platformForm.email.value });
+          showStatus(platformMessage, "You're on the list — we'll email you when Windows ships.", 'ok', 'mt-2 text-sm');
           platformForm.reset();
+        } catch (err) {
+          showStatus(platformMessage, err.message, 'error', 'mt-2 text-sm');
+        } finally {
+          setBusy(platformForm, false);
         }
-        platformMessage.classList.remove('hidden');
-        setTimeout(() => platformMessage.classList.add('hidden'), 5000);
       });
     }
 
@@ -1725,9 +1773,9 @@
         el.setAttribute('tabindex', '0');
         el.setAttribute('role', 'button');
         el.setAttribute('aria-label', 'Expand screenshot: ' + (el.alt || ''));
-        el.addEventListener('click', function() { open(el.src, el.alt); });
+        el.addEventListener('click', function() { open(el.currentSrc || el.src, el.alt); });
         el.addEventListener('keydown', function(e) {
-          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(el.src, el.alt); }
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(el.currentSrc || el.src, el.alt); }
         });
       });
 

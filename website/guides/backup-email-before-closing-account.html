@@ -98,30 +98,10 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            primary: {
-              50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc',
-              400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca',
-              800: '#3730a3', 900: '#312e81',
-            }
-          }
-        }
-      }
-    }
-  </script>
-
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=1">
 
   <style>
-    body { font-family: 'Inter', system-ui, sans-serif; }
     .gradient-text {
       background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
       -webkit-background-clip: text;
@@ -172,7 +152,7 @@
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16">
         <a href="/" class="flex items-center gap-3">
-          <img src="/icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
+          <img src="/icon-128.webp" alt="MailVault logo" class="w-8 h-8 rounded-lg" width="32" height="32">
           <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
         </a>
 
@@ -232,7 +212,6 @@
 
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
 
-
           <p>
             Closing an email account is one of the few truly irreversible actions on the internet. Once a provider deletes an account &mdash; whether you close it yourself, a company shuts down a work email after you leave, or a domain lapses and takes its mailboxes with it &mdash; the emails are usually gone permanently, sometimes within days. There's no undo button, and support tickets asking to restore a closed account almost never work. If you're even considering closing an account, back it up first. Here's how to do it properly.
           </p>
@@ -272,7 +251,6 @@
           <p>
             MailVault is a free, open-source desktop app for macOS and Linux built for exactly this situation. Connect the account you're about to close over IMAP (OAuth for Gmail and Microsoft accounts, standard connection for everything else), select every folder including Sent and Drafts, and archive the whole thing as individual <code>.eml</code> files on your disk. Because each email is its own file in a standard, portable format, you can open, search, or move the archive freely afterward &mdash; no proprietary format, no vendor lock-in. Manual archiving like this is free and unlimited. If you're backing up several accounts on a recurring basis (say, every employee who leaves a company), scheduled automatic backups are a $4/month premium feature.
           </p>
-
 
           <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Don't close an account without a real backup first</p>
@@ -324,7 +302,7 @@
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex flex-col md:flex-row items-center justify-between gap-4">
         <div class="flex items-center gap-2">
-          <img src="/icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
+          <img src="/icon-128.webp" alt="MailVault logo" class="w-8 h-8 rounded-lg" width="32" height="32">
           <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
         </div>
 

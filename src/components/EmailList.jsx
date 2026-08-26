@@ -1,5 +1,7 @@
-import React, { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import React, { memo, useState, useCallback, useRef, useEffect, useMemo, useId } from 'react';
 import ReactDOM from 'react-dom';
+import { useDialogA11y } from '../hooks/useDialogA11y';
+import { displayText } from '../utils/bidiText';
 import { useMailStore } from '../stores/mailStore';
 import { useAccountStore } from '../stores/accountStore';
 import { useMessageListStore } from '../stores/messageListStore';
@@ -193,6 +195,7 @@ function EmailListComponent() {
   const layoutMode = useSettingsStore(s => s.layoutMode);
   const isCompact = emailListStyle === 'compact';
   const ROW_HEIGHT = isCompact ? ROW_HEIGHT_COMPACT : ROW_HEIGHT_DEFAULT;
+  const rowStyle = useMemo(() => ({ height: ROW_HEIGHT }), [ROW_HEIGHT]);
   const RowComponent = isCompact ? CompactEmailRow : EmailRow;
 
   const [showSearch, setShowSearch] = useState(false);
@@ -245,6 +248,16 @@ function EmailListComponent() {
   const [savingRowIds, setSavingRowIds] = useState(() => new Set());
   const startSaving = useCallback((id) => setSavingRowIds(prev => { const next = new Set(prev); next.add(id); return next; }), []);
   const stopSaving = useCallback((id) => setSavingRowIds(prev => { const next = new Set(prev); next.delete(id); return next; }), []);
+
+  // Rows are React.memo'd, so every prop has to be referentially stable or the
+  // whole render window re-renders on any list state change. These four are the
+  // ones each row used to receive as a freshly-minted closure or object.
+  const openRowMenu = useCallback((id) => setActiveMenuRowId(id), []);
+  const closeRowMenu = useCallback(() => setActiveMenuRowId(null), []);
+  const requestRowDelete = useCallback((executor, label) => {
+    setActiveMenuRowId(null);
+    setPendingDelete({ executor, label });
+  }, []);
   const scrollContainerRef = useRef(null);
 
   const expandedSenderRef = useRef(expandedSender);
@@ -1175,6 +1188,7 @@ function EmailListComponent() {
               if (item.type === 'thread') {
                 const ThreadRowComponent = isCompact ? CompactThreadRow : ThreadRow;
                 const anyChecked = item.thread.emails.some(e => selectedEmailIds.has(selKey(e)));
+                const rowId = `thread-${item.thread.threadId}`;
                 return (
                   <div
                     key={vr.key}
@@ -1188,21 +1202,22 @@ function EmailListComponent() {
                     }}
                   >
                     <ThreadRowComponent
-                      key={`thread-${item.thread.threadId}`}
+                      key={rowId}
+                      rowId={rowId}
                       thread={item.thread}
                       isSelected={item.thread.emails.some(e => selectedEmailId === selKey(e))}
                       onSelectThread={selectThread}
                       onToggleSelection={toggleEmailSelection}
                       anyChecked={anyChecked}
-                      style={{ height: ROW_HEIGHT }}
+                      style={rowStyle}
                       actions={rowActions}
-                      menuOpen={activeMenuRowId === `thread-${item.thread.threadId}`}
-                      onOpenMenu={() => { setActiveMenuRowId(`thread-${item.thread.threadId}`); }}
-                      onCloseMenu={() => { setActiveMenuRowId(null); }}
-                      onRequestDelete={(executor, label) => { setActiveMenuRowId(null); setPendingDelete({ executor, label }); }}
-                      isSaving={savingRowIds.has(`thread-${item.thread.threadId}`)}
-                      onStartSaving={() => startSaving(`thread-${item.thread.threadId}`)}
-                      onStopSaving={() => stopSaving(`thread-${item.thread.threadId}`)}
+                      menuOpen={activeMenuRowId === rowId}
+                      onOpenMenu={openRowMenu}
+                      onCloseMenu={closeRowMenu}
+                      onRequestDelete={requestRowDelete}
+                      isSaving={savingRowIds.has(rowId)}
+                      onStartSaving={startSaving}
+                      onStopSaving={stopSaving}
                     />
                   </div>
                 );
@@ -1222,22 +1237,23 @@ function EmailListComponent() {
                 >
                   <RowComponent
                     key={item.email.uid}
+                    rowId={item.email.uid}
                     email={item.email}
                     isSelected={selectedEmailId === selKey(item.email)}
                     isChecked={selectedEmailIds.has(selKey(item.email))}
                     onSelect={selectEmail}
                     onToggleSelection={toggleEmailSelection}
-                    style={{ height: ROW_HEIGHT }}
+                    style={rowStyle}
                     actions={rowActions}
                     unifiedInbox={unifiedInbox}
                     accountColors={accountColors}
                     menuOpen={activeMenuRowId === item.email.uid}
-                    onOpenMenu={() => { setActiveMenuRowId(item.email.uid); }}
-                    onCloseMenu={() => { setActiveMenuRowId(null); }}
-                    onRequestDelete={(executor, label) => { setActiveMenuRowId(null); setPendingDelete({ executor, label }); }}
+                    onOpenMenu={openRowMenu}
+                    onCloseMenu={closeRowMenu}
+                    onRequestDelete={requestRowDelete}
                     isSaving={savingRowIds.has(item.email.uid)}
-                    onStartSaving={() => startSaving(item.email.uid)}
-                    onStopSaving={() => stopSaving(item.email.uid)}
+                    onStartSaving={startSaving}
+                    onStopSaving={stopSaving}
                   />
                 </div>
               );
@@ -1289,6 +1305,13 @@ function EmailListComponent() {
 }
 
 function RowDeleteConfirmModal({ pending, busy, onCancel, onConfirm }) {
+  const titleId = useId();
+  const descId = useId();
+  // Escape closes this rather than reaching App's global shortcut, which would
+  // clear the very selection the dialog is asking about. Cancel takes first
+  // focus: nothing destructive is ever one stray Return away.
+  const panelRef = useDialogA11y(Boolean(pending), busy ? undefined : onCancel);
+
   return ReactDOM.createPortal(
     <AnimatePresence>
       {pending && (
@@ -1298,9 +1321,14 @@ function RowDeleteConfirmModal({ pending, busy, onCancel, onConfirm }) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 backdrop-blur-sm"
-          onClick={onCancel}
+          onClick={busy ? undefined : onCancel}
         >
           <motion.div
+            ref={panelRef}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            aria-describedby={descId}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
@@ -1308,16 +1336,17 @@ function RowDeleteConfirmModal({ pending, busy, onCancel, onConfirm }) {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start gap-3 mb-4">
-              <AlertTriangle size={20} className="text-mail-danger flex-shrink-0 mt-0.5" />
+              <AlertTriangle size={20} aria-hidden="true" className="text-mail-danger flex-shrink-0 mt-0.5" />
               <div>
-                <h3 className="text-base font-semibold text-mail-text mb-1">Delete from server?</h3>
-                <p className="text-sm text-mail-text-muted">{pending.label}</p>
+                <h3 id={titleId} className="text-base font-semibold text-mail-text mb-1">Delete from server?</h3>
+                <p id={descId} className="text-sm text-mail-text-muted" dir="auto">{displayText(pending.label)}</p>
               </div>
             </div>
             <div className="flex justify-end gap-2">
               <button
                 onClick={onCancel}
                 disabled={busy}
+                data-autofocus
                 className="px-3 py-1.5 text-sm text-mail-text-muted hover:bg-mail-border rounded-lg transition-colors disabled:opacity-50"
               >
                 Cancel

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { displayText } from '../../utils/bidiText';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatDateTime } from '../../utils/dateFormat';
@@ -183,8 +184,8 @@ export function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, l
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className="font-semibold text-mail-text">
-              {getSenderName(email)}
+            <span dir="auto" className="font-semibold text-mail-text">
+              {displayText(getSenderName(email))}
             </span>
             <SenderVerificationBadge email={email} />
             {email.from?.name && (

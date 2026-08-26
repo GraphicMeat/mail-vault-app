@@ -98,30 +98,10 @@
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            primary: {
-              50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc',
-              400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca',
-              800: '#3730a3', 900: '#312e81',
-            }
-          }
-        }
-      }
-    }
-  </script>
-
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=1">
 
   <style>
-    body { font-family: 'Inter', system-ui, sans-serif; }
     .gradient-text {
       background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
       -webkit-background-clip: text;
@@ -172,7 +152,7 @@
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16">
         <a href="/" class="flex items-center gap-3">
-          <img src="/icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
+          <img src="/icon-128.webp" alt="MailVault logo" class="w-8 h-8 rounded-lg" width="32" height="32">
           <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
         </a>
 
@@ -232,7 +212,6 @@
 
         <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
 
-
           <p>
             Apple doesn't provide a one-click "export my mail" button for iCloud Mail, which surprises a lot of people looking to back up an @icloud.com, @me.com, or @mac.com account. The good news is iCloud Mail fully supports standard IMAP access, which means any IMAP-capable mail client or backup tool can download your mail &mdash; you just need to set it up correctly, including one Apple-specific step: an app-specific password.
           </p>
@@ -279,7 +258,6 @@
           <p>
             Manual archiving is free and unlimited. If you want your iCloud Mail backup kept up to date automatically on a schedule, that's part of MailVault Premium ($4/month or $25/year; 14-day free trial on yearly).
           </p>
-
 
           <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
             <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Get iCloud Mail onto your own disk</p>
@@ -331,7 +309,7 @@
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex flex-col md:flex-row items-center justify-between gap-4">
         <div class="flex items-center gap-2">
-          <img src="/icon-128.png" alt="MailVault logo" class="w-8 h-8 rounded-lg">
+          <img src="/icon-128.webp" alt="MailVault logo" class="w-8 h-8 rounded-lg" width="32" height="32">
           <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
         </div>
 
