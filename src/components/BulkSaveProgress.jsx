@@ -98,7 +98,7 @@ function BulkSaveProgressInner({ progress, onDismiss, onCancel, mode = 'archive'
               )
             ) : (
               <div className="w-6 h-6 bg-mail-accent/20 rounded-full flex items-center justify-center">
-                <Icon size={14} className="text-mail-accent" />
+                <Icon size={14} className="text-mail-accent-text" />
               </div>
             )}
             <span className="font-medium text-mail-text text-sm">
@@ -134,7 +134,7 @@ function BulkSaveProgressInner({ progress, onDismiss, onCancel, mode = 'archive'
             <span className="text-sm text-mail-text-muted">
               {completed} of {total} emails
             </span>
-            <span className="text-sm font-medium text-mail-accent">
+            <span className="text-sm font-medium text-mail-accent-text">
               {percentage}%
             </span>
           </div>

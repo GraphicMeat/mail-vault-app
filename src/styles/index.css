@@ -1,3 +1,28 @@
+/* ============================================================================
+   DIRECTION CONTRACT — MailVault client colour system, "Custody Field"
+
+   THESIS: Colour here is a claim about where your mail lives. It refuses the
+   one-accent monochrome that left custody to a 12px glyph, and it refuses
+   dashboard colour-as-decoration.
+   OWN-WORLD: Night-desk ink (indigo-cast near-black, three steps) carrying
+   four named roles — Vault Emerald, Server Blue, Only-Copy Gold, Desk Lamp
+   Indigo. Every role owns a solid tint surface, never stacked alpha. (The
+   per-account identity wash is the one derived fill: its colour is chosen by
+   the user, so no token can precompute it.)
+   STORY: Someone scanning 17,000 rows reads custody before they read a word,
+   and deletes from a server because the colour already said the vault has it.
+   FIRST VIEWPORT: Three panes on ink. Account colour spines the rail, the list
+   header carries a vault/server meter over the loaded window (the store holds
+   no per-folder archived counts, so a folder-level meter would be a number the
+   app cannot compute), every message row carries a tinted custody chip, an
+   only-copy row is washed gold end to end, and the reading pane opens under a
+   custody band.
+   FORM: Colour-strategy replacement inside the committed Night Desk world —
+   Full palette, four named roles. No world tournament, no seed.
+   FINISH: unreviewed and undocumented is unfinished; this build ends with the
+   finish review, the verdict, and DESIGN.md.
+   ========================================================================= */
+
 @import './fonts.css';
 
 @tailwind base;
@@ -15,42 +40,108 @@
   contain: content;
 }
 
-/* Theme CSS Variables */
+/* Theme CSS Variables — see DIRECTION CONTRACT above.
+   Every value below is contrast-checked against the surface it lands on:
+   text and muted text >= 4.5:1, glyphs and control borders >= 3:1. Tints are
+   precomputed solids, not alpha over an unknown ground, so a banner's text
+   contrast is a fixed number rather than whatever happens to sit behind it.
+
+   Tints are also checked against `surface-hover`, which is the bar that
+   matters for a custody chip sitting in a list row: at their first values they
+   measured 1.06-1.17:1 against the row surface while plain hover measured
+   1.10:1, so a claim about where your mail lives was indistinguishable from
+   "the mouse is here". Every tint now clears hover by a visible margin. */
 :root,
 [data-theme="dark"] {
   color-scheme: dark;
-  --mail-bg: #0a0a0f;
-  --mail-surface: #12121a;
-  --mail-surface-hover: #1a1a25;
-  --mail-border: #2a2a3a;
-  --mail-accent: #6366f1;
+
+  /* Ink — the desk, three steps and two hairlines */
+  --mail-bg: #0a0a12;
+  --mail-surface: #15151f;
+  --mail-surface-hover: #1e1e2c;
+  --mail-border: #2e2e45;          /* structural hairline between panes */
+  --mail-border-strong: #5f5f8a;   /* control boundary, 3.01:1 on surface */
+  --mail-input-bg: #0a0a12;
+
+  /* Text */
+  --mail-text: #e8e8ef;            /* 14.86:1 on surface */
+  --mail-text-muted: #8b8ba3;      /* 5.45:1 on surface (was 3.86, failed AA) */
+
+  /* Desk Lamp Indigo — the live thing */
+  --mail-accent: #6366f1;          /* identity: rings, borders, tints, edges */
   --mail-accent-hover: #818cf8;
-  --mail-text: #e4e4e7;
-  --mail-text-muted: #71717a;
+  --mail-accent-text: #a5b4fc;     /* indigo as text/icon, 9.09:1 */
+  --mail-accent-fill: #4f46e5;     /* filled control under white, 6.29:1 */
+  --mail-accent-tint: #262759;
+
+  /* Custody — a closed vocabulary. Emerald/blue/gold mean vault/server/
+     only-copy and are never spent on decoration or generic status. */
+  --mail-local: #10b981;           /* Vault Emerald — on your disk */
+  --mail-local-tint: #0c3f33;
+  --mail-server: #3b82f6;          /* Server Blue — on the server */
+  --mail-server-tint: #1b3360;
+  --mail-only-copy: #fbbf24;       /* Only-Copy Gold — the server dropped it */
+  --mail-only-copy-tint: #4d3d17;
+  /* The only-copy row wash. Three values because a row has three states and
+     an alarm that vanishes under the cursor is not an alarm: at its first
+     value this measured 1.04:1 against hover, so the gold disappeared exactly
+     while the user was deciding whether to delete. */
+  --mail-only-copy-row: #443516;         /* 1.52:1 on surface, 1.38:1 on hover */
+  --mail-only-copy-row-unread: #574418;  /* unread still outranks read */
+  --mail-only-copy-row-hover: #614b18;
+  /* Secondary text on ANY tint. Grey muted falls to 3.17:1 on the raised
+     tints, and grey on a coloured surface is wrong regardless. Solid, not
+     alpha — stacked alpha is what the tint tokens exist to avoid. The worst
+     case is the gold HOVER row, not any of the flat tints; check it there. */
+  --mail-text-on-tint: #c9c9d8;
+
+  /* Status — never custody */
   --mail-success: #22c55e;
-  --mail-warning: #f59e0b;
-  --mail-danger: #ef4444;
-  --mail-local: #10b981;
-  --mail-server: #3b82f6;
-  --mail-input-bg: #0a0a0f;
+  --mail-success-tint: #113e27;
+  --mail-warning: #fb923c;         /* caution: degraded, limited, unverified */
+  --mail-warning-tint: #4d301e;
+  --mail-danger: #f87171;          /* destructive as text/icon, 6.55:1 */
+  --mail-danger-fill: #dc2626;     /* destructive fill under white, 4.83:1 */
+  --mail-danger-tint: #4d272d;
 }
 
 [data-theme="light"] {
   color-scheme: light;
-  --mail-bg: #f8fafc;
+
+  --mail-bg: #f6f7fb;
   --mail-surface: #ffffff;
-  --mail-surface-hover: #f1f5f9;
-  --mail-border: #e2e8f0;
-  --mail-accent: #6366f1;
-  --mail-accent-hover: #4f46e5;
-  --mail-text: #1e293b;
-  --mail-text-muted: #64748b;
-  --mail-success: #16a34a;
-  --mail-warning: #d97706;
-  --mail-danger: #dc2626;
-  --mail-local: #059669;
-  --mail-server: #2563eb;
+  --mail-surface-hover: #eceef6;
+  --mail-border: #dfe3ee;
+  --mail-border-strong: #7f88a6;   /* 3.51:1 on white */
   --mail-input-bg: #ffffff;
+
+  --mail-text: #1a1a2e;
+  --mail-text-muted: #5c5c73;      /* 6.49:1 on white */
+
+  --mail-accent: #4f46e5;
+  --mail-accent-hover: #4338ca;
+  --mail-accent-text: #4338ca;     /* 7.90:1 on white */
+  --mail-accent-fill: #4f46e5;
+  --mail-accent-tint: #d5d3f9;
+
+  --mail-local: #065f46;           /* 7.68:1 on white, 5.58:1 on its own tint */
+  --mail-local-tint: #c8e1da;
+  --mail-server: #1d4ed8;          /* 6.70:1 on white */
+  --mail-server-tint: #cdd8f6;
+  --mail-only-copy: #854d0e;       /* 6.51:1 on white */
+  --mail-only-copy-tint: #e4d8ca;
+  --mail-only-copy-row: #e4d8ca;
+  --mail-only-copy-row-unread: #dacab7;
+  --mail-only-copy-row-hover: #d3bfa8;
+  --mail-text-on-tint: #4a4a63;   /* 4.81:1 worst case — the gold hover row */
+
+  --mail-success: #166534;
+  --mail-success-tint: #ccddd2;
+  --mail-warning: #9a3412;   /* 5.27:1 on its own tint */
+  --mail-warning-tint: #f2d5ca;
+  --mail-danger: #991b1b;    /* 5.67:1 on its own tint */
+  --mail-danger-fill: #dc2626;
+  --mail-danger-tint: #f0cdcd;
 }
 
 /* Non-macOS: thin styled scrollbars */
@@ -125,6 +216,25 @@ body {
 .bg-mail-local { background-color: var(--mail-local); }
 .bg-mail-server { background-color: var(--mail-server); }
 .bg-mail-input { background-color: var(--mail-input-bg); }
+.bg-mail-accent-fill { background-color: var(--mail-accent-fill); }
+.bg-mail-danger-fill { background-color: var(--mail-danger-fill); }
+.bg-mail-only-copy { background-color: var(--mail-only-copy); }
+
+/* Tint surfaces — solid, so text contrast on them is a fixed number. */
+.bg-mail-accent-tint { background-color: var(--mail-accent-tint); }
+.bg-mail-local-tint { background-color: var(--mail-local-tint); }
+.bg-mail-server-tint { background-color: var(--mail-server-tint); }
+.bg-mail-only-copy-tint { background-color: var(--mail-only-copy-tint); }
+.text-mail-text-on-tint { color: var(--mail-text-on-tint); }
+
+/* Only-copy rows own their whole background, including hover and unread, so
+   one property can carry both meanings without either winning silently. */
+.row-only-copy { background-color: var(--mail-only-copy-row); }
+.row-only-copy.row-unread { background-color: var(--mail-only-copy-row-unread); }
+.row-only-copy:hover { background-color: var(--mail-only-copy-row-hover); }
+.bg-mail-success-tint { background-color: var(--mail-success-tint); }
+.bg-mail-warning-tint { background-color: var(--mail-warning-tint); }
+.bg-mail-danger-tint { background-color: var(--mail-danger-tint); }
 
 .text-mail-text { color: var(--mail-text); }
 .text-mail-text-muted { color: var(--mail-text-muted); }
@@ -135,11 +245,18 @@ body {
 .text-mail-danger { color: var(--mail-danger); }
 .text-mail-local { color: var(--mail-local); }
 .text-mail-server { color: var(--mail-server); }
+.text-mail-only-copy { color: var(--mail-only-copy); }
+.text-mail-accent-text { color: var(--mail-accent-text); }
 
 .border-mail-border { border-color: var(--mail-border); }
 .border-mail-accent { border-color: var(--mail-accent); }
 .border-mail-success { border-color: var(--mail-success); }
 .border-mail-danger { border-color: var(--mail-danger); }
+.border-mail-strong { border-color: var(--mail-border-strong); }
+.border-mail-local { border-color: var(--mail-local); }
+.border-mail-server { border-color: var(--mail-server); }
+.border-mail-only-copy { border-color: var(--mail-only-copy); }
+.border-mail-warning { border-color: var(--mail-warning); }
 .divide-mail-border > * + * { border-color: var(--mail-border); }
 
 /* Hover states */
@@ -148,6 +265,8 @@ body {
 .hover\:bg-mail-border:hover { background-color: var(--mail-border); }
 .hover\:text-mail-text:hover { color: var(--mail-text); }
 .hover\:text-mail-accent:hover { color: var(--mail-accent); }
+.hover\:text-mail-accent-text:hover { color: var(--mail-accent-text); }
+.hover\:bg-mail-accent-hover\:hover { background-color: var(--mail-accent-hover); }
 .hover\:border-mail-accent:hover { border-color: var(--mail-accent); }
 
 /* Focus states */
@@ -161,7 +280,7 @@ body {
 }
 
 .email-content a {
-  color: var(--mail-accent);
+  color: var(--mail-accent-text);
   text-decoration: underline;
 }
 
@@ -180,19 +299,19 @@ body {
 /* Chat bubble styles */
 :root,
 [data-theme="dark"] {
-  --chat-sent-bg: #4f46e5;
+  --chat-sent-bg: #4338ca;
   --chat-sent-text: #ffffff;
-  --chat-received-bg: #1e1e2e;
-  --chat-received-text: #e4e4e7;
-  --chat-received-border: #2a2a3a;
+  --chat-received-bg: #1e1e2c;
+  --chat-received-text: #e8e8ef;
+  --chat-received-border: #2e2e45;
 }
 
 [data-theme="light"] {
   --chat-sent-bg: #4338ca;
   --chat-sent-text: #ffffff;
   --chat-received-bg: #ffffff;
-  --chat-received-text: #1e293b;
-  --chat-received-border: #e2e8f0;
+  --chat-received-text: #1a1a2e;
+  --chat-received-border: #dfe3ee;
 }
 
 .chat-bubble-sent {
@@ -206,12 +325,49 @@ body {
   border: 1px solid var(--chat-received-border);
 }
 
+/* Custody chip — the tinted field a message-state glyph sits in. Fixed 20px
+   box so a state change can never alter a virtualized row's height. */
+.custody-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease;
+}
+.custody-chip[data-tone="local"] { background-color: var(--mail-local-tint); }
+.custody-chip[data-tone="server"] { background-color: var(--mail-server-tint); }
+.custody-chip[data-tone="only-copy"] { background-color: var(--mail-only-copy-tint); }
+
+/* Custody meter — the proportion of a folder that is already in the vault.
+   Two solid fields, no gradient, no label of its own; the folder row's count
+   is the text cue that keeps this from being colour-only information. */
+.custody-meter {
+  display: block;
+  height: 3px;
+  width: 100%;
+  border-radius: 9999px;
+  overflow: hidden;
+  /* The track is the server side of the claim, so it has to be *visible* —
+     at `--mail-server-tint` it disappeared into the ground and the emerald
+     fill read as a floating line rather than a proportion. */
+  background-color: color-mix(in srgb, var(--mail-server) 45%, var(--mail-surface));
+}
+.custody-meter > span {
+  display: block;
+  height: 100%;
+  background-color: var(--mail-local);
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 /* Custom checkbox */
 .custom-checkbox {
   appearance: none;
   width: 18px;
   height: 18px;
-  border: 2px solid var(--mail-border);
+  border: 2px solid var(--mail-border-strong);
   border-radius: 4px;
   background: transparent;
   cursor: pointer;
@@ -245,7 +401,7 @@ body {
   position: relative;
   width: 44px;
   height: 24px;
-  background-color: var(--mail-border);
+  background-color: var(--mail-border-strong);
   border-radius: 12px;
   cursor: pointer;
   transition: background-color 0.2s ease;
@@ -274,7 +430,7 @@ body {
 
 /* Glass effect */
 .glass {
-  background: rgba(18, 18, 26, 0.8);
+  background: rgba(21, 21, 31, 0.86);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }

@@ -116,7 +116,7 @@ function PremiumGate({ onUpgrade }) {
           <p className="text-xs text-mail-text-muted mt-3">{priceBlurb}</p>
         )}
         {!IS_APPSTORE_BUILD && onUpgrade && (
-          <button onClick={onUpgrade} className="mt-4 px-4 py-1.5 text-xs font-semibold bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full hover:opacity-90 transition-opacity">
+          <button onClick={onUpgrade} className="mt-4 px-4 py-1.5 text-xs font-semibold bg-mail-accent-fill text-white rounded-full hover:bg-mail-accent-hover transition-colors">
             Upgrade
           </button>
         )}
@@ -140,7 +140,7 @@ function SnapshotList({ snapshots, loading, creating, error, confirmDelete, onOp
           </div>
           <button
             onClick={onCreate} disabled={creating}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-lg bg-mail-accent text-white hover:bg-mail-accent/90 disabled:opacity-50 transition-colors"
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-lg bg-mail-accent-fill text-white hover:bg-mail-accent/90 disabled:opacity-50 transition-colors"
           >
             {creating ? <Loader size={14} className="animate-spin" /> : <Download size={14} />}
             {creating ? 'Creating...' : 'Take Snapshot'}
@@ -149,7 +149,7 @@ function SnapshotList({ snapshots, loading, creating, error, confirmDelete, onOp
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-xs">
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-mail-danger-tint border border-mail-danger/20 text-mail-danger text-xs">
           <AlertCircle size={14} className="shrink-0" />{error}
         </div>
       )}
@@ -174,7 +174,7 @@ function SnapshotList({ snapshots, loading, creating, error, confirmDelete, onOp
             >
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-10 h-10 rounded-full bg-mail-accent/10 flex items-center justify-center shrink-0">
-                  <Clock size={18} className="text-mail-accent" />
+                  <Clock size={18} className="text-mail-accent-text" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-mail-text truncate">{formatSnapshotDate(snap.timestamp)}</p>
@@ -186,11 +186,11 @@ function SnapshotList({ snapshots, loading, creating, error, confirmDelete, onOp
               <div className="opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
                 {confirmDelete === snap.filename ? (
                   <div className="flex items-center gap-1">
-                    <button onClick={() => onDelete(snap.filename)} className="px-2.5 py-1 text-xs font-medium text-red-500 hover:bg-red-500/10 rounded-lg">Delete</button>
+                    <button onClick={() => onDelete(snap.filename)} className="px-2.5 py-1 text-xs font-medium text-mail-danger hover:bg-mail-danger/20 rounded-lg">Delete</button>
                     <button onClick={() => onConfirmDelete(null)} className="px-2.5 py-1 text-xs text-mail-text-muted hover:bg-mail-surface-hover rounded-lg">Cancel</button>
                   </div>
                 ) : (
-                  <button onClick={() => onConfirmDelete(snap.filename)} className="p-1.5 rounded-lg hover:bg-red-500/10 text-mail-text-muted hover:text-red-500 transition-colors">
+                  <button onClick={() => onConfirmDelete(snap.filename)} className="p-1.5 rounded-lg hover:bg-mail-danger/20 text-mail-text-muted hover:text-mail-danger transition-colors">
                     <Trash2 size={14} />
                   </button>
                 )}
@@ -255,7 +255,7 @@ function SnapshotBrowser({ accountId }) {
               onClick={() => selectMailbox(name)}
               className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors mb-0.5 ${
                 selectedMailbox === name
-                  ? 'bg-mail-accent/10 text-mail-accent'
+                  ? 'bg-mail-accent/10 text-mail-accent-text'
                   : 'text-mail-text-muted hover:bg-mail-surface-hover hover:text-mail-text'
               }`}
             >
@@ -345,8 +345,8 @@ function SnapshotViewer({ email, loading, accountId, mailbox }) {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Read-only banner */}
-      <div className="px-6 py-1.5 bg-amber-500/10 border-b border-amber-500/20 shrink-0">
-        <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium text-center">Read-only snapshot view — no actions available</p>
+      <div className="px-6 py-1.5 bg-mail-warning-tint border-b border-mail-warning/20 shrink-0">
+        <p className="text-[11px] text-mail-warning font-medium text-center">Read-only snapshot view — no actions available</p>
       </div>
 
       {/* Email header */}

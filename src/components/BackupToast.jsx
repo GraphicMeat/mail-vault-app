@@ -23,10 +23,10 @@ export function BackupToast({ showSettings, onOpenBackup }) {
         onClick={onOpenBackup}
       >
         <div className="flex items-center gap-2">
-          <HardDrive size={14} className="text-mail-accent flex-shrink-0" />
+          <HardDrive size={14} className="text-mail-accent-text flex-shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1">
-              <Loader2 size={12} className="text-mail-accent animate-spin flex-shrink-0" />
+              <Loader2 size={12} className="text-mail-accent-text animate-spin flex-shrink-0" />
               <span className="text-xs font-semibold text-mail-text truncate">
                 Backing up {activeBackup.accountEmail}
               </span>

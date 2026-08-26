@@ -11,7 +11,7 @@ import { ReplyToAlertIcon } from './ReplyToAlertIcon';
 import { RowActionMenu } from './RowActionMenu';
 import { RowActionMenuItems } from './RowActionMenuItems';
 import { formatEmailDate } from '../utils/dateFormat';
-import { ConnectedStateIcon } from './email/MessageStateIcon';
+import { ConnectedStateIcon, describeMessageState } from './email/MessageStateIcon';
 import {
   RefreshCw,
   Paperclip,
@@ -36,6 +36,13 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
   };
 
   const isUnread = !email.flags?.includes('\\Seen');
+  // "Your only copy" is the loudest claim this UI can make, and a 20px chip is
+  // not a place to make it — the row itself carries the alarm. Routed through
+  // describeMessageState so the row ground, the chip and the viewer band can
+  // never disagree, and so the gold still requires proof of server absence.
+  // Background only: a virtualized row's height is a constant the list knows.
+  const serverKnown = useMailStore(s => s.serverUids.complete);
+  const isOnlyCopy = describeMessageState(email, { serverKnown }).tone === 'only-copy';
 
   return (
     <div
@@ -43,8 +50,8 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
       style={style}
       className={`virtual-row group relative flex items-center gap-3 px-4 border-b border-mail-border
                  cursor-pointer
-                 ${isSelected && !isChecked ? 'border-l-2 border-l-mail-accent pl-[14px]' : 'hover:bg-mail-surface-hover'}
-                 ${isUnread ? 'bg-mail-surface' : ''}`}
+                 ${isSelected && !isChecked ? 'border-l-2 border-l-mail-accent pl-[14px]' : isOnlyCopy ? '' : 'hover:bg-mail-surface-hover'}
+                 ${isOnlyCopy ? `row-only-copy ${isUnread ? 'row-unread' : ''}` : isUnread ? 'bg-mail-surface' : ''}`}
       onClick={() => onSelect(email.uid, email.source, email._mailbox)}
     >
       <div onClick={(e) => { e.stopPropagation(); onToggleSelection(email.uid, email._accountId); }}>
@@ -105,7 +112,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
             title="Archive"
           >
             {isSaving ? (
-              <RefreshCw size={14} className="animate-spin text-mail-accent" />
+              <RefreshCw size={14} className="animate-spin text-mail-accent-text" />
             ) : (
               <Archive size={14} className="text-mail-text-muted hover:text-mail-local" />
             )}
@@ -134,6 +141,13 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
   };
 
   const isUnread = !email.flags?.includes('\\Seen');
+  // "Your only copy" is the loudest claim this UI can make, and a 20px chip is
+  // not a place to make it — the row itself carries the alarm. Routed through
+  // describeMessageState so the row ground, the chip and the viewer band can
+  // never disagree, and so the gold still requires proof of server absence.
+  // Background only: a virtualized row's height is a constant the list knows.
+  const serverKnown = useMailStore(s => s.serverUids.complete);
+  const isOnlyCopy = describeMessageState(email, { serverKnown }).tone === 'only-copy';
 
   return (
     <div
@@ -141,8 +155,8 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
       style={style}
       className={`virtual-row group relative flex items-center gap-2 px-4 border-b border-mail-border
                  cursor-pointer
-                 ${isSelected && !isChecked ? 'border-l-2 border-l-mail-accent pl-[14px]' : 'hover:bg-mail-surface-hover'}
-                 ${isUnread ? 'bg-mail-surface' : ''}`}
+                 ${isSelected && !isChecked ? 'border-l-2 border-l-mail-accent pl-[14px]' : isOnlyCopy ? '' : 'hover:bg-mail-surface-hover'}
+                 ${isOnlyCopy ? `row-only-copy ${isUnread ? 'row-unread' : ''}` : isUnread ? 'bg-mail-surface' : ''}`}
       onClick={() => onSelect(email.uid, email.source, email._mailbox)}
     >
       <div onClick={(e) => { e.stopPropagation(); onToggleSelection(email.uid, email._accountId); }}>
@@ -150,7 +164,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
       </div>
 
       {/* Source icon */}
-      <div className="w-4 flex items-center justify-center flex-shrink-0">
+      <div className="w-5 flex items-center justify-center flex-shrink-0">
         <ConnectedStateIcon email={email} size={13} />
       </div>
 
@@ -193,7 +207,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
         {!email.isArchived && (
           <button onClick={handleSave} disabled={isSaving}
             className="p-1 hover:bg-mail-border rounded transition-colors" title="Archive">
-            {isSaving ? <RefreshCw size={13} className="animate-spin text-mail-accent" />
+            {isSaving ? <RefreshCw size={13} className="animate-spin text-mail-accent-text" />
               : <Archive size={13} className="text-mail-text-muted hover:text-mail-local" />}
           </button>
         )}

@@ -39,9 +39,9 @@ export function AuthDetailPopover({ email, onClose, anchorRect }) {
   }, [onClose]);
 
   const StatusDot = ({ result }) => {
-    if (result === 'pass' || result === 'bestguesspass') return <span className="inline-block w-2 h-2 rounded-full bg-green-500" />;
-    if (result === 'fail' || result === 'softfail') return <span className="inline-block w-2 h-2 rounded-full bg-red-500" />;
-    return <span className="inline-block w-2 h-2 rounded-full bg-gray-400" />;
+    if (result === 'pass' || result === 'bestguesspass') return <span className="inline-block w-2 h-2 rounded-full bg-mail-success" />;
+    if (result === 'fail' || result === 'softfail') return <span className="inline-block w-2 h-2 rounded-full bg-mail-danger" />;
+    return <span className="inline-block w-2 h-2 rounded-full bg-mail-text-muted" />;
   };
 
   const senderIssues = verification.issues?.filter(i => i.level === 'danger' || i.level === 'warning') || [];
@@ -88,8 +88,8 @@ export function AuthDetailPopover({ email, onClose, anchorRect }) {
         <div className="space-y-1.5 mb-2 border-t border-mail-border pt-2">
           {senderIssues.map((issue, i) => (
             <div key={i} className="flex items-start gap-2 text-xs">
-              <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 mt-1 ${issue.level === 'danger' ? 'bg-red-500' : 'bg-orange-500'}`} />
-              <span className={issue.level === 'danger' ? 'text-red-500' : 'text-orange-500'}>{issue.text}</span>
+              <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 mt-1 ${issue.level === 'danger' ? 'bg-mail-danger' : 'bg-mail-warning'}`} />
+              <span className={issue.level === 'danger' ? 'text-mail-danger' : 'text-mail-warning'}>{issue.text}</span>
             </div>
           ))}
         </div>
@@ -116,7 +116,7 @@ export function AuthDetailPopover({ email, onClose, anchorRect }) {
           </div>
           {replyToAddr && (
             <div className="flex items-center gap-2 text-xs border-t border-mail-border pt-1.5 mt-1.5">
-              <span className={`inline-block w-2 h-2 rounded-full ${replyToMatches ? 'bg-green-500' : 'bg-orange-500'}`} />
+              <span className={`inline-block w-2 h-2 rounded-full ${replyToMatches ? 'bg-mail-success' : 'bg-mail-warning'}`} />
               <span className="text-mail-text-muted">Reply-To</span>
               <span className="text-mail-text">{replyToMatches ? 'matches sender' : replyToAddr}</span>
             </div>
@@ -144,7 +144,7 @@ export function SenderVerificationBadge({ email, size = 14 }) {
 
   if (status === 'none') return null;
 
-  const colorClass = status === 'verified' ? 'text-green-500' : status === 'warning' ? 'text-orange-500' : 'text-red-500';
+  const colorClass = status === 'verified' ? 'text-mail-success' : status === 'warning' ? 'text-mail-warning' : 'text-mail-danger';
   const Icon = status === 'verified' ? ShieldCheck : status === 'warning' ? AlertTriangle : ShieldAlert;
 
   return (
@@ -196,7 +196,7 @@ export function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, l
             <button
               data-testid="sender-insights-toggle"
               onClick={(e) => { e.stopPropagation(); onToggleInsights?.(); }}
-              className={`p-0.5 rounded transition-colors flex-shrink-0 ${showInsights ? 'text-mail-accent' : 'text-mail-text-muted hover:text-mail-text'}`}
+              className={`p-0.5 rounded transition-colors flex-shrink-0 ${showInsights ? 'text-mail-accent-text' : 'text-mail-text-muted hover:text-mail-text'}`}
               title="Sender insights"
             >
               <Info size={14} />
@@ -230,7 +230,7 @@ export function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, l
                   disabled={loadingRaw}
                   className={`mt-2 flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors
                              ${showRaw
-                               ? 'bg-mail-accent text-white'
+                               ? 'bg-mail-accent-fill text-white'
                                : 'bg-mail-surface hover:bg-mail-surface-hover text-mail-text-muted'}
                              disabled:opacity-50`}
                 >

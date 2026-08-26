@@ -181,7 +181,7 @@ export function UpdateModal({ updateInfo, onClose }) {
           <div className="flex items-center justify-between px-5 py-4 border-b border-mail-border">
             <div>
               <h2 className="text-lg font-semibold text-mail-text flex items-center gap-2">
-                <Download size={20} className="text-mail-accent" />
+                <Download size={20} className="text-mail-accent-text" />
                 MailVault v{newVersion} Available
               </h2>
               <p className="text-xs text-mail-text-muted mt-0.5">
@@ -227,7 +227,7 @@ export function UpdateModal({ updateInfo, onClose }) {
                 <button
                   onClick={handleUpdateNow}
                   className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium text-white
-                             bg-mail-accent hover:bg-mail-accent-hover rounded-lg transition-colors"
+                             bg-mail-accent-fill hover:bg-mail-accent-hover rounded-lg transition-colors"
                 >
                   <Download size={14} />
                   Update Now
@@ -239,7 +239,7 @@ export function UpdateModal({ updateInfo, onClose }) {
           {/* Downloading state */}
           {state === 'downloading' && (
             <div className="px-5 py-8 flex flex-col items-center gap-3">
-              <Download size={24} className="text-mail-accent" />
+              <Download size={24} className="text-mail-accent-text" />
               <p className="text-sm text-mail-text">Downloading v{newVersion}...</p>
               <div className="w-full max-w-xs">
                 <div className="h-2 bg-mail-border rounded-full overflow-hidden">
@@ -258,7 +258,7 @@ export function UpdateModal({ updateInfo, onClose }) {
           {/* Installing state */}
           {state === 'installing' && (
             <div className="px-5 py-8 flex flex-col items-center gap-3">
-              <RefreshCw size={24} className="text-mail-accent animate-spin" />
+              <RefreshCw size={24} className="text-mail-accent-text animate-spin" />
               <p className="text-sm text-mail-text">Installing update...</p>
               <p className="text-xs text-mail-text-muted">The app will restart automatically</p>
             </div>
@@ -267,7 +267,7 @@ export function UpdateModal({ updateInfo, onClose }) {
           {/* Error state */}
           {state === 'error' && (
             <div className="px-5 py-5">
-              <div className="flex items-start gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-lg mb-4">
+              <div className="flex items-start gap-3 p-4 bg-mail-danger-tint border border-mail-danger/20 rounded-lg mb-4">
                 <AlertCircle size={20} className="text-mail-danger flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-sm font-medium text-mail-text">Failed to install update</p>
@@ -284,7 +284,7 @@ export function UpdateModal({ updateInfo, onClose }) {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium text-white
-                             bg-mail-accent hover:bg-mail-accent-hover rounded-lg transition-colors"
+                             bg-mail-accent-fill hover:bg-mail-accent-hover rounded-lg transition-colors"
                 >
                   <Download size={14} />
                   Download v{newVersion}

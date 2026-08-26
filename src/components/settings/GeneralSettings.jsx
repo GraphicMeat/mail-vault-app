@@ -23,7 +23,7 @@ export function GeneralSettings({ accounts }) {
             onClick={() => setGeneralSubTab(sub.id)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px
                        ${generalSubTab === sub.id
-                         ? 'border-mail-accent text-mail-accent'
+                         ? 'border-mail-accent text-mail-accent-text'
                          : 'border-transparent text-mail-text-muted hover:text-mail-text hover:border-mail-border'}`}
           >
             {sub.label}

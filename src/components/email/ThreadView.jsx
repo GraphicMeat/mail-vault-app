@@ -214,7 +214,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
                 <>
                   <button
                     onClick={() => setSigExpanded(prev => !prev)}
-                    className="block mt-2 text-xs text-mail-text-muted hover:text-mail-accent cursor-pointer select-none"
+                    className="block mt-2 text-xs text-mail-text-muted hover:text-mail-accent-text cursor-pointer select-none"
                   >
                     {sigExpanded ? '\u25BE Hide signature' : '\u2014 Show signature'}
                   </button>
@@ -230,7 +230,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
             <>
               <button
                 onClick={() => setQuotesExpanded(prev => !prev)}
-                className="block mt-2 text-xs text-mail-text-muted hover:text-mail-accent bg-mail-surface border border-mail-border rounded px-2 py-0.5 cursor-pointer select-none"
+                className="block mt-2 text-xs text-mail-text-muted hover:text-mail-accent-text bg-mail-surface border border-mail-border rounded px-2 py-0.5 cursor-pointer select-none"
               >
                 {quotesExpanded ? '\u25BE Hide quoted text' : '\u22EF'}
               </button>

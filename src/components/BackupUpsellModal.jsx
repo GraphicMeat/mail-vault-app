@@ -62,7 +62,7 @@ export default function BackupUpsellModal({ onUpgrade }) {
         <div className="flex flex-col gap-2">
           <button
             onClick={startTrial}
-            className="bg-mail-accent text-white rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-mail-accent-hover transition-colors"
+            className="bg-mail-accent-fill text-white rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-mail-accent-hover transition-colors"
           >
             Start 14-day free trial
           </button>

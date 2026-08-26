@@ -125,7 +125,7 @@ export function ContactsPickerButton({ value, onChange, fieldName, boostAccountI
                 onClick={() => setFilterAccountId(null)}
                 className={`flex-shrink-0 px-2.5 py-1 text-[11px] font-medium rounded-full
                            transition-colors ${effectiveFilterId === null
-                             ? 'bg-mail-accent text-white'
+                             ? 'bg-mail-accent-fill text-white'
                              : 'text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover'}`}
                 title="All accounts"
               >
@@ -163,7 +163,7 @@ export function ContactsPickerButton({ value, onChange, fieldName, boostAccountI
               type="button"
               onClick={() => setTab('latest')}
               className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium
-                         transition-colors ${tab === 'latest' ? 'text-mail-accent border-b-2 border-mail-accent' : 'text-mail-text-muted hover:text-mail-text'}`}
+                         transition-colors ${tab === 'latest' ? 'text-mail-accent-text border-b-2 border-mail-accent' : 'text-mail-text-muted hover:text-mail-text'}`}
             >
               <Clock size={12} />
               Latest
@@ -172,7 +172,7 @@ export function ContactsPickerButton({ value, onChange, fieldName, boostAccountI
               type="button"
               onClick={() => setTab('popular')}
               className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium
-                         transition-colors ${tab === 'popular' ? 'text-mail-accent border-b-2 border-mail-accent' : 'text-mail-text-muted hover:text-mail-text'}`}
+                         transition-colors ${tab === 'popular' ? 'text-mail-accent-text border-b-2 border-mail-accent' : 'text-mail-text-muted hover:text-mail-text'}`}
             >
               <Star size={12} />
               Most popular
@@ -192,7 +192,7 @@ export function ContactsPickerButton({ value, onChange, fieldName, boostAccountI
                   className="w-full text-left px-3 py-2 hover:bg-mail-surface-hover transition-colors flex items-center gap-2"
                 >
                   <div className="w-6 h-6 rounded-full bg-mail-accent/20 flex items-center justify-center flex-shrink-0">
-                    <span className="text-[10px] font-semibold text-mail-accent">
+                    <span className="text-[10px] font-semibold text-mail-accent-text">
                       {((c.name || c.address)[0] || '?').toUpperCase()}
                     </span>
                   </div>

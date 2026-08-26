@@ -91,7 +91,7 @@ function UnifiedFolderList({ tagCloud = false }) {
                 onClick={() => switchUnifiedFolder(folder.id)}
                 className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs transition-colors border
                            ${isActive
-                             ? 'bg-mail-accent text-white border-mail-accent'
+                             ? 'bg-mail-accent-fill text-white border-mail-accent'
                              : 'text-mail-text border-mail-border hover:bg-mail-surface-hover'}`}
                 title={folder.name}
               >
@@ -117,7 +117,7 @@ function UnifiedFolderList({ tagCloud = false }) {
           <div
             key={folder.id}
             className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors
-                       ${isActive ? 'bg-mail-accent/10 text-mail-accent' : 'text-mail-text hover:bg-mail-surface-hover'}`}
+                       ${isActive ? 'bg-mail-accent/10 text-mail-accent-text' : 'text-mail-text hover:bg-mail-surface-hover'}`}
             onClick={() => switchUnifiedFolder(folder.id)}
           >
             <Icon size={16} />
@@ -153,8 +153,8 @@ function BackupStatusIcon({ accountId, onClick }) {
   const showWarning = isFailed || neverBackedUp || (isOverdue && !isSuccess);
 
   const icon = showWarning
-    ? <AlertCircle size={12} className="text-amber-500 flex-shrink-0" />
-    : <CheckCircle2 size={12} className="text-emerald-500 flex-shrink-0" />;
+    ? <AlertCircle size={12} className="text-mail-warning flex-shrink-0" />
+    : <CheckCircle2 size={12} className="text-mail-success flex-shrink-0" />;
 
   const title = isFailed ? 'Backup failed — click to view'
     : neverBackedUp ? 'Never backed up — click to configure'
@@ -181,7 +181,7 @@ function CollapsedBackupIcon({ onOpenBackup }) {
   if (!ab?.active) return null;
   return (
     <button onClick={onOpenBackup} className="p-2 hover:bg-mail-accent/10 rounded-lg transition-colors" title={`Backing up ${ab.accountEmail}...`}>
-      <HardDrive size={16} className="text-mail-accent animate-pulse" />
+      <HardDrive size={16} className="text-mail-accent-text animate-pulse" />
     </button>
   );
 }
@@ -199,7 +199,7 @@ function BackupIndicator({ onOpenBackup }) {
     <button
       onClick={onOpenBackup}
       className={`w-full mt-1 flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors ${
-        isDone ? 'text-mail-success hover:bg-mail-success/10' : 'text-mail-accent hover:bg-mail-accent/10'
+        isDone ? 'text-mail-success hover:bg-mail-success/10' : 'text-mail-accent-text hover:bg-mail-accent/10'
       }`}
     >
       {isDone ? (
@@ -247,7 +247,7 @@ const CollapsedAccountButton = memo(function CollapsedAccountButton({
         <BackupStatusIcon accountId={account.id} onClick={onOpenBackup} />
       </div>
       {unreadCount > 0 && (
-        <div className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 flex items-center justify-center">
+        <div className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-mail-danger-fill flex items-center justify-center">
           <span className="text-[9px] font-bold text-white leading-none">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
@@ -274,14 +274,26 @@ const ExpandedAccountRow = memo(function ExpandedAccountRow({
   account, isActive, color, initial, unifiedInbox, connectionStatus, connectionError,
   unreadCount, onActivate, onOpenBackup
 }) {
+  // The active account is marked by its own identity colour, not by a generic
+  // accent: a 3px spine at the rail edge over a 10% wash of the same colour.
+  // color-mix keeps one source of truth (the account colour) instead of a
+  // second stored tint that could drift out of sync with it.
   return (
     <div
-      className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all
-                 ${isActive && !unifiedInbox
-                   ? 'bg-mail-accent/10 text-mail-accent'
-                   : 'hover:bg-mail-surface-hover text-mail-text'}`}
+      className={`relative flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all text-mail-text
+                 ${isActive && !unifiedInbox ? '' : 'hover:bg-mail-surface-hover'}`}
+      style={isActive && !unifiedInbox
+        ? { backgroundColor: `color-mix(in srgb, ${color} 10%, transparent)` }
+        : undefined}
       onClick={onActivate}
     >
+      {isActive && !unifiedInbox && (
+        <span
+          aria-hidden="true"
+          className="absolute left-0 top-0 bottom-0 w-[3px] rounded-full"
+          style={{ backgroundColor: color }}
+        />
+      )}
       <div className="relative flex-shrink-0">
         <div
           className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold select-none"
@@ -290,7 +302,7 @@ const ExpandedAccountRow = memo(function ExpandedAccountRow({
           {initial}
         </div>
         {unreadCount > 0 && (
-          <div className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 flex items-center justify-center">
+          <div className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-mail-danger-fill flex items-center justify-center">
             <span className="text-[10px] font-bold text-white leading-none">
               {unreadCount > 99 ? '99+' : unreadCount}
             </span>
@@ -428,7 +440,7 @@ const TagCloudAccountBubble = memo(function TagCloudAccountBubble({
       title={account.name ? `${account.name} — ${account.email}` : account.email}
       className={`relative inline-flex items-center gap-1.5 pl-0.5 pr-2.5 py-0.5 rounded-full text-xs transition-all border max-w-full min-w-0
                  ${isActive && !unifiedInbox
-                   ? 'bg-mail-accent text-white border-mail-accent'
+                   ? 'bg-mail-accent-fill text-white border-mail-accent'
                    : 'text-mail-text border-mail-border hover:bg-mail-surface-hover'}`}
     >
       <span
@@ -439,7 +451,7 @@ const TagCloudAccountBubble = memo(function TagCloudAccountBubble({
       </span>
       <span className="truncate min-w-0">{label}</span>
       {unreadCount > 0 && (
-        <span className="min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-[9px] font-bold text-white flex items-center justify-center leading-none">
+        <span className="min-w-[16px] h-4 px-1 rounded-full bg-mail-danger-fill text-[9px] font-bold text-white flex items-center justify-center leading-none">
           {unreadCount > 99 ? '99+' : unreadCount}
         </span>
       )}
@@ -532,7 +544,7 @@ function TransferStatsHoverBubble({ pos, stats, onClick, onMouseEnter, onMouseLe
             <StatRow label="This month" bucket={stats.month} />
           </div>
 
-          <div className="mt-2 pt-2 border-t border-mail-border text-mail-accent">
+          <div className="mt-2 pt-2 border-t border-mail-border text-mail-accent-text">
             Click to see more →
           </div>
         </>
@@ -762,7 +774,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                       window.open(url, '_blank');
                     }
                   }}
-                  className="mt-3 text-sm text-mail-accent hover:text-mail-accent-hover transition-colors underline"
+                  className="mt-3 text-sm text-mail-accent-text hover:text-mail-accent-hover transition-colors underline"
                 >
                   Learn more in our FAQ
                 </button>
@@ -793,7 +805,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         <div className="w-full py-2 flex justify-center border-b border-mail-border">
           <button
             onClick={onCompose}
-            className="p-2.5 bg-mail-accent hover:bg-mail-accent-hover text-white rounded-lg transition-all shadow-glow hover:shadow-glow-lg"
+            className="p-2.5 bg-mail-accent-fill hover:bg-mail-accent-hover text-white rounded-lg transition-all shadow-glow hover:shadow-glow-lg"
             title="Compose"
           >
             <PenSquare size={16} />
@@ -808,7 +820,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
               onClick={() => setUnifiedInbox(true)}
               className={`p-2 rounded-lg transition-all
                          ${unifiedInbox
-                           ? 'bg-mail-accent/10 text-mail-accent'
+                           ? 'bg-mail-accent/10 text-mail-accent-text'
                            : 'text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover'}`}
               title="All Inboxes"
             >
@@ -868,7 +880,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                 <button
                   className={`p-2 rounded-lg transition-all
                              ${isActive && !mailbox.noselect
-                               ? 'bg-mail-accent/10 text-mail-accent'
+                               ? 'bg-mail-accent/10 text-mail-accent-text'
                                : 'text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover'}`}
                   onClick={() => {
                     if (mailbox.noselect && hasChildren) {
@@ -890,7 +902,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                       key={child.path}
                       className={`p-1.5 rounded-lg transition-all
                                  ${isChildActive
-                                   ? 'bg-mail-accent/10 text-mail-accent'
+                                   ? 'bg-mail-accent/10 text-mail-accent-text'
                                    : 'text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover'}`}
                       onClick={() => activateAccount(activeAccountId, child.path)}
                       title={mailboxLabel(child.name)}
@@ -948,7 +960,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                 : `${totalEmails.toLocaleString()} emails`}
             >
               {(loading || cacheFilling) ? (
-                <RefreshCw size={14} className="animate-spin text-mail-accent" />
+                <RefreshCw size={14} className="animate-spin text-mail-accent-text" />
               ) : (
                 <HardDrive size={14} className="text-mail-text-muted" />
               )}
@@ -968,7 +980,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
       {/* Logo */}
       <div data-tauri-drag-region className="px-4 py-3 border-b border-mail-border flex items-center justify-between flex-shrink-0">
         <h1 className="text-xl font-display font-bold">
-          <span className="text-mail-accent">Mail</span>
+          <span className="text-mail-accent-text">Mail</span>
           <span className="text-mail-text">Vault</span>
         </h1>
         <div className="flex items-center gap-1">
@@ -1005,7 +1017,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         <button
           onClick={onCompose}
           className="w-full flex items-center justify-center gap-2 px-4 py-2.5
-                     bg-mail-accent hover:bg-mail-accent-hover text-white
+                     bg-mail-accent-fill hover:bg-mail-accent-hover text-white
                      font-medium rounded-lg transition-all shadow-glow hover:shadow-glow-lg"
         >
           <PenSquare size={18} />
@@ -1025,7 +1037,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                     onClick={() => setUnifiedInbox(true)}
                     className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs transition-colors border
                                ${unifiedInbox
-                                 ? 'bg-mail-accent text-white border-mail-accent'
+                                 ? 'bg-mail-accent-fill text-white border-mail-accent'
                                  : 'text-mail-text border-mail-border hover:bg-mail-surface-hover'}`}
                     title="All Inboxes"
                   >
@@ -1105,12 +1117,12 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
               data-testid="all-inboxes-btn"
               className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all mb-1
                          ${unifiedInbox
-                           ? 'bg-mail-accent/10 text-mail-accent'
+                           ? 'bg-mail-accent/10 text-mail-accent-text'
                            : 'hover:bg-mail-surface-hover text-mail-text'}`}
               onClick={() => setUnifiedInbox(true)}
             >
               <div className="w-8 h-8 rounded-full flex items-center justify-center bg-mail-accent/15">
-                <Inbox size={16} className={unifiedInbox ? 'text-mail-accent' : 'text-mail-text-muted'} />
+                <Inbox size={16} className={unifiedInbox ? 'text-mail-accent-text' : 'text-mail-text-muted'} />
               </div>
               <div className="text-sm font-medium">All Inboxes</div>
             </div>
@@ -1250,7 +1262,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
               className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2
                          rounded-md text-xs font-medium transition-all
                          ${viewMode === mode.id
-                           ? 'bg-mail-accent text-white'
+                           ? 'bg-mail-accent-fill text-white'
                            : 'text-mail-text-muted hover:text-mail-text'}`}
             >
               <mode.icon size={12} />
@@ -1282,7 +1294,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                     title={mailboxLabel(mailbox.name)}
                     className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs transition-colors border
                                ${isActive
-                                 ? 'bg-mail-accent text-white border-mail-accent'
+                                 ? 'bg-mail-accent-fill text-white border-mail-accent'
                                  : 'text-mail-text border-mail-border hover:bg-mail-surface-hover'}`}
                   >
                     <Icon size={12} />
@@ -1302,7 +1314,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                       title={mailboxLabel(child.name)}
                       className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs transition-colors border
                                  ${isChildActive
-                                   ? 'bg-mail-accent text-white border-mail-accent'
+                                   ? 'bg-mail-accent-fill text-white border-mail-accent'
                                    : 'text-mail-text-muted border-mail-border hover:bg-mail-surface-hover hover:text-mail-text'}`}
                     >
                       <ChildIcon size={12} />
@@ -1333,7 +1345,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                 className={`flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors
                            ${mailbox.noselect ? 'cursor-default' : 'cursor-pointer'}
                            ${isActive && !mailbox.noselect
-                             ? 'bg-mail-accent/10 text-mail-accent'
+                             ? 'bg-mail-accent/10 text-mail-accent-text'
                              : 'text-mail-text hover:bg-mail-surface-hover'}`}
                 onClick={() => {
                   if (mailbox.noselect && hasChildren) {
@@ -1374,7 +1386,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                         key={child.path}
                         className={`flex items-center gap-2 px-2 py-1.5 rounded-lg
                                    cursor-pointer transition-colors ${isChildActive
-                                     ? 'bg-mail-accent/10 text-mail-accent'
+                                     ? 'bg-mail-accent/10 text-mail-accent-text'
                                      : 'text-mail-text hover:bg-mail-surface-hover'}`}
                         onClick={() => activateAccount(activeAccountId, child.path)}
                       >
@@ -1419,7 +1431,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
               <span>{totalEmails.toLocaleString()} emails</span>
             )}
             {(loading || cacheFilling) && (
-              <RefreshCw size={10} className="animate-spin text-mail-accent" />
+              <RefreshCw size={10} className="animate-spin text-mail-accent-text" />
             )}
           </div>
         )}

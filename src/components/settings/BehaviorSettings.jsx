@@ -33,7 +33,7 @@ export function BehaviorSettings() {
       {/* Email Sync (Behavior) */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-          <RefreshCw size={18} className="text-mail-accent" />
+          <RefreshCw size={18} className="text-mail-accent-text" />
           Email Sync
         </h4>
 
@@ -105,7 +105,7 @@ export function BehaviorSettings() {
       {/* Sending */}
       <div data-testid="settings-undo-send" className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-          <SendHorizontal size={18} className="text-mail-accent" />
+          <SendHorizontal size={18} className="text-mail-accent-text" />
           Sending
         </h4>
 
@@ -135,7 +135,7 @@ export function BehaviorSettings() {
               <option value={300}>5 minutes</option>
             </select>
             {(sendDelay ?? 0) > 0 && (
-              <p className="mt-2 text-xs text-amber-500 flex items-center gap-1.5">
+              <p className="mt-2 text-xs text-mail-warning flex items-center gap-1.5">
                 <span>⚠</span>
                 Your computer must stay awake during the delay. If it sleeps, the email will be sent when it wakes.
               </p>
@@ -147,7 +147,7 @@ export function BehaviorSettings() {
       {/* Mark as Read */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-          <Eye size={18} className="text-mail-accent" />
+          <Eye size={18} className="text-mail-accent-text" />
           Mark as Read
         </h4>
 
@@ -186,7 +186,7 @@ export function BehaviorSettings() {
                 <label className="text-sm font-medium text-mail-text">
                   Delay before marking as read
                 </label>
-                <span className="text-sm font-medium text-mail-accent">
+                <span className="text-sm font-medium text-mail-accent-text">
                   {markAsReadDelay} {markAsReadDelay === 1 ? 'second' : 'seconds'}
                 </span>
               </div>
@@ -212,7 +212,7 @@ export function BehaviorSettings() {
       {/* Search Settings */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-          <Search size={18} className="text-mail-accent" />
+          <Search size={18} className="text-mail-accent-text" />
           Search
         </h4>
 
@@ -227,7 +227,7 @@ export function BehaviorSettings() {
               <label className="text-sm font-medium text-mail-text">
                 Search history limit
               </label>
-              <span className="text-sm font-medium text-mail-accent">
+              <span className="text-sm font-medium text-mail-accent-text">
                 {searchHistoryLimit} searches
               </span>
             </div>
@@ -253,7 +253,7 @@ export function BehaviorSettings() {
               <label className="text-sm font-medium text-mail-text">
                 Popular filters period
               </label>
-              <span className="text-sm font-medium text-mail-accent">
+              <span className="text-sm font-medium text-mail-accent-text">
                 {filterHistoryPeriodDays >= 30 && filterHistoryPeriodDays < 60
                   ? '1 month'
                   : filterHistoryPeriodDays >= 60 && filterHistoryPeriodDays < 90
@@ -287,7 +287,7 @@ export function BehaviorSettings() {
               <label className="text-sm font-medium text-mail-text">
                 Number of popular filters to show
               </label>
-              <span className="text-sm font-medium text-mail-accent">
+              <span className="text-sm font-medium text-mail-accent-text">
                 {topFiltersLimit} filters
               </span>
             </div>

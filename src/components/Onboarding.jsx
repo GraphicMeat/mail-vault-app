@@ -52,7 +52,7 @@ export function Onboarding() {
         {/* Logo */}
         <div className="text-center mb-3">
           <h1 className="text-2xl font-display font-bold text-mail-text">
-            <span className="text-mail-accent">Mail</span>Vault
+            <span className="text-mail-accent-text">Mail</span>Vault
           </h1>
           <p className="text-xs text-mail-text-muted">
             A secure, privacy-focused email client
@@ -64,7 +64,7 @@ export function Onboarding() {
           {/* Security Header */}
           <div className="flex items-center gap-2 mb-3 pb-2 border-b border-mail-border">
             <div className="w-8 h-8 bg-mail-accent/10 rounded-lg flex items-center justify-center">
-              <Shield size={16} className="text-mail-accent" />
+              <Shield size={16} className="text-mail-accent-text" />
             </div>
             <div>
               <h2 className="text-base font-semibold text-mail-text">
@@ -86,7 +86,7 @@ export function Onboarding() {
                   className="p-2 rounded-lg border border-mail-border bg-mail-bg flex items-center gap-2"
                 >
                   <div className="w-7 h-7 rounded bg-mail-accent/10 flex items-center justify-center flex-shrink-0">
-                    <Icon size={14} className="text-mail-accent" />
+                    <Icon size={14} className="text-mail-accent-text" />
                   </div>
                   <div className="min-w-0">
                     <h3 className="font-medium text-xs text-mail-text leading-tight">
@@ -128,7 +128,7 @@ export function Onboarding() {
             </button>
             <button
               onClick={handleComplete}
-              className="flex items-center gap-1.5 px-4 py-1.5 bg-mail-accent
+              className="flex items-center gap-1.5 px-4 py-1.5 bg-mail-accent-fill
                         hover:bg-mail-accent-hover text-white font-medium rounded-lg
                         transition-all shadow-glow hover:shadow-glow-lg text-xs"
             >

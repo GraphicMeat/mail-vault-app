@@ -23,6 +23,7 @@ import {
   RefreshCw,
   HardDrive,
   Cloud,
+  CloudOff,
   Paperclip,
   CheckSquare,
   Square,
@@ -69,7 +70,7 @@ const LEGEND_ENTRIES = [
   },
   {
     id: 'legend-local-only',
-    glyph: <HardDrive size={12} className="text-mail-warning" />,
+    glyph: <CloudOff size={12} className="text-mail-only-copy" />,
     text: 'Local only (deleted from server)',
     label: 'Your only copy',
     detail: 'Confirmed gone from the server. Nothing else has it — back this up.',
@@ -403,6 +404,18 @@ function EmailListComponent() {
   }, [showSkeleton, loading]);
 
   const dateRange = useMemo(() => getDateRange(displayEmails), [displayEmails]);
+
+  // What share of the loaded window is already on this machine. A claim about
+  // the rows the list is holding, never about the server total — the meter and
+  // the sentence beside it read off the same two numbers, so colour is never
+  // the only carrier. Null (renders nothing) when nothing is loaded.
+  const vaultShare = useMemo(() => {
+    const loaded = sortedEmails.length;
+    if (!loaded) return null;
+    let inVault = 0;
+    for (const e of sortedEmails) if (e.isArchived) inVault++;
+    return { loaded, inVault, pct: Math.round((inVault / loaded) * 100) };
+  }, [sortedEmails]);
 
   // Count emails with alerts — used in fingerprints to invalidate caches when alerts change
   const alertCount = useMemo(() => {
@@ -800,7 +813,7 @@ function EmailListComponent() {
             className="p-1 hover:bg-mail-border rounded transition-colors"
           >
             {allSelected ? (
-              <CheckSquare size={18} className="text-mail-accent" />
+              <CheckSquare size={18} className="text-mail-accent-text" />
             ) : (
               <Square size={18} className="text-mail-text-muted" />
             )}
@@ -808,7 +821,7 @@ function EmailListComponent() {
 
           {searchActive ? (
             <div className="flex items-center gap-2">
-              <Search size={16} className="text-mail-accent" />
+              <Search size={16} className="text-mail-accent-text" />
               <span className="text-lg font-semibold text-mail-text">Search Results</span>
               <span className="text-sm text-mail-text-muted">
                 ({displayEmails.length} found)
@@ -850,6 +863,16 @@ function EmailListComponent() {
                   </>
                 )}
               </div>
+              {vaultShare && (
+                <div className="flex items-center gap-2 mt-1 max-w-[260px]">
+                  <span className="custody-meter flex-1 min-w-[40px]" aria-hidden="true">
+                    <span style={{ width: `${vaultShare.pct}%` }} />
+                  </span>
+                  <span data-testid="email-list-vault-share" className="text-[11px] text-mail-text-muted whitespace-nowrap">
+                    {vaultShare.inVault.toLocaleString()} of {vaultShare.loaded.toLocaleString()} loaded in your vault
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -861,7 +884,7 @@ function EmailListComponent() {
             onClick={toggleUnreadOnly}
             className={`p-1.5 rounded-lg transition-colors ${
               unreadOnly
-                ? 'bg-mail-accent/10 text-mail-accent'
+                ? 'bg-mail-accent/10 text-mail-accent-text'
                 : 'text-mail-text-muted hover:bg-mail-border'
             }`}
             title={unreadOnly ? 'Show all messages' : 'Show unread only'}
@@ -876,8 +899,8 @@ function EmailListComponent() {
             )}
             className={`p-1.5 rounded-lg transition-colors ${
               emailListGrouping === 'sender'
-                ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
-                : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                ? 'bg-mail-accent/10 text-mail-accent-text'
+                : 'text-mail-text-muted hover:text-mail-text'
             }`}
             title={emailListGrouping === 'sender' ? 'Switch to chronological view' : 'Group by sender'}
           >
@@ -887,7 +910,7 @@ function EmailListComponent() {
             onClick={() => setShowSearch(!showSearch)}
             className={`p-2 rounded-lg transition-colors ${
               showSearch || searchActive
-                ? 'bg-mail-accent/10 text-mail-accent'
+                ? 'bg-mail-accent/10 text-mail-accent-text'
                 : 'hover:bg-mail-border text-mail-text-muted'
             }`}
             title="Search emails"
@@ -929,7 +952,7 @@ function EmailListComponent() {
           >
             <RefreshCw
               size={18}
-              className={`text-mail-accent transition-transform ${isRefreshing ? 'animate-spin' : ''}`}
+              className={`text-mail-accent-text transition-transform ${isRefreshing ? 'animate-spin' : ''}`}
               style={{
                 transform: `rotate(${Math.min(pullDistance / PULL_THRESHOLD, 1) * 360}deg)`,
                 opacity: Math.min(pullDistance / PULL_THRESHOLD, 1),
@@ -1010,7 +1033,7 @@ function EmailListComponent() {
         ) : emailListGrouping === 'sender' ? (
           /* Virtualized sender-grouped view */
           senderGroups === null ? (
-            <div className="flex items-center justify-center h-32 text-gray-400">
+            <div className="flex items-center justify-center h-32 text-mail-text-muted">
               <RefreshCw size={16} className="animate-spin mr-2" />
               Grouping...
             </div>
@@ -1064,7 +1087,7 @@ function EmailListComponent() {
                           </div>
                         </div>
                         {item.sender.unreadCount > 0 && (
-                          <span className="px-1.5 py-0.5 text-xs font-medium bg-mail-accent/15 text-mail-accent rounded-full">
+                          <span className="px-1.5 py-0.5 text-xs font-medium bg-mail-accent/15 text-mail-accent-text rounded-full">
                             {item.sender.unreadCount}
                           </span>
                         )}
@@ -1106,7 +1129,7 @@ function EmailListComponent() {
                           </div>
                         </div>
                         {item.topic.unreadCount > 0 && (
-                          <span className="px-1.5 py-0.5 text-xs font-medium bg-mail-accent/15 text-mail-accent rounded-full">
+                          <span className="px-1.5 py-0.5 text-xs font-medium bg-mail-accent/15 text-mail-accent-text rounded-full">
                             {item.topic.unreadCount}
                           </span>
                         )}
@@ -1149,7 +1172,7 @@ function EmailListComponent() {
                               {item.email._fromSentFolder ? 'You' : getSenderName(item.email)}
                             </span>
                             {item.email._fromSentFolder && (
-                              <span className="text-[10px] px-1 py-0.5 rounded bg-mail-accent/10 text-mail-accent font-medium">Sent</span>
+                              <span className="text-[10px] px-1 py-0.5 rounded bg-mail-accent/10 text-mail-accent-text font-medium">Sent</span>
                             )}
                           </div>
                           {item.email.snippet && (

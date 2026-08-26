@@ -54,7 +54,7 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
         <div className="flex items-center justify-between mb-3">
           <div>
             <h4 className="font-semibold text-mail-text flex items-center gap-2">
-              <Clock size={18} className="text-mail-accent" />
+              <Clock size={18} className="text-mail-accent-text" />
               Automatic Backup
             </h4>
             <p className="text-xs text-mail-text-muted mt-0.5">
@@ -91,7 +91,7 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
           {activeBackup && activeBackup.active && (
             <div className="bg-mail-bg rounded-lg p-3 space-y-2">
               <div className="flex items-center gap-2">
-                <Loader size={14} className="text-mail-accent animate-spin flex-shrink-0" />
+                <Loader size={14} className="text-mail-accent-text animate-spin flex-shrink-0" />
                 <span className="text-xs font-semibold text-mail-text truncate">
                   Backing up {activeBackup.accountEmail}
                 </span>
@@ -118,7 +118,7 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
               }
             }}
             disabled={activeBackup?.active}
-            className="w-full bg-mail-accent/10 text-mail-accent rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-mail-accent/20 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+            className="w-full bg-mail-accent/10 text-mail-accent-text rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-mail-accent/20 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
           >
             {activeBackup?.active ? (
               <>

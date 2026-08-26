@@ -140,7 +140,7 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg
                                text-left transition-colors mb-0.5
                                ${activeTab === tab.id
-                                 ? 'bg-mail-accent/10 text-mail-accent'
+                                 ? 'bg-mail-accent/10 text-mail-accent-text'
                                  : 'text-mail-text-muted hover:bg-mail-surface-hover hover:text-mail-text'}`}
                   >
                     <tab.icon size={18} />
@@ -199,7 +199,7 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
                   onClick={() => setSelectedFeatureAccountId(acc.id)}
                   className={`px-3 py-1.5 text-xs rounded-full border transition-colors whitespace-nowrap shrink-0 ${
                     selectedFeatureAccountId === acc.id
-                      ? 'bg-mail-accent text-white border-mail-accent'
+                      ? 'bg-mail-accent-fill text-white border-mail-accent'
                       : 'border-mail-border text-mail-text-muted hover:border-mail-accent hover:text-mail-text'
                   }`}
                 >

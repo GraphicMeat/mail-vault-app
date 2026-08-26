@@ -9,15 +9,26 @@ const mailColor = (name) => ({ opacityValue }) =>
 
 const mailColors = Object.fromEntries(
   [
-    'accent', 'accent-hover', 'bg', 'border', 'danger', 'input-bg', 'local',
-    'server', 'success', 'surface', 'surface-hover', 'text', 'text-muted', 'warning',
+    'accent', 'accent-hover', 'accent-text', 'accent-fill', 'accent-tint',
+    'bg', 'border', 'border-strong', 'input-bg', 'surface', 'surface-hover',
+    'text', 'text-muted',
+    'local', 'local-tint', 'server', 'server-tint', 'only-copy', 'only-copy-tint', 'only-copy-row',
+    'success', 'success-tint', 'warning', 'warning-tint', 'text-on-tint',
+    'danger', 'danger-fill', 'danger-tint',
   ].map((name) => [`mail-${name}`, mailColor(name)])
 )
 
 /** @type {import('tailwindcss').Config} */
 export default {
+  // The app switches themes with `[data-theme]` (src/stores/themeStore.js) and
+  // never adds a `dark` class. Left unset, Tailwind's `dark:` variant defaults
+  // to `prefers-color-scheme`, so every `dark:` utility in src/ followed the OS
+  // instead of the app's own setting — mixed-theme UI whenever the two disagreed.
+  darkMode: ['class', '[data-theme="dark"]'],
   content: [
-    "./index.html",
+    // app.html is the client's entry (vite rollupOptions.input). index.html is
+    // the marketing page; scanning it compiled website classes into the bundle.
+    "./app.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {

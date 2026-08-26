@@ -413,7 +413,7 @@ export function BillingSettings() {
     <div ref={rootRef} className="p-6 space-y-6">
       {/* Transient warning banners — cleared immediately on next successful refresh */}
       {rateLimitMsg && (
-        <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-500">
+        <div className="p-3 rounded-lg bg-mail-warning-tint border border-mail-warning/20 text-xs text-mail-warning">
           {rateLimitMsg}
           {showingCached && <span className="block mt-1 text-mail-text-muted">Showing last known billing data.</span>}
         </div>
@@ -427,13 +427,13 @@ export function BillingSettings() {
       {/* Current Plan */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <div className="flex items-center gap-3 mb-4">
-          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isPremium ? 'bg-emerald-500/10' : 'bg-mail-accent/10'}`}>
-            {isPremium ? <CheckCircle2 size={20} className="text-emerald-500" /> : <CreditCard size={20} className="text-mail-accent" />}
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isPremium ? 'bg-mail-accent-tint' : 'bg-mail-accent/10'}`}>
+            {isPremium ? <CheckCircle2 size={20} className="text-mail-accent-text" /> : <CreditCard size={20} className="text-mail-accent-text" />}
           </div>
           <div>
             <h3 className="text-sm font-semibold text-mail-text">{statusLabel}</h3>
             {billingProfile?.status === 'trialing' && billingProfile?.currentPeriodEnd && (
-              <p className="text-xs text-emerald-500">
+              <p className="text-xs text-mail-accent-text">
                 Free trial ends {formatDate(billingProfile.currentPeriodEnd)} — yearly billing begins after.
               </p>
             )}
@@ -445,7 +445,7 @@ export function BillingSettings() {
               </p>
             )}
             {billingProfile?.status === 'past_due' && (
-              <p className="text-xs text-amber-500">Payment past due — please update your payment method.</p>
+              <p className="text-xs text-mail-warning">Payment past due — please update your payment method.</p>
             )}
           </div>
         </div>
@@ -458,7 +458,7 @@ export function BillingSettings() {
                 {billingEmail}
               </div>
               <button onClick={() => refreshSignedIn({ manual: true })} disabled={syncing || cooldownRemaining > 0}
-                className="p-2 text-sm text-mail-text-muted hover:text-mail-accent rounded-lg hover:bg-mail-accent/10 transition-colors disabled:opacity-50"
+                className="p-2 text-sm text-mail-text-muted hover:text-mail-accent-text rounded-lg hover:bg-mail-accent/10 transition-colors disabled:opacity-50"
                 title="Refresh subscription status">
                 {syncing ? <Loader size={14} className="animate-spin" /> : <RefreshCw size={14} />}
               </button>
@@ -466,7 +466,7 @@ export function BillingSettings() {
             <button
               onClick={() => setShowLogoutConfirm(true)}
               disabled={logoutLoading}
-              className="flex items-center gap-1.5 text-xs font-medium text-red-500 hover:text-red-600 transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 text-xs font-medium text-mail-danger hover:opacity-80 transition-colors disabled:opacity-50"
             >
               <LogOut size={12} />
               Sign out of Premium on this device
@@ -489,15 +489,15 @@ export function BillingSettings() {
               ))}
             </select>
             <button onClick={handleSignIn} disabled={signInDisabled}
-              className="min-w-[140px] px-4 py-2 text-sm font-medium bg-mail-accent text-white rounded-lg hover:bg-mail-accent/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
+              className="min-w-[140px] px-4 py-2 text-sm font-medium bg-mail-accent-fill text-white rounded-lg hover:bg-mail-accent/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
               {syncing ? <Loader size={14} className="animate-spin" /> : <CreditCard size={14} />}
               <span>{signInLabel}</span>
             </button>
           </div>
         )}
         {signInNotice && !isSignedIn && (
-          <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-            <p className="text-xs font-medium text-amber-600 dark:text-amber-400">{signInNotice}</p>
+          <div className="mt-3 p-3 rounded-lg bg-mail-warning-tint border border-mail-warning/20">
+            <p className="text-xs font-medium text-mail-warning">{signInNotice}</p>
             {selectedEmail && <p className="text-[11px] text-mail-text-muted mt-1">Checked: {selectedEmail}</p>}
           </div>
         )}
@@ -507,7 +507,7 @@ export function BillingSettings() {
 
       {/* Early Bird Pricing — non-MAS only, it pitches the web subscription */}
       {!IS_APPSTORE_BUILD && !isPremium && (
-        <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 border border-amber-500/20 rounded-xl p-5">
+        <div className="bg-mail-accent-tint border border-mail-accent/20 rounded-xl p-5">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-lg">🐣</span>
             <h4 className="text-sm font-semibold text-mail-text">Early Bird & Family Pricing</h4>
@@ -516,15 +516,15 @@ export function BillingSettings() {
             MailVault is in early access. Lock in discounted pricing today — your rate stays the same as long as your subscription is active, even after prices increase.
           </p>
           <div className="flex flex-wrap gap-3 text-xs">
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-mail-accent/10 text-mail-accent-text">
               <CheckCircle2 size={12} />
               <span>Early bird rate locked for life</span>
             </div>
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-mail-accent/10 text-mail-accent-text">
               <Monitor size={12} />
               <span>Up to 5 devices per subscription</span>
             </div>
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-mail-accent/10 text-mail-accent-text">
               <Shield size={12} />
               <span>14-day free trial, cancel anytime</span>
             </div>
@@ -558,7 +558,7 @@ export function BillingSettings() {
                   <div className="text-2xl font-bold text-mail-text mb-1">{monthlyPlan.formattedAmount}<span className="text-sm font-normal text-mail-text-muted">/mo</span></div>
                   <p className="text-xs text-mail-text-muted mb-4 flex-1">Cancel anytime</p>
                   <button onClick={() => handleCheckout(monthlyPlan.planId)} disabled={checkoutLoading || !selectedEmail}
-                    className="w-full py-2 text-sm font-semibold bg-mail-accent text-white rounded-lg hover:bg-mail-accent-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
+                    className="w-full py-2 text-sm font-semibold bg-mail-accent-fill text-white rounded-lg hover:bg-mail-accent-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
                     {checkoutLoading === 'monthly' ? <Loader size={14} className="animate-spin" /> : <ExternalLink size={14} />}
                     Upgrade
                   </button>
@@ -567,11 +567,11 @@ export function BillingSettings() {
               {yearlyPlan && (
                 <div className="bg-mail-surface border-2 border-mail-accent rounded-xl p-5 flex flex-col relative">
                   {yearlyPlan.trialEligible && yearlyPlan.trialDays ? (
-                    <span className="absolute -top-2.5 right-4 px-2 py-0.5 text-[10px] font-bold uppercase bg-emerald-500 text-white rounded-full">
+                    <span className="absolute -top-2.5 right-4 px-2 py-0.5 text-[10px] font-bold uppercase bg-mail-accent-fill text-white rounded-full">
                       {yearlyPlan.trialDays}-day free trial
                     </span>
                   ) : yearlyPlan.savingsPercent > 0 ? (
-                    <span className="absolute -top-2.5 right-4 px-2 py-0.5 text-[10px] font-bold uppercase bg-mail-accent text-white rounded-full">
+                    <span className="absolute -top-2.5 right-4 px-2 py-0.5 text-[10px] font-bold uppercase bg-mail-accent-fill text-white rounded-full">
                       Save {yearlyPlan.savingsPercent}%
                     </span>
                   ) : null}
@@ -583,7 +583,7 @@ export function BillingSettings() {
                       : `~${yearlyPlan.monthlyEquivalent}/month`}
                   </p>
                   <button onClick={() => handleCheckout(yearlyPlan.planId)} disabled={checkoutLoading || !selectedEmail}
-                    className="w-full py-2 text-sm font-semibold bg-mail-accent text-white rounded-lg hover:bg-mail-accent-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
+                    className="w-full py-2 text-sm font-semibold bg-mail-accent-fill text-white rounded-lg hover:bg-mail-accent-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
                     {checkoutLoading === 'yearly' ? <Loader size={14} className="animate-spin" /> : <ExternalLink size={14} />}
                     {yearlyPlan.trialEligible && yearlyPlan.trialDays ? 'Start Free Trial' : 'Upgrade'}
                   </button>
@@ -605,7 +605,7 @@ export function BillingSettings() {
           <p className="text-xs text-mail-text-muted mb-3">{pricingError}</p>
           <div className="flex gap-2">
             <button onClick={() => loadPricing()}
-              className="px-4 py-2 text-sm font-medium bg-mail-accent text-white rounded-lg hover:bg-mail-accent/90 transition-colors flex items-center gap-1.5">
+              className="px-4 py-2 text-sm font-medium bg-mail-accent-fill text-white rounded-lg hover:bg-mail-accent/90 transition-colors flex items-center gap-1.5">
               <RefreshCw size={14} /> Retry
             </button>
             <button onClick={() => openInBrowser('https://mailvaultapp.com/pricing.html').catch(() => {})}
@@ -634,7 +634,7 @@ export function BillingSettings() {
       {!IS_APPSTORE_BUILD && !isPremium && (
         <button
           onClick={() => useBackupStore.getState().setShareUnlock({ emailsBackedUp: 0 })}
-          className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-mail-accent border border-mail-border rounded-lg hover:border-mail-accent transition-colors"
+          className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-mail-accent-text border border-mail-border rounded-lg hover:border-mail-accent transition-colors"
         >
           <Gift size={15} />
           Or unlock premium free — star &amp; share MailVault
@@ -662,11 +662,11 @@ export function BillingSettings() {
           </div>
 
           <div className="w-full h-1.5 bg-mail-border rounded-full mb-3">
-            <div className={`h-full rounded-full transition-all ${activeClientCount >= clientLimit ? 'bg-amber-500' : 'bg-mail-accent'}`}
+            <div className={`h-full rounded-full transition-all ${activeClientCount >= clientLimit ? 'bg-mail-warning' : 'bg-mail-accent'}`}
               style={{ width: `${Math.min(100, (activeClientCount / clientLimit) * 100)}%` }} />
           </div>
 
-          {replacedNotice && <p className="text-xs text-amber-500 mb-3">{replacedNotice}</p>}
+          {replacedNotice && <p className="text-xs text-mail-warning mb-3">{replacedNotice}</p>}
 
           <div className="space-y-2">
             {activeClients.map(client => {
@@ -674,11 +674,11 @@ export function BillingSettings() {
               return (
                 <div key={client.clientId} className={`flex items-center justify-between px-3 py-2 rounded-lg ${isCurrent ? 'bg-mail-accent/5 border border-mail-accent/20' : 'bg-mail-bg'}`}>
                   <div className="flex items-center gap-3 min-w-0">
-                    <Monitor size={14} className={isCurrent ? 'text-mail-accent flex-shrink-0' : 'text-mail-text-muted flex-shrink-0'} />
+                    <Monitor size={14} className={isCurrent ? 'text-mail-accent-text flex-shrink-0' : 'text-mail-text-muted flex-shrink-0'} />
                     <div className="min-w-0">
                       <p className="text-xs font-medium text-mail-text truncate">
                         {client.clientName || client.platform || 'Unknown device'}
-                        {isCurrent && <span className="ml-1.5 text-[10px] text-mail-accent font-semibold">(this device)</span>}
+                        {isCurrent && <span className="ml-1.5 text-[10px] text-mail-accent-text font-semibold">(this device)</span>}
                       </p>
                       <p className="text-[10px] text-mail-text-muted">
                         {[client.platform, client.appVersion && `v${client.appVersion}`].filter(Boolean).join(' · ')}
@@ -717,12 +717,12 @@ export function BillingSettings() {
             </ul>
           </div>
           <div>
-            <p className="text-xs font-semibold text-mail-accent uppercase tracking-wide mb-2">Premium</p>
+            <p className="text-xs font-semibold text-mail-accent-text uppercase tracking-wide mb-2">Premium</p>
             <ul className="space-y-2">
               {[[Clock, 'Scheduled automatic backups'], [CheckCircle2, 'Backup health & status management'],
                 [ArrowLeftRight, 'Cross-account mailbox migration'], [Trash2, 'Auto-cleanup rules']].map(([Icon, text]) => (
                 <li key={text} className="flex items-start gap-2 text-xs text-mail-text">
-                  <Icon size={12} className="text-mail-accent mt-0.5 flex-shrink-0" />{text}
+                  <Icon size={12} className="text-mail-accent-text mt-0.5 flex-shrink-0" />{text}
                 </li>
               ))}
             </ul>

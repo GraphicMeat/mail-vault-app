@@ -37,8 +37,8 @@ export function ConfirmDialog({
   if (!isOpen) return null;
 
   const confirmColors = destructive
-    ? 'bg-red-500 hover:bg-red-600 text-white'
-    : 'bg-mail-accent hover:bg-mail-accent/90 text-white';
+    ? 'bg-mail-danger-fill hover:bg-mail-danger text-white'
+    : 'bg-mail-accent-fill hover:bg-mail-accent/90 text-white';
 
   return (
     <AnimatePresence>
@@ -76,8 +76,8 @@ export function ConfirmDialog({
           {/* Icon + Title */}
           <div className="flex items-center gap-3 mb-4">
             {icon || (
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${destructive ? 'bg-red-500/10' : 'bg-mail-accent/10'}`}>
-                <AlertTriangle size={20} className={destructive ? 'text-red-500' : 'text-mail-accent'} />
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${destructive ? 'bg-mail-danger-tint' : 'bg-mail-accent/10'}`}>
+                <AlertTriangle size={20} className={destructive ? 'text-mail-danger' : 'text-mail-accent-text'} />
               </div>
             )}
             <h3 id={titleId} className="text-lg font-semibold text-mail-text pr-8">{title}</h3>

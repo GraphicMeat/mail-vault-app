@@ -275,7 +275,7 @@ export default function ChangeServerModal() {
                 Cancel
               </button>
               <button
-                className="bg-mail-accent text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent-hover transition-colors disabled:opacity-50"
+                className="bg-mail-accent-fill text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent-hover transition-colors disabled:opacity-50"
                 onClick={handleVerifySave}
                 disabled={!form.password || !!busyLeg}
               >
@@ -312,7 +312,7 @@ export default function ChangeServerModal() {
                     Skip
                   </button>
                   <button
-                    className="bg-mail-accent text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent-hover transition-colors flex items-center gap-2"
+                    className="bg-mail-accent-fill text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent-hover transition-colors flex items-center gap-2"
                     onClick={handleStartRestore}
                   >
                     <UploadCloud size={14} /> Restore {localTotal}
@@ -339,7 +339,7 @@ export default function ChangeServerModal() {
                     Cancel
                   </button>
                   <button
-                    className="bg-mail-accent text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent-hover transition-colors flex items-center gap-2"
+                    className="bg-mail-accent-fill text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent-hover transition-colors flex items-center gap-2"
                     onClick={handleMinimize}
                   >
                     <Minus size={14} /> Minimize
@@ -363,7 +363,7 @@ export default function ChangeServerModal() {
                 </div>
                 <div className="flex justify-end mt-4">
                   <button
-                    className="bg-mail-accent text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent-hover transition-colors"
+                    className="bg-mail-accent-fill text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent-hover transition-colors"
                     onClick={handleRestoreContinue}
                   >
                     Continue
@@ -400,7 +400,7 @@ export default function ChangeServerModal() {
             )}
             <div className="flex justify-end">
               <button
-                className="bg-mail-accent text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent-hover transition-colors"
+                className="bg-mail-accent-fill text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent-hover transition-colors"
                 onClick={handleClose}
               >
                 Done

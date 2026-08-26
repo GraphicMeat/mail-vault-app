@@ -193,7 +193,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
               }
             }}
             disabled={loadingStatus}
-            className="text-xs text-mail-accent hover:text-mail-accent-hover flex items-center gap-1"
+            className="text-xs text-mail-accent-text hover:text-mail-accent-hover flex items-center gap-1"
           >
             {loadingStatus ? <Loader size={10} className="animate-spin" /> : <Shield size={10} />}
             {loadingStatus ? 'Checking...' : 'Verify backup coverage'}
@@ -237,7 +237,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
                   <label className="text-xs text-mail-text-muted">Folders to back up</label>
                   <button
                     onClick={() => setShowFolderPicker(!showFolderPicker)}
-                    className="text-xs text-mail-accent hover:text-mail-accent-hover"
+                    className="text-xs text-mail-accent-text hover:text-mail-accent-hover"
                   >
                     {showFolderPicker ? 'Hide' : (config.folders ? `${config.folders.length} selected` : 'All folders')}
                   </button>
@@ -301,7 +301,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
         <div className="text-mail-danger text-xs">{state.lastError}</div>
       )}
       {state.lastStatus === 'degraded' && (
-        <div className="flex items-start gap-2 text-xs text-amber-500 bg-amber-500/10 border border-amber-500/20 rounded-lg p-2">
+        <div className="flex items-start gap-2 text-xs text-mail-warning bg-mail-warning-tint border border-mail-warning/20 rounded-lg p-2">
           <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
           <span>{state.lastError || 'Backed up locally, but external backup failed for some emails.'}</span>
         </div>
@@ -318,11 +318,11 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
                 <span className="text-mail-text w-24">{entry.emailsBackedUp} emails</span>
                 <span className="text-mail-text-muted w-20">{formatDuration(entry.durationSecs)}</span>
                 {entry.success && entry.externalCopyOk !== false ? (
-                  <span className="text-emerald-500 flex items-center gap-1">
+                  <span className="text-mail-success flex items-center gap-1">
                     <CheckCircle2 size={12} /> Success
                   </span>
                 ) : entry.success && entry.externalCopyOk === false ? (
-                  <span className="text-amber-500 flex items-center gap-1" title={entry.externalCopyError || 'External copy failed'}>
+                  <span className="text-mail-warning flex items-center gap-1" title={entry.externalCopyError || 'External copy failed'}>
                     <AlertCircle size={12} /> Partial
                   </span>
                 ) : (
@@ -373,7 +373,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
         <button
           onClick={handleManualBackup}
           disabled={runningManual}
-          className="bg-mail-accent/10 text-mail-accent rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent/20 transition-colors disabled:opacity-50 flex items-center gap-2"
+          className="bg-mail-accent/10 text-mail-accent-text rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent/20 transition-colors disabled:opacity-50 flex items-center gap-2"
         >
           {runningManual ? (
             <>
@@ -381,15 +381,15 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
               {backupProgress ? `Backing up ${backupProgress.folder || ''}...` : 'Backing up...'}
             </>
           ) : manualStatus === 'success' ? (
-            <span className="text-emerald-500">Done!</span>
+            <span className="text-mail-success">Done!</span>
           ) : manualStatus === 'degraded' ? (
-            <span className="text-amber-500">Partial</span>
+            <span className="text-mail-warning">Partial</span>
           ) : (
             'Back up now'
           )}
         </button>
         {manualStatus === 'degraded' && manualError && (
-          <div className="text-xs text-amber-500">{manualError}</div>
+          <div className="text-xs text-mail-warning">{manualError}</div>
         )}
         {manualStatus === 'error' && manualError && (
           <div className="text-xs text-mail-warning">{manualError}</div>
@@ -417,7 +417,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
           <div className="flex-1 min-w-0">
             <span className="text-sm font-medium text-mail-text">{account.email}</span>
             {globalEnabled && (
-              <span className="text-xs text-mail-accent ml-2">Using global schedule</span>
+              <span className="text-xs text-mail-accent-text ml-2">Using global schedule</span>
             )}
           </div>
         </div>
@@ -443,8 +443,8 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
           </div>
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-mail-surface/60 backdrop-blur-[1px] rounded-lg">
             <div className="flex flex-col items-center gap-3 text-center px-6">
-              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500/20 to-indigo-500/20 border border-blue-500/30 flex items-center justify-center">
-                <Clock size={20} className="text-blue-500" />
+              <div className="w-12 h-12 rounded-full bg-mail-accent-tint border border-mail-accent/30 flex items-center justify-center">
+                <Clock size={20} className="text-mail-accent-text" />
               </div>
               <div>
                 <p className="text-sm font-semibold text-mail-text mb-1">Premium Feature</p>
@@ -458,7 +458,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
                 )}
               </div>
               {!IS_APPSTORE_BUILD && onUpgrade && (
-                <button onClick={onUpgrade} className="px-4 py-1.5 text-xs font-semibold bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full hover:opacity-90 transition-opacity">
+                <button onClick={onUpgrade} className="px-4 py-1.5 text-xs font-semibold bg-mail-accent-fill text-white rounded-full hover:bg-mail-accent-hover transition-colors">
                   Upgrade
                 </button>
               )}
@@ -501,7 +501,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
             <button
               onClick={handleManualBackup}
               disabled={runningManual}
-              className="text-xs px-3 py-1.5 rounded-lg bg-mail-accent/10 text-mail-accent hover:bg-mail-accent/20 transition-colors flex items-center gap-1.5 font-medium"
+              className="text-xs px-3 py-1.5 rounded-lg bg-mail-accent/10 text-mail-accent-text hover:bg-mail-accent/20 transition-colors flex items-center gap-1.5 font-medium"
             >
               {runningManual ? <Loader size={12} className="animate-spin" /> : manualStatus === 'success' ? <CheckCircle2 size={12} /> : <HardDrive size={12} />}
               {runningManual ? `Backing up ${backupProgress?.folder || ''}...` : manualStatus === 'success' ? 'Done!' : 'Back up now'}

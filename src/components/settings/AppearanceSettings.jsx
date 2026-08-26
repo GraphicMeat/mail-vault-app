@@ -49,7 +49,7 @@ export function AppearanceSettings() {
       {/* Appearance */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-          <Palette size={18} className="text-mail-accent" />
+          <Palette size={18} className="text-mail-accent-text" />
           Appearance
         </h4>
 
@@ -62,12 +62,12 @@ export function AppearanceSettings() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <Sun size={18} className={theme === 'light' ? 'text-mail-accent' : 'text-mail-text-muted'} />
+              <Sun size={18} className={theme === 'light' ? 'text-mail-accent-text' : 'text-mail-text-muted'} />
               <ToggleSwitch
                 active={theme === 'dark'}
                 onClick={toggleTheme}
               />
-              <Moon size={18} className={theme === 'dark' ? 'text-mail-accent' : 'text-mail-text-muted'} />
+              <Moon size={18} className={theme === 'dark' ? 'text-mail-accent-text' : 'text-mail-text-muted'} />
             </div>
           </div>
 
@@ -168,7 +168,7 @@ export function AppearanceSettings() {
       {/* Layout */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-          <LayoutGrid size={18} className="text-mail-accent" />
+          <LayoutGrid size={18} className="text-mail-accent-text" />
           Layout
         </h4>
 
@@ -226,7 +226,7 @@ export function AppearanceSettings() {
       {/* Sidebar Style */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-          <LayoutGrid size={18} className="text-mail-accent" />
+          <LayoutGrid size={18} className="text-mail-accent-text" />
           Sidebar Style
         </h4>
 
@@ -276,7 +276,7 @@ export function AppearanceSettings() {
       {/* View Style */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-          <MessageSquare size={18} className="text-mail-accent" />
+          <MessageSquare size={18} className="text-mail-accent-text" />
           View Style
         </h4>
 
@@ -332,7 +332,7 @@ export function AppearanceSettings() {
       {/* Email List Style */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-          <List size={18} className="text-mail-accent" />
+          <List size={18} className="text-mail-accent-text" />
           Email List Style
         </h4>
 
@@ -393,7 +393,7 @@ export function AppearanceSettings() {
       {/* Thread Sort Order */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-          <List size={18} className="text-mail-accent" />
+          <List size={18} className="text-mail-accent-text" />
           Thread Sort Order
         </h4>
         <p className="text-sm text-mail-text-muted mb-4">
@@ -428,7 +428,7 @@ export function AppearanceSettings() {
       {/* Signature Display */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-          <PenTool size={18} className="text-mail-accent" />
+          <PenTool size={18} className="text-mail-accent-text" />
           Signature Display
         </h4>
         <p className="text-sm text-mail-text-muted mb-4">

@@ -51,7 +51,7 @@ function StepIndicator({ step }) {
               <div
                 className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${
                   isCompleted || isCurrent
-                    ? 'bg-mail-accent text-white'
+                    ? 'bg-mail-accent-fill text-white'
                     : 'bg-mail-border text-mail-text-muted'
                 }`}
               >
@@ -359,7 +359,7 @@ export default function MigrationSettings({ onUpgrade }) {
                       const dst = accounts.find(a => a.email === incompleteMigration.dest_email);
                       if (src && dst) handleResume(src, dst);
                     }}
-                    className="bg-mail-accent text-white rounded-lg px-4 py-2 text-sm font-semibold"
+                    className="bg-mail-accent-fill text-white rounded-lg px-4 py-2 text-sm font-semibold"
                   >
                     Resume Migration
                   </button>
@@ -453,7 +453,7 @@ export default function MigrationSettings({ onUpgrade }) {
 
                 {loadingFolders ? (
                   <div className="flex items-center justify-center py-12">
-                    <Loader size={24} className="animate-spin text-mail-accent" />
+                    <Loader size={24} className="animate-spin text-mail-accent-text" />
                   </div>
                 ) : (
                   <>
@@ -587,7 +587,7 @@ export default function MigrationSettings({ onUpgrade }) {
             <button
               onClick={step === 4 ? handleStartMigration : () => setStep(s => s + 1)}
               disabled={!canGoNext || starting}
-              className={`bg-mail-accent text-white rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+              className={`bg-mail-accent-fill text-white rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
                 !canGoNext || starting ? 'opacity-50 cursor-not-allowed' : 'hover:bg-mail-accent-hover'
               }`}
             >
@@ -648,8 +648,8 @@ export default function MigrationSettings({ onUpgrade }) {
           </div>
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-mail-surface/60 backdrop-blur-[1px] rounded-lg">
             <div className="flex flex-col items-center gap-3 text-center px-6">
-              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500/20 to-indigo-500/20 border border-blue-500/30 flex items-center justify-center">
-                <ArrowLeftRight size={20} className="text-blue-500" />
+              <div className="w-12 h-12 rounded-full bg-mail-accent-tint border border-mail-accent/30 flex items-center justify-center">
+                <ArrowLeftRight size={20} className="text-mail-accent-text" />
               </div>
               <div>
                 <p className="text-sm font-semibold text-mail-text mb-1">Premium Feature</p>
@@ -663,7 +663,7 @@ export default function MigrationSettings({ onUpgrade }) {
                 )}
               </div>
               {!IS_APPSTORE_BUILD && onUpgrade && (
-                <button onClick={onUpgrade} className="px-4 py-1.5 text-xs font-semibold bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full hover:opacity-90 transition-opacity">
+                <button onClick={onUpgrade} className="px-4 py-1.5 text-xs font-semibold bg-mail-accent-fill text-white rounded-full hover:bg-mail-accent-hover transition-colors">
                   Upgrade
                 </button>
               )}
@@ -870,7 +870,7 @@ function ProgressView({ migration, accounts, accountColors, onPause, onResume, o
             if (folder.status === 'completed') { Icon = CheckCircle2; iconClass = 'text-mail-success'; }
             else if (folder.status === 'in_progress') {
               if (migrationPaused) { Icon = Pause; iconClass = 'text-mail-warning'; }
-              else { Icon = Loader; iconClass = 'text-mail-accent animate-spin'; }
+              else { Icon = Loader; iconClass = 'text-mail-accent-text animate-spin'; }
             }
             else if (folder.status === 'failed') { Icon = XCircle; iconClass = 'text-mail-danger'; }
 
@@ -903,7 +903,7 @@ function ProgressView({ migration, accounts, accountColors, onPause, onResume, o
             onClick={() => {
               if (srcAccount && dstAccount) onResume(srcAccount, dstAccount);
             }}
-            className="bg-mail-accent text-white rounded-lg px-4 py-2 text-sm font-semibold flex items-center gap-2"
+            className="bg-mail-accent-fill text-white rounded-lg px-4 py-2 text-sm font-semibold flex items-center gap-2"
           >
             <Play size={14} /> Resume
           </button>
@@ -976,7 +976,7 @@ function CompletionView({ migration, onDone }) {
       )}
       <button
         onClick={onDone}
-        className="bg-mail-accent text-white rounded-lg px-4 py-2 text-sm font-semibold mt-6"
+        className="bg-mail-accent-fill text-white rounded-lg px-4 py-2 text-sm font-semibold mt-6"
       >
         Done
       </button>

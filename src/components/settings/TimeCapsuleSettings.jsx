@@ -30,7 +30,7 @@ export function TimeCapsuleSettings() {
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <div className="flex items-center gap-3 mb-3">
           <div className="w-10 h-10 rounded-full bg-mail-accent/10 flex items-center justify-center">
-            <Info size={20} className="text-mail-accent" />
+            <Info size={20} className="text-mail-accent-text" />
           </div>
           <h3 className="text-sm font-semibold text-mail-text">How Time Capsule works</h3>
         </div>
@@ -46,7 +46,7 @@ export function TimeCapsuleSettings() {
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-mail-accent/10 flex items-center justify-center">
-            <Clock size={20} className="text-mail-accent" />
+            <Clock size={20} className="text-mail-accent-text" />
           </div>
           <div>
             <h3 className="text-sm font-semibold text-mail-text">Automatic Snapshots</h3>

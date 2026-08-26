@@ -91,7 +91,7 @@ export function AISettings() {
   return (
     <div className="p-6 space-y-6">
       {error && (
-        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-500 flex items-center gap-2">
+        <div className="p-3 rounded-lg bg-mail-danger-tint border border-mail-danger/20 text-xs text-mail-danger flex items-center gap-2">
           <AlertCircle size={14} className="shrink-0" />
           <span className="flex-1">{error}</span>
           <button onClick={() => setError(null)}><XCircle size={14} /></button>
@@ -102,7 +102,7 @@ export function AISettings() {
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <div className="flex items-center gap-3 mb-3">
           <div className="w-10 h-10 rounded-full bg-mail-accent/10 flex items-center justify-center">
-            <Info size={20} className="text-mail-accent" />
+            <Info size={20} className="text-mail-accent-text" />
           </div>
           <h3 className="text-sm font-semibold text-mail-text">How Email Cleanup works</h3>
         </div>
@@ -122,7 +122,7 @@ export function AISettings() {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-mail-accent/10 flex items-center justify-center">
-              <Brain size={20} className="text-mail-accent" />
+              <Brain size={20} className="text-mail-accent-text" />
             </div>
             <div>
               <h3 className="text-sm font-semibold text-mail-text">Learned Rules</h3>
@@ -198,7 +198,7 @@ export function AISettings() {
                   </div>
                   <button
                     onClick={(e) => { e.stopPropagation(); deleteRule(activeAccountId, rule.id); }}
-                    className="p-1 rounded hover:bg-red-500/10 text-mail-text-muted hover:text-red-500 transition-colors"
+                    className="p-1 rounded hover:bg-mail-danger/20 text-mail-text-muted hover:text-mail-danger transition-colors"
                   >
                     <Trash2 size={12} />
                   </button>
@@ -258,7 +258,7 @@ export function AISettings() {
                         await saveRule(activeAccountId, updated);
                         setEditingRuleId(null);
                       }}
-                      className="flex items-center gap-1 px-3 py-1 text-[11px] rounded-lg bg-mail-accent text-white hover:bg-mail-accent/90 transition-colors"
+                      className="flex items-center gap-1 px-3 py-1 text-[11px] rounded-lg bg-mail-accent-fill text-white hover:bg-mail-accent/90 transition-colors"
                     >
                       <Save size={10} /> Save
                     </button>
@@ -274,7 +274,7 @@ export function AISettings() {
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-mail-accent/10 flex items-center justify-center">
-            <Sparkles size={20} className="text-mail-accent" />
+            <Sparkles size={20} className="text-mail-accent-text" />
           </div>
           <div>
             <h3 className="text-sm font-semibold text-mail-text">Custom Categories</h3>
@@ -291,7 +291,7 @@ export function AISettings() {
                 <span className="text-sm text-mail-text">{cat}</span>
                 <button
                   onClick={() => removeCustomCategory(cat)}
-                  className="p-1 rounded hover:bg-red-500/10 text-mail-text-muted hover:text-red-500 transition-colors"
+                  className="p-1 rounded hover:bg-mail-danger/20 text-mail-text-muted hover:text-mail-danger transition-colors"
                 >
                   <Trash2 size={14} />
                 </button>
@@ -343,7 +343,7 @@ export function AISettings() {
               type="button"
               onClick={() => setNewCategoryRule(!newCategoryRule)}
               className={`px-2 py-2 text-sm rounded-lg border transition-colors ${
-                newCategoryRule ? 'border-mail-accent text-mail-accent' : 'border-mail-border text-mail-text-muted hover:border-mail-accent'
+                newCategoryRule ? 'border-mail-accent text-mail-accent-text' : 'border-mail-border text-mail-text-muted hover:border-mail-accent'
               }`}
               title="Add rule for this category"
             >
@@ -351,7 +351,7 @@ export function AISettings() {
             </button>
             <button
               type="submit"
-              className="px-4 py-2 text-sm rounded-lg bg-mail-accent text-white hover:bg-mail-accent/90 transition-colors"
+              className="px-4 py-2 text-sm rounded-lg bg-mail-accent-fill text-white hover:bg-mail-accent/90 transition-colors"
             >
               Add
             </button>

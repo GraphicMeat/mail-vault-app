@@ -42,3 +42,68 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ============================================================================
+   DIRECTION CONTRACT — mailvaultapp.com colour system, "Custody Field"
+
+   THESIS: The site teaches the app's colour before anyone downloads it. It
+   refuses the indigo-to-violet SaaS gradient that used to headline every page
+   and said nothing about the product.
+   OWN-WORLD: Slate paper under Desk Lamp Indigo, with three reserved words —
+   Vault Emerald (your disk), Server Blue (someone else's server), Only-Copy
+   Gold (the server dropped it). Colour appears where custody is the subject.
+   STORY: A visitor with a full mailbox learns, by colour, that the product
+   moves mail from blue to green and can prove which copies exist.
+   FIRST VIEWPORT: Headline in solid indigo, custody rule under it, one real
+   screenshot, one visible download action.
+   FORM: Colour-strategy replacement inside the committed site — no gradient,
+   four named roles.
+   FINISH: unreviewed and undocumented is unfinished; this build ends with the
+   finish review, the verdict, and DESIGN.md.
+   ========================================================================= */
+
+:root {
+  --lamp: #4f46e5;          /* Desk Lamp Indigo, 6.29:1 on white */
+  --vault: #065f46;         /* 7.68:1 on white — the app's light --mail-local, same value on both surfaces */
+  --server: #1d4ed8;        /* 6.70:1 on white */
+  --only-copy: #854d0e;     /* 6.51:1 on white */
+}
+
+.dark {
+  --lamp: #a5b4fc;          /* 9.09:1 on the dark slate ground */
+  --vault: #34d399;
+  --server: #60a5fa;
+  --only-copy: #fbbf24;
+}
+
+/* Was `.gradient-text`: an indigo→violet→purple fill on every page headline.
+   Emphasis on a heading comes from weight and size; the colour's job is to say
+   which word matters, so it is now one solid, readable indigo. */
+.lamp-text { color: var(--lamp); }
+.lamp-bg { background-color: #4f46e5; }
+.lamp-bg:hover { background-color: #4338ca; }
+
+/* Custody words inside running copy — the three reserved colours, used only
+   when the sentence is about where a message lives. */
+.c-vault { color: var(--vault); font-weight: 600; }
+.c-server { color: var(--server); font-weight: 600; }
+.c-onlycopy { color: var(--only-copy); font-weight: 600; }
+
+/* The custody rule: server blue giving way to vault emerald, with the
+   only-copy gold as the far end. Three solid fields, no gradient — the same
+   claim the client's message-state glyph makes, at page scale. */
+.custody-rule {
+  display: flex;
+  gap: 2px;              /* three fields, legible as three — at 3px tall and
+                            butted together they read as the gradient this
+                            system just retired */
+  height: 3px;
+  width: 100%;
+  max-width: 20rem;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+.custody-rule > i { display: block; height: 100%; }
+.custody-rule > i:nth-child(1) { flex: 5; background: var(--server); }
+.custody-rule > i:nth-child(2) { flex: 8; background: var(--vault); }
+.custody-rule > i:nth-child(3) { flex: 2; background: var(--only-copy); }

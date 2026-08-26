@@ -19,7 +19,7 @@ function ToolbarButton({ onClick, active, disabled, title, children }) {
       title={title}
       className={`p-1.5 rounded transition-colors ${
         active
-          ? 'bg-mail-accent/20 text-mail-accent'
+          ? 'bg-mail-accent/20 text-mail-accent-text'
           : 'text-mail-text-muted hover:bg-mail-surface-hover hover:text-mail-text'
       } ${disabled ? 'opacity-30 cursor-not-allowed' : ''}`}
     >

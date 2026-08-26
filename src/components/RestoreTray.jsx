@@ -30,15 +30,15 @@ export function RestoreTray() {
           exit={{ y: 30, opacity: 0 }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
           className={`flex items-start gap-3 px-4 py-3 rounded-xl shadow-2xl min-w-[280px] max-w-[380px] border cursor-pointer
-                     ${failed ? 'bg-red-500/10 border-red-500/40' : 'bg-mail-surface border-mail-border'}`}
+                     ${failed ? 'bg-mail-danger-tint border-mail-danger/40' : 'bg-mail-surface border-mail-border'}`}
           onClick={() => openChangeServer(activeRestore.account_id)}
           data-testid={`restore-bubble-${activeRestore.status}`}
         >
           <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0
-                          ${failed ? 'bg-red-500/20' : completed ? 'bg-green-500/20' : 'bg-mail-accent/20'}`}>
-            {running && <Loader size={14} className="text-mail-accent animate-spin" />}
-            {completed && <Check size={14} className="text-green-500" />}
-            {failed && <AlertTriangle size={14} className="text-red-500" />}
+                          ${failed ? 'bg-mail-danger-tint' : completed ? 'bg-mail-success-tint' : 'bg-mail-accent/20'}`}>
+            {running && <Loader size={14} className="text-mail-accent-text animate-spin" />}
+            {completed && <Check size={14} className="text-mail-success" />}
+            {failed && <AlertTriangle size={14} className="text-mail-danger" />}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-xs font-medium text-mail-text truncate flex items-center gap-1.5">

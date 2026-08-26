@@ -42,7 +42,7 @@ export function LogsSettings() {
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5 flex-1 flex flex-col min-h-0">
         <div className="flex items-center justify-between mb-4">
           <h4 className="font-semibold text-mail-text flex items-center gap-2">
-            <ScrollText size={18} className="text-mail-accent" />
+            <ScrollText size={18} className="text-mail-accent-text" />
             Application Logs
           </h4>
           <div className="flex items-center gap-2">
@@ -175,7 +175,7 @@ export function LogsSettings() {
         <div className="flex-1 min-h-0 overflow-hidden">
           {loadingLogs ? (
             <div className="flex items-center justify-center h-full">
-              <Loader size={24} className="animate-spin text-mail-accent" />
+              <Loader size={24} className="animate-spin text-mail-accent-text" />
             </div>
           ) : !invoke ? (
             <div className="flex items-center justify-center h-full text-mail-text-muted">

@@ -144,7 +144,7 @@ export default function ShareUnlockModal({ onSubscribe }) {
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-mail-surface-hover">
-                  <Gift size={20} className="text-mail-accent" />
+                  <Gift size={20} className="text-mail-accent-text" />
                 </div>
                 <div>
                   <h2 className="text-base font-semibold text-mail-text">Unlock premium — free</h2>
@@ -195,7 +195,7 @@ export default function ShareUnlockModal({ onSubscribe }) {
             <div className="px-3 pb-2">
               <button
                 onClick={() => { close(); onSubscribe(); }}
-                className="w-full text-center text-xs text-mail-text-muted hover:text-mail-accent py-1"
+                className="w-full text-center text-xs text-mail-text-muted hover:text-mail-accent-text py-1"
               >
                 Prefer not to share? Subscribe instead →
               </button>
@@ -206,7 +206,7 @@ export default function ShareUnlockModal({ onSubscribe }) {
           <div className="px-5 py-4 border-t border-mail-border flex items-center justify-between">
             <div className="text-xs">
               {claimDate ? (
-                <span className="text-mail-accent font-medium">Premium unlocked until {claimDate}</span>
+                <span className="text-mail-accent-text font-medium">Premium unlocked until {claimDate}</span>
               ) : (
                 <span className="text-mail-text-muted">Pick any action to start</span>
               )}
@@ -246,14 +246,14 @@ function GithubRow({ done, gh, onStart, onOpenRepo, onRecheck }) {
     control = (
       <div className="text-right">
         <div className="text-[11px] text-mail-text-muted">Enter code on GitHub</div>
-        <code className="text-sm font-mono font-semibold text-mail-accent tracking-widest">{gh.userCode}</code>
+        <code className="text-sm font-mono font-semibold text-mail-accent-text tracking-widest">{gh.userCode}</code>
       </div>
     );
   } else if (gh.stage === 'needs_star') {
     control = (
       <div className="flex flex-col items-end gap-1">
         <BtnPrimary onClick={onOpenRepo}><Star size={13} /> Star repo</BtnPrimary>
-        <button onClick={onRecheck} className="text-[11px] text-mail-accent hover:underline">I starred it — verify</button>
+        <button onClick={onRecheck} className="text-[11px] text-mail-accent-text hover:underline">I starred it — verify</button>
       </div>
     );
   } else {
@@ -293,7 +293,7 @@ function BtnPrimary({ onClick, children }) {
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-mail-accent text-white hover:opacity-90 transition-opacity"
+      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-mail-accent-fill text-white hover:opacity-90 transition-opacity"
     >
       {children}
     </button>

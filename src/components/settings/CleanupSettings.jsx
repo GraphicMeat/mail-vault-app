@@ -76,7 +76,7 @@ function CategoryDropdown({ current, categories, onChange }) {
       <button
         ref={btnRef}
         onClick={handleOpen}
-        className="text-[11px] px-2 py-0.5 rounded-full bg-mail-surface-hover text-mail-text-muted hover:bg-mail-accent/10 hover:text-mail-accent transition-colors"
+        className="text-[11px] px-2 py-0.5 rounded-full bg-mail-surface-hover text-mail-text-muted hover:bg-mail-accent/10 hover:text-mail-accent-text transition-colors"
       >
         {CATEGORY_LABELS[current] || current}
       </button>
@@ -91,7 +91,7 @@ function CategoryDropdown({ current, categories, onChange }) {
               <button
                 key={cat}
                 onClick={(e) => { e.stopPropagation(); onChange(cat); setOpen(false); }}
-                className={`w-full px-3 py-1.5 text-left text-xs hover:bg-mail-surface-hover ${cat === current ? 'text-mail-accent font-medium' : 'text-mail-text'}`}
+                className={`w-full px-3 py-1.5 text-left text-xs hover:bg-mail-surface-hover ${cat === current ? 'text-mail-accent-text font-medium' : 'text-mail-text'}`}
               >
                 {CATEGORY_LABELS[cat] || cat}
               </button>
@@ -129,7 +129,7 @@ function ActionDropdown({ current, onChange }) {
       <button
         ref={btnRef}
         onClick={handleOpen}
-        className="text-[11px] px-2 py-0.5 rounded-full bg-mail-surface-hover text-mail-text-muted hover:bg-mail-accent/10 hover:text-mail-accent transition-colors"
+        className="text-[11px] px-2 py-0.5 rounded-full bg-mail-surface-hover text-mail-text-muted hover:bg-mail-accent/10 hover:text-mail-accent-text transition-colors"
       >
         {ACTION_LABELS[current] || current}
       </button>
@@ -144,7 +144,7 @@ function ActionDropdown({ current, onChange }) {
               <button
                 key={act}
                 onClick={(e) => { e.stopPropagation(); onChange(act); setOpen(false); }}
-                className={`w-full px-3 py-1.5 text-left text-xs hover:bg-mail-surface-hover ${act === current ? 'text-mail-accent font-medium' : 'text-mail-text'}`}
+                className={`w-full px-3 py-1.5 text-left text-xs hover:bg-mail-surface-hover ${act === current ? 'text-mail-accent-text font-medium' : 'text-mail-text'}`}
               >
                 {ACTION_LABELS[act]}
               </button>
@@ -536,7 +536,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
           <p className="text-xs text-mail-text-muted mt-3">{priceBlurb}</p>
         )}
         {!IS_APPSTORE_BUILD && onUpgrade && (
-          <button onClick={onUpgrade} className="mt-4 px-4 py-1.5 text-xs font-semibold bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full hover:opacity-90 transition-opacity">
+          <button onClick={onUpgrade} className="mt-4 px-4 py-1.5 text-xs font-semibold bg-mail-accent-fill text-white rounded-full hover:bg-mail-accent-hover transition-colors">
             Upgrade
           </button>
         )}
@@ -552,7 +552,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
     const pct = classStatus.total > 0 ? (classStatus.classified / classStatus.total * 100) : 0;
     content = (
       <div className="flex flex-col items-center justify-center h-full text-center">
-        <Loader className="w-10 h-10 text-mail-accent mb-4 animate-spin" />
+        <Loader className="w-10 h-10 text-mail-accent-text mb-4 animate-spin" />
         <h3 className="font-semibold text-base mb-2">Classifying Emails...</h3>
         <p className="text-sm text-mail-text-muted mb-4">
           {classStatus.total > 0 ? `${classStatus.classified} / ${classStatus.total} processed` : 'Preparing...'}
@@ -656,7 +656,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
         {/* Inline progress when classifying with existing results */}
         {isClassifying && (
           <div className="flex items-center gap-3 p-3 rounded-lg bg-mail-accent/5 border border-mail-accent/20">
-            <Loader size={16} className="animate-spin text-mail-accent shrink-0" />
+            <Loader size={16} className="animate-spin text-mail-accent-text shrink-0" />
             <span className="text-sm text-mail-text">
               Classifying... {classStatus.total > 0 ? `${classStatus.classified}/${classStatus.total}` : 'Preparing...'}
             </span>
@@ -679,9 +679,9 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
               const ids = new Set(mailboxResults.filter(r => (r.classification?.action || r.action) === 'delete-from-server').map(r => r.messageId));
               setSelectedIds(ids);
             }}
-            className="p-4 rounded-xl bg-red-500/5 border border-red-500/20 text-center hover:bg-red-500/10 transition-colors"
+            className="p-4 rounded-xl bg-mail-danger-tint border border-mail-danger/20 text-center hover:bg-mail-danger/20 transition-colors"
           >
-            <p className="text-2xl font-bold text-red-500">{deletableCount.toLocaleString()}</p>
+            <p className="text-2xl font-bold text-mail-danger">{deletableCount.toLocaleString()}</p>
             <p className="text-xs text-mail-text-muted mt-1">Can Delete</p>
           </button>
           <button
@@ -689,9 +689,9 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
               const ids = new Set(mailboxResults.filter(r => (r.classification?.action || r.action) === 'archive').map(r => r.messageId));
               setSelectedIds(ids);
             }}
-            className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/20 text-center hover:bg-blue-500/10 transition-colors"
+            className="p-4 rounded-xl bg-mail-accent-tint border border-mail-accent/20 text-center hover:bg-mail-accent/20 transition-colors"
           >
-            <p className="text-2xl font-bold text-blue-500">{archivableCount.toLocaleString()}</p>
+            <p className="text-2xl font-bold text-mail-accent-text">{archivableCount.toLocaleString()}</p>
             <p className="text-xs text-mail-text-muted mt-1">Can Archive</p>
           </button>
         </div>
@@ -701,7 +701,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
           <button
             onClick={() => setActiveCategory('all')}
             className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
-              activeCategory === 'all' ? 'bg-mail-accent text-white border-mail-accent' : 'border-mail-border text-mail-text-muted hover:border-mail-accent'
+              activeCategory === 'all' ? 'bg-mail-accent-fill text-white border-mail-accent' : 'border-mail-border text-mail-text-muted hover:border-mail-accent'
             }`}
           >
             All ({mailboxTotal})
@@ -712,7 +712,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
             return (
               <button key={cat} onClick={() => setActiveCategory(cat)}
                 className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
-                  activeCategory === cat ? 'bg-mail-accent text-white border-mail-accent' : 'border-mail-border text-mail-text-muted hover:border-mail-accent'
+                  activeCategory === cat ? 'bg-mail-accent-fill text-white border-mail-accent' : 'border-mail-border text-mail-text-muted hover:border-mail-accent'
                 }`}
               >
                 {CATEGORY_LABELS[cat] || cat} ({count})
@@ -724,7 +724,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
         {/* Bulk Progress */}
         {bulkProgress && (
           <div className="flex items-center gap-3 p-3 rounded-lg bg-mail-surface border border-mail-accent/30">
-            <Loader size={14} className="animate-spin text-mail-accent shrink-0" />
+            <Loader size={14} className="animate-spin text-mail-accent-text shrink-0" />
             <span className="text-sm text-mail-text capitalize">{bulkProgress.status}...</span>
             <div className="flex-1 h-1.5 bg-mail-border rounded-full overflow-hidden">
               <div
@@ -744,14 +744,14 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
               <button
                 onClick={() => setBulkAction('delete')}
                 disabled={bulkRunning}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-mail-danger-tint text-mail-danger hover:bg-mail-danger/20 transition-colors disabled:opacity-50"
               >
                 <Trash2 size={13} /> Delete ({selectedIds.size})
               </button>
               <button
                 onClick={() => setBulkAction('archive')}
                 disabled={bulkRunning}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-colors disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-mail-accent-tint text-mail-accent-text hover:bg-mail-accent/20 transition-colors disabled:opacity-50"
               >
                 <Archive size={13} /> Archive ({selectedIds.size})
               </button>
@@ -877,7 +877,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
                 <button
                   onClick={() => handleBulkAction(bulkAction)}
                   className={`px-4 py-2 text-sm text-white rounded-lg transition-colors ${
-                    bulkAction === 'delete' ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'
+                    bulkAction === 'delete' ? 'bg-mail-danger-fill hover:bg-mail-danger' : 'bg-mail-accent-fill hover:bg-mail-accent-hover'
                   }`}
                 >
                   {bulkAction === 'delete' ? 'Delete' : 'Archive'}

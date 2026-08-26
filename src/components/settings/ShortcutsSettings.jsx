@@ -134,7 +134,7 @@ export function ShortcutsSettings() {
       {/* Keyboard Shortcuts */}
       <div data-testid="settings-shortcuts" className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-          <Keyboard size={18} className="text-mail-accent" />
+          <Keyboard size={18} className="text-mail-accent-text" />
           Keyboard Shortcuts
         </h4>
 
@@ -184,7 +184,7 @@ export function ShortcutsSettings() {
                           </span>
                           <div className="flex items-center gap-2">
                             {duplicate && (
-                              <span className="text-xs text-amber-500" title={`Also bound to "${SHORTCUT_ACTION_LABELS[duplicate]}"`}>
+                              <span className="text-xs text-mail-warning" title={`Also bound to "${SHORTCUT_ACTION_LABELS[duplicate]}"`}>
                                 Duplicate
                               </span>
                             )}
@@ -202,7 +202,7 @@ export function ShortcutsSettings() {
                               className={`inline-flex items-center justify-center min-w-[72px] h-7 px-2
                                          text-xs font-mono rounded-md border transition-all ${
                                 isRebinding
-                                  ? 'border-mail-accent bg-mail-accent/10 text-mail-accent animate-pulse'
+                                  ? 'border-mail-accent bg-mail-accent/10 text-mail-accent-text animate-pulse'
                                   : isModified
                                     ? 'border-mail-accent/50 bg-mail-accent/5 text-mail-text hover:border-mail-accent'
                                     : 'border-mail-border bg-mail-border/30 text-mail-text-muted hover:border-mail-accent/50'

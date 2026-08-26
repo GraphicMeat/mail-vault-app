@@ -316,17 +316,17 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, account,
     <>
       <div
         className={`flex items-center gap-${compact ? '2' : '3'} ${compact ? 'px-2.5 py-1.5' : 'p-3'} bg-mail-bg rounded-lg border transition-all group cursor-pointer
-                   ${error ? 'border-mail-danger' : justDownloaded ? 'border-green-500/50' : 'border-mail-border hover:border-mail-accent/50'}`}
+                   ${error ? 'border-mail-danger' : justDownloaded ? 'border-mail-success/50' : 'border-mail-border hover:border-mail-accent/50'}`}
         onClick={downloadedPath && isTauri ? handleOpen : handleDownload}
         onContextMenu={handleContextMenu}
         role="button"
         tabIndex={0}
       >
-        <div className={`${compact ? 'w-7 h-7' : 'w-10 h-10'} rounded-lg flex items-center justify-center ${justDownloaded ? 'bg-green-500/10' : 'bg-mail-accent/10'}`}>
+        <div className={`${compact ? 'w-7 h-7' : 'w-10 h-10'} rounded-lg flex items-center justify-center ${justDownloaded ? 'bg-mail-success-tint' : 'bg-mail-accent/10'}`}>
           {justDownloaded ? (
-            <Check size={iconSize} className="text-green-500" />
+            <Check size={iconSize} className="text-mail-success" />
           ) : (
-            <FileText size={iconSize} className="text-mail-accent" />
+            <FileText size={iconSize} className="text-mail-accent-text" />
           )}
         </div>
         <div className="flex-1 min-w-0">
@@ -337,7 +337,7 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, account,
             {error ? (
               <span className="text-mail-danger">{error}</span>
             ) : justDownloaded ? (
-              <span className="text-green-500">Downloaded</span>
+              <span className="text-mail-success">Downloaded</span>
             ) : downloadedPath ? (
               <span className="text-mail-text-muted">Click to open</span>
             ) : (
@@ -348,16 +348,16 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, account,
         {downloading ? (
           <div className={`${compact ? 'w-3 h-3' : 'w-4 h-4'} border-2 border-mail-accent border-t-transparent rounded-full animate-spin`} />
         ) : justDownloaded ? (
-          <Check size={badgeIconSize} className="text-green-500" />
+          <Check size={badgeIconSize} className="text-mail-success" />
         ) : downloadedPath ? (
           <ExternalLink
             size={badgeIconSize}
-            className="text-mail-text-muted group-hover:text-mail-accent transition-colors"
+            className="text-mail-text-muted group-hover:text-mail-accent-text transition-colors"
           />
         ) : (
           <Download
             size={badgeIconSize}
-            className="text-mail-text-muted group-hover:text-mail-accent transition-colors"
+            className="text-mail-text-muted group-hover:text-mail-accent-text transition-colors"
           />
         )}
       </div>
@@ -443,7 +443,7 @@ export function DownloadAllButton({ attachments, emailUid, account, folder }) {
       onClick={handleDownloadAll}
       disabled={downloading}
       className="flex items-center gap-1.5 px-3 py-1.5 bg-mail-accent/10
-                text-mail-accent hover:bg-mail-accent/20 rounded-lg text-sm
+                text-mail-accent-text hover:bg-mail-accent/20 rounded-lg text-sm
                 font-medium transition-colors disabled:opacity-70"
     >
       {downloading ? (

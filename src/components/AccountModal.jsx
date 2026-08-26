@@ -546,7 +546,7 @@ export function AccountModal({ onClose }) {
                 >
                   <div className="w-9 h-9 flex-shrink-0 bg-mail-accent/10 rounded-lg flex items-center
                                 justify-center group-hover:bg-mail-accent/20 transition-colors">
-                    <Mail size={18} className="text-mail-accent" />
+                    <Mail size={18} className="text-mail-accent-text" />
                   </div>
                   <div className="min-w-0">
                     <div className="font-medium text-mail-text text-sm truncate">{config.name}</div>
@@ -563,7 +563,7 @@ export function AccountModal({ onClose }) {
               >
                 <div className="w-9 h-9 flex-shrink-0 bg-mail-accent/10 rounded-lg flex items-center
                               justify-center group-hover:bg-mail-accent/20 transition-colors">
-                  <Server size={18} className="text-mail-accent" />
+                  <Server size={18} className="text-mail-accent-text" />
                 </div>
                 <div className="min-w-0">
                   <div className="font-medium text-mail-text text-sm truncate">Other / Custom</div>
@@ -576,13 +576,13 @@ export function AccountModal({ onClose }) {
               {/* Provider Note */}
               {provider && providerConfig?.note && (
                 <div className="flex items-start gap-3 p-3 bg-mail-accent/10 rounded-lg text-sm">
-                  <AlertCircle size={16} className="text-mail-accent mt-0.5 flex-shrink-0" />
+                  <AlertCircle size={16} className="text-mail-accent-text mt-0.5 flex-shrink-0" />
                   <div className="text-mail-text">
                     <span>{providerConfig.note}</span>
                     {providerConfig.helpUrl && (
                       <button
                         type="button"
-                        className="ml-2 text-mail-accent hover:underline font-medium"
+                        className="ml-2 text-mail-accent-text hover:underline font-medium"
                         onClick={() => {
                           import('@tauri-apps/plugin-shell').then(({ open }) => {
                             open(providerConfig.helpUrl);
@@ -645,8 +645,8 @@ export function AccountModal({ onClose }) {
                         className={`w-full flex items-center justify-center gap-3 px-4 py-3
                                   text-white rounded-lg transition-all font-medium
                                   ${oauthLoading || !formData.email?.includes('@')
-                                    ? 'bg-purple-400/50 cursor-not-allowed'
-                                    : 'bg-purple-600 hover:bg-purple-700'}`}
+                                    ? 'bg-mail-accent-fill/50 cursor-not-allowed'
+                                    : 'bg-mail-accent-fill hover:bg-mail-accent-hover'}`}
                       >
                         {oauthLoading ? (
                           <>
@@ -679,7 +679,7 @@ export function AccountModal({ onClose }) {
                       <button
                         type="button"
                         onClick={() => setShowAdvanced(!showAdvanced)}
-                        className="text-xs text-gray-400 hover:text-gray-300 flex items-center gap-1"
+                        className="text-xs text-mail-text-muted hover:text-mail-text flex items-center gap-1"
                       >
                         <ChevronRight size={12} className={`transition-transform ${showAdvanced ? 'rotate-90' : ''}`} />
                         Advanced (Corporate)
@@ -691,14 +691,14 @@ export function AccountModal({ onClose }) {
                             placeholder="Custom Client ID (optional)"
                             value={formData.oauth2CustomClientId}
                             onChange={e => setFormData(prev => ({ ...prev, oauth2CustomClientId: e.target.value }))}
-                            className="w-full px-3 py-1.5 text-xs bg-gray-700 border border-gray-600 rounded text-gray-200 placeholder-gray-500"
+                            className="w-full px-3 py-1.5 text-xs bg-mail-bg border border-mail-border rounded text-mail-text placeholder-mail-text-muted"
                           />
                           <input
                             type="text"
                             placeholder="Tenant ID (optional, e.g. contoso.onmicrosoft.com)"
                             value={formData.oauth2TenantId}
                             onChange={e => setFormData(prev => ({ ...prev, oauth2TenantId: e.target.value }))}
-                            className="w-full px-3 py-1.5 text-xs bg-gray-700 border border-gray-600 rounded text-gray-200 placeholder-gray-500"
+                            className="w-full px-3 py-1.5 text-xs bg-mail-bg border border-mail-border rounded text-mail-text placeholder-mail-text-muted"
                           />
                         </div>
                       )}
@@ -959,7 +959,7 @@ export function AccountModal({ onClose }) {
                   type="submit"
                   disabled={testing || success || (authType === 'oauth2' && !oauthConnected)}
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5
-                            bg-mail-accent hover:bg-mail-accent-hover disabled:opacity-50
+                            bg-mail-accent-fill hover:bg-mail-accent-hover disabled:opacity-50
                             text-white font-medium rounded-lg transition-all
                             shadow-glow hover:shadow-glow-lg disabled:shadow-none"
                 >

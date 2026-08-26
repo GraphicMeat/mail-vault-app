@@ -12,7 +12,7 @@ export function SecuritySettings() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center gap-2 mb-2">
-        <Shield size={18} className="text-mail-accent" />
+        <Shield size={18} className="text-mail-accent-text" />
       </div>
 
       <div className="space-y-4">
@@ -40,8 +40,8 @@ export function SecuritySettings() {
       <div className="pt-4 border-t border-mail-border">
         <h4 className="text-sm font-medium text-mail-text mb-2">How it works</h4>
         <div className="text-xs text-mail-text-muted space-y-1">
-          <p><span className="text-red-500 font-medium">Red alerts</span> — Link text shows one URL but actually goes to a different domain (phishing indicator)</p>
-          <p><span className="text-amber-500 font-medium">Yellow alerts</span> — Link passes through a tracking redirect to a different domain</p>
+          <p><span className="text-mail-danger font-medium">Red alerts</span> — Link text shows one URL but actually goes to a different domain (phishing indicator)</p>
+          <p><span className="text-mail-warning font-medium">Yellow alerts</span> — Link passes through a tracking redirect to a different domain</p>
           <p className="mt-2 text-mail-text-muted/70">All scanning is performed locally on your device — no email data is sent to any server.</p>
         </div>
       </div>

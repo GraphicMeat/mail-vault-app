@@ -8,12 +8,14 @@ import {
   Paperclip,
   Download,
   HardDrive,
+  CloudOff,
   Cloud,
   FileText,
   AlertTriangle,
   RefreshCw,
 } from 'lucide-react';
 import { getRealAttachments, replaceCidUrls } from '../services/attachmentUtils';
+import { describeMessageState } from './email/MessageStateIcon';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { SenderInsightsPanel } from './SenderInsightsPanel';
 import { ThreadView } from './email/ThreadView';
@@ -53,6 +55,10 @@ function EmailViewerComponent({ onComposeReply }) {
   const deleteEmailFromServer = useSelectionStore(s => s.deleteEmailFromServer);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   const activeMailbox = useAccountStore(s => s.activeMailbox);
+  // Gold requires proof of server absence, so the band reads the same
+  // uid-set completeness flag ConnectedStateIcon does — never `isLocalOnly`
+  // on its own, which is only "the list didn't have it".
+  const serverKnown = useMailStore(s => s.serverUids.complete);
 
   const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
   const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
@@ -85,6 +91,27 @@ function EmailViewerComponent({ onComposeReply }) {
   const isArchived = selectedEmail && archivedEmailIds.has(selectedEmail.uid);
   const isLocalOnly = selectedEmailSource === 'local-only';
   const isRead = selectedEmail?.flags?.includes('\\Seen');
+  // One custody statement per message, in the vocabulary the rows already use.
+  //
+  // The row's chip and this band are two visible claims about the same message,
+  // so they have to read the same fields or they will contradict each other on
+  // screen. The row goes through `describeMessageState(email, …)` — the email's
+  // own `isArchived`/`source`. This band was reading two *store* sets instead
+  // (`archivedEmailIds`, and the selection store's `selectedEmailSource`), a
+  // third carrier of provenance that a click has to keep populated. Read the
+  // message first and let the optimistic sets only ADD archived state, which is
+  // the one direction they ever move within a session.
+  //
+  // NOT `selectedEmailSource`. That field's declared contract is
+  // `'server' | 'local' | 'local-only'` (selectionSlice.js), but
+  // selectEmail.js also writes `'header-only'` into it to mean the BODY has not
+  // been fetched — a loading state wearing a provenance field's name. Reading
+  // it here rendered "Saved in your vault" over a row whose own glyph said
+  // "your only copy", because 'header-only' is simply not 'local-only'.
+  const custody = describeMessageState(
+    { isArchived: isArchived || !!selectedEmail?.isArchived, source: selectedEmail?.source },
+    { serverKnown }
+  );
 
   // Reset view states when switching emails
   useEffect(() => {
@@ -385,28 +412,28 @@ function EmailViewerComponent({ onComposeReply }) {
           <LinkAlertIcon level={selectedEmail._linkAlert} size={18} alerts={getCachedAlerts(scopeKey)} />
           {selectedEmail.subject}
         </h1>
-        <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium flex-shrink-0 mt-0.5
-                        ${isLocalOnly
-                          ? 'text-mail-warning'
-                          : isArchived
-                            ? 'text-mail-local'
-                            : 'text-mail-text-muted'}`}
-             style={{
-               backgroundColor: isLocalOnly
-                 ? 'color-mix(in srgb, var(--mail-warning) 10%, transparent)'
-                 : isArchived
-                   ? 'color-mix(in srgb, var(--mail-local) 10%, transparent)'
-                   : 'color-mix(in srgb, var(--mail-accent) 8%, transparent)'
-             }}
-        >
-          {isLocalOnly ? (
-            <><HardDrive size={12} /><span>Local only</span></>
-          ) : isArchived ? (
-            <><HardDrive size={12} /><span>Archived</span></>
-          ) : (
-            <><Cloud size={12} /><span>Server</span></>
-          )}
-        </div>
+      </div>
+
+      {/* Custody band — the reading pane opens under the claim about where this
+          message lives. Same words the row glyph's tooltip uses; the tint is a
+          solid custody surface, so the text contrast on it is a fixed number. */}
+      <div
+        data-testid="email-custody-band"
+        data-tone={custody.tone}
+        className={`flex items-center gap-2 px-3 py-1.5 border-b border-mail-border text-xs
+                   ${custody.tone === 'only-copy'
+                     ? 'bg-mail-only-copy-tint'
+                     : custody.tone === 'local'
+                       ? 'bg-mail-local-tint'
+                       : 'bg-mail-server-tint'}`}
+      >
+        {custody.icon === 'cloud-off'
+          ? <CloudOff size={14} className="flex-shrink-0 text-mail-only-copy" />
+          : custody.icon === 'cloud'
+          ? <Cloud size={14} className="flex-shrink-0 text-mail-server" />
+          : <HardDrive size={14} className="flex-shrink-0 text-mail-local" />}
+        <span className="font-medium text-mail-text">{custody.label}</span>
+        <span className="text-mail-text-on-tint truncate">{custody.detail}</span>
       </div>
 
       {/* Header */}
@@ -645,8 +672,8 @@ function EmailViewerComponent({ onComposeReply }) {
                 </button>
                 <button
                   onClick={confirmDeleteEmail}
-                  className="px-4 py-2 text-sm text-white bg-red-600 rounded-lg
-                            hover:bg-red-700 transition-colors"
+                  className="px-4 py-2 text-sm text-white bg-mail-danger-fill rounded-lg
+                            hover:bg-mail-danger transition-colors"
                 >
                   Delete
                 </button>
@@ -691,8 +718,8 @@ function EmailViewerComponent({ onComposeReply }) {
                 </button>
                 <button
                   onClick={confirmRemoveLocal}
-                  className="px-4 py-2 text-sm text-white bg-red-600 rounded-lg
-                            hover:bg-red-700 transition-colors"
+                  className="px-4 py-2 text-sm text-white bg-mail-danger-fill rounded-lg
+                            hover:bg-mail-danger transition-colors"
                 >
                   {isLocalOnly ? 'Delete' : 'Unarchive'}
                 </button>

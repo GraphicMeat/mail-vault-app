@@ -101,8 +101,8 @@ export function SendAsVerifyModal({ isOpen, account, sendAsAddress, displayName,
               data-status={status}
               className={`mt-4 flex items-start gap-2 text-sm rounded-lg p-3 ${
                 status === 'ok'
-                  ? 'bg-green-500/10 text-green-500'
-                  : 'bg-red-500/10 text-red-500'
+                  ? 'bg-mail-success-tint text-mail-success'
+                  : 'bg-mail-danger-tint text-mail-danger'
               }`}
             >
               {status === 'ok' ? <Check size={16} className="mt-0.5 shrink-0" /> : <AlertTriangle size={16} className="mt-0.5 shrink-0" />}
@@ -121,7 +121,7 @@ export function SendAsVerifyModal({ isOpen, account, sendAsAddress, displayName,
               onClick={runVerify}
               disabled={!validRecipient || status === 'sending'}
               data-testid="send-as-verify-send"
-              className="px-4 py-2 rounded-lg text-sm bg-mail-accent hover:bg-mail-accent/90 text-white
+              className="px-4 py-2 rounded-lg text-sm bg-mail-accent-fill hover:bg-mail-accent/90 text-white
                         transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {status === 'sending' ? <Loader size={14} className="animate-spin" /> : <Send size={14} />}

@@ -23,7 +23,7 @@ export function LinkAlertIcon({ level, size = 14, alerts }) {
     <>
       <button
         onClick={(e) => { e.stopPropagation(); setShowModal(true); }}
-        className={`flex-shrink-0 ${isRed ? 'text-red-500' : 'text-amber-500'} hover:opacity-80 transition-opacity`}
+        className={`flex-shrink-0 ${isRed ? 'text-mail-danger' : 'text-mail-warning'} hover:opacity-80 transition-opacity`}
         title={title}
       >
         <AlertTriangle size={size} />
@@ -40,10 +40,10 @@ export function LinkAlertIcon({ level, size = 14, alerts }) {
             </button>
 
             <div className="flex items-center gap-3 mb-4">
-              <div className={`w-10 h-10 rounded-full ${isRed ? 'bg-red-500/20' : 'bg-amber-500/20'} flex items-center justify-center`}>
-                <AlertTriangle size={22} className={isRed ? 'text-red-500' : 'text-amber-500'} />
+              <div className={`w-10 h-10 rounded-full ${isRed ? 'bg-mail-danger-tint' : 'bg-mail-warning-tint'} flex items-center justify-center`}>
+                <AlertTriangle size={22} className={isRed ? 'text-mail-danger' : 'text-mail-warning'} />
               </div>
-              <h3 className={`text-lg font-bold ${isRed ? 'text-red-500' : 'text-amber-500'}`}>{title}</h3>
+              <h3 className={`text-lg font-bold ${isRed ? 'text-mail-danger' : 'text-mail-warning'}`}>{title}</h3>
             </div>
 
             {alerts && alerts.length > 0 ? (
@@ -51,8 +51,8 @@ export function LinkAlertIcon({ level, size = 14, alerts }) {
                 {alerts.map((alert, i) => (
                   <div key={i} className="p-3 rounded-lg bg-mail-surface border border-mail-border">
                     <div className="flex items-center gap-2 mb-2">
-                      <AlertTriangle size={12} className={alert.level === 'red' ? 'text-red-500' : 'text-amber-500'} />
-                      <span className={`text-xs font-medium ${alert.level === 'red' ? 'text-red-500' : 'text-amber-500'}`}>
+                      <AlertTriangle size={12} className={alert.level === 'red' ? 'text-mail-danger' : 'text-mail-warning'} />
+                      <span className={`text-xs font-medium ${alert.level === 'red' ? 'text-mail-danger' : 'text-mail-warning'}`}>
                         {alert.level === 'red' ? 'Dangerous' : 'Suspicious'}
                       </span>
                     </div>

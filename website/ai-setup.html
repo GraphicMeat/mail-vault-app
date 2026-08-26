@@ -27,11 +27,9 @@
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 
   <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/assets/tailwind.css?v=1">
+  <link rel="stylesheet" href="/assets/tailwind.css?v=6">
 
   <style>
-    .gradient-text { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-    .gradient-bg { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); }
     .glass { background: rgba(255,255,255,0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
     .dark .glass { background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05); }
   </style>
@@ -59,7 +57,7 @@
             <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/></svg>
             <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/></svg>
           </button>
-          <a href="/#download" class="hidden sm:inline-flex gradient-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">Download</a>
+          <a href="/#download" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">Download</a>
         </div>
       </div>
     </div>
@@ -74,7 +72,7 @@
           Premium Feature
         </div>
         <h1 class="text-4xl sm:text-5xl font-bold mb-6">
-          AI-Powered <span class="gradient-text">Email Cleanup</span>
+          AI-Powered <span class="lamp-text">Email Cleanup</span>
         </h1>
         <p class="text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
           A local AI model classifies your emails and suggests what's safe to remove from the server. Everything runs on your machine. No email data ever leaves your device.
@@ -88,21 +86,21 @@
         <h2 class="text-2xl font-bold text-center mb-12">How It Works</h2>
         <div class="grid md:grid-cols-3 gap-8">
           <div class="text-center">
-            <div class="w-14 h-14 mx-auto mb-4 rounded-2xl gradient-bg flex items-center justify-center">
+            <div class="w-14 h-14 mx-auto mb-4 rounded-2xl lamp-bg flex items-center justify-center">
               <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/></svg>
             </div>
             <h3 class="font-semibold text-lg mb-2">1. Download the Model</h3>
             <p class="text-sm text-slate-600 dark:text-slate-400">Enable AI in Settings and download a model (~2-5 GB). It's stored locally in your app data folder. One-time download.</p>
           </div>
           <div class="text-center">
-            <div class="w-14 h-14 mx-auto mb-4 rounded-2xl gradient-bg flex items-center justify-center">
+            <div class="w-14 h-14 mx-auto mb-4 rounded-2xl lamp-bg flex items-center justify-center">
               <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
             </div>
             <h3 class="font-semibold text-lg mb-2">2. Automatic Classification</h3>
             <p class="text-sm text-slate-600 dark:text-slate-400">After each backup, the AI classifies your emails: newsletters, promotions, notifications, personal, work, and more.</p>
           </div>
           <div class="text-center">
-            <div class="w-14 h-14 mx-auto mb-4 rounded-2xl gradient-bg flex items-center justify-center">
+            <div class="w-14 h-14 mx-auto mb-4 rounded-2xl lamp-bg flex items-center justify-center">
               <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
             </div>
             <h3 class="font-semibold text-lg mb-2">3. Review & Clean Up</h3>
@@ -123,15 +121,15 @@
             </p>
             <ul class="space-y-3">
               <li class="flex items-start gap-3">
-                <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
                 <span class="text-slate-700 dark:text-slate-300">Model runs on your CPU/GPU — no internet needed for classification</span>
               </li>
               <li class="flex items-start gap-3">
-                <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
                 <span class="text-slate-700 dark:text-slate-300">No email content, metadata, or addresses leave your machine</span>
               </li>
               <li class="flex items-start gap-3">
-                <svg class="w-5 h-5 text-green-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
                 <span class="text-slate-700 dark:text-slate-300">Delete the model anytime to free disk space</span>
               </li>
             </ul>

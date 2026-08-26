@@ -134,7 +134,7 @@ export function MigrationToast({ showSettings, onOpenSettings }) {
                 </div>
               </div>
               <div className="flex items-center gap-2 mt-2">
-                <button onClick={handleResume} className="text-xs px-3 py-1 rounded bg-mail-accent text-white font-semibold">Resume</button>
+                <button onClick={handleResume} className="text-xs px-3 py-1 rounded bg-mail-accent-fill text-white font-semibold">Resume</button>
                 <button onClick={handleDiscard} className="text-xs px-3 py-1 rounded bg-mail-surface border border-mail-border text-mail-text">Discard</button>
               </div>
             </>
@@ -173,7 +173,7 @@ export function MigrationToast({ showSettings, onOpenSettings }) {
               {status === 'rate_limited' ? (
                 <AlertTriangle size={14} className="text-mail-warning flex-shrink-0" />
               ) : (
-                <Loader2 size={14} className="text-mail-accent animate-spin flex-shrink-0" />
+                <Loader2 size={14} className="text-mail-accent-text animate-spin flex-shrink-0" />
               )}
               <span className="text-sm font-semibold text-mail-text truncate">
                 {total_emails > 0

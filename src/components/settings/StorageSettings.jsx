@@ -119,11 +119,11 @@ export function StorageSettings({ accounts, onUpgrade }) {
       {/* Current Storage Status */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-          <Database size={18} className="text-mail-accent" />
+          <Database size={18} className="text-mail-accent-text" />
           Storage Status
         </h4>
 
-        <div className="flex items-center gap-3 p-3 bg-mail-success/10 border border-mail-success/20 rounded-lg mb-4">
+        <div className="flex items-center gap-3 p-3 bg-mail-local-tint border border-mail-local/20 rounded-lg mb-4">
           <div className="w-3 h-3 bg-mail-success rounded-full animate-pulse" />
           <span className="text-sm text-mail-text">
             Your emails are stored securely in local storage
@@ -139,7 +139,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
       {/* Local Email Caching */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-          <HardDrive size={18} className="text-mail-accent" />
+          <HardDrive size={18} className="text-mail-accent-text" />
           Local Email Caching
         </h4>
 
@@ -149,7 +149,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
               <label className="text-sm font-medium text-mail-text">
                 Cache Duration
               </label>
-              <span className="text-sm font-medium text-mail-accent">
+              <span className="text-sm font-medium text-mail-accent-text">
                 {localCacheDurationMonths === 0 ? 'All emails' :
                  localCacheDurationMonths === 1 ? '1 month' :
                  localCacheDurationMonths === 12 ? '1 year' :
@@ -191,7 +191,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
           <div className="flex items-center justify-between p-3 bg-mail-bg rounded-lg">
             <div>
               <div className="text-sm text-mail-text">Local storage usage</div>
-              <div className="text-xs text-mail-text-muted">
+              <div className="text-xs text-mail-local">
                 {localStorageUsage ? (
                   <>
                     {(localStorageUsage.totalMB || 0) >= 1024
@@ -229,7 +229,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                 <button
                   onClick={() => setPurgeOrphansConfirm(true)}
                   disabled={purgingOrphans}
-                  className="flex items-center gap-2 shrink-0 px-3 py-1.5 text-sm font-medium rounded-lg border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
+                  className="flex items-center gap-2 shrink-0 px-3 py-1.5 text-sm font-medium rounded-lg border border-mail-danger text-mail-danger hover:bg-mail-danger-tint transition-colors disabled:opacity-50"
                 >
                   <Trash2 size={14} />
                   Delete
@@ -261,7 +261,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                       }
                     }}
                     disabled={purgingOrphans}
-                    className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg bg-mail-danger-fill text-white hover:bg-mail-danger transition-colors disabled:opacity-50"
                   >
                     {purgingOrphans ? <Loader size={14} className="animate-spin" /> : <Trash2 size={14} />}
                     Delete permanently
@@ -283,7 +283,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
               <button
                 onClick={() => { setClearCacheConfirm(true); setClearCacheResult(null); }}
                 disabled={clearingCache}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg border border-mail-danger text-mail-danger hover:bg-mail-danger-tint transition-colors disabled:opacity-50"
               >
                 <Trash2 size={14} />
                 Clear Cache
@@ -340,7 +340,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                     }
                   }}
                   disabled={clearingCache}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg bg-mail-danger-fill text-white hover:bg-mail-danger transition-colors disabled:opacity-50"
                 >
                   {clearingCache ? (
                     <Loader size={14} className="animate-spin" />
@@ -353,7 +353,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
             )}
           </div>
           {clearCacheResult && (
-            <div className="text-xs text-green-600 dark:text-green-400 px-1">
+            <div className="text-xs text-mail-success px-1">
               Cleared {clearCacheResult.deletedCount.toLocaleString()} cached emails
               {clearCacheResult.skippedArchived > 0 && `, ${clearCacheResult.skippedArchived.toLocaleString()} archived emails preserved`}.
               Re-sync started.
@@ -365,10 +365,10 @@ export function StorageSettings({ accounts, onUpgrade }) {
       {/* Auto-Cleanup Rules */}
       <div data-testid="settings-auto-cleanup" className="bg-mail-surface border border-mail-border rounded-xl p-5 relative overflow-hidden">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-          <Clock size={18} className="text-mail-accent" />
+          <Clock size={18} className="text-mail-accent-text" />
           Auto-Cleanup
           {!isPaidUser && (
-            <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full">
+            <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-mail-accent-fill text-white rounded-full">
               Premium
             </span>
           )}
@@ -398,7 +398,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                 </div>
               </div>
               <div className="flex gap-2">
-                <div className="px-3 py-1.5 text-sm bg-mail-accent/10 text-mail-accent rounded-lg">Add Rule</div>
+                <div className="px-3 py-1.5 text-sm bg-mail-accent/10 text-mail-accent-text rounded-lg">Add Rule</div>
                 <div className="px-3 py-1.5 text-sm bg-mail-surface-hover text-mail-text rounded-lg">Run All Now</div>
               </div>
             </div>
@@ -406,8 +406,8 @@ export function StorageSettings({ accounts, onUpgrade }) {
             {/* Lock overlay */}
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-mail-surface/60 backdrop-blur-[1px] rounded-lg">
               <div className="flex flex-col items-center gap-3 text-center px-6">
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500/20 to-indigo-500/20 border border-blue-500/30 flex items-center justify-center">
-                  <Clock size={20} className="text-blue-500" />
+                <div className="w-12 h-12 rounded-full bg-mail-accent-tint border border-mail-accent/30 flex items-center justify-center">
+                  <Clock size={20} className="text-mail-accent-text" />
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-mail-text mb-1">Premium Feature</p>
@@ -421,7 +421,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                   )}
                 </div>
                 {!IS_APPSTORE_BUILD && onUpgrade && (
-                  <button onClick={onUpgrade} className="px-4 py-1.5 text-xs font-semibold bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full hover:opacity-90 transition-opacity">
+                  <button onClick={onUpgrade} className="px-4 py-1.5 text-xs font-semibold bg-mail-accent-fill text-white rounded-full hover:bg-mail-accent-hover transition-colors">
                     Upgrade
                   </button>
                 )}
@@ -450,8 +450,8 @@ export function StorageSettings({ accounts, onUpgrade }) {
                       </span>
                       <span className={`text-xs px-1.5 py-0.5 rounded whitespace-nowrap ${
                         rule.action === 'delete'
-                          ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                          : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                          ? 'bg-mail-danger-tint text-mail-danger'
+                          : 'bg-mail-accent-tint text-mail-accent-text'
                       }`}>
                         {rule.action === 'delete' ? 'Delete from server' : 'Archive then delete'}
                       </span>
@@ -470,7 +470,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                           setCleanupUnit(rule.unit);
                           setCleanupAction(rule.action);
                         }}
-                        className="p-1.5 text-mail-text-muted hover:text-mail-accent rounded-md hover:bg-mail-surface transition-colors opacity-0 group-hover:opacity-100"
+                        className="p-1.5 text-mail-text-muted hover:text-mail-accent-text rounded-md hover:bg-mail-surface transition-colors opacity-0 group-hover:opacity-100"
                         title="Edit rule"
                       >
                         <Pencil size={14} />
@@ -488,7 +488,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                               removeCleanupRule(rule.id);
                               setCleanupDeleteConfirm(null);
                             }}
-                            className="px-2 py-1 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                            className="px-2 py-1 text-xs text-mail-danger hover:bg-mail-danger-tint rounded transition-colors"
                           >
                             Delete
                           </button>
@@ -496,7 +496,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                       ) : (
                         <button
                           onClick={() => setCleanupDeleteConfirm(rule.id)}
-                          className="p-1.5 text-mail-text-muted hover:text-red-500 rounded-md hover:bg-mail-surface transition-colors opacity-0 group-hover:opacity-100"
+                          className="p-1.5 text-mail-text-muted hover:text-mail-danger rounded-md hover:bg-mail-surface transition-colors opacity-0 group-hover:opacity-100"
                           title="Delete rule"
                         >
                           <Trash2 size={14} />
@@ -523,9 +523,9 @@ export function StorageSettings({ accounts, onUpgrade }) {
 
                 {/* First-time warning */}
                 {showCleanupFirstTimeWarning && (
-                  <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                    <AlertTriangle size={16} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                    <p className="text-xs text-amber-800 dark:text-amber-300">
+                  <div className="flex items-start gap-2 p-3 bg-mail-warning-tint border border-mail-warning rounded-lg">
+                    <AlertTriangle size={16} className="text-mail-warning shrink-0 mt-0.5" />
+                    <p className="text-xs text-mail-warning">
                       Auto-cleanup rules run automatically. Deleted emails cannot be recovered from server.
                     </p>
                   </div>
@@ -591,7 +591,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                       </select>
                     </div>
                     {cleanupUnit === 'days' && cleanupAge < 7 && cleanupAge > 0 && (
-                      <p className="text-[10px] text-red-500 mt-1">Minimum 7 days</p>
+                      <p className="text-[10px] text-mail-danger mt-1">Minimum 7 days</p>
                     )}
                   </div>
 
@@ -639,7 +639,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                       setShowCleanupFirstTimeWarning(false);
                     }}
                     disabled={cleanupUnit === 'days' && cleanupAge < 7}
-                    className="px-3 py-1.5 text-sm font-medium bg-mail-accent text-white rounded-lg hover:bg-mail-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-1.5 text-sm font-medium bg-mail-accent-fill text-white rounded-lg hover:bg-mail-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {cleanupForm.mode === 'edit' ? 'Save' : 'Add Rule'}
                   </button>
@@ -662,7 +662,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                       setShowCleanupFirstTimeWarning(true);
                     }
                   }}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-mail-accent/10 text-mail-accent rounded-lg hover:bg-mail-accent/20 transition-colors"
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-mail-accent/10 text-mail-accent-text rounded-lg hover:bg-mail-accent/20 transition-colors"
                 >
                   <Plus size={14} />
                   Add Rule
@@ -708,7 +708,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
       {supportsFileSystem && (
         <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
           <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-            <FolderOpen size={18} className="text-mail-accent" />
+            <FolderOpen size={18} className="text-mail-accent-text" />
             Advanced: Custom Storage Folder
           </h4>
 
@@ -739,7 +739,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
       {/* Security */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-          <Shield size={18} className="text-mail-accent" />
+          <Shield size={18} className="text-mail-accent-text" />
           Security
         </h4>
 
@@ -747,7 +747,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
           <p className="mb-3">
             Password protection for your local storage is coming soon.
           </p>
-          <div className="flex items-center gap-2 text-mail-accent">
+          <div className="flex items-center gap-2 text-mail-accent-text">
             <Shield size={16} />
             <span>This feature is under development</span>
           </div>

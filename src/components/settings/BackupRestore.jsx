@@ -243,7 +243,7 @@ export default function BackupRestore() {
       {/* Backup & Restore (ZIP) */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-          <HardDrive size={18} className="text-mail-accent" />
+          <HardDrive size={18} className="text-mail-accent-text" />
           Backup & Restore
         </h4>
 
@@ -255,7 +255,7 @@ export default function BackupRestore() {
           <button
             onClick={handleExportData}
             className="flex-1 flex items-center justify-center gap-2 px-4 py-3
-                      bg-mail-accent/10 hover:bg-mail-accent/20 text-mail-accent
+                      bg-mail-accent/10 hover:bg-mail-accent/20 text-mail-accent-text
                       rounded-lg transition-colors"
           >
             <Download size={18} />
@@ -277,7 +277,7 @@ export default function BackupRestore() {
       {/* MBOX Import / Export */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-          <HardDrive size={18} className="text-mail-accent" />
+          <HardDrive size={18} className="text-mail-accent-text" />
           MBOX Import / Export
         </h4>
 
@@ -289,7 +289,7 @@ export default function BackupRestore() {
           <button
             onClick={handleExportMbox}
             className="flex-1 flex items-center justify-center gap-2 px-4 py-3
-                      bg-mail-accent/10 hover:bg-mail-accent/20 text-mail-accent
+                      bg-mail-accent/10 hover:bg-mail-accent/20 text-mail-accent-text
                       rounded-lg transition-colors"
           >
             <Download size={18} />
@@ -332,7 +332,7 @@ export default function BackupRestore() {
               <div className="flex flex-col gap-3">
                 <button
                   onClick={() => doExport(true)}
-                  className="w-full px-4 py-3 bg-mail-accent hover:bg-mail-accent-hover
+                  className="w-full px-4 py-3 bg-mail-accent-fill hover:bg-mail-accent-hover
                             text-white rounded-lg font-medium transition-colors text-left"
                 >
                   <span className="block">Archived Emails</span>

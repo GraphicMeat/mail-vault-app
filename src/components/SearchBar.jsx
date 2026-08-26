@@ -229,7 +229,7 @@ export function SearchBar() {
             onClick={() => setShowFilters(!showFilters)}
             className={`p-2 rounded-lg border transition-colors ${
               showFilters || searchFilters.sender || searchFilters.dateFrom || searchFilters.dateTo || searchFilters.hasAttachments
-                ? 'bg-mail-accent/10 border-mail-accent text-mail-accent'
+                ? 'bg-mail-accent/10 border-mail-accent text-mail-accent-text'
                 : 'bg-mail-bg border-mail-border text-mail-text-muted hover:text-mail-text hover:border-mail-text-muted'
             }`}
           >
@@ -308,7 +308,7 @@ export function SearchBar() {
                           onClick={() => {
                             setSearchFilters({ dateFrom: null, dateTo: null });
                           }}
-                          className="text-xs text-mail-text-muted hover:text-mail-accent transition-colors"
+                          className="text-xs text-mail-text-muted hover:text-mail-accent-text transition-colors"
                         >
                           Reset
                         </button>
@@ -337,7 +337,7 @@ export function SearchBar() {
                             }}
                             className={`flex-1 px-1.5 py-1 text-[10px] rounded transition-colors ${
                               isActive
-                                ? 'bg-mail-accent text-white'
+                                ? 'bg-mail-accent-fill text-white'
                                 : 'bg-mail-bg border border-mail-border text-mail-text-muted hover:border-mail-accent hover:text-mail-text'
                             }`}
                           >
@@ -433,7 +433,7 @@ export function SearchBar() {
         {/* Search button */}
         <button
           type="submit"
-          className="px-4 py-2 bg-mail-accent hover:bg-mail-accent-hover text-white
+          className="px-4 py-2 bg-mail-accent-fill hover:bg-mail-accent-hover text-white
                     font-medium rounded-lg text-sm transition-colors"
         >
           Search
@@ -468,7 +468,7 @@ export function SearchBar() {
                         key={idx}
                         onClick={() => applyPopularFilter(filter)}
                         className="flex items-center gap-1.5 px-2 py-1 bg-mail-accent/10 border border-mail-accent/20
-                                  rounded-lg text-xs text-mail-accent hover:bg-mail-accent/20 transition-colors"
+                                  rounded-lg text-xs text-mail-accent-text hover:bg-mail-accent/20 transition-colors"
                       >
                         <Icon size={12} />
                         <span className="max-w-[120px] truncate">{getFilterLabel(filter)}</span>

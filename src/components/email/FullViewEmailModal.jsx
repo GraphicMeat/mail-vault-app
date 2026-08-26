@@ -218,7 +218,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
           {!fetchedEmail && loadingEmail ? (
             <div className="absolute inset-0 flex items-center justify-center bg-mail-bg">
               <div className="flex flex-col items-center gap-3">
-                <Loader size={32} className="text-mail-accent animate-spin" />
+                <Loader size={32} className="text-mail-accent-text animate-spin" />
                 <span className="text-sm text-mail-text-muted">Loading email content...</span>
               </div>
             </div>

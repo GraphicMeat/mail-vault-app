@@ -67,7 +67,7 @@ export default function RestoreModal() {
                 Not now
               </button>
               <button
-                className="bg-mail-accent text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent-hover transition-colors"
+                className="bg-mail-accent-fill text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent-hover transition-colors"
                 onClick={onStart}
               >
                 Restore {localTotal}
@@ -107,7 +107,7 @@ export default function RestoreModal() {
             </div>
             <div className="flex justify-end mt-4">
               <button
-                className="bg-mail-accent text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent-hover transition-colors"
+                className="bg-mail-accent-fill text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent-hover transition-colors"
                 onClick={onClose}
               >
                 Done

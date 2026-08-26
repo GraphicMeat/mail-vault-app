@@ -57,7 +57,7 @@ export function BulkSelectionBubble() {
               className="flex items-center gap-2 px-1 py-0.5 rounded-lg hover:bg-mail-surface-hover transition-colors"
               title="Back to bulk operations"
             >
-              <ListChecks size={15} className="text-mail-accent flex-shrink-0" />
+              <ListChecks size={15} className="text-mail-accent-text flex-shrink-0" />
               <span className="text-sm text-mail-text whitespace-nowrap">
                 <span className="text-mail-text-muted">{email}</span>
                 <span className="text-mail-text-muted mx-1.5">·</span>

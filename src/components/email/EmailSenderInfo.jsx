@@ -131,7 +131,7 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
             <button
               data-testid="sender-insights-toggle"
               onClick={(e) => { e.stopPropagation(); onToggleInsights?.(); }}
-              className={`p-0.5 rounded transition-colors flex-shrink-0 ${showInsights ? 'text-mail-accent' : 'text-mail-text-muted hover:text-mail-text'}`}
+              className={`p-0.5 rounded transition-colors flex-shrink-0 ${showInsights ? 'text-mail-accent-text' : 'text-mail-text-muted hover:text-mail-text'}`}
               title="Sender insights"
             >
               <Info size={12} />
@@ -161,7 +161,7 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
               )}
               <button
                 onClick={(e) => { e.stopPropagation(); setHeaderExpanded(!headerExpanded); }}
-                className="ml-2 text-mail-accent hover:underline"
+                className="ml-2 text-mail-accent-text hover:underline"
               >
                 {headerExpanded ? 'Less' : 'More'}
               </button>
@@ -186,7 +186,7 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
                     disabled={loadingRaw}
                     className={`mt-2 flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors
                                ${showRaw
-                                 ? 'bg-mail-accent text-white'
+                                 ? 'bg-mail-accent-fill text-white'
                                  : 'bg-mail-surface hover:bg-mail-surface-hover text-mail-text-muted'}
                                disabled:opacity-50`}
                   >

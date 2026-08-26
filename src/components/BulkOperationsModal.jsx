@@ -400,7 +400,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
           {/* Delete confirmation */}
           {showDeleteConfirm ? (
             <div className="p-5">
-              <div className="flex items-start gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-lg mb-4">
+              <div className="flex items-start gap-3 p-4 bg-mail-danger-tint border border-mail-danger/20 rounded-lg mb-4">
                 <AlertTriangle size={20} className="text-mail-danger flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-sm font-medium text-mail-text">
@@ -442,8 +442,8 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
               )}
 
               {isPartialLoad && (
-                <div className="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg mb-4">
-                  <AlertTriangle size={16} className="text-yellow-500 flex-shrink-0 mt-0.5" />
+                <div className="flex items-start gap-2 p-3 bg-mail-warning-tint border border-mail-warning/20 rounded-lg mb-4">
+                  <AlertTriangle size={16} className="text-mail-warning flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-mail-text-muted">
                     {emailPool.length.toLocaleString()} of {totalEmails.toLocaleString()} total emails are available locally. Only those will be selected.
                   </p>
@@ -463,7 +463,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                           onClick={() => setSelectedRange({ type: 'year', year })}
                           className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                             isActive
-                              ? 'bg-mail-accent text-white border-mail-accent'
+                              ? 'bg-mail-accent-fill text-white border-mail-accent'
                               : 'bg-mail-surface border-mail-border text-mail-text hover:bg-mail-surface-hover'
                           }`}
                         >
@@ -496,7 +496,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                         onClick={() => setSelectedRange({ type: preset.type })}
                         className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                           isActive
-                            ? 'bg-mail-accent text-white border-mail-accent'
+                            ? 'bg-mail-accent-fill text-white border-mail-accent'
                             : 'bg-mail-surface border-mail-border text-mail-text hover:bg-mail-surface-hover'
                         }`}
                       >
@@ -512,7 +512,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                 <button
                   onClick={() => setSelectedRange({ type: 'custom' })}
                   className={`flex items-center gap-1.5 text-sm mb-2 ${
-                    selectedRange?.type === 'custom' ? 'text-mail-accent font-medium' : 'text-mail-text-muted hover:text-mail-text'
+                    selectedRange?.type === 'custom' ? 'text-mail-accent-text font-medium' : 'text-mail-text-muted hover:text-mail-text'
                   }`}
                 >
                   <Calendar size={14} />
@@ -554,7 +554,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                   <button
                     onClick={() => setStep(2)}
                     disabled={selectedCount === 0 || loadingPool}
-                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-mail-accent text-white
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-mail-accent-fill text-white
                               rounded-lg hover:bg-mail-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Next
@@ -633,10 +633,10 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                       }`}
                       style={isActive ? {
                         background: isGradient
-                          ? `linear-gradient(135deg, ${actionBg('var(--mail-local)', 10)}, ${actionBg('var(--mail-danger)', 10)})`
+                          ? actionBg('var(--mail-local)', 10)
                           : actionBg(styles.color, 10),
                         borderColor: isGradient
-                          ? actionBg('var(--mail-local)', 30)
+                          ? actionBg('var(--mail-danger)', 30)
                           : actionBg(styles.color, 30),
                       } : undefined}
                     >
@@ -644,7 +644,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                         className="w-8 h-8 rounded-lg flex items-center justify-center"
                         style={isActive ? {
                           background: isGradient
-                            ? `linear-gradient(135deg, ${actionBg('var(--mail-local)', 20)}, ${actionBg('var(--mail-danger)', 20)})`
+                            ? actionBg('var(--mail-local)', 20)
                             : actionBg(styles.color, 20),
                         } : { backgroundColor: 'var(--mail-border)' }}
                       >
@@ -678,11 +678,9 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                   className="px-4 py-2 text-sm font-medium text-white rounded-lg transition-all
                             disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
                   style={{
-                    background: !selectedAction
+                    background: !selectedAction || selectedAction === 'archive_and_delete'
                       ? 'var(--mail-accent)'
-                      : selectedAction === 'archive_and_delete'
-                        ? 'linear-gradient(135deg, var(--mail-local), var(--mail-danger))'
-                        : ACTION_STYLES[selectedAction].color
+                      : ACTION_STYLES[selectedAction].color
                   }}
                 >
                   {selectedAction ? ACTION_STYLES[selectedAction].confirmLabel : 'Start'}

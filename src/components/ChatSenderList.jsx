@@ -191,7 +191,7 @@ const SenderRow = memo(function SenderRow({ correspondent, onClick, index }) {
           </span>
 
           {correspondent.unreadCount > 0 && (
-            <span className="flex-shrink-0 min-w-[20px] h-5 px-1.5 bg-mail-accent rounded-full
+            <span className="flex-shrink-0 min-w-[20px] h-5 px-1.5 bg-mail-accent-fill rounded-full
                           text-white text-xs font-medium flex items-center justify-center">
               {correspondent.unreadCount > 99 ? '99+' : correspondent.unreadCount}
             </span>

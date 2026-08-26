@@ -26,7 +26,7 @@ export function SenderAlertIcon({ level, email, size = 14 }) {
     <>
       <button
         onClick={(e) => { e.stopPropagation(); setShowModal(true); }}
-        className={`flex-shrink-0 ${isRed ? 'text-red-500' : 'text-amber-500'} hover:opacity-80 transition-opacity`}
+        className={`flex-shrink-0 ${isRed ? 'text-mail-danger' : 'text-mail-warning'} hover:opacity-80 transition-opacity`}
         title={title}
       >
         <ShieldAlert size={size} />
@@ -46,10 +46,10 @@ export function SenderAlertIcon({ level, email, size = 14 }) {
             </button>
 
             <div className="flex items-center gap-3 mb-4">
-              <div className={`w-10 h-10 rounded-full ${isRed ? 'bg-red-500/20' : 'bg-amber-500/20'} flex items-center justify-center`}>
-                <ShieldAlert size={22} className={isRed ? 'text-red-500' : 'text-amber-500'} />
+              <div className={`w-10 h-10 rounded-full ${isRed ? 'bg-mail-danger-tint' : 'bg-mail-warning-tint'} flex items-center justify-center`}>
+                <ShieldAlert size={22} className={isRed ? 'text-mail-danger' : 'text-mail-warning'} />
               </div>
-              <h3 className={`text-lg font-bold ${isRed ? 'text-red-500' : 'text-amber-500'}`}>{title}</h3>
+              <h3 className={`text-lg font-bold ${isRed ? 'text-mail-danger' : 'text-mail-warning'}`}>{title}</h3>
             </div>
 
             <p className="text-sm text-mail-text-muted mb-4">
@@ -67,7 +67,7 @@ export function SenderAlertIcon({ level, email, size = 14 }) {
               <div className="text-xs text-mail-text-muted mb-1">Actual sender address:</div>
               <div className="text-sm font-mono text-mail-text break-all">{fromAddress}</div>
               {fromAddress.includes('@') && (
-                <div className={`text-xs ${isRed ? 'text-red-500' : 'text-amber-500'} mt-0.5`}>
+                <div className={`text-xs ${isRed ? 'text-mail-danger' : 'text-mail-warning'} mt-0.5`}>
                   {fromAddress.split('@')[1]}
                 </div>
               )}

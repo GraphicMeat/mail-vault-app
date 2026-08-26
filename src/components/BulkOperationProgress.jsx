@@ -53,6 +53,9 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
 
   // Determine phase count for display
   const totalPhases = type === 'archive_and_delete' ? 2 : 1;
+  // Custody colours only when the operation really does move mail into the vault.
+  // A delete (or delete_everywhere) is not "server becoming vault".
+  const movesToVault = type === 'archive' || type === 'archive_and_delete';
   const currentPhaseNum = currentPhase === 'delete' && type === 'archive_and_delete' ? 2 : 1;
 
   const PhaseIcon = PHASE_ICONS[currentPhase] || HardDrive;
@@ -73,7 +76,7 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
           className="flex items-center gap-2 px-3 py-2 bg-mail-surface border border-mail-border
                     rounded-lg shadow-lg hover:bg-mail-surface-hover transition-colors"
         >
-          <PhaseIcon size={14} className="text-mail-accent animate-pulse" />
+          <PhaseIcon size={14} className="text-mail-accent-text animate-pulse" />
           <span className="text-sm text-mail-text">{phaseLabel}... {percentage}%</span>
           <Maximize2 size={12} className="text-mail-text-muted" />
         </button>
@@ -105,7 +108,7 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
                 </div>
               ) : (
                 <div className="w-6 h-6 bg-mail-accent/20 rounded-full flex items-center justify-center">
-                  <PhaseIcon size={14} className="text-mail-accent" />
+                  <PhaseIcon size={14} className="text-mail-accent-text" />
                 </div>
               )}
               <span className="font-medium text-mail-text text-sm">
@@ -179,22 +182,22 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
               <span className="text-sm text-mail-text-muted">
                 {completed.toLocaleString()} of {total.toLocaleString()} emails
               </span>
-              <span className="text-sm font-medium text-mail-accent">
+              <span className="text-sm font-medium text-mail-accent-text">
                 {percentage}%
               </span>
             </div>
 
-            <div className="h-2 bg-mail-border rounded-full overflow-hidden">
+            {/* When the operation moves mail into the vault, the track IS the
+                custody story: the filled part is Vault Emerald (this many are
+                on your disk now) over a Server Blue field (this many are still
+                only on the server). Every other operation gets a plain accent
+                bar. A failed run drops out of the story into danger. */}
+            <div className={`h-2 rounded-full overflow-hidden ${movesToVault ? 'bg-mail-server-tint' : 'bg-mail-surface-hover'}`}>
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${percentage}%` }}
                 transition={{ duration: 0.3, ease: 'easeOut' }}
-                className={`h-full rounded-full ${
-                  isComplete ? 'bg-mail-success'
-                    : isError ? 'bg-mail-danger'
-                    : currentPhase === 'delete' ? 'bg-mail-warning'
-                    : 'bg-mail-accent'
-                }`}
+                className={`h-full rounded-full ${isError ? 'bg-mail-danger' : movesToVault ? 'bg-mail-local' : 'bg-mail-accent'}`}
               />
             </div>
 

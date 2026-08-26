@@ -64,7 +64,7 @@ export class ChunkErrorBoundary extends React.Component {
             </button>
             <button
               onClick={() => window.location.reload()}
-              className="flex-1 px-4 py-2.5 rounded-lg bg-mail-accent hover:bg-mail-accent-hover
+              className="flex-1 px-4 py-2.5 rounded-lg bg-mail-accent-fill hover:bg-mail-accent-hover
                          text-white font-medium transition-colors"
               autoFocus
             >

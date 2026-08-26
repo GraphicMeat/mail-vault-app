@@ -3,17 +3,28 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { safeStorage } from './safeStorage';
 
 // Palette of visually distinct avatar colors
+// An account's identity colour, and deliberately none of the reserved words.
+//
+// This list used to open with indigo, emerald, amber, blue and red — the
+// accent plus the entire custody-and-status vocabulary. That was survivable
+// while the colour was a 7px avatar dot, but the identity colour is now
+// structural: it spines and washes the active account row. An account hashed
+// to emerald would have claimed "in your vault" down the whole rail, and one
+// hashed to red would have read as destructive. Every hue below is chosen to
+// sit outside `--mail-accent`, `--mail-local`, `--mail-server`,
+// `--mail-only-copy`, `--mail-warning` and `--mail-danger`.
+//
+// Changing this list re-hashes accounts that never set an explicit colour;
+// an explicit `accountColors[account.id]` override still wins.
 export const AVATAR_COLORS = [
-  '#6366f1', // indigo (default accent)
-  '#f43f5e', // rose
-  '#10b981', // emerald
-  '#f59e0b', // amber
-  '#3b82f6', // blue
   '#8b5cf6', // violet
   '#ec4899', // pink
   '#14b8a6', // teal
-  '#ef4444', // red
   '#06b6d4', // cyan
+  '#84cc16', // lime
+  '#64748b', // slate
+  '#d946ef', // fuchsia
+  '#f43f5e', // rose
 ];
 
 // Deterministic color from email string

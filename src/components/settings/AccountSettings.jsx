@@ -421,7 +421,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                     <div className="text-sm font-medium text-mail-text truncate flex items-center gap-1.5">
                       {getDisplayName(account.id) || account.name || account.email?.split('@')[0] || 'Unknown'}
                       {account.authType === 'oauth2' && (
-                        <Shield size={12} className="text-blue-500 flex-shrink-0" />
+                        <Shield size={12} className="text-mail-accent-text flex-shrink-0" />
                       )}
                       {hiddenAccounts[account.id] && (
                         <EyeOff size={12} className="text-mail-text-muted flex-shrink-0" />
@@ -432,7 +432,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                     </div>
                   </div>
                   {account.id === selectedAccountId && (
-                    <ChevronRight size={16} className="text-mail-accent" />
+                    <ChevronRight size={16} className="text-mail-accent-text" />
                   )}
                 </div>
               ))}
@@ -459,7 +459,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
             {/* Account Info */}
             <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
               <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-                <User size={18} className="text-mail-accent" />
+                <User size={18} className="text-mail-accent-text" />
                 Account Settings
                 <SavedBadge visible={autoSaved} />
               </h4>
@@ -603,7 +603,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                   {isAccountHidden(selectedAccountId) ? (
                     <EyeOff size={18} className="text-mail-text-muted" />
                   ) : (
-                    <Eye size={18} className="text-mail-accent" />
+                    <Eye size={18} className="text-mail-accent-text" />
                   )}
                   <div>
                     <div className="font-medium text-mail-text">
@@ -672,7 +672,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
             {/* Signature */}
             <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
               <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-                <FileText size={18} className="text-mail-accent" />
+                <FileText size={18} className="text-mail-accent-text" />
                 Email Signature
                 <SavedBadge visible={autoSaved} />
               </h4>
@@ -715,7 +715,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
             {/* Sent Folder */}
             <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
               <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-                <Send size={18} className="text-mail-accent" />
+                <Send size={18} className="text-mail-accent-text" />
                 Sent Folder
                 <SavedBadge visible={saved} />
               </h4>
@@ -753,7 +753,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                   <button
                     onClick={handleSaveSentFolder}
                     disabled={savingSent || sentOverride === (selectedAccount.sentFolderOverride || '')}
-                    className="px-4 py-2 bg-mail-accent hover:bg-mail-accent-hover
+                    className="px-4 py-2 bg-mail-accent-fill hover:bg-mail-accent-hover
                               text-white rounded-lg transition-colors text-sm font-medium
                               disabled:opacity-50"
                   >
@@ -778,7 +778,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
             {selectedAccount.authType !== 'oauth2' && (
               <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
                 <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-                  <Server size={18} className="text-mail-accent" />
+                  <Server size={18} className="text-mail-accent-text" />
                   Mail Server
                 </h4>
 
@@ -811,7 +811,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
             {/* Password / Authentication */}
             <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
               <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-                <Key size={18} className="text-mail-accent" />
+                <Key size={18} className="text-mail-accent-text" />
                 Authentication
               </h4>
 
@@ -819,8 +819,8 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
               <div className="flex items-center gap-2 mb-4">
                 <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium
                   ${selectedAccount.authType === 'oauth2'
-                    ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20'
-                    : 'bg-mail-accent/10 text-mail-accent border border-mail-accent/20'}`}>
+                    ? 'bg-mail-accent-tint text-mail-accent-text border border-mail-accent/20'
+                    : 'bg-mail-accent/10 text-mail-accent-text border border-mail-accent/20'}`}>
                   {selectedAccount.authType === 'oauth2' ? (
                     <><Shield size={12} /> {selectedAccount.oauth2Provider === 'google' ? 'Google' : 'Microsoft'} OAuth2</>
                   ) : (
@@ -901,7 +901,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                         <button
                           onClick={handleUpdatePassword}
                           disabled={!newPassword.trim()}
-                          className="px-4 py-2 bg-mail-accent hover:bg-mail-accent-hover
+                          className="px-4 py-2 bg-mail-accent-fill hover:bg-mail-accent-hover
                                     text-white rounded-lg transition-colors disabled:opacity-50"
                         >
                           Save Password
@@ -977,7 +977,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                         This will permanently delete all locally archived emails, attachments, and settings for this account. This action cannot be undone.
                       </p>
                       {accounts.length === 1 && hasPremiumAccess(useSettingsStore.getState().billingProfile) && (
-                        <p className="text-sm text-amber-600 dark:text-amber-400 mb-2">
+                        <p className="text-sm text-mail-warning mb-2">
                           This is your last account. Removing it will also sign this device out of Premium and release the device seat.
                         </p>
                       )}

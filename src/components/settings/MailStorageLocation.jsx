@@ -118,7 +118,7 @@ export default function MailStorageLocation() {
   return (
     <div className="bg-mail-surface border border-mail-border rounded-xl p-5 space-y-4">
       <h4 className="font-semibold text-mail-text flex items-center gap-2">
-        <HardDrive size={18} className="text-mail-accent" />
+        <HardDrive size={18} className="text-mail-accent-text" />
         Where your mail is stored
       </h4>
 
@@ -133,8 +133,8 @@ export default function MailStorageLocation() {
           {vaultStatus?.displayPath || 'Loading...'}
         </div>
         <span className={`text-xs px-2 py-0.5 rounded-full whitespace-nowrap ${
-          missing ? 'bg-red-500/10 text-red-500'
-            : isCustom ? 'bg-emerald-500/10 text-emerald-500'
+          missing ? 'bg-mail-danger-tint text-mail-danger'
+            : isCustom ? 'bg-mail-accent-tint text-mail-accent-text'
             : 'bg-mail-bg text-mail-text-muted'
         }`}>
           {missing ? 'Not found' : isCustom ? 'Custom folder' : 'Default'}
@@ -201,7 +201,7 @@ export default function MailStorageLocation() {
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <button
               onClick={() => handleReset(true)}
-              className="text-xs font-medium px-3 py-2 rounded-lg bg-mail-accent text-white hover:opacity-90"
+              className="text-xs font-medium px-3 py-2 rounded-lg bg-mail-accent-fill text-white hover:opacity-90"
             >
               Move mail back
             </button>

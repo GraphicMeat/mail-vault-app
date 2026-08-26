@@ -50,7 +50,7 @@ export function KeychainToast({ onRetry, onOpenAccounts }) {
               <div className="flex items-center gap-2 mt-2.5">
                 <button
                   onClick={() => { setVisible(false); onRetry?.(); }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-mail-accent/10 text-mail-accent hover:bg-mail-accent/20 rounded-lg transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-mail-accent/10 text-mail-accent-text hover:bg-mail-accent/20 rounded-lg transition-colors"
                 >
                   <RefreshCw size={12} />
                   Retry

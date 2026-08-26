@@ -101,7 +101,7 @@ function AttachmentPreview({ attachment, onRemove }) {
       data-filename={attachment.filename}
       className="flex items-center gap-2 px-3 py-2 bg-mail-surface-hover rounded-lg"
     >
-      <FileText size={16} className="text-mail-accent" />
+      <FileText size={16} className="text-mail-accent-text" />
       <span className="text-sm text-mail-text truncate flex-1">{attachment.filename}</span>
       <span className="text-xs text-mail-text-muted">{formatSize(attachment.size)}</span>
       <button
@@ -1259,7 +1259,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               // ProseMirror's posAtCoords needs the real target.
               <div data-testid="compose-inline-dropzone-hint"
                    className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center pt-2">
-                <span className="rounded-full bg-mail-accent px-3 py-1 text-xs font-medium text-white shadow">
+                <span className="rounded-full bg-mail-accent-fill px-3 py-1 text-xs font-medium text-white shadow">
                   Drop an image to place it in the message
                 </span>
               </div>
@@ -1313,7 +1313,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                 <div data-testid="compose-quoted" className="px-4 pb-3 max-h-[300px] overflow-y-auto">
                   <div
                     className="text-xs text-mail-text-muted border-l-2 border-mail-border pl-3
-                              [&_p]:my-1 [&_a]:text-mail-accent [&_img]:max-w-full"
+                              [&_p]:my-1 [&_a]:text-mail-accent-text [&_img]:max-w-full"
                     dangerouslySetInnerHTML={{ __html: quotedHtml }}
                   />
                 </div>
@@ -1402,7 +1402,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                             data-testid="compose-template-save"
                             onClick={handleSaveTemplate}
                             disabled={!templateName.trim()}
-                            className="px-2 py-1 text-xs bg-mail-accent text-white rounded
+                            className="px-2 py-1 text-xs bg-mail-accent-fill text-white rounded
                                       hover:bg-mail-accent-hover disabled:opacity-50 transition-colors"
                           >
                             Save
@@ -1413,7 +1413,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                           type="button"
                           data-testid="compose-template-save-as"
                           onClick={() => setSavingTemplate(true)}
-                          className="w-full text-left px-3 py-2 text-sm text-mail-accent
+                          className="w-full text-left px-3 py-2 text-sm text-mail-accent-text
                                     hover:bg-mail-surface-hover transition-colors"
                         >
                           Save as Template
@@ -1455,7 +1455,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                 data-testid="compose-send"
                 disabled={sending}
                 title="Send (Shift+Enter)"
-                className="flex items-center gap-2 px-4 py-2 bg-mail-accent
+                className="flex items-center gap-2 px-4 py-2 bg-mail-accent-fill
                           hover:bg-mail-accent-hover disabled:opacity-50
                           text-white font-medium rounded-lg transition-all text-sm"
               >
@@ -1508,7 +1508,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                 </button>
                 <button
                   onClick={() => { setShowDiscardDialog(false); closeDiscarding(); }}
-                  className="px-4 py-2 text-sm bg-red-500/90 hover:bg-red-500 text-white
+                  className="px-4 py-2 text-sm bg-mail-danger-fill hover:bg-mail-danger text-white
                             rounded-lg transition-colors font-medium"
                 >
                   Discard

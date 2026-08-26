@@ -125,7 +125,7 @@ export default function BackupConfig() {
         <div className="bg-mail-surface border border-mail-border rounded-xl p-6 space-y-5">
           <div className="flex items-start gap-3">
             <div className="rounded-full bg-mail-accent/10 p-2.5">
-              <Lock size={20} className="text-mail-accent" />
+              <Lock size={20} className="text-mail-accent-text" />
             </div>
             <div className="flex-1">
               <h4 className="font-semibold text-mail-text">Cloud Backups (One-time purchase)</h4>
@@ -143,7 +143,7 @@ export default function BackupConfig() {
           </ul>
 
           {iapError && (
-            <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/20 rounded-lg p-2.5">
+            <div className="flex items-start gap-2 bg-mail-danger-tint border border-mail-danger/20 rounded-lg p-2.5">
               <AlertCircle size={14} className="text-mail-danger flex-shrink-0 mt-0.5" />
               <p className="text-xs text-mail-danger">{iapError}</p>
             </div>
@@ -153,7 +153,7 @@ export default function BackupConfig() {
             <button
               onClick={handlePurchase}
               disabled={iapBusy !== null}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-mail-accent hover:bg-mail-accent-hover disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-mail-accent-fill hover:bg-mail-accent-hover disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
             >
               {iapBusy === 'purchase' ? <Loader size={16} className="animate-spin" /> : <Lock size={16} />}
               {iapBusy === 'purchase' ? 'Contacting App Store…' : 'Unlock Cloud Backups'}
@@ -186,7 +186,7 @@ export default function BackupConfig() {
 
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5 space-y-4">
         <h4 className="font-semibold text-mail-text flex items-center gap-2">
-          <HardDrive size={18} className="text-mail-accent" />
+          <HardDrive size={18} className="text-mail-accent-text" />
           Backup Scope & Storage
         </h4>
 
@@ -255,9 +255,9 @@ export default function BackupConfig() {
                 </span>
               ) : (
                 <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${
-                  externalBackupLocation.status === 'ready' ? 'bg-emerald-500/10 text-emerald-500'
-                  : externalBackupLocation.status === 'needs_reauth' ? 'bg-amber-500/10 text-amber-500'
-                  : 'bg-red-500/10 text-red-500'
+                  externalBackupLocation.status === 'ready' ? 'bg-mail-success-tint text-mail-success'
+                  : externalBackupLocation.status === 'needs_reauth' ? 'bg-mail-warning-tint text-mail-warning'
+                  : 'bg-mail-danger-tint text-mail-danger'
                 }`}>
                   {externalBackupLocation.status === 'ready' ? 'Ready'
                     : externalBackupLocation.status === 'needs_reauth' ? 'Needs reauthorization'
@@ -269,7 +269,7 @@ export default function BackupConfig() {
               {!validatingExternal && externalBackupLocation.status === 'needs_reauth' && (
                 <button
                   onClick={handleChooseBackupDir}
-                  className="text-xs text-mail-accent hover:text-mail-accent-hover"
+                  className="text-xs text-mail-accent-text hover:text-mail-accent-hover"
                 >
                   Reauthorize
                 </button>

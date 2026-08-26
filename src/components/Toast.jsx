@@ -20,8 +20,8 @@ export function Toast({ message, type = 'error', duration = 5000, onClose }) {
   const colors = {
     error: 'bg-mail-danger/10 border-mail-danger/20 text-mail-danger',
     success: 'bg-mail-success/10 border-mail-success/20 text-mail-success',
-    info: 'bg-mail-accent/10 border-mail-accent/20 text-mail-accent',
-    warning: 'bg-yellow-500/10 border-yellow-500/20 text-yellow-500'
+    info: 'bg-mail-accent/10 border-mail-accent/20 text-mail-accent-text',
+    warning: 'bg-mail-warning-tint border-mail-warning/20 text-mail-warning'
   };
   
   const Icon = icons[type] || AlertCircle;

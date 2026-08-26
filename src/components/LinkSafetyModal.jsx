@@ -15,8 +15,8 @@ export function LinkSafetyModal({ alert, onOpenAnyway, onCancel }) {
 
   const isRed = alert.level === 'red';
   const bgColor = 'bg-mail-bg';
-  const borderColor = isRed ? 'border-red-500' : 'border-amber-500';
-  const iconColor = isRed ? 'text-red-500' : 'text-amber-500';
+  const borderColor = isRed ? 'border-mail-danger' : 'border-mail-warning';
+  const iconColor = isRed ? 'text-mail-danger' : 'text-mail-warning';
   const title = isRed ? 'Dangerous Link Detected' : 'Suspicious Link Detected';
 
   let textDomain = '';
@@ -41,10 +41,10 @@ export function LinkSafetyModal({ alert, onOpenAnyway, onCancel }) {
         </button>
 
         <div className="flex items-center gap-3 mb-4">
-          <div className={`w-10 h-10 rounded-full ${isRed ? 'bg-red-500/20' : 'bg-amber-500/20'} flex items-center justify-center`}>
+          <div className={`w-10 h-10 rounded-full ${isRed ? 'bg-mail-danger-tint' : 'bg-mail-warning-tint'} flex items-center justify-center`}>
             <AlertTriangle size={22} className={iconColor} />
           </div>
-          <h3 className={`text-lg font-bold ${isRed ? 'text-red-500' : 'text-amber-500'}`}>{title}</h3>
+          <h3 className={`text-lg font-bold ${isRed ? 'text-mail-danger' : 'text-mail-warning'}`}>{title}</h3>
         </div>
 
         <p className="text-sm text-mail-text-muted mb-4">{alert.reason}</p>
@@ -52,13 +52,13 @@ export function LinkSafetyModal({ alert, onOpenAnyway, onCancel }) {
         <div className="mb-3 p-3 rounded-lg bg-mail-surface border border-mail-border">
           <div className="text-xs text-mail-text-muted mb-1">Link text says:</div>
           <div className="text-sm font-mono text-mail-text break-all">{alert.textContent || '(no text)'}</div>
-          {textDomain && <div className="text-xs text-green-500 mt-0.5">{textDomain}</div>}
+          {textDomain && <div className="text-xs text-mail-success mt-0.5">{textDomain}</div>}
         </div>
 
         <div className="mb-5 p-3 rounded-lg bg-mail-surface border border-mail-border">
           <div className="text-xs text-mail-text-muted mb-1">Actually redirects to:</div>
           <div className="text-sm font-mono text-mail-text break-all">{alert.actualUrl}</div>
-          {actualDomain && <div className={`text-xs ${isRed ? 'text-red-500' : 'text-amber-500'} mt-0.5`}>{actualDomain}</div>}
+          {actualDomain && <div className={`text-xs ${isRed ? 'text-mail-danger' : 'text-mail-warning'} mt-0.5`}>{actualDomain}</div>}
         </div>
 
         <div className="flex gap-3">
@@ -71,8 +71,8 @@ export function LinkSafetyModal({ alert, onOpenAnyway, onCancel }) {
           <button
             onClick={onOpenAnyway}
             className={`flex-1 px-4 py-2.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-2
-                       ${isRed ? 'bg-red-500/10 border border-red-500/30 text-red-500 hover:bg-red-500/20'
-                               : 'bg-amber-500/10 border border-amber-500/30 text-amber-500 hover:bg-amber-500/20'}`}
+                       ${isRed ? 'bg-mail-danger-tint border border-mail-danger/30 text-mail-danger hover:bg-mail-danger/20'
+                               : 'bg-mail-warning-tint border border-mail-warning/30 text-mail-warning hover:bg-mail-warning/20'}`}
           >
             <ExternalLink size={14} />
             Open Anyway

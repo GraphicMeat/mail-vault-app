@@ -227,7 +227,7 @@ export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail,
       <div className="px-4 py-3 border-t border-mail-border bg-mail-surface">
         <button
           className="w-full flex items-center justify-center gap-2 px-4 py-2.5
-                    bg-mail-accent hover:bg-mail-accent-hover text-white
+                    bg-mail-accent-fill hover:bg-mail-accent-hover text-white
                     rounded-lg font-medium transition-colors"
           onClick={() => handleReplyToEmail(latestEmail, 'reply')}
         >
@@ -581,7 +581,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
                     <button
                       onClick={(e) => { e.stopPropagation(); setSigExpanded(prev => !prev); }}
                       className={`block mt-2 text-xs cursor-pointer select-none ${
-                        fromUser ? 'text-white/60 hover:text-white' : 'text-mail-text-muted hover:text-mail-accent'
+                        fromUser ? 'text-white/60 hover:text-white' : 'text-mail-text-muted hover:text-mail-accent-text'
                       }`}
                     >
                       {sigExpanded ? '\u25BE Hide signature' : '\u2014 Show signature'}
@@ -603,7 +603,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
                     className={`block mt-1 text-xs cursor-pointer select-none rounded px-2 py-0.5 border transition-colors ${
                       fromUser
                         ? 'text-white/70 hover:text-white bg-white/10 border-white/20'
-                        : 'text-mail-text-muted hover:text-mail-accent bg-mail-surface border-mail-border'
+                        : 'text-mail-text-muted hover:text-mail-accent-text bg-mail-surface border-mail-border'
                     }`}
                   >
                     {quotesExpanded ? '\u25BE Hide quoted text' : '\u22EF'}
@@ -635,7 +635,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                   fromUser
                     ? 'bg-white/20 hover:bg-white/30 text-white'
-                    : 'bg-mail-accent/10 hover:bg-mail-accent/20 text-mail-accent'
+                    : 'bg-mail-accent/10 hover:bg-mail-accent/20 text-mail-accent-text'
                 }`}
               >
                 <ExternalLink size={12} />
@@ -684,7 +684,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
           {(wasStripped || hasHtml) && (
             <button
               onClick={onToggleOriginal}
-              className="flex items-center gap-1 text-[10px] text-mail-accent hover:underline"
+              className="flex items-center gap-1 text-[10px] text-mail-accent-text hover:underline"
             >
               <Eye size={10} />
               {isOriginalVisible ? 'Show cleaned' : 'View original'}
@@ -694,7 +694,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
           {/* Open in new window button */}
           <button
             onClick={handleOpenFullView}
-            className="flex items-center gap-1 text-[10px] text-mail-text-muted hover:text-mail-accent"
+            className="flex items-center gap-1 text-[10px] text-mail-text-muted hover:text-mail-accent-text"
             title="Open in new window"
           >
             <ExternalLink size={10} />
@@ -703,7 +703,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
           {/* Quick reply button */}
           <button
             onClick={onReply}
-            className="flex items-center gap-1 text-[10px] text-mail-text-muted hover:text-mail-accent"
+            className="flex items-center gap-1 text-[10px] text-mail-text-muted hover:text-mail-accent-text"
           >
             <Reply size={10} />
           </button>

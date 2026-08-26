@@ -25,7 +25,7 @@ export function TemplateSettings() {
     <div className="p-6 space-y-6">
       <div data-testid="settings-templates" className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-          <FileText size={18} className="text-mail-accent" />
+          <FileText size={18} className="text-mail-accent-text" />
           Email Templates
         </h4>
 
@@ -56,7 +56,7 @@ export function TemplateSettings() {
                 </button>
                 <button
                   onClick={() => removeEmailTemplate(tpl.id)}
-                  className="p-1.5 text-mail-text-muted hover:text-red-500 hover:bg-mail-border rounded-lg transition-colors"
+                  className="p-1.5 text-mail-text-muted hover:text-mail-danger hover:bg-mail-border rounded-lg transition-colors"
                   title="Delete template"
                 >
                   <Trash2 size={14} />
@@ -136,7 +136,7 @@ export function TemplateSettings() {
                         setTemplateBody('');
                       }}
                       disabled={!templateName.trim() || !templateBody.trim()}
-                      className="px-3 py-1.5 text-sm bg-mail-accent text-white rounded-lg
+                      className="px-3 py-1.5 text-sm bg-mail-accent-fill text-white rounded-lg
                                 hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed
                                 flex items-center gap-1.5"
                     >
@@ -156,7 +156,7 @@ export function TemplateSettings() {
                 setTemplateName('');
                 setTemplateBody('');
               }}
-              className="flex items-center gap-2 px-3 py-2 text-sm text-mail-accent
+              className="flex items-center gap-2 px-3 py-2 text-sm text-mail-accent-text
                         hover:bg-mail-bg rounded-lg transition-colors w-full justify-center
                         border border-dashed border-mail-border hover:border-mail-accent"
             >

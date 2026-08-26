@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Cloud, HardDrive } from 'lucide-react';
+import { Cloud, CloudOff, HardDrive } from 'lucide-react';
 import { useMailStore } from '../../stores/mailStore';
 
 /**
@@ -12,8 +12,8 @@ import { useMailStore } from '../../stores/mailStore';
  * and `archived-server-unknown` share a glyph and differ only in wording,
  * because the visual claim they make is genuinely the same one.
  *
- * The rule the whole file exists to enforce: amber — "deleted from the server,
- * this is your only copy" — requires PROOF of server absence. An unverified
+ * The rule the whole file exists to enforce: Only-Copy Gold — "deleted from the
+ * server, this is your only copy" — requires PROOF of server absence. An unverified
  * server uid set means "not asked yet", so it renders as a plain archived row
  * and says so in the tooltip. Rendering the alarm on an unanswered question
  * made every account switch flash "deleted from server" across the list.
@@ -44,9 +44,13 @@ export function describeMessageState(email, { backedUp = false, serverKnown = fa
 
   if (provenGone) {
     return {
+      // Its own glyph, not the vault's. Emerald and gold converge under
+      // deuteranopia and the tooltip is hover/focus-only, so with a shared
+      // HardDrive the difference between "safe in your vault" and "the last
+      // copy in existence" was carried by hue alone.
       id: `local-only${dotSuffix}`,
-      icon: 'drive',
-      tone: 'warning',
+      icon: 'cloud-off',
+      tone: 'only-copy',
       dot,
       label: dot === 'filled'
         ? 'In your vault and backup drive'
@@ -76,7 +80,7 @@ export function describeMessageState(email, { backedUp = false, serverKnown = fa
 const TONE_CLASS = {
   server: 'text-mail-server',
   local: 'text-mail-local',
-  warning: 'text-mail-warning',
+  'only-copy': 'text-mail-only-copy',
 };
 
 const DOT_CLASS = {
@@ -155,18 +159,20 @@ export function StateTooltip({ label, detail, children, testId = 'msg-state-icon
 
 export function MessageStateIcon({ email, size = 14, backedUp = false, serverKnown = false }) {
   const state = describeMessageState(email, { backedUp, serverKnown });
-  const Glyph = state.icon === 'cloud' ? Cloud : HardDrive;
+  const Glyph = state.icon === 'cloud' ? Cloud : state.icon === 'cloud-off' ? CloudOff : HardDrive;
 
   return (
     <StateTooltip label={state.label} detail={state.detail} state={state.id}>
-      <span className="relative inline-flex">
-        <Glyph size={size} className={TONE_CLASS[state.tone]} />
-        {state.dot && (
-          <span
-            data-dot={state.dot}
-            className={`absolute -bottom-0.5 -right-0.5 w-[6px] h-[6px] rounded-full border ${DOT_CLASS[state.dot]}`}
-          />
-        )}
+      <span className="custody-chip" data-tone={state.tone}>
+        <span className="relative inline-flex">
+          <Glyph size={size} className={TONE_CLASS[state.tone]} />
+          {state.dot && (
+            <span
+              data-dot={state.dot}
+              className={`absolute -bottom-0.5 -right-0.5 w-[6px] h-[6px] rounded-full border ${DOT_CLASS[state.dot]}`}
+            />
+          )}
+        </span>
       </span>
     </StateTooltip>
   );

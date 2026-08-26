@@ -81,7 +81,7 @@ export function OriginalEmailModal({ email, onClose }) {
                     <Paperclip size={14} className="text-mail-text-muted" />
                     <span className="text-mail-text">{att.filename}</span>
                     <button className="p-1 hover:bg-mail-border rounded">
-                      <Download size={14} className="text-mail-accent" />
+                      <Download size={14} className="text-mail-accent-text" />
                     </button>
                   </div>
                 ))}

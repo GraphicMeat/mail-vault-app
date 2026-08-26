@@ -122,7 +122,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
             title="Archive thread"
           >
             {isSaving ? (
-              <RefreshCw size={14} className="animate-spin text-mail-accent" />
+              <RefreshCw size={14} className="animate-spin text-mail-accent-text" />
             ) : (
               <Archive size={14} className="text-mail-text-muted hover:text-mail-local" />
             )}
@@ -191,7 +191,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
         <input type="checkbox" checked={anyChecked} onChange={() => {}} className="custom-checkbox" />
       </div>
 
-      <div className="w-4 flex items-center justify-center flex-shrink-0">
+      <div className="w-5 flex items-center justify-center flex-shrink-0">
         <ConnectedStateIcon email={latestEmail} size={13} />
       </div>
 
@@ -229,7 +229,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
         {!allArchived && (
           <button onClick={handleArchiveThread} disabled={isSaving}
             className="p-1 hover:bg-mail-border rounded transition-colors" title="Archive thread">
-            {isSaving ? <RefreshCw size={13} className="animate-spin text-mail-accent" />
+            {isSaving ? <RefreshCw size={13} className="animate-spin text-mail-accent-text" />
               : <Archive size={13} className="text-mail-text-muted hover:text-mail-local" />}
           </button>
         )}

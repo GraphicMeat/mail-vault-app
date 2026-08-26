@@ -34,24 +34,24 @@ export function OutboxTray({ onRestoreDraft }) {
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
               className={`flex items-start gap-3 px-4 py-3 rounded-xl shadow-2xl min-w-[320px] max-w-[420px] border
                          ${isError
-                           ? 'bg-red-500/10 border-red-500/40'
+                           ? 'bg-mail-danger-tint border-mail-danger/40'
                            : 'bg-mail-surface border-mail-border'}`}
               data-testid={`outbox-bubble-${item.status}`}
             >
               <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0
-                              ${isError ? 'bg-red-500/20'
-                               : isSent ? 'bg-green-500/20'
+                              ${isError ? 'bg-mail-danger-tint'
+                               : isSent ? 'bg-mail-success-tint'
                                : 'bg-mail-accent/20'}`}>
-                {isSending && <Loader size={14} className="text-mail-accent animate-spin" />}
-                {isSent && <Check size={14} className="text-green-500" />}
-                {isError && <AlertTriangle size={14} className="text-red-500" />}
+                {isSending && <Loader size={14} className="text-mail-accent-text animate-spin" />}
+                {isSent && <Check size={14} className="text-mail-success" />}
+                {isError && <AlertTriangle size={14} className="text-mail-danger" />}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-mail-text truncate">{subject}</p>
                 {recipient && (
                   <p className="text-[10px] text-mail-text-muted truncate">To: {recipient}</p>
                 )}
-                <p className={`text-[11px] mt-0.5 ${isError ? 'text-red-400' : 'text-mail-text-muted'}`}>
+                <p className={`text-[11px] mt-0.5 ${isError ? 'text-mail-danger' : 'text-mail-text-muted'}`}>
                   {isSending && 'Sending…'}
                   {isSent && 'Sent'}
                   {isError && (item.error || 'Failed to send')}
@@ -76,7 +76,7 @@ export function OutboxTray({ onRestoreDraft }) {
                   <button
                     onClick={() => retryOutbox(item.id)}
                     className="flex items-center gap-1 px-2 py-1 text-xs font-medium
-                               text-mail-accent hover:bg-mail-surface-hover rounded-md transition-colors"
+                               text-mail-accent-text hover:bg-mail-surface-hover rounded-md transition-colors"
                     title="Retry send"
                   >
                     <RefreshCw size={12} />

@@ -31,15 +31,15 @@ export function DaemonSettings() {
       {/* Connection Status */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <div className="flex items-center gap-3 mb-4">
-          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${connected ? 'bg-emerald-500/10' : connected === false ? 'bg-red-500/10' : 'bg-mail-accent/10'}`}>
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${connected ? 'bg-mail-success-tint' : connected === false ? 'bg-mail-danger-tint' : 'bg-mail-accent/10'}`}>
             {checking ? (
-              <Loader size={20} className="text-mail-accent animate-spin" />
+              <Loader size={20} className="text-mail-accent-text animate-spin" />
             ) : connected ? (
-              <CheckCircle2 size={20} className="text-emerald-500" />
+              <CheckCircle2 size={20} className="text-mail-success" />
             ) : connected === false ? (
-              <XCircle size={20} className="text-red-500" />
+              <XCircle size={20} className="text-mail-danger" />
             ) : (
-              <Server size={20} className="text-mail-accent" />
+              <Server size={20} className="text-mail-accent-text" />
             )}
           </div>
           <div>
@@ -63,7 +63,7 @@ export function DaemonSettings() {
         <button
           onClick={checkConnection}
           disabled={checking}
-          className="text-xs font-medium text-mail-accent hover:text-mail-accent/80 disabled:opacity-50 transition-colors"
+          className="text-xs font-medium text-mail-accent-text hover:text-mail-accent/80 disabled:opacity-50 transition-colors"
         >
           {checking ? 'Checking...' : 'Test Connection'}
         </button>

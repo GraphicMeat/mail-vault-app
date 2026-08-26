@@ -651,10 +651,10 @@ function App() {
         <div className="h-screen bg-mail-bg flex items-center justify-center pt-8">
           <div className="text-center">
             <h1 className="text-4xl font-display font-bold text-mail-text mb-4">
-              <span className="text-mail-accent">Mail</span>Vault
+              <span className="text-mail-accent-text">Mail</span>Vault
             </h1>
             <p className="text-mail-text-muted mb-4">Loading your accounts...</p>
-            <RefreshCw size={24} className="animate-spin text-mail-accent mx-auto" />
+            <RefreshCw size={24} className="animate-spin text-mail-accent-text mx-auto" />
           </div>
         </div>
       );
@@ -668,7 +668,7 @@ function App() {
         >
           <div className="mb-8">
             <h1 className="text-4xl font-display font-bold text-mail-text mb-2">
-              <span className="text-mail-accent">Mail</span>Vault
+              <span className="text-mail-accent-text">Mail</span>Vault
             </h1>
             <p className="text-mail-text-muted">
               A reactive email client with local storage
@@ -677,7 +677,7 @@ function App() {
 
           <button
             onClick={() => setShowAccountModal(true)}
-            className="px-6 py-3 bg-mail-accent hover:bg-mail-accent-hover text-white
+            className="px-6 py-3 bg-mail-accent-fill hover:bg-mail-accent-hover text-white
                        font-medium rounded-lg transition-all duration-200
                        shadow-glow hover:shadow-glow-lg"
           >
@@ -815,7 +815,7 @@ function App() {
                 onClick={() => restoreCompose(w.id)}
               >
                 <div className="w-7 h-7 rounded-full bg-mail-accent/20 flex items-center justify-center flex-shrink-0">
-                  <span className="text-xs font-semibold text-mail-accent">
+                  <span className="text-xs font-semibold text-mail-accent-text">
                     {(recipient || 'N')[0].toUpperCase()}
                   </span>
                 </div>
@@ -937,7 +937,7 @@ function App() {
                 if (!account) return;
                 await bulkOperationManager.resume(pendingOperation, account, () => {});
               }}
-              className="px-3 py-1.5 text-sm font-medium bg-mail-accent text-white rounded-lg
+              className="px-3 py-1.5 text-sm font-medium bg-mail-accent-fill text-white rounded-lg
                         hover:bg-mail-accent/90 transition-colors"
             >
               Resume

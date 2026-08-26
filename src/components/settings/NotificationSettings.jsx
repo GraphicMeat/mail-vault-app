@@ -34,7 +34,7 @@ export function NotificationSettings({ accounts }) {
       {/* Notifications */}
       <div data-testid="settings-notifications" className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-          <Bell size={18} className="text-mail-accent" />
+          <Bell size={18} className="text-mail-accent-text" />
           Notifications
         </h4>
 
@@ -142,9 +142,9 @@ export function NotificationSettings({ accounts }) {
                                           : [...acctConfig.folders, folder];
                                         setAccountNotificationFolders(account.id, newFolders);
                                       }}
-                                      className="rounded border-mail-border text-mail-accent focus:ring-mail-accent"
+                                      className="rounded border-mail-border text-mail-accent-text focus:ring-mail-accent"
                                     />
-                                    <span className="text-sm text-mail-text group-hover:text-mail-accent transition-colors">
+                                    <span className="text-sm text-mail-text group-hover:text-mail-accent-text transition-colors">
                                       {decodeImapUtf7(folder)}
                                     </span>
                                   </label>
@@ -167,7 +167,7 @@ export function NotificationSettings({ accounts }) {
       {/* Backup Notifications */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-          <HardDrive size={18} className="text-mail-accent" />
+          <HardDrive size={18} className="text-mail-accent-text" />
           Backup Notifications
         </h4>
 
@@ -186,7 +186,7 @@ export function NotificationSettings({ accounts }) {
       {/* Badge */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-          <Mail size={18} className="text-mail-accent" />
+          <Mail size={18} className="text-mail-accent-text" />
           Badge
         </h4>
 

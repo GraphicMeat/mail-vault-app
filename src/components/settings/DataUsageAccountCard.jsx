@@ -81,7 +81,7 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
             key={p.id}
             onClick={() => setPeriod(p.id)}
             className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
-              period === p.id ? 'bg-mail-accent text-white' : 'text-mail-text-muted hover:text-mail-text'
+              period === p.id ? 'bg-mail-accent-fill text-white' : 'text-mail-text-muted hover:text-mail-text'
             }`}
           >
             {p.label}
@@ -92,11 +92,11 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
       {/* Totals for the selected period */}
       <div className="grid grid-cols-2 gap-4 pt-3 border-t border-mail-border">
         <div>
-          <div className="text-xs text-mail-text-muted flex items-center gap-1"><ArrowDown size={12} /> Downloaded</div>
+          <div className="text-xs text-mail-text-muted flex items-center gap-1"><ArrowDown size={12} className="text-mail-accent" /> Downloaded</div>
           <div className="text-sm font-semibold text-mail-text">{formatBytes(periodStats.down)}</div>
         </div>
         <div>
-          <div className="text-xs text-mail-text-muted flex items-center gap-1"><ArrowUp size={12} /> Uploaded</div>
+          <div className="text-xs text-mail-text-muted flex items-center gap-1"><ArrowUp size={12} className="text-mail-text-muted" /> Uploaded</div>
           <div className="text-sm font-semibold text-mail-text">{formatBytes(periodStats.up)}</div>
         </div>
       </div>

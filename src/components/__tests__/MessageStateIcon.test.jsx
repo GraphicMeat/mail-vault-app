@@ -37,9 +37,9 @@ describe('describeMessageState', () => {
     ['archived-server-unknown',                 archived,  false, false, 'drive', 'local',   null],
     ['archived-server-unknown-backed-up',       archived,  true,  false, 'drive', 'local',   'filled'],
     ['archived-server-unknown-backup-unknown',  archived,  null,  false, 'drive', 'local',   'hollow'],
-    ['local-only',                              localOnly, false, true,  'drive', 'warning', null],
-    ['local-only-backed-up',                    localOnly, true,  true,  'drive', 'warning', 'filled'],
-    ['local-only-backup-unknown',               localOnly, null,  true,  'drive', 'warning', 'hollow'],
+    ['local-only',                              localOnly, false, true,  'cloud-off', 'only-copy', null],
+    ['local-only-backed-up',                    localOnly, true,  true,  'cloud-off', 'only-copy', 'filled'],
+    ['local-only-backup-unknown',               localOnly, null,  true,  'cloud-off', 'only-copy', 'hollow'],
   ];
 
   for (const [id, email, backedUp, serverKnown, icon, tone, dot] of table) {
@@ -54,11 +54,11 @@ describe('describeMessageState', () => {
     });
   }
 
-  it('never renders the warning tone when the server is unverified', () => {
+  it('never renders the only-copy tone when the server is unverified', () => {
     // The whole point: amber is a claim that needs proof.
     for (const backedUp of [true, false, null]) {
       const s = describeMessageState(localOnly, { backedUp, serverKnown: false });
-      expect(s.tone).not.toBe('warning');
+      expect(s.tone).not.toBe('only-copy');
     }
   });
 
@@ -71,8 +71,8 @@ describe('describeMessageState', () => {
   it('fails closed: no options object means no proof, so never amber', () => {
     // The gate exists to require proof. A caller that forgets to pass
     // serverKnown must not get the alarm by default.
-    expect(describeMessageState(localOnly).tone).not.toBe('warning');
-    expect(describeMessageState(localOnly, { backedUp: false }).tone).not.toBe('warning');
+    expect(describeMessageState(localOnly).tone).not.toBe('only-copy');
+    expect(describeMessageState(localOnly, { backedUp: false }).tone).not.toBe('only-copy');
   });
 });
 
@@ -193,7 +193,7 @@ describe('ConnectedStateIcon', () => {
     expect(document.querySelector('[data-dot="filled"]')).not.toBeNull();
   });
 
-  it('passes server uid completeness through so a local-only row proven gone renders the warning tone', () => {
+  it('passes server uid completeness through so a local-only row proven gone renders the only-copy tone', () => {
     mockStoreState = { backedUpKeys: new Set(), serverUids: { uids: new Set(), complete: true }, activeAccountId: 'acc1' };
     render(<ConnectedStateIcon email={{ uid: 5, _accountId: 'acc1', source: 'local-only', isArchived: true }} />);
     expect(screen.getByTestId('msg-state-icon').getAttribute('data-state')).toBe('local-only');

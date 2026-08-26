@@ -94,7 +94,7 @@ const TopicRow = memo(function TopicRow({ topic, onClick, index }) {
     >
       {/* Topic Icon */}
       <div className="w-10 h-10 rounded-lg bg-mail-accent/10 flex items-center justify-center flex-shrink-0">
-        <MessageCircle size={20} className="text-mail-accent" />
+        <MessageCircle size={20} className="text-mail-accent-text" />
       </div>
 
       {/* Content */}
@@ -107,7 +107,7 @@ const TopicRow = memo(function TopicRow({ topic, onClick, index }) {
           </h3>
 
           {unreadCount > 0 && (
-            <span className="flex-shrink-0 min-w-[20px] h-5 px-1.5 bg-mail-accent rounded-full
+            <span className="flex-shrink-0 min-w-[20px] h-5 px-1.5 bg-mail-accent-fill rounded-full
                           text-white text-xs font-medium flex items-center justify-center">
               {unreadCount}
             </span>
@@ -128,7 +128,7 @@ const TopicRow = memo(function TopicRow({ topic, onClick, index }) {
           )}
 
           {hasAttachments && (
-            <span className="text-mail-accent">Has attachments</span>
+            <span className="text-mail-accent-text">Has attachments</span>
           )}
         </div>
       </div>

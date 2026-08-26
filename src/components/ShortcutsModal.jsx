@@ -133,7 +133,7 @@ export function ShortcutsModal({ onClose }) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-mail-border">
           <h2 className="text-lg font-semibold text-mail-text flex items-center gap-2">
-            <Keyboard size={20} className="text-mail-accent" />
+            <Keyboard size={20} className="text-mail-accent-text" />
             Keyboard Shortcuts
           </h2>
           <button onClick={onClose} className="p-1 hover:bg-mail-border rounded transition-colors">
