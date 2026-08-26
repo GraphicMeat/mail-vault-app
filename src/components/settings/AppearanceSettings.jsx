@@ -17,7 +17,26 @@ import {
   PenTool,
 } from 'lucide-react';
 
+// The shell forces the stacked layout below 768px (App.jsx). Without this the
+// three-column card would take a click and change nothing — a control that
+// names an action it cannot perform.
+const STACKED_BELOW = '(max-width: 767px)';
+function useWindowIsNarrow() {
+  const [narrow, setNarrow] = React.useState(
+    () => typeof window !== 'undefined' && window.matchMedia(STACKED_BELOW).matches,
+  );
+  React.useEffect(() => {
+    const mq = window.matchMedia(STACKED_BELOW);
+    const onChange = (e) => setNarrow(e.matches);
+    mq.addEventListener('change', onChange);
+    setNarrow(mq.matches);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return narrow;
+}
+
 export function AppearanceSettings() {
+  const windowIsNarrow = useWindowIsNarrow();
   const { theme, toggleTheme } = useThemeStore();
   const {
     layoutMode,
@@ -175,6 +194,13 @@ export function AppearanceSettings() {
         <p className="text-sm text-mail-text-muted mb-4">
           Choose how emails are displayed. Drag the divider between panes to resize.
         </p>
+
+        {windowIsNarrow && (
+          <p className="text-sm text-mail-text-muted mb-4 border-l border-mail-border pl-3">
+            This window is too narrow for three columns, so the list and the message
+            are stacked until you widen it. Your choice is remembered.
+          </p>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <button

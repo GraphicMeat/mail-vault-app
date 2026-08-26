@@ -77,7 +77,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
         <ConnectedStateIcon email={email} size={14} />
       </div>
 
-      <div className={`w-48 min-w-[80px] truncate flex-shrink flex items-center gap-1.5 ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
+      <div className={`w-[32%] max-w-48 min-w-[80px] truncate flex-shrink flex items-center gap-1.5 ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
         {unifiedInbox && email._accountEmail && (
           <span
             data-testid="account-dot"
@@ -91,12 +91,18 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
 
       {/*
         min-w-[120px], not min-w-0, and flex-1 on the subject span below.
-        The sender column is a fixed w-48 that only gives up space once the
-        flex line overflows — and min-w-0 here meant it never did, because
+        The sender column used to be a fixed w-48 that only gave up space once
+        the flex line overflowed — and min-w-0 here meant it never did, because
         this column absorbed the whole deficit instead. At a 349px row that
         left 51px for a 67px date and the subject rendered at 0px wide: for
         every message whose date carries a year, the row showed a sender and
         a date and no subject at all.
+
+        The sender is now `w-[32%] max-w-48`, so it is a share of the row it
+        actually sits in rather than of the window. Above ~600px the cap keeps
+        it at the same 192px it always was; in a half-screen window or a
+        dragged-narrow list pane it yields first, because a subject is what
+        someone scans a list for and a sender name is what they can infer.
       */}
       <div className="flex-1 min-w-[120px] flex items-center gap-2">
         <SenderAlertIcon level={email._senderAlert} email={email} />

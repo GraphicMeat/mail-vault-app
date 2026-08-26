@@ -70,7 +70,7 @@ function RecipientField({ name, label, placeholder, value, onChange, setValue, t
   const inputRef = useRef(null);
   return (
     <div className="flex items-center gap-2 relative">
-      <label className="w-12 text-sm text-mail-text-muted">{label}</label>
+      <label className="w-16 flex-shrink-0 text-sm text-mail-text-muted">{label}</label>
       <div className="flex-1 flex items-center gap-1">
         <input
           ref={inputRef}
@@ -1139,7 +1139,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                 single account means it has an override or a mined alias. */}
             {identities.length > 1 && (
               <div className="flex items-center gap-2">
-                <label className="w-12 text-sm text-mail-text-muted">From:</label>
+                <label className="w-16 flex-shrink-0 text-sm text-mail-text-muted">From:</label>
                 <div className="relative flex-1">
                   <select
                     data-testid="compose-from"
@@ -1215,7 +1215,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             
             {/* Subject */}
             <div className="flex items-center gap-2">
-              <label className="w-12 text-sm text-mail-text-muted">Subject:</label>
+              <label className="w-16 flex-shrink-0 text-sm text-mail-text-muted">Subject:</label>
               <input
                 type="text"
                 name="subject"

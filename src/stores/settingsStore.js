@@ -156,7 +156,11 @@ export const useSettingsStore = create(
       sidebarCollapsed: false, // Whether sidebar is in compact/collapsed mode
       sidebarAccountsRatio: 0.4, // Ratio of accounts section height vs total available (0.2 - 0.8)
       sidebarStyle: 'list', // 'list' | 'tagcloud' — render accounts & folders as list rows or wrapped bubble tags
-      listPaneSize: 350, // Width of email list in 3-column, or height in 2-column
+      listPaneSize: 350, // Width of the email list in three-column
+      // Height of the email list when the panes are stacked. Separate from the
+      // width above: one number read on two axes let a legal list width become
+      // a list height that pushed the reading pane off the bottom of the window.
+      listPaneHeight: 320,
       viewerPaneSize: 50, // Percentage of remaining space for viewer in 3-column
 
       // Onboarding
@@ -605,6 +609,7 @@ export const useSettingsStore = create(
       setActionButtonDisplay: (mode) => set({ actionButtonDisplay: mode }),
       setEmailViewerTheme: (mode) => set({ emailViewerTheme: mode }),
       setListPaneSize: (size) => set({ listPaneSize: size }),
+      setListPaneHeight: (size) => set({ listPaneHeight: size }),
       setViewerPaneSize: (size) => set({ viewerPaneSize: size }),
 
       // Onboarding
@@ -787,6 +792,7 @@ export const useSettingsStore = create(
           sidebarCollapsed: false,
           sidebarStyle: 'list',
           listPaneSize: 350,
+          listPaneHeight: 320,
           viewerPaneSize: 50,
           onboardingComplete: false,
           searchHistoryLimit: 20,

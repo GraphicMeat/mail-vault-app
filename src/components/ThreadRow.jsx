@@ -90,16 +90,17 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
         <ConnectedStateIcon email={latestEmail} size={14} />
       </div>
 
-      <div className={`w-48 min-w-[80px] truncate flex-shrink ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
+      <div className={`w-[32%] max-w-48 min-w-[80px] truncate flex-shrink ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
         {participantNames}
       </div>
 
       {/*
         Same shape as EmailRow: a real floor, not min-w-0, and flex-1 on the
-        subject span. The participants column is a fixed w-48 that only gives
-        up space once the flex line overflows — with min-w-0 here it never
-        did, so this column took the whole deficit and the subject rendered at
-        0px while the count badge and date kept theirs.
+        subject span. The participants column is `w-[32%] max-w-48` — a share
+        of this row, capped at the 192px it has always been above ~600px — and
+        it only gives up space once the flex line overflows. With min-w-0 here
+        it never did, so this column took the whole deficit and the subject
+        rendered at 0px while the count badge and date kept theirs.
 
         140px, not EmailRow's 120px: this row carries the message-count badge
         as well, and the badge plus its gap is the extra 20px. At a 350px pane

@@ -108,7 +108,7 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
       panelClassName="w-full max-w-7xl h-[92vh] rounded-2xl flex overflow-hidden"
     >
         {/* Sidebar */}
-        <div className="w-56 bg-mail-surface border-r border-mail-border flex flex-col">
+        <div className="w-44 sm:w-56 flex-shrink-0 bg-mail-surface border-r border-mail-border flex flex-col">
           <div className="px-4 py-4 border-b border-mail-border flex items-center h-[57px]">
             <h2 id={titleId} className="text-lg font-semibold text-mail-text">Settings</h2>
           </div>

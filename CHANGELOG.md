@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed
+- **A narrow window no longer pushes the message out of sight.** Below 768px wide the list and the message stack one above the other, and the height of the list came from the same setting as its width in the three-column layout. Widen the list with the divider, then make the window narrow — half a screen, or the smallest size MailVault opens at — and that width became a height taller than the window: the message you clicked was rendered below the bottom edge, along with the divider that would have brought it back, so clicking a message showed nothing and there was no way to undo it from inside the app. The two layouts now keep their own sizes, neither can be dragged past what the window can hold, and the stacked layout gives the whole window to the list until you open something — instead of holding half of it for a pane that says "Select an email to read".
+- **Settings stops hiding its own tabs in a narrow window.** In General and in Backup & Restore, the row of tabs ran off the right-hand edge — "Notifications" and "Keyboard Shortcuts" were simply not on screen, in a strip that scrolled sideways with nothing to show that it could. The tabs now wrap onto a second line, and the settings list on the left takes less room when the window is small.
+- **A narrow message list keeps more of the subject.** The sender column was a fixed width whatever the list was doing, so in a half-screen window it took nearly as much room as the subject beside it. It is now a share of the row: unchanged at the widths it has always had, and it gives way first when the list is narrow, because a subject is what a list is read for.
+- **The layout picker says when three columns will not fit.** Choosing "Three Columns" in a window too narrow to hold them did nothing at all, with nothing to explain why. Settings → General → Layout now says the panes are stacked until the window is widened, and that the choice is remembered.
+- **"Subject:" fits its label in the compose window.** The label was five pixels narrower than the word.
+
 ## [2.10.2] - 2026-08-25
 
 ### Added

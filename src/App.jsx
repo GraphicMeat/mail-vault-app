@@ -5,7 +5,10 @@ import { useSyncStore } from './stores/syncStore';
 import { useUiStore } from './stores/uiStore';
 import { useThemeStore } from './stores/themeStore';
 import { useSettingsStore } from './stores/settingsStore';
-import { clampListPaneWidth, maxListPaneWidth, MIN_LIST_WIDTH } from './utils/paneLayout';
+import {
+  clampListPaneWidth, maxListPaneWidth, MIN_LIST_WIDTH,
+  clampListPaneHeight, MIN_LIST_HEIGHT, MIN_VIEWER_HEIGHT,
+} from './utils/paneLayout';
 import { ChunkErrorBoundary } from './components/ChunkErrorBoundary';
 import { Sidebar } from './components/Sidebar';
 import { EmailList } from './components/EmailList';
@@ -123,6 +126,8 @@ function App() {
   const viewStyle = useSettingsStore(s => s.viewStyle);
   const listPaneSize = useSettingsStore(s => s.listPaneSize);
   const setListPaneSize = useSettingsStore(s => s.setListPaneSize);
+  const listPaneHeight = useSettingsStore(s => s.listPaneHeight);
+  const setListPaneHeight = useSettingsStore(s => s.setListPaneHeight);
   const sidebarCollapsed = useSettingsStore(s => s.sidebarCollapsed);
   const setSidebarCollapsed = useSettingsStore(s => s.setSidebarCollapsed);
   const onboardingComplete = useSettingsStore(s => s.onboardingComplete);
@@ -130,10 +135,11 @@ function App() {
 
   // ── Responsive layout adaptation ─────────────────────────────────────────
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
+  const [windowHeight, setWindowHeight] = useState(typeof window !== 'undefined' ? window.innerHeight : 800);
   const autoCollapsedRef = useRef(false); // true = sidebar was collapsed by responsive, not by user
 
   useEffect(() => {
-    const onResize = () => setWindowWidth(window.innerWidth);
+    const onResize = () => { setWindowWidth(window.innerWidth); setWindowHeight(window.innerHeight); };
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
@@ -256,9 +262,22 @@ function App() {
   const maxListWidth = maxListPaneWidth(availableWidth);
   const clampedListWidth = clampListPaneWidth(listPaneSize, availableWidth);
 
+  // Stacked layout: the window is too narrow to hold a list and a reader side
+  // by side, so the two take turns instead of splitting a window neither fits
+  // in. With nothing selected the list IS the screen — a placeholder telling
+  // someone to pick a message, in a pane below the list they are looking at,
+  // is 450px of a 900px window spent saying nothing. Once a message is open
+  // the reader takes the larger share and the list keeps a scannable strip, so
+  // moving to the next message never costs a trip back.
+  const hasOpenMessage = useMailStore(s => !!s.selectedEmail || !!s.selectedThread);
+  const stackedSolo = layoutMode === 'two-column' && !hasOpenMessage;
+  const clampedListHeight = clampListPaneHeight(listPaneHeight, windowHeight);
+
   const listPaneStyle = layoutMode === 'three-column'
     ? { width: clampedListWidth, minWidth: MIN_LIST_WIDTH, maxWidth: maxListWidth }
-    : { height: listPaneSize, minHeight: 100 };
+    : stackedSolo
+      ? { flex: '1 1 auto', minHeight: 0 }
+      : { height: clampedListHeight, minHeight: MIN_LIST_HEIGHT };
 
   // Initialize email scheduler
   useEmailScheduler();
@@ -371,12 +390,11 @@ function App() {
       const sw = sidebarCollapsed ? 56 : 256;
       setListPaneSize(clampListPaneWidth(position - sw, containerRect.width));
     } else {
-      // In 2-column mode, position is Y coordinate
-      // Minimum 100px for both top and bottom sections
-      const newSize = Math.max(100, Math.min(containerRect.height - 100, position - containerRect.top));
-      setListPaneSize(newSize);
+      // In 2-column mode, position is a Y coordinate — clamped on its own axis
+      // and stored in its own setting, so a drag here never becomes a width.
+      setListPaneHeight(clampListPaneHeight(position - containerRect.top, containerRect.height));
     }
-  }, [layoutMode, setListPaneSize, sidebarCollapsed]);
+  }, [layoutMode, setListPaneSize, setListPaneHeight, sidebarCollapsed]);
 
   const handleReportBug = useCallback(() => {
     const os = navigator.platform || navigator.userAgent || 'Unknown';
@@ -744,19 +762,23 @@ function App() {
               <EmailList />
             </div>
 
-            {/* Resizable divider */}
-            <ResizeDivider
-              orientation={layoutMode === 'three-column' ? 'vertical' : 'horizontal'}
-              onResize={handleListResize}
-            />
+            {/* Divider and reader. Both stand down in the stacked layout while
+                nothing is open — see `stackedSolo`. */}
+            {!stackedSolo && (
+              <>
+                <ResizeDivider
+                  orientation={layoutMode === 'three-column' ? 'vertical' : 'horizontal'}
+                  onResize={handleListResize}
+                />
 
-            {/* Email Viewer */}
-            <div
-              className="flex-1 min-h-0 min-w-0 flex flex-col"
-              style={layoutMode === 'three-column' ? { minWidth: 300 } : { minHeight: 100 }}
-            >
-              <EmailViewer onComposeReply={(mode, email) => setComposeState({ mode, replyTo: email })} />
-            </div>
+                <div
+                  className="flex-1 min-h-0 min-w-0 flex flex-col"
+                  style={layoutMode === 'three-column' ? { minWidth: 300 } : { minHeight: MIN_VIEWER_HEIGHT }}
+                >
+                  <EmailViewer onComposeReply={(mode, email) => setComposeState({ mode, replyTo: email })} />
+                </div>
+              </>
+            )}
           </>
         )}
       </div>

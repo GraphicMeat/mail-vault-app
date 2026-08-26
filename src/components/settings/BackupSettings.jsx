@@ -20,7 +20,7 @@ export default function BackupSettings({ initialAccountId = null, onUpgrade }) {
   return (
     <div>
       {/* Sub-tab navigation */}
-      <div className="flex border-b border-mail-border px-6 pt-2">
+      <div className="flex flex-wrap border-b border-mail-border px-6 pt-2">
         {backupSubTabs.map(sub => (
           <button
             key={sub.id}
