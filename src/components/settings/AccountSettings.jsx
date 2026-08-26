@@ -1,3 +1,4 @@
+import { Button } from '../ui/Button';
 import React, { useState, useEffect, useRef } from 'react';
 import { useMailStore } from '../../stores/mailStore';
 import { useAccountStore } from '../../stores/accountStore';
@@ -242,7 +243,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
       console.error('Failed to save Sent folder:', err);
-      alert('Failed to save Sent folder: ' + (err.message || err));
+      alert('Could not save the Sent folder. Reconnect the account and try again.\n\nDetails: ' + (err.message || err));
     } finally {
       setSavingSent(false);
     }
@@ -276,7 +277,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
       console.error('Auto-create Sent folder failed:', err);
-      alert('Could not auto-detect or create a Sent folder: ' + (err.message || err));
+      alert('Could not find or create a Sent folder on this server. Pick one from the list instead, or create it in your webmail first.\n\nDetails: ' + (err.message || err));
     } finally {
       setAutoCreatingSent(false);
     }
@@ -327,7 +328,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
       setTimeout(() => setSaved(false), 2000);
     } catch (error) {
       console.error('OAuth2 reconnect failed:', error);
-      alert('Reconnect failed: ' + (error.message || error));
+      alert('Could not reconnect this account. Check the password and server settings below, then try again.\n\nDetails: ' + (error.message || error));
     } finally {
       setOauthReconnecting(false);
     }
@@ -363,7 +364,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
       setTimeout(() => setSaved(false), 2000);
     } catch (error) {
       console.error('Failed to update password:', error);
-      alert('Failed to update password: ' + error);
+      alert('Could not save the new password. The keychain may have refused access — retry, and allow the prompt if one appears.\n\nDetails: ' + error);
     }
   };
 
@@ -783,7 +784,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                 </h4>
 
                 <p className="text-sm text-mail-text-muted mb-4">
-                  Changed hosting or email provider but kept the same address? Update the IMAP/SMTP servers here. Your locally archived mail stays put — if the new server is empty, MailVault will offer to restore it.
+                  Changed hosting or email provider but kept the same address? Update the IMAP/SMTP servers here. Your vault stays exactly as it is — if the new server is empty, MailVault offers to upload it back.
                 </p>
 
                 <div className="flex items-center justify-between">
@@ -926,14 +927,12 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                           {selectedAccount.password ? 'Stored securely in system keychain' : 'Not configured'}
                         </div>
                       </div>
-                      <button
+                      <Button variant="subtle"
                         onClick={() => setEditingPassword(true)}
-                        className="px-4 py-2 bg-mail-surface-hover hover:bg-mail-border
-                                  text-mail-text rounded-lg transition-colors flex items-center gap-2"
                       >
                         <Key size={16} />
                         {selectedAccount.password ? 'Update' : 'Set Password'}
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </>
@@ -948,18 +947,16 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
               </h4>
 
               <p className="text-sm text-mail-text-muted mb-4">
-                This will remove the account from MailVault. All locally archived emails,
+                This removes the account from MailVault. Everything of its in your vault,
                 attachments, and settings for this account will be permanently deleted
                 and cannot be recovered.
               </p>
-              <button
+              <Button variant="dangerTint"
                 onClick={() => setShowRemoveConfirm(true)}
-                className="px-4 py-2 bg-mail-danger/10 hover:bg-mail-danger/20
-                          text-mail-danger rounded-lg transition-colors flex items-center gap-2"
               >
                 <Trash2 size={16} />
                 Remove This Account
-              </button>
+              </Button>
 
               <AnimatePresence>
                 {showRemoveConfirm && (
@@ -974,7 +971,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                         Are you sure you want to remove {selectedAccount.email}?
                       </p>
                       <p className="text-sm text-mail-text-muted mb-2">
-                        This will permanently delete all locally archived emails, attachments, and settings for this account. This action cannot be undone.
+                        Deletes this account\u2019s emails, attachments and settings from your vault. Mail still on the server is untouched; anything the server no longer has is gone for good.
                       </p>
                       {accounts.length === 1 && hasPremiumAccess(useSettingsStore.getState().billingProfile) && (
                         <p className="text-sm text-mail-warning mb-2">

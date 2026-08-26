@@ -1,9 +1,12 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useId } from 'react';
 import { useAccountStore } from '../stores/accountStore';
+import { Dialog } from './ui/Dialog';
+import { Button } from './ui/Button';
 import { getOAuth2AuthUrl, exchangeOAuth2Code, testConnection, resolveEmailSettings } from '../services/api';
 import { isPersonalMicrosoftEmail } from '../services/graphConfig';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Mail, Lock, Server, Eye, EyeOff, Check, AlertCircle, Loader, Wand2, Shield, ChevronRight } from 'lucide-react';
+import { describeConnectionError } from '../utils/connectionError';
 
 // Common email provider configurations
 export const PROVIDER_CONFIGS = {
@@ -134,6 +137,7 @@ function guessServerSettings(email) {
 }
 
 export function AccountModal({ onClose }) {
+  const titleId = useId();
   const { addAccount } = useAccountStore();
 
   const [step, setStep] = useState(1);
@@ -186,6 +190,7 @@ export function AccountModal({ onClose }) {
       oauthConnected
     );
   };
+
 
   const handleClose = () => {
     if (isDirty()) {
@@ -277,7 +282,7 @@ export function AccountModal({ onClose }) {
   const handleAutoDetect = async () => {
     console.log('[AccountModal] handleAutoDetect called');
     if (!formData.email || !formData.password) {
-      setError('Please enter email and password first');
+      setError('Enter your email address and password first — auto-detect signs in to confirm the settings it finds.');
       return;
     }
 
@@ -383,7 +388,7 @@ export function AccountModal({ onClose }) {
           smtpHost: guess.patterns[0].smtpHost,
           smtpPort: guess.smtpPort
         }));
-        setError('Could not auto-detect server settings. Please enter them manually.');
+        setError('No settings found for this domain. Your provider\u2019s help pages list its IMAP and SMTP hostnames — enter them below and we filled in a best guess to start from.');
       }
 
       setShowManualConfig(true);
@@ -493,7 +498,10 @@ export function AccountModal({ onClose }) {
       }, 1500);
     } catch (err) {
       console.error('[AccountModal] addAccount failed:', err);
-      setError(typeof err === 'string' ? err : (err.message || 'Failed to connect to email server'));
+      // Never the raw backend string as the whole message: this is the first
+      // thing someone sees when setup fails, and "Connection test failed:
+      // AUTHENTICATIONFAILED (Failure)" names no problem they can act on.
+      setError(describeConnectionError(err));
     } finally {
       setTesting(false);
     }
@@ -504,32 +512,23 @@ export function AccountModal({ onClose }) {
   const isFastmail = provider === 'fastmail' || isFastmailAccount(formData);
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50"
-      onClick={handleClose}
+    <Dialog
+      open
+      onClose={handleClose}
+      size="lg"
+      padded={false}
+      panelBg="bg-mail-surface"
+      aria-labelledby={titleId}
+      panelClassName="overflow-hidden max-h-[90vh] flex flex-col"
     >
-      <motion.div
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.95, opacity: 0 }}
-        className="bg-mail-surface border border-mail-border rounded-2xl shadow-2xl
-                   w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col relative"
-        onClick={(e) => e.stopPropagation()}
-      >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-mail-border">
-          <h2 className="text-lg font-semibold text-mail-text">
+          <h2 id={titleId} className="text-lg font-semibold text-mail-text">
             {step === 1 ? 'Choose Email Provider' : 'Add Account'}
           </h2>
-          <button
-            onClick={handleClose}
-            className="p-1 hover:bg-mail-border rounded-lg transition-colors"
-          >
-            <X size={20} className="text-mail-text-muted" />
-          </button>
+          <Button variant="ghost" icon size="xs" onClick={handleClose} aria-label="Close">
+            <X size={20} />
+          </Button>
         </div>
 
         {/* Content */}
@@ -920,8 +919,13 @@ export function AccountModal({ onClose }) {
                   className="flex items-center gap-2 p-3 bg-mail-danger/10 border border-mail-danger/20
                             rounded-lg text-sm text-mail-danger"
                 >
-                  <AlertCircle size={16} />
-                  {error}
+                  <AlertCircle size={16} className="flex-shrink-0 self-start mt-0.5" />
+                  <div className="min-w-0">
+                    <p>{typeof error === 'string' ? error : error.message}</p>
+                    {typeof error !== 'string' && error.detail && (
+                      <p className="mt-1 text-xs text-mail-text-muted break-words">{error.detail}</p>
+                    )}
+                  </div>
                 </motion.div>
               )}
 
@@ -955,20 +959,15 @@ export function AccountModal({ onClose }) {
                 >
                   Back
                 </button>
-                <button
+                <Button
                   type="submit"
+                  variant="primary"
+                  size="lg"
+                  className="flex-1"
                   disabled={testing || success || (authType === 'oauth2' && !oauthConnected)}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5
-                            bg-mail-accent-fill hover:bg-mail-accent-hover disabled:opacity-50
-                            text-white font-medium rounded-lg transition-all
-                            shadow-glow hover:shadow-glow-lg disabled:shadow-none"
+                  loading={testing}
                 >
-                  {testing ? (
-                    <>
-                      <Loader size={18} className="animate-spin" />
-                      Testing Connection...
-                    </>
-                  ) : success ? (
+                  {testing ? 'Testing Connection...' : success ? (
                     <>
                       <Check size={18} />
                       Connected!
@@ -976,7 +975,7 @@ export function AccountModal({ onClose }) {
                   ) : (
                     'Add Account'
                   )}
-                </button>
+                </Button>
               </div>
             </form>
           )}
@@ -1003,26 +1002,17 @@ export function AccountModal({ onClose }) {
                   All entered details will be lost.
                 </p>
                 <div className="flex gap-3">
-                  <button
-                    onClick={() => setShowDiscardConfirm(false)}
-                    className="flex-1 px-3 py-2 text-sm font-medium text-mail-text
-                               bg-mail-surface-hover hover:bg-mail-border rounded-lg transition-colors"
-                  >
+                  <Button variant="subtle" size="sm" className="flex-1" onClick={() => setShowDiscardConfirm(false)}>
                     Keep Editing
-                  </button>
-                  <button
-                    onClick={onClose}
-                    className="flex-1 px-3 py-2 text-sm font-medium text-white
-                               bg-mail-danger hover:bg-mail-danger/80 rounded-lg transition-colors"
-                  >
+                  </Button>
+                  <Button variant="danger" size="sm" className="flex-1" onClick={onClose}>
                     Discard
-                  </button>
+                  </Button>
                 </div>
               </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
-      </motion.div>
-    </motion.div>
+    </Dialog>
   );
 }

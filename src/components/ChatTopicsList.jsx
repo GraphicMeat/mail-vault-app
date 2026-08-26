@@ -1,3 +1,4 @@
+import { Button } from './ui/Button';
 import React, { memo, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
@@ -20,12 +21,11 @@ export function ChatTopicsList({ correspondent, topics, onBack, onSelectTopic })
     <div className="flex flex-col h-full">
       {/* Header */}
       <div data-tauri-drag-region className="flex items-center gap-2.5 px-4 py-[13px] border-b border-mail-border bg-mail-surface">
-        <button
+        <Button variant="ghost" icon size="xs" className="hover:bg-mail-border"
           onClick={onBack}
-          className="p-1 hover:bg-mail-border rounded-lg transition-colors"
         >
           <ChevronLeft size={18} className="text-mail-text-muted" />
-        </button>
+        </Button>
 
         <div
           className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0"

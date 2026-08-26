@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
+import { Dialog } from '../ui/Dialog';
+import { Button } from '../ui/Button';
 import { useMailStore } from '../../stores/mailStore';
 import { useAccountStore } from '../../stores/accountStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { safeStorage } from '../../stores/safeStorage';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
   Download,
   Upload,
@@ -23,7 +25,7 @@ export default function BackupRestore() {
 
   const handleExportData = () => {
     if (!invoke) {
-      alert('Backup export is only available in the desktop app.');
+      alert('Exporting a backup is only available in the desktop app.');
       return;
     }
     setShowExportChoice(true);
@@ -79,13 +81,13 @@ export default function BackupRestore() {
     } catch (error) {
       console.error('Export error:', error);
       useMailStore.getState().dismissExportProgress();
-      alert('Failed to export backup: ' + (error.message || error));
+      alert('Could not write the backup file. Pick a folder you can write to, make sure there is room on the disk, and try again.\n\nDetails: ' + (error.message || error));
     }
   };
 
   const handleImportData = async () => {
     if (!invoke) {
-      alert('Backup import is only available in the desktop app.');
+      alert('Importing a backup is only available in the desktop app.');
       return;
     }
     try {
@@ -126,17 +128,17 @@ export default function BackupRestore() {
 
       setTimeout(() => {
         useMailStore.getState().dismissExportProgress();
-        let msg = `Backup imported successfully!\n\n${result.emailCount} email(s) from ${result.accountCount} account(s).`;
+        let msg = `Backup restored. ${result.emailCount} email(s) from ${result.accountCount} account(s) are now in your vault.`;
         if (result.newAccounts.length > 0) {
-          msg += `\n\nNew accounts created (re-enter passwords in Settings):\n\u2022 ${result.newAccounts.join('\n\u2022 ')}`;
+          msg += `\n\nThese accounts were recreated and still need their passwords, under Settings \u203a Accounts:\n\u2022 ${result.newAccounts.join('\n\u2022 ')}`;
         }
-        alert(msg + '\n\nThe page will reload.');
+        alert(msg + '\n\nMailVault reloads when you close this.');
         window.location.reload();
       }, 1500);
     } catch (error) {
       console.error('Import error:', error);
       useMailStore.getState().dismissExportProgress();
-      alert('Failed to import backup: ' + (error.message || error));
+      alert('Could not read that backup file. Pick the .zip MailVault wrote — nothing in your vault was changed.\n\nDetails: ' + (error.message || error));
     }
   };
 
@@ -144,7 +146,7 @@ export default function BackupRestore() {
 
   const handleExportMbox = async () => {
     if (!invoke) {
-      alert('MBOX export is only available in the desktop app.');
+      alert('Exporting MBOX is only available in the desktop app.');
       return;
     }
     try {
@@ -175,22 +177,22 @@ export default function BackupRestore() {
 
       setTimeout(() => {
         useMailStore.getState().dismissExportProgress();
-        alert(`MBOX exported successfully!\n\n${result.emailCount} email(s) from ${result.accountCount} account(s).`);
+        alert(`MBOX written. ${result.emailCount} email(s) from ${result.accountCount} account(s) are in the file — Thunderbird, Apple Mail and anything else that reads MBOX can open it.`);
       }, 1500);
     } catch (error) {
       console.error('MBOX export error:', error);
       useMailStore.getState().dismissExportProgress();
-      alert('Failed to export MBOX: ' + (error.message || error));
+      alert('Could not write the MBOX file. Pick a folder you can write to, make sure there is room on the disk, and try again.\n\nDetails: ' + (error.message || error));
     }
   };
 
   const handleImportMbox = async () => {
     if (!invoke) {
-      alert('MBOX import is only available in the desktop app.');
+      alert('Importing MBOX is only available in the desktop app.');
       return;
     }
     if (!visibleAccounts.length) {
-      alert('Add an email account first before importing an MBOX file.');
+      alert('Add an email account first — an imported MBOX has to land in one.');
       return;
     }
     try {
@@ -228,13 +230,13 @@ export default function BackupRestore() {
 
       setTimeout(() => {
         useMailStore.getState().dismissExportProgress();
-        alert(`MBOX imported successfully!\n\n${result.emailCount} email(s) imported into ${targetAccount.email || 'your account'} / ${targetMailbox}.\n\nThe page will reload.`);
+        alert(`MBOX imported. ${result.emailCount} email(s) are now in your vault under ${targetAccount.email || 'your account'} / ${targetMailbox}.\n\nMailVault reloads when you close this.`);
         window.location.reload();
       }, 1500);
     } catch (error) {
       console.error('MBOX import error:', error);
       useMailStore.getState().dismissExportProgress();
-      alert('Failed to import MBOX: ' + (error.message || error));
+      alert('Could not read that MBOX file. Check it is the file you meant — nothing in your vault was changed.\n\nDetails: ' + (error.message || error));
     }
   };
 
@@ -248,29 +250,23 @@ export default function BackupRestore() {
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">
-          Export your data to create a backup file, or import a previous backup to restore your emails.
+          Write everything in your vault to a single .zip you can copy anywhere, or read one back in.
         </p>
 
         <div className="flex gap-3">
-          <button
+          <Button variant="accentTint" className="flex-1 py-3"
             onClick={handleExportData}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-3
-                      bg-mail-accent/10 hover:bg-mail-accent/20 text-mail-accent-text
-                      rounded-lg transition-colors"
           >
             <Download size={18} />
             Export Backup
-          </button>
+          </Button>
 
-          <button
+          <Button variant="subtle" className="flex-1 py-3"
             onClick={handleImportData}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-3
-                      bg-mail-surface-hover hover:bg-mail-border text-mail-text
-                      rounded-lg transition-colors"
           >
             <Upload size={18} />
             Import Backup
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -282,74 +278,49 @@ export default function BackupRestore() {
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">
-          Export all emails as a standard MBOX file compatible with Thunderbird, Apple Mail, and other email clients. You can also import an MBOX file to restore emails.
+          Write your vault to a standard MBOX file that Thunderbird, Apple Mail and other clients can open, or read an MBOX from another client into your vault.
         </p>
 
         <div className="flex gap-3">
-          <button
+          <Button variant="accentTint" className="flex-1 py-3"
             onClick={handleExportMbox}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-3
-                      bg-mail-accent/10 hover:bg-mail-accent/20 text-mail-accent-text
-                      rounded-lg transition-colors"
           >
             <Download size={18} />
             Export MBOX
-          </button>
+          </Button>
 
-          <button
+          <Button variant="subtle" className="flex-1 py-3"
             onClick={handleImportMbox}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-3
-                      bg-mail-surface-hover hover:bg-mail-border text-mail-text
-                      rounded-lg transition-colors"
           >
             <Upload size={18} />
             Import MBOX
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Export choice modal */}
-      <AnimatePresence>
-        {showExportChoice && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]"
-            onClick={() => setShowExportChoice(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-mail-bg border border-mail-border rounded-xl shadow-xl max-w-sm w-full mx-4 p-6"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h3 className="text-lg font-semibold text-mail-text mb-2">Export Backup</h3>
-              <p className="text-sm text-mail-text-muted mb-5">
-                Which emails would you like to export?
-              </p>
-              <div className="flex flex-col gap-3">
-                <button
-                  onClick={() => doExport(true)}
-                  className="w-full px-4 py-3 bg-mail-accent-fill hover:bg-mail-accent-hover
-                            text-white rounded-lg font-medium transition-colors text-left"
-                >
-                  <span className="block">Archived Emails</span>
-                  <span className="block text-xs font-normal opacity-80 mt-0.5">Only emails you've explicitly saved to your device</span>
-                </button>
-                <button
-                  onClick={() => setShowExportChoice(false)}
-                  className="w-full px-4 py-2 text-sm text-mail-text-muted hover:text-mail-text
-                            transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <Dialog
+        open={showExportChoice}
+        onClose={() => setShowExportChoice(false)}
+        size="sm"
+        title="Export Backup"
+        // This asked "Which emails would you like to export?" and then offered
+        // one button and Cancel. A question with a single answer is not a
+        // choice — say what the export contains instead.
+        description="The .zip holds everything in your vault, plus your accounts and settings. Mail that only exists on the server is not included."
+      >
+        <div className="flex flex-col gap-3">
+          <Button variant="primary" size="lg" onClick={() => doExport(true)} fullWidth className="py-3 text-left justify-start">
+            <span className="block">
+              Choose a location
+              <span className="block text-xs font-normal opacity-80 mt-0.5">Pick where to write the backup file</span>
+            </span>
+          </Button>
+          <Button variant="ghost" onClick={() => setShowExportChoice(false)} fullWidth data-autofocus>
+            Cancel
+          </Button>
+        </div>
+      </Dialog>
     </div>
   );
 }

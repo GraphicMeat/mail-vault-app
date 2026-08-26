@@ -1,3 +1,4 @@
+import { Button } from '../ui/Button';
 import React, { useState, useEffect } from 'react';
 import { AlertCircle, FolderOpen, HardDrive, Loader } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -211,12 +212,11 @@ export default function MailStorageLocation() {
             >
               Leave it there
             </button>
-            <button
+            <Button variant="ghost" size="xs" className="text-xs py-2"
               onClick={() => setConfirmReset(false)}
-              className="text-xs text-mail-text-muted hover:text-mail-text px-2 py-2"
             >
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}

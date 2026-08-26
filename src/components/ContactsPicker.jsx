@@ -116,7 +116,7 @@ export function ContactsPickerButton({ value, onChange, fieldName, boostAccountI
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-1 w-80 bg-mail-surface border border-mail-border
-                        rounded-lg shadow-2xl z-50 overflow-hidden">
+                        rounded-lg z-50 overflow-hidden">
           {/* Account filter row: All | <avatar> | <avatar> | ... */}
           {accounts.length > 1 && (
             <div className="flex items-center gap-1 px-2 py-1.5 border-b border-mail-border overflow-x-auto">
@@ -269,7 +269,7 @@ export function ContactsAutocomplete({ value, onChange, inputRef, boostAccountId
 
   return (
     <div className="absolute left-12 top-full mt-1 w-[min(22rem,calc(100%-3rem))] bg-mail-surface
-                    border border-mail-border rounded-lg shadow-2xl z-50 overflow-hidden">
+                    border border-mail-border rounded-lg z-50 overflow-hidden">
       {matches.map((c, i) => (
         <button
           type="button"

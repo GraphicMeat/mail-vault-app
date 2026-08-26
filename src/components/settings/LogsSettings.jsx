@@ -1,3 +1,4 @@
+import { Button } from '../ui/Button';
 import React, { useState, useEffect } from 'react';
 import {
   ScrollText,
@@ -55,7 +56,7 @@ export function LogsSettings() {
               <RefreshCw size={14} className={loadingLogs ? 'animate-spin' : ''} />
               Refresh
             </button>
-            <button
+            <Button variant="ghost" size="sm" className="hover:bg-mail-border"
               onClick={async () => {
                 try {
                   await navigator.clipboard.writeText(logs);
@@ -66,18 +67,15 @@ export function LogsSettings() {
                 }
               }}
               disabled={!logs || loadingLogs}
-              className="px-3 py-1.5 text-sm text-mail-text-muted hover:text-mail-text
-                        hover:bg-mail-border rounded-lg transition-colors flex items-center gap-2
-                        disabled:opacity-50"
             >
               {logsCopied ? <Check size={14} /> : <Copy size={14} />}
               {logsCopied ? 'Copied!' : 'Copy'}
-            </button>
-            <button
+            </Button>
+            <Button variant="ghost" size="sm" className="hover:bg-mail-border"
               onClick={async () => {
                 console.log('Export button clicked, logs length:', logs?.length);
                 if (!logs || logs.length === 0) {
-                  alert('No logs to export. Try refreshing first.');
+                  alert('Nothing to export yet. Refresh the log first.');
                   return;
                 }
                 try {
@@ -91,7 +89,7 @@ export function LogsSettings() {
                     });
                     if (filePath) {
                       await writeTextFile(filePath, logs);
-                      alert('Logs exported successfully!');
+                      alert('Log saved.');
                     }
                   } else {
                     // Fallback to browser download
@@ -112,33 +110,30 @@ export function LogsSettings() {
                   console.log('Logs exported successfully');
                 } catch (error) {
                   console.error('Failed to export logs:', error);
-                  alert('Failed to export logs: ' + (error.message || error));
+                  alert('Could not save the log file. Pick a folder you can write to and try again.\n\nDetails: ' + (error.message || error));
                 }
               }}
               disabled={!logs || loadingLogs}
-              className="px-3 py-1.5 text-sm text-mail-text-muted hover:text-mail-text
-                        hover:bg-mail-border rounded-lg transition-colors flex items-center gap-2
-                        disabled:opacity-50"
             >
               <Download size={14} />
               Export
-            </button>
+            </Button>
             <button
               onClick={async () => {
                 console.log('Clear button clicked, invoke available:', !!invoke);
                 if (!invoke) {
-                  alert('Clear logs is only available in the desktop app');
+                  alert('Clearing the log is only available in the desktop app.');
                   return;
                 }
                 try {
                   const { ask } = await import('@tauri-apps/plugin-dialog');
-                  const confirmed = await ask('Are you sure you want to clear all logs?', {
-                    title: 'Clear Logs',
-                    kind: 'warning',
-                  });
+                  const confirmed = await ask(
+                    'Deletes the diagnostic log this app keeps on your computer. Your mail and your vault are not touched.',
+                    { title: 'Clear the log?', kind: 'warning', okLabel: 'Clear log', cancelLabel: 'Keep it' },
+                  );
                   if (!confirmed) return;
                 } catch {
-                  if (!confirm('Are you sure you want to clear all logs?')) return;
+                  if (!confirm('Delete the diagnostic log this app keeps on your computer? Your mail and your vault are not touched.')) return;
                 }
                 try {
                   setLoadingLogs(true);
@@ -147,7 +142,7 @@ export function LogsSettings() {
                   console.log('clear_logs result:', result);
                   // Reload logs after clearing
                   await loadLogs();
-                  alert(result || 'Logs cleared successfully');
+                  alert(result || 'Log cleared.');
                 } catch (error) {
                   console.error('Failed to clear logs:', error);
                   const errorMsg = typeof error === 'string' ? error : (error.message || JSON.stringify(error));

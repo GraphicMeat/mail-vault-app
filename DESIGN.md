@@ -332,7 +332,7 @@ A three-pane desktop shell: account rail and folder sidebar on the left, virtual
 
 Overlays separate from the page by *scrim*, not by lift: a `black/50` backdrop with `backdrop-blur-sm` puts the app behind glass while the dialog itself sits on the plain ground colour with one hairline border.
 
-**Known drift to remove, not to copy:** the current code still carries `shadow-2xl` (28), `shadow-xl` (16) and `shadow-lg` (14) on 58 elements (dialogs, popovers, toasts), an indigo `shadow-glow` / `shadow-glow-lg` (`0 0 20px rgba(99,102,241,0.3)` and its 40px sibling, 10 uses), and a `.glass` treatment (`rgba(21,21,31,0.86)` + `blur(12px)`). Those predate this rule. New work must not add to them, and a cleanup pass should replace each with a hairline-plus-scrim treatment.
+**Known drift, now mostly gone:** every dialog, menu and toast used to carry its own `shadow-2xl` / `shadow-xl` / `shadow-lg` — 58 elements in all. The extraction into `ui/Dialog`, `ui/Popover` and `ui/ToastShell` removed them: those primitives have no shadow vocabulary at all, and the anchored panels that stayed hand-rolled (the move-to-folder dropdown, the contacts and search panels, the state tooltip) were stripped alongside them. **17 remain**, plus 8 uses of the indigo `shadow-glow` / `shadow-glow-lg` (`0 0 20px rgba(99,102,241,0.3)` and its 40px sibling) and the `.glass` treatment (`rgba(21,21,31,0.86)` + `blur(12px)`). What is left sits on surfaces no primitive owns yet — the onboarding sheet, the bulk-progress and outbox trays, the selection bar, the in-pane loading overlays and the sidebar hover card. They are drift, not precedent: new work must not add to them, and the next pass should give each a hairline-plus-scrim treatment.
 
 ### Named Rules
 
@@ -407,6 +407,16 @@ The one claim the whole palette exists to make, at three scales.
 - **Meter** (`.custody-meter`): a 3px pill showing how much of the loaded window is already in the vault. Emerald fill over a track mixed from `server` at 45% — two solid fields, no gradient. It always ships beside its own count text (`"N of M loaded in your vault"`), so the proportion is never colour-only information.
 - **Tooltip:** portals to `<body>` (rows clip their overflow), flips above the anchor within 120px of the window bottom, clamps to a 240px max width against both viewport edges, closes on capture-phase scroll, and always carries two lines: the claim and what it implies.
 
+### Primitives (`src/components/ui/`)
+
+Five files own the chrome that used to be copied by hand. Reach for these before writing a `<button>`, a scrim, or a floating panel; a surface that needs something they cannot express is a reason to widen the primitive, not to fork it.
+
+- **`Button`** — `variant` × `size`, plus `icon`, `pill`, `loading`, `fullWidth`. Variants are the families that already existed: `primary` (indigo fill, 14px/600), `secondary` (surface + hairline, the Cancel side of every dialog), `danger`, `subtle`, `accentTint`, `dangerTint`, `ghost` (row and toolbar actions), `link`. Sizes `xs|sm|md|lg` map to the padding steps; `icon` swaps them for square hit-areas. It sets no focus styles — `index.css` already gives every `button:focus-visible` the 2px accent outline. In dev it warns when an `icon` button carries neither `aria-label` nor `title`.
+- **`Dialog`** — scrim, panel, `role`/`aria-modal`/`aria-labelledby`, focus trap and Escape (via `useDialogA11y`), entrance motion, and the close button. `size` is `sm|md|lg|xl|full|custom`; `padded` defaults on for the sized dialogs and **off** for `full`/`custom`, which lay themselves out. `dismissable={false}` withholds the backdrop, Escape and the X while an operation is in flight. `portal` renders into `<body>` for a dialog raised from a virtualized row, whose ancestor `transform` would otherwise be its containing block.
+- **`Popover` / `MenuItem`** — portal, transparent outside-click catcher, Escape, and the panel itself in two shapes: `menu` (ground ink, 8px, `py-1`) and `panel` (surface ink, 12px, `p-4`). The anchor maths stays with the caller, because a row menu clamping to a viewport edge and a submenu opening beside its parent are genuinely different sums.
+- **`ToastShell`** — the fixed card a transient message lives in: position preset, entrance from the edge it is pinned to, `role="status"` (or `alert`), and the surface chrome. `bare` for a toast that draws its own.
+- **`layers.js`** — the named z-scale, bottom to top: `hud` → `surface` → `popover` → `toast` → `dialog` → `alert` → `tooltip` → `fatal`. The numbers are the ones the app already used; what is new is that they have names and a documented order, so a new overlay is a choice rather than a guess.
+
 ### Motion
 
 **Thesis: colour says where your mail lives; motion says when it moved.** A colour that swaps between two frames cannot claim that anything happened — a row that turns emerald mid-sync looks identical to a row that was always emerald. Motion exists here to make custody transfer legible, and for nothing else.
@@ -459,7 +469,7 @@ Framer Motion under `<MotionConfig reducedMotion="user">`, used sparingly and al
 - **Don't** build a custody or status surface out of stacked alpha; the whole point of the tint tokens is that contrast on them is a fixed number.
 - **Don't** add a colour to `AVATAR_COLORS` that collides with `--mail-accent`, `--mail-local`, `--mail-server`, `--mail-only-copy`, `--mail-warning` or `--mail-danger` — the identity colour is structural now.
 - **Don't** introduce a gradient anywhere, on either surface. There are currently zero, and the retired site gradient is the reason.
-- **Don't** add a box-shadow, glow, or `.glass` blur to anything new — the 58 that exist are drift, not precedent.
+- **Don't** add a box-shadow, glow, or `.glass` blur to anything new — the 17 that remain are drift, not precedent.
 - **Don't** put white text on `bg-mail-accent`; that is 4.47:1 and `accent-fill` exists for it.
 - **Don't** use size for emphasis, or let any prose fall below 11px.
 - **Don't** let a custody state change a row's height, wrap, or margin — background, glyph, colour and weight only.

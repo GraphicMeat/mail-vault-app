@@ -1,3 +1,4 @@
+import { Button } from './ui/Button';
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -8,7 +9,7 @@ const PHASE_LABELS = {
   archive: 'Downloading',
   verify: 'Verifying',
   delete: 'Deleting',
-  vault: 'Removing local copies',
+  vault: 'Removing from your vault',
   backup: 'Clearing backup',
 };
 
@@ -132,28 +133,24 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
 
             <div className="flex items-center gap-1">
               {isDone ? (
-                <button
+                <Button variant="ghost" icon size="xs" className="hover:bg-mail-border"
                   onClick={handleDismiss}
-                  className="p-1 hover:bg-mail-border rounded transition-colors"
                 >
                   <X size={14} className="text-mail-text-muted" />
-                </button>
+                </Button>
               ) : isActive ? (
                 <>
-                  <button
+                  <Button variant="ghost" icon size="xs" className="hover:bg-mail-border"
                     onClick={() => setMinimized(true)}
-                    className="p-1 hover:bg-mail-border rounded transition-colors"
                     title="Minimize"
                   >
                     <Minimize2 size={14} className="text-mail-text-muted" />
-                  </button>
-                  <button
+                  </Button>
+                  <Button variant="ghost" size="xs" className="hover:bg-mail-border hover:text-mail-danger"
                     onClick={() => setShowCancelConfirm(true)}
-                    className="px-2 py-1 text-xs text-mail-text-muted hover:text-mail-danger
-                             hover:bg-mail-border rounded transition-colors"
                   >
                     Cancel
-                  </button>
+                  </Button>
                 </>
               ) : null}
             </div>

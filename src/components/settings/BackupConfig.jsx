@@ -1,3 +1,4 @@
+import { Button } from '../ui/Button';
 import React, { useState, useEffect } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import {
@@ -194,7 +195,7 @@ export default function BackupConfig() {
         <div className="bg-mail-bg rounded-lg p-3">
           <p className="text-xs text-mail-text-muted">
             {backupScope === 'archived'
-              ? 'Only emails you have explicitly archived (saved locally) will be backed up. To include all server emails, switch to "All emails" below.'
+              ? 'Only what is already in your vault gets mirrored. To include mail that is still only on the server, switch to "All emails" below.'
               : 'All emails from selected folders on the mail server will be downloaded and backed up locally. This may use significant disk space.'}
           </p>
           <p className="text-xs text-mail-text-muted mt-1">
@@ -235,13 +236,12 @@ export default function BackupConfig() {
               {externalBackupLocation ? 'Change' : 'Choose Folder'}
             </button>
             {externalBackupLocation && (
-              <button
+              <Button variant="ghost" size="xs" className="text-xs py-2"
                 onClick={handleClearExternal}
-                className="text-xs text-mail-text-muted hover:text-mail-text px-2 py-2"
                 title="Remove external backup location"
               >
                 Reset
-              </button>
+              </Button>
             )}
           </div>
 
@@ -267,12 +267,11 @@ export default function BackupConfig() {
                 </span>
               )}
               {!validatingExternal && externalBackupLocation.status === 'needs_reauth' && (
-                <button
+                <Button variant="link" size="xs" className="p-0 text-xs"
                   onClick={handleChooseBackupDir}
-                  className="text-xs text-mail-accent-text hover:text-mail-accent-hover"
                 >
                   Reauthorize
-                </button>
+                </Button>
               )}
             </div>
           )}

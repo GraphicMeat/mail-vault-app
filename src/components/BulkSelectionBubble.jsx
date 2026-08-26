@@ -1,3 +1,4 @@
+import { Button } from './ui/Button';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ListChecks } from 'lucide-react';
@@ -66,13 +67,12 @@ export function BulkSelectionBubble() {
                 <span className="font-medium">{count.toLocaleString()} selected</span>
               </span>
             </button>
-            <button
+            <Button variant="ghost" icon size="sm"
               onClick={endBulkSession}
-              className="p-1.5 hover:bg-mail-surface-hover rounded-lg transition-colors"
               title="End bulk selection"
             >
               <X size={14} className="text-mail-text-muted" />
-            </button>
+            </Button>
           </div>
         </motion.div>
       )}

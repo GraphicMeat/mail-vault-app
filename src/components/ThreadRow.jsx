@@ -1,3 +1,4 @@
+import { Button } from './ui/Button';
 import React, { useMemo } from 'react';
 import { displayText } from '../utils/bidiText';
 import { getSenderName, threadRowMembers } from '../utils/emailParser';
@@ -128,10 +129,9 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
 
       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible bg-mail-surface-hover rounded-md px-1">
         {!allArchived && (
-          <button
+          <Button variant="ghost" icon size="sm" className="press hover:bg-mail-border"
             onClick={handleArchiveThread}
             disabled={isSaving}
-            className="press p-1.5 hover:bg-mail-border rounded transition-colors"
             title="Archive thread"
           >
             {isSaving ? (
@@ -139,7 +139,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
             ) : (
               <Archive size={14} className="text-mail-text-muted hover:text-mail-local" />
             )}
-          </button>
+          </Button>
         )}
 
         <RowActionMenu open={menuOpen} onOpen={handleOpenMenu} onClose={onCloseMenu}>
@@ -251,11 +251,10 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
       {/* Hover actions */}
       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible bg-mail-surface-hover rounded-md px-1">
         {!allArchived && (
-          <button onClick={handleArchiveThread} disabled={isSaving}
-            className="press p-1 hover:bg-mail-border rounded transition-colors" title="Archive thread">
+          <Button variant="ghost" icon size="xs" className="press hover:bg-mail-border" onClick={handleArchiveThread} disabled={isSaving} title="Archive thread">
             {isSaving ? <RefreshCw size={13} className="animate-spin text-mail-accent-text" />
               : <Archive size={13} className="text-mail-text-muted hover:text-mail-local" />}
-          </button>
+          </Button>
         )}
         <RowActionMenu open={menuOpen} onOpen={handleOpenMenu} onClose={onCloseMenu} size={13}>
           <RowActionMenuItems emails={members} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} />

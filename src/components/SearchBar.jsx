@@ -1,3 +1,4 @@
+import { Button } from './ui/Button';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useAccountStore } from '../stores/accountStore';
 import { useSearchStore } from '../stores/searchStore';
@@ -25,7 +26,9 @@ import {
 const LOCATION_OPTIONS = [
   { id: 'all', label: 'All', icon: Layers },
   { id: 'server', label: 'Server', icon: Cloud },
-  { id: 'local', label: 'Local', icon: HardDrive },
+  // Same rename as the sidebar's view filter: the place is called the vault
+  // everywhere else in the product, so this control names it too.
+  { id: 'local', label: 'Vault', icon: HardDrive },
 ];
 
 export function SearchBar() {
@@ -199,13 +202,12 @@ export function SearchBar() {
           {/* Location selector inside input */}
           <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
             {(localQuery || searchActive) && (
-              <button
+              <Button variant="ghost" icon size="xs" className="hover:bg-mail-border"
                 type="button"
                 onClick={handleClear}
-                className="p-1 hover:bg-mail-border rounded transition-colors"
               >
                 <X size={14} className="text-mail-text-muted" />
-              </button>
+              </Button>
             )}
 
             <select
@@ -244,7 +246,7 @@ export function SearchBar() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -10, scale: 0.95 }}
                 className="absolute right-0 top-full mt-2 w-72 bg-mail-surface border border-mail-border
-                          rounded-xl shadow-xl z-[100] p-4"
+                          rounded-xl z-[100] p-4"
               >
                 <h4 className="font-medium text-mail-text mb-3 flex items-center gap-2">
                   <Filter size={14} />
@@ -449,7 +451,7 @@ export function SearchBar() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             className="absolute left-0 right-24 top-full mt-2 bg-mail-surface border border-mail-border
-                      rounded-xl shadow-xl z-[100] p-3 max-h-80 overflow-y-auto"
+                      rounded-xl z-[100] p-3 max-h-80 overflow-y-auto"
           >
             {/* Popular filters */}
             {popularFilters.length > 0 && (

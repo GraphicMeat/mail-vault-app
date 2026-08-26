@@ -1,13 +1,23 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
+import { ToastShell } from './ui/ToastShell';
 import { KeyRound, X, RefreshCw } from 'lucide-react';
 import * as keychainSession from '../services/keychainSession';
 
+// Each of these states has a different way out, and the toast has the two
+// buttons to take it — the message used to name the failure and stop there.
 const MESSAGES = {
-  denied: 'Keychain access was denied.',
-  cancelled: 'Keychain prompt was dismissed.',
-  timed_out: 'Keychain access timed out.',
-  unavailable: 'Keychain service is unavailable.',
+  denied: 'The keychain refused access to your password.',
+  cancelled: 'The keychain prompt was dismissed.',
+  timed_out: 'The keychain did not answer in time.',
+  unavailable: 'The keychain is unavailable right now.',
+};
+
+const RECOVERY = {
+  denied: 'Retry and allow the prompt, or re-enter the password under Accounts.',
+  cancelled: 'Retry to bring the prompt back.',
+  timed_out: 'Retry — this usually clears on a second attempt.',
+  unavailable: 'Retry in a moment, or re-enter the password under Accounts.',
 };
 
 export function KeychainToast({ onRetry, onOpenAccounts }) {
@@ -31,21 +41,24 @@ export function KeychainToast({ onRetry, onOpenAccounts }) {
 
   return (
     <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 20 }}
-        className="fixed bottom-6 right-6 z-[70] w-80 bg-mail-surface border border-mail-border rounded-xl shadow-lg overflow-hidden"
+      {/* `bare`: this toast draws its own edge-to-edge action bar, so the
+          shell's own padding would inset it. */}
+      <ToastShell
+        position="bottom-right"
+        role="alert"
+        bare
+        className="w-80 bg-mail-surface border border-mail-border rounded-xl overflow-hidden"
       >
         <div className="px-4 py-3">
           <div className="flex items-start gap-3">
             <KeyRound size={18} className="text-mail-warning flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium text-mail-text">
-                {MESSAGES[status] || 'Keychain access failed.'}
+                {MESSAGES[status] || 'The keychain refused access to your password.'}
               </div>
               <div className="text-xs text-mail-text-muted mt-1">
-                Cached and local emails are still available. Server actions need keychain access.
+                Everything already in your vault still opens. Reaching the server needs the password.
+                {' '}{RECOVERY[status] || 'Retry, or re-enter the password under Accounts.'}
               </div>
               <div className="flex items-center gap-2 mt-2.5">
                 <button
@@ -59,7 +72,7 @@ export function KeychainToast({ onRetry, onOpenAccounts }) {
                   onClick={() => { setVisible(false); onOpenAccounts?.(); }}
                   className="px-3 py-1.5 text-xs font-medium text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover rounded-lg transition-colors"
                 >
-                  Open Accounts
+                  Re-enter password
                 </button>
               </div>
             </div>
@@ -71,7 +84,7 @@ export function KeychainToast({ onRetry, onOpenAccounts }) {
             </button>
           </div>
         </div>
-      </motion.div>
+      </ToastShell>
     </AnimatePresence>
   );
 }

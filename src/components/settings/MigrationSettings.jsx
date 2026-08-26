@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Dialog } from '../ui/Dialog';
+import { Button } from '../ui/Button';
 import {
   ArrowRight, ArrowLeftRight, Check, CheckCircle2, Circle,
   Loader, XCircle, AlertCircle, Folder, Lock,
@@ -343,12 +345,11 @@ export default function MigrationSettings({ onUpgrade }) {
                     >
                       Discard
                     </button>
-                    <button
+                    <Button variant="ghost" size="sm" className="p-0"
                       onClick={() => setShowDiscardConfirm(false)}
-                      className="text-sm text-mail-text-muted hover:text-mail-text"
                     >
                       Keep
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ) : (
@@ -363,12 +364,11 @@ export default function MigrationSettings({ onUpgrade }) {
                   >
                     Resume Migration
                   </button>
-                  <button
+                  <Button variant="ghost" size="sm" className="p-0"
                     onClick={() => setShowDiscardConfirm(true)}
-                    className="text-sm text-mail-text-muted hover:text-mail-text"
                   >
                     Discard
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
@@ -402,7 +402,7 @@ export default function MigrationSettings({ onUpgrade }) {
           {step === 1 && (
             <div className="bg-mail-surface/50 border border-mail-border rounded-lg p-3 mb-2">
               <p className="text-xs text-mail-text-muted">
-                Migration copies emails between mail servers (IMAP/Graph). Emails are transferred directly from one server to another — nothing is downloaded to your device during this process.
+                Migration copies emails between mail servers (IMAP/Graph). Emails are transferred directly from one server to another — nothing passes through your vault on the way.
               </p>
             </div>
           )}
@@ -542,9 +542,9 @@ export default function MigrationSettings({ onUpgrade }) {
                       className="mt-0.5 accent-mail-accent"
                     />
                     <div>
-                      <span className="text-sm text-mail-text font-medium">Include locally archived emails</span>
+                      <span className="text-sm text-mail-text font-medium">Include emails from your vault</span>
                       <p className="text-xs text-mail-text-muted mt-0.5">
-                        Also upload .eml files saved on your device to the destination server. Without this, only server-side emails are migrated.
+                        Also upload the .eml files in your vault to the destination server. Without this, only what is on the source server moves.
                       </p>
                     </div>
                   </label>
@@ -577,12 +577,11 @@ export default function MigrationSettings({ onUpgrade }) {
           {/* Navigation buttons */}
           <div className="flex items-center justify-between pt-4">
             {step > 1 ? (
-              <button
+              <Button variant="secondary" className="bg-transparent"
                 onClick={() => setStep(s => s - 1)}
-                className="text-sm font-medium text-mail-text border border-mail-border rounded-lg px-4 py-2 hover:bg-mail-surface-hover transition-colors"
               >
                 Back
-              </button>
+              </Button>
             ) : <div />}
             <button
               onClick={step === 4 ? handleStartMigration : () => setStep(s => s + 1)}
@@ -663,9 +662,9 @@ export default function MigrationSettings({ onUpgrade }) {
                 )}
               </div>
               {!IS_APPSTORE_BUILD && onUpgrade && (
-                <button onClick={onUpgrade} className="px-4 py-1.5 text-xs font-semibold bg-mail-accent-fill text-white rounded-full hover:bg-mail-accent-hover transition-colors">
+                <Button variant="primary" size="sm" pill className="text-xs font-semibold" onClick={onUpgrade}>
                   Upgrade
-                </button>
+                </Button>
               )}
             </div>
           </div>
@@ -912,39 +911,45 @@ function ProgressView({ migration, accounts, accountColors, onPause, onResume, o
             <Loader2 size={14} className="animate-spin" /> Pausing...
           </button>
         ) : (
-          <button
+          <Button
             onClick={() => { setIsPausing(true); onPause(); }}
-            className="bg-mail-warning/10 text-mail-warning rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-warning/20 flex items-center gap-2"
+            className="bg-mail-warning-tint text-mail-warning font-semibold hover:bg-mail-warning/20"
           >
             <Pause size={14} /> Pause
-          </button>
+          </Button>
         )}
-        {showCancelConfirm ? (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40">
-            <div className="bg-mail-surface border border-mail-border rounded-xl shadow-xl p-4 w-80 space-y-3">
-              <h4 className="text-sm font-semibold text-mail-text">Cancel migration?</h4>
-              <p className="text-xs text-mail-text-muted">Migration will stop. Choose what to do with emails already copied to the destination.</p>
-              <p className="text-xs text-mail-text-muted italic">Removal is best-effort. If the connection drops, some emails may remain at the destination.</p>
-              {cancelRemoveError && (
-                <p className="text-xs text-mail-danger">{cancelRemoveError}</p>
-              )}
-              <div className="flex items-center gap-2">
-                <button onClick={() => onConfirmCancel('keep')} className="text-xs px-3 py-1.5 rounded bg-mail-surface border border-mail-border text-mail-text">Keep emails</button>
-                <button onClick={() => onConfirmCancel('remove')} disabled={cancelRemoving} className="text-xs px-3 py-1.5 rounded bg-mail-danger text-white flex items-center gap-1">
-                  {cancelRemoving && <Loader2 size={10} className="animate-spin" />}
-                  Remove emails
-                </button>
-                <button onClick={onCancelCancel} className="text-xs text-mail-text-muted ml-auto">Go back</button>
-              </div>
+        <Dialog
+          open={showCancelConfirm}
+          onClose={onCancelCancel}
+          role="alertdialog"
+          size="sm"
+          panelBg="bg-mail-surface"
+          title="Cancel migration?"
+          description="Migration will stop. Choose what to do with emails already copied to the destination."
+          footer={
+            <div className="flex items-center gap-2 w-full">
+              <Button variant="secondary" size="sm" onClick={() => onConfirmCancel('keep')}>Keep emails</Button>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => onConfirmCancel('remove')}
+                loading={cancelRemoving}
+              >
+                Remove emails
+              </Button>
+              <Button variant="ghost" size="sm" onClick={onCancelCancel} className="ml-auto" data-autofocus>Go back</Button>
             </div>
-          </div>
-        ) : (
-          <button
-            onClick={onCancel}
-            className="text-sm text-mail-danger hover:text-mail-danger/80"
-          >
+          }
+        >
+          <p className="text-xs text-mail-text-muted italic">Removal is best-effort. If the connection drops, some emails may remain at the destination.</p>
+          {cancelRemoveError && (
+            <p className="text-xs text-mail-danger">{cancelRemoveError}</p>
+          )}
+        </Dialog>
+        {!showCancelConfirm && (
+          <Button variant="link" size="sm" className="text-sm" onClick={onCancel}>
             Cancel Migration
-          </button>
+          </Button>
         )}
       </div>
     </div>

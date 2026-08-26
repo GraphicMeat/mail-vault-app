@@ -1,5 +1,7 @@
+import { Button } from './ui/Button';
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
+import { ToastShell } from './ui/ToastShell';
 import { CheckCircle2, Loader2, AlertTriangle } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore.js';
 import * as api from '../services/api.js';
@@ -100,13 +102,7 @@ export function MigrationToast({ showSettings, onOpenSettings }) {
 
     return (
       <AnimatePresence>
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 20 }}
-          transition={{ duration: 0.2 }}
-          className="fixed bottom-6 right-6 z-[60] bg-mail-surface border border-mail-border rounded-xl shadow-lg p-2 w-72"
-        >
+        <ToastShell position="bottom-right" className="w-72">
           {showDiscardDialog ? (
             <div className="space-y-2">
               <p className="text-sm font-semibold text-mail-text">Discard incomplete migration?</p>
@@ -116,11 +112,11 @@ export function MigrationToast({ showSettings, onOpenSettings }) {
                 <p className="text-xs text-mail-danger">{removeError}</p>
               )}
               <div className="flex items-center gap-2">
-                <button onClick={handleDiscardKeep} className="text-xs px-2 py-1 rounded bg-mail-surface border border-mail-border text-mail-text">Keep emails</button>
-                <button onClick={handleDiscardRemove} disabled={removing} className="text-xs px-2 py-1 rounded bg-mail-danger text-white flex items-center gap-1">
+                <Button variant="secondary" size="xs" className="text-xs" onClick={handleDiscardKeep}>Keep emails</Button>
+                <Button variant="danger" size="xs" className="text-xs" onClick={handleDiscardRemove} disabled={removing}>
                   {removing && <Loader2 size={10} className="animate-spin" />}
                   Remove emails
-                </button>
+                </Button>
                 <button onClick={(e) => { e.stopPropagation(); setShowDiscardDialog(false); }} className="text-xs text-mail-text-muted">Go back</button>
               </div>
             </div>
@@ -134,12 +130,12 @@ export function MigrationToast({ showSettings, onOpenSettings }) {
                 </div>
               </div>
               <div className="flex items-center gap-2 mt-2">
-                <button onClick={handleResume} className="text-xs px-3 py-1 rounded bg-mail-accent-fill text-white font-semibold">Resume</button>
-                <button onClick={handleDiscard} className="text-xs px-3 py-1 rounded bg-mail-surface border border-mail-border text-mail-text">Discard</button>
+                <Button variant="primary" size="xs" className="text-xs" onClick={handleResume}>Resume</Button>
+                <Button variant="secondary" size="xs" className="text-xs" onClick={handleDiscard}>Discard</Button>
               </div>
             </>
           )}
-        </motion.div>
+        </ToastShell>
       </AnimatePresence>
     );
   }
@@ -150,14 +146,7 @@ export function MigrationToast({ showSettings, onOpenSettings }) {
 
   return (
     <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 20 }}
-        transition={{ duration: 0.2 }}
-        className="fixed bottom-6 right-6 z-[60] bg-mail-surface border border-mail-border rounded-xl shadow-lg p-2 w-72 cursor-pointer"
-        onClick={onOpenSettings}
-      >
+      <ToastShell position="bottom-right" className="w-72 cursor-pointer" onClick={onOpenSettings}>
         {status === 'completed' ? (
           <div className="flex items-center gap-2">
             <CheckCircle2 size={16} className="text-mail-success flex-shrink-0" />
@@ -189,7 +178,7 @@ export function MigrationToast({ showSettings, onOpenSettings }) {
             )}
           </>
         )}
-      </motion.div>
+      </ToastShell>
     </AnimatePresence>
   );
 }

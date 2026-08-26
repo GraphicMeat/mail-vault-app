@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { displayText } from '../../utils/bidiText';
 import { useAccountStore } from '../../stores/accountStore';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Popover, MenuItem } from '../ui/Popover';
 import {
   Download,
   Save,
@@ -72,77 +73,48 @@ function AttachmentContextMenu({ x, y, downloadedPath, onDownload, onSaveAs, onO
     }
   }, [x, y]);
 
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        onClose();
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [onClose]);
-
   return (
-    <motion.div
+    <Popover
       ref={menuRef}
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      className="fixed z-50 bg-mail-surface border border-mail-border rounded-lg shadow-xl py-1 min-w-[180px]"
+      open
+      onClose={onClose}
+      role="menu"
+      className="min-w-[180px]"
       style={{ left: position.x, top: position.y }}
-      onClick={(e) => e.stopPropagation()}
     >
       {downloadedPath ? (
         <>
-          <button
-            onClick={onOpen}
-            className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover flex items-center gap-2 text-mail-text"
-          >
+          <MenuItem onClick={onOpen}>
             <ExternalLink size={14} />
             Open
-          </button>
-          <button
-            onClick={onOpenWith}
-            className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover flex items-center gap-2 text-mail-text"
-          >
+          </MenuItem>
+          <MenuItem onClick={onOpenWith}>
             <AppWindow size={14} />
             Open With...
-          </button>
+          </MenuItem>
           <div className="my-1 border-t border-mail-border" />
-          <button
-            onClick={onSaveAs}
-            className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover flex items-center gap-2 text-mail-text"
-          >
+          <MenuItem onClick={onSaveAs}>
             <Save size={14} />
             Save As...
-          </button>
-          <button
-            onClick={onShowInFolder}
-            className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover flex items-center gap-2 text-mail-text"
-          >
+          </MenuItem>
+          <MenuItem onClick={onShowInFolder}>
             <FolderOpen size={14} />
             Show in Folder
-          </button>
+          </MenuItem>
         </>
       ) : (
         <>
-          <button
-            onClick={onDownload}
-            className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover flex items-center gap-2 text-mail-text"
-          >
+          <MenuItem onClick={onDownload}>
             <Download size={14} />
             Download
-          </button>
-          <button
-            onClick={onSaveAs}
-            className="w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover flex items-center gap-2 text-mail-text"
-          >
+          </MenuItem>
+          <MenuItem onClick={onSaveAs}>
             <Save size={14} />
             Save As...
-          </button>
+          </MenuItem>
         </>
       )}
-    </motion.div>
+    </Popover>
   );
 }
 

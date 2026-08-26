@@ -1,3 +1,4 @@
+import { Button } from './ui/Button';
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSelectionStore } from '../stores/selectionStore';
@@ -6,6 +7,7 @@ import {
   MailOpen, Mail, Trash2, Archive, ArchiveRestore, X, AlertTriangle, FolderSymlink, ShieldX
 } from 'lucide-react';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
+import { vaultClause } from '../utils/custodyCopy';
 
 export function SelectionActionBar() {
   const selectedEmailIds = useSelectionStore(s => s.selectedEmailIds);
@@ -49,15 +51,22 @@ export function SelectionActionBar() {
     return key;
   };
 
-  // Determine archive state of selected emails
-  const { hasArchived, hasUnarchived } = useMemo(() => {
+  // Determine archive state of selected emails. The counts, not just the
+  // booleans: the delete confirmation says how many of them the vault
+  // actually holds, and it must agree with what gates Archive/Unarchive.
+  const { hasArchived, hasUnarchived, archivedCount, totalCount } = useMemo(() => {
     let archived = 0;
     let unarchived = 0;
     for (const key of selectedEmailIds) {
       if (archivedEmailIds.has(parseKey(key))) archived++;
       else unarchived++;
     }
-    return { hasArchived: archived > 0, hasUnarchived: unarchived > 0 };
+    return {
+      hasArchived: archived > 0,
+      hasUnarchived: unarchived > 0,
+      archivedCount: archived,
+      totalCount: archived + unarchived,
+    };
   }, [selectedEmailIds, archivedEmailIds]);
 
   const handleAction = async (action) => {
@@ -134,20 +143,18 @@ export function SelectionActionBar() {
             <div className="w-px h-6 bg-mail-border" />
 
             {/* Actions */}
-            <button
+            <Button variant="ghost" icon size="md"
               onClick={() => handleAction(markSelectedAsRead)}
-              className="p-2 hover:bg-mail-surface-hover rounded-lg transition-colors"
               title="Mark as read"
             >
               <MailOpen size={16} className="text-mail-text-muted" />
-            </button>
-            <button
+            </Button>
+            <Button variant="ghost" icon size="md"
               onClick={() => handleAction(markSelectedAsUnread)}
-              className="p-2 hover:bg-mail-surface-hover rounded-lg transition-colors"
               title="Mark as unread"
             >
               <Mail size={16} className="text-mail-text-muted" />
-            </button>
+            </Button>
 
             <div className="w-px h-6 bg-mail-border" />
 
@@ -221,13 +228,12 @@ export function SelectionActionBar() {
             <div className="w-px h-6 bg-mail-border" />
 
             {/* Clear */}
-            <button
+            <Button variant="ghost" icon size="md"
               onClick={clearSelection}
-              className="p-2 hover:bg-mail-surface-hover rounded-lg transition-colors"
               title="Clear selection"
             >
               <X size={16} className="text-mail-text-muted" />
-            </button>
+            </Button>
           </div>
 
           {/* Delete confirmation popover — shared by both delete buttons, copy
@@ -245,8 +251,8 @@ export function SelectionActionBar() {
                   <AlertTriangle size={16} className="text-mail-danger flex-shrink-0 mt-0.5" />
                   <p className="text-sm text-mail-text">
                     {deleteMode === 'everywhere'
-                      ? `Delete ${deleteScope} from the server, this computer, and your external backup? No copy will be left anywhere. This cannot be undone.`
-                      : `Delete ${deleteScope} from server? This cannot be undone.`}
+                      ? `Delete ${deleteScope} from the server, your vault, and your backup drive? No copy will be left anywhere. This cannot be undone.`
+                      : `Delete ${deleteScope} from the server? ${vaultClause(totalCount, archivedCount)}`}
                   </p>
                 </div>
                 <div className="flex justify-end gap-2">
@@ -261,7 +267,7 @@ export function SelectionActionBar() {
                     className="px-3 py-1.5 text-xs font-medium bg-mail-danger text-white rounded-lg
                               hover:bg-mail-danger/90 transition-colors"
                   >
-                    Delete
+                    {deleteMode === 'everywhere' ? 'Delete everywhere' : 'Delete from server'}
                   </button>
                 </div>
               </motion.div>

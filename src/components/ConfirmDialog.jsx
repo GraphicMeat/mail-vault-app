@@ -1,10 +1,15 @@
-import React, { useId } from 'react';
-import { useDialogA11y } from '../hooks/useDialogA11y';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, AlertTriangle, Loader } from 'lucide-react';
+import React from 'react';
+import { AlertTriangle } from 'lucide-react';
+import { Dialog } from './ui/Dialog';
+import { Button } from './ui/Button';
 
 /**
  * Reusable in-app confirmation dialog.
+ *
+ * The shell (scrim, focus trap, Escape, `aria-modal`) is `ui/Dialog`; what is
+ * left here is the confirmation's own shape: a warning glyph, a description,
+ * and a Cancel/Confirm pair where Cancel takes the initial focus so Enter on
+ * an accidental open does not confirm.
  *
  * @param {Object} props
  * @param {boolean} props.isOpen
@@ -30,90 +35,43 @@ export function ConfirmDialog({
   loading = false,
   icon,
 }) {
-  const titleId = useId();
-  const descId = useId();
-  const panelRef = useDialogA11y(isOpen, loading ? undefined : onClose);
-
-  if (!isOpen) return null;
-
-  const confirmColors = destructive
-    ? 'bg-mail-danger-fill hover:bg-mail-danger text-white'
-    : 'bg-mail-accent-fill hover:bg-mail-accent/90 text-white';
-
   return (
-    <AnimatePresence>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" onClick={loading ? undefined : onClose}>
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          aria-hidden="true"
-          className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        />
-
-        <motion.div
-          ref={panelRef}
-          role="alertdialog"
-          aria-modal="true"
-          aria-labelledby={titleId}
-          aria-describedby={description ? descId : undefined}
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.95 }}
-          className="relative max-w-md w-full bg-mail-bg border border-mail-border rounded-2xl shadow-2xl p-6"
-          onClick={e => e.stopPropagation()}
-        >
-          {/* Close button */}
-          <button
+    <Dialog
+      open={isOpen}
+      onClose={onClose}
+      role="alertdialog"
+      title={title}
+      description={description}
+      dismissable={!loading}
+      closeLabel={cancelLabel}
+      icon={icon || (
+        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${destructive ? 'bg-mail-danger-tint' : 'bg-mail-accent/10'}`}>
+          <AlertTriangle size={20} className={destructive ? 'text-mail-danger' : 'text-mail-accent-text'} />
+        </div>
+      )}
+      footer={
+        <>
+          <Button
+            variant="secondary"
+            size="lg"
             onClick={onClose}
             disabled={loading}
-            aria-label={cancelLabel}
-            className="absolute top-4 right-4 p-1 rounded-lg hover:bg-mail-surface-hover transition-colors disabled:opacity-50"
+            data-autofocus
+            className="flex-1"
           >
-            <X size={18} className="text-mail-text-muted" />
-          </button>
-
-          {/* Icon + Title */}
-          <div className="flex items-center gap-3 mb-4">
-            {icon || (
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${destructive ? 'bg-mail-danger-tint' : 'bg-mail-accent/10'}`}>
-                <AlertTriangle size={20} className={destructive ? 'text-mail-danger' : 'text-mail-accent-text'} />
-              </div>
-            )}
-            <h3 id={titleId} className="text-lg font-semibold text-mail-text pr-8">{title}</h3>
-          </div>
-
-          {/* Description */}
-          {description && (
-            <div id={descId} className="text-sm text-mail-text-muted mb-6">
-              {typeof description === 'string' ? <p>{description}</p> : description}
-            </div>
-          )}
-
-          {/* Action buttons */}
-          <div className="flex gap-3">
-            <button
-              onClick={onClose}
-              disabled={loading}
-              data-autofocus
-              className="flex-1 px-4 py-2.5 rounded-lg bg-mail-surface border border-mail-border
-                         text-mail-text font-medium hover:bg-mail-surface-hover transition-colors
-                         disabled:opacity-50"
-            >
-              {cancelLabel}
-            </button>
-            <button
-              onClick={onConfirm}
-              disabled={loading}
-              className={`flex-1 px-4 py-2.5 rounded-lg font-medium transition-colors
-                         disabled:opacity-50 flex items-center justify-center gap-2 ${confirmColors}`}
-            >
-              {loading && <Loader size={14} className="animate-spin" />}
-              {confirmLabel}
-            </button>
-          </div>
-        </motion.div>
-      </div>
-    </AnimatePresence>
+            {cancelLabel}
+          </Button>
+          <Button
+            variant={destructive ? 'danger' : 'primary'}
+            size="lg"
+            onClick={onConfirm}
+            loading={loading}
+            className="flex-1"
+          >
+            {confirmLabel}
+          </Button>
+        </>
+      }
+    />
   );
 }

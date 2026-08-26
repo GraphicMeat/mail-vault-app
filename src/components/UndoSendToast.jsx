@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { ToastShell } from './ui/ToastShell';
+import { Button } from './ui/Button';
 import { useComposeStore } from '../stores/composeStore';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import { Undo2, Check, Mail } from 'lucide-react';
 
 function formatCountdown(seconds) {
@@ -52,15 +54,11 @@ export function UndoSendToast({ onUndo }) {
   return (
     <AnimatePresence>
       {visible && (
-        <motion.div
-          initial={{ y: 80, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 80, opacity: 0 }}
-          transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60]"
+        <ToastShell
+          position="bottom-center"
+          data-testid="undo-send-toast"
+          className="flex items-center gap-3 px-5 py-3 min-w-[320px] max-w-[480px]"
         >
-          <div data-testid="undo-send-toast" className="flex items-center gap-3 px-5 py-3 bg-mail-surface border border-mail-border
-                          rounded-xl shadow-2xl min-w-[320px] max-w-[480px]">
             {showSent && !pendingSend ? (
               <>
                 <Check size={18} className="text-mail-success" />
@@ -80,20 +78,19 @@ export function UndoSendToast({ onUndo }) {
                     <span className="font-semibold tabular-nums text-mail-text">{formatCountdown(secondsLeft)}</span>
                   </p>
                 </div>
-                <button
+                <Button
+                  variant="link"
+                  size="sm"
                   data-testid="undo-send-btn"
                   onClick={handleUndo}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium
-                             text-mail-accent-text hover:bg-mail-surface-hover rounded-lg
-                             transition-colors flex-shrink-0"
+                  className="font-medium hover:bg-mail-surface-hover flex-shrink-0"
                 >
                   <Undo2 size={14} />
                   Undo
-                </button>
+                </Button>
               </>
             )}
-          </div>
-        </motion.div>
+        </ToastShell>
       )}
     </AnimatePresence>
   );

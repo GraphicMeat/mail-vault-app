@@ -6,13 +6,13 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 
 vi.mock('lucide-react', () => {
   const icon = (name) => (props) => React.createElement('span', { 'data-icon': name, ...props });
-  const names = [
-    'Inbox', 'Send', 'File', 'Trash2', 'Star', 'Archive', 'AlertCircle', 'AlertTriangle',
-    'CheckCircle2', 'Plus', 'ChevronDown', 'ChevronRight', 'Settings', 'HardDrive', 'Cloud',
-    'Layers', 'PenSquare', 'Sun', 'Moon', 'WifiOff', 'Key', 'ServerOff', 'RefreshCw', 'Info',
-    'X', 'PanelLeftClose', 'PanelLeftOpen', 'Loader',
-  ];
-  return Object.fromEntries(names.map((n) => [n, icon(n)]));
+  // Every icon resolves. A hand-listed set breaks the moment a shared
+  // primitive (ui/Button pulls in Loader, ui/Dialog pulls in X) imports one
+  // more glyph — vitest then fails the whole file with "No export defined".
+  return new Proxy({}, {
+    get: (_t, name) => (typeof name === 'symbol' || name === 'then' ? undefined : icon(String(name))),
+    has: () => true,
+  });
 });
 
 const openChangeServer = vi.fn();

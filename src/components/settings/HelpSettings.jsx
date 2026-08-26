@@ -1,3 +1,4 @@
+import { Button } from '../ui/Button';
 import React from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { openInBrowser } from '../../services/billingApi';
@@ -43,13 +44,11 @@ export function HelpSettings({ onClose, onReportBug }) {
                 Send a bug report email to the developer
               </div>
             </div>
-            <button
+            <Button variant="primary"
               onClick={() => { onReportBug?.(); onClose(); }}
-              className="px-4 py-2 bg-mail-accent-fill hover:bg-mail-accent-hover
-                        text-white text-sm font-medium rounded-lg transition-colors"
             >
               Report Bug
-            </button>
+            </Button>
           </div>
 
           {LINKS.map((link) => (
@@ -60,15 +59,13 @@ export function HelpSettings({ onClose, onReportBug }) {
                   <div className="font-medium text-mail-text">{link.title}</div>
                   <div className="text-sm text-mail-text-muted">{link.subtitle}</div>
                 </div>
-                <button
+                <Button variant="subtle"
                   onClick={() => openInBrowser(link.url).catch(() => {})}
                   data-url={link.url}
-                  className="px-4 py-2 bg-mail-surface-hover hover:bg-mail-border
-                            text-mail-text rounded-lg transition-colors flex items-center gap-2"
                 >
                   <ExternalLink size={16} />
                   Open
-                </button>
+                </Button>
               </div>
             </React.Fragment>
           ))}
@@ -82,17 +79,15 @@ export function HelpSettings({ onClose, onReportBug }) {
                 Show the welcome screen again on next launch
               </div>
             </div>
-            <button
+            <Button variant="subtle"
               onClick={() => {
                 setOnboardingComplete(false);
                 window.location.reload();
               }}
-              className="px-4 py-2 bg-mail-surface-hover hover:bg-mail-border
-                        text-mail-text rounded-lg transition-colors flex items-center gap-2"
             >
               <RotateCcw size={16} />
               Reset
-            </button>
+            </Button>
           </div>
         </div>
       </div>

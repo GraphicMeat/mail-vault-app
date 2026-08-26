@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { MailOpen, Mail, Archive, ArchiveRestore, FolderSymlink, Trash2, ShieldX } from 'lucide-react';
 import { useMailStore } from '../stores/mailStore';
 import { _selKey, resolveEmailLocation } from '../stores/slices/unifiedHelpers';
+import { describeServerDelete, describeDeleteEverywhere } from '../utils/custodyCopy';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
+import { MenuItem } from './ui/Popover';
 
 /**
  * Contents of a row's 3-dot menu.
@@ -74,26 +76,23 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
 
   const runOnThisRow = (fn) => runScoped(fn).finally(onClose);
 
-  const item = 'w-full px-3 py-2 text-left text-sm hover:bg-mail-surface-hover flex items-center gap-2';
-
   return (
     <>
       {hasUnread && (
-        <button className={`${item} text-mail-text`} onClick={(e) => { e.stopPropagation(); runOnThisRow(markSelectedAsRead); }}>
+        <MenuItem onClick={(e) => { e.stopPropagation(); runOnThisRow(markSelectedAsRead); }}>
           <MailOpen size={14} />
           Mark as read
-        </button>
+        </MenuItem>
       )}
       {hasRead && (
-        <button className={`${item} text-mail-text`} onClick={(e) => { e.stopPropagation(); runOnThisRow(markSelectedAsUnread); }}>
+        <MenuItem onClick={(e) => { e.stopPropagation(); runOnThisRow(markSelectedAsUnread); }}>
           <Mail size={14} />
           Mark as unread
-        </button>
+        </MenuItem>
       )}
 
       {hasUnarchived && (
-        <button
-          className={`${item} text-mail-text`}
+        <MenuItem
           onClick={async (e) => {
             e.stopPropagation();
             await saveEmailsLocally(emails.filter(em => !em.isArchived).map(em => em.uid));
@@ -102,11 +101,10 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
         >
           <Archive size={14} />
           Archive
-        </button>
+        </MenuItem>
       )}
       {hasArchived && (
-        <button
-          className={`${item} text-mail-text`}
+        <MenuItem
           onClick={async (e) => {
             e.stopPropagation();
             for (const em of emails.filter(m => m.isArchived)) await removeLocalEmail(em.uid);
@@ -115,14 +113,14 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
         >
           <ArchiveRestore size={14} />
           Unarchive
-        </button>
+        </MenuItem>
       )}
 
       <div className="relative">
-        <button className={`${item} text-mail-text`} onClick={(e) => { e.stopPropagation(); setShowMove(v => !v); }}>
+        <MenuItem onClick={(e) => { e.stopPropagation(); setShowMove(v => !v); }}>
           <FolderSymlink size={14} />
           Move to folder
-        </button>
+        </MenuItem>
         {showMove && (
           <div className="absolute left-full top-0 ml-1">
             <MoveToFolderDropdown uids={keys} onClose={() => { setShowMove(false); onClose(); }} anchorRect={null} />
@@ -131,8 +129,8 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
       </div>
 
       {hasServerBacked && (
-        <button
-          className={`${item} text-mail-danger`}
+        <MenuItem
+          tone="danger"
           onClick={(e) => {
             e.stopPropagation();
             const serverEmails = emails.filter(em => em.source !== 'local-only');
@@ -161,15 +159,20 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
                 }
                 useMailStore.getState().loadEmails();
               },
-              serverEmails.length === 1
-                ? 'This email will be permanently deleted from the server. This cannot be undone.'
-                : `${serverEmails.length} emails will be permanently deleted from the server. This cannot be undone.`
+              {
+                title: 'Delete from server?',
+                description: describeServerDelete(
+                  serverEmails.length,
+                  serverEmails.filter(em => em.isArchived).length,
+                ),
+                confirmLabel: 'Delete from server',
+              }
             );
           }}
         >
           <Trash2 size={14} />
           Delete from server
-        </button>
+        </MenuItem>
       )}
 
       {/* hasArchived || hasServerBacked is a verified tautology, not a live
@@ -180,21 +183,23 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
           documented reason Delete everywhere is always safe to show, rather
           than simplified to an unconditional render. */}
       {(hasArchived || hasServerBacked) && (
-        <button
-          className={`${item} text-mail-danger`}
+        <MenuItem
+          tone="danger"
           onClick={(e) => {
             e.stopPropagation();
             onRequestDelete(
               () => runScoped(purgeSelectedEverywhere, { destructive: true }),
-              emails.length === 1
-                ? 'This email will be removed from the server, this computer, and your external backup. No copy will be left anywhere. This cannot be undone.'
-                : `${emails.length} emails will be removed from the server, this computer, and your external backup. No copy will be left anywhere. This cannot be undone.`
+              {
+                title: 'Delete everywhere?',
+                description: describeDeleteEverywhere(emails.length),
+                confirmLabel: 'Delete everywhere',
+              }
             );
           }}
         >
           <ShieldX size={14} />
           Delete everywhere
-        </button>
+        </MenuItem>
       )}
     </>
   );

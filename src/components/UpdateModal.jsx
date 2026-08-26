@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useEffect, useId } from 'react';
+import { Dialog } from './ui/Dialog';
+import { Button } from './ui/Button';
 import { Download, X, Clock, SkipForward, AlertCircle, RefreshCw } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { version as currentVersion } from '../../package.json';
@@ -73,13 +74,7 @@ export function UpdateModal({ updateInfo, onClose }) {
   const notes = updateInfo?.notes || '';
 
   // ESC to close (only when idle, not during download/install)
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && state === 'idle') { e.preventDefault(); onClose(); }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [state, onClose]);
+  const titleId = useId();
   // Listen for download progress events from Rust (Linux only)
   useEffect(() => {
     if (state !== 'downloading') return;
@@ -150,37 +145,22 @@ export function UpdateModal({ updateInfo, onClose }) {
     }
   };
 
-  const handleBackdropClick = () => {
-    if (state === 'idle') {
-      onClose();
-    }
-  };
-
   return (
-    <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center">
-        {/* Backdrop */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="absolute inset-0 bg-black/50"
-          onClick={handleBackdropClick}
-        />
-
-        {/* Modal */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.95 }}
-          className="relative bg-mail-bg border border-mail-border rounded-xl shadow-2xl
-                     w-full max-w-lg mx-4 overflow-hidden"
-          onClick={(e) => e.stopPropagation()}
-        >
+    <Dialog
+      open
+      onClose={onClose}
+      // A download in flight has no cancel: the backdrop and the X are both
+      // withheld until it is back to idle.
+      dismissable={state === 'idle'}
+      size="lg"
+      padded={false}
+      aria-labelledby={titleId}
+      panelClassName="overflow-hidden"
+    >
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-mail-border">
             <div>
-              <h2 className="text-lg font-semibold text-mail-text flex items-center gap-2">
+              <h2 id={titleId} className="text-lg font-semibold text-mail-text flex items-center gap-2">
                 <Download size={20} className="text-mail-accent-text" />
                 MailVault v{newVersion} Available
               </h2>
@@ -189,9 +169,9 @@ export function UpdateModal({ updateInfo, onClose }) {
               </p>
             </div>
             {state === 'idle' && (
-              <button onClick={onClose} className="p-1 hover:bg-mail-border rounded transition-colors">
-                <X size={18} className="text-mail-text-muted" />
-              </button>
+              <Button variant="ghost" icon size="xs" onClick={onClose} aria-label="Later">
+                <X size={18} />
+              </Button>
             )}
           </div>
 
@@ -299,8 +279,6 @@ export function UpdateModal({ updateInfo, onClose }) {
               </div>
             </div>
           )}
-        </motion.div>
-      </div>
-    </AnimatePresence>
+    </Dialog>
   );
 }

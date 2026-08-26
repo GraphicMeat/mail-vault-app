@@ -1,9 +1,10 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useRef, useEffect, useCallback, useId } from 'react';
 import { Gift, Github, Star, Check, Loader, X as XIcon, ExternalLink, AlertCircle } from 'lucide-react';
 import { useBackupStore } from '../stores/backupStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { openInBrowser } from '../services/billingApi';
+import { Dialog } from './ui/Dialog';
+import { Button } from './ui/Button';
 import {
   GITHUB_REPO_URL,
   REWARD_DAYS,
@@ -42,6 +43,8 @@ export default function ShareUnlockModal({ onSubscribe }) {
     polling.current = false;
     clearShareUnlock();
   };
+
+  const titleId = useId();
 
   const claimDate = shareGrant?.expiresAt
     ? new Date(shareGrant.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
@@ -128,17 +131,14 @@ export default function ShareUnlockModal({ onSubscribe }) {
     : `Your backup just finished.`;
 
   return (
-    <AnimatePresence>
-      <motion.div
-        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        onClick={close}
-      >
-        <motion.div
-          className="w-full max-w-md bg-mail-surface border border-mail-border rounded-2xl shadow-2xl overflow-hidden"
-          initial={{ scale: 0.95, y: 12 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0 }}
-          onClick={e => e.stopPropagation()}
-        >
+    <Dialog
+      open
+      onClose={close}
+      padded={false}
+      panelBg="bg-mail-surface"
+      aria-labelledby={titleId}
+      panelClassName="overflow-hidden"
+    >
           {/* Header */}
           <div className="p-5 pb-4 border-b border-mail-border">
             <div className="flex items-start justify-between">
@@ -147,13 +147,13 @@ export default function ShareUnlockModal({ onSubscribe }) {
                   <Gift size={20} className="text-mail-accent-text" />
                 </div>
                 <div>
-                  <h2 className="text-base font-semibold text-mail-text">Unlock premium — free</h2>
+                  <h2 id={titleId} className="text-base font-semibold text-mail-text">Unlock premium — free</h2>
                   <p className="text-xs text-mail-text-muted">{milestone}</p>
                 </div>
               </div>
-              <button onClick={close} className="text-mail-text-muted hover:text-mail-text p-1" aria-label="Close">
+              <Button variant="ghost" icon size="xs" onClick={close} aria-label="Close">
                 <XIcon size={18} />
-              </button>
+              </Button>
             </div>
             <p className="text-sm text-mail-text-muted mt-3">
               Star us and share MailVault — unlock Cloud Backups & Time Capsule free.
@@ -211,13 +211,11 @@ export default function ShareUnlockModal({ onSubscribe }) {
                 <span className="text-mail-text-muted">Pick any action to start</span>
               )}
             </div>
-            <button onClick={close} className="text-xs text-mail-text-muted hover:text-mail-text">
+            <Button variant="ghost" size="xs" onClick={close}>
               Maybe later
-            </button>
+            </Button>
           </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
+    </Dialog>
   );
 }
 
@@ -291,12 +289,9 @@ function DoneBadge() {
 
 function BtnPrimary({ onClick, children }) {
   return (
-    <button
-      onClick={onClick}
-      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-mail-accent-fill text-white hover:opacity-90 transition-opacity"
-    >
+    <Button variant="primary" size="sm" className="text-xs font-medium" onClick={onClick}>
       {children}
-    </button>
+    </Button>
   );
 }
 

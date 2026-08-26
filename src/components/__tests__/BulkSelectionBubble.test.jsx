@@ -11,11 +11,23 @@ import { create } from 'zustand';
 
 vi.mock('lucide-react', () => {
   const icon = (name) => (props) => React.createElement('span', { 'data-icon': name, ...props });
-  return { X: icon('X'), ListChecks: icon('ListChecks') };
+  // Every icon resolves. A hand-listed set breaks the moment a shared
+  // primitive (ui/Button pulls in Loader, ui/Dialog pulls in X) imports one
+  // more glyph — vitest then fails the whole file with "No export defined".
+  return new Proxy({}, {
+    get: (_t, name) => (typeof name === 'symbol' || name === 'then' ? undefined : icon(String(name))),
+    has: () => true,
+  });
 });
 
 vi.mock('framer-motion', () => ({
-  motion: new Proxy({}, { get: () => ({ children, ...props }) => React.createElement('div', props, children) }),
+  // forwardRef, like the real motion.div: ui/Dialog puts its focus-trap ref on
+  // the panel, and a plain function component swallows it — the trap and the
+  // Escape handler then never arm, silently.
+  motion: new Proxy({}, {
+    get: () => React.forwardRef(({ children, ...props }, ref) =>
+      React.createElement('div', { ...props, ref }, children)),
+  }),
   AnimatePresence: ({ children }) => children,
 }));
 

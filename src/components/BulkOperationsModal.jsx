@@ -1,26 +1,28 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useMemo, useEffect, useRef, useId } from 'react';
+import { Dialog } from './ui/Dialog';
+import { Button } from './ui/Button';
 import { X, Archive, ArchiveRestore, Trash2, ArrowRight, ArrowLeft, AlertTriangle, HardDrive, Calendar } from 'lucide-react';
 import { useMessageListStore } from '../stores/messageListStore';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import * as db from '../services/db';
+import { vaultClause } from '../utils/custodyCopy';
 
 const ACTION_STYLES = {
   archive: {
     color: 'var(--mail-local)',
     iconColor: 'text-mail-local',
-    confirmLabel: 'Start Archive',
+    confirmLabel: 'Archive',
   },
   delete: {
     color: 'var(--mail-danger)',
     iconColor: 'text-mail-danger',
-    confirmLabel: 'Confirm Delete',
+    confirmLabel: 'Delete from server',
   },
   archive_and_delete: {
     color: 'var(--mail-local)',
     iconColor: 'text-mail-local',
-    confirmLabel: 'Archive & Delete',
+    confirmLabel: 'Archive & delete',
   },
   unarchive: {
     color: 'var(--mail-warning)',
@@ -30,7 +32,37 @@ const ACTION_STYLES = {
   delete_everywhere: {
     color: 'var(--mail-danger)',
     iconColor: 'text-mail-danger',
-    confirmLabel: 'Delete Everywhere',
+    confirmLabel: 'Delete everywhere',
+  },
+};
+
+// The last screen before thousands of messages move. It has to name the
+// action it is about to run, and describe only what that action actually
+// costs. It used to show one generic "Are you sure? This will permanently
+// delete N emails from the server. This cannot be undone." for both plain
+// Delete and Archive & Delete — so the product's flagship operation, which
+// copies into the vault and verifies each message before the server delete,
+// warned that the mail was about to be destroyed for good.
+const CONFIRM_COPY = {
+  delete: {
+    title: 'Delete from server?',
+    lead: (n) => `Remove ${n.toLocaleString()} emails from the server.`,
+    detail: (n, inVault) => vaultClause(n, inVault),
+    confirmLabel: 'Delete from server',
+  },
+  archive_and_delete: {
+    title: 'Archive, then delete from server?',
+    lead: (n) => `Copy ${n.toLocaleString()} emails into your vault, then remove them from the server.`,
+    // True of the run, not a reassurance: BulkOperationManager archives,
+    // verifies, and deletes only the uids that came back verified.
+    detail: () => 'Each email is verified in your vault before it leaves the server. Anything that fails to copy stays on the server.',
+    confirmLabel: 'Archive & delete',
+  },
+  delete_everywhere: {
+    title: 'Delete everywhere?',
+    lead: (n) => `Remove ${n.toLocaleString()} emails from the server, your vault, and your backup drive.`,
+    detail: () => 'No copy will be left anywhere. This cannot be undone.',
+    confirmLabel: 'Delete everywhere',
   },
 };
 
@@ -311,10 +343,10 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
   // only" already tells the user the other two locations aren't touched; the
   // legend above states whether a backup is configured without claiming contents.
   const deleteDescription = archivedSelectedCount === 0
-    ? 'Remove from server. No copy exists on this computer — this is permanent.'
+    ? 'Remove from the server. No copy is in your vault, so this is permanent.'
     : archivedSelectedCount < selectedCount
-      ? 'Remove from server only. Copies are kept only for the emails already archived here.'
-      : 'Remove from server only. Your copy on this computer is kept.';
+      ? 'Remove from the server only. Only the emails already in your vault keep a copy.'
+      : 'Remove from the server only. Your vault keeps its copy.';
 
   const handleConfirm = () => {
     if (selectedAction === 'delete' || selectedAction === 'archive_and_delete' || selectedAction === 'delete_everywhere') {
@@ -353,48 +385,28 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
     endBulkSession();
   };
 
-  // ESC to minimize
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') { e.preventDefault(); handleMinimize(); }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
+  const titleId = useId();
 
   return (
-    <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center">
-        {/* Backdrop */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="absolute inset-0 bg-black/50"
-          onClick={handleMinimize}
-        />
-
-        {/* Modal */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.95 }}
-          className="relative bg-mail-bg border border-mail-border rounded-xl shadow-2xl
-                     w-full max-w-md mx-4 overflow-hidden"
-        >
+    <Dialog
+      open={isOpen}
+      // Backdrop and Escape MINIMIZE — the session and its selection survive
+      // so the bubble can carry them. Only Cancel ends the session.
+      onClose={handleMinimize}
+      padded={false}
+      aria-labelledby={titleId}
+      panelClassName="overflow-hidden"
+    >
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-mail-border">
-            <h2 className="text-lg font-semibold text-mail-text">
+            <h2 id={titleId} className="text-lg font-semibold text-mail-text">
               {showDeleteConfirm
-                ? (selectedAction === 'delete_everywhere' ? 'Delete Everywhere?' : 'Confirm Delete')
+                ? CONFIRM_COPY[selectedAction].title
                 : step === 1 ? 'Bulk Email Operations' : `Choose Action for ${selectedCount.toLocaleString()} Emails`}
             </h2>
-            <button onClick={handleMinimize} className="p-1 hover:bg-mail-border rounded transition-colors">
-              <X size={18} className="text-mail-text-muted" />
-            </button>
+            <Button variant="ghost" icon size="xs" onClick={handleMinimize} aria-label="Minimize" title="Minimize — the selection is kept">
+              <X size={18} />
+            </Button>
           </div>
 
           {/* Delete confirmation */}
@@ -404,31 +416,26 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                 <AlertTriangle size={20} className="text-mail-danger flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-sm font-medium text-mail-text">
-                    {selectedAction === 'delete_everywhere'
-                      ? `Permanently remove ${selectedCount.toLocaleString()} emails from the server, this computer, and your external backup?`
-                      : `Are you sure? This will permanently delete ${selectedCount.toLocaleString()} emails from the server.`}
+                    {CONFIRM_COPY[selectedAction].lead(selectedCount)}
                   </p>
                   <p className="text-xs text-mail-text-muted mt-1">
-                    {selectedAction === 'delete_everywhere'
-                      ? 'There will be no copy left anywhere. This cannot be undone.'
-                      : 'This cannot be undone.'}
+                    {CONFIRM_COPY[selectedAction].detail(selectedCount, archivedSelectedCount)}
                   </p>
                 </div>
               </div>
               <div className="flex justify-end gap-2">
-                <button
+                <Button variant="ghost" className="hover:bg-mail-border"
                   onClick={() => setShowDeleteConfirm(false)}
-                  className="px-4 py-2 text-sm text-mail-text-muted hover:bg-mail-border rounded-lg transition-colors"
                 >
                   Cancel
-                </button>
+                </Button>
                 <button
                   onClick={handleDeleteConfirm}
                   data-testid="bulk-delete-confirm"
                   className="px-4 py-2 text-sm font-medium bg-mail-danger text-white rounded-lg
                             hover:bg-mail-danger/90 transition-colors"
                 >
-                  {selectedAction === 'delete_everywhere' ? 'Yes, Delete Everywhere' : 'Yes, Delete'}
+                  {CONFIRM_COPY[selectedAction].confirmLabel}
                 </button>
               </div>
             </div>
@@ -545,12 +552,11 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                   {selectedCount > 0 ? `${selectedCount.toLocaleString()} emails selected` : 'Select a date range'}
                 </span>
                 <div className="flex gap-2">
-                  <button
+                  <Button variant="ghost" className="hover:bg-mail-border"
                     onClick={handleCancel}
-                    className="px-4 py-2 text-sm text-mail-text-muted hover:bg-mail-border rounded-lg transition-colors"
                   >
                     Cancel
-                  </button>
+                  </Button>
                   <button
                     onClick={() => setStep(2)}
                     disabled={selectedCount === 0 || loadingPool}
@@ -581,8 +587,9 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                 <div className="flex items-start gap-2 p-3 mb-3 rounded-lg bg-mail-warning/10 border border-mail-warning/30">
                   <AlertTriangle size={14} className="text-mail-warning flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-mail-text">
-                    Some selected emails are archived locally. Deleting from server is safe — your local copies remain.
-                    Unarchiving will remove local copies — if they're also deleted from server, they will be <strong>lost forever</strong>.
+                    Your vault already holds some of these emails, so deleting them from the server is safe.
+                    Unarchiving is the risky one: it deletes the vault copy, and anything already gone
+                    from the server is then <strong>lost for good</strong>.
                   </p>
                 </div>
               )}
@@ -592,13 +599,13 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                     id: 'archive',
                     icon: HardDrive,
                     label: 'Archive',
-                    description: 'Copy to this computer. Stays on server.',
+                    description: 'Copy into your vault. Stays on the server too.',
                   },
                   ...(hasArchivedSelected ? [{
                     id: 'unarchive',
                     icon: ArchiveRestore,
                     label: 'Unarchive',
-                    description: 'Delete the copy on this computer. Server copy kept.',
+                    description: 'Delete the vault copy. The server copy is kept.',
                   }] : []),
                   {
                     id: 'delete',
@@ -610,13 +617,13 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                     id: 'archive_and_delete',
                     icon: Archive,
                     label: 'Archive & Delete',
-                    description: 'Copy here first, verify, then remove from server.',
+                    description: 'Copy into your vault, verify each one, then remove from the server.',
                   },
                   {
                     id: 'delete_everywhere',
                     icon: Trash2,
                     label: 'Delete Everywhere',
-                    description: 'Remove from server, this computer, and external backup. Unrecoverable.',
+                    description: 'Remove from the server, your vault, and your backup drive. Unrecoverable.',
                   },
                 ].map(action => {
                   const isActive = selectedAction === action.id;
@@ -688,8 +695,6 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
               </div>
             </div>
           )}
-        </motion.div>
-      </div>
-    </AnimatePresence>
+    </Dialog>
   );
 }

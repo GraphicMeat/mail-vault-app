@@ -7,15 +7,23 @@ import { create } from 'zustand';
 
 vi.mock('lucide-react', () => {
   const icon = (name) => (props) => React.createElement('span', { 'data-icon': name, ...props });
-  return {
-    X: icon('X'), Archive: icon('Archive'), ArchiveRestore: icon('ArchiveRestore'),
-    Trash2: icon('Trash2'), ArrowRight: icon('ArrowRight'), ArrowLeft: icon('ArrowLeft'),
-    AlertTriangle: icon('AlertTriangle'), HardDrive: icon('HardDrive'), Calendar: icon('Calendar'),
-  };
+  // Every icon resolves. A hand-listed set breaks the moment a shared
+  // primitive (ui/Button pulls in Loader, ui/Dialog pulls in X) imports one
+  // more glyph — vitest then fails the whole file with "No export defined".
+  return new Proxy({}, {
+    get: (_t, name) => (typeof name === 'symbol' || name === 'then' ? undefined : icon(String(name))),
+    has: () => true,
+  });
 });
 
 vi.mock('framer-motion', () => ({
-  motion: new Proxy({}, { get: () => ({ children, ...props }) => React.createElement('div', props, children) }),
+  // forwardRef, like the real motion.div: ui/Dialog puts its focus-trap ref on
+  // the panel, and a plain function component swallows it — the trap and the
+  // Escape handler then never arm, silently.
+  motion: new Proxy({}, {
+    get: () => React.forwardRef(({ children, ...props }, ref) =>
+      React.createElement('div', { ...props, ref }, children)),
+  }),
   AnimatePresence: ({ children }) => children,
 }));
 
@@ -122,7 +130,7 @@ describe('BulkOperationsModal', () => {
 
     fireEvent.click(screen.getByText('Next'));
     fireEvent.click(screen.getByText('Archive'));
-    fireEvent.click(screen.getByText('Start Archive'));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
 
     // 5 and 4 from the window, 1 only from the cache; 2 tombstoned, 3 \Deleted.
     expect(onConfirm).toHaveBeenCalledWith({ action: 'archive', uids: [5, 4, 1] });
@@ -166,7 +174,12 @@ describe('BulkOperationsModal', () => {
     await waitFor(() => expect(screen.queryByText(/Reading all/)).toBeNull());
     fireEvent.click(screen.getByText('All'));
 
-    fireEvent.keyDown(window, { key: 'Escape' });
+    // Dispatch on `document`, not `window`: the dialog's Escape listener is a
+    // document capture handler (useDialogA11y) so a dialog's Escape cannot
+    // reach App's global shortcut and clear the selection behind it. A real
+    // key press targets an element inside the document and passes through
+    // that capture; a window-dispatched synthetic event never does.
+    fireEvent.keyDown(document, { key: 'Escape' });
 
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(useMessageListStoreMock.getState().bulkSession).not.toBeNull();
@@ -215,7 +228,7 @@ describe('BulkOperationsModal', () => {
 
     fireEvent.click(screen.getByText('Next'));
     fireEvent.click(screen.getByText('Archive'));
-    fireEvent.click(screen.getByText('Start Archive'));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
 
     expect(onConfirm).toHaveBeenCalledWith({ action: 'archive', uids: [5, 1] });
   });
@@ -237,7 +250,7 @@ describe('BulkOperationsModal', () => {
 
     fireEvent.click(screen.getByText('Next'));
     fireEvent.click(screen.getByText('Archive'));
-    fireEvent.click(screen.getByText('Start Archive'));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
     expect(onConfirm).toHaveBeenCalledWith({ action: 'archive', uids: [5, 4, 1] });
   });
 
@@ -269,7 +282,7 @@ describe('BulkOperationsModal', () => {
 
     fireEvent.click(screen.getByText('Next'));
     fireEvent.click(screen.getByText('Archive'));
-    fireEvent.click(screen.getByText('Start Archive'));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
     expect(onConfirm).toHaveBeenCalledWith({ action: 'archive', uids: [5, 1] });
   });
 
@@ -299,7 +312,7 @@ describe('BulkOperationsModal', () => {
 
     fireEvent.click(screen.getByText('Next'));
     fireEvent.click(screen.getByText('Archive'));
-    fireEvent.click(screen.getByText('Start Archive'));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
     expect(onConfirm).toHaveBeenCalledWith({ action: 'archive', uids: [5, 4, 1] });
   });
 
@@ -365,7 +378,7 @@ describe('BulkOperationsModal', () => {
 
     fireEvent.click(screen.getByText('Next'));
     fireEvent.click(screen.getByText('Archive'));
-    fireEvent.click(screen.getByText('Start Archive'));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
     expect(onConfirm).toHaveBeenCalledWith({ action: 'archive', uids: [5, 4, 1] });
   });
 
@@ -437,16 +450,15 @@ describe('BulkOperationsModal', () => {
       // The footer confirm button now shares the row's label text; its
       // accessible name is the exact string (no description appended),
       // unlike the row button's, so this resolves it unambiguously.
-      fireEvent.click(screen.getByRole('button', { name: 'Delete Everywhere' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Delete everywhere' }));
 
       // Its own confirmation — distinct header and body from the plain delete confirm.
-      expect(screen.getByText('Delete Everywhere?')).toBeTruthy();
-      expect(screen.queryByText('Confirm Delete')).toBeNull();
-      expect(screen.getByText(/Permanently remove 3 emails from the server, this computer, and your external backup\?/)).toBeTruthy();
-      expect(screen.getByText('There will be no copy left anywhere. This cannot be undone.')).toBeTruthy();
-      expect(screen.queryByText(/Are you sure\? This will permanently delete/)).toBeNull();
+      expect(screen.getByText('Delete everywhere?')).toBeTruthy();
+      expect(screen.queryByText('Delete from server?')).toBeNull();
+      expect(screen.getByText(/Remove 3 emails from the server, your vault, and your backup drive\./)).toBeTruthy();
+      expect(screen.getByText('No copy will be left anywhere. This cannot be undone.')).toBeTruthy();
 
-      fireEvent.click(screen.getByText('Yes, Delete Everywhere'));
+      fireEvent.click(screen.getByRole('button', { name: 'Delete everywhere' }));
       expect(onConfirm).toHaveBeenCalledWith({ action: 'delete_everywhere', uids: [5, 4, 1] });
     });
 
@@ -457,14 +469,15 @@ describe('BulkOperationsModal', () => {
       fireEvent.click(screen.getByText('All'));
       fireEvent.click(screen.getByText('Next'));
       fireEvent.click(screen.getByText('Delete from Server'));
-      fireEvent.click(screen.getByText('Confirm Delete'));
+      fireEvent.click(screen.getByRole('button', { name: 'Delete from server' }));
 
-      expect(screen.getByText('Confirm Delete', { selector: 'h2' })).toBeTruthy();
-      expect(screen.getByText(/Are you sure\? This will permanently delete 3 emails from the server\./)).toBeTruthy();
-      expect(screen.getByText('This cannot be undone.')).toBeTruthy();
-      expect(screen.queryByText(/no copy left anywhere/)).toBeNull();
+      expect(screen.getByText('Delete from server?', { selector: 'h2' })).toBeTruthy();
+      expect(screen.getByText(/Remove 3 emails from the server\./)).toBeTruthy();
+      // None of the three fixtures is archived, so the vault clause is the permanent one.
+      expect(screen.getByText('No copy is in your vault, so this cannot be undone.')).toBeTruthy();
+      expect(screen.queryByText(/no copy will be left anywhere/i)).toBeNull();
 
-      fireEvent.click(screen.getByText('Yes, Delete'));
+      fireEvent.click(screen.getByRole('button', { name: 'Delete from server' }));
       expect(onConfirm).toHaveBeenCalledWith({ action: 'delete', uids: [5, 4, 1] });
     });
   });
@@ -494,7 +507,7 @@ describe('BulkOperationsModal', () => {
     it('none archived: warns the deletion is permanent, does not say "kept"', async () => {
       // archivedEmailIds is empty by default (cleared in beforeEach).
       await openToStep2();
-      expect(screen.getByText('Remove from server. No copy exists on this computer — this is permanent.')).toBeTruthy();
+      expect(screen.getByText('Remove from the server. No copy is in your vault, so this is permanent.')).toBeTruthy();
       expect(screen.queryByText(/kept/)).toBeNull();
     });
 
@@ -504,7 +517,7 @@ describe('BulkOperationsModal', () => {
       await openToStep2();
       // Exact-string match — a stray "...and in backup" tail would make this
       // fail to find a match at all, since the two would no longer be equal.
-      expect(screen.getByText('Remove from server only. Copies are kept only for the emails already archived here.')).toBeTruthy();
+      expect(screen.getByText('Remove from the server only. Only the emails already in your vault keep a copy.')).toBeTruthy();
       expect(screen.queryByText(/permanent/)).toBeNull();
     });
 
@@ -512,7 +525,7 @@ describe('BulkOperationsModal', () => {
       archivedEmailIds.add(5); archivedEmailIds.add(4); archivedEmailIds.add(1);
       backupState.externalBackupLocation = null;
       await openToStep2();
-      expect(screen.getByText('Remove from server only. Your copy on this computer is kept.')).toBeTruthy();
+      expect(screen.getByText('Remove from the server only. Your vault keeps its copy.')).toBeTruthy();
       expect(screen.queryByText(/permanent/)).toBeNull();
     });
 
@@ -523,7 +536,7 @@ describe('BulkOperationsModal', () => {
       // Exact-string match — same description as the no-backup case above,
       // even though the legend elsewhere on this screen does say "backup
       // configured". The description itself makes no claim either way.
-      expect(screen.getByText('Remove from server only. Your copy on this computer is kept.')).toBeTruthy();
+      expect(screen.getByText('Remove from the server only. Your vault keeps its copy.')).toBeTruthy();
     });
   });
 });

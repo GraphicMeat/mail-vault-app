@@ -1,3 +1,4 @@
+import { Button } from '../ui/Button';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSettingsStore, getAccountInitial, getAccountColor, hasPremiumAccess } from '../../stores/settingsStore';
 import { backupScheduler } from '../../services/backupScheduler';
@@ -235,12 +236,11 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
               <div className="pt-3 border-t border-mail-border">
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-xs text-mail-text-muted">Folders to back up</label>
-                  <button
+                  <Button variant="link" size="xs" className="p-0 text-xs"
                     onClick={() => setShowFolderPicker(!showFolderPicker)}
-                    className="text-xs text-mail-accent-text hover:text-mail-accent-hover"
                   >
                     {showFolderPicker ? 'Hide' : (config.folders ? `${config.folders.length} selected` : 'All folders')}
-                  </button>
+                  </Button>
                 </div>
                 {showFolderPicker && accountFolders.length > 0 && (
                   <div className="space-y-1 max-h-32 overflow-y-auto bg-mail-bg rounded-lg p-2 border border-mail-border">
@@ -458,9 +458,9 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
                 )}
               </div>
               {!IS_APPSTORE_BUILD && onUpgrade && (
-                <button onClick={onUpgrade} className="px-4 py-1.5 text-xs font-semibold bg-mail-accent-fill text-white rounded-full hover:bg-mail-accent-hover transition-colors">
+                <Button variant="primary" size="sm" pill className="text-xs font-semibold" onClick={onUpgrade}>
                   Upgrade
-                </button>
+                </Button>
               )}
             </div>
           </div>
@@ -498,14 +498,13 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
                 </div>
               </div>
             )}
-            <button
+            <Button variant="accentTint" size="sm" className="text-xs"
               onClick={handleManualBackup}
               disabled={runningManual}
-              className="text-xs px-3 py-1.5 rounded-lg bg-mail-accent/10 text-mail-accent-text hover:bg-mail-accent/20 transition-colors flex items-center gap-1.5 font-medium"
             >
               {runningManual ? <Loader size={12} className="animate-spin" /> : manualStatus === 'success' ? <CheckCircle2 size={12} /> : <HardDrive size={12} />}
               {runningManual ? `Backing up ${backupProgress?.folder || ''}...` : manualStatus === 'success' ? 'Done!' : 'Back up now'}
-            </button>
+            </Button>
             {manualStatus === 'error' && manualError && (
               <div className="text-xs text-mail-warning">{manualError}</div>
             )}

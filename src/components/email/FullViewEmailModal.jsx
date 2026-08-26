@@ -1,4 +1,6 @@
 import React, { useMemo, useRef, useEffect, useState } from 'react';
+import { Dialog } from '../ui/Dialog';
+import { Button } from '../ui/Button';
 import { useAccountStore } from '../../stores/accountStore';
 import { useMailStore } from '../../stores/mailStore';
 import { resolveEmailLocation } from '../../stores/slices/unifiedHelpers';
@@ -159,23 +161,16 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
     return () => iframe.removeEventListener('load', setup);
   }, [email]);
 
-  if (!email) return null;
-
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black/60 z-50 flex flex-col"
-      onClick={onClose}
+    <Dialog
+      open={Boolean(email)}
+      onClose={onClose}
+      size="custom"
+      panelBg="bg-mail-surface"
+      aria-label="Full message"
+      className="flex-col"
+      panelClassName="flex-1 m-4 rounded-2xl overflow-hidden flex flex-col"
     >
-      <motion.div
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 20, opacity: 0 }}
-        className="flex-1 m-4 bg-mail-surface border border-mail-border rounded-xl shadow-2xl overflow-hidden flex flex-col"
-        onClick={e => e.stopPropagation()}
-      >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-mail-border bg-mail-bg">
           <div className="flex-1 min-w-0 mr-4">
@@ -183,12 +178,9 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
               {email.subject || '(No subject)'}
             </h2>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-mail-border rounded-lg transition-colors flex-shrink-0"
-          >
-            <X size={20} className="text-mail-text-muted" />
-          </button>
+          <Button variant="ghost" icon onClick={onClose} aria-label="Close" className="flex-shrink-0">
+            <X size={20} />
+          </Button>
         </div>
 
         {/* Email Meta */}
@@ -256,7 +248,6 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
             </div>
           ) : null;
         })()}
-      </motion.div>
       <LinkSafetyModal
         alert={linkSafetyAlert}
         onCancel={() => setLinkSafetyAlert(null)}
@@ -266,6 +257,6 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
           import('@tauri-apps/plugin-shell').then(({ open }) => open(url)).catch(() => window.open(url, '_blank'));
         }}
       />
-    </motion.div>
+    </Dialog>
   );
 }

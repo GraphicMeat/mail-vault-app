@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import { useAccountStore } from '../stores/accountStore';
-import { motion } from 'framer-motion';
+import { Dialog } from './ui/Dialog';
+import { Button } from './ui/Button';
 import {
   X,
   User,
@@ -68,14 +69,9 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
   const accounts = useAccountStore(s => s.accounts);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
 
-  // Close on Escape key
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  // Close on Escape — capture phase, and only while this is the top dialog, so
+  // a confirmation opened inside Settings peels off first.
+  const titleId = useId();
 
   // Map old 'ai' tab ID to new 'cleanup'
   const resolvedInitialTab = initialTab === 'ai' ? 'cleanup' : initialTab;
@@ -102,26 +98,19 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
   const currentTab = allTabs.find(t => t.id === activeTab);
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
+    <Dialog
+      open
+      onClose={onClose}
+      size="custom"
       data-testid="settings-page"
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-      onClick={onClose}
+      aria-labelledby={titleId}
+      className="p-4"
+      panelClassName="w-full max-w-7xl h-[92vh] rounded-2xl flex overflow-hidden"
     >
-      <motion.div
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.95, opacity: 0 }}
-        className="bg-mail-bg border border-mail-border rounded-xl shadow-2xl
-                   w-full max-w-7xl h-[92vh] flex overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
         {/* Sidebar */}
         <div className="w-56 bg-mail-surface border-r border-mail-border flex flex-col">
           <div className="px-4 py-4 border-b border-mail-border flex items-center h-[57px]">
-            <h2 className="text-lg font-semibold text-mail-text">Settings</h2>
+            <h2 id={titleId} className="text-lg font-semibold text-mail-text">Settings</h2>
           </div>
 
           <nav className="flex-1 p-2 overflow-y-auto">
@@ -158,12 +147,11 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
           <div className="flex items-center justify-between px-6 py-4 border-b border-mail-border h-[57px] shrink-0">
             <div className="flex items-center gap-3 min-w-0">
               {hasConfigSubView && subView === 'config' && (
-                <button
+                <Button variant="ghost" icon size="sm"
                   onClick={() => setSubView(null)}
-                  className="p-1.5 hover:bg-mail-surface-hover rounded-lg transition-colors"
                 >
                   <ChevronLeft size={18} className="text-mail-text-muted" />
-                </button>
+                </Button>
               )}
               <h3 className="text-lg font-semibold text-mail-text truncate">
                 {hasConfigSubView && subView === 'config'
@@ -173,20 +161,18 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
             </div>
             <div className="flex items-center gap-2">
               {hasConfigSubView && subView !== 'config' && (
-                <button
+                <Button variant="ghost" icon size="md"
                   onClick={() => setSubView('config')}
-                  className="p-2 hover:bg-mail-surface-hover rounded-lg transition-colors"
                   title="Settings"
                 >
                   <Settings size={18} className="text-mail-text-muted" />
-                </button>
+                </Button>
               )}
-              <button
+              <Button variant="ghost" icon size="md"
                 onClick={onClose}
-                className="p-2 hover:bg-mail-surface-hover rounded-lg transition-colors"
               >
                 <X size={20} className="text-mail-text-muted" />
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -272,7 +258,6 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
             )}
           </div>
         </div>
-      </motion.div>
-    </motion.div>
+    </Dialog>
   );
 }

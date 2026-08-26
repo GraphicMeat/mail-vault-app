@@ -1,7 +1,9 @@
-import { useEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { X, CheckCircle2 } from 'lucide-react';
+import { useId } from 'react';
+import { CheckCircle2 } from 'lucide-react';
 import { useBackupStore } from '../stores/backupStore';
+import { Dialog } from './ui/Dialog';
+import { Button } from './ui/Button';
+import { Z } from './ui/layers';
 
 /**
  * Post-backup automation upsell. Shown once, right after a free user's first
@@ -13,42 +15,30 @@ export default function BackupUpsellModal({ onUpgrade }) {
   const upsell = useBackupStore((s) => s.backupUpsell);
   const clear = useBackupStore((s) => s.clearBackupUpsell);
 
-  // Escape dismisses (mirrors backdrop click). Only bound while open.
-  useEffect(() => {
-    if (!upsell) return;
-    const onKey = (e) => { if (e.key === 'Escape') clear(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [upsell, clear]);
+  const titleId = useId();
 
-  if (!upsell) return null;
-
-  const count = upsell.emailsBackedUp || 0;
+  const count = upsell?.emailsBackedUp || 0;
   const startTrial = () => { clear(); onUpgrade?.(); };
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 p-4"
-      onClick={clear}
+  return (
+    <Dialog
+      open={Boolean(upsell)}
+      onClose={clear}
+      // Above a dialog: this lands on top of whatever settings surface the
+      // backup was started from.
+      z={Z.alert}
+      portal
+      size="md"
+      aria-labelledby={titleId}
+      panelBg="bg-mail-surface"
+      panelClassName="text-center"
     >
-      <div
-        className="relative bg-mail-surface border border-mail-border w-[440px] max-w-[92vw] rounded-xl p-6 shadow-xl text-center"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button
-          onClick={clear}
-          aria-label="Close"
-          className="absolute top-3 right-3 text-mail-text-muted hover:text-mail-text"
-        >
-          <X size={18} />
-        </button>
-
         <div className="flex justify-center mb-3">
           <CheckCircle2 size={40} className="text-mail-success" />
         </div>
 
-        <h2 className="text-lg font-semibold text-mail-text mb-1">
-          Backup complete — your emails are safe on this computer
+        <h2 id={titleId} className="text-lg font-semibold text-mail-text mb-1">
+          Backup complete — these emails are in your vault now
         </h2>
         {count > 0 && (
           <p className="text-sm text-mail-text mb-1">
@@ -60,21 +50,13 @@ export default function BackupUpsellModal({ onUpgrade }) {
         </p>
 
         <div className="flex flex-col gap-2">
-          <button
-            onClick={startTrial}
-            className="bg-mail-accent-fill text-white rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-mail-accent-hover transition-colors"
-          >
+          <Button variant="primary" size="lg" onClick={startTrial} fullWidth>
             Start 14-day free trial
-          </button>
-          <button
-            onClick={clear}
-            className="text-sm font-medium text-mail-text-muted hover:text-mail-text py-1.5"
-          >
+          </Button>
+          <Button variant="ghost" size="sm" onClick={clear} fullWidth data-autofocus>
             Maybe later
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>,
-    document.body
+    </Dialog>
   );
 }

@@ -146,7 +146,7 @@ export function StateTooltip({ label, detail, children, testId = 'msg-state-icon
           data-testid="msg-state-tooltip"
           style={{ ...pos, transform: 'translateX(-50%)' }}
           className="fixed z-[9999] max-w-[240px] px-2.5 py-1.5 rounded-md pointer-events-none
-                     bg-mail-surface border border-mail-border shadow-lg text-xs"
+                     bg-mail-surface border border-mail-border text-xs"
         >
           <div className="font-semibold text-mail-text">{label}</div>
           <div className="text-mail-text-muted mt-0.5">{detail}</div>

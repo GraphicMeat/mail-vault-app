@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef, memo } from 'react';
+import { Dialog } from './ui/Dialog';
+import { Button } from './ui/Button';
 import { createPortal } from 'react-dom';
 import { version } from '../../package.json';
 import { useMailStore } from '../stores/mailStore';
@@ -9,7 +11,7 @@ import { useUiStore } from '../stores/uiStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useSettingsStore, getAccountInitial, getAccountColor, hasPremiumAccess } from '../stores/settingsStore';
 import { useBackupStore } from '../stores/backupStore';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import * as api from '../services/api';
 import { formatBytes } from '../utils/formatBytes';
 import { mailboxLabel } from '../utils/imapUtf7';
@@ -359,13 +361,12 @@ export const ConnectionErrorCard = memo(function ConnectionErrorCard({
               <Key size={14} />
               <span>Password missing</span>
             </div>
-            <button
+            <Button variant="ghost" icon size="xs" className="hover:bg-mail-warning/20"
               onClick={retryKeychainAccess}
-              className="p-1 hover:bg-mail-warning/20 rounded transition-colors"
               title="Retry"
             >
               <RefreshCw size={12} />
-            </button>
+            </Button>
           </div>
           <button
             onClick={() => onOpenAccounts?.(account.id)}
@@ -391,20 +392,18 @@ export const ConnectionErrorCard = memo(function ConnectionErrorCard({
             )}
           </div>
           <div className="flex items-center gap-1">
-            <button
+            <Button variant="ghost" icon size="xs" className="hover:bg-mail-danger/20"
               onClick={() => setShowErrorModal(true)}
-              className="p-1 hover:bg-mail-danger/20 rounded transition-colors"
               title="View error details"
             >
               <Info size={12} />
-            </button>
-            <button
+            </Button>
+            <Button variant="ghost" icon size="xs" className="hover:bg-mail-danger/20"
               onClick={() => activateAccount(account.id, activeMailbox)}
-              className="p-1 hover:bg-mail-danger/20 rounded transition-colors"
               title="Retry connection"
             >
               <RefreshCw size={12} />
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -734,30 +733,24 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
 
   // Shared error modal (rendered in both collapsed and expanded views)
   const errorModal = (
-    <AnimatePresence>
-      {showErrorModal && connectionError && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={() => setShowErrorModal(false)}
+        <Dialog
+          open={Boolean(showErrorModal && connectionError)}
+          onClose={() => setShowErrorModal(false)}
+          padded={false}
+          aria-label="Error details"
+          panelClassName="overflow-hidden"
         >
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-mail-bg border border-mail-border rounded-xl shadow-xl max-w-md w-full mx-4 overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
             <div className="flex items-center justify-between px-4 py-3 border-b border-mail-border">
               <h3 className="text-sm font-semibold text-mail-text">Error Details</h3>
-              <button
+              <Button
+                variant="ghost"
+                icon
+                size="xs"
                 onClick={() => setShowErrorModal(false)}
-                className="p-1 hover:bg-mail-surface-hover rounded transition-colors"
+                aria-label="Close"
               >
-                <X size={14} className="text-mail-text-muted" />
-              </button>
+                <X size={14} />
+              </Button>
             </div>
             <div className="p-4">
               <p className="text-sm text-mail-text-muted whitespace-pre-wrap break-words">
@@ -780,10 +773,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                 </button>
               )}
             </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+        </Dialog>
   );
 
   // --- COLLAPSED SIDEBAR ---
@@ -792,13 +782,12 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
       <div className="w-14 h-full bg-mail-surface border-r border-mail-border flex flex-col items-center relative transition-all duration-200">
         {/* Expand button */}
         <div data-tauri-drag-region className="w-full py-3 flex justify-center border-b border-mail-border flex-shrink-0">
-          <button
+          <Button variant="ghost" icon size="md"
             onClick={toggleSidebarCollapsed}
-            className="p-2 hover:bg-mail-surface-hover rounded-lg transition-colors"
             title="Expand sidebar"
           >
             <PanelLeftOpen size={18} className="text-mail-text-muted" />
-          </button>
+          </Button>
         </div>
 
         {/* Compose */}
@@ -918,9 +907,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
 
         {/* Footer icons */}
         <div className="w-full py-2 border-t border-mail-border flex flex-col items-center gap-1">
-          <button
+          <Button variant="ghost" icon size="md"
             onClick={toggleTheme}
-            className="p-2 hover:bg-mail-surface-hover rounded-lg transition-colors"
             title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           >
             {theme === 'dark' ? (
@@ -928,30 +916,27 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             ) : (
               <Moon size={16} className="text-mail-text-muted" />
             )}
-          </button>
-          <button
+          </Button>
+          <Button variant="ghost" icon size="md"
             onClick={refreshCurrentView}
-            className="p-2 hover:bg-mail-surface-hover rounded-lg transition-colors"
             title="Refresh emails"
           >
             <RefreshCw size={16} className={`text-mail-text-muted ${loading || loadingMore || manualRefreshSpinning ? 'animate-spin' : ''}`} />
-          </button>
+          </Button>
           {/* Backup in progress indicator (collapsed) */}
           <CollapsedBackupIcon onOpenBackup={onOpenBackup} />
-          <button
+          <Button variant="ghost" icon size="md"
             onClick={onOpenSettings}
-            className="p-2 hover:bg-mail-surface-hover rounded-lg transition-colors"
             title="Settings"
           >
             <Settings size={16} className="text-mail-text-muted" />
-          </button>
-          <button
+          </Button>
+          <Button variant="ghost" icon size="md"
             onClick={onReportBug}
-            className="p-2 hover:bg-mail-surface-hover rounded-lg transition-colors"
             title="Report a bug"
           >
             <Bug size={16} className="text-mail-text-muted" />
-          </button>
+          </Button>
           {totalEmails > 0 && (
             <div
               className="p-2"
@@ -984,9 +969,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           <span className="text-mail-text">Vault</span>
         </h1>
         <div className="flex items-center gap-1">
-          <button
+          <Button variant="ghost" icon size="md"
             onClick={toggleTheme}
-            className="p-2 hover:bg-mail-surface-hover rounded-lg transition-colors"
             title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           >
             {theme === 'dark' ? (
@@ -994,21 +978,19 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             ) : (
               <Moon size={18} className="text-mail-text-muted" />
             )}
-          </button>
-          <button
+          </Button>
+          <Button variant="ghost" icon size="md"
             onClick={refreshCurrentView}
-            className="p-2 hover:bg-mail-surface-hover rounded-lg transition-colors"
             title="Refresh emails"
           >
             <RefreshCw size={18} className={`text-mail-text-muted ${loading || loadingMore || manualRefreshSpinning ? 'animate-spin' : ''}`} />
-          </button>
-          <button
+          </Button>
+          <Button variant="ghost" icon size="md"
             onClick={toggleSidebarCollapsed}
-            className="p-2 hover:bg-mail-surface-hover rounded-lg transition-colors"
             title="Collapse sidebar"
           >
             <PanelLeftClose size={18} className="text-mail-text-muted" />
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -1077,18 +1059,17 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                       <AlertTriangle size={14} />
                       <span>Showing cached data</span>
                     </div>
-                    <button
+                    <Button variant="ghost" icon size="xs" className="hover:bg-mail-warning/20"
                       // Not activateAccount: that lands in the sync probe's 10s
                       // "checked moments ago" window and returns without asking
                       // the server anything, which is why this button was
                       // reported as doing nothing. refreshCurrentView clears the
                       // probe first, so an explicit retry always reaches the server.
                       onClick={refreshCurrentView}
-                      className="p-1 hover:bg-mail-warning/20 rounded transition-colors"
                       title="Retry connection"
                     >
                       <RefreshCw size={12} />
-                    </button>
+                    </Button>
                   </div>
                   <p className="mt-1 text-[10px] text-mail-text-muted leading-tight">
                     {suspectEmptyServerData.message}
@@ -1163,18 +1144,17 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                       <AlertTriangle size={14} />
                       <span>Showing cached data</span>
                     </div>
-                    <button
+                    <Button variant="ghost" icon size="xs" className="hover:bg-mail-warning/20"
                       // Not activateAccount: that lands in the sync probe's 10s
                       // "checked moments ago" window and returns without asking
                       // the server anything, which is why this button was
                       // reported as doing nothing. refreshCurrentView clears the
                       // probe first, so an explicit retry always reaches the server.
                       onClick={refreshCurrentView}
-                      className="p-1 hover:bg-mail-warning/20 rounded transition-colors"
                       title="Retry connection"
                     >
                       <RefreshCw size={12} />
-                    </button>
+                    </Button>
                   </div>
                   <p className="mt-1 text-[10px] text-mail-text-muted leading-tight">
                     {suspectEmptyServerData.message}
@@ -1252,9 +1232,14 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         </div>
         <div className="flex gap-1 bg-mail-bg rounded-lg p-1">
           {[
+            // Labels, not ids: the `local` filter shows exactly what the vault
+            // holds, and the product calls that place the vault everywhere
+            // else — on the row glyph, in every delete confirmation, on the
+            // website. "Local" was the one surface still using another word
+            // for it. The id stays `local`; only what the user reads changed.
             { id: 'all', icon: Layers, label: 'All' },
             { id: 'server', icon: Cloud, label: 'Server' },
-            { id: 'local', icon: HardDrive, label: 'Local' }
+            { id: 'local', icon: HardDrive, label: 'Vault' }
           ].map(mode => (
             <button
               key={mode.id}
@@ -1405,23 +1390,19 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
 
       {/* Footer */}
       <div className="p-3 border-t border-mail-border space-y-0.5">
-        <button
+        <Button variant="ghost" fullWidth className="justify-start p-2"
           onClick={onOpenSettings}
-          className="w-full flex items-center gap-2 p-2 text-sm text-mail-text-muted
-                    hover:text-mail-text hover:bg-mail-surface-hover rounded-lg transition-all"
         >
           <Settings size={16} />
           Settings
-        </button>
-        <button
+        </Button>
+        <Button variant="ghost" fullWidth className="justify-start p-2"
           onClick={onReportBug}
-          className="w-full flex items-center gap-2 p-2 text-sm text-mail-text-muted
-                    hover:text-mail-text hover:bg-mail-surface-hover rounded-lg transition-all"
           title="Report a bug"
         >
           <Bug size={16} />
           Report a bug
-        </button>
+        </Button>
         {totalEmails > 0 && (
           <div className="flex items-center gap-1.5 px-2 mt-1 text-xs text-mail-text-muted">
             <HardDrive size={12} />

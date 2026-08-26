@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { createPortal } from 'react-dom';
+import { Popover, MenuItem } from '../ui/Popover';
+import { Button } from '../ui/Button';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useAccountStore } from '../../stores/accountStore';
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
@@ -80,26 +81,17 @@ function CategoryDropdown({ current, categories, onChange }) {
       >
         {CATEGORY_LABELS[current] || current}
       </button>
-      {open && createPortal(
-        <>
-          <div className="fixed inset-0 z-[9998]" onClick={() => setOpen(false)} />
-          <div
-            className="fixed bg-mail-bg border border-mail-border rounded-lg shadow-lg z-[9999] py-1 min-w-[140px]"
-            style={{ top: pos.top, left: pos.left }}
+      <Popover open={open} onClose={() => setOpen(false)} role="menu" className="min-w-[140px]" style={{ top: pos.top, left: pos.left }}>
+        {categories.map(cat => (
+          <MenuItem
+            key={cat}
+            onClick={(e) => { e.stopPropagation(); onChange(cat); setOpen(false); }}
+            className={`py-1.5 text-xs ${cat === current ? 'text-mail-accent-text font-medium' : ''}`}
           >
-            {categories.map(cat => (
-              <button
-                key={cat}
-                onClick={(e) => { e.stopPropagation(); onChange(cat); setOpen(false); }}
-                className={`w-full px-3 py-1.5 text-left text-xs hover:bg-mail-surface-hover ${cat === current ? 'text-mail-accent-text font-medium' : 'text-mail-text'}`}
-              >
-                {CATEGORY_LABELS[cat] || cat}
-              </button>
-            ))}
-          </div>
-        </>,
-        document.body
-      )}
+            {CATEGORY_LABELS[cat] || cat}
+          </MenuItem>
+        ))}
+      </Popover>
     </div>
   );
 }
@@ -133,26 +125,17 @@ function ActionDropdown({ current, onChange }) {
       >
         {ACTION_LABELS[current] || current}
       </button>
-      {open && createPortal(
-        <>
-          <div className="fixed inset-0 z-[9998]" onClick={() => setOpen(false)} />
-          <div
-            className="fixed bg-mail-bg border border-mail-border rounded-lg shadow-lg z-[9999] py-1 min-w-[120px]"
-            style={{ top: pos.top, left: pos.left }}
+      <Popover open={open} onClose={() => setOpen(false)} role="menu" className="min-w-[120px]" style={{ top: pos.top, left: pos.left }}>
+        {ACTIONS.map(act => (
+          <MenuItem
+            key={act}
+            onClick={(e) => { e.stopPropagation(); onChange(act); setOpen(false); }}
+            className={`py-1.5 text-xs ${act === current ? 'text-mail-accent-text font-medium' : ''}`}
           >
-            {ACTIONS.map(act => (
-              <button
-                key={act}
-                onClick={(e) => { e.stopPropagation(); onChange(act); setOpen(false); }}
-                className={`w-full px-3 py-1.5 text-left text-xs hover:bg-mail-surface-hover ${act === current ? 'text-mail-accent-text font-medium' : 'text-mail-text'}`}
-              >
-                {ACTION_LABELS[act]}
-              </button>
-            ))}
-          </div>
-        </>,
-        document.body
-      )}
+            {ACTION_LABELS[act]}
+          </MenuItem>
+        ))}
+      </Popover>
     </div>
   );
 }
@@ -536,9 +519,9 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
           <p className="text-xs text-mail-text-muted mt-3">{priceBlurb}</p>
         )}
         {!IS_APPSTORE_BUILD && onUpgrade && (
-          <button onClick={onUpgrade} className="mt-4 px-4 py-1.5 text-xs font-semibold bg-mail-accent-fill text-white rounded-full hover:bg-mail-accent-hover transition-colors">
+          <Button variant="primary" size="sm" pill className="mt-4 text-xs" onClick={onUpgrade}>
             Upgrade
-          </button>
+          </Button>
         )}
       </div>
     );
@@ -830,9 +813,9 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
       {/* Sub-header for preview navigation */}
       {previewItem && (
         <div className="flex items-center gap-2 px-6 py-2 border-b border-mail-border shrink-0">
-          <button onClick={() => closePreview()} className="p-1.5 hover:bg-mail-surface-hover rounded-lg transition-colors">
+          <Button variant="ghost" icon size="sm" onClick={() => closePreview()}>
             <ChevronLeft size={18} className="text-mail-text-muted" />
-          </button>
+          </Button>
           <span className="text-sm font-medium text-mail-text truncate">{previewItem.subject || 'Email'}</span>
         </div>
       )}
@@ -868,12 +851,11 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
                   : `${selectedIds.size} email${selectedIds.size !== 1 ? 's' : ''} will be saved to your local archive.`}
               </p>
               <div className="flex justify-end gap-2">
-                <button
+                <Button variant="secondary" className="bg-mail-bg"
                   onClick={() => setBulkAction(null)}
-                  className="px-4 py-2 text-sm text-mail-text bg-mail-bg border border-mail-border rounded-lg hover:bg-mail-surface-hover transition-colors"
                 >
                   Cancel
-                </button>
+                </Button>
                 <button
                   onClick={() => handleBulkAction(bulkAction)}
                   className={`px-4 py-2 text-sm text-white rounded-lg transition-colors ${

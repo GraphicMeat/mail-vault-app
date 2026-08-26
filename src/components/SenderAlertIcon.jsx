@@ -1,18 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { X, ShieldAlert } from 'lucide-react';
+import React, { useCallback, useState } from 'react';
+import { ShieldAlert } from 'lucide-react';
+import { Dialog } from './ui/Dialog';
 
 export function SenderAlertIcon({ level, email, size = 14 }) {
   const [showModal, setShowModal] = useState(false);
 
-  useEffect(() => {
-    if (!showModal) return;
-    const onKey = (e) => {
-      if (e.key === 'Escape') { e.stopPropagation(); setShowModal(false); }
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [showModal]);
+  const closeModal = useCallback(() => setShowModal(false), []);
 
   if (!level) return null;
 
@@ -27,55 +20,47 @@ export function SenderAlertIcon({ level, email, size = 14 }) {
       <button
         onClick={(e) => { e.stopPropagation(); setShowModal(true); }}
         className={`flex-shrink-0 ${isRed ? 'text-mail-danger' : 'text-mail-warning'} hover:opacity-80 transition-opacity`}
+        aria-label={title}
         title={title}
       >
         <ShieldAlert size={size} />
       </button>
-      {showModal && createPortal(
-        // Portal to body: virtualized list cells have `transform` on their
-        // ancestor, which creates a containing block for `position: fixed`
-        // and clips full-screen overlays. Portaling to <body> escapes that.
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-          <div
-            className="relative max-w-md w-full bg-mail-bg border border-mail-border rounded-2xl shadow-2xl p-6"
-            onClick={e => e.stopPropagation()}
-          >
-            <button onClick={() => setShowModal(false)} className="absolute top-4 right-4 p-1 rounded-lg hover:bg-mail-surface-hover">
-              <X size={18} className="text-mail-text-muted" />
-            </button>
-
-            <div className="flex items-center gap-3 mb-4">
-              <div className={`w-10 h-10 rounded-full ${isRed ? 'bg-mail-danger-tint' : 'bg-mail-warning-tint'} flex items-center justify-center`}>
-                <ShieldAlert size={22} className={isRed ? 'text-mail-danger' : 'text-mail-warning'} />
-              </div>
-              <h3 className={`text-lg font-bold ${isRed ? 'text-mail-danger' : 'text-mail-warning'}`}>{title}</h3>
-            </div>
-
-            <p className="text-sm text-mail-text-muted mb-4">
-              {isRed
-                ? 'The sender\'s display name shows a different email address than the actual sender. This is a common phishing technique to impersonate trusted contacts.'
-                : 'The sender\'s display name looks like a domain that doesn\'t match the actual sender domain. This could indicate impersonation.'}
-            </p>
-
-            <div className="mb-3 p-3 rounded-lg bg-mail-surface border border-mail-border">
-              <div className="text-xs text-mail-text-muted mb-1">Display name shows:</div>
-              <div className="text-sm font-mono text-mail-text break-all">{fromName}</div>
-            </div>
-
-            <div className="p-3 rounded-lg bg-mail-surface border border-mail-border">
-              <div className="text-xs text-mail-text-muted mb-1">Actual sender address:</div>
-              <div className="text-sm font-mono text-mail-text break-all">{fromAddress}</div>
-              {fromAddress.includes('@') && (
-                <div className={`text-xs ${isRed ? 'text-mail-danger' : 'text-mail-warning'} mt-0.5`}>
-                  {fromAddress.split('@')[1]}
-                </div>
-              )}
-            </div>
+      <Dialog
+        open={showModal}
+        onClose={closeModal}
+        role="alertdialog"
+        // Portal to body: virtualized list cells sit under an ancestor with a
+        // `transform`, which becomes the containing block for `position: fixed`
+        // and would clip this to the row.
+        portal
+        title={title}
+        icon={
+          <div className={`w-10 h-10 rounded-full ${isRed ? 'bg-mail-danger-tint' : 'bg-mail-warning-tint'} flex items-center justify-center`}>
+            <ShieldAlert size={22} className={isRed ? 'text-mail-danger' : 'text-mail-warning'} />
           </div>
-        </div>,
-        document.body
-      )}
+        }
+      >
+        <p className="text-sm text-mail-text-muted">
+          {isRed
+            ? 'The sender\'s display name shows a different email address than the actual sender. This is a common phishing technique to impersonate trusted contacts.'
+            : 'The sender\'s display name looks like a domain that doesn\'t match the actual sender domain. This could indicate impersonation.'}
+        </p>
+
+        <div className="p-3 rounded-lg bg-mail-surface border border-mail-border">
+          <div className="text-xs text-mail-text-muted mb-1">Display name shows:</div>
+          <div className="text-sm font-mono text-mail-text break-all">{fromName}</div>
+        </div>
+
+        <div className="p-3 rounded-lg bg-mail-surface border border-mail-border">
+          <div className="text-xs text-mail-text-muted mb-1">Actual sender address:</div>
+          <div className="text-sm font-mono text-mail-text break-all">{fromAddress}</div>
+          {fromAddress.includes('@') && (
+            <div className={`text-xs ${isRed ? 'text-mail-danger' : 'text-mail-warning'} mt-0.5`}>
+              {fromAddress.split('@')[1]}
+            </div>
+          )}
+        </div>
+      </Dialog>
     </>
   );
 }

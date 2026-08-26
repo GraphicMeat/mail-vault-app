@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useMemo, memo } from 'react';
-import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Popover } from '../ui/Popover';
 import { Info } from 'lucide-react';
 import { SenderVerificationBadge } from './EmailHeaderComponent';
 import { ConnectedStateIcon } from './MessageStateIcon';
@@ -75,39 +74,17 @@ export const SenderInfoPopover = memo(function SenderInfoPopover({
     };
   }, []);
 
-  // Dismiss on click outside
-  useEffect(() => {
-    const handleMouseDown = (e) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target)) {
-        onClose();
-      }
-    };
-    document.addEventListener('mousedown', handleMouseDown);
-    return () => document.removeEventListener('mousedown', handleMouseDown);
-  }, [onClose]);
-
-  // Dismiss on Escape
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
-
-  const content = (
-    <AnimatePresence>
-      <motion.div
-        ref={popoverRef}
-        tabIndex={-1}
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        transition={{ duration: 0.15 }}
-        className="fixed z-50 bg-mail-surface border border-mail-border rounded-xl shadow-lg p-4 min-w-[240px] max-w-[320px] outline-none"
-        style={{ top: position.top, left: position.left }}
-        onClick={(e) => e.stopPropagation()}
-      >
+  // Outside click and Escape both come from ui/Popover.
+  return (
+    <Popover
+      open
+      onClose={onClose}
+      variant="panel"
+      ref={popoverRef}
+      tabIndex={-1}
+      className="min-w-[240px] max-w-[320px] outline-none"
+      style={{ top: position.top, left: position.left }}
+    >
         {/* Heading */}
         <div className="text-xs font-semibold text-mail-text mb-2">Sender Details</div>
 
@@ -152,9 +129,6 @@ export const SenderInfoPopover = memo(function SenderInfoPopover({
             via {listName}
           </div>
         )}
-      </motion.div>
-    </AnimatePresence>
+    </Popover>
   );
-
-  return createPortal(content, document.body);
 });

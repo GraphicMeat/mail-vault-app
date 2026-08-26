@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { X, Server, Loader2, CheckCircle2, AlertTriangle, UploadCloud, Minus } from 'lucide-react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { Server, Loader2, CheckCircle2, AlertTriangle, UploadCloud, Minus } from 'lucide-react';
+import { Dialog } from './ui/Dialog';
+import { Button } from './ui/Button';
+import { Z } from './ui/layers';
 import { useSettingsStore } from '../stores/settingsStore.js';
 import { useMailStore } from '../stores/mailStore.js';
 import { restoreManager } from '../services/restoreManager.js';
@@ -31,6 +33,7 @@ export default function ChangeServerModal() {
   const [dnsHealth, setDnsHealth] = useState({ loading: false, warnings: null, failed: false });
 
   const detectRanFor = useRef(null);
+  const titleId = useId();
 
   const handleClose = () => {
     closeChangeServer();
@@ -189,22 +192,28 @@ export default function ChangeServerModal() {
 
   const showCloseButton = step === 1 || step === 3;
 
-  return createPortal(
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50">
-      <div className="bg-mail-surface border border-mail-border w-[480px] max-w-[92vw] rounded-xl p-6 shadow-xl">
+  return (
+    <Dialog
+      open
+      onClose={handleClose}
+      portal
+      // A server change is mid-migration state that outranks the settings
+      // dialog it was started from.
+      z={Z.alert}
+      size="lg"
+      panelBg="bg-mail-surface"
+      // Steps 2 has work in flight: it can be minimized, never dismissed.
+      dismissable={showCloseButton}
+      aria-labelledby={titleId}
+    >
         <div className="flex items-center justify-between mb-3">
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-mail-text">
+          <h2 id={titleId} className="flex items-center gap-2 text-lg font-semibold text-mail-text">
             <Server size={18} /> Change server — {account.email}
           </h2>
-          {showCloseButton && (
-            <button onClick={handleClose} aria-label="Close" className="text-mail-text-muted hover:text-mail-text">
-              <X size={18} />
-            </button>
-          )}
           {step === 2 && activeRestore && (
-            <button onClick={handleMinimize} aria-label="Minimize" title="Minimize — restore continues in the background" className="text-mail-text-muted hover:text-mail-text">
+            <Button variant="ghost" icon size="xs" onClick={handleMinimize} aria-label="Minimize" title="Minimize — restore continues in the background">
               <Minus size={18} />
-            </button>
+            </Button>
           )}
         </div>
 
@@ -267,13 +276,12 @@ export default function ChangeServerModal() {
             )}
 
             <div className="flex justify-end gap-2">
-              <button
-                className="text-sm font-medium text-mail-text border border-mail-border rounded-lg px-4 py-2 hover:bg-mail-surface-hover transition-colors"
+              <Button variant="secondary" className="bg-transparent"
                 onClick={handleClose}
                 disabled={!!busyLeg}
               >
                 Cancel
-              </button>
+              </Button>
               <button
                 className="bg-mail-accent-fill text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent-hover transition-colors disabled:opacity-50"
                 onClick={handleVerifySave}
@@ -305,18 +313,16 @@ export default function ChangeServerModal() {
                   ))}
                 </ul>
                 <div className="flex justify-end gap-2">
-                  <button
-                    className="text-sm font-medium text-mail-text border border-mail-border rounded-lg px-4 py-2 hover:bg-mail-surface-hover transition-colors"
+                  <Button variant="secondary" className="bg-transparent"
                     onClick={() => setStep(3)}
                   >
                     Skip
-                  </button>
-                  <button
-                    className="bg-mail-accent-fill text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent-hover transition-colors flex items-center gap-2"
+                  </Button>
+                  <Button variant="primary"
                     onClick={handleStartRestore}
                   >
                     <UploadCloud size={14} /> Restore {localTotal}
-                  </button>
+                  </Button>
                 </div>
               </>
             )}
@@ -332,18 +338,16 @@ export default function ChangeServerModal() {
                   {activeRestore.folder_progress ? ` · ${activeRestore.folder_progress}` : ''}
                 </div>
                 <div className="flex justify-end gap-2 mt-4">
-                  <button
-                    className="text-sm font-medium text-mail-text border border-mail-border rounded-lg px-4 py-2 hover:bg-mail-surface-hover transition-colors"
+                  <Button variant="secondary" className="bg-transparent"
                     onClick={() => restoreManager.cancel()}
                   >
                     Cancel
-                  </button>
-                  <button
-                    className="bg-mail-accent-fill text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent-hover transition-colors flex items-center gap-2"
+                  </Button>
+                  <Button variant="primary"
                     onClick={handleMinimize}
                   >
                     <Minus size={14} /> Minimize
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -362,12 +366,11 @@ export default function ChangeServerModal() {
                   </span>
                 </div>
                 <div className="flex justify-end mt-4">
-                  <button
-                    className="bg-mail-accent-fill text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent-hover transition-colors"
+                  <Button variant="primary"
                     onClick={handleRestoreContinue}
                   >
                     Continue
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -399,17 +402,12 @@ export default function ChangeServerModal() {
               </ul>
             )}
             <div className="flex justify-end">
-              <button
-                className="bg-mail-accent-fill text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent-hover transition-colors"
-                onClick={handleClose}
-              >
+              <Button variant="primary" onClick={handleClose}>
                 Done
-              </button>
+              </Button>
             </div>
           </div>
         )}
-      </div>
-    </div>,
-    document.body
+    </Dialog>
   );
 }

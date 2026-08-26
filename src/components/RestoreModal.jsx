@@ -1,6 +1,8 @@
-import { useMemo } from 'react';
-import { createPortal } from 'react-dom';
-import { X, UploadCloud, Loader2, CheckCircle2 } from 'lucide-react';
+import { useCallback, useId, useMemo } from 'react';
+import { UploadCloud, Loader2, CheckCircle2 } from 'lucide-react';
+import { Dialog } from './ui/Dialog';
+import { Button } from './ui/Button';
+import { Z } from './ui/layers';
 import { useSettingsStore } from '../stores/settingsStore.js';
 import { restoreManager } from '../services/restoreManager.js';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
@@ -21,6 +23,10 @@ export default function RestoreModal() {
     [detected]
   );
 
+  const titleId = useId();
+  const close = useCallback(() => { clearActive(); clearDetected(); }, [clearActive, clearDetected]);
+  // A restore in flight has no cancel — Escape and the X are both withheld.
+
   if (!open) return null;
 
   const running = active && active.status === 'running';
@@ -30,20 +36,27 @@ export default function RestoreModal() {
     if (!detected) return;
     restoreManager.start(detected.account, detected.accountId, detected.folders.map((f) => f.mailbox));
   };
-  const onClose = () => { clearActive(); clearDetected(); };
+  const onClose = close;
 
-  return createPortal(
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50">
-      <div className="bg-mail-surface border border-mail-border w-[480px] max-w-[92vw] rounded-xl p-6 shadow-xl">
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      portal
+      // Restoring to a server is the reason the app is in front of you: it
+      // outranks whatever dialog started it.
+      z={Z.alert}
+      size="lg"
+      panelBg="bg-mail-surface"
+      // A restore in flight has no cancel — Escape, the backdrop and the X
+      // are all withheld.
+      dismissable={!running}
+      aria-labelledby={titleId}
+    >
         <div className="flex items-center justify-between mb-3">
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-mail-text">
+          <h2 id={titleId} className="flex items-center gap-2 text-lg font-semibold text-mail-text">
             <UploadCloud size={18} /> Restore emails to server
           </h2>
-          {!running && (
-            <button onClick={onClose} aria-label="Close" className="text-mail-text-muted hover:text-mail-text">
-              <X size={18} />
-            </button>
-          )}
         </div>
 
         {!active && detected && (
@@ -60,18 +73,12 @@ export default function RestoreModal() {
               ))}
             </ul>
             <div className="flex justify-end gap-2">
-              <button
-                className="text-sm font-medium text-mail-text border border-mail-border rounded-lg px-4 py-2 hover:bg-mail-surface-hover transition-colors"
-                onClick={() => dismissRestore(detected.accountId)}
-              >
+              <Button variant="secondary" onClick={() => dismissRestore(detected.accountId)}>
                 Not now
-              </button>
-              <button
-                className="bg-mail-accent-fill text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent-hover transition-colors"
-                onClick={onStart}
-              >
+              </Button>
+              <Button variant="primary" onClick={onStart}>
                 Restore {localTotal}
-              </button>
+              </Button>
             </div>
           </>
         )}
@@ -87,12 +94,9 @@ export default function RestoreModal() {
               {active.folder_progress ? ` · ${active.folder_progress}` : ''}
             </div>
             <div className="flex justify-end mt-4">
-              <button
-                className="text-sm font-medium text-mail-text border border-mail-border rounded-lg px-4 py-2 hover:bg-mail-surface-hover transition-colors"
-                onClick={() => restoreManager.cancel()}
-              >
+              <Button variant="secondary" onClick={() => restoreManager.cancel()}>
                 Cancel
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -106,17 +110,12 @@ export default function RestoreModal() {
               {active.uploaded_emails} uploaded · {active.skipped_emails} skipped · {active.failed_emails} failed
             </div>
             <div className="flex justify-end mt-4">
-              <button
-                className="bg-mail-accent-fill text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent-hover transition-colors"
-                onClick={onClose}
-              >
+              <Button variant="primary" onClick={onClose}>
                 Done
-              </button>
+              </Button>
             </div>
           </div>
         )}
-      </div>
-    </div>,
-    document.body
+    </Dialog>
   );
 }

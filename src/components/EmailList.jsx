@@ -1,6 +1,5 @@
 import React, { memo, useState, useCallback, useRef, useEffect, useMemo, useId } from 'react';
 import ReactDOM from 'react-dom';
-import { useDialogA11y } from '../hooks/useDialogA11y';
 import { displayText } from '../utils/bidiText';
 import { useMailStore } from '../stores/mailStore';
 import { useAccountStore } from '../stores/accountStore';
@@ -14,6 +13,9 @@ import { shouldPrefetch } from '../services/cachePressure';
 import { buildThreads, groupBySender, getSenderName, filterUnread, threadRowMembers } from '../utils/emailParser';
 import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
+import { Dialog } from './ui/Dialog';
+import { Button } from './ui/Button';
+import { Z } from './ui/layers';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -24,6 +26,7 @@ import {
   HardDrive,
   Cloud,
   CloudOff,
+  ServerOff,
   Paperclip,
   CheckSquare,
   Square,
@@ -64,14 +67,14 @@ const LEGEND_ENTRIES = [
   {
     id: 'legend-archived',
     glyph: <HardDrive size={12} className="text-mail-local" />,
-    text: 'Archived',
+    text: 'In your vault',
     label: 'Saved in your vault',
-    detail: 'A copy lives on this machine. Green also covers messages whose server copy has not been verified yet.',
+    detail: 'A copy is on your disk. Also shown when the server copy has not been checked yet — it is the calm answer, not proof the server still has it.',
   },
   {
     id: 'legend-local-only',
     glyph: <CloudOff size={12} className="text-mail-only-copy" />,
-    text: 'Local only (deleted from server)',
+    text: 'Only copy',
     label: 'Your only copy',
     detail: 'Confirmed gone from the server. Nothing else has it — back this up.',
   },
@@ -80,7 +83,7 @@ const LEGEND_ENTRIES = [
     glyph: <span className="w-[6px] h-[6px] rounded-full border bg-mail-local border-mail-local" />,
     text: 'On backup drive',
     label: 'On your backup drive',
-    detail: 'A filled dot means the external mirror has it too. A hollow dot means the drive is not connected and we cannot check.',
+    detail: 'Filled means your backup drive has it too. Hollow means the drive is not connected, so there is no answer either way.',
   },
 ];
 
@@ -201,6 +204,9 @@ function EmailListComponent() {
   const RowComponent = isCompact ? CompactEmailRow : EmailRow;
 
   const [showSearch, setShowSearch] = useState(false);
+  // Same signal the sidebar's ConnectionErrorCard reads, so the empty
+  // state and the account row can never disagree about reachability.
+  const connectionStatus = useMailStore(s => s.connectionStatus);
   const bulkModalOpen = useMailStore(s => s.bulkModalOpen);
   const openBulkModal = useMailStore(s => s.openBulkModal);
   const minimizeBulkModal = useMailStore(s => s.minimizeBulkModal);
@@ -243,7 +249,8 @@ function EmailListComponent() {
   // Lifted row menu state — only one menu can be active at a time
   const [activeMenuRowId, setActiveMenuRowId] = useState(null);
   // Pending delete confirmation lifted out of rows so the modal escapes the
-  // virtualizer's transform stacking context. { label, executor } | null
+  // virtualizer's transform stacking context.
+  // { executor, copy: { title, description, confirmLabel } } | null
   const [pendingDelete, setPendingDelete] = useState(null);
   // Lifted saving state — tracks which rows have active save operations
   const [savingRowIds, setSavingRowIds] = useState(() => new Set());
@@ -255,9 +262,9 @@ function EmailListComponent() {
   // ones each row used to receive as a freshly-minted closure or object.
   const openRowMenu = useCallback((id) => setActiveMenuRowId(id), []);
   const closeRowMenu = useCallback(() => setActiveMenuRowId(null), []);
-  const requestRowDelete = useCallback((executor, label) => {
+  const requestRowDelete = useCallback((executor, copy) => {
     setActiveMenuRowId(null);
-    setPendingDelete({ executor, label });
+    setPendingDelete({ executor, copy });
   }, []);
   const scrollContainerRef = useRef(null);
 
@@ -808,16 +815,15 @@ function EmailListComponent() {
       {/* Header */}
       <div data-tauri-drag-region data-testid="email-list-header" className="flex items-center justify-between px-4 py-3 border-b border-mail-border bg-mail-surface flex-shrink-0 min-h-[48px]">
         <div className="flex items-center gap-3">
-          <button
+          <Button variant="ghost" icon size="xs" className="hover:bg-mail-border"
             onClick={() => allSelected ? clearSelection() : openBulkModal()}
-            className="p-1 hover:bg-mail-border rounded transition-colors"
           >
             {allSelected ? (
               <CheckSquare size={18} className="text-mail-accent-text" />
             ) : (
               <Square size={18} className="text-mail-text-muted" />
             )}
-          </button>
+          </Button>
 
           {searchActive ? (
             <div className="flex items-center gap-2">
@@ -1014,14 +1020,28 @@ function EmailListComponent() {
             ) : viewMode === 'local' ? (
               <>
                 <HardDrive size={48} className="mb-4 opacity-50" />
-                <p>No locally archived emails</p>
-                <p className="text-sm mt-2">Archive emails from "Server" view to access them offline</p>
+                <p>Nothing in your vault from this folder</p>
+                <p className="text-sm mt-2">Switch to Server, then archive what you want to keep. A copy lands here on your disk.</p>
               </>
             ) : viewMode === 'server' ? (
               <>
-                <Cloud size={48} className="mb-4 opacity-50" />
-                <p>No emails on server</p>
-                <p className="text-sm mt-2">This folder is empty or server is unreachable</p>
+                {/* This used to read "This folder is empty or server is
+                    unreachable" — one line for two states the app can already
+                    tell apart, so neither answer was usable. connectionStatus
+                    is the same signal the sidebar's error card reads. */}
+                {connectionStatus === 'error' ? (
+                  <>
+                    <ServerOff size={48} className="mb-4 opacity-50" />
+                    <p>Can&rsquo;t reach the server</p>
+                    <p className="text-sm mt-2">This folder may not be empty — nothing was loaded. The account in the sidebar shows why, and retries from there.</p>
+                  </>
+                ) : (
+                  <>
+                    <Cloud size={48} className="mb-4 opacity-50" />
+                    <p>Nothing on the server in this folder</p>
+                    <p className="text-sm mt-2">Anything you already archived is still in your vault.</p>
+                  </>
+                )}
               </>
             ) : (
               <>
@@ -1360,63 +1380,44 @@ function EmailListComponent() {
 }
 
 function RowDeleteConfirmModal({ pending, onCancel, onConfirm }) {
-  const titleId = useId();
   const descId = useId();
-  // Escape closes this rather than reaching App's global shortcut, which would
-  // clear the very selection the dialog is asking about. Cancel takes first
-  // focus: nothing destructive is ever one stray Return away.
-  const panelRef = useDialogA11y(Boolean(pending), onCancel);
 
-  return ReactDOM.createPortal(
-    <AnimatePresence>
-      {pending && (
-        <motion.div
-          key="row-delete-confirm"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 backdrop-blur-sm"
-          onClick={onCancel}
-        >
-          <motion.div
-            ref={panelRef}
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby={titleId}
-            aria-describedby={descId}
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-mail-bg border border-mail-border rounded-xl shadow-2xl p-5 min-w-[320px] max-w-[420px] mx-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start gap-3 mb-4">
-              <AlertTriangle size={20} aria-hidden="true" className="text-mail-danger flex-shrink-0 mt-0.5" />
-              <div>
-                <h3 id={titleId} className="text-base font-semibold text-mail-text mb-1">Delete from server?</h3>
-                <p id={descId} className="text-sm text-mail-text-muted" dir="auto">{displayText(pending.label)}</p>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={onCancel}
-                data-autofocus
-                className="px-3 py-1.5 text-sm text-mail-text-muted hover:bg-mail-border rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={onConfirm}
-                className="px-3 py-1.5 text-sm font-medium bg-mail-danger text-white rounded-lg hover:bg-mail-danger/90 transition-colors flex items-center gap-1.5"
-              >
-                <Trash2 size={14} /> Delete
-              </button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>,
-    document.body
+  return (
+    <Dialog
+      open={Boolean(pending)}
+      onClose={onCancel}
+      role="alertdialog"
+      // Portal + the top layer: this is raised from inside a virtualized row,
+      // whose ancestor `transform` would otherwise be its containing block.
+      portal
+      z={Z.fatal}
+      size="sm"
+      aria-describedby={descId}
+      panelClassName="min-w-[320px] max-w-[420px]"
+      footer={
+        <div className="flex justify-end gap-2 w-full">
+          {/* Cancel takes first focus: nothing destructive is ever one stray
+              Return away. */}
+          <Button variant="ghost" size="sm" onClick={onCancel} data-autofocus>
+            Cancel
+          </Button>
+          <Button variant="danger" size="sm" onClick={onConfirm}>
+            <Trash2 size={14} /> {pending?.copy.confirmLabel}
+          </Button>
+        </div>
+      }
+    >
+      <div className="flex items-start gap-3">
+        <AlertTriangle size={20} aria-hidden="true" className="text-mail-danger flex-shrink-0 mt-0.5" />
+        <div>
+          {/* Both delete verbs open this one modal. The title used to be
+              hardcoded to "Delete from server?", so Delete everywhere
+              asked about an action it was not about to perform. */}
+          <h3 className="text-base font-semibold text-mail-text mb-1">{pending?.copy.title}</h3>
+          <p id={descId} className="text-sm text-mail-text-muted" dir="auto">{displayText(pending?.copy.description)}</p>
+        </div>
+      </div>
+    </Dialog>
   );
 }
 

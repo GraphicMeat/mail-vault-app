@@ -12,15 +12,23 @@ import { create } from 'zustand';
 
 vi.mock('lucide-react', () => {
   const icon = (name) => (props) => React.createElement('span', { 'data-icon': name, ...props });
-  return {
-    MailOpen: icon('MailOpen'), Mail: icon('Mail'), Trash2: icon('Trash2'),
-    Archive: icon('Archive'), ArchiveRestore: icon('ArchiveRestore'), X: icon('X'),
-    AlertTriangle: icon('AlertTriangle'), FolderSymlink: icon('FolderSymlink'), ShieldX: icon('ShieldX'),
-  };
+  // Every icon resolves. A hand-listed set breaks the moment a shared
+  // primitive (ui/Button pulls in Loader, ui/Dialog pulls in X) imports one
+  // more glyph — vitest then fails the whole file with "No export defined".
+  return new Proxy({}, {
+    get: (_t, name) => (typeof name === 'symbol' || name === 'then' ? undefined : icon(String(name))),
+    has: () => true,
+  });
 });
 
 vi.mock('framer-motion', () => ({
-  motion: new Proxy({}, { get: () => ({ children, ...props }) => React.createElement('div', props, children) }),
+  // forwardRef, like the real motion.div: ui/Dialog puts its focus-trap ref on
+  // the panel, and a plain function component swallows it — the trap and the
+  // Escape handler then never arm, silently.
+  motion: new Proxy({}, {
+    get: () => React.forwardRef(({ children, ...props }, ref) =>
+      React.createElement('div', { ...props, ref }, children)),
+  }),
   AnimatePresence: ({ children }) => children,
 }));
 
@@ -70,13 +78,32 @@ describe('SelectionActionBar delete confirmation', () => {
     expect(screen.getByTitle('Delete everywhere')).toBeTruthy();
   });
 
-  it('Delete shows server-only confirmation copy, no backup/computer mention', () => {
+  it('Delete shows server-only confirmation copy, no backup/vault-destroying mention', () => {
     render(<SelectionActionBar />);
     fireEvent.click(screen.getByTitle('Delete from server'));
 
-    const copy = screen.getByText(/Delete 2 emails from server\?/);
+    const copy = screen.getByText(/Delete 2 emails from the server\?/);
     expect(copy).toBeTruthy();
     expect(copy.textContent).not.toMatch(/backup/i);
+  });
+
+  // The fixture's two selected uids are not in archivedEmailIds, so the vault
+  // clause must be the permanent one. The bug this guards: the bar used to say
+  // "This cannot be undone" for every server delete, archived or not.
+  it('says a server delete is permanent only when the vault has no copy', () => {
+    render(<SelectionActionBar />);
+    fireEvent.click(screen.getByTitle('Delete from server'));
+    expect(screen.getByText(/No copy is in your vault, so this cannot be undone\./)).toBeTruthy();
+  });
+
+  it('promises the vault copy survives when every selected message is archived', () => {
+    useMailStoreMock.setState({ archivedEmailIds: new Set([1, 2]) });
+    render(<SelectionActionBar />);
+    fireEvent.click(screen.getByTitle('Delete from server'));
+
+    const copy = screen.getByText(/Delete 2 emails from the server\?/);
+    expect(copy.textContent).toMatch(/Your vault keeps the copies/);
+    expect(copy.textContent).not.toMatch(/cannot be undone/i);
   });
 
   it('Delete everywhere shows the everywhere confirmation copy', () => {
@@ -84,7 +111,7 @@ describe('SelectionActionBar delete confirmation', () => {
     fireEvent.click(screen.getByTitle('Delete everywhere'));
 
     const copy = screen.getByText(/No copy will be left anywhere/);
-    expect(copy.textContent).toMatch(/server, this computer, and your external backup/);
+    expect(copy.textContent).toMatch(/server, your vault, and your backup drive/);
   });
 
   // The reported defect, at the moment it matters: two ticked conversation
@@ -103,7 +130,7 @@ describe('SelectionActionBar delete confirmation', () => {
     render(<SelectionActionBar />);
     fireEvent.click(screen.getByTitle('Delete everywhere'));
 
-    const confirmButtons = screen.getAllByText('Delete');
+    const confirmButtons = screen.getAllByRole('button', { name: 'Delete everywhere' });
     fireEvent.click(confirmButtons[confirmButtons.length - 1]);
 
     expect(useMailStoreMock.getState().purgeSelectedEverywhere).toHaveBeenCalledTimes(1);
@@ -114,7 +141,7 @@ describe('SelectionActionBar delete confirmation', () => {
     render(<SelectionActionBar />);
     fireEvent.click(screen.getByTitle('Delete from server'));
 
-    const confirmButtons = screen.getAllByText('Delete');
+    const confirmButtons = screen.getAllByRole('button', { name: 'Delete from server' });
     fireEvent.click(confirmButtons[confirmButtons.length - 1]);
 
     expect(useMailStoreMock.getState().deleteSelectedFromServer).toHaveBeenCalledTimes(1);

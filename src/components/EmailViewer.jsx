@@ -1,3 +1,4 @@
+import { Button } from './ui/Button';
 import React, { memo, useState, useEffect, useRef, useMemo } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useSelectionStore } from '../stores/selectionStore';
@@ -670,20 +671,16 @@ function EmailViewerComponent({ onComposeReply }) {
                   : 'This email will be permanently deleted from the server.'}
               </p>
               <div className="flex justify-end gap-2">
-                <button
+                <Button variant="secondary" className="bg-mail-bg"
                   onClick={() => setConfirmDelete(false)}
-                  className="px-4 py-2 text-sm text-mail-text bg-mail-bg border border-mail-border
-                            rounded-lg hover:bg-mail-surface-hover transition-colors"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button variant="danger"
                   onClick={confirmDeleteEmail}
-                  className="px-4 py-2 text-sm text-white bg-mail-danger-fill rounded-lg
-                            hover:bg-mail-danger transition-colors"
                 >
                   Delete
-                </button>
+                </Button>
               </div>
             </motion.div>
           </motion.div>
@@ -716,20 +713,16 @@ function EmailViewerComponent({ onComposeReply }) {
                   : 'The cached copy will be removed. The email will still be available on the server.'}
               </p>
               <div className="flex justify-end gap-2">
-                <button
+                <Button variant="secondary" className="bg-mail-bg"
                   onClick={() => setConfirmUnarchive(false)}
-                  className="px-4 py-2 text-sm text-mail-text bg-mail-bg border border-mail-border
-                            rounded-lg hover:bg-mail-surface-hover transition-colors"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button variant="danger"
                   onClick={confirmRemoveLocal}
-                  className="px-4 py-2 text-sm text-white bg-mail-danger-fill rounded-lg
-                            hover:bg-mail-danger transition-colors"
                 >
                   {isLocalOnly ? 'Delete' : 'Unarchive'}
-                </button>
+                </Button>
               </div>
             </motion.div>
           </motion.div>

@@ -23,15 +23,13 @@ import { create } from 'zustand';
 
 vi.mock('lucide-react', () => {
   const icon = (name) => (props) => React.createElement('span', { 'data-icon': name, ...props });
-  return {
-    MailOpen: icon('MailOpen'),
-    Mail: icon('Mail'),
-    Archive: icon('Archive'),
-    ArchiveRestore: icon('ArchiveRestore'),
-    FolderSymlink: icon('FolderSymlink'),
-    Trash2: icon('Trash2'),
-    ShieldX: icon('ShieldX'),
-  };
+  // Every icon resolves. A hand-listed set breaks the moment a shared
+  // primitive (ui/Button pulls in Loader, ui/Dialog pulls in X) imports one
+  // more glyph — vitest then fails the whole file with "No export defined".
+  return new Proxy({}, {
+    get: (_t, name) => (typeof name === 'symbol' || name === 'then' ? undefined : icon(String(name))),
+    has: () => true,
+  });
 });
 
 // MoveToFolderDropdown pulls in its own store deps (mailboxes, search input,
@@ -209,8 +207,12 @@ describe('RowActionMenuItems', () => {
       render(<RowActionMenuItems emails={emails} actions={actions} onRequestDelete={onRequestDelete} onClose={vi.fn()} />);
 
       fireEvent.click(screen.getByText('Delete from server'));
-      const [executor, label] = onRequestDelete.mock.calls[0];
-      expect(label).toMatch(/^2 emails will be permanently deleted/);
+      // Second arg is now { title, description, confirmLabel } — the modal
+      // needs a title per verb, since both deletes share one dialog.
+      const [executor, copy] = onRequestDelete.mock.calls[0];
+      expect(copy.title).toBe('Delete from server?');
+      expect(copy.confirmLabel).toBe('Delete from server');
+      expect(copy.description).toMatch(/^These 2 emails leave the server\./);
       await executor();
 
       expect(actions.deleteEmailFromServer).toHaveBeenCalledTimes(2);
@@ -228,8 +230,9 @@ describe('RowActionMenuItems', () => {
       render(<RowActionMenuItems emails={emails} actions={makeActions()} onRequestDelete={onRequestDelete} onClose={vi.fn()} />);
 
       fireEvent.click(screen.getByText('Delete everywhere'));
-      const [executor, label] = onRequestDelete.mock.calls[0];
-      expect(label).toMatch(/^2 emails will be removed/);
+      const [executor, copy] = onRequestDelete.mock.calls[0];
+      expect(copy.title).toBe('Delete everywhere?');
+      expect(copy.description).toMatch(/^These 2 emails leave the server, your vault, and your backup drive\./);
       await executor();
 
       expect(useMailStoreMock.getState().setSelection).toHaveBeenCalledWith([1, 2]);
@@ -246,9 +249,9 @@ describe('RowActionMenuItems', () => {
 
       expect(onRequestDelete).toHaveBeenCalledTimes(1);
       expect(useMailStoreMock.getState().purgeSelectedEverywhere).not.toHaveBeenCalled();
-      const [executor, label] = onRequestDelete.mock.calls[0];
+      const [executor, copy] = onRequestDelete.mock.calls[0];
       expect(typeof executor).toBe('function');
-      expect(label).toMatch(/removed from the server, this computer, and your external backup/);
+      expect(copy.description).toMatch(/the server, your vault, and your backup drive/);
     });
 
     it('Delete from server also routes through onRequestDelete, not deleteEmailFromServer directly', () => {

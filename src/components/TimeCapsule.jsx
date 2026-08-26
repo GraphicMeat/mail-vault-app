@@ -1,3 +1,4 @@
+import { Button } from './ui/Button';
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useSnapshotStore } from '../stores/snapshotStore';
 import { useAccountStore } from '../stores/accountStore';
@@ -56,12 +57,11 @@ export function TimeCapsuleView({ accountId, onDetailChange, onUpgrade }) {
       {/* Sub-header for internal navigation */}
       {page !== 'list' && (
         <div className="flex items-center gap-2 px-6 py-2 border-b border-mail-border shrink-0">
-          <button
+          <Button variant="ghost" icon size="sm"
             onClick={page === 'viewer' ? store.closeViewer : store.closeSnapshot}
-            className="p-1.5 hover:bg-mail-surface-hover rounded-lg transition-colors"
           >
             <ChevronLeft size={18} className="text-mail-text-muted" />
-          </button>
+          </Button>
           <span className="text-sm font-medium text-mail-text truncate">
             {page === 'viewer'
               ? (store.viewerEmail?.subject || 'Email')
@@ -116,9 +116,9 @@ function PremiumGate({ onUpgrade }) {
           <p className="text-xs text-mail-text-muted mt-3">{priceBlurb}</p>
         )}
         {!IS_APPSTORE_BUILD && onUpgrade && (
-          <button onClick={onUpgrade} className="mt-4 px-4 py-1.5 text-xs font-semibold bg-mail-accent-fill text-white rounded-full hover:bg-mail-accent-hover transition-colors">
+          <Button variant="primary" size="sm" pill className="mt-4 text-xs" onClick={onUpgrade}>
             Upgrade
-          </button>
+          </Button>
         )}
     </div>
   );

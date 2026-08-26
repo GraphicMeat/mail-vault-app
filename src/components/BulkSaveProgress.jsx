@@ -1,3 +1,4 @@
+import { Button } from './ui/Button';
 import React, { useEffect } from 'react';
 import { useUiStore } from '../stores/uiStore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -111,20 +112,17 @@ function BulkSaveProgressInner({ progress, onDismiss, onCancel, mode = 'archive'
           </div>
 
           {isComplete ? (
-            <button
+            <Button variant="ghost" icon size="xs" className="hover:bg-mail-border"
               onClick={onDismiss}
-              className="p-1 hover:bg-mail-border rounded transition-colors"
             >
               <X size={14} className="text-mail-text-muted" />
-            </button>
+            </Button>
           ) : onCancel ? (
-            <button
+            <Button variant="ghost" size="xs" className="hover:bg-mail-border hover:text-mail-danger"
               onClick={onCancel}
-              className="px-2 py-1 text-xs text-mail-text-muted hover:text-mail-danger
-                         hover:bg-mail-border rounded transition-colors"
             >
               Cancel
-            </button>
+            </Button>
           ) : null}
         </div>
 

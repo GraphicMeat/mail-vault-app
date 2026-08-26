@@ -1,3 +1,4 @@
+import { Button } from '../ui/Button';
 import React, { useState, useEffect } from 'react';
 import { useMailStore } from '../../stores/mailStore';
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
@@ -20,9 +21,14 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
+import { ConfirmDialog } from '../ConfirmDialog';
 
 export function StorageSettings({ accounts, onUpgrade }) {
   const priceBlurb = usePremiumPriceBlurb();
+  // A native confirm() can only offer OK/Cancel, so the button on the most
+  // destructive action in the app could not name what it was about to erase.
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const {
     localStoragePath,
     setLocalStoragePath,
@@ -92,18 +98,18 @@ export function StorageSettings({ accounts, onUpgrade }) {
 
       const newPath = dirHandle.name;
 
+      // No confirm() here any more. It asked "Do you want to move all existing
+      // emails and settings to the new folder?" and then ran
+      // setLocalStoragePath(newPath) either way — the only thing the answer
+      // changed was whether a 500ms spinner appeared first. A question the app
+      // does not act on teaches people that these prompts do not matter.
       if (localStoragePath && localStoragePath !== newPath) {
-        const shouldMove = confirm(
-          'Do you want to move all existing emails and settings to the new folder?'
-        );
-        if (shouldMove) {
-          setMovingStorage(true);
-          setTimeout(() => {
-            setLocalStoragePath(newPath);
-            setMovingStorage(false);
-          }, 500);
-          return;
-        }
+        setMovingStorage(true);
+        setTimeout(() => {
+          setLocalStoragePath(newPath);
+          setMovingStorage(false);
+        }, 500);
+        return;
       }
 
       setLocalStoragePath(newPath);
@@ -131,8 +137,8 @@ export function StorageSettings({ accounts, onUpgrade }) {
         </div>
 
         <p className="text-sm text-mail-text-muted">
-          All archived emails, attachments, and settings are stored locally on your device.
-          This data persists across sessions and is private to your device.
+          Your vault, its attachments, and your settings live on this disk as ordinary files.
+          Nothing is uploaded, and they stay put between sessions.
         </p>
       </div>
 
@@ -236,14 +242,13 @@ export function StorageSettings({ accounts, onUpgrade }) {
                 </button>
               ) : (
                 <div className="flex items-center gap-2 shrink-0">
-                  <button
+                  <Button variant="secondary" size="sm" className="bg-transparent text-mail-text-muted hover:bg-mail-surface"
                     onClick={() => setPurgeOrphansConfirm(false)}
                     disabled={purgingOrphans}
-                    className="px-3 py-1.5 text-sm font-medium rounded-lg border border-mail-border text-mail-text-muted hover:bg-mail-surface transition-colors disabled:opacity-50"
                   >
                     Cancel
-                  </button>
-                  <button
+                  </Button>
+                  <Button variant="danger" size="sm"
                     onClick={async () => {
                       if (purgingOrphans) return;
                       setPurgingOrphans(true);
@@ -261,11 +266,10 @@ export function StorageSettings({ accounts, onUpgrade }) {
                       }
                     }}
                     disabled={purgingOrphans}
-                    className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg bg-mail-danger-fill text-white hover:bg-mail-danger transition-colors disabled:opacity-50"
                   >
                     {purgingOrphans ? <Loader size={14} className="animate-spin" /> : <Trash2 size={14} />}
                     Delete permanently
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
@@ -290,14 +294,13 @@ export function StorageSettings({ accounts, onUpgrade }) {
               </button>
             ) : (
               <div className="flex items-center gap-2">
-                <button
+                <Button variant="secondary" size="sm" className="bg-transparent text-mail-text-muted hover:bg-mail-surface"
                   onClick={() => setClearCacheConfirm(false)}
                   disabled={clearingCache}
-                  className="px-3 py-1.5 text-sm font-medium rounded-lg border border-mail-border text-mail-text-muted hover:bg-mail-surface transition-colors disabled:opacity-50"
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button variant="danger" size="sm"
                   onClick={async () => {
                     if (clearingCache) return;
                     setClearingCache(true);
@@ -340,7 +343,6 @@ export function StorageSettings({ accounts, onUpgrade }) {
                     }
                   }}
                   disabled={clearingCache}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg bg-mail-danger-fill text-white hover:bg-mail-danger transition-colors disabled:opacity-50"
                 >
                   {clearingCache ? (
                     <Loader size={14} className="animate-spin" />
@@ -348,7 +350,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                     <Trash2 size={14} />
                   )}
                   {clearingCache ? 'Clearing...' : 'Confirm'}
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -421,9 +423,9 @@ export function StorageSettings({ accounts, onUpgrade }) {
                   )}
                 </div>
                 {!IS_APPSTORE_BUILD && onUpgrade && (
-                  <button onClick={onUpgrade} className="px-4 py-1.5 text-xs font-semibold bg-mail-accent-fill text-white rounded-full hover:bg-mail-accent-hover transition-colors">
+                  <Button variant="primary" size="sm" pill className="text-xs font-semibold" onClick={onUpgrade}>
                     Upgrade
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
@@ -713,7 +715,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
           </h4>
 
           <p className="text-sm text-mail-text-muted mb-3">
-            Optionally select a folder on your device to sync your emails.
+            Choose where your vault lives. Any folder on this computer or an attached drive works.
           </p>
           <div className="flex gap-2">
             <div className="flex-1 px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
@@ -762,32 +764,41 @@ export function StorageSettings({ accounts, onUpgrade }) {
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">
-          Clear all locally archived emails and settings. This action cannot be undone.
+          Empties your vault on this computer and forgets every account and setting.
+          Mail still on the server is untouched; anything the server no longer has is gone for good.
         </p>
-        <button
-          onClick={async () => {
-            if (confirm('Are you sure? This will delete all locally archived emails and settings. This action cannot be undone.')) {
-              try {
-                const db = await import('../../services/db');
-                // Delete each account's Maildir and data
-                const accts = await db.getAccountsWithoutPasswords();
-                for (const acct of accts) {
-                  await db.deleteAccount(acct.id);
-                }
-              } catch (e) {
-                console.error('Failed to clear Maildir data:', e);
-              }
-              try { localStorage.clear(); } catch { /* sandbox may block */ }
-              window.location.reload();
-            }
-          }}
-          className="px-4 py-2 bg-mail-danger/10 hover:bg-mail-danger/20
-                    text-mail-danger rounded-lg transition-colors flex items-center gap-2"
+        <Button variant="dangerTint"
+          onClick={() => setShowClearConfirm(true)}
         >
           <Trash2 size={16} />
-          Clear All Data
-        </button>
+          Empty the vault
+        </Button>
       </div>
+
+      <ConfirmDialog
+        isOpen={showClearConfirm}
+        onClose={() => !clearing && setShowClearConfirm(false)}
+        title="Empty your vault on this computer?"
+        description="Every email in your vault, every account, and every setting is deleted from this computer. Mail still on the server can be downloaded again; anything the server no longer has has no other copy. This cannot be undone."
+        confirmLabel="Empty the vault"
+        destructive
+        loading={clearing}
+        onConfirm={async () => {
+          setClearing(true);
+          try {
+            const db = await import('../../services/db');
+            // Delete each account's Maildir and data
+            const accts = await db.getAccountsWithoutPasswords();
+            for (const acct of accts) {
+              await db.deleteAccount(acct.id);
+            }
+          } catch (e) {
+            console.error('Failed to clear Maildir data:', e);
+          }
+          try { localStorage.clear(); } catch { /* sandbox may block */ }
+          window.location.reload();
+        }}
+      />
 
     </div>
   );

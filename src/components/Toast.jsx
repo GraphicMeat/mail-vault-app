@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { ToastShell } from './ui/ToastShell';
+import { Button } from './ui/Button';
 import { AlertCircle, X, CheckCircle, Info, AlertTriangle } from 'lucide-react';
 
 export function Toast({ message, type = 'error', duration = 5000, onClose }) {
@@ -28,21 +29,24 @@ export function Toast({ message, type = 'error', duration = 5000, onClose }) {
   const colorClass = colors[type] || colors.error;
   
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 50, x: '-50%' }}
-      animate={{ opacity: 1, y: 0, x: '-50%' }}
-      exit={{ opacity: 0, y: 50, x: '-50%' }}
-      className={`fixed bottom-6 left-1/2 flex items-center gap-3 px-4 py-3 
-                 border rounded-xl shadow-lg backdrop-blur-sm ${colorClass}`}
+    <ToastShell
+      position="bottom-center"
+      role={type === 'error' ? 'alert' : 'status'}
+      bare
+      className={`flex items-center gap-3 px-4 py-3 border rounded-xl ${colorClass}`}
     >
       <Icon size={18} />
       <span className="text-sm font-medium max-w-md">{message}</span>
-      <button
+      <Button
+        variant="ghost"
+        icon
+        size="xs"
         onClick={onClose}
-        className="p-1 hover:bg-white/10 rounded transition-colors ml-2"
+        aria-label="Dismiss"
+        className="hover:bg-white/10 ml-2"
       >
         <X size={14} />
-      </button>
-    </motion.div>
+      </Button>
+    </ToastShell>
   );
 }

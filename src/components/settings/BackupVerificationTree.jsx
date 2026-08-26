@@ -1,3 +1,4 @@
+import { Button } from '../ui/Button';
 import React, { useState } from 'react';
 import { mailboxLabel, decodeImapUtf7 } from '../../utils/imapUtf7';
 import {
@@ -69,7 +70,7 @@ export default function BackupVerificationTree({ data, onHide }) {
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold text-mail-text">Backup Verification</span>
-        <button onClick={onHide} className="text-xs text-mail-text-muted hover:text-mail-text">Hide</button>
+        <Button variant="ghost" size="xs" className="p-0 text-xs" onClick={onHide}>Hide</Button>
       </div>
 
       {/* Summary chips */}

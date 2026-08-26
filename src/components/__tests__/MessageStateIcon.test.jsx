@@ -6,9 +6,13 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 
 vi.mock('lucide-react', () => {
   const icon = (name) => (props) => React.createElement('span', { 'data-icon': name, ...props });
-  // Allowlist: every glyph the component can render must be listed, or vitest
-  // throws "No <name> export is defined on the lucide-react mock" at render.
-  return { Cloud: icon('Cloud'), CloudOff: icon('CloudOff'), HardDrive: icon('HardDrive') };
+  // Every icon resolves. A hand-listed set breaks the moment a shared
+  // primitive (ui/Button pulls in Loader, ui/Dialog pulls in X) imports one
+  // more glyph — vitest then fails the whole file with "No export defined".
+  return new Proxy({}, {
+    get: (_t, name) => (typeof name === 'symbol' || name === 'then' ? undefined : icon(String(name))),
+    has: () => true,
+  });
 });
 
 // Minimal zustand-like mock — mirrors the pattern EmailList.test.js uses for

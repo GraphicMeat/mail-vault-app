@@ -7,11 +7,13 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 // Mock lucide-react icons
 vi.mock('lucide-react', () => {
   const icon = (name) => (props) => React.createElement('span', { 'data-icon': name, ...props });
-  return {
-    AlertTriangle: icon('AlertTriangle'),
-    ExternalLink: icon('ExternalLink'),
-    X: icon('X'),
-  };
+  // Every icon resolves. A hand-listed set breaks the moment a shared
+  // primitive (ui/Button pulls in Loader, ui/Dialog pulls in X) imports one
+  // more glyph — vitest then fails the whole file with "No export defined".
+  return new Proxy({}, {
+    get: (_t, name) => (typeof name === 'symbol' || name === 'then' ? undefined : icon(String(name))),
+    has: () => true,
+  });
 });
 
 import { LinkSafetyModal } from '../LinkSafetyModal';
@@ -54,7 +56,9 @@ describe('LinkSafetyModal', () => {
     render(
       <LinkSafetyModal alert={mockAlert} onCancel={onCancel} onOpenAnyway={vi.fn()} />
     );
-    fireEvent.keyDown(window, { key: 'Escape' });
+    // See the note in useDialogA11y: Escape is handled on `document` in the
+    // capture phase, which a window-dispatched event never reaches.
+    fireEvent.keyDown(document, { key: 'Escape' });
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 

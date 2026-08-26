@@ -1,4 +1,5 @@
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
+import { ToastShell } from './ui/ToastShell';
 import { HardDrive, Loader2 } from 'lucide-react';
 import { useBackupStore } from '../stores/backupStore.js';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
@@ -14,14 +15,7 @@ export function BackupToast({ showSettings, onOpenBackup }) {
 
   return (
     <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 20 }}
-        transition={{ duration: 0.2 }}
-        className="fixed bottom-6 left-6 z-[60] bg-mail-surface border border-mail-border rounded-xl shadow-lg p-2 w-72 cursor-pointer"
-        onClick={onOpenBackup}
-      >
+      <ToastShell position="bottom-left" className="w-72 cursor-pointer" onClick={onOpenBackup}>
         <div className="flex items-center gap-2">
           <HardDrive size={14} className="text-mail-accent-text flex-shrink-0" />
           <div className="flex-1 min-w-0">
@@ -43,7 +37,7 @@ export function BackupToast({ showSettings, onOpenBackup }) {
             <div className="h-1 rounded-full bg-mail-accent transition-all" style={{ width: `${percent}%` }} />
           </div>
         )}
-      </motion.div>
+      </ToastShell>
     </AnimatePresence>
   );
 }

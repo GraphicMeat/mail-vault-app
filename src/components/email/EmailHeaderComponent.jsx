@@ -64,7 +64,7 @@ export function AuthDetailPopover({ email, onClose, anchorRect }) {
 
   const popover = (
     <div ref={popoverRef}
-         className={`${position ? 'fixed' : 'absolute top-full left-0 mt-1'} z-50 bg-mail-surface border border-mail-border rounded-lg shadow-lg p-3 min-w-[240px] max-w-[320px]`}
+         className={`${position ? 'fixed' : 'absolute top-full left-0 mt-1'} z-50 bg-mail-surface border border-mail-border rounded-lg p-3 min-w-[240px] max-w-[320px]`}
          style={position || undefined}
          onClick={(e) => e.stopPropagation()}>
       <div className="text-xs font-semibold text-mail-text mb-2">Sender Details</div>

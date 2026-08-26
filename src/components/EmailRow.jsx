@@ -1,3 +1,4 @@
+import { Button } from './ui/Button';
 import React from 'react';
 import { displayText } from '../utils/bidiText';
 import { getAccountColor } from '../stores/settingsStore';
@@ -114,10 +115,9 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
 
       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible bg-mail-surface-hover rounded-md px-1">
         {!email.isArchived && (
-          <button
+          <Button variant="ghost" icon size="sm" className="press hover:bg-mail-border"
             onClick={handleSave}
             disabled={isSaving}
-            className="press p-1.5 hover:bg-mail-border rounded transition-colors"
             title="Archive"
           >
             {isSaving ? (
@@ -125,7 +125,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
             ) : (
               <Archive size={14} className="text-mail-text-muted hover:text-mail-local" />
             )}
-          </button>
+          </Button>
         )}
 
         <RowActionMenu open={menuOpen} onOpen={handleOpenMenu} onClose={onCloseMenu}>
@@ -222,11 +222,10 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
       {/* Hover actions */}
       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible bg-mail-surface-hover rounded-md px-1">
         {!email.isArchived && (
-          <button onClick={handleSave} disabled={isSaving}
-            className="press p-1 hover:bg-mail-border rounded transition-colors" title="Archive">
+          <Button variant="ghost" icon size="xs" className="press hover:bg-mail-border" onClick={handleSave} disabled={isSaving} title="Archive">
             {isSaving ? <RefreshCw size={13} className="animate-spin text-mail-accent-text" />
               : <Archive size={13} className="text-mail-text-muted hover:text-mail-local" />}
-          </button>
+          </Button>
         )}
         <RowActionMenu open={menuOpen} onOpen={handleOpenMenu} onClose={onCloseMenu} size={13}>
           <RowActionMenuItems emails={[email]} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} />

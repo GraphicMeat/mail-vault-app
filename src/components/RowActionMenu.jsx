@@ -1,12 +1,14 @@
 import React, { useRef, useState, useLayoutEffect } from 'react';
-import ReactDOM from 'react-dom';
-import { motion, AnimatePresence } from 'framer-motion';
 import { MoreHorizontal } from 'lucide-react';
+import { Popover } from './ui/Popover';
+import { Button } from './ui/Button';
 
 /**
  * Portal-based action menu for email/thread rows.
- * Renders the dropdown at the document body level to escape virtualizer
- * stacking contexts and scroll container overflow clipping.
+ *
+ * The panel, the portal and the outside-click all come from `ui/Popover`;
+ * what stays here is the anchor sum — this menu hangs from the bottom-right
+ * of its own button, which no other popover in the app does.
  */
 export function RowActionMenu({ open, onOpen, onClose, size = 14, children }) {
   const btnRef = useRef(null);
@@ -24,43 +26,22 @@ export function RowActionMenu({ open, onOpen, onClose, size = 14, children }) {
 
   return (
     <>
-      <button
+      <Button
         ref={btnRef}
+        variant="ghost"
+        icon
+        size="sm"
+        aria-label="Row actions"
+        aria-haspopup="menu"
+        aria-expanded={open}
         onClick={(e) => { e.stopPropagation(); open ? onClose() : onOpen(); }}
-        className="p-1.5 hover:bg-mail-border rounded transition-colors"
       >
-        <MoreHorizontal size={size} className="text-mail-text-muted" />
-      </button>
+        <MoreHorizontal size={size} />
+      </Button>
 
-      {ReactDOM.createPortal(
-        <AnimatePresence>
-          {open && (
-            <>
-              <div
-                className="fixed inset-0"
-                style={{ zIndex: 9998 }}
-                onClick={(e) => { e.stopPropagation(); onClose(); }}
-              />
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-mail-bg border border-mail-border rounded-lg shadow-lg py-1 min-w-[160px]"
-                style={{
-                  position: 'fixed',
-                  top: pos.top,
-                  right: pos.right,
-                  zIndex: 9999,
-                }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                {children}
-              </motion.div>
-            </>
-          )}
-        </AnimatePresence>,
-        document.body
-      )}
+      <Popover open={open} onClose={onClose} role="menu" style={{ top: pos.top, right: pos.right }}>
+        {children}
+      </Popover>
     </>
   );
 }

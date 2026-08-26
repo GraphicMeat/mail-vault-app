@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Dialog } from './ui/Dialog';
+import { Button } from './ui/Button';
 import { useAccountStore } from '../stores/accountStore';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { formatDateTime } from '../utils/dateFormat';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { X, Send, Paperclip, Loader, Minimize2, FileText, Trash2, ChevronDown, BookTemplate, ChevronRight } from 'lucide-react';
 import * as api from '../services/api';
 import { ensureFreshToken } from '../services/authUtils';
@@ -104,13 +106,12 @@ function AttachmentPreview({ attachment, onRemove }) {
       <FileText size={16} className="text-mail-accent-text" />
       <span className="text-sm text-mail-text truncate flex-1">{attachment.filename}</span>
       <span className="text-xs text-mail-text-muted">{formatSize(attachment.size)}</span>
-      <button
+      <Button variant="ghost" icon size="xs" className="hover:bg-mail-border"
         onClick={onRemove}
         title="Remove attachment"
-        className="p-1 hover:bg-mail-border rounded transition-colors"
       >
         <X size={14} className="text-mail-text-muted" />
-      </button>
+      </Button>
     </div>
   );
 }
@@ -1099,21 +1100,19 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           <h2 className="font-semibold text-mail-text">{getTitle()}</h2>
           <div className="flex items-center gap-1">
             {onMinimize && (
-              <button
+              <Button variant="ghost" icon size="sm" className="hover:bg-mail-border"
                 onClick={handleMinimize}
                 title="Minimize"
-                className="p-1.5 hover:bg-mail-border rounded transition-colors"
               >
                 <Minimize2 size={16} className="text-mail-text-muted" />
-              </button>
+              </Button>
             )}
-            <button
+            <Button variant="ghost" icon size="sm" className="hover:bg-mail-border"
               onClick={confirmClose}
               title="Close"
-              className="p-1.5 hover:bg-mail-border rounded transition-colors"
             >
               <X size={16} className="text-mail-text-muted" />
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -1341,27 +1340,25 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                 multiple
                 className="hidden"
               />
-              <button
+              <Button variant="ghost" icon size="md" className="hover:bg-mail-border"
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="p-2 hover:bg-mail-border rounded-lg transition-colors"
                 title="Attach files"
               >
                 <Paperclip size={18} className="text-mail-text-muted" />
-              </button>
+              </Button>
               <div className="relative" ref={templatesRef}>
-                <button
+                <Button variant="ghost" icon size="md" className="hover:bg-mail-border"
                   type="button"
                   data-testid="compose-templates-btn"
                   onClick={() => { setShowTemplates(v => !v); setSavingTemplate(false); }}
-                  className="p-2 hover:bg-mail-border rounded-lg transition-colors"
                   title="Templates"
                 >
                   <BookTemplate size={18} className="text-mail-text-muted" />
-                </button>
+                </Button>
                 {showTemplates && (
                   <div className="absolute bottom-full left-0 mb-1 w-64 bg-mail-surface border border-mail-border
-                                  rounded-lg shadow-xl z-50 overflow-hidden">
+                                  rounded-lg z-50 overflow-hidden">
                     {emailTemplates.length > 0 && (
                       <div className="max-h-48 overflow-y-auto">
                         {emailTemplates.map(t => (
@@ -1476,48 +1473,27 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         </form>
       </motion.div>
 
-      {/* Styled discard confirmation dialog */}
-      <AnimatePresence>
-        {showDiscardDialog && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]"
-            onClick={() => setShowDiscardDialog(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              data-testid="compose-discard-dialog"
-              className="bg-mail-surface border border-mail-border rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h3 className="text-base font-semibold text-mail-text mb-2">Discard message?</h3>
-              <p className="text-sm text-mail-text-muted mb-5">
-                You have unsaved changes. This message will be permanently discarded.
-              </p>
-              <div className="flex justify-end gap-2">
-                <button
-                  onClick={() => setShowDiscardDialog(false)}
-                  className="px-4 py-2 text-sm text-mail-text hover:bg-mail-surface-hover
-                            rounded-lg transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => { setShowDiscardDialog(false); closeDiscarding(); }}
-                  className="px-4 py-2 text-sm bg-mail-danger-fill hover:bg-mail-danger text-white
-                            rounded-lg transition-colors font-medium"
-                >
-                  Discard
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Discard confirmation. Above the compose window it belongs to. */}
+      <Dialog
+        open={showDiscardDialog}
+        onClose={() => setShowDiscardDialog(false)}
+        role="alertdialog"
+        size="sm"
+        panelBg="bg-mail-surface"
+        data-testid="compose-discard-dialog"
+        title="Discard message?"
+        description="You have unsaved changes. This message will be permanently discarded."
+        footer={
+          <div className="flex justify-end gap-2 w-full">
+            <Button variant="ghost" onClick={() => setShowDiscardDialog(false)} data-autofocus>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={() => { setShowDiscardDialog(false); closeDiscarding(); }}>
+              Discard
+            </Button>
+          </div>
+        }
+      />
     </motion.div>
   );
 }

@@ -1,3 +1,4 @@
+import { Button } from './ui/Button';
 import React, { useState, useEffect, useCallback } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import { useAccountStore } from '../stores/accountStore';
@@ -89,12 +90,11 @@ export function TransferLimitBanner({ onOpenDataUsage }) {
           {w.email} has used {Math.round(w.pct * 100)}% of its daily {w.direction} limit
         </p>
       </div>
-      <button
+      <Button variant="ghost" size="sm" className="bg-mail-warning/20 text-mail-warning hover:bg-mail-warning/30 font-medium text-xs whitespace-nowrap"
         onClick={() => onOpenDataUsage?.(w.accountId)}
-        className="text-xs font-medium px-3 py-1.5 rounded-lg bg-mail-warning/20 text-mail-warning hover:bg-mail-warning/30 transition-colors whitespace-nowrap"
       >
         View
-      </button>
+      </Button>
       <button
         onClick={() => dismiss(w.accountId)}
         className="p-1 hover:bg-mail-warning/20 rounded transition-colors flex-shrink-0"

@@ -1,3 +1,4 @@
+import { Button } from '../ui/Button';
 import React from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ToggleSwitch } from './ToggleSwitch';
@@ -318,14 +319,12 @@ export function BehaviorSettings() {
                 </div>
               </div>
             </div>
-            <button
+            <Button variant="ghost" size="sm" className="hover:bg-mail-border"
               onClick={clearSearchHistory}
               disabled={searchHistory.length === 0}
-              className="px-3 py-1.5 text-sm text-mail-text-muted hover:text-mail-text
-                        hover:bg-mail-border rounded-lg transition-colors disabled:opacity-50"
             >
               Clear
-            </button>
+            </Button>
           </div>
 
           {/* Filter usage history */}
@@ -339,14 +338,12 @@ export function BehaviorSettings() {
                 </div>
               </div>
             </div>
-            <button
+            <Button variant="ghost" size="sm" className="hover:bg-mail-border"
               onClick={clearFilterHistory}
               disabled={filterUsageHistory.length === 0}
-              className="px-3 py-1.5 text-sm text-mail-text-muted hover:text-mail-text
-                        hover:bg-mail-border rounded-lg transition-colors disabled:opacity-50"
             >
               Clear
-            </button>
+            </Button>
           </div>
         </div>
       </div>

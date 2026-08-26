@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, Loader, Check, AlertTriangle, Send } from 'lucide-react';
+import { Check, AlertTriangle, Send } from 'lucide-react';
+import { Dialog } from '../ui/Dialog';
+import { Button } from '../ui/Button';
 import * as api from '../../services/api';
 import { ensureFreshToken } from '../../services/authUtils';
 
@@ -49,41 +50,35 @@ export function SendAsVerifyModal({ isOpen, account, sendAsAddress, displayName,
   };
 
   return (
-    <AnimatePresence>
-      <div
-        className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-        onClick={onClose}
-        data-testid="send-as-verify-modal"
-      >
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        />
-
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.95 }}
-          className="relative max-w-md w-full bg-mail-bg border border-mail-border rounded-2xl shadow-2xl p-6"
-          onClick={e => e.stopPropagation()}
-        >
-          <button
-            onClick={onClose}
-            className="absolute top-4 right-4 p-1 rounded-lg hover:bg-mail-surface-hover transition-colors"
-            title="Close"
+    <Dialog
+      open={isOpen}
+      onClose={onClose}
+      data-testid="send-as-verify-modal"
+      title="Verify send-as address"
+      description={
+        <>
+          Sends one test message from <span className="font-mono text-mail-text">{sendAsAddress}</span>{' '}
+          so you can see whether your server accepts it. Signed in as{' '}
+          <span className="font-mono">{account?.email}</span>.
+        </>
+      }
+      footer={
+        <div className="flex justify-end gap-2 w-full">
+          <Button variant="ghost" onClick={onClose}>Close</Button>
+          <Button
+            variant="primary"
+            onClick={runVerify}
+            disabled={!validRecipient}
+            loading={status === 'sending'}
+            data-testid="send-as-verify-send"
           >
-            <X size={18} className="text-mail-text-muted" />
-          </button>
-
-          <h3 className="text-lg font-semibold text-mail-text mb-1">Verify send-as address</h3>
-          <p className="text-sm text-mail-text-muted mb-4">
-            Sends one test message from <span className="font-mono text-mail-text">{sendAsAddress}</span>{' '}
-            so you can see whether your server accepts it. Signed in as{' '}
-            <span className="font-mono">{account?.email}</span>.
-          </p>
-
+            {status !== 'sending' && <Send size={14} />}
+            {status === 'sending' ? 'Sending…' : 'Send test'}
+          </Button>
+        </div>
+      }
+    >
+      <div>
           <label className="block text-sm font-medium text-mail-text mb-2">Send test to</label>
           <input
             type="email"
@@ -110,26 +105,7 @@ export function SendAsVerifyModal({ isOpen, account, sendAsAddress, displayName,
             </div>
           )}
 
-          <div className="flex justify-end gap-2 mt-5">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 rounded-lg text-sm text-mail-text-muted hover:bg-mail-surface-hover transition-colors"
-            >
-              Close
-            </button>
-            <button
-              onClick={runVerify}
-              disabled={!validRecipient || status === 'sending'}
-              data-testid="send-as-verify-send"
-              className="px-4 py-2 rounded-lg text-sm bg-mail-accent-fill hover:bg-mail-accent/90 text-white
-                        transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {status === 'sending' ? <Loader size={14} className="animate-spin" /> : <Send size={14} />}
-              {status === 'sending' ? 'Sending…' : 'Send test'}
-            </button>
-          </div>
-        </motion.div>
       </div>
-    </AnimatePresence>
+    </Dialog>
   );
 }

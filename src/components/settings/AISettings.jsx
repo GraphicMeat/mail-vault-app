@@ -1,3 +1,4 @@
+import { Button } from '../ui/Button';
 import React, { useEffect, useState } from 'react';
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { useLearningStore } from '../../stores/learningStore';
@@ -130,18 +131,16 @@ export function AISettings() {
             </div>
           </div>
           <div className="flex gap-1.5">
-            <button
+            <Button variant="secondary" size="xs" className="bg-transparent text-[11px] px-2.5"
               onClick={handleExportRules}
-              className="flex items-center gap-1 px-2.5 py-1 text-[11px] rounded-lg border border-mail-border hover:bg-mail-surface-hover transition-colors"
             >
               <FileDown size={12} /> Export
-            </button>
-            <button
+            </Button>
+            <Button variant="secondary" size="xs" className="bg-transparent text-[11px] px-2.5"
               onClick={handleImportRules}
-              className="flex items-center gap-1 px-2.5 py-1 text-[11px] rounded-lg border border-mail-border hover:bg-mail-surface-hover transition-colors"
             >
               <Upload size={12} /> Import
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -196,12 +195,11 @@ export function AISettings() {
                       <span className="text-[10px] px-1 py-0.5 rounded bg-mail-surface-hover text-mail-text-muted">imported</span>
                     )}
                   </div>
-                  <button
+                  <Button variant="ghost" icon size="xs" className="hover:bg-mail-danger/20 hover:text-mail-danger"
                     onClick={(e) => { e.stopPropagation(); deleteRule(activeAccountId, rule.id); }}
-                    className="p-1 rounded hover:bg-mail-danger/20 text-mail-text-muted hover:text-mail-danger transition-colors"
                   >
                     <Trash2 size={12} />
-                  </button>
+                  </Button>
                 </div>
                 {editingRuleId === rule.id && (
                   <div className="px-3 pb-3 pt-1 border-t border-mail-border space-y-2">
@@ -289,12 +287,11 @@ export function AISettings() {
             customCategories.map(cat => (
               <div key={cat} className="flex items-center justify-between p-2 rounded-lg border border-mail-border">
                 <span className="text-sm text-mail-text">{cat}</span>
-                <button
+                <Button variant="ghost" icon size="xs" className="hover:bg-mail-danger/20 hover:text-mail-danger"
                   onClick={() => removeCustomCategory(cat)}
-                  className="p-1 rounded hover:bg-mail-danger/20 text-mail-text-muted hover:text-mail-danger transition-colors"
                 >
                   <Trash2 size={14} />
-                </button>
+                </Button>
               </div>
             ))
           )}

@@ -43,14 +43,13 @@ vi.mock('framer-motion', () => ({
 // Mock lucide-react icons
 vi.mock('lucide-react', () => {
   const icon = (name) => (props) => React.createElement('span', { 'data-icon': name, ...props });
-  return {
-    RefreshCw: icon('RefreshCw'), HardDrive: icon('HardDrive'), Cloud: icon('Cloud'), CloudOff: icon('CloudOff'),
-    Paperclip: icon('Paperclip'), MoreHorizontal: icon('MoreHorizontal'), Trash2: icon('Trash2'),
-    CheckSquare: icon('CheckSquare'), Square: icon('Square'), Archive: icon('Archive'),
-    X: icon('X'), Layers: icon('Layers'), Search: icon('Search'),
-    MessageSquare: icon('MessageSquare'), Users: icon('Users'), Mail: icon('Mail'),
-    AlertTriangle: icon('AlertTriangle'),
-  };
+  // Every icon resolves. A hand-listed set breaks the moment a shared
+  // primitive (ui/Button pulls in Loader, ui/Dialog pulls in X) imports one
+  // more glyph — vitest then fails the whole file with "No export defined".
+  return new Proxy({}, {
+    get: (_t, name) => (typeof name === 'symbol' || name === 'then' ? undefined : icon(String(name))),
+    has: () => true,
+  });
 });
 
 // Mock child components

@@ -1,7 +1,8 @@
-import React, { useEffect } from 'react';
-import { motion } from 'framer-motion';
+import React, { useId } from 'react';
 import { X, Keyboard } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
+import { Dialog } from './ui/Dialog';
+import { Button } from './ui/Button';
 
 const ACTION_LABELS = {
   nextEmail: 'Next email',
@@ -99,46 +100,27 @@ function ShortcutRow({ action, keybinding }) {
 export function ShortcutsModal({ onClose }) {
   const keyboardShortcuts = useSettingsStore(s => s.keyboardShortcuts);
 
-  // Close on Escape
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown, true);
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [onClose]);
+  const titleId = useId();
 
   return (
-    <div data-testid="shortcuts-modal" className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="absolute inset-0 bg-black/50"
-        onClick={onClose}
-      />
-
-      {/* Modal */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        className="relative bg-mail-bg border border-mail-border rounded-xl shadow-2xl
-                   w-full max-w-lg mx-4 overflow-hidden"
-      >
+    <Dialog
+      open
+      onClose={onClose}
+      size="lg"
+      padded={false}
+      data-testid="shortcuts-modal"
+      aria-labelledby={titleId}
+      panelClassName="overflow-hidden"
+    >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-mail-border">
-          <h2 className="text-lg font-semibold text-mail-text flex items-center gap-2">
+          <h2 id={titleId} className="text-lg font-semibold text-mail-text flex items-center gap-2">
             <Keyboard size={20} className="text-mail-accent-text" />
             Keyboard Shortcuts
           </h2>
-          <button onClick={onClose} className="p-1 hover:bg-mail-border rounded transition-colors">
-            <X size={18} className="text-mail-text-muted" />
-          </button>
+          <Button variant="ghost" icon size="xs" onClick={onClose} aria-label="Close">
+            <X size={18} />
+          </Button>
         </div>
 
         {/* Body */}
@@ -169,7 +151,6 @@ export function ShortcutsModal({ onClose }) {
             Press <KeyBadge>?</KeyBadge> to toggle this panel
           </p>
         </div>
-      </motion.div>
-    </div>
+    </Dialog>
   );
 }
