@@ -68,7 +68,14 @@ describe('BulkOperationProgress — the completion beat', () => {
   it('does not beat while the run is still going', () => {
     const { container } = paint();
     expect(container.querySelector('.op-landed')).toBeNull();
-    expect(container.querySelector('.rounded-xl').className).toContain('border-mail-border');
+    // Mid-run the panel wears the chrome's neutral resting edge, and no
+    // custody colour has landed on it. The neutral is `border-mail-strong`
+    // since the elevation pass — borders carry what shadows used to — so
+    // name the absent colours too, not just the neutral of the day.
+    const panel = container.querySelector('.rounded-xl');
+    expect(panel.className).toContain('border-mail-strong');
+    expect(panel.className).not.toContain('border-mail-local');
+    expect(panel.className).not.toContain('border-mail-danger');
   });
 
   it('still reports the counts it is there to report', () => {
