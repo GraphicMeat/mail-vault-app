@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useId } from 'react';
+import { motion } from 'framer-motion';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
 import { Download, X, Clock, SkipForward, AlertCircle, RefreshCw } from 'lucide-react';
