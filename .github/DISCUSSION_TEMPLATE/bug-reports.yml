@@ -1,0 +1,185 @@
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Broken behaviour only. Works-but-should-do-more goes in **Ideas**; not-sure-how-to goes in **Q&A**.
+
+        Most of this is dropdowns — pick, don't write. The three text boxes are the ones that matter.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where in the app
+      options:
+        - Sync — mail not arriving, stuck, or slow
+        - Backup / archive — the run itself
+        - The vault on disk — missing, wrong, or unreadable files
+        - Reading — threading, quotes, images, attachments
+        - Compose / send — drafts, replies, sending, Sent folder
+        - Search and filters
+        - Accounts and sign-in
+        - Deleting / moving mail
+        - Updates and installation
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, in your own words. Exact error text if there was any.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Start from a fresh launch of the app if you can.
+      value: |
+        1. 
+        2. 
+        3. 
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: MailVault version
+      description: Settings → Help, or MailVault → About MailVault
+      placeholder: "2.10.2"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Ubuntu / Debian
+        - Fedora
+        - Arch
+        - Other Linux
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version
+      placeholder: "15.3 / 24.04"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: channel
+    attributes:
+      label: How you installed it
+      options:
+        - DMG from mailvaultapp.com
+        - Mac App Store
+        - .deb
+        - AppImage
+        - Snap
+        - Flatpak
+        - Built from source
+    validations:
+      required: true
+
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Mail provider
+      options:
+        - Gmail / Google Workspace
+        - Microsoft 365 (work or school)
+        - Outlook.com / Hotmail (personal)
+        - iCloud Mail
+        - Fastmail
+        - Yahoo Mail
+        - Proton Mail (via Bridge)
+        - Zoho Mail
+        - Self-hosted or business IMAP
+        - Other — name it in the text above
+    validations:
+      required: true
+
+  - type: dropdown
+    id: auth
+    attributes:
+      label: How you sign in to it
+      options:
+        - Sign in with Google (OAuth2)
+        - Sign in with Microsoft (OAuth2)
+        - IMAP with my normal password
+        - IMAP with an app-specific password
+    validations:
+      required: true
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: How many accounts it affects
+      options:
+        - One account only
+        - Every account
+        - Only in the unified inbox, with accounts merged
+        - I only have one account
+    validations:
+      required: true
+
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: How often it happens
+      options:
+        - Every time
+        - Sometimes, no pattern I can see
+        - Happened once
+    validations:
+      required: true
+
+  - type: dropdown
+    id: dataloss
+    attributes:
+      label: Did any mail get lost?
+      description: Mail gone from both the server and the vault, wrong content in a vault file, or deleted from the server without a local copy. These jump the queue.
+      options:
+        - "No — nothing is missing"
+        - "Yes — mail is missing, wrong, or gone from the server with no vault copy"
+        - "Not sure yet"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and screenshots
+      description: |
+        Help → Logs → Export Logs… in the app, then drag the file in here. Two processes write two files — attach the daemon log too if you have it.
+
+        Never paste passwords, app passwords, OAuth tokens, or the raw source of a real email. Redact addresses: alice@example.com → a***@example.com. This page is public and indexed.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you post
+      options:
+        - label: I'm on the latest release and checked the changelog
+          required: true
+        - label: I searched Bug Reports for the same thing
+          required: true
+        - label: No passwords, tokens, or other people's addresses in this report
+          required: true
