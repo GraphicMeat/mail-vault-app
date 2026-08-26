@@ -27,6 +27,7 @@ import { emailScopeKey } from '../../stores/slices/unifiedHelpers';
 import { getSenderName } from '../../utils/emailParser';
 import { LinkSafetyModal } from '../LinkSafetyModal';
 import { LinkAlertIcon } from '../LinkAlertIcon';
+import { MAIL_DARK_BG, MAIL_DARK_TEXT } from '../../utils/mailChrome';
 
 // ── Thread Email Item Content ────────────────────────────────────────────────
 
@@ -183,7 +184,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
       {loadedEmail.html ? (
         <div
           className="rounded-lg overflow-hidden mt-2 max-w-full"
-          style={{ backgroundColor: isDark ? '#0a0a0f' : '#ffffff' }}
+          style={{ backgroundColor: isDark ? MAIL_DARK_BG : '#ffffff' }}
         >
           <iframe
             ref={iframeRef}
@@ -198,8 +199,8 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, signatureDispla
         <div
           className="email-content whitespace-pre-wrap mt-2 text-sm break-words overflow-hidden rounded-lg p-3"
           style={{
-            backgroundColor: isDark ? '#0a0a0f' : '#ffffff',
-            color: isDark ? '#e4e4e7' : '#333333',
+            backgroundColor: isDark ? MAIL_DARK_BG : '#ffffff',
+            color: isDark ? MAIL_DARK_TEXT : '#333333',
           }}
         >
           {bodyWithoutSig || 'No content'}

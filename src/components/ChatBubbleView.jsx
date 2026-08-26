@@ -36,6 +36,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { scanEmailLinks, checkLinkAlert } from '../utils/linkSafety';
 import { emailScopeKey } from '../stores/slices/unifiedHelpers';
 import { LinkSafetyModal } from './LinkSafetyModal';
+import { MAIL_DARK_TEXT } from '../utils/mailChrome';
 
 export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail, onBack, onReply }) {
   const scrollRef = useRef(null);
@@ -330,7 +331,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     if (!mergedEmail.html) return '';
 
     // Use appropriate text color based on bubble type
-    const textColor = fromUser ? '#ffffff' : 'var(--mail-text, #e4e4e7)';
+    const textColor = fromUser ? '#ffffff' : `var(--mail-text, ${MAIL_DARK_TEXT})`;
     const linkColor = fromUser ? '#c7d2fe' : '#6366f1';
     const quoteColor = fromUser ? 'rgba(255,255,255,0.6)' : '#6b7280';
     const quoteBorder = fromUser ? 'rgba(255,255,255,0.3)' : '#d1d5db';

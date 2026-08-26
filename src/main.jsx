@@ -4,6 +4,7 @@ import ReactDOM from 'react-dom/client';
 import { MotionConfig } from 'framer-motion';
 import App from './App';
 import './styles/index.css';
+import { MAIL_DARK_BG, MAIL_DARK_TEXT } from './utils/mailChrome';
 
 // A row can vanish at four layers — the sidecar cache, `emails`, the filters
 // that produce `sortedEmails`, and the virtualizer's render window — and from
@@ -85,8 +86,8 @@ class ErrorBoundary extends React.Component {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: '#0a0a0f',
-          color: '#e4e4e7',
+          background: MAIL_DARK_BG,
+          color: MAIL_DARK_TEXT,
           fontFamily: "'Instrument Sans', system-ui, sans-serif",
           padding: '2rem',
           textAlign: 'center'

@@ -34,6 +34,7 @@ import { useThemeStore } from '../stores/themeStore';
 import { buildEmailIframeHtml, getEmailBodyContent, getContextMenuColors, measureEmailIframeHeight } from '../utils/emailIframeTemplate';
 import { getDarkReaderInlineScripts } from '../utils/darkReaderInject';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../utils/iframeQuoteFolding';
+import { MAIL_DARK_BG, MAIL_DARK_TEXT } from '../utils/mailChrome';
 
 // Re-export AttachmentItem for any external consumers
 export { AttachmentItem } from './email/AttachmentBar';
@@ -564,7 +565,7 @@ function EmailViewerComponent({ onComposeReply }) {
               className="rounded-lg overflow-hidden max-w-full h-full"
               style={{
                 contain: 'inline-size',
-                backgroundColor: emailDarkMode ? '#0a0a0f' : '#ffffff',
+                backgroundColor: emailDarkMode ? MAIL_DARK_BG : '#ffffff',
               }}
             >
               <iframe
@@ -606,8 +607,8 @@ function EmailViewerComponent({ onComposeReply }) {
             <div
               className="email-content whitespace-pre-wrap rounded-lg p-4"
               style={{
-                backgroundColor: emailDarkMode ? '#0a0a0f' : '#ffffff',
-                color: emailDarkMode ? '#e4e4e7' : '#333333',
+                backgroundColor: emailDarkMode ? MAIL_DARK_BG : '#ffffff',
+                color: emailDarkMode ? MAIL_DARK_TEXT : '#333333',
               }}
             >
               {selectedEmail.text || 'No content'}
