@@ -370,36 +370,49 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
 }
 
 
-// Stamp `serverDeleted` on the vault's index entry for one message.
+// Write custody fields onto the vault's index entry for one message.
 //
 // `local_index_append` upserts by uid, so re-appending the existing entry with
-// the extra field is the whole write — no Rust change, and the entry keeps its
+// the extra fields is the whole write — no Rust change, and the entry keeps its
 // own `source` ('local' / 'local_sent' / 'local_draft'), which custody reads
 // separately as `_origin`.
-export async function markServerDeleted(accountId, mailbox, uid) {
-  if (!accountId || !mailbox || uid == null) return;
+//
+// Every gold claim goes through here, because every gold claim has to survive a
+// reload: an in-memory stamp dies with the session and the row goes quiet again
+// on the next launch, which is the same silence the bug produced.
+//
+// @returns {Promise<boolean>} whether the stamp reached disk.
+export async function stampVaultEntry(accountId, mailbox, uid, extra) {
+  if (!accountId || !mailbox || uid == null) return false;
   try {
     const entry = await db.getLocalIndexEntry(accountId, mailbox, uid);
     if (entry) {
-      await api.appendLocalIndex(accountId, mailbox, [{ ...entry, serverDeleted: true }]);
-      return;
+      await api.appendLocalIndex(accountId, mailbox, [{ ...entry, ...extra }]);
+      return true;
     }
     // No entry yet. The bulk archive path stores the .eml through Rust and
     // never writes one, so without this a bulk-archived message loses its gold
-    // the moment the app restarts — the in-memory stamp dies with the session.
+    // the moment the app restarts.
     //
     // Only for a message the vault actually holds: writing an entry for one it
     // does not would put a row on screen with nothing behind it.
     const { useMailStore } = await import('../../stores/mailStore');
     const state = useMailStore.getState();
-    if (!state.archivedEmailIds?.has(uid)) return;
+    if (!state.archivedEmailIds?.has(uid)) return false;
     const row = [...(state.localEmails || []), ...(state.emails || []), ...(state.sortedEmails || [])]
       .find(e => e.uid === uid && (e._mailbox == null || e._mailbox === mailbox));
-    if (!row?.subject) return;
-    await api.appendLocalIndex(accountId, mailbox, [indexEntryFor(row, { serverDeleted: true })]);
+    if (!row?.subject) return false;
+    await api.appendLocalIndex(accountId, mailbox, [indexEntryFor(row, extra)]);
+    return true;
   } catch (e) {
-    console.warn('[markServerDeleted] Failed to mark serverDeleted for uid', uid, e);
+    console.warn('[stampVaultEntry] Failed to stamp uid', uid, extra, e);
+    return false;
   }
+}
+
+// "This app deleted the server copy" — one of the three proofs custody accepts.
+export async function markServerDeleted(accountId, mailbox, uid) {
+  return stampVaultEntry(accountId, mailbox, uid, { serverDeleted: true });
 }
 
 // ── applyServerRemoval ──

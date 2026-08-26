@@ -12,7 +12,7 @@
  * the destructive path (see its LOCALLY_CREATED block) — this is the same fix
  * for the display path.
  *
- * So gold now requires evidence, and there are exactly two kinds:
+ * So gold now requires evidence, and there are exactly three kinds:
  *
  *   1. the message was created here and never had a server copy — a staged
  *      send or a local draft, recorded in local-index.json as `local_sent` /
@@ -22,21 +22,43 @@
  *      reload instead of living in a uid set that the next full UID SEARCH
  *      rebuilds from scratch.
  *
- * Absence from one mailbox is not evidence and never becomes gold. Proving
- * server-wide absence for a message the app did not delete needs a Message-ID
- * probe across every folder — a real feature, not a derivation, and not here.
- * ponytail: until that exists, the quiet state is the honest one.
+ *   3. the server was ASKED and said no — `services/workflows/probeServerCopy`
+ *      sweeps every selectable folder for the message's Message-ID and stamps
+ *      `serverAbsent` only when all of them answered and none had it. This is
+ *      the "someone else deleted your mail" case, and it is the one the gold
+ *      colour was written for.
+ *
+ * Absence from one mailbox is not evidence and never becomes gold. Note what
+ * separates (3) from the derivation it replaces: not a different heuristic, an
+ * actual answer from the server about every folder, with the incomplete sweep
+ * reported as unknown rather than rounded down to absent.
  */
 
 export const LOCALLY_CREATED = new Set(['local_sent', 'local_draft']);
+
+/**
+ * Which of the three proofs this message carries — or null, meaning gold is
+ * not sayable about it. The three read very differently to a person ("it never
+ * existed there" / "you deleted it" / "someone else did"), so the row's tooltip
+ * and the viewer's band both need to know which one, not merely that there is
+ * one.
+ *
+ * @returns {'never-on-server'|'we-deleted'|'server-lost-it'|null}
+ */
+export function custodyProof(email) {
+  if (!email) return null;
+  if (email._localStaged === true || LOCALLY_CREATED.has(email._origin)) return 'never-on-server';
+  if (email.serverDeleted === true) return 'we-deleted';
+  if (email.serverAbsent === true) return 'server-lost-it';
+  return null;
+}
 
 /**
  * @returns {'server'|'local'|'local-only'}
  */
 export function custodySource(email) {
   if (!email?.isArchived) return 'server';
-  if (email._localStaged === true || LOCALLY_CREATED.has(email._origin)) return 'local-only';
-  return email.serverDeleted === true ? 'local-only' : 'local';
+  return custodyProof(email) ? 'local-only' : 'local';
 }
 
 /**

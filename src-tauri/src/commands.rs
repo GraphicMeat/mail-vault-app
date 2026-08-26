@@ -785,6 +785,33 @@ pub async fn imap_search_emails(
     }))
 }
 
+// ── Message-ID probe ────────────────────────────────────────────────────────
+
+/// "Is this Message-ID anywhere on the server?" — asked of every folder.
+///
+/// The one question the gold "your only copy" claim rests on. Absence from the
+/// mailbox a message was archived from is not absence from the server, so this
+/// sweeps them all; `complete` reports whether it managed to.
+#[tauri::command]
+pub async fn imap_find_message_id(
+    pool: tauri::State<'_, ImapPool>,
+    account: ImapConfig,
+    message_id: String,
+    stop_on_first: Option<bool>,
+) -> Result<serde_json::Value, String> {
+    let stop_on_first = stop_on_first.unwrap_or(true);
+
+    let probe = with_background(&pool, &account, |mut session| async move {
+        let result = imap::find_message_id(&mut session, &message_id, stop_on_first).await?;
+        // A sweep SELECTs many folders and can end on one whose SELECT was
+        // refused, so it has no single answer for the pool's bookkeeping —
+        // None says so rather than naming a folder that may not be selected.
+        Ok((result, session, None))
+    }).await?;
+
+    serde_json::to_value(&probe).map_err(|e| format!("Serialize probe: {}", e))
+}
+
 // ── Disconnect ──────────────────────────────────────────────────────────────
 
 #[tauri::command]

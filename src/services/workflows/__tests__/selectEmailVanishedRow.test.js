@@ -101,6 +101,11 @@ vi.mock('../../../stores/settingsStore', () => ({
   },
 }));
 
+const mockProbeServerCopy = vi.fn().mockResolvedValue({ state: 'unknown' });
+vi.mock('../probeServerCopy', () => ({
+  probeServerCopy: (...a) => mockProbeServerCopy(...a),
+}));
+
 vi.mock('../../safeStorage', () => ({
   safeStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
 }));
@@ -231,6 +236,31 @@ describe('selectEmail — a row the server no longer holds', () => {
     await useMailStore.getState().selectEmail(31056, 'server');
 
     expect(mockDeleteLocalEmail).not.toHaveBeenCalled();
+  });
+
+  it('asks the server about every folder when the vanished message is in the vault', async () => {
+    // The server proved ONE mailbox lost it, which is also what an archive, a
+    // filter and a delete-to-Bin look like. For a message the vault holds, the
+    // difference between those and "someone else destroyed it" is the whole
+    // custody claim — so ask, instead of guessing either way.
+    mockFetchEmailLight.mockRejectedValue(goneError(31056));
+    primeStore();
+    useMailStore.setState({ archivedEmailIds: new Set([31056]) });
+
+    await useMailStore.getState().selectEmail(31056, 'server');
+
+    expect(mockProbeServerCopy).toHaveBeenCalledWith(31056, { accountId: ACCOUNT.id, mailbox: 'INBOX' });
+  });
+
+  it('does not sweep the server for a message the vault never kept', async () => {
+    // Nothing rides on the answer: the row is leaving the list either way, and
+    // a sweep is a SELECT per folder.
+    mockFetchEmailLight.mockRejectedValue(goneError(31056));
+    primeStore();
+
+    await useMailStore.getState().selectEmail(31056, 'server');
+
+    expect(mockProbeServerCopy).not.toHaveBeenCalled();
   });
 
   it('keeps the row when the fetch merely failed', async () => {

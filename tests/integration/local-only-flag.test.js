@@ -235,4 +235,36 @@ describe('Local-Only Flag Detection (send → archive → delete → verify)', (
     });
     expect(proven.every((e) => e.source === 'local-only')).toBe(true);
   });
+
+  it('should flag emails "local-only" when a completed folder sweep found nothing', () => {
+    // The third proof, and the only one that covers a deletion this app did not
+    // make. The sweep itself is IMAP — src-core/tests/imap_search.rs drives it
+    // against this same protocol — and `serverAbsent` is what it writes down.
+    // This asserts the display rows honour that stamp, and that a sweep which
+    // wrote no stamp leaves the rows quiet.
+    const localEmails = [
+      { uid: uidA, subject: subjectA, date: '2026-02-10T00:00:00Z', from: { address: LUKE.email }, flags: [] },
+      { uid: uidB, subject: subjectB, date: '2026-02-10T00:00:00Z', from: { address: LUKE.email }, flags: [] },
+    ];
+    const base = {
+      searchActive: false,
+      searchResults: [],
+      emails: [],
+      archivedEmailIds: new Set([uidA, uidB]),
+      viewMode: 'local',
+      // A COMPLETE enumeration of this mailbox that still lists both messages:
+      // the uid set says nothing either way, and must not.
+      serverUidSet: new Set([uidA, uidB]),
+      serverUidsKnown: true,
+    };
+
+    const swept = display({ ...base, localEmails: localEmails.map((e) => ({ ...e, serverAbsent: true })) });
+    expect(swept.every((e) => e.source === 'local-only')).toBe(true);
+
+    // A sweep that could not open every folder writes nothing at all, and a
+    // `false` written when the message turned out to be present is not
+    // evidence of anything either.
+    const unswept = display({ ...base, localEmails: localEmails.map((e) => ({ ...e, serverAbsent: false })) });
+    expect(unswept.every((e) => e.source === 'local')).toBe(true);
+  });
 });

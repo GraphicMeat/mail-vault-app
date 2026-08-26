@@ -322,6 +322,23 @@ export async function searchEmails(account, mailbox = 'INBOX', query, filters = 
   });
 }
 
+/**
+ * "Is this Message-ID anywhere on this account?" — every folder, one sweep.
+ *
+ * The question the gold "your only copy" row is built on and could not ask.
+ * A message is routinely absent from the mailbox it was archived from and
+ * entirely alive in All Mail, a label, or the Bin, so nothing derived from one
+ * mailbox's uid set can claim the server lost it. This asks the server.
+ *
+ * @returns {Promise<{messageId: string, found: {mailbox: string, uid: number}[],
+ *                    searched: string[], failed: string[], complete: boolean}>}
+ *   `complete && !found.length` is the ONLY shape that proves absence.
+ *   `failed` names the folders that would not open, so the app can say which.
+ */
+export async function findMessageId(account, messageId, { stopOnFirst = true } = {}) {
+  return tauriInvoke('imap_find_message_id', { account, messageId, stopOnFirst });
+}
+
 // ── OAuth2 API functions ────────────────────────────────────────────────────
 
 export async function getOAuth2AuthUrl(email, provider, customClientId, tenantId, useGraph) {

@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Cloud, CloudOff, HardDrive } from 'lucide-react';
 import { useMailStore } from '../../stores/mailStore';
-import { custodySource } from '../../stores/slices/custody';
+import { custodyProof, custodySource } from '../../stores/slices/custody';
 
 /**
  * Where a message lives, as one glyph.
@@ -18,8 +18,9 @@ import { custodySource } from '../../stores/slices/custody';
  * that decides what counts as proof. It is never derived from the active
  * mailbox's uid set: a message missing from INBOX is routinely alive in All
  * Mail, a label, or the Bin, and stamping the alarm on that made the list gold
- * for ordinary archived mail. Two proofs qualify — the message was created here
- * and never had a server copy, or this app deleted the server copy.
+ * for ordinary archived mail. Three proofs qualify — the message was created
+ * here and never had a server copy, this app deleted the server copy, or a
+ * Message-ID sweep of every folder came back empty (probeServerCopy).
  */
 
 export function describeMessageState(email, { backedUp = false, serverKnown = false } = {}) {
@@ -49,11 +50,22 @@ export function describeMessageState(email, { backedUp = false, serverKnown = fa
   const provenGone = (email.source ?? custodySource(email)) === 'local-only';
 
   if (provenGone) {
-    // Never on a server at all (staged send, local draft) reads differently
-    // from a server copy this app deleted, and the difference is the whole
-    // reason the row is gold — say which one it is.
-    const neverOnServer = email.serverDeleted !== true;
-    const gone = neverOnServer ? 'It was never on the server.' : 'You deleted the server copy.';
+    // Three ways to be the only copy, and they are not the same news. A staged
+    // send never existed on a server; a delete this app issued cleared one
+    // mailbox; a completed Message-ID sweep that found nothing means the server
+    // lost it without being asked to — someone else deleted it. Say which.
+    //
+    // A row stamped 'local-only' with no proof field on it is the oldest of the
+    // three by construction (nothing else could have stamped it), so that is
+    // where the fallback lands.
+    const proof = custodyProof(email) || 'never-on-server';
+    // Only a delete this app issued leaves other copies plausible: it clears one
+    // mailbox, and a label store (Gmail) keeps its own under All Mail or the Bin.
+    // The sweep visited those.
+    const nothingElseHasIt = proof !== 'we-deleted';
+    const gone = proof === 'never-on-server' ? 'It was never on the server.'
+      : proof === 'we-deleted' ? 'You deleted the server copy.'
+      : 'Someone else deleted the server copy.';
     return {
       // Its own glyph, not the vault's. Emerald and gold converge under
       // deuteranopia and the tooltip is hover/focus-only, so with a shared
@@ -70,10 +82,7 @@ export function describeMessageState(email, { backedUp = false, serverKnown = fa
         ? `${gone} Two copies left.`
         : dot === 'hollow'
           ? `${gone} Backup drive not connected — can't verify.`
-          // "Nothing else has it" is only sayable about a message that never
-          // reached a server. A delete this app issued clears one mailbox; a
-          // label store (Gmail) keeps its own copy under All Mail or the Bin.
-          : neverOnServer ? `${gone} Nothing else has it.` : gone,
+          : nothingElseHasIt ? `${gone} Nothing else has it.` : gone,
     };
   }
 

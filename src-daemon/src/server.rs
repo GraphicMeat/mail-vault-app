@@ -198,6 +198,7 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
         "imap.fetch_raw" => handle_imap_with_pool(&state, req.params, id, imap_op_fetch_raw).await,
         "imap.append_email" => handle_imap_with_pool(&state, req.params, id, imap_op_append_email).await,
         "imap.search_emails" => handle_imap_with_pool(&state, req.params, id, imap_op_search_emails).await,
+        "imap.find_message_id" => handle_imap_with_pool(&state, req.params, id, imap_op_find_message_id).await,
         "imap.disconnect" => handle_imap_disconnect(&state, req.params, id).await,
         "imap.move_emails" => handle_imap_with_pool(&state, req.params, id, imap_op_move_emails).await,
 
@@ -664,6 +665,18 @@ async fn imap_op_search_emails(mut session: ImapSession, params: Value) -> Resul
     let before = params.get("before").and_then(|v| v.as_str());
     let result = imap::search_emails(&mut session, mailbox, query, from_filter, subject_filter, since, before).await?;
     Ok((serde_json::to_value(result).unwrap(), session, Some(mailbox.to_string())))
+}
+
+/// "Is this Message-ID anywhere on the server?" — every folder, one sweep.
+/// Absence from one mailbox is not absence from the server; this is what the
+/// gold "your only copy" claim needs before it can be made.
+async fn imap_op_find_message_id(mut session: ImapSession, params: Value) -> Result<(Value, ImapSession, Option<String>), String> {
+    let message_id = params.get("messageId").and_then(|v| v.as_str()).unwrap_or("");
+    let stop_on_first = params.get("stopOnFirst").and_then(|v| v.as_bool()).unwrap_or(true);
+    let result = imap::find_message_id(&mut session, message_id, stop_on_first).await?;
+    // Many folders SELECTed, possibly ending on one that refused — the pool
+    // gets None rather than the name of a mailbox that may not be selected.
+    Ok((serde_json::to_value(result).unwrap(), session, None))
 }
 
 async fn imap_op_move_emails(mut session: ImapSession, params: Value) -> Result<(Value, ImapSession, Option<String>), String> {

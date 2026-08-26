@@ -27,7 +27,9 @@
  * this app deletes the server copy). Neither of those watches the viewer.
  */
 
+import { ImapFlow } from 'imapflow';
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
+import { MOCK_PASSWORD } from './mockImap.js';
 
 describe('Custody claims', function () {
   this.timeout(240000);
@@ -48,6 +50,43 @@ describe('Custody claims', function () {
 
   const bandText = () => browser.execute(() =>
     document.querySelector('[data-testid="email-custody-band"]')?.innerText || null);
+
+  const clickCheckServer = () => browser.execute(() => {
+    const btn = document.querySelector('[data-testid="custody-check-server"]');
+    if (!btn || btn.offsetHeight === 0) return false;
+    btn.click();
+    return true;
+  });
+
+  const checkResult = () => browser.execute(() =>
+    document.querySelector('[data-testid="custody-check-result"]')?.innerText || null);
+
+  /**
+   * Delete a message from the mock server with our own IMAP connection —
+   * behind the app's back, which is the whole point. Every other way of losing
+   * a server copy in this suite goes through the app, and the app stamps
+   * `serverDeleted` when it does; this is the case nobody told the app about,
+   * and the only evidence available afterwards is a sweep of the folders.
+   */
+  async function expungeBehindTheApp(serverIndex, user, mailbox, subject) {
+    const { host, port } = browser.mockImap[serverIndex];
+    const client = new ImapFlow({
+      host, port, secure: false, auth: { user, pass: MOCK_PASSWORD }, logger: false,
+    });
+    await client.connect();
+    const lock = await client.getMailboxLock(mailbox);
+    try {
+      const uids = await client.search({ subject }, { uid: true });
+      expect(uids.length).toBeGreaterThan(0);
+      await client.messageDelete(uids, { uid: true });
+      // Prove it actually went, or the assertion below would pass on a delete
+      // that never happened AND on a probe that never looked.
+      expect(await client.search({ subject }, { uid: true })).toEqual([]);
+    } finally {
+      lock.release();
+      await client.logout();
+    }
+  }
 
   const clickRowCheckbox = (subject) => browser.execute((needle) => {
     for (const row of document.querySelectorAll('[data-testid="email-row"]')) {
@@ -236,6 +275,123 @@ describe('Custody claims', function () {
       // looked in — the server may well still hold a copy in its own Bin.
       expect(band).toContain('You deleted the server copy');
       expect(band).not.toContain('Nothing else has it');
+    });
+  });
+
+  /**
+   * "Is this Message-ID anywhere?" — the question the gold colour was written
+   * for, asked of the server across every folder.
+   *
+   * The pair below is the whole feature. The first case is the one that used to
+   * be got wrong: a message that left INBOX and is alive in the Bin. Nothing
+   * derived from a mailbox can tell it apart from a message someone deleted for
+   * good, which is why gold was withdrawn from both. The second is the case the
+   * withdrawal cost: a server copy destroyed by somebody else, discoverable
+   * only by looking in every folder and finding none.
+   *
+   * Run them in this order and the first is a negative control for the second —
+   * a probe that only ever searched INBOX would report the Bin message absent
+   * and fail here, before it got the chance to pass there for the wrong reason.
+   */
+  describe('asking the server about every folder', function () {
+    // Carried between the last two cases: the reload has to bring back the
+    // verdict for THIS message, not merely find some gold row somewhere.
+    let sweptSubject = null;
+
+    /**
+     * The quiet vault row the first case in this file already left behind:
+     * archived here, server copy moved to the Bin, verdict re-derived after a
+     * reload. Reused rather than made again — `saveEmailLocally` fails outright
+     * for a message the vault has already cached ("Email UID N not found in
+     * Maildir": `isEmailSaved` says yes off `maildir_exists`, `archiveEmail`
+     * says no off `maildir_list`), and by the seventh case of a session most
+     * rows are cached. That bug is not this feature's, and reproducing it here
+     * would only hide the sweep.
+     *
+     * `archived*`, not "not server-only": by now one LUKE row is gold, and
+     * `local-only` is an archived state whose id does not begin with "archived".
+     */
+    async function binnedVaultRow(account, subjectRe) {
+      await switchToFolder(account, 'INBOX');
+      const row = (await rows()).find((r) => subjectRe.test(r.text) && r.icon?.startsWith('archived'));
+      expect(`${row?.text}`).toMatch(subjectRe);
+      return row.text.match(subjectRe)[0];
+    }
+
+    async function openAndCheck(subject) {
+      expect(await openRow(subject)).toBe(true);
+      await browser.waitUntil(async () => !!(await bandText()), {
+        timeout: 30_000, interval: 200, timeoutMsg: 'Custody band never rendered',
+      });
+      expect(await clickCheckServer()).toBe(true);
+      await browser.waitUntil(async () =>
+        !!(await checkResult()) || !!(await bandText())?.includes('only copy'), {
+        timeout: 60_000, interval: 300, timeoutMsg: 'The server check never came back',
+      });
+    }
+
+    it('finds the copy the mailbox lost, in the folder that has it', async function () {
+      const subject = await binnedVaultRow(LUKE, /Luke message \d+/);
+      await openAndCheck(subject);
+
+      // The sweep visited the Bin. A probe scoped to the active mailbox — the
+      // derivation this whole feature replaces — would have said "absent".
+      const note = await checkResult();
+      expect(`${note}`).toContain('Still on the server');
+      expect(`${note}`).toMatch(/Trash|Bin/i);
+      const band = await bandText();
+      expect(band).toContain('Saved in your vault');
+      expect(band).not.toContain('only copy');
+    });
+
+    it('turns the row gold when someone else deleted the server copy', async function () {
+      // A second account, because the claim is per-account and the first
+      // version of this bug only appeared on a switch.
+      const subject = await binnedVaultRow(YODA, /Yoda message \d+/);
+      sweptSubject = subject;
+
+      // Now take it off the server without telling the app. No `serverDeleted`
+      // stamp exists for this — the app was never asked to delete anything.
+      // The Bin is where the first case in this file left the server copy.
+      await expungeBehindTheApp(2, YODA, 'Trash', subject);
+
+      await openAndCheck(subject);
+
+      await browser.waitUntil(async () => !!(await rowFor(subject))?.icon?.startsWith('local-only'), {
+        timeout: 60_000, interval: 300,
+        // The probe reports WHY it could not answer; print it, or a red here
+        // says only "not gold" and the next run is another nine minutes.
+        timeoutMsg: `"${subject}" never went gold after the sweep — the band said `
+          + `${JSON.stringify(await bandText())}, the check said ${JSON.stringify(await checkResult())}`,
+      });
+
+      const band = await bandText();
+      expect(band).toContain('only copy');
+      // The sentence the colour was written for — and it may say "nothing else
+      // has it" here, unlike the app's own delete, because the sweep looked in
+      // All Mail, the Bin and every other folder before saying so.
+      expect(band).toContain('Someone else deleted the server copy');
+      expect(band).toContain('Nothing else has it');
+    });
+
+    it('keeps the verdict across a reload — it is on disk, not in the session', async function () {
+      // The stamp lives on the vault's index entry. An in-memory one would die
+      // with the session and the row would go quiet on the next launch, which
+      // is the same silence the original bug produced.
+      await browser.execute(() => window.location.reload());
+      await waitForApp();
+      await waitForEmails();
+      await switchToFolder(YODA, 'INBOX');
+
+      expect(sweptSubject).toBeTruthy();
+      const gold = await browser.waitUntil(async () => {
+        const row = await rowFor(sweptSubject);
+        return row?.icon?.startsWith('local-only') ? row : false;
+      }, {
+        timeout: 60_000, interval: 300,
+        timeoutMsg: `"${sweptSubject}" did not come back gold after a reload`,
+      });
+      expect(gold.icon).toMatch(/^local-only/);
     });
   });
 });

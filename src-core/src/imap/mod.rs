@@ -1505,6 +1505,168 @@ pub async fn search_emails(
     Ok((emails, total_matches))
 }
 
+// ── Message-ID probe ────────────────────────────────────────────────────────
+
+/// One server-side copy of a message: which folder holds it, under which uid.
+#[derive(Debug, Serialize, Clone, PartialEq)]
+pub struct MessageIdLocation {
+    pub mailbox: String,
+    pub uid: u32,
+}
+
+/// The answer to "is this Message-ID anywhere on this account?"
+///
+/// The only result that proves the server no longer holds the message is
+/// `complete == true && found.is_empty()`. Everything else is unknown: a
+/// folder that refused to open could be the one holding it, and `failed` names
+/// which ones so the app can say so instead of guessing.
+#[derive(Debug, Serialize, Clone)]
+pub struct MessageIdProbe {
+    #[serde(rename = "messageId")]
+    pub message_id: String,
+    /// Every copy found. Non-empty is proof of presence on its own — no
+    /// completeness needed, which is why `stop_on_first` is safe.
+    pub found: Vec<MessageIdLocation>,
+    /// Folders that answered.
+    pub searched: Vec<String>,
+    /// Folders that refused with a tagged NO — no rights, or a container the
+    /// LIST attributes did not flag `\Noselect`.
+    pub failed: Vec<String>,
+    /// Every selectable folder answered. Absence is only claimable under this.
+    pub complete: bool,
+}
+
+/// The search term for a Message-ID.
+///
+/// IMAP HEADER matching is substring-based (RFC 3501 §6.4.4) and servers
+/// disagree about whether the stored value keeps its angle brackets, so strip
+/// them and let the substring cover both. A different message would have to
+/// contain this whole id inside its own to collide — and a collision would
+/// report the message as PRESENT, which is the quiet direction.
+pub fn message_id_search_term(message_id: &str) -> String {
+    message_id
+        .trim()
+        .trim_start_matches('<')
+        .trim_end_matches('>')
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+}
+
+/// SELECT + UID SEARCH one folder for a Message-ID.
+///
+/// `Ok(None)` is a tagged NO: the folder refused, the read buffer is intact,
+/// and the sweep may continue. Every other error can leave unconsumed bytes on
+/// the session — the next command would then read this one's reply — so it
+/// propagates and the caller discards the connection.
+async fn search_message_id_in(
+    session: &mut ImapSession,
+    mailbox: &str,
+    term: &str,
+) -> Result<Option<Vec<u32>>, String> {
+    match session.select(mailbox).await {
+        Ok(_) => {}
+        Err(async_imap::error::Error::No(msg)) => {
+            warn!("[IMAP] Message-ID probe: SELECT {} refused: {}", mailbox, msg);
+            return Ok(None);
+        }
+        Err(e) => return Err(format!("SELECT {} failed: {}", mailbox, e)),
+    }
+
+    match session
+        .uid_search(format!("HEADER \"Message-ID\" \"{}\"", term))
+        .await
+    {
+        Ok(uids) => {
+            let mut uids: Vec<u32> = uids.into_iter().collect();
+            uids.sort_unstable();
+            Ok(Some(uids))
+        }
+        Err(async_imap::error::Error::No(msg)) => {
+            warn!("[IMAP] Message-ID probe: SEARCH in {} refused: {}", mailbox, msg);
+            Ok(None)
+        }
+        Err(e) => Err(format!("SEARCH in {} failed: {}", mailbox, e)),
+    }
+}
+
+/// Ask the server whether a Message-ID exists in ANY folder.
+///
+/// This is the question the gold "your only copy" row was written for and
+/// could not ask. Absence from one mailbox proves nothing on any provider —
+/// Gmail's archive moves a message to All Mail, a filter moves it to a label,
+/// a delete moves it to the Bin — so "the vault is the copy you have left" was
+/// unclaimable for a message this app did not itself delete. One sweep over
+/// every selectable folder is the evidence that makes it claimable.
+///
+/// `stop_on_first` returns as soon as a copy turns up: presence needs one hit,
+/// absence needs all of them.
+pub async fn find_message_id(
+    session: &mut ImapSession,
+    message_id: &str,
+    stop_on_first: bool,
+) -> Result<MessageIdProbe, String> {
+    let term = message_id_search_term(message_id);
+    // A message with no Message-ID cannot be looked up, and an empty term
+    // matches every header on the server — refuse rather than answer "found
+    // everywhere" or "absent".
+    if term.is_empty() {
+        return Err("Message-ID probe: empty Message-ID".to_string());
+    }
+
+    let mut targets: Vec<String> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for mb in list_mailboxes(session).await? {
+        // \Noselect boxes are pure containers — SELECT fails on them — and a
+        // path can be listed twice.
+        if mb.noselect || mb.path.is_empty() || !seen.insert(mb.path.clone()) {
+            continue;
+        }
+        targets.push(mb.path);
+    }
+    // INBOX first: the folder most likely to end the sweep on its first round trip.
+    targets.sort_by_key(|p| !p.eq_ignore_ascii_case("INBOX"));
+
+    let total = targets.len();
+    let mut probe = MessageIdProbe {
+        message_id: message_id.to_string(),
+        found: Vec::new(),
+        searched: Vec::new(),
+        failed: Vec::new(),
+        complete: false,
+    };
+
+    for path in targets {
+        match search_message_id_in(session, &path, &term).await? {
+            Some(uids) => {
+                probe.searched.push(path.clone());
+                probe.found.extend(uids.into_iter().map(|uid| MessageIdLocation {
+                    mailbox: path.clone(),
+                    uid,
+                }));
+                if stop_on_first && !probe.found.is_empty() {
+                    // `complete` stays false, and that is correct: this answer
+                    // proves presence, and presence is all it claims.
+                    return Ok(probe);
+                }
+            }
+            None => probe.failed.push(path),
+        }
+    }
+
+    // A LIST that came back empty must never read as "searched everywhere and
+    // found nothing" — that would stamp gold on every message of an account
+    // whose folder listing broke.
+    probe.complete = !probe.searched.is_empty() && probe.failed.is_empty() && probe.searched.len() == total;
+    info!(
+        "[IMAP] Message-ID probe: {} copies across {} folders ({} refused, complete={})",
+        probe.found.len(),
+        probe.searched.len(),
+        probe.failed.len(),
+        probe.complete
+    );
+    Ok(probe)
+}
+
 /// Test IMAP connection
 pub async fn test_connection(config: &ImapConfig) -> Result<(), String> {
     let mut session = connect_and_auth(config).await

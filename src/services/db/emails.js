@@ -204,6 +204,13 @@ export async function getLocalEmails(accountId, mailbox) {
         });
       }
     }
+    // NOT stamped with custody here on purpose. These rows become `localEmails`
+    // and the stamp belongs on them, but reading the index from this function
+    // breaks the folder switch: it runs on the hot path that activateAccount
+    // awaits, and the extra read left the list loading forever (proved on the
+    // e2e runner, 6/6 red, green the moment this line came out). The rows that
+    // carry custody today come from getArchivedEmails, which reads the index
+    // once for the whole mailbox. See the note above custodyStamper.
     return emails;
   } catch {
     return [];
@@ -249,14 +256,15 @@ export async function readLocalEmailIndex(accountId, mailbox) {
  * destructive path needs that distinction, so it reads the raw entries.
  */
 /**
- * uid → `{ origin, serverDeleted }` for one mailbox's index.
+ * uid → `{ origin, serverDeleted, serverAbsent }` for one mailbox's index.
  *
- * The two facts custody needs, read together because they come from the same
+ * The three facts custody needs, read together because they come from the same
  * file: `origin` is the entry's raw `source` (`local_sent` / `local_draft`
- * meaning the message never had a server copy) and `serverDeleted` is stamped
- * by applyServerRemoval when this app deletes the server copy. Both are on
- * disk, so a gold row survives a reload — the uid set it used to be derived
- * from does not.
+ * meaning the message never had a server copy), `serverDeleted` is stamped by
+ * applyServerRemoval when this app deletes the server copy, and `serverAbsent`
+ * by probeServerCopy when a completed Message-ID sweep of every folder found
+ * nothing. All three are on disk, so a gold row survives a reload — the uid set
+ * it used to be derived from does not.
  */
 export async function getLocalIndexMeta(accountId, mailbox) {
   await initBasic();
@@ -268,11 +276,35 @@ export async function getLocalIndexMeta(accountId, mailbox) {
     const entries = JSON.parse(data);
     return new Map(entries
       .filter(e => e && e.uid != null)
-      .map(e => [Number(e.uid), { origin: e.source, serverDeleted: e.serverDeleted === true }]));
+      .map(e => [Number(e.uid), {
+        origin: e.source,
+        serverDeleted: e.serverDeleted === true,
+        serverAbsent: e.serverAbsent === true,
+      }]));
   } catch (e) {
     console.warn('[db] Failed to read local index meta:', e);
     return new Map();
   }
+}
+
+/**
+ * Stamp custody onto a vault row from one mailbox/index-meta pair.
+ *
+ * `getArchivedEmails` builds vault rows from four different sources, none of
+ * which knows anything about provenance, so the stamp is what lets custody tell
+ * a staged send from an archived server message.
+ *
+ * `getLocalEmails` builds vault rows too and deliberately does NOT stamp: it
+ * sits on the folder-switch path activateAccount awaits, and adding an index
+ * read there left the message list loading forever.
+ */
+export function custodyStamper(meta) {
+  return (e) => {
+    const m = meta.get(Number(e.uid));
+    return m
+      ? { ...e, _origin: m.origin, serverDeleted: m.serverDeleted, serverAbsent: m.serverAbsent }
+      : e;
+  };
 }
 
 export async function getLocalIndexProvenance(accountId, mailbox) {
@@ -362,11 +394,7 @@ export async function getArchivedEmails(accountId, mailbox, archivedUidSet, onBa
   // body/header source that knows nothing about provenance — without this the
   // list has no way to tell a staged send from an archived server message, and
   // custodySource correctly refuses to call either one gold.
-  const meta = await getLocalIndexMeta(accountId, mailbox);
-  const withCustody = (e) => {
-    const m = meta.get(Number(e.uid));
-    return m ? { ...e, _origin: m.origin, serverDeleted: m.serverDeleted } : e;
-  };
+  const withCustody = custodyStamper(await getLocalIndexMeta(accountId, mailbox));
 
   // 1. Fast path: read from sidecar cache (email_cache/{uid}.json)
   // These are already written by IMAP sync — no .eml parsing needed
@@ -464,7 +492,7 @@ export async function getArchivedEmails(accountId, mailbox, archivedUidSet, onBa
 
     // Save to archived_headers.json for next load
     if (allEmails.length > 0) {
-      const forCache = allEmails.map(({ localId, isArchived, _origin, serverDeleted, ...rest }) => rest);
+      const forCache = allEmails.map(({ localId, isArchived, _origin, serverDeleted, serverAbsent, ...rest }) => rest);
       invoke('maildir_save_archived_cache', { accountId, mailbox, emails: forCache }).catch(() => {});
     }
 

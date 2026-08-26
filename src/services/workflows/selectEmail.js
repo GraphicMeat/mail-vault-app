@@ -11,6 +11,7 @@ import { _resolveUnifiedContext, bodyMatchesHeader } from '../../stores/slices/u
 import { _shouldPrefetch, getCacheCurrentSizeMB } from '../../stores/slices/cacheSlice';
 import { applySeenLocally, _setSeenOnServer, applyServerRemoval } from './messageMutations';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
+import { probeServerCopy } from './probeServerCopy';
 
 // Module-level mark-as-read timer
 let _markAsReadTimer = null;
@@ -326,6 +327,23 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
         await applyServerRemoval(uid, { accountId, mailbox, isUnified, skipRefresh: true, clearSelection: false });
       } catch (pruneError) {
         console.warn('[selectEmail] Could not prune the vanished row:', pruneError);
+      }
+
+      // This mailbox lost the message — which on its own is the most ordinary
+      // event there is: an archive, a filter, a delete-to-Bin all look exactly
+      // like this, and the message is alive under another folder. But it is
+      // ALSO what it looks like when someone else deleted the mail for good,
+      // and for an archived message that is the difference between a vault
+      // holding a spare copy and a vault holding the only one. So ask: is this
+      // Message-ID in ANY folder? The sweep writes its verdict to the vault
+      // entry, so the row keeps it across reloads.
+      //
+      // Only for a message the vault actually holds — nothing rides on the
+      // answer otherwise — and never awaited: it is a SELECT per folder, and
+      // the click that started this is waiting on `loadingEmail`.
+      if (get().archivedEmailIds?.has(uid)) {
+        probeServerCopy(uid, { accountId, mailbox })
+          .catch(probeError => console.warn('[selectEmail] Server-wide check failed:', probeError));
       }
     }
   } finally {

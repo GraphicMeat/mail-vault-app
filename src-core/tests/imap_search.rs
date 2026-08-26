@@ -172,3 +172,178 @@ async fn search_filters_by_from_and_subject() {
     assert_eq!(by_subject.len(), 1);
     assert_eq!(by_subject[0].subject, "Lunch");
 }
+
+// ── Cross-folder Message-ID probe ───────────────────────────────────────────
+//
+// The gold "your only copy" row claims the server no longer holds a message.
+// It used to be derived from the ACTIVE MAILBOX's uid set, which is a mailbox
+// fact printed as a server fact: an archive, a filter or a delete moves a
+// message out of INBOX and leaves it very much alive under All Mail, a label
+// or the Bin. `find_message_id` is the question that actually settles it, and
+// these tests pin the only two answers it is allowed to give.
+
+fn probe_eml(message_id: &str) -> String {
+    format!(
+        "From: sender@example.com\r\n\
+         To: user@example.com\r\n\
+         Subject: Aruodas listing\r\n\
+         Date: Thu, 01 Jan 2026 12:00:00 +0000\r\n\
+         Message-ID: <{message_id}>\r\n\
+         Content-Type: text/plain; charset=UTF-8\r\n\
+         \r\n\
+         body\r\n"
+    )
+}
+
+/// The whole point: the message is NOT in the folder it was archived from, and
+/// the server still has it. Absence from INBOX must never read as absence.
+#[async_std::test]
+async fn a_message_moved_out_of_inbox_is_still_found() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX").push(eml("Other", "a@b.c", "hi")))
+            .mailbox(Mailbox::new("Archive").push(probe_eml("kept@example.com")))
+            .mailbox(Mailbox::new("Trash")),
+    );
+    let mut sess = session(&server).await;
+
+    let probe = find_message_id(&mut sess, "<kept@example.com>", false)
+        .await
+        .expect("probe");
+
+    assert_eq!(
+        probe.found,
+        vec![MessageIdLocation { mailbox: "Archive".into(), uid: 1 }],
+        "the copy in Archive must be found — it is the copy the row would have called deleted"
+    );
+}
+
+/// The alarm. Every selectable folder answered, none has it: `complete` is the
+/// flag that makes the claim sayable.
+#[async_std::test]
+async fn absence_is_claimable_only_when_every_folder_answered() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX").push(eml("Other", "a@b.c", "hi")))
+            .mailbox(Mailbox::new("Archive"))
+            .mailbox(Mailbox::new("Trash")),
+    );
+    let mut sess = session(&server).await;
+
+    let probe = find_message_id(&mut sess, "<gone@example.com>", false)
+        .await
+        .expect("probe");
+
+    assert!(probe.found.is_empty(), "nothing holds it");
+    assert!(probe.complete, "three folders, three answers");
+    assert_eq!(probe.searched.len(), 3);
+    assert!(probe.failed.is_empty());
+}
+
+/// One folder that will not open is one folder that could be holding it. The
+/// sweep continues — a tagged NO leaves the session clean — but the verdict is
+/// unknown, not absent, and `failed` names the folder that would not answer.
+#[async_std::test]
+async fn a_folder_that_refuses_to_open_forbids_the_absence_claim() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX"))
+            .mailbox(Mailbox::new("Archive"))
+            .mailbox(Mailbox::new("Spam"))
+            .fault(
+                Trigger::with("SELECT", "Spam"),
+                Action::Respond("NO".into(), "[NOPERM] Not yours".into()),
+            ),
+    );
+    let mut sess = session(&server).await;
+
+    let probe = find_message_id(&mut sess, "<gone@example.com>", false)
+        .await
+        .expect("a refused folder is not a failed probe");
+
+    assert!(probe.found.is_empty());
+    assert!(!probe.complete, "Spam never answered — absence is not provable");
+    assert_eq!(probe.failed, vec!["Spam".to_string()]);
+    assert_eq!(probe.searched.len(), 2, "the other two still answered");
+}
+
+/// `[Gmail]` and friends are containers: SELECT fails on them by definition, so
+/// counting them as unanswered would make absence permanently unclaimable on
+/// every Gmail account.
+#[async_std::test]
+async fn noselect_containers_do_not_block_the_claim() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX"))
+            .mailbox(Mailbox::new("[Gmail]").with_attrs(&["\\Noselect", "\\HasChildren"]))
+            .mailbox(Mailbox::new("[Gmail]/All Mail")),
+    );
+    let mut sess = session(&server).await;
+
+    let probe = find_message_id(&mut sess, "<gone@example.com>", false)
+        .await
+        .expect("probe");
+
+    assert!(probe.complete, "a container is not an unanswered folder");
+    assert!(!probe.searched.iter().any(|p| p == "[Gmail]"));
+    assert!(probe.searched.iter().any(|p| p == "[Gmail]/All Mail"));
+}
+
+/// Presence needs one hit; absence needs all of them. INBOX is swept first so
+/// the common answer costs one round trip.
+#[async_std::test]
+async fn stop_on_first_ends_the_sweep_at_the_first_copy() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX").push(probe_eml("kept@example.com")))
+            .mailbox(Mailbox::new("Archive").push(probe_eml("kept@example.com")))
+            .mailbox(Mailbox::new("Trash")),
+    );
+    let mut sess = session(&server).await;
+
+    let probe = find_message_id(&mut sess, "<kept@example.com>", true)
+        .await
+        .expect("probe");
+
+    assert_eq!(probe.found.len(), 1);
+    assert_eq!(probe.searched, vec!["INBOX".to_string()]);
+    assert!(!probe.complete, "an early return has not searched everything");
+}
+
+/// An empty Message-ID would match every header on the server. Refuse it — the
+/// alternative is a probe that answers "found everywhere" or "absent" about a
+/// message it never looked for.
+#[async_std::test]
+async fn an_empty_message_id_is_refused() {
+    let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX")));
+    let mut sess = session(&server).await;
+
+    assert!(find_message_id(&mut sess, "<>", false).await.is_err());
+    assert!(find_message_id(&mut sess, "   ", false).await.is_err());
+}
+
+#[test]
+fn the_search_term_drops_the_angle_brackets() {
+    // Servers disagree about storing them; HEADER matching is a substring, so
+    // the unbracketed form matches both.
+    assert_eq!(message_id_search_term("<a@b.c>"), "a@b.c");
+    assert_eq!(message_id_search_term("  a@b.c  "), "a@b.c");
+    assert_eq!(message_id_search_term("a\"b@c"), "a\\\"b@c");
+}
+
+/// An account whose LIST comes back empty has not been searched — it has failed
+/// to be searched, and the difference is every message on it going gold.
+/// `list_mailboxes` already refuses an empty LIST as a dropped response; this
+/// pins that the probe inherits the refusal instead of reporting "found
+/// nowhere" over zero folders.
+#[async_std::test]
+async fn an_account_with_no_listed_folders_proves_nothing() {
+    // `Scenario::new()` ships a default INBOX — clear it, so LIST really is empty.
+    let server = MockImap::start(Scenario::new().mailboxes(vec![]));
+    let mut sess = session(&server).await;
+
+    let err = find_message_id(&mut sess, "<gone@example.com>", false)
+        .await
+        .expect_err("zero folders is a failed sweep, not an empty one");
+    assert!(err.contains("LIST"), "the error must name what did not answer: {err}");
+}

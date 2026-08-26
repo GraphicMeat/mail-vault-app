@@ -4970,6 +4970,7 @@ fn main() {
             commands::imap_delete_email,
             commands::smtp_send_email,
             commands::imap_search_emails,
+            commands::imap_find_message_id,
             commands::imap_disconnect,
             commands::oauth2_auth_url,
             commands::oauth2_exchange,

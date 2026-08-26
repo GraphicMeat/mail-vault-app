@@ -14,14 +14,16 @@ vi.mock('../../mailStore', () => {
   return { useMailStore: hook };
 });
 
-const { custodySource, custodyRowFor } = await import('../custody');
+const { custodySource, custodyProof, custodyRowFor } = await import('../custody');
 const { describeMessageState } = await import('../../../components/email/MessageStateIcon');
 
 // The rule this file guards: gold ("your only copy") is a claim about the
-// SERVER, and the only two things that prove it are the message never having
-// had a server copy, and this app having deleted the one it had. Absence from
-// a mailbox proves neither — Gmail's archive, a label move and the Bin all
-// take a live message out of INBOX.
+// SERVER, and exactly three things prove it — the message never having had a
+// server copy, this app having deleted the one it had, and a completed
+// Message-ID sweep of every folder coming back empty. Absence from a mailbox
+// proves none of them: Gmail's archive, a label move and the Bin all take a
+// live message out of INBOX. That is why the third proof is a probe of the
+// server (`services/workflows/probeServerCopy`) and not another derivation.
 
 const archived = (extra = {}) => ({ uid: 3, isArchived: true, ...extra });
 
@@ -51,9 +53,39 @@ describe('custodySource', () => {
     expect(custodySource(archived({ serverDeleted: true }))).toBe('local-only');
   });
 
+  it('calls a message the server was asked about and does not have local-only', () => {
+    expect(custodySource(archived({ serverAbsent: true }))).toBe('local-only');
+  });
+
   it('ignores a falsy stamp rather than reading it as proof', () => {
     expect(custodySource(archived({ serverDeleted: false }))).toBe('local');
     expect(custodySource(archived({ serverDeleted: 'no' }))).toBe('local');
+    // A probe that came back 'unknown' writes nothing, but a stamp torn up
+    // after the message turned out to be present writes `false` — and `false`
+    // is not evidence of anything.
+    expect(custodySource(archived({ serverAbsent: false }))).toBe('local');
+    expect(custodySource(archived({ serverAbsent: 'maybe' }))).toBe('local');
+  });
+});
+
+describe('custodyProof', () => {
+  it('names which of the three proofs a row carries', () => {
+    expect(custodyProof(archived({ _origin: 'local_sent' }))).toBe('never-on-server');
+    expect(custodyProof(archived({ _localStaged: true }))).toBe('never-on-server');
+    expect(custodyProof(archived({ serverDeleted: true }))).toBe('we-deleted');
+    expect(custodyProof(archived({ serverAbsent: true }))).toBe('server-lost-it');
+  });
+
+  it('is null for a row with no proof at all', () => {
+    expect(custodyProof(archived())).toBeNull();
+    expect(custodyProof(null)).toBeNull();
+  });
+
+  it('prefers the strongest claim when a row somehow carries two', () => {
+    // A staged send this app then "deleted" from a server it never reached:
+    // the honest sentence is the first one, not the second.
+    expect(custodyProof(archived({ _origin: 'local_sent', serverDeleted: true })))
+      .toBe('never-on-server');
   });
 });
 
@@ -79,6 +111,16 @@ describe('describeMessageState over custodySource', () => {
     );
     expect(state.tone).toBe('only-copy');
     expect(state.detail).toBe('It was never on the server. Nothing else has it.');
+  });
+
+  it('names someone else when a completed sweep found nothing', () => {
+    // The alarm the gold colour was written for: the app did not delete this,
+    // and every folder on the server was asked.
+    const state = describeMessageState(
+      archived({ source: 'local-only', serverAbsent: true }), { serverKnown: true },
+    );
+    expect(state.tone).toBe('only-copy');
+    expect(state.detail).toBe('Someone else deleted the server copy. Nothing else has it.');
   });
 
   it('derives custody itself when handed a copy the list never stamped', () => {
