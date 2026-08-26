@@ -840,7 +840,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={e => e.stopPropagation()}
-              className="bg-mail-surface border border-mail-border rounded-xl p-6 shadow-xl max-w-sm mx-4"
+              className="bg-mail-surface border border-mail-border rounded-xl p-6 max-w-sm mx-4"
             >
               <h3 className="text-lg font-semibold text-mail-text mb-2">
                 {bulkAction === 'delete' ? 'Delete emails?' : 'Archive emails?'}

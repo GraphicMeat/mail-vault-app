@@ -678,8 +678,7 @@ function App() {
           <button
             onClick={() => setShowAccountModal(true)}
             className="px-6 py-3 bg-mail-accent-fill hover:bg-mail-accent-hover text-white
-                       font-medium rounded-lg transition-all duration-200
-                       shadow-glow hover:shadow-glow-lg"
+                       font-medium rounded-lg transition-colors duration-200"
           >
             Add Your First Account
           </button>
@@ -809,8 +808,8 @@ function App() {
                 initial={{ x: 100, opacity: 0 }}
                 animate={{ x: 0, opacity: 1 }}
                 exit={{ x: 100, opacity: 0 }}
-                className="flex items-center gap-2 bg-mail-surface border border-mail-border
-                           rounded-lg shadow-lg px-3 py-2 cursor-pointer hover:bg-mail-surface-hover
+                className="flex items-center gap-2 bg-mail-surface border border-mail-strong
+                           rounded-lg px-3 py-2 cursor-pointer hover:bg-mail-surface-hover
                            transition-colors max-w-[280px] group"
                 onClick={() => restoreCompose(w.id)}
               >
@@ -922,7 +921,7 @@ function App() {
 
       {/* Pending bulk operation resume banner */}
       {pendingOperation && (
-        <div className="fixed top-4 right-4 z-50 bg-mail-surface border border-mail-border rounded-xl shadow-2xl p-4 max-w-sm">
+        <div className="fixed top-4 right-4 z-50 bg-mail-surface border border-mail-strong rounded-xl p-4 max-w-sm">
           <p className="text-sm text-mail-text mb-3">
             You have an unfinished operation: {pendingOperation.type.replace(/_/g, ' ')} {
               ((pendingOperation.totalUids || []).length - (pendingOperation.completedUids || []).length).toLocaleString()

@@ -49,7 +49,7 @@ export function BulkSelectionBubble() {
         >
           <div
             className="flex items-center gap-2 pl-3 pr-1 py-1.5 bg-mail-surface border border-mail-accent/40
-                       rounded-xl shadow-2xl backdrop-blur-sm pointer-events-auto"
+                       rounded-xl pointer-events-auto"
             data-testid="bulk-selection-bubble"
           >
             <button

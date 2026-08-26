@@ -994,7 +994,7 @@ export function AccountModal({ onClose }) {
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-mail-surface border border-mail-border rounded-xl shadow-xl p-6 mx-4 max-w-xs"
+                className="bg-mail-surface border border-mail-border rounded-xl p-6 mx-4 max-w-xs"
                 onClick={(e) => e.stopPropagation()}
               >
                 <h3 className="text-base font-semibold text-mail-text mb-2">Discard changes?</h3>

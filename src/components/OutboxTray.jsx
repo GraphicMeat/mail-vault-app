@@ -32,10 +32,10 @@ export function OutboxTray({ onRestoreDraft }) {
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 30, opacity: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className={`flex items-start gap-3 px-4 py-3 rounded-xl shadow-2xl min-w-[320px] max-w-[420px] border
+              className={`flex items-start gap-3 px-4 py-3 rounded-xl min-w-[320px] max-w-[420px] border
                          ${isError
                            ? 'bg-mail-danger-tint border-mail-danger/40'
-                           : 'bg-mail-surface border-mail-border'}`}
+                           : 'bg-mail-surface border-mail-strong'}`}
               data-testid={`outbox-bubble-${item.status}`}
             >
               <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0

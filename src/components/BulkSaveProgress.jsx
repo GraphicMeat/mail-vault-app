@@ -65,6 +65,16 @@ function BulkSaveProgressInner({ progress, onDismiss, onCancel, mode = 'archive'
   const config = MODE_CONFIG[mode] || MODE_CONFIG.archive;
   const Icon = config.icon;
 
+  // Same reasoning as BulkOperationProgress: quarter milestones and the
+  // outcome, never every percent.
+  const milestone = Math.floor(percentage / 25) * 25;
+  const of = `${completed.toLocaleString()} of ${total.toLocaleString()}`;
+  const announcement = isComplete
+    ? (errors > 0 ? `${config.errorLabel(errors)}. ${of} messages.` : `${config.successLabel}. ${of} messages.`)
+    // activeLabel ends in an ellipsis for the eye; a screen reader would
+    // read it out as "dot dot dot".
+    : `${config.activeLabel.replace(/\.\.\.$/, '')} ${milestone}% of ${total.toLocaleString()} messages.`;
+
   useEffect(() => {
     if (isComplete && errors === 0) {
       const timer = setTimeout(() => {
@@ -82,7 +92,8 @@ function BulkSaveProgressInner({ progress, onDismiss, onCancel, mode = 'archive'
       exit={{ y: 100, opacity: 0 }}
       className="fixed bottom-4 right-4 z-50"
     >
-      <div className="bg-mail-surface border border-mail-border rounded-xl shadow-2xl
+      <p role="status" aria-live="polite" className="sr-only">{announcement}</p>
+      <div className="bg-mail-surface border border-mail-strong rounded-xl
                      overflow-hidden min-w-[300px]">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-mail-border">

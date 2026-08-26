@@ -29,8 +29,8 @@ export function RestoreTray() {
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 30, opacity: 0 }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className={`flex items-start gap-3 px-4 py-3 rounded-xl shadow-2xl min-w-[280px] max-w-[380px] border cursor-pointer
-                     ${failed ? 'bg-mail-danger-tint border-mail-danger/40' : 'bg-mail-surface border-mail-border'}`}
+          className={`flex items-start gap-3 px-4 py-3 rounded-xl min-w-[280px] max-w-[380px] border cursor-pointer
+                     ${failed ? 'bg-mail-danger-tint border-mail-danger/40' : 'bg-mail-surface border-mail-strong'}`}
           onClick={() => openChangeServer(activeRestore.account_id)}
           data-testid={`restore-bubble-${activeRestore.status}`}
         >

@@ -62,6 +62,19 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
   const PhaseIcon = PHASE_ICONS[currentPhase] || HardDrive;
   const phaseLabel = PHASE_LABELS[currentPhase] || 'Processing';
 
+  // Thousands of messages leave the server here, and until now the whole
+  // operation was silent to a screen reader — the bar is the only report it
+  // makes. Announce phase changes, quarter milestones and the outcome; not
+  // every percent, which would talk over the user for the whole run.
+  const milestone = Math.floor(percentage / 25) * 25;
+  const of = `${completed.toLocaleString()} of ${total.toLocaleString()}`;
+  const announcement = isComplete
+    ? (errors > 0 ? `Finished with ${errors.toLocaleString()} failed. ${of} messages.` : `Finished. ${of} messages.`)
+    : isCancelled ? `Cancelled at ${of} messages.`
+    : isError ? `Stopped by an error at ${of} messages.`
+    : `${phaseLabel}, ${milestone}% of ${total.toLocaleString()} messages.`;
+  const liveRegion = <p role="status" aria-live="polite" className="sr-only">{announcement}</p>;
+
   if (!isActive && !isComplete && !isCancelled && !isError) return null;
 
   // Minimized view
@@ -72,10 +85,11 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
         animate={{ y: 0, opacity: 1 }}
         className="fixed bottom-4 right-4 z-50"
       >
+        {liveRegion}
         <button
           onClick={() => setMinimized(false)}
-          className="flex items-center gap-2 px-3 py-2 bg-mail-surface border border-mail-border
-                    rounded-lg shadow-lg hover:bg-mail-surface-hover transition-colors"
+          className="flex items-center gap-2 px-3 py-2 bg-mail-surface border border-mail-strong
+                    rounded-lg hover:bg-mail-surface-hover transition-colors"
         >
           <PhaseIcon size={14} className="text-mail-accent-text animate-pulse" />
           <span className="text-sm text-mail-text">{phaseLabel}... {percentage}%</span>
@@ -94,9 +108,10 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
         exit={{ y: 100, opacity: 0 }}
         className="fixed bottom-4 right-4 z-50"
       >
-        <div className={`bg-mail-surface border rounded-xl shadow-2xl overflow-hidden min-w-[320px]
+        {liveRegion}
+        <div className={`bg-mail-surface border rounded-xl overflow-hidden min-w-[320px]
                         transition-[border-color] duration-[var(--mv-transition)]
-                        ${isError ? 'border-mail-danger' : isComplete && movesToVault ? 'border-mail-local' : 'border-mail-border'}`}>
+                        ${isError ? 'border-mail-danger' : isComplete && movesToVault ? 'border-mail-local' : 'border-mail-strong'}`}>
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-mail-border">
             <div className="flex items-center gap-2">

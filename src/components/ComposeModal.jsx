@@ -1083,7 +1083,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         exit={{ scale: 0.95, opacity: 0 }}
         data-testid="compose-modal"
         data-dragging={dragging ? 'true' : 'false'}
-        className={`bg-mail-surface border rounded-xl shadow-2xl
+        className={`bg-mail-surface border rounded-xl
                    w-full max-w-4xl max-h-[90vh] h-[min(80vh,700px)] min-h-[320px] flex flex-col overflow-hidden
                    ${dragging ? 'border-mail-accent border-2' : 'border-mail-border'}`}
         onClick={(e) => e.stopPropagation()}

@@ -433,17 +433,6 @@ body {
   transform: translateX(20px);
 }
 
-/* Glass effect */
-.glass {
-  background: rgba(21, 21, 31, 0.86);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-
-[data-theme="light"] .glass {
-  background: rgba(255, 255, 255, 0.9);
-}
-
 /* Selection styles */
 ::selection {
   background-color: var(--mail-accent);
@@ -467,15 +456,6 @@ button:focus-visible {
 /* Transitions */
 .transition-smooth {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Shadow glow effect */
-.shadow-glow {
-  box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
-}
-
-.shadow-glow-lg {
-  box-shadow: 0 0 40px rgba(99, 102, 241, 0.4);
 }
 
 /* Animation keyframes */
@@ -568,13 +548,11 @@ input[type="range"]::-webkit-slider-thumb {
   height: 16px;
   width: 16px;
   border-radius: 50%;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.15s ease;
 }
 
 input[type="range"]::-webkit-slider-thumb:hover {
   transform: scale(1.1);
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
 }
 
 input[type="range"]::-moz-range-track {
@@ -589,21 +567,11 @@ input[type="range"]::-moz-range-thumb {
   width: 16px;
   border-radius: 50%;
   border: none;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.15s ease;
 }
 
 input[type="range"]::-moz-range-thumb:hover {
   transform: scale(1.1);
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
-}
-
-input[type="range"]:focus {
-  outline: none;
-}
-
-input[type="range"]:focus::-webkit-slider-thumb {
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.3);
 }
 
 /* TipTap Rich Text Editor */

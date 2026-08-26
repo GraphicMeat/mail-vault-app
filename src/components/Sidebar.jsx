@@ -230,15 +230,28 @@ const CollapsedAccountButton = memo(function CollapsedAccountButton({
   unreadCount, onActivate, onOpenBackup
 }) {
   return (
+    // Same active marker as the expanded rail: the identity spine over a 10%
+    // wash of the same colour. A ring here was the last box-shadow in the
+    // app's own chrome, and it said "active" in a language nothing else
+    // in the client speaks. (The email-body iframe keeps its own.)
     <button
-      className={`relative p-1.5 rounded-lg transition-all
-                 ${isActive && !unifiedInbox
-                   ? 'ring-2 ring-offset-1 ring-offset-mail-surface'
-                   : 'hover:bg-mail-surface-hover'}`}
-      style={isActive && !unifiedInbox ? { '--tw-ring-color': color } : undefined}
+      className={`relative p-1.5 rounded-lg transition-colors
+                 ${isActive && !unifiedInbox ? '' : 'hover:bg-mail-surface-hover'}`}
+      style={isActive && !unifiedInbox
+        ? { backgroundColor: `color-mix(in srgb, ${color} 10%, transparent)` }
+        : undefined}
       onClick={onActivate}
+      aria-label={account.name || account.email}
+      aria-current={isActive && !unifiedInbox ? 'true' : undefined}
       title={account.name || account.email}
     >
+      {isActive && !unifiedInbox && (
+        <span
+          aria-hidden="true"
+          className="absolute left-0 top-1 bottom-1 w-[3px] rounded-full"
+          style={{ backgroundColor: color }}
+        />
+      )}
       <div
         className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold select-none"
         style={{ backgroundColor: color }}
@@ -491,7 +504,7 @@ function TransferStatsHoverBubble({ pos, stats, onClick, onMouseEnter, onMouseLe
 
   return createPortal(
     <div
-      className="fixed z-[80] w-64 bg-mail-surface border border-mail-border rounded-lg shadow-lg p-3 text-xs cursor-pointer"
+      className="fixed z-[80] w-64 bg-mail-surface border border-mail-strong rounded-lg p-3 text-xs cursor-pointer"
       style={{ top: pos.top, left: pos.left }}
       onClick={onClick}
       onMouseEnter={onMouseEnter}
@@ -794,7 +807,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         <div className="w-full py-2 flex justify-center border-b border-mail-border">
           <button
             onClick={onCompose}
-            className="p-2.5 bg-mail-accent-fill hover:bg-mail-accent-hover text-white rounded-lg transition-all shadow-glow hover:shadow-glow-lg"
+            className="p-2.5 bg-mail-accent-fill hover:bg-mail-accent-hover text-white rounded-lg transition-colors"
             title="Compose"
           >
             <PenSquare size={16} />
@@ -1000,7 +1013,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           onClick={onCompose}
           className="w-full flex items-center justify-center gap-2 px-4 py-2.5
                      bg-mail-accent-fill hover:bg-mail-accent-hover text-white
-                     font-medium rounded-lg transition-all shadow-glow hover:shadow-glow-lg"
+                     font-medium rounded-lg transition-colors"
         >
           <PenSquare size={18} />
           Compose

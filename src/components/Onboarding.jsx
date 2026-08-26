@@ -64,7 +64,7 @@ export function Onboarding() {
         </div>
 
         {/* Main Card */}
-        <div className="bg-mail-surface border border-mail-border rounded-xl p-4 shadow-xl">
+        <div className="bg-mail-surface border border-mail-border rounded-xl p-4">
           {/* Security Header */}
           <div className="flex items-center gap-2 mb-3 pb-2 border-b border-mail-border">
             <div className="w-8 h-8 bg-mail-accent/10 rounded-lg flex items-center justify-center">
@@ -127,7 +127,7 @@ export function Onboarding() {
               onClick={handleComplete}
               className="flex items-center gap-1.5 px-4 py-1.5 bg-mail-accent-fill
                         hover:bg-mail-accent-hover text-white font-medium rounded-lg
-                        transition-all shadow-glow hover:shadow-glow-lg text-xs"
+                        transition-colors text-xs"
             >
               Get Started
               <Mail size={14} />
