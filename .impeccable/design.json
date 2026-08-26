@@ -1,0 +1,487 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-26T00:00:00.000Z",
+  "title": "Design System: MailVault",
+  "extensions": {
+    "colorMeta": {
+      "accent": {
+        "role": "primary",
+        "displayName": "Desk Lamp Indigo",
+        "canonical": "oklch(58.54% 0.204 277.117)",
+        "light": "#4f46e5",
+        "purpose": "The single live colour: active folder, focus ring, primary action, links, selected-row edge.",
+        "tonalRamp": [
+          "oklch(15% 0.112 277.117)",
+          "oklch(25% 0.163 277.117)",
+          "oklch(35% 0.204 277.117)",
+          "oklch(45% 0.204 277.117)",
+          "oklch(55% 0.204 277.117)",
+          "oklch(65% 0.204 277.117)",
+          "oklch(80% 0.204 277.117)",
+          "oklch(95% 0.112 277.117)"
+        ]
+      },
+      "accent-hover": {
+        "role": "primary",
+        "displayName": "Desk Lamp Indigo Raised",
+        "canonical": "oklch(68.011% 0.158 276.935)",
+        "light": "#4f46e5 → deepens on hover in light theme",
+        "purpose": "Hover pair for the accent. Brightens in dark, deepens in light — the direction reverses per theme.",
+        "tonalRamp": [
+          "oklch(15% 0.087 276.935)",
+          "oklch(25% 0.127 276.935)",
+          "oklch(35% 0.158 276.935)",
+          "oklch(45% 0.158 276.935)",
+          "oklch(55% 0.158 276.935)",
+          "oklch(65% 0.158 276.935)",
+          "oklch(80% 0.158 276.935)",
+          "oklch(95% 0.087 276.935)"
+        ]
+      },
+      "bg": {
+        "role": "neutral",
+        "displayName": "Midnight Ink",
+        "canonical": "oklch(14.733% 0.011 285.007)",
+        "light": "#f8fafc",
+        "purpose": "Window ground, and the inside of text inputs so fields read as cut into the desk.",
+        "tonalRamp": [
+          "oklch(15% 0.006 285.007)",
+          "oklch(25% 0.009 285.007)",
+          "oklch(35% 0.011 285.007)",
+          "oklch(45% 0.011 285.007)",
+          "oklch(55% 0.011 285.007)",
+          "oklch(65% 0.011 285.007)",
+          "oklch(80% 0.011 285.007)",
+          "oklch(95% 0.006 285.007)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Ink Surface",
+        "canonical": "oklch(18.614% 0.016 284.716)",
+        "light": "#ffffff",
+        "purpose": "Panels, sidebars, unread rows, settings cards — one tonal step above the ground.",
+        "tonalRamp": [
+          "oklch(15% 0.009 284.716)",
+          "oklch(25% 0.013 284.716)",
+          "oklch(35% 0.016 284.716)",
+          "oklch(45% 0.016 284.716)",
+          "oklch(55% 0.016 284.716)",
+          "oklch(65% 0.016 284.716)",
+          "oklch(80% 0.016 284.716)",
+          "oklch(95% 0.009 284.716)"
+        ]
+      },
+      "surface-hover": {
+        "role": "neutral",
+        "displayName": "Ink Raised",
+        "canonical": "oklch(22.303% 0.021 284.54)",
+        "light": "#f1f5f9",
+        "purpose": "Hover fills, code blocks, secondary chips — one step above surface.",
+        "tonalRamp": [
+          "oklch(15% 0.012 284.54)",
+          "oklch(25% 0.017 284.54)",
+          "oklch(35% 0.021 284.54)",
+          "oklch(45% 0.021 284.54)",
+          "oklch(55% 0.021 284.54)",
+          "oklch(65% 0.021 284.54)",
+          "oklch(80% 0.021 284.54)",
+          "oklch(95% 0.012 284.54)"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "oklch(29.219% 0.029 284.464)",
+        "light": "#e2e8f0",
+        "purpose": "Every division in the app, always 1px.",
+        "tonalRamp": [
+          "oklch(15% 0.016 284.464)",
+          "oklch(25% 0.023 284.464)",
+          "oklch(35% 0.029 284.464)",
+          "oklch(45% 0.029 284.464)",
+          "oklch(55% 0.029 284.464)",
+          "oklch(65% 0.029 284.464)",
+          "oklch(80% 0.029 284.464)",
+          "oklch(95% 0.016 284.464)"
+        ]
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "oklch(91.973% 0.004 286.32)",
+        "light": "#1e293b",
+        "purpose": "Primary text.",
+        "tonalRamp": [
+          "oklch(15% 0.002 286.32)",
+          "oklch(25% 0.003 286.32)",
+          "oklch(35% 0.004 286.32)",
+          "oklch(45% 0.004 286.32)",
+          "oklch(55% 0.004 286.32)",
+          "oklch(65% 0.004 286.32)",
+          "oklch(80% 0.004 286.32)",
+          "oklch(95% 0.002 286.32)"
+        ]
+      },
+      "text-muted": {
+        "role": "neutral",
+        "displayName": "Half-Light",
+        "canonical": "oklch(55.166% 0.014 285.938)",
+        "light": "#64748b",
+        "purpose": "Secondary text and every icon at rest.",
+        "tonalRamp": [
+          "oklch(15% 0.008 285.938)",
+          "oklch(25% 0.011 285.938)",
+          "oklch(35% 0.014 285.938)",
+          "oklch(45% 0.014 285.938)",
+          "oklch(55% 0.014 285.938)",
+          "oklch(65% 0.014 285.938)",
+          "oklch(80% 0.014 285.938)",
+          "oklch(95% 0.008 285.938)"
+        ]
+      },
+      "local": {
+        "role": "secondary",
+        "displayName": "Vault Emerald",
+        "canonical": "oklch(69.587% 0.149 162.48)",
+        "light": "#059669",
+        "purpose": "Custody: the message is in your vault, on your disk.",
+        "tonalRamp": [
+          "oklch(15% 0.082 162.48)",
+          "oklch(25% 0.119 162.48)",
+          "oklch(35% 0.149 162.48)",
+          "oklch(45% 0.149 162.48)",
+          "oklch(55% 0.149 162.48)",
+          "oklch(65% 0.149 162.48)",
+          "oklch(80% 0.149 162.48)",
+          "oklch(95% 0.082 162.48)"
+        ]
+      },
+      "server": {
+        "role": "secondary",
+        "displayName": "Server Blue",
+        "canonical": "oklch(62.308% 0.188 259.815)",
+        "light": "#2563eb",
+        "purpose": "Custody: the message is on the server and only there.",
+        "tonalRamp": [
+          "oklch(15% 0.103 259.815)",
+          "oklch(25% 0.15 259.815)",
+          "oklch(35% 0.188 259.815)",
+          "oklch(45% 0.188 259.815)",
+          "oklch(55% 0.188 259.815)",
+          "oklch(65% 0.188 259.815)",
+          "oklch(80% 0.188 259.815)",
+          "oklch(95% 0.103 259.815)"
+        ]
+      },
+      "warning": {
+        "role": "secondary",
+        "displayName": "Only-Copy Amber",
+        "canonical": "oklch(76.859% 0.165 70.08)",
+        "light": "#d97706",
+        "purpose": "Custody: the server no longer has this message. Requires verified server state.",
+        "tonalRamp": [
+          "oklch(15% 0.091 70.08)",
+          "oklch(25% 0.132 70.08)",
+          "oklch(35% 0.165 70.08)",
+          "oklch(45% 0.165 70.08)",
+          "oklch(55% 0.165 70.08)",
+          "oklch(65% 0.165 70.08)",
+          "oklch(80% 0.165 70.08)",
+          "oklch(95% 0.091 70.08)"
+        ]
+      },
+      "success": {
+        "role": "tertiary",
+        "displayName": "Confirm Green",
+        "canonical": "oklch(72.275% 0.192 149.579)",
+        "light": "#16a34a",
+        "purpose": "Completed operations.",
+        "tonalRamp": [
+          "oklch(15% 0.106 149.579)",
+          "oklch(25% 0.154 149.579)",
+          "oklch(35% 0.192 149.579)",
+          "oklch(45% 0.192 149.579)",
+          "oklch(55% 0.192 149.579)",
+          "oklch(65% 0.192 149.579)",
+          "oklch(80% 0.192 149.579)",
+          "oklch(95% 0.106 149.579)"
+        ]
+      },
+      "danger": {
+        "role": "tertiary",
+        "displayName": "Destructive Red",
+        "canonical": "oklch(63.683% 0.208 25.331)",
+        "light": "#dc2626",
+        "purpose": "Delete actions and error states.",
+        "tonalRamp": [
+          "oklch(15% 0.114 25.331)",
+          "oklch(25% 0.166 25.331)",
+          "oklch(35% 0.208 25.331)",
+          "oklch(45% 0.208 25.331)",
+          "oklch(55% 0.208 25.331)",
+          "oklch(65% 0.208 25.331)",
+          "oklch(80% 0.208 25.331)",
+          "oklch(95% 0.114 25.331)"
+        ]
+      },
+      "chat-sent-bg": {
+        "role": "primary",
+        "displayName": "Sent Indigo",
+        "canonical": "oklch(51.057% 0.23 276.966)",
+        "light": "#4338ca",
+        "purpose": "Sent chat bubbles — a deliberate half-step deeper than the accent.",
+        "tonalRamp": [
+          "oklch(15% 0.127 276.966)",
+          "oklch(25% 0.184 276.966)",
+          "oklch(35% 0.23 276.966)",
+          "oklch(45% 0.23 276.966)",
+          "oklch(55% 0.23 276.966)",
+          "oklch(65% 0.23 276.966)",
+          "oklch(80% 0.23 276.966)",
+          "oklch(95% 0.127 276.966)"
+        ]
+      },
+      "chat-received-bg": {
+        "role": "neutral",
+        "displayName": "Received Ink",
+        "canonical": "oklch(24.287% 0.03 283.911)",
+        "light": "#ffffff",
+        "purpose": "Received chat bubbles, with a 1px hairline.",
+        "tonalRamp": [
+          "oklch(15% 0.017 283.911)",
+          "oklch(25% 0.024 283.911)",
+          "oklch(35% 0.03 283.911)",
+          "oklch(45% 0.03 283.911)",
+          "oklch(55% 0.03 283.911)",
+          "oklch(65% 0.03 283.911)",
+          "oklch(80% 0.03 283.911)",
+          "oklch(95% 0.017 283.911)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "App-level titles and onboarding headlines. Six occurrences in the whole client."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Section headers in full-screen surfaces like Settings."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Dialog and modal titles, panel headers."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "The workhorse: subjects, senders, message text, buttons, inputs. 500+ usages."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Timestamps, folder chips, counts, secondary metadata."
+      },
+      "micro": {
+        "displayName": "Micro",
+        "purpose": "Unread counts, state badges, dense-row furniture. 11px, and 10px for badge digits only."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Raw headers, message IDs, file paths — where the app shows you the actual stored bytes."
+      }
+    },
+    "motion": [
+      {
+        "name": "fade-fast",
+        "value": "150ms ease-out",
+        "purpose": "Default opacity change for popovers, toasts and inline reveals."
+      },
+      {
+        "name": "fade",
+        "value": "200ms ease-out",
+        "purpose": "Theme transitions on body background and colour; standard state fades."
+      },
+      {
+        "name": "ease-standard",
+        "value": "cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "The .transition-smooth easing for any 200ms property change."
+      },
+      {
+        "name": "overlay-spring",
+        "value": "spring, damping 25, stiffness 300",
+        "purpose": "Trays, panels and sheets entering. Framer Motion only."
+      },
+      {
+        "name": "dialog-in",
+        "value": "opacity 0→1 with scale 0.95→1",
+        "purpose": "Centered dialogs over a black/50 backdrop-blur-sm scrim."
+      },
+      {
+        "name": "spin",
+        "value": "1s linear infinite",
+        "purpose": "Busy spinners inside buttons and progress rows."
+      },
+      {
+        "name": "pulse-soft",
+        "value": "2s ease-in-out infinite, opacity 1→0.7",
+        "purpose": "Ambient \"work in progress\" pulse. The only infinite non-spinner animation."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one live action in a view. Indigo fill, never more than one per dialog.",
+      "html": "<button class=\"ds-btn-primary\">Archive &amp; Delete</button>",
+      "css": ".ds-btn-primary{background:var(--mail-accent);color:#fff;font:600 0.875rem/1.5 \"Instrument Sans\",system-ui,sans-serif;padding:8px 16px;border:none;border-radius:8px;cursor:pointer;transition:background-color .2s cubic-bezier(.4,0,.2,1)}.ds-btn-primary:hover{background:var(--mail-accent-hover)}.ds-btn-primary:focus-visible{outline:2px solid var(--mail-accent);outline-offset:2px}.ds-btn-primary:disabled{opacity:.5}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "The Cancel side of every dialog. Outnumbers primary two to one.",
+      "html": "<button class=\"ds-btn-secondary\">Cancel</button>",
+      "css": ".ds-btn-secondary{background:var(--mail-surface);color:var(--mail-text);font:500 0.875rem/1.5 \"Instrument Sans\",system-ui,sans-serif;padding:10px 16px;border:1px solid var(--mail-border);border-radius:8px;cursor:pointer;transition:background-color .2s cubic-bezier(.4,0,.2,1)}.ds-btn-secondary:hover{background:var(--mail-surface-hover)}.ds-btn-secondary:focus-visible{outline:2px solid var(--mail-accent);outline-offset:2px}"
+    },
+    {
+      "name": "Icon Button (ghost)",
+      "kind": "button",
+      "refersTo": "button-icon",
+      "description": "Default for row and toolbar actions. Transparent until hovered.",
+      "html": "<button class=\"ds-btn-icon\" aria-label=\"Close\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/></svg></button>",
+      "css": ".ds-btn-icon{background:transparent;color:var(--mail-text-muted);padding:8px;border:none;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background-color .2s,color .2s}.ds-btn-icon:hover{background:var(--mail-surface-hover);color:var(--mail-text)}.ds-btn-icon:focus-visible{outline:2px solid var(--mail-accent);outline-offset:2px}"
+    },
+    {
+      "name": "Search Input",
+      "kind": "input",
+      "refersTo": "input-text",
+      "description": "Fields are cut into the ground, not raised off it. Focus moves the hairline to indigo.",
+      "html": "<div class=\"ds-field\"><svg class=\"ds-field-icon\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"11\" cy=\"11\" r=\"8\"/><path d=\"m21 21-4.3-4.3\"/></svg><input class=\"ds-input\" type=\"text\" placeholder=\"Search emails...\"></div>",
+      "css": ".ds-field{position:relative;display:block;width:280px}.ds-field-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--mail-text-muted);pointer-events:none}.ds-input{width:100%;background:var(--mail-input-bg);color:var(--mail-text);font:400 0.875rem/1.5 \"Instrument Sans\",system-ui,sans-serif;padding:8px 12px 8px 34px;border:1px solid var(--mail-border);border-radius:8px;transition:border-color .15s ease}.ds-input::placeholder{color:var(--mail-text-muted)}.ds-input:focus{outline:none;border-color:var(--mail-accent)}"
+    },
+    {
+      "name": "Folder Chip",
+      "kind": "chip",
+      "refersTo": "chip-folder",
+      "description": "Pill means state. Rest is a hairline outline; active fills indigo.",
+      "html": "<div class=\"ds-chips\"><button class=\"ds-chip ds-chip-active\"><svg width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"22 12 16 12 14 15 10 15 8 12 2 12\"/><path d=\"M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z\"/></svg><span>Inbox</span></button><button class=\"ds-chip\"><span>Archive</span></button></div>",
+      "css": ".ds-chips{display:flex;gap:8px}.ds-chip{display:inline-flex;align-items:center;gap:4px;background:transparent;color:var(--mail-text);font:500 0.75rem/1.4 \"Instrument Sans\",system-ui,sans-serif;padding:4px 10px;border:1px solid var(--mail-border);border-radius:9999px;cursor:pointer;transition:background-color .2s}.ds-chip:hover{background:var(--mail-surface-hover)}.ds-chip-active{background:var(--mail-accent);border-color:var(--mail-accent);color:#fff}.ds-chip-active:hover{background:var(--mail-accent)}"
+    },
+    {
+      "name": "Sidebar Folder Row",
+      "kind": "nav",
+      "refersTo": "chip-folder-active",
+      "description": "Active is a 10% accent tint, never a solid fill — the folder list has to stay quiet.",
+      "html": "<nav class=\"ds-nav\"><div class=\"ds-nav-item ds-nav-item-active\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"22 12 16 12 14 15 10 15 8 12 2 12\"/><path d=\"M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z\"/></svg><span>Inbox</span><span class=\"ds-nav-count\">12</span></div><div class=\"ds-nav-item\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><line x1=\"22\" x2=\"2\" y1=\"12\" y2=\"12\"/><path d=\"M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z\"/><line x1=\"6\" x2=\"6.01\" y1=\"16\" y2=\"16\"/><line x1=\"10\" x2=\"10.01\" y1=\"16\" y2=\"16\"/></svg><span>Vault</span></div></nav>",
+      "css": ".ds-nav{display:flex;flex-direction:column;gap:2px;width:220px}.ds-nav-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;color:var(--mail-text);font:400 0.875rem/1.5 \"Instrument Sans\",system-ui,sans-serif;cursor:pointer;transition:background-color .2s}.ds-nav-item:hover{background:var(--mail-surface-hover)}.ds-nav-item-active{background:color-mix(in srgb,var(--mail-accent) 10%,transparent);color:var(--mail-accent)}.ds-nav-count{margin-left:auto;font-size:0.6875rem;font-weight:500;padding:1px 6px;border-radius:9999px;background:color-mix(in srgb,var(--mail-accent) 15%,transparent);color:var(--mail-accent)}"
+    },
+    {
+      "name": "Message Row",
+      "kind": "custom",
+      "refersTo": "row-email",
+      "description": "Fixed 56px inside a virtualizer. Unread is a tonal step plus weight — never a size change.",
+      "html": "<div class=\"ds-rows\"><div class=\"ds-row ds-row-unread\"><input class=\"ds-check\" type=\"checkbox\" checked><svg class=\"ds-row-glyph ds-tone-local\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><line x1=\"22\" x2=\"2\" y1=\"12\" y2=\"12\"/><path d=\"M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z\"/><line x1=\"6\" x2=\"6.01\" y1=\"16\" y2=\"16\"/><line x1=\"10\" x2=\"10.01\" y1=\"16\" y2=\"16\"/></svg><span class=\"ds-row-sender\">Hostinger Billing</span><span class=\"ds-row-subject\">Your invoice for August is ready</span><span class=\"ds-row-date\">09:42</span></div><div class=\"ds-row\"><input class=\"ds-check\" type=\"checkbox\"><svg class=\"ds-row-glyph ds-tone-server\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z\"/></svg><span class=\"ds-row-sender\">Purelymail</span><span class=\"ds-row-subject\">Storage report — 61% of quota used</span><span class=\"ds-row-date\">Fri</span></div></div>",
+      "css": ".ds-rows{width:100%;max-width:640px}.ds-row{display:flex;align-items:center;gap:12px;height:56px;padding:0 16px;border-bottom:1px solid var(--mail-border);color:var(--mail-text);font:400 0.875rem/1.5 \"Instrument Sans\",system-ui,sans-serif;cursor:pointer}.ds-row:hover{background:var(--mail-surface-hover)}.ds-row-unread{background:var(--mail-surface);font-weight:600}.ds-row-sender{flex:0 0 140px;overflow:clip;text-overflow:ellipsis;white-space:nowrap}.ds-row-subject{flex:1 1 auto;min-width:0;overflow:clip;text-overflow:ellipsis;white-space:nowrap;color:var(--mail-text-muted)}.ds-row-unread .ds-row-subject{color:var(--mail-text)}.ds-row-date{flex:0 0 auto;font-size:0.75rem;color:var(--mail-text-muted)}.ds-tone-local{color:var(--mail-local)}.ds-tone-server{color:var(--mail-server)}.ds-check{appearance:none;width:18px;height:18px;border:2px solid var(--mail-border);border-radius:4px;background:transparent;cursor:pointer;position:relative;flex:0 0 auto;transition:all .15s ease}.ds-check:checked{background:var(--mail-accent);border-color:var(--mail-accent)}.ds-check:checked::after{content:\"\";position:absolute;left:5px;top:2px;width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}.ds-check:hover{border-color:var(--mail-accent)}"
+    },
+    {
+      "name": "Message State Glyph",
+      "kind": "custom",
+      "refersTo": "row-email",
+      "description": "The signature component: where a message lives, as one glyph, plus a backup dot. Emerald = vault, blue = server, amber = your only copy.",
+      "html": "<div class=\"ds-states\"><span class=\"ds-state\"><svg class=\"ds-tone-server\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z\"/></svg><em>On the server</em></span><span class=\"ds-state\"><svg class=\"ds-tone-local\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><line x1=\"22\" x2=\"2\" y1=\"12\" y2=\"12\"/><path d=\"M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z\"/><line x1=\"6\" x2=\"6.01\" y1=\"16\" y2=\"16\"/><line x1=\"10\" x2=\"10.01\" y1=\"16\" y2=\"16\"/></svg><span class=\"ds-dot ds-dot-filled\"></span><em>Saved in your vault and backup drive</em></span><span class=\"ds-state\"><svg class=\"ds-tone-warning\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><line x1=\"22\" x2=\"2\" y1=\"12\" y2=\"12\"/><path d=\"M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z\"/><line x1=\"6\" x2=\"6.01\" y1=\"16\" y2=\"16\"/><line x1=\"10\" x2=\"10.01\" y1=\"16\" y2=\"16\"/></svg><span class=\"ds-dot ds-dot-hollow\"></span><em>Your only known copy</em></span></div>",
+      "css": ".ds-states{display:flex;flex-direction:column;gap:10px}.ds-state{display:inline-flex;align-items:center;gap:6px;font:500 0.75rem/1.4 \"Instrument Sans\",system-ui,sans-serif;color:var(--mail-text)}.ds-state em{font-style:normal;color:var(--mail-text-muted)}.ds-tone-local{color:var(--mail-local)}.ds-tone-server{color:var(--mail-server)}.ds-tone-warning{color:var(--mail-warning)}.ds-dot{width:6px;height:6px;border-radius:9999px;border:1px solid;display:inline-block}.ds-dot-filled{background:var(--mail-local);border-color:var(--mail-local)}.ds-dot-hollow{background:transparent;border-color:var(--mail-text-muted)}"
+    },
+    {
+      "name": "Confirm Dialog",
+      "kind": "card",
+      "refersTo": "dialog",
+      "description": "16px corners, hairline border, no shadow — separation comes from the scrim behind it.",
+      "html": "<div class=\"ds-dialog\"><div class=\"ds-dialog-head\"><span class=\"ds-dialog-badge\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3\"/><path d=\"M12 9v4\"/><path d=\"M12 17h.01\"/></svg></span><h3>Delete from server?</h3></div><p>1,284 messages are archived in your vault. Deleting them from the server keeps your local copies.</p><div class=\"ds-dialog-actions\"><button class=\"ds-btn-secondary\">Cancel</button><button class=\"ds-btn-danger\">Delete 1,284</button></div></div>",
+      "css": ".ds-dialog{width:448px;max-width:92vw;background:var(--mail-bg);border:1px solid var(--mail-border);border-radius:16px;padding:24px;font-family:\"Instrument Sans\",system-ui,sans-serif;color:var(--mail-text)}.ds-dialog-head{display:flex;align-items:center;gap:12px;margin-bottom:16px}.ds-dialog-badge{width:40px;height:40px;border-radius:9999px;display:inline-flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--mail-danger) 10%,transparent);color:var(--mail-danger)}.ds-dialog h3{font-size:1.125rem;font-weight:600;margin:0}.ds-dialog p{font-size:0.875rem;line-height:1.5;color:var(--mail-text-muted);margin:0 0 24px}.ds-dialog-actions{display:flex;gap:12px}.ds-dialog-actions>*{flex:1}.ds-btn-danger{background:var(--mail-danger);color:#fff;font:500 0.875rem/1.5 \"Instrument Sans\",system-ui,sans-serif;padding:10px 16px;border:none;border-radius:8px;cursor:pointer;transition:filter .2s}.ds-btn-danger:hover{filter:brightness(1.1)}.ds-btn-danger:focus-visible{outline:2px solid var(--mail-accent);outline-offset:2px}"
+    },
+    {
+      "name": "Chat Bubbles",
+      "kind": "custom",
+      "refersTo": "chat-bubble-sent",
+      "description": "Sent sits a half-step deeper than the accent so a wall of sent mail does not read as a wall of buttons.",
+      "html": "<div class=\"ds-chat\"><div class=\"ds-bubble ds-bubble-received\">Did the invoice come through?</div><div class=\"ds-bubble ds-bubble-sent\">Yes — archived it to the vault this morning.</div></div>",
+      "css": ".ds-chat{display:flex;flex-direction:column;gap:8px;width:320px;font-family:\"Instrument Sans\",system-ui,sans-serif;font-size:0.875rem;line-height:1.5}.ds-bubble{padding:8px 12px;border-radius:12px;max-width:80%}.ds-bubble-received{align-self:flex-start;background:var(--chat-received-bg,#1e1e2e);color:var(--chat-received-text,var(--mail-text));border:1px solid var(--chat-received-border,var(--mail-border))}.ds-bubble-sent{align-self:flex-end;background:var(--chat-sent-bg,#4f46e5);color:var(--chat-sent-text,#fff)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Night Desk",
+    "overview": "MailVault is a dark room with one lamp on it. The ground is near-black with a blue cast (#0a0a0f), surfaces step up from it in barely-there increments, and the only saturated colour in a resting window is the indigo on the folder you are standing in. People sit in this app for hours, moving thousands of messages between a server they do not control and a vault they do — the interface has to stay legible at 2am and stay quiet while it does.\n\nQuiet is not the same as empty. Every pixel of colour in this system is doing custody work: emerald says a message is in your vault, blue says it is on the server, amber says the server no longer has it and this is your only copy. That vocabulary is the reason the palette is otherwise so restrained — if surfaces competed for attention, the three colours that actually matter would stop being readable as a claim about where your mail lives.\n\nDensity is deliberate and high. Rows are 56px (52px compact), body text is 14px, labels 12px, and the list stays smooth past 17,000 messages. This is a working instrument, not a showcase: nothing decorative, nothing that costs a frame in a virtualized scroll, nothing that makes a person hunt for the state of their own archive.\n\nIt is explicitly not webmail (no promo chrome, no tabbed inbox, no Material bounce), not a consumer Electron app (no gradient hero buttons, no illustrations, no mascots), and not backup-utility grey (progress bars are not a personality).",
+    "keyCharacteristics": [
+      "Dark-first: [data-theme=\"dark\"] is :root; light is a full, equal second theme, not an afterthought.",
+      "One accent, spent sparingly — indigo marks the live thing, nothing else.",
+      "Custody colour is a closed vocabulary: emerald / blue / amber mean vault / server / only-copy, and never anything else.",
+      "Depth by tone and hairline, not by shadow.",
+      "14px body, 12px label, 8px rhythm; high information density at rest.",
+      "Motion is short and functional: 150–200ms fades, spring-eased overlays, nothing that delays a click."
+    ],
+    "rules": [
+      {
+        "name": "The One Lamp Rule",
+        "section": "colors",
+        "body": "Indigo marks the live thing — what is selected, focused, or about to happen — and nothing else. A resting window shows it in one or two places. If a screen has three indigo elements competing, two of them are decoration and should be text-muted."
+      },
+      {
+        "name": "The Custody Colour Rule",
+        "section": "colors",
+        "body": "Emerald, blue and amber are reserved words. Emerald means the vault, blue means the server, amber means \"your only copy\". Never spend them on generic status, brand accenting, or category colour — an account's identity colour comes from the per-account palette, not from these three."
+      },
+      {
+        "name": "The Proof Rule",
+        "section": "colors",
+        "body": "Amber is a claim about the server, so it may only render when server state was actually verified. Absence of local knowledge is not proof of server absence; render the calm state and say \"not verified yet\" in the tooltip."
+      },
+      {
+        "name": "The 14/12 Rule",
+        "section": "typography",
+        "body": "Body is 14px and labels are 12px. Anything bigger is a title and must be one of the three heading roles; anything smaller than 11px is a badge digit, never prose."
+      },
+      {
+        "name": "The One Weight Up Rule",
+        "section": "typography",
+        "body": "Emphasis comes from weight (500 → 600) and colour (text-muted → text), never from size. Unread rows go bolder, not larger, so row height never shifts under a sync."
+      },
+      {
+        "name": "The Fixed Row Rule",
+        "section": "layout",
+        "body": "Row height is a constant the virtualizer knows. A state change may swap a glyph, a colour or a weight — never a size, a wrap, or a margin."
+      },
+      {
+        "name": "The No-Shadow Rule",
+        "section": "elevation",
+        "body": "Depth is tone and hairline. If an element needs to read as \"above\", raise its ink one step and give it a 1px border — do not reach for a box-shadow, a glow, or a blur. The ~58 shadow utilities in the current code are drift, not precedent."
+      },
+      {
+        "name": "The Hairline Rule",
+        "section": "shapes",
+        "body": "Every division in the app is 1px of --mail-border. Thicker strokes are reserved for two jobs: marking the selected row (2px indigo, left edge) and drawing the checkbox."
+      }
+    ],
+    "dos": [
+      "Do spend indigo on exactly one thing per view — the live, selected, or imminent action (The One Lamp Rule).",
+      "Do use emerald / blue / amber only for vault / server / only-copy, and require verified server state before rendering amber (The Proof Rule).",
+      "Do build depth from the three ink steps plus a 1px --mail-border hairline (The No-Shadow Rule).",
+      "Do keep body at 14px and labels at 12px, and express emphasis with weight and colour (The 14/12 Rule).",
+      "Do hold row height constant across every state change, and keep truncate as overflow: clip (The Fixed Row Rule).",
+      "Do ship both themes together: any new token needs a [data-theme=\"light\"] value in the same commit, and the accent's hover direction reverses between them.",
+      "Do carry min-w-0 down every column of the reading pane so hostile mail cannot widen the app.",
+      "Do leave :focus-visible at a 2px accent outline with 2px offset on every interactive element."
+    ],
+    "donts": [
+      "Don't add a box-shadow, glow, or .glass blur to anything new — the 58 that exist are drift, not precedent.",
+      "Don't introduce a second accent, a gradient fill, or a brand colour beyond the account identity palette.",
+      "Don't reuse emerald, blue, or amber for decoration, category colour, or generic status.",
+      "Don't use size for emphasis, or let any prose fall below 11px.",
+      "Don't animate anything that delays interaction, or add a transition longer than 300ms.",
+      "Don't put a pill on an action or a rectangle on a piece of state.",
+      "Don't import the marketing site's Inter, hero gradients, or illustration style into the client — the two surfaces share the indigo and nothing else.",
+      "Don't let a resting window look busy: if three elements are competing for attention, two are wrong."
+    ]
+  }
+}
