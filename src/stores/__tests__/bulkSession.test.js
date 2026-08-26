@@ -24,14 +24,21 @@ vi.mock('../../services/safeStorage', () => ({
 }));
 
 const { useMailStore } = await import('../mailStore');
+const { invalidateChatAndThreadCaches } = await import('../slices/messageListSlice');
 
 beforeEach(() => {
   useMailStore.setState({
     activeMailbox: 'INBOX.Spam',
     selectedEmailIds: new Set(),
+    sortedEmails: [],
+    sentEmails: [],
     bulkModalOpen: false,
     bulkSession: null,
   });
+  // getChatEmails/getThreads memoize behind a fingerprint that several of these
+  // cases match exactly (same mailbox, same list length, same first/last uid).
+  // Without this, a case reads the previous case's messages.
+  invalidateChatAndThreadCaches();
 });
 
 describe('bulk session', () => {
@@ -139,5 +146,66 @@ describe('bulk session', () => {
     useMailStore.getState().setSelection([1, 2]);
 
     expect(useMailStore.getState().getSelectionSummary()).toEqual({ threads: 1, emails: 2 });
+  });
+
+  // The reported defect: two checked rows, bar reads "11 selected (4
+  // conversations)". An INBOX list threads INBOX + Sent together, so the row
+  // is one conversation on screen; counting over INBOX alone splits it again
+  // at every point where the only link was a reply the user sent.
+  it('counts a conversation linked only through a sent reply as one conversation', () => {
+    useMailStore.setState({
+      activeMailbox: 'INBOX',
+      activeAccountId: 'acct-1',
+      sortedEmails: [
+        { uid: 1, messageId: '<a@x>' },
+        { uid: 3, messageId: '<c@x>', inReplyTo: '<b@x>' },
+      ],
+      sentEmails: [
+        { uid: 90, messageId: '<b@x>', inReplyTo: '<a@x>', _accountId: 'acct-1' },
+      ],
+    });
+    useMailStore.getState().setSelection([1, 3]);
+
+    expect(useMailStore.getState().getSelectionSummary()).toEqual({ threads: 1, emails: 2 });
+  });
+});
+
+// A thread row's checkbox is one control over every message in the row. Toggling
+// them one at a time inverted a partly-selected row instead of following the box
+// the user just clicked, and wrote to the store once per message.
+describe('setEmailsSelected', () => {
+  const row = [{ uid: 1 }, { uid: 2 }, { uid: 3 }];
+
+  it('checks the whole row, then clears the whole row', () => {
+    useMailStore.getState().setEmailsSelected(row, true);
+    expect([...useMailStore.getState().selectedEmailIds]).toEqual([1, 2, 3]);
+
+    useMailStore.getState().setEmailsSelected(row, false);
+    expect(useMailStore.getState().selectedEmailIds.size).toBe(0);
+  });
+
+  it('follows the checkbox on a partly-selected row instead of inverting it', () => {
+    useMailStore.getState().setSelection([2]);
+
+    useMailStore.getState().setEmailsSelected(row, true);
+
+    expect([...useMailStore.getState().selectedEmailIds].sort()).toEqual([1, 2, 3]);
+  });
+
+  it('leaves the rest of the selection alone', () => {
+    useMailStore.getState().setSelection([99]);
+
+    useMailStore.getState().setEmailsSelected(row, true);
+    useMailStore.getState().setEmailsSelected(row, false);
+
+    expect([...useMailStore.getState().selectedEmailIds]).toEqual([99]);
+  });
+
+  it('keys by account in the unified inbox', () => {
+    useMailStore.setState({ activeMailbox: 'UNIFIED' });
+
+    useMailStore.getState().setEmailsSelected([{ uid: 7, _accountId: 'acct-2' }], true);
+
+    expect([...useMailStore.getState().selectedEmailIds]).toEqual(['acct-2:7']);
   });
 });

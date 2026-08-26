@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { displayText } from '../utils/bidiText';
-import { getSenderName } from '../utils/emailParser';
+import { getSenderName, threadRowMembers } from '../utils/emailParser';
 import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
 import { useMailStore } from '../stores/mailStore';
 import { LinkAlertIcon } from './LinkAlertIcon';
@@ -17,16 +17,21 @@ import {
 } from 'lucide-react';
 
 // Thread row for default layout — shows collapsed thread with participant names and count
-export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelected, onSelectThread, onToggleSelection, anyChecked, style, actions, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
+export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelected, onSelectThread, onSetSelection, anyChecked, style, actions, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
   const handleOpenMenu = React.useCallback(() => onOpenMenu(rowId), [onOpenMenu, rowId]);
   const { saveEmailsLocally } = actions;
 
   if (!thread?.lastEmail) return null;
   const latestEmail = thread.lastEmail;
   const hasUnread = thread.unreadCount > 0;
-  const allArchived = thread.emails.every(e => e.isArchived);
+  // Everything this row acts on — its checkbox, its menu, its archive button —
+  // is the part of the thread that lives in the folder on screen, never the
+  // Sent copies an INBOX list merges in for context. See threadRowMembers.
+  const members = useMemo(() => threadRowMembers(thread.emails), [thread.emails]);
+  const allArchived = members.every(e => e.isArchived);
 
-  // Build participant display: show sender names (not the user)
+  // Build participant display: every distinct sender in the thread, the user
+  // included — a conversation you replied to shows your name too.
   const participantNames = useMemo(() => {
     const seen = new Set();
     const names = [];
@@ -45,7 +50,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
     e.stopPropagation();
     onStartSaving(rowId);
     try {
-      const uids = thread.emails.filter(em => !em.isArchived).map(em => em.uid);
+      const uids = members.filter(em => !em.isArchived).map(em => em.uid);
       if (uids.length > 0) await saveEmailsLocally(uids);
     } finally {
       onStopSaving(rowId);
@@ -63,7 +68,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
                  ${hasUnread ? 'bg-mail-surface' : ''}`}
       onClick={() => onSelectThread(thread)}
     >
-      <div onClick={(e) => { e.stopPropagation(); thread.emails.forEach(em => onToggleSelection(em.uid, em._accountId)); }}>
+      <div onClick={(e) => { e.stopPropagation(); onSetSelection(members, !anyChecked); }}>
         <input type="checkbox" checked={anyChecked} onChange={() => {}} className="custom-checkbox" />
       </div>
 
@@ -125,7 +130,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
         )}
 
         <RowActionMenu open={menuOpen} onOpen={handleOpenMenu} onClose={onCloseMenu}>
-          <RowActionMenuItems emails={thread.emails} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} />
+          <RowActionMenuItems emails={members} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} />
         </RowActionMenu>
       </div>
     </div>
@@ -133,14 +138,18 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
 });
 
 // Compact thread row for compact layout
-export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, thread, isSelected, onSelectThread, onToggleSelection, anyChecked, style, actions, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
+export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, thread, isSelected, onSelectThread, onSetSelection, anyChecked, style, actions, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
   const handleOpenMenu = React.useCallback(() => onOpenMenu(rowId), [onOpenMenu, rowId]);
   const { saveEmailsLocally } = actions;
 
   if (!thread?.lastEmail) return null;
   const latestEmail = thread.lastEmail;
   const hasUnread = thread.unreadCount > 0;
-  const allArchived = thread.emails.every(e => e.isArchived);
+  // Everything this row acts on — its checkbox, its menu, its archive button —
+  // is the part of the thread that lives in the folder on screen, never the
+  // Sent copies an INBOX list merges in for context. See threadRowMembers.
+  const members = useMemo(() => threadRowMembers(thread.emails), [thread.emails]);
+  const allArchived = members.every(e => e.isArchived);
 
   const participantNames = useMemo(() => {
     const seen = new Set();
@@ -160,7 +169,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
     e.stopPropagation();
     onStartSaving(rowId);
     try {
-      const uids = thread.emails.filter(em => !em.isArchived).map(em => em.uid);
+      const uids = members.filter(em => !em.isArchived).map(em => em.uid);
       if (uids.length > 0) await saveEmailsLocally(uids);
     } finally {
       onStopSaving(rowId);
@@ -178,7 +187,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
                  ${hasUnread ? 'bg-mail-surface' : ''}`}
       onClick={() => onSelectThread(thread)}
     >
-      <div onClick={(e) => { e.stopPropagation(); thread.emails.forEach(em => onToggleSelection(em.uid, em._accountId)); }}>
+      <div onClick={(e) => { e.stopPropagation(); onSetSelection(members, !anyChecked); }}>
         <input type="checkbox" checked={anyChecked} onChange={() => {}} className="custom-checkbox" />
       </div>
 
@@ -225,7 +234,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
           </button>
         )}
         <RowActionMenu open={menuOpen} onOpen={handleOpenMenu} onClose={onCloseMenu} size={13}>
-          <RowActionMenuItems emails={thread.emails} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} />
+          <RowActionMenuItems emails={members} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} />
         </RowActionMenu>
       </div>
     </div>

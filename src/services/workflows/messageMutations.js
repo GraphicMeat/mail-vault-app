@@ -272,6 +272,51 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
 
   const invoke = window.__TAURI__?.core?.invoke;
 
+  // Journal the intent first, and await it — same reason and same ordering as
+  // deleteSelectedFromServer: the row is about to vanish from the list, so a
+  // reload or quit before the server answers must leave something the next
+  // launch can finish (replayPendingDeletes). Skipped for Graph (its delete is
+  // addressed by a per-session message id, not a replayable uid) and for
+  // local-only rows (no server delete to replay).
+  const realUid = unified?.uid ?? uid;
+  const journalled = !isLocalOnly && !isGraphAccount(account);
+  if (journalled) await db.queuePendingDeletes(accountId, mailbox, [realUid]);
+
+  // ── Optimistic removal ──
+  // Take the row out now. Everything below is a network round trip (pool
+  // checkout, STORE + EXPUNGE, or a Graph id lookup) and takes seconds; a list
+  // that sits there unchanged while a modal spins is the same UI the bulk
+  // paths already refuse to show (deleteSelectedFromServer, purgeEverywhere).
+  // The tombstone stops a stale header cache re-rendering the row in the
+  // meantime; a failed delete lifts it again and reloads, which puts the row
+  // back — exactly the contract the bulk paths use.
+  const tombstone = `${accountId}|${mailbox}|${realUid}`;
+  const isThisEmail = (e) => (isUnified ? _selKey(e) === String(uid) || (e._accountId === accountId && e.uid === realUid) : e.uid === uid);
+  useMailStore.setState({
+    deleteTombstones: new Set(state.deleteTombstones).add(tombstone),
+    emails: state.emails.filter(e => !isThisEmail(e)),
+    sentEmails: state.sentEmails.filter(e => !isThisEmail(e)),
+    selectedEmailIds: new Set([...state.selectedEmailIds].filter(k => k !== uid && k !== realUid)),
+    ...(selectedEmailId === uid || selectedEmailId === realUid
+      ? { selectedEmailId: null, selectedEmail: null, selectedEmailSource: null, selectedThread: null }
+      : {}),
+  });
+  get().updateSortedEmails();
+
+  // Put the row back and let the reconcile re-derive it. `totalEmails` is
+  // untouched above — applyServerRemoval owns that decrement on the success
+  // path, so a failure has nothing to restore there.
+  const restoreRow = () => {
+    const ts = new Set(get().deleteTombstones);
+    ts.delete(tombstone);
+    useMailStore.setState({ deleteTombstones: ts });
+    // Drop the journal entry too: the row is back on screen, so a replay at
+    // next launch would delete a message the app is currently showing as
+    // present. Same call the bulk path makes for its whole group.
+    if (journalled) db.clearPendingDeletes(accountId, mailbox, [realUid]);
+    if (!isUnified) get().loadEmails();
+  };
+
   if (isLocalOnly) {
     if (invoke) {
       try {
@@ -280,6 +325,7 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
         console.log(`[deleteEmail] Local-only delete: UID ${uid} (${accountId}/${mailbox})`);
       } catch (err) {
         console.error(`[deleteEmail] Local-only delete FAILED for UID ${uid}:`, err);
+        restoreRow();
         throw err;
       }
     }
@@ -299,9 +345,12 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
       console.log(`[deleteEmail] Successfully deleted UID ${uid} from "${mailbox}"`);
     } catch (err) {
       console.error(`[deleteEmail] FAILED to delete UID ${uid} from "${mailbox}":`, err);
+      restoreRow();
       throw err;
     }
   }
+
+  if (journalled) await db.clearPendingDeletes(accountId, mailbox, [realUid]);
 
   await applyServerRemoval(uid, {
     accountId, mailbox, isUnified, skipRefresh,

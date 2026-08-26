@@ -104,6 +104,14 @@ export function SelectionActionBar() {
     ? `${summary.emails} selected`
     : `${summary.emails} selected (${summary.threads} conversations)`;
 
+  // What the confirmation is about to destroy, in the same two units as the
+  // label above. A conversation row is one checkbox over several messages, so
+  // a bare message count reads as wrong to whoever ticked two boxes — say both
+  // numbers whenever they differ.
+  const deleteScope = summary.threads === summary.emails
+    ? `${summary.emails} email${summary.emails !== 1 ? 's' : ''}`
+    : `${summary.emails} emails in ${summary.threads} conversation${summary.threads !== 1 ? 's' : ''}`;
+
   return (
     <AnimatePresence>
       {hasSelection && (
@@ -237,8 +245,8 @@ export function SelectionActionBar() {
                   <AlertTriangle size={16} className="text-mail-danger flex-shrink-0 mt-0.5" />
                   <p className="text-sm text-mail-text">
                     {deleteMode === 'everywhere'
-                      ? `Delete ${summary.emails} email${summary.emails !== 1 ? 's' : ''} from the server, this computer, and your external backup? No copy will be left anywhere. This cannot be undone.`
-                      : `Delete ${summary.emails} email${summary.emails !== 1 ? 's' : ''} from server? This cannot be undone.`}
+                      ? `Delete ${deleteScope} from the server, this computer, and your external backup? No copy will be left anywhere. This cannot be undone.`
+                      : `Delete ${deleteScope} from server? This cannot be undone.`}
                   </p>
                 </div>
                 <div className="flex justify-end gap-2">

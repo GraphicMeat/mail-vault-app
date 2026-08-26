@@ -61,7 +61,7 @@ const thread = () => {
 
 const noopActions = { saveEmailsLocally: vi.fn(), saveEmailLocally: vi.fn() };
 const rowProps = {
-  isSelected: false, onSelectThread: vi.fn(), onSelect: vi.fn(), onToggleSelection: vi.fn(),
+  isSelected: false, onSelectThread: vi.fn(), onSelect: vi.fn(), onToggleSelection: vi.fn(), onSetSelection: vi.fn(),
   anyChecked: false, isChecked: false, style: {}, actions: noopActions, menuOpen: false,
   onOpenMenu: vi.fn(), onCloseMenu: vi.fn(), onRequestDelete: vi.fn(), isSaving: false,
   onStartSaving: vi.fn(), onStopSaving: vi.fn(),

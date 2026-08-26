@@ -87,6 +87,18 @@ describe('SelectionActionBar delete confirmation', () => {
     expect(copy.textContent).toMatch(/server, this computer, and your external backup/);
   });
 
+  // The reported defect, at the moment it matters: two ticked conversation
+  // rows, and the confirmation offered to delete "11 emails" — a number the
+  // user had never seen. When the two units differ, both go in the sentence.
+  it('names conversations as well as messages when a selection spans threads', () => {
+    useMailStoreMock.setState({ getSelectionSummary: vi.fn(() => ({ threads: 2, emails: 11 })) });
+    render(<SelectionActionBar />);
+
+    fireEvent.click(screen.getByTitle('Delete everywhere'));
+
+    expect(screen.getByText(/Delete 11 emails in 2 conversations from the server/)).toBeTruthy();
+  });
+
   it('confirming after Delete everywhere calls purgeSelectedEverywhere, not deleteSelectedFromServer', () => {
     render(<SelectionActionBar />);
     fireEvent.click(screen.getByTitle('Delete everywhere'));

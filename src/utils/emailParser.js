@@ -773,6 +773,29 @@ export function updateThreads(existingThreads, newEmails, removedUids, allEmails
 }
 
 /**
+ * The messages a thread row acts on: the ones that live in the folder on
+ * screen.
+ *
+ * An INBOX list threads over INBOX + Sent (getChatEmails) so a conversation
+ * reads whole, but a row's checkbox and its 3-dot menu act by bare UID against
+ * the active mailbox — and a UID only names a message inside one mailbox.
+ * Handing them a merged Sent copy spends an INBOX UID on a message that only
+ * exists in Sent, and inflates the selection with rows the user never saw here
+ * (two checked rows reported "11 selected (4 conversations)").
+ *
+ * A thread that is nothing but Sent copies — a conversation you started that
+ * got no reply — keeps them: they are all the row has to act on, and they are
+ * exactly what it renders.
+ *
+ * @param {Array} emails - a thread's messages
+ * @returns {Array} the subset the row represents in the current folder
+ */
+export function threadRowMembers(emails) {
+  const inFolder = (emails || []).filter(e => !e._fromSentFolder);
+  return inFolder.length ? inFolder : (emails || []);
+}
+
+/**
  * Signature patterns to detect and strip
  */
 const SIGNATURE_PATTERNS = [

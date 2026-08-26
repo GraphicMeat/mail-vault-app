@@ -11,7 +11,7 @@ import { useUiStore } from '../stores/uiStore';
 import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore, getAccountInitial, hashColor } from '../stores/settingsStore';
 import { shouldPrefetch } from '../services/cachePressure';
-import { buildThreads, groupBySender, getSenderName, filterUnread } from '../utils/emailParser';
+import { buildThreads, groupBySender, getSenderName, filterUnread, threadRowMembers } from '../utils/emailParser';
 import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
 import { LinkAlertIcon } from './LinkAlertIcon';
@@ -171,6 +171,7 @@ function EmailListComponent() {
   const selectEmail = useSelectionStore(s => s.selectEmail);
   const selectThread = useSelectionStore(s => s.selectThread);
   const toggleEmailSelection = useSelectionStore(s => s.toggleEmailSelection);
+  const setEmailsSelected = useSelectionStore(s => s.setEmailsSelected);
   const selectAllEmails = useSelectionStore(s => s.selectAllEmails);
   const clearSelection = useSelectionStore(s => s.clearSelection);
   const clearSearch = useSearchStore(s => s.clearSearch);
@@ -243,7 +244,6 @@ function EmailListComponent() {
   // Pending delete confirmation lifted out of rows so the modal escapes the
   // virtualizer's transform stacking context. { label, executor } | null
   const [pendingDelete, setPendingDelete] = useState(null);
-  const [deletingPending, setDeletingPending] = useState(false);
   // Lifted saving state — tracks which rows have active save operations
   const [savingRowIds, setSavingRowIds] = useState(() => new Set());
   const startSaving = useCallback((id) => setSavingRowIds(prev => { const next = new Set(prev); next.add(id); return next; }), []);
@@ -1187,7 +1187,12 @@ function EmailListComponent() {
 
               if (item.type === 'thread') {
                 const ThreadRowComponent = isCompact ? CompactThreadRow : ThreadRow;
-                const anyChecked = item.thread.emails.some(e => selectedEmailIds.has(selKey(e)));
+                // Over the row's own members, not every message the thread
+                // holds: a merged Sent copy can carry the same uid as a
+                // selected message in this folder and would tick the box for a
+                // row nothing in it is selected.
+                const members = threadRowMembers(item.thread.emails);
+                const anyChecked = members.some(e => selectedEmailIds.has(selKey(e)));
                 const rowId = `thread-${item.thread.threadId}`;
                 return (
                   <div
@@ -1207,7 +1212,7 @@ function EmailListComponent() {
                       thread={item.thread}
                       isSelected={item.thread.emails.some(e => selectedEmailId === selKey(e))}
                       onSelectThread={selectThread}
-                      onToggleSelection={toggleEmailSelection}
+                      onSetSelection={setEmailsSelected}
                       anyChecked={anyChecked}
                       style={rowStyle}
                       actions={rowActions}
@@ -1290,27 +1295,38 @@ function EmailListComponent() {
       />
       <RowDeleteConfirmModal
         pending={pendingDelete}
-        busy={deletingPending}
-        onCancel={() => { if (!deletingPending) setPendingDelete(null); }}
-        onConfirm={async () => {
-          if (!pendingDelete || deletingPending) return;
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => {
+          if (!pendingDelete) return;
           const exec = pendingDelete.executor;
-          setDeletingPending(true);
-          try { await exec(); } catch (err) { console.error('[EmailList] row delete failed:', err); }
-          finally { setDeletingPending(false); setPendingDelete(null); }
+          setPendingDelete(null);
+          // Not awaited, and the modal is already gone: every delete verb
+          // behind this button pulls its rows from the list before it touches
+          // the network (deleteEmailFromServer, purgeEverywhere), and puts
+          // them back if the server refuses. Holding a modal open over a
+          // backdrop for the seconds an IMAP round trip takes bought the user
+          // nothing but a frozen window.
+          Promise.resolve()
+            .then(exec)
+            .catch((err) => {
+              console.error('[EmailList] row delete failed:', err);
+              // Plain `error`: resolveErrorToastProps defaults an unmatched
+              // message to the error-styled toast (utils/errorToast.js).
+              useMailStore.setState({ error: `Delete failed: ${err?.message || err}` });
+            });
         }}
       />
     </div>
   );
 }
 
-function RowDeleteConfirmModal({ pending, busy, onCancel, onConfirm }) {
+function RowDeleteConfirmModal({ pending, onCancel, onConfirm }) {
   const titleId = useId();
   const descId = useId();
   // Escape closes this rather than reaching App's global shortcut, which would
   // clear the very selection the dialog is asking about. Cancel takes first
   // focus: nothing destructive is ever one stray Return away.
-  const panelRef = useDialogA11y(Boolean(pending), busy ? undefined : onCancel);
+  const panelRef = useDialogA11y(Boolean(pending), onCancel);
 
   return ReactDOM.createPortal(
     <AnimatePresence>
@@ -1321,7 +1337,7 @@ function RowDeleteConfirmModal({ pending, busy, onCancel, onConfirm }) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 backdrop-blur-sm"
-          onClick={busy ? undefined : onCancel}
+          onClick={onCancel}
         >
           <motion.div
             ref={panelRef}
@@ -1345,18 +1361,16 @@ function RowDeleteConfirmModal({ pending, busy, onCancel, onConfirm }) {
             <div className="flex justify-end gap-2">
               <button
                 onClick={onCancel}
-                disabled={busy}
                 data-autofocus
-                className="px-3 py-1.5 text-sm text-mail-text-muted hover:bg-mail-border rounded-lg transition-colors disabled:opacity-50"
+                className="px-3 py-1.5 text-sm text-mail-text-muted hover:bg-mail-border rounded-lg transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={onConfirm}
-                disabled={busy}
-                className="px-3 py-1.5 text-sm font-medium bg-mail-danger text-white rounded-lg hover:bg-mail-danger/90 transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                className="px-3 py-1.5 text-sm font-medium bg-mail-danger text-white rounded-lg hover:bg-mail-danger/90 transition-colors flex items-center gap-1.5"
               >
-                <Trash2 size={14} /> {busy ? 'Deleting…' : 'Delete'}
+                <Trash2 size={14} /> Delete
               </button>
             </div>
           </motion.div>

@@ -5,6 +5,7 @@ import {
   buildReplyHeaders,
   normalizeMessageId,
   parseReferenceList,
+  threadRowMembers,
 } from '../emailParser';
 
 const mk = (over = {}) => ({
@@ -259,5 +260,31 @@ describe('message-id helpers', () => {
     expect(parseReferenceList('<a@x>\n <b@x> <a@x>')).toEqual(['<a@x>', '<b@x>']);
     expect(parseReferenceList(['<a@x>', '<b@x>'])).toEqual(['<a@x>', '<b@x>']);
     expect(parseReferenceList(null)).toEqual([]);
+  });
+});
+
+
+// A thread row in INBOX renders INBOX + Sent together so the conversation reads
+// whole. Its checkbox, its menu and its archive button act by bare UID against
+// the active mailbox, where a Sent message's UID names a different message —
+// so they act on the part of the row that lives in this folder.
+describe('threadRowMembers', () => {
+  it('drops the Sent copies an INBOX list merged in', () => {
+    const members = threadRowMembers([
+      mk({ uid: 1 }),
+      mk({ uid: 90, _fromSentFolder: true }),
+      mk({ uid: 2 }),
+    ]);
+    expect(members.map(e => e.uid)).toEqual([1, 2]);
+  });
+
+  it('keeps a thread that is nothing but sent messages — they are all the row shows', () => {
+    const sent = [mk({ uid: 90, _fromSentFolder: true }), mk({ uid: 91, _fromSentFolder: true })];
+    expect(threadRowMembers(sent)).toEqual(sent);
+  });
+
+  it('is a no-op on a folder that merges nothing', () => {
+    const emails = [mk({ uid: 1 }), mk({ uid: 2 })];
+    expect(threadRowMembers(emails)).toEqual(emails);
   });
 });

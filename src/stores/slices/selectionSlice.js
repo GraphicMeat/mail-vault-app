@@ -64,6 +64,24 @@ export const createSelectionSlice = (set, get) => ({
     });
   },
 
+  // Select or deselect one row's worth of messages in a single write.
+  // A thread row's checkbox is one control over many messages: toggling each
+  // uid in turn inverts a partially-selected thread instead of following the
+  // box the user just clicked, and fires one store write (one list re-render)
+  // per message in the thread.
+  setEmailsSelected: (emails, selected) => {
+    set(state => {
+      const isUnified = state.activeMailbox === 'UNIFIED';
+      const next = new Set(state.selectedEmailIds);
+      for (const e of emails) {
+        const key = isUnified && e._accountId ? _selKey(e) : e.uid;
+        if (selected) next.add(key);
+        else next.delete(key);
+      }
+      return { selectedEmailIds: next };
+    });
+  },
+
   selectAllEmails: () => {
     const { sortedEmails, activeMailbox } = get();
     const isUnified = activeMailbox === 'UNIFIED';
@@ -86,7 +104,14 @@ export const createSelectionSlice = (set, get) => ({
     if (selectedEmailIds.size === 0) return { threads: 0, emails: 0 };
 
     const isUnified = activeMailbox === 'UNIFIED';
-    const threads = buildThreads(sortedEmails);
+    // Thread over the same messages the list threaded over. An INBOX list
+    // threads INBOX + Sent together (EmailList's `mergedEmails`, via
+    // getChatEmails) so a conversation reads whole; re-threading INBOX alone
+    // here split it again wherever a sent reply was the only link, and two
+    // checked rows reported "(4 conversations)". Not getThreads(): its memo
+    // key carries neither account nor mailbox, and a count is not worth
+    // trusting to that.
+    const threads = buildThreads(activeMailbox === 'INBOX' ? get().getChatEmails() : sortedEmails);
     // `sortedEmails` is the paginated render window; the selection is not
     // bound to it — the bulk modal resolves a date range against the whole
     // sidecar cache (BulkOperationsModal's `cachedRows`), so it can select

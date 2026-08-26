@@ -465,6 +465,70 @@ describe('deleteSelectedFromServer', () => {
   });
 });
 
+// The single-row delete behind the row menu, the viewer's delete button and the
+// `#` shortcut. It used to hold the row on screen (and a modal over a backdrop)
+// for the whole server round trip; the bulk paths never did.
+describe('deleteEmailFromServer', () => {
+  it('pulls the row out of the list before the server answers', async () => {
+    let release;
+    mockDeleteEmail.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+    primeStore(seedThread(), []);
+
+    const pending = useMailStore.getState().deleteEmailFromServer(1);
+    // Enough ticks for the workflow's dynamic store import and the optimistic
+    // write, nowhere near enough for a server delete that has not been released.
+    await new Promise(r => setTimeout(r, 0));
+
+    expect(useMailStore.getState().sortedEmails.map(e => e.uid)).toEqual([2]);
+    expect(mockDeleteEmail).toHaveBeenCalledWith(ACCOUNT, 1, 'INBOX');
+    release();
+    await pending;
+  });
+
+  it('puts the row back when the server refuses', async () => {
+    mockDeleteEmail.mockRejectedValueOnce(new Error('nope'));
+    primeStore(seedThread(), []);
+
+    await expect(useMailStore.getState().deleteEmailFromServer(1)).rejects.toThrow('nope');
+
+    // Tombstone lifted and a reconcile asked for — the same contract the bulk
+    // path uses to restore a row whose delete failed.
+    expect(useMailStore.getState().deleteTombstones.size).toBe(0);
+    expect(useMailStore.getState().loadEmails).toHaveBeenCalled();
+  });
+
+  // The row vanishes before the server answers, so a reload in that window has
+  // to leave something the next launch can finish — the same journal the bulk
+  // path writes.
+  it('journals the uid before the row goes and clears it once the server confirms', async () => {
+    primeStore(seedThread(), []);
+
+    await useMailStore.getState().deleteEmailFromServer(1);
+
+    expect(mockQueuePendingDeletes).toHaveBeenCalledWith('acct1', 'INBOX', [1]);
+    expect(mockClearPendingDeletes).toHaveBeenCalledWith('acct1', 'INBOX', [1]);
+  });
+
+  it('clears the journal when the delete fails, so no replay deletes a restored row', async () => {
+    mockDeleteEmail.mockRejectedValueOnce(new Error('nope'));
+    primeStore(seedThread(), []);
+
+    await expect(useMailStore.getState().deleteEmailFromServer(1)).rejects.toThrow('nope');
+
+    expect(mockClearPendingDeletes).toHaveBeenCalledWith('acct1', 'INBOX', [1]);
+  });
+
+  it('clears the viewer when the deleted row was the open email', async () => {
+    primeStore(seedThread(), []);
+    useMailStore.setState({ selectedEmailId: 1, selectedEmail: { uid: 1 } });
+
+    await useMailStore.getState().deleteEmailFromServer(1);
+
+    expect(useMailStore.getState().selectedEmailId).toBeNull();
+    expect(useMailStore.getState().selectedEmail).toBeNull();
+  });
+});
+
 describe('moveEmails', () => {
   it('drops the moved rows from the rendered list without waiting for a reload', async () => {
     primeStore(seedThread(), [1]);
