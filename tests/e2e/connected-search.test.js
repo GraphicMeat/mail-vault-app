@@ -129,7 +129,7 @@ describe('Connected Search', function () {
       const selects = document.querySelectorAll('select');
       for (const sel of selects) {
         const options = [...sel.options].map(o => o.textContent.trim());
-        if (options.includes('All') && options.includes('Server') && options.includes('Local')) {
+        if (options.includes('All') && options.includes('Server') && options.includes('Vault')) {
           return true;
         }
       }

@@ -5,6 +5,7 @@ import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ensureFreshToken, resolveServerAccount } from '../authUtils';
 import { buildThreads } from '../../utils/emailParser';
+import { describeConnectionError } from '../../utils/connectionError';
 import { UidMap } from '../UidMap';
 import { getDaemonHealth } from '../transport';
 import { syncNow, waitForSync } from '../syncService';
@@ -704,7 +705,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
         if (!signal.aborted) {
           useMailStore.setState({
             connectionStatus: 'error',
-            connectionError: 'Password not found. Please re-enter your password in Settings.',
+            connectionError: 'Your password is not in the keychain. Re-enter it under Settings \u203a Accounts to reconnect.',
             connectionErrorType: 'passwordMissing',
             loading: false,
             loadingMore: false,
@@ -884,7 +885,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
             if (!signal.aborted) {
               useMailStore.setState({
                 connectionStatus: 'error',
-                connectionError: syncResult?.error || 'Sync failed',
+                connectionError: syncResult?.error || 'The server refused the sync. Nothing in your vault changed.',
                 connectionErrorType: 'serverError',
                 loading: false,
                 loadingMore: false,
@@ -906,12 +907,12 @@ export async function activateAccount(accountId, mailbox, options = {}) {
           const isOnline = await invoke('check_network_connectivity');
           if (signal.aborted) return;
           if (isOnline === false) {
-            useMailStore.setState({ connectionStatus: 'error', connectionError: 'No internet connection. Showing cached emails.', connectionErrorType: 'offline', loading: false, loadingMore: false });
+            useMailStore.setState({ connectionStatus: 'error', connectionError: 'No internet connection. Showing what is already on this computer.', connectionErrorType: 'offline', loading: false, loadingMore: false });
             serverTrace.end('offline');
             return;
           }
         } catch {
-          useMailStore.setState({ connectionStatus: 'error', connectionError: 'Could not check internet.', connectionErrorType: 'offline', loading: false, loadingMore: false });
+          useMailStore.setState({ connectionStatus: 'error', connectionError: 'Could not tell whether this computer is online. Showing what is already here.', connectionErrorType: 'offline', loading: false, loadingMore: false });
           serverTrace.end('connectivity-failed');
           return;
         }
@@ -1318,7 +1319,8 @@ export async function init() {
       });
   } catch (error) {
     console.error('Failed to initialize:', error);
-    useMailStore.setState({ error: error.message, loading: false });
+    // Raw backend text is a detail, not the message — see utils/connectionError.js.
+    useMailStore.setState({ error: describeConnectionError(error).message, loading: false });
   }
 }
 

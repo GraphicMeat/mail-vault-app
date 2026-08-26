@@ -320,7 +320,7 @@ describe('Bulk delete everywhere', function () {
     await waitForBodyText('Choose Action for', 'Modal never advanced to the action step');
 
     await waitClick(() => clickTestId('bulk-action-archive'), 'Could not select the Archive action');
-    await waitClick(() => clickTestId('bulk-step2-confirm'), 'Step 2 confirm button (Start Archive) never became clickable');
+    await waitClick(() => clickTestId('bulk-step2-confirm'), 'Step 2 confirm button (Archive) never became clickable');
 
     await waitForBodyText('Operation Complete', 'Archive operation never reported completion');
     await browser.waitUntil(
@@ -443,9 +443,9 @@ describe('Bulk delete everywhere', function () {
     await waitForBodyText('Choose Action for', 'Reopened modal did not land back on the action step');
 
     await waitClick(() => clickTestId('bulk-step2-confirm'), 'Step 2 confirm button never became clickable');
-    await waitForBodyText('Delete Everywhere?', 'Delete Everywhere confirmation dialog never appeared');
-    expect(await bodyIncludes('the server, this computer, and your external backup')).toBe(true);
-    expect(await bodyIncludes('no copy left anywhere')).toBe(true);
+    await waitForBodyText('Delete everywhere?', 'Delete everywhere confirmation dialog never appeared');
+    expect(await bodyIncludes('the server, your vault, and your backup drive')).toBe(true);
+    expect(await bodyIncludes('No copy will be left anywhere')).toBe(true);
 
     await waitClick(() => clickTestId('bulk-delete-confirm'), 'Could not confirm Delete Everywhere');
 

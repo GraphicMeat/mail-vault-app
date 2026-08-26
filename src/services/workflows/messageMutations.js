@@ -80,7 +80,9 @@ export async function saveEmailLocally(uid) {
     }
     get().updateSortedEmails();
   } catch (error) {
-    useMailStore.setState({ error: `Failed to archive email: ${error.message}` });
+    // Says what did NOT happen, too: an archive that fails is the moment a
+    // user most needs to know their server copy is still there.
+    useMailStore.setState({ error: `Could not copy that email into your vault. Nothing was removed from the server. (${error.message})` });
     throw error;
   }
 }
@@ -505,7 +507,7 @@ export async function markEmailReadStatus(uid, read) {
       });
     }
   } catch (error) {
-    useMailStore.setState({ error: `Failed to update read status: ${error.message}` });
+    useMailStore.setState({ error: `Could not change the read status on the server. (${error.message})` });
   }
 }
 

@@ -8,30 +8,34 @@ import {
   ArrowRight,
   Mail,
   HardDrive,
-  EyeOff,
-  XCircle
+  EyeOff
 } from 'lucide-react';
 
+// Each card used to state a claim in the title and repeat it in the
+// description ("Secure Password Storage" / "Passwords stored securely in
+// system keychain"), which is one idea said twice and no mechanism named.
+// The product's voice is mechanisms, not reassurance — so each card now says
+// what actually happens, and the title carries the noun the sentence is about.
 const features = [
   {
     icon: Key,
-    title: 'Secure Password Storage',
-    description: 'Passwords stored securely in system keychain'
+    title: 'System keychain',
+    description: 'Your password is held by the OS, not by MailVault'
   },
   {
     icon: Lock,
-    title: 'Encrypted Storage',
-    description: 'Never saved in plain text files'
+    title: 'Nothing in a plain file',
+    description: 'No password is ever written to disk by this app'
   },
   {
     icon: EyeOff,
-    title: 'Privacy Protected',
-    description: 'App cannot view your passwords'
+    title: 'No account, no telemetry',
+    description: 'There is no MailVault server to send anything to'
   },
   {
     icon: HardDrive,
-    title: 'Local Email Storage',
-    description: 'Archive emails for offline access'
+    title: 'Your vault',
+    description: 'Each email you archive is a standard .eml file on your disk'
   }
 ];
 
@@ -55,7 +59,7 @@ export function Onboarding() {
             <span className="text-mail-accent-text">Mail</span>Vault
           </h1>
           <p className="text-xs text-mail-text-muted">
-            A secure, privacy-focused email client
+            Read your mail. Keep your mail.
           </p>
         </div>
 
@@ -68,10 +72,10 @@ export function Onboarding() {
             </div>
             <div>
               <h2 className="text-base font-semibold text-mail-text">
-                Your Security Matters
+                Where your data lives
               </h2>
               <p className="text-xs text-mail-text-muted">
-                How MailVault keeps your data safe
+                All of it on this computer, before you add an account
               </p>
             </div>
           </div>
@@ -107,25 +111,18 @@ export function Onboarding() {
               <Key size={14} className="text-mail-warning flex-shrink-0" />
               <div>
                 <h4 className="font-medium text-xs text-mail-warning">
-                  Keychain Access Required
+                  Your keychain will ask for permission
                 </h4>
                 <p className="text-[10px] text-mail-text-muted">
-                  When adding an account, click "Always Allow" for secure password storage.
+                  Choose &ldquo;Always Allow&rdquo; the first time, or it asks again on every sync.
                 </p>
               </div>
             </div>
           </div>
 
           {/* Action buttons */}
-          <div className="flex items-center justify-between">
-            <button
-              onClick={handleComplete}
-              className="flex items-center gap-1 px-2 py-1 text-[10px] text-mail-text-muted
-                        hover:text-mail-text hover:bg-mail-bg rounded transition-colors"
-            >
-              <XCircle size={12} />
-              Do not show again
-            </button>
+          <div className="flex items-center justify-end">
+
             <button
               onClick={handleComplete}
               className="flex items-center gap-1.5 px-4 py-1.5 bg-mail-accent-fill
@@ -138,10 +135,6 @@ export function Onboarding() {
           </div>
         </div>
 
-        {/* Footer */}
-        <p className="text-center text-[10px] text-mail-text-muted mt-2">
-          Your privacy is our priority. Data never leaves your device.
-        </p>
       </motion.div>
     </div>
   );

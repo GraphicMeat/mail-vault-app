@@ -253,12 +253,12 @@ describe('Selection Action Bar effects', function () {
 
     expect(await toggleRow(subject)).toBe(true);
     expect(await clickBarButton('Delete from server')).toBe(true);
-    await waitForText('cannot be undone', 'Delete confirmation never appeared');
+    await waitForText('No copy is in your vault', 'Delete confirmation never appeared');
 
     // The bar's own trigger carries a title; the popover's confirm button does not.
     const confirmed = await browser.execute(() => {
       for (const btn of document.querySelectorAll('button')) {
-        if ((btn.textContent || '').trim() === 'Delete' && btn.offsetHeight > 0 &&
+        if ((btn.textContent || '').trim() === 'Delete from server' && btn.offsetHeight > 0 &&
             !btn.getAttribute('title')) {
           btn.click();
           return true;

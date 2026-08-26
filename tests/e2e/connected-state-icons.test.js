@@ -275,7 +275,7 @@ describe('Message state icons', function () {
       const legend = await browser.execute(() =>
         [...document.querySelectorAll('[data-testid="legend-state-icon"]')]
           .map((el) => el.parentElement?.innerText || '').join(' | '));
-      expect(legend).toContain('Local only (deleted from server)');
+      expect(legend).toContain('Only copy');
     });
   });
 });
