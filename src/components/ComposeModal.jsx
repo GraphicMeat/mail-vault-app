@@ -130,6 +130,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const sendAsAddresses = useSettingsStore(s => s.sendAsAddresses);
   const globalSendDelay = useSettingsStore(s => s.sendDelay) ?? 0;
   const emailTemplates = useSettingsStore(s => s.emailTemplates);
+  const spellcheckEnabled = useSettingsStore(s => s.spellcheckEnabled ?? true);
   const addEmailTemplate = useSettingsStore(s => s.addEmailTemplate);
   const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
   const accounts = getOrderedAccounts(rawAccounts);
@@ -1223,6 +1224,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                 value={formData.subject}
                 onChange={handleChange}
                 placeholder="Subject"
+                spellCheck={spellcheckEnabled}
                 className="flex-1 bg-transparent text-mail-text placeholder-mail-text-muted
                           outline-none text-sm py-1"
               />

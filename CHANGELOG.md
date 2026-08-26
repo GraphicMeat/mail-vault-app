@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- **Spellcheck can be turned off while you write.** The toolbar in the message window has a new button at its right-hand end. Press it and the red underlines stop — in the message and in the subject line — and press it again and they come back. MailVault remembers which way you left it, so it stays that way for the next message and after a restart, rather than switching itself back on with every new window. The signature editor in Settings is the same editor, so it follows the same switch.
+
 ## [2.10.3] - 2026-08-26
 
 ### Fixed

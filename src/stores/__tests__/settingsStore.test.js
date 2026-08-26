@@ -137,3 +137,25 @@ describe('lastComposeIdentity', () => {
     expect(useSettingsStore.getState().lastComposeIdentity).toBeNull();
   });
 });
+
+describe('spellcheckEnabled', () => {
+  it('defaults to on — the toggle takes it away, it does not grant it', () => {
+    expect(useSettingsStore.getState().spellcheckEnabled).toBe(true);
+  });
+
+  it('setSpellcheckEnabled stores a boolean, whatever it was handed', () => {
+    useSettingsStore.getState().setSpellcheckEnabled(false);
+    expect(useSettingsStore.getState().spellcheckEnabled).toBe(false);
+
+    // The toolbar hands it `!spellcheckEnabled`, but a truthy non-boolean must
+    // not reach `spellCheck={...}` — React would render the string.
+    useSettingsStore.getState().setSpellcheckEnabled('yes');
+    expect(useSettingsStore.getState().spellcheckEnabled).toBe(true);
+  });
+
+  it('resetSettings restores it to on', () => {
+    useSettingsStore.getState().setSpellcheckEnabled(false);
+    useSettingsStore.getState().resetSettings();
+    expect(useSettingsStore.getState().spellcheckEnabled).toBe(true);
+  });
+});

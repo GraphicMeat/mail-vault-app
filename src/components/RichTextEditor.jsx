@@ -7,8 +7,9 @@ import Placeholder from '@tiptap/extension-placeholder';
 import Image from '@tiptap/extension-image';
 import {
   Bold, Italic, Underline as UnderlineIcon, Strikethrough,
-  List, ListOrdered, Quote, Code, Link as LinkIcon, Undo, Redo, RemoveFormatting
+  List, ListOrdered, Quote, Code, Link as LinkIcon, Undo, Redo, RemoveFormatting, SpellCheck
 } from 'lucide-react';
+import { useSettingsStore } from '../stores/settingsStore';
 
 function ToolbarButton({ onClick, active, disabled, title, children }) {
   return (
@@ -33,7 +34,8 @@ function ToolbarDivider() {
 }
 
 function Toolbar({ editor }) {
-  if (!editor) return null;
+  const spellcheckEnabled = useSettingsStore((s) => s.spellcheckEnabled ?? true);
+  const setSpellcheckEnabled = useSettingsStore((s) => s.setSpellcheckEnabled);
 
   const setLink = useCallback(() => {
     const previousUrl = editor.getAttributes('link').href;
@@ -46,7 +48,18 @@ function Toolbar({ editor }) {
     editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
   }, [editor]);
 
+  // The attribute lives on the wrapper below and the editable inherits it;
+  // WebKit keeps painting the squiggles it already drew until the editable is
+  // re-entered, so re-enter it.
+  const toggleSpellcheck = useCallback(() => {
+    setSpellcheckEnabled(!spellcheckEnabled);
+    editor?.commands.blur();
+    setTimeout(() => editor?.commands.focus(), 0);
+  }, [editor, spellcheckEnabled, setSpellcheckEnabled]);
+
   const S = 15;
+
+  if (!editor) return null;
 
   return (
     <div className="flex items-center gap-0.5 px-2 py-1 border-b border-mail-border bg-mail-surface/50 flex-wrap">
@@ -95,6 +108,16 @@ function Toolbar({ editor }) {
       <ToolbarButton onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().redo()} title="Redo">
         <Redo size={S} />
       </ToolbarButton>
+
+      <ToolbarDivider />
+
+      <ToolbarButton
+        onClick={toggleSpellcheck}
+        active={spellcheckEnabled}
+        title={spellcheckEnabled ? 'Spellcheck on — click to turn off' : 'Spellcheck off — click to turn on'}
+      >
+        <SpellCheck size={S} />
+      </ToolbarButton>
     </div>
   );
 }
@@ -118,6 +141,7 @@ async function insertImageFiles(editor, files, pos) {
 }
 
 export function RichTextEditor({ content, onUpdate, placeholder = 'Write your message...', editorRef, onFiles }) {
+  const spellcheckEnabled = useSettingsStore((s) => s.spellcheckEnabled ?? true);
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -181,7 +205,9 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
   }, [content, editor]);
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 overflow-hidden bg-mail-bg">
+    // spellCheck is inherited by the contenteditable below — ProseMirror never
+    // sets the attribute itself, so nothing here overrides it.
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden bg-mail-bg" spellCheck={spellcheckEnabled}>
       <Toolbar editor={editor} />
       <div className="flex-1 overflow-y-auto">
         <EditorContent editor={editor} className="h-full" />

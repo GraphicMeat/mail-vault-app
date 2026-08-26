@@ -120,6 +120,10 @@ export const useSettingsStore = create(
       autoSaveDrafts: true,
       autoSaveInterval: 30, // seconds
 
+      // Spellcheck while composing — the toolbar toggle writes here so the
+      // choice outlives the compose window that made it.
+      spellcheckEnabled: true,
+
       // Email sync settings
       refreshInterval: 5, // minutes (0 = disabled)
       refreshOnLaunch: true,
@@ -535,6 +539,9 @@ export const useSettingsStore = create(
       setUndoSendDelay: (delay) => set({ undoSendDelay: delay }),
       setSendDelay: (seconds) => set({ sendDelay: seconds, undoSendEnabled: seconds > 0, undoSendDelay: seconds }),
 
+      // Compose spellcheck
+      setSpellcheckEnabled: (enabled) => set({ spellcheckEnabled: !!enabled }),
+
       // Email sync settings
       setRefreshInterval: (minutes) => set({ refreshInterval: minutes }),
       setRefreshOnLaunch: (enabled) => set({ refreshOnLaunch: enabled }),
@@ -766,6 +773,7 @@ export const useSettingsStore = create(
           undoSendDelay: 5,
           autoSaveDrafts: true,
           autoSaveInterval: 30,
+          spellcheckEnabled: true,
           refreshInterval: 5,
           refreshOnLaunch: true,
           lastRefreshTime: null,
