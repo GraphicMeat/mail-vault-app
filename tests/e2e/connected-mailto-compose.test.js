@@ -148,3 +148,95 @@ describe('A mailto: link opens compose', function () {
     expect(await modalCount()).toBe(0);
   });
 });
+
+/**
+ * The plain-text half of the same feature.
+ *
+ * A text/plain message has no anchors at all, so an address in one was
+ * characters on a page — nothing to click, however obviously it was an address.
+ * `AddressText` linkifies them as React children (never innerHTML), and the
+ * link opens the same compose window.
+ *
+ * Fixture: every mock message's body ends "…for luke@mock.test." — the trailing
+ * period is the point. A regex that swallows it produces a link to an address
+ * that does not exist.
+ */
+describe('An address in a plain-text body opens compose', function () {
+  this.timeout(120_000);
+
+  /** The first mailto: link inside the rendered message body. */
+  const bodyAddressLink = () => browser.execute(() => {
+    const link = document.querySelector('.email-content a[href^="mailto:"]');
+    if (!link) return null;
+    const body = link.closest('.email-content');
+    return { text: link.textContent, href: link.getAttribute('href'), bodyText: body.innerText };
+  });
+
+  before(async function () {
+    await waitForApp();
+    await waitForEmails();
+    await closeComposeHard();
+
+    // A plain-text message — every mock body is text/plain except the one HTML
+    // fixture, so any "Luke message" row reaches the branch under test.
+    const clicked = await browser.execute(() => {
+      for (const row of document.querySelectorAll('[data-testid="email-row"]')) {
+        if (/Luke message \d+/.test(row.textContent || '') && row.offsetHeight > 0) {
+          row.click();
+          return (row.innerText || '').trim();
+        }
+      }
+      return null;
+    });
+    expect(clicked).not.toBe(null);
+
+    await browser.waitUntil(async () => (await bodyAddressLink()) !== null, {
+      timeout: 30_000,
+      interval: 400,
+      timeoutMsg: 'No mailto: link was rendered in the plain-text body',
+    });
+  });
+
+  after(async function () {
+    await closeComposeHard();
+  });
+
+  it('links the address and stops at it, leaving the sentence intact', async function () {
+    const link = await bodyAddressLink();
+    // Not "luke@mock.test." — the period ends the sentence, not the address.
+    expect(link.text).toBe(LUKE);
+    expect(link.href).toBe(`mailto:${LUKE}`);
+    // The reader still sees their message: the link is inside it, not instead
+    // of it. `innerText` reads through the anchor.
+    expect(link.bodyText).toContain(`for ${LUKE}.`);
+    expect(link.bodyText).toMatch(/^Body of luke message \d+ for /);
+  });
+
+  it('opens compose on the address, prefilled and alone', async function () {
+    const clicked = await browser.execute(() => {
+      const link = document.querySelector('.email-content a[href^="mailto:"]');
+      if (!link) return false;
+      link.click();
+      return true;
+    });
+    expect(clicked).toBe(true);
+
+    await browser.waitUntil(modalOpen, {
+      timeout: 15_000,
+      interval: 200,
+      timeoutMsg: 'Clicking the address in the plain-text body opened no compose window',
+    });
+    expect(await modalCount()).toBe(1);
+    expect(await fieldValue('compose-to')).toBe(LUKE);
+    expect(await fieldValue('compose-subject')).toBe('');
+  });
+
+  it('leaves the message on screen rather than navigating to it', async function () {
+    // The href is a real mailto:; unhandled, the webview follows it and the
+    // app is replaced by whatever the OS does next.
+    const link = await bodyAddressLink();
+    expect(link).not.toBe(null);
+    expect(link.bodyText.length).toBeGreaterThan(0);
+    expect(await modalOpen()).toBe(true);
+  });
+});

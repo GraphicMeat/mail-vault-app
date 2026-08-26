@@ -39,6 +39,7 @@ import { emailScopeKey } from '../stores/slices/unifiedHelpers';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { MAIL_DARK_TEXT } from '../utils/mailChrome';
 import { openMailtoCompose } from '../utils/mailto';
+import { AddressText } from './email/AddressText';
 
 export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail, onBack, onReply }) {
   const scrollRef = useRef(null);
@@ -561,7 +562,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
                 />
               ) : (
                 <div className="whitespace-pre-wrap break-words text-sm">
-                  {mergedEmail.text || mergedEmail.textBody || '(No text content)'}
+                  <AddressText text={mergedEmail.text || mergedEmail.textBody || '(No text content)'} accountId={mergedEmail?._accountId} />
                 </div>
               )}
             </div>
@@ -578,13 +579,13 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
             </div>
           ) : hasDisplayableContent ? (
             <div className="px-4 py-2.5 whitespace-pre-wrap break-words text-sm">
-              {bodyWithoutSig}
+              <AddressText text={bodyWithoutSig} accountId={mergedEmail?._accountId} />
               {signature && signatureDisplay !== 'always-hide' && (
                 signatureDisplay === 'always-show' ? (
                   <div className={`mt-2 text-xs whitespace-pre-wrap opacity-60 ${
                     fromUser ? 'text-white/60' : 'text-mail-text-muted'
                   }`}>
-                    {signature}
+                    <AddressText text={signature} accountId={mergedEmail?._accountId} />
                   </div>
                 ) : (
                   <>
@@ -600,7 +601,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
                       <div className={`mt-1 text-xs whitespace-pre-wrap opacity-60 ${
                         fromUser ? 'text-white/60' : 'text-mail-text-muted'
                       }`}>
-                        {signature}
+                        <AddressText text={signature} accountId={mergedEmail?._accountId} />
                       </div>
                     )}
                   </>
@@ -622,7 +623,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
                     <div className={`mt-1 border-l-2 pl-2 ${
                       fromUser ? 'text-white/60 border-white/30' : 'text-mail-text-muted border-mail-border'
                     }`}>
-                      {quotedContent}
+                      <AddressText text={quotedContent} accountId={mergedEmail?._accountId} />
                     </div>
                   )}
                 </>
@@ -638,7 +639,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
           ) : (
             <div className="px-4 py-3 flex flex-col gap-2">
               <p className={`text-sm italic ${fromUser ? 'text-white/70' : 'text-mail-text-muted'}`}>
-                {email.text || email.textBody || email.snippet || email.subject || 'No content available'}
+                <AddressText text={email.text || email.textBody || email.snippet || email.subject || 'No content available'} accountId={mergedEmail?._accountId} />
               </p>
               <button
                 onClick={handleOpenFullView}

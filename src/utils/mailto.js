@@ -68,3 +68,46 @@ export function openMailtoCompose(href, accountId) {
   _opener(initialData);
   return true;
 }
+
+// ── Addresses printed in a plain-text body ──────────────────────────────────
+//
+// A text/plain message has no anchors: an address in it is characters. These
+// split one into linkable runs so the reader can click it like any other
+// address in the app.
+
+// Deliberately conservative. Over-matching turns ordinary prose into links,
+// which is worse than missing an exotic address: the local part is the common
+// subset, and the last label must be alphabetic so a trailing "." or "," in a
+// sentence stays punctuation.
+const ADDRESS_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,}/g;
+
+/**
+ * Split text into runs: `{ text, address }` with `address` null for the parts
+ * that are not one. Always covers the whole input, in order, so joining the
+ * `text` fields returns the original string exactly.
+ */
+export function splitAddresses(text) {
+  if (typeof text !== 'string' || !text) return [];
+  const out = [];
+  let last = 0;
+  for (const m of text.matchAll(ADDRESS_RE)) {
+    if (m.index > last) out.push({ text: text.slice(last, m.index), address: null });
+    out.push({ text: m[0], address: m[0] });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) out.push({ text: text.slice(last), address: null });
+  return out;
+}
+
+/**
+ * The same thing as an HTML fragment, for the one plain-text body that renders
+ * inside an iframe rather than as React children (FullViewEmailModal). Escaped
+ * here because nothing downstream will do it.
+ */
+export function addressesToHtml(text) {
+  return splitAddresses(text)
+    .map(seg => seg.address
+      ? `<a href="mailto:${encodeURI(seg.address)}">${_escapeHtml(seg.text)}</a>`
+      : _escapeHtml(seg.text))
+    .join('');
+}

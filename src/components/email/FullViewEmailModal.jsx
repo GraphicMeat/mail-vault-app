@@ -13,7 +13,7 @@ import { AttachmentItem } from '../EmailViewer';
 import { getRealAttachments, replaceCidUrls } from '../../services/attachmentUtils';
 import { checkLinkAlert } from '../../utils/linkSafety';
 import { LinkSafetyModal } from '../LinkSafetyModal';
-import { openMailtoCompose } from '../../utils/mailto';
+import { openMailtoCompose, addressesToHtml } from '../../utils/mailto';
 
 // Full-screen modal for viewing complete email with HTML rendering
 export function FullViewEmailModal({ email: initialEmail, onClose }) {
@@ -66,7 +66,10 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
   // Build full HTML content for iframe
   const iframeContent = useMemo(() => {
     const htmlBody = email.html || `<pre style="white-space: pre-wrap; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0;">${
-      (email.text || email.textBody || '(No content)').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      // Escapes (including `&`, which the hand-rolled pair here used to let
+      // through) and turns any address into a mailto: the frame's click
+      // handler already knows what to do with.
+      addressesToHtml(email.text || email.textBody || '(No content)')
     }</pre>`;
 
     return `

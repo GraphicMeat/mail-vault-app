@@ -40,6 +40,7 @@ import { getDarkReaderInlineScripts } from '../utils/darkReaderInject';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../utils/iframeQuoteFolding';
 import { MAIL_DARK_BG, MAIL_DARK_TEXT } from '../utils/mailChrome';
 import { openMailtoCompose } from '../utils/mailto';
+import { AddressText } from './email/AddressText';
 
 // Re-export AttachmentItem for any external consumers
 export { AttachmentItem } from './email/AttachmentBar';
@@ -607,7 +608,7 @@ function EmailViewerComponent({ onComposeReply }) {
                 color: emailDarkMode ? MAIL_DARK_TEXT : '#333333',
               }}
             >
-              {selectedEmail.text || 'No content'}
+              <AddressText text={selectedEmail.text || 'No content'} accountId={selectedEmail?._accountId} />
             </div>
           )}
         </div>

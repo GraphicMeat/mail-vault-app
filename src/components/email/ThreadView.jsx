@@ -30,6 +30,7 @@ import { LinkSafetyModal } from '../LinkSafetyModal';
 import { LinkAlertIcon } from '../LinkAlertIcon';
 import { MAIL_DARK_BG, MAIL_DARK_TEXT } from '../../utils/mailChrome';
 import { openMailtoCompose } from '../../utils/mailto';
+import { AddressText } from './AddressText';
 
 // ── Thread Email Item Content ────────────────────────────────────────────────
 
@@ -192,7 +193,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
       </div>
     ) : (
       <div className="py-3 text-sm text-mail-text-muted italic">
-        {email.text || email.textBody || email.snippet || email.subject || 'No content available'}
+        <AddressText text={email.text || email.textBody || email.snippet || email.subject || 'No content available'} accountId={email?._accountId} />
       </div>
     );
   }
@@ -221,12 +222,12 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
             color: isDark ? MAIL_DARK_TEXT : '#333333',
           }}
         >
-          {bodyWithoutSig || 'No content'}
+          <AddressText text={bodyWithoutSig || 'No content'} accountId={email?._accountId} />
           {signature && signatureDisplay !== 'always-hide' && (
             showSigInline
               ? (
                 <div className="mt-2 text-mail-text-muted text-xs whitespace-pre-wrap opacity-60">
-                  {signature}
+                  <AddressText text={signature} accountId={email?._accountId} />
                 </div>
               )
               : (
@@ -239,7 +240,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
                   </button>
                   {sigExpanded && (
                     <div className="mt-1 text-mail-text-muted text-xs whitespace-pre-wrap opacity-60">
-                      {signature}
+                      <AddressText text={signature} accountId={email?._accountId} />
                     </div>
                   )}
                 </>
@@ -255,7 +256,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
               </button>
               {quotesExpanded && (
                 <div className="mt-1 text-mail-text-muted border-l-2 border-mail-border pl-3">
-                  {quotedContent}
+                  <AddressText text={quotedContent} accountId={email?._accountId} />
                 </div>
               )}
             </>
