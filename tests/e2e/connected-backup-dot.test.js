@@ -287,6 +287,8 @@ describe('The backup-drive dot', function () {
     const text = await browser.execute(() =>
       document.querySelector('[data-testid="email-list-vault-share"]')?.textContent?.trim() ?? null);
     expect(text).not.toBe(null, 'no vault share line rendered');
-    expect(text).toMatch(/^Vault: [\d,]+ of [\d,]+ loaded$/);
+    // The "loaded" suffix is conditional — it only shows while the window is
+    // short of the server total.
+    expect(text).toMatch(/^In your vault: [\d,]+ of [\d,]+( loaded)?$/);
   });
 });

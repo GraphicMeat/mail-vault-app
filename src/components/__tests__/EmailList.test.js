@@ -699,9 +699,41 @@ describe('vault share line', () => {
     render(React.createElement(EmailList.type));
 
     const text = screen.getByTestId('email-list-vault-share').textContent;
-    expect(text).toBe('Vault: 2 of 3 loaded');
+    expect(text).toBe('In your vault: 2 of 3 loaded');
     // The server total is the OTHER line's denominator and must not leak here.
     expect(text).not.toContain('5,000');
+  });
+
+  it('drops the "loaded" suffix once the whole mailbox is in hand', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    useMailStore.setState({
+      totalEmails: 3,
+      sortedEmails: [row(1, true), row(2, true), row(3, false)],
+    });
+
+    const { EmailList } = await import('../EmailList.jsx');
+    render(React.createElement(EmailList.type));
+
+    // Nothing left to page in, so "loaded" would invite a scroll that can never
+    // move either number.
+    expect(screen.getByTestId('email-list-vault-share').textContent).toBe('In your vault: 2 of 3');
+  });
+
+  it('never calls the vault view partial, however big the server total is', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    useMailStore.setState({
+      viewMode: 'local',
+      totalEmails: 5000,
+      sortedEmails: [row(1, true), row(2, true)],
+    });
+
+    const { EmailList } = await import('../EmailList.jsx');
+    render(React.createElement(EmailList.type));
+
+    // These rows come off disk. totalEmails still counts the SERVER, so a bare
+    // `loaded < totalEmails` would promise a scroll that pages in nothing.
+    expect(screen.getByTestId('email-list-vault-share').textContent).toBe('In your vault: 2 of 2');
+    useMailStore.setState({ viewMode: 'all' });
   });
 
   it('renders nothing at all when no window is loaded', async () => {

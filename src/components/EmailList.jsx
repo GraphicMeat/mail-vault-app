@@ -424,6 +424,12 @@ function EmailListComponent() {
     return { loaded, inVault, pct: Math.round((inVault / loaded) * 100) };
   }, [sortedEmails]);
 
+  // ponytail: the "loaded" suffix only earns its place while the server still
+  // holds rows this window hasn't paged in — otherwise it invites a scroll that
+  // can never move either number. Vault view is never partial in that sense:
+  // its rows come off disk, while totalEmails keeps counting the server.
+  const windowIsPartial = viewMode !== 'local' && sortedEmails.length < totalEmails;
+
   // Count emails with alerts — used in fingerprints to invalidate caches when alerts change
   const alertCount = useMemo(() => {
     let count = 0;
@@ -883,7 +889,7 @@ function EmailListComponent() {
                     <span style={{ transform: `scaleX(${vaultShare.pct / 100})` }} />
                   </span>
                   <span data-testid="email-list-vault-share" className="text-[11px] text-mail-text-muted whitespace-nowrap">
-                    Vault: {vaultShare.inVault.toLocaleString()} of {vaultShare.loaded.toLocaleString()} loaded
+                    In your vault: {vaultShare.inVault.toLocaleString()} of {vaultShare.loaded.toLocaleString()}{windowIsPartial ? ' loaded' : ''}
                   </span>
                 </div>
               )}
