@@ -13,9 +13,6 @@ colors:
   server-tint: "#1b3360"
   only-copy: "#fbbf24"
   only-copy-tint: "#4d3d17"
-  only-copy-row: "#443516"
-  only-copy-row-unread: "#574418"
-  only-copy-row-hover: "#614b18"
   bg: "#0a0a12"
   surface: "#15151f"
   surface-hover: "#1e1e2c"
@@ -177,18 +174,6 @@ components:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.text}"
     height: "56px"
-  row-email-only-copy:
-    backgroundColor: "{colors.only-copy-row}"
-    textColor: "{colors.text}"
-    height: "56px"
-  row-email-only-copy-unread:
-    backgroundColor: "{colors.only-copy-row-unread}"
-    textColor: "{colors.text}"
-    height: "56px"
-  row-email-only-copy-hover:
-    backgroundColor: "{colors.only-copy-row-hover}"
-    textColor: "{colors.text}"
-    height: "56px"
   chat-bubble-sent:
     backgroundColor: "{colors.chat-sent-bg}"
     textColor: "#ffffff"
@@ -238,7 +223,7 @@ An indigo-cast near-black field carrying four named roles, each with a solid tin
 - **Server Blue** (`server`): the message is on the server and only there. `Cloud` glyph, and the track of the custody meter — the track *is* the server side of the claim, so it is mixed to 45% against the surface rather than left at its tint, where it vanished.
 - **Only-Copy Gold** (`only-copy`): the server no longer has this message. `CloudOff` glyph — its own shape, not the vault's, because emerald and gold converge under deuteranopia and the tooltip is hover/focus-only. This is the loudest claim the UI can make and it requires proof (see The Proof Rule).
 
-Each of the three owns a tint (`local-tint`, `server-tint`, `only-copy-tint`) used by the 20×20 custody chip and by the reading pane's custody band. Only-copy additionally owns a **three-value row wash** — `only-copy-row`, `only-copy-row-unread`, `only-copy-row-hover` — because a row has three states and an alarm that vanishes under the cursor is not an alarm.
+Each of the three owns a tint (`local-tint`, `server-tint`, `only-copy-tint`) used by the 20×20 custody chip and by the reading pane's custody band. The custody claim stops there: the list row keeps the ordinary `surface`/`surface-hover`/unread ground, so nothing competes with the glyph that carries the meaning.
 
 ### Tertiary — status, never custody
 - **Confirm Green** (`success`) for a completed operation, **Caution Orange** (`warning`) for degraded, rate-limited, unverified or quota conditions, **Destructive Red** (`danger` as text/icon at 6.55:1, `danger-fill` under white at 4.83:1). Each has a solid tint. Orange was deliberately re-cut from the old amber precisely so that it could never be mistaken for the only-copy claim it used to carry.
@@ -388,9 +373,8 @@ Soft-but-not-rounded rectangles, with a pill reserved for anything that is a pie
 ### Message rows
 - Flex row at fixed height, 16px side padding, `gap-3` (comfortable) or `gap-2` (compact), separated by a bottom hairline.
 - **Unread:** `surface` fill against the `bg` ground, plus heavier weight. No dot, no size change.
-- **Only-copy:** the whole row ground goes gold — `.row-only-copy`, with `.row-only-copy.row-unread` and `.row-only-copy:hover` overriding it. One property carries all three meanings so none of them can win silently, and hover is *suppressed* for only-copy rows so the wash cannot be replaced by `surface-hover`.
 - **Selected:** 2px indigo left border with padding compensated to 14px so text does not shift.
-- **Hover:** `surface-hover` fill, suppressed while the row is selected or only-copy.
+- **Hover:** `surface-hover` fill, suppressed while the row is selected.
 
 ### Chat bubbles
 - 12px corners, `8px 12px` padding, 14px text. **Sent** is a deeper indigo than the accent (`chat-sent-bg`, the same value in both themes) with white text; **received** is `chat-received-bg` with a 1px hairline. The deliberate half-step between the sent bubble and the accent keeps a wall of sent mail from reading as a wall of buttons.

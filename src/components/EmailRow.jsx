@@ -40,14 +40,11 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
   };
 
   const isUnread = !email.flags?.includes('\\Seen');
-  // "Your only copy" is the loudest claim this UI can make, and a 20px chip is
-  // not a place to make it — the row itself carries the alarm. Routed through
-  // describeMessageState so the row ground, the chip and the viewer band can
-  // never disagree, and so the gold still requires proof of server absence.
-  // Background only: a virtualized row's height is a constant the list knows.
+  // Custody is the glyph's job, not the row ground's: the row keeps the plain
+  // surface/hover/unread background every other row has. The tone is still
+  // read here so the handoff below knows when this message changed hands.
   const serverKnown = useMailStore(s => s.serverUids.complete);
   const custodyTone = describeMessageState(email, { serverKnown }).tone;
-  const isOnlyCopy = custodyTone === 'only-copy';
   // The handoff belongs to the row, not to the 20px chip: when a message
   // becomes yours, the row is what changed hands. Null except for the one
   // ~620ms beat after this message's own custody changed.
@@ -60,8 +57,8 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
       style={style}
       className={`virtual-row group relative flex items-center gap-3 px-4 border-b border-mail-border
                  cursor-pointer
-                 ${isSelected && !isChecked ? 'border-l-2 border-l-mail-accent pl-[14px]' : isOnlyCopy ? '' : 'hover:bg-mail-surface-hover'}
-                 ${isOnlyCopy ? `row-only-copy ${isUnread ? 'row-unread' : ''}` : isUnread ? 'bg-mail-surface' : ''}`}
+                 ${isSelected && !isChecked ? 'border-l-2 border-l-mail-accent pl-[14px]' : 'hover:bg-mail-surface-hover'}
+                 ${isUnread ? 'bg-mail-surface' : ''}`}
       onClick={() => onSelect(email.uid, email.source, email._mailbox)}
     >
       <div onClick={(e) => { e.stopPropagation(); onToggleSelection(email.uid, email._accountId); }}>
@@ -158,14 +155,11 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
   };
 
   const isUnread = !email.flags?.includes('\\Seen');
-  // "Your only copy" is the loudest claim this UI can make, and a 20px chip is
-  // not a place to make it — the row itself carries the alarm. Routed through
-  // describeMessageState so the row ground, the chip and the viewer band can
-  // never disagree, and so the gold still requires proof of server absence.
-  // Background only: a virtualized row's height is a constant the list knows.
+  // Custody is the glyph's job, not the row ground's: the row keeps the plain
+  // surface/hover/unread background every other row has. The tone is still
+  // read here so the handoff below knows when this message changed hands.
   const serverKnown = useMailStore(s => s.serverUids.complete);
   const custodyTone = describeMessageState(email, { serverKnown }).tone;
-  const isOnlyCopy = custodyTone === 'only-copy';
   // The handoff belongs to the row, not to the 20px chip: when a message
   // becomes yours, the row is what changed hands. Null except for the one
   // ~620ms beat after this message's own custody changed.
@@ -178,8 +172,8 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
       style={style}
       className={`virtual-row group relative flex items-center gap-2 px-4 border-b border-mail-border
                  cursor-pointer
-                 ${isSelected && !isChecked ? 'border-l-2 border-l-mail-accent pl-[14px]' : isOnlyCopy ? '' : 'hover:bg-mail-surface-hover'}
-                 ${isOnlyCopy ? `row-only-copy ${isUnread ? 'row-unread' : ''}` : isUnread ? 'bg-mail-surface' : ''}`}
+                 ${isSelected && !isChecked ? 'border-l-2 border-l-mail-accent pl-[14px]' : 'hover:bg-mail-surface-hover'}
+                 ${isUnread ? 'bg-mail-surface' : ''}`}
       onClick={() => onSelect(email.uid, email.source, email._mailbox)}
     >
       <div onClick={(e) => { e.stopPropagation(); onToggleSelection(email.uid, email._accountId); }}>

@@ -12,7 +12,7 @@ const mailColors = Object.fromEntries(
     'accent', 'accent-hover', 'accent-text', 'accent-fill', 'accent-tint',
     'bg', 'border', 'border-strong', 'input-bg', 'surface', 'surface-hover',
     'text', 'text-muted',
-    'local', 'local-tint', 'server', 'server-tint', 'only-copy', 'only-copy-tint', 'only-copy-row',
+    'local', 'local-tint', 'server', 'server-tint', 'only-copy', 'only-copy-tint',
     'success', 'success-tint', 'warning', 'warning-tint', 'text-on-tint',
     'danger', 'danger-fill', 'danger-tint',
   ].map((name) => [`mail-${name}`, mailColor(name)])

@@ -14,9 +14,8 @@
    FIRST VIEWPORT: Three panes on ink. Account colour spines the rail, the list
    header carries a vault/server meter over the loaded window (the store holds
    no per-folder archived counts, so a folder-level meter would be a number the
-   app cannot compute), every message row carries a tinted custody chip, an
-   only-copy row is washed gold end to end, and the reading pane opens under a
-   custody band.
+   app cannot compute), every message row carries a tinted custody chip, and
+   the reading pane opens under a custody band.
    FORM: Colour-strategy replacement inside the committed Night Desk world —
    Full palette, four named roles. No world tournament, no seed.
    FINISH: unreviewed and undocumented is unfinished; this build ends with the
@@ -82,17 +81,9 @@
   --mail-server-tint: #1b3360;
   --mail-only-copy: #fbbf24;       /* Only-Copy Gold — the server dropped it */
   --mail-only-copy-tint: #4d3d17;
-  /* The only-copy row wash. Three values because a row has three states and
-     an alarm that vanishes under the cursor is not an alarm: at its first
-     value this measured 1.04:1 against hover, so the gold disappeared exactly
-     while the user was deciding whether to delete. */
-  --mail-only-copy-row: #443516;         /* 1.52:1 on surface, 1.38:1 on hover */
-  --mail-only-copy-row-unread: #574418;  /* unread still outranks read */
-  --mail-only-copy-row-hover: #614b18;
   /* Secondary text on ANY tint. Grey muted falls to 3.17:1 on the raised
      tints, and grey on a coloured surface is wrong regardless. Solid, not
-     alpha — stacked alpha is what the tint tokens exist to avoid. The worst
-     case is the gold HOVER row, not any of the flat tints; check it there. */
+     alpha — stacked alpha is what the tint tokens exist to avoid. */
   --mail-text-on-tint: #c9c9d8;
 
   /* Status — never custody */
@@ -130,10 +121,7 @@
   --mail-server-tint: #cdd8f6;
   --mail-only-copy: #854d0e;       /* 6.51:1 on white */
   --mail-only-copy-tint: #e4d8ca;
-  --mail-only-copy-row: #e4d8ca;
-  --mail-only-copy-row-unread: #dacab7;
-  --mail-only-copy-row-hover: #d3bfa8;
-  --mail-text-on-tint: #4a4a63;   /* 4.81:1 worst case — the gold hover row */
+  --mail-text-on-tint: #4a4a63;   /* 4.81:1 worst case — the only-copy tint */
 
   --mail-success: #166534;
   --mail-success-tint: #ccddd2;
@@ -227,11 +215,6 @@ body {
 .bg-mail-only-copy-tint { background-color: var(--mail-only-copy-tint); }
 .text-mail-text-on-tint { color: var(--mail-text-on-tint); }
 
-/* Only-copy rows own their whole background, including hover and unread, so
-   one property can carry both meanings without either winning silently. */
-.row-only-copy { background-color: var(--mail-only-copy-row); }
-.row-only-copy.row-unread { background-color: var(--mail-only-copy-row-unread); }
-.row-only-copy:hover { background-color: var(--mail-only-copy-row-hover); }
 .bg-mail-success-tint { background-color: var(--mail-success-tint); }
 .bg-mail-warning-tint { background-color: var(--mail-warning-tint); }
 .bg-mail-danger-tint { background-color: var(--mail-danger-tint); }
@@ -685,8 +668,8 @@ input[type="range"]::-moz-range-thumb:hover {
   --mv-ease-state: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Row ground. Carries hover AND the gold arrival of an only-copy row through
-   one property, at a duration short enough that hover still feels like hover. */
+/* Row ground. Hover only, at a duration short enough that hover still feels
+   like hover — custody lives in the glyph, not in the row's background. */
 .virtual-row {
   transition: background-color var(--mv-feedback) var(--mv-ease-state);
 }
