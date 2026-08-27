@@ -93,7 +93,10 @@ describe('useChatBodyLoader — vault copy under a reissued uid', () => {
     const { result } = renderHook(() => useChatBodyLoader([ROW]));
 
     await waitFor(() => expect(entryFor(result)?.status).toBe('loaded'));
-    expect(entryFor(result).email).toBe(SERVER_COPY);
+    // Not `toBe`: the loader hands back the body with the row's account on it,
+    // so a reply to it leaves from the mailbox the message was read in.
+    expect(entryFor(result).email).toMatchObject(SERVER_COPY);
+    expect(entryFor(result).email._accountId).toBe(ROW._accountId);
     expect(mockFetchEmailLight).toHaveBeenCalledTimes(1);
   });
 

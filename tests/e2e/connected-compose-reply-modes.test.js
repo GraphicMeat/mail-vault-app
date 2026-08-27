@@ -117,6 +117,9 @@ describe('Connected Compose Reply Modes', function () {
     // Leave the selection empty: a seeded email that outlives its spec makes
     // every later "r"/"f" press open a compose nobody asked for.
     await mailStoreSet({ selectedEmail: null, selectedEmailId: null, selectedThread: null });
+    // The last-sent identity is global settings state: a case that seeds one
+    // has to put it back, or every later compose in this run opens on it.
+    await browser.execute(() => window.__SETTINGS_STORE__.setState({ lastComposeIdentity: null }));
     for (const a of browser.mockAccounts || []) {
       await settingsCall('setSignature', a.id, SIG_OFF);
     }
@@ -168,6 +171,38 @@ describe('Connected Compose Reply Modes', function () {
   it('keeps a single "Re:" when replying to a subject that already has one', async function () {
     await openMode({ ...EMAIL, subject: `Re: ${SUBJECT}` }, 'r');
     expect(await fieldValue('compose-subject')).toBe(`Re: ${SUBJECT}`);
+  });
+
+  // -------------------------------------------------------------------------
+  // Which mailbox the reply leaves from
+  // -------------------------------------------------------------------------
+  // Reported 2026-08-26: replied inside a thread and the From row read another
+  // mailbox — the one that had SENT last. Both cases below seed that identity
+  // on the OTHER account, which is what used to win.
+
+  it('a reply with no provenance leaves from the account being read', async function () {
+    // No `_accountId` on purpose: that is what a body fetched from the server
+    // looks like, and the row click that asked for it forwards a bare uid.
+    const other = browser.mockAccounts[1];
+    const { _accountId, ...noProvenance } = EMAIL;
+    await browser.execute((id, addr) => {
+      window.__SETTINGS_STORE__.setState({ lastComposeIdentity: { accountId: id, address: addr } });
+    }, other.id, other.email);
+
+    await openMode(noProvenance, 'r');
+
+    expect(await fieldValue('compose-from')).toBe(`${accountOne.id} ${accountOne.email}`);
+  });
+
+  it('a forward leaves from the mailbox the message is in, not the one that sent last', async function () {
+    const other = browser.mockAccounts[1];
+    await browser.execute((id, addr) => {
+      window.__SETTINGS_STORE__.setState({ lastComposeIdentity: { accountId: id, address: addr } });
+    }, accountOne.id, accountOne.email);
+
+    await openMode({ ...EMAIL, _accountId: other.id }, 'f');
+
+    expect(await fieldValue('compose-from')).toBe(`${other.id} ${other.email}`);
   });
 
   // -------------------------------------------------------------------------

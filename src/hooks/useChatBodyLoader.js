@@ -62,7 +62,9 @@ export function useChatBodyLoader(topicEmails) {
         }
         const cached = store.getFromCache(`${loc.accountId}-${loc.mailbox}-${email.uid}`);
         if (cached && bodyMatchesHeader(email, cached)) {
-          bodiesMapRef.current.set(key, { status: 'loaded', email: cached });
+          // The body answers for the header it was loaded for: keep that
+          // header's account on it, so replying to it leaves from there.
+          bodiesMapRef.current.set(key, { status: 'loaded', email: { ...cached, _accountId: loc.accountId } });
         } else {
           bodiesMapRef.current.set(key, { status: 'loading', email: null });
         }
@@ -158,7 +160,7 @@ export function useChatBodyLoader(topicEmails) {
         if (emailBody) {
           emailBody = await hydrateInlineImages(emailBody, resolvedAccountId, resolvedMailbox);
           store.addToCache(cacheKey, emailBody, cacheLimitMB);
-          bodiesMap.set(key, { status: 'loaded', email: emailBody });
+          bodiesMap.set(key, { status: 'loaded', email: { ...emailBody, _accountId: resolvedAccountId } });
         } else if (retryCount < MAX_RETRIES) {
           // Retry after a short delay
           await new Promise(r => setTimeout(r, 1000 * (retryCount + 1)));

@@ -134,8 +134,9 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const addEmailTemplate = useSettingsStore(s => s.addEmailTemplate);
   const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
   const accounts = getOrderedAccounts(rawAccounts);
-  // Replies stay on the email's source account; a restored draft keeps its
-  // saved identity; a fresh compose defaults to whoever sent the last message.
+  // Replies and forwards leave from the mailbox the message is in (falling back
+  // to the one being read); a restored draft keeps its saved identity; only a
+  // fresh compose defaults to whoever sent the last message.
   const initialIdentity = resolveInitialComposeIdentity({
     replyTo,
     initialData,

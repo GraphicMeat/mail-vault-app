@@ -179,6 +179,11 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
   // Cancel any pending delayed mark-as-read from previous email
   if (_markAsReadTimer) { clearTimeout(_markAsReadTimer); _markAsReadTimer = null; }
 
+  // Which mailbox a message came from is not recoverable from the message: a
+  // body fetched from the server carries no account, so reply/forward had to
+  // guess. Stamp it here, where it is already resolved.
+  const withAccount = (e) => (e && !e._accountId ? { ...e, _accountId: accountId } : e);
+
   const selectedEmailId = isUnified ? `${accountId}:${uid}` : uid;
   useMailStore.setState({ selectedThread: null, selectedEmailId, loadingEmail: true, selectedEmail: null, selectedEmailSource: source });
 
@@ -195,7 +200,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
       // read/unread, sync, another client). The list row is the current copy.
       const row = get().emails.find(e => isUnified ? (e._accountId === accountId && e.uid === uid) : e.uid === uid);
       const fresh = row?.flags ? { ...hydrated, flags: row.flags } : hydrated;
-      useMailStore.setState({ selectedEmail: fresh, selectedEmailSource: source, loadingEmail: false });
+      useMailStore.setState({ selectedEmail: withAccount(fresh), selectedEmailSource: source, loadingEmail: false });
       await _autoMarkRead(useMailStore, {
         email: fresh, accountId, mailbox, uid, isUnified,
         markOnServer: () => _setSeenOnServer(account, accountId, mailbox, uid, true),
@@ -273,7 +278,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
     // Update hasAttachments on the list item
     const hasReal = hasRealAttachments(email);
     useMailStore.setState(state => ({
-      selectedEmail: email,
+      selectedEmail: withAccount(email),
       selectedEmailSource: actualSource,
       emails: state.emails.map(e => e.uid === uid ? { ...e, hasAttachments: hasReal } : e),
     }));
@@ -294,7 +299,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
         return;
       }
       useMailStore.setState({
-        selectedEmail: { ...headerEmail, text: headerEmail.snippet || '', _bodyError: detail },
+        selectedEmail: withAccount({ ...headerEmail, text: headerEmail.snippet || '', _bodyError: detail }),
         selectedEmailSource: 'header-only',
       });
     };
@@ -304,7 +309,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
       // wrong message is worse here than an honest "body did not load".
       const localEmail = await _readVerifiedLocal(accountId, mailbox, uid, get().emails.find(e => e.uid === uid));
       if (localEmail) {
-        useMailStore.setState({ selectedEmail: localEmail, selectedEmailSource: 'local-only' });
+        useMailStore.setState({ selectedEmail: withAccount(localEmail), selectedEmailSource: 'local-only' });
       } else {
         headerOnly();
       }

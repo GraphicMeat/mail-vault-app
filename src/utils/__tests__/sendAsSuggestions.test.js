@@ -139,6 +139,36 @@ describe('resolveInitialComposeIdentity', () => {
     expect(out).toEqual({ accountId: 'a1', address: '' });
   });
 
+  // Reported 2026-08-26: replied to a message read in one mailbox, and compose
+  // opened on the mailbox that had sent last. A body fetched from the server
+  // carries no `_accountId`, so the reply fell through to the last identity.
+  it('a reply follows the mailbox being read when the message carries no account', () => {
+    const out = resolveInitialComposeIdentity({
+      ...base,
+      replyTo: { uid: 7, subject: 'no provenance' },
+      lastIdentity: { accountId: 'a2', address: 'alias@y.com' },
+    });
+    expect(out).toEqual({ accountId: 'a1', address: '' });
+  });
+
+  it('a forward of a search hit follows the account the hit came from', () => {
+    const out = resolveInitialComposeIdentity({
+      ...base,
+      replyTo: { _srcAccountId: 'a2' },
+      lastIdentity: { accountId: 'a1', address: 'other@x.com' },
+    });
+    expect(out).toEqual({ accountId: 'a2', address: '' });
+  });
+
+  it('a reply whose account is gone falls back to the one being read, not the last sender', () => {
+    const out = resolveInitialComposeIdentity({
+      ...base,
+      replyTo: { _accountId: 'removed' },
+      lastIdentity: { accountId: 'a2', address: 'alias@y.com' },
+    });
+    expect(out).toEqual({ accountId: 'a1', address: '' });
+  });
+
   it('a restored draft keeps its saved account and From address', () => {
     const out = resolveInitialComposeIdentity({
       ...base,

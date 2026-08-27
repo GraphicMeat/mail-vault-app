@@ -85,6 +85,10 @@ export function composeIdentities(accounts, sendAsAddresses = {}, sentAsByAccoun
  * restored draft's saved identity → the replied-to message's account →
  * the identity that sent the last message → the active account.
  * `address: ''` means "the account's default From".
+ *
+ * A reply or forward never reaches the last-sent identity: it leaves from the
+ * mailbox the message being answered is in, and the account being read is the
+ * fallback when that message carries no provenance of its own.
  */
 export function resolveInitialComposeIdentity({ replyTo, initialData, lastIdentity, accounts, activeAccountId }) {
   const exists = (id) => (accounts || []).some(a => a.id === id);
@@ -98,7 +102,14 @@ export function resolveInitialComposeIdentity({ replyTo, initialData, lastIdenti
     // Draft saved before identities were persisted — keep the old behavior.
     return { accountId: activeAccountId, address: '' };
   }
-  if (replyTo?._accountId) return { accountId: replyTo._accountId, address: '' };
+  if (replyTo) {
+    // Provenance is often missing here — a body fetched from the server carries
+    // no `_accountId`, and a row click forwards a bare uid — and then the
+    // mailbox being read is the honest answer. The identity that last SENT is
+    // not: it belongs to whatever mailbox the user was in before this one.
+    const source = replyTo._accountId || replyTo._srcAccountId;
+    return { accountId: exists(source) ? source : activeAccountId, address: '' };
+  }
   if (lastIdentity && exists(lastIdentity.accountId)) {
     return { accountId: lastIdentity.accountId, address: lastIdentity.address || '' };
   }
