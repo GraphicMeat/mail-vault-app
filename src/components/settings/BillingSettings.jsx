@@ -8,6 +8,7 @@ import {
   unregisterBillingClient, getClientInfo, openInBrowser,
   isBillingRateLimited, getBillingRateLimitedUntil, BillingRateLimitError,
 } from '../../services/billingApi';
+import { sendNotification } from '../../services/api';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { Toast } from '../Toast';
 import { formatDateLong, formatTime } from '../../utils/dateFormat';
@@ -82,6 +83,25 @@ export function signInFailureNotice(result, { appStore = IS_APPSTORE_BUILD } = {
         ? `Subscription status "${result.status || 'unknown'}" does not grant premium access.`
         : `Subscription status "${result.status || 'unknown'}" does not grant premium access. Check Manage Subscription.`;
   }
+}
+
+/**
+ * Why premium just stopped, for a refresh that used to grant it.
+ *
+ * A subscription can end between two refreshes — it lapses, payment fails, or
+ * the device loses its seat to another machine. Before this, the app simply
+ * re-rendered as Free: premium features stopped with no message anywhere, and
+ * the only way to find out was to notice something missing (2026-08-27).
+ *
+ * `null` when there is nothing to announce — no access before, or access kept.
+ */
+export function premiumDropNotice(previous, next, { appStore = IS_APPSTORE_BUILD } = {}) {
+  if (!hasPremiumAccess(previous)) return null;
+  if (hasPremiumAccess(next)) return null;
+  const reason = signInFailureNotice(next, { appStore });
+  return reason
+    ? `Premium access ended on this device. ${reason}`
+    : 'Premium access ended on this device.';
 }
 
 function timeAgo(dateStr) {
@@ -305,14 +325,29 @@ export function BillingSettings() {
     const email = billingEmail;
     if (!cid && !email) return;
 
+    const previous = billingProfile;
     const result = await billingRequest({ email, customerId: cid, manual });
     if (!result) return;
 
     setBillingProfile(result);
+
+    const dropped = premiumDropNotice(previous, result);
+    if (dropped) {
+      // Same treatment as a sign-in that granted nothing: say why, and drop the
+      // stored identity so the UI shows a signed-out state instead of a signed-in
+      // one with no access. The OS notification is the half the user sees when
+      // this lands while they are looking at anything but this tab.
+      setSignInNotice(dropped);
+      setBillingEmail('');
+      sendNotification('MailVault Premium is no longer active', dropped).catch(() => {});
+      if (!IS_APPSTORE_BUILD) loadPricing(result.customerEmail || email);
+      return;
+    }
+
     if (result.customerEmail && result.customerEmail !== email) {
       setBillingEmail(result.customerEmail);
     }
-  }, [billingEmail, billingProfile?.customerId, billingRequest, setBillingProfile, setBillingEmail]);
+  }, [billingEmail, billingProfile, billingRequest, setBillingProfile, setBillingEmail, loadPricing]);
 
   // Focus refresh — only when signed in and Billing tab is visible
   useEffect(() => {

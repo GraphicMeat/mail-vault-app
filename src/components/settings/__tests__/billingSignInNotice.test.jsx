@@ -7,7 +7,14 @@ vi.mock('lucide-react', () => new Proxy({}, {
   get: (_t, name) => (props) => React.createElement('span', { 'data-icon': String(name), ...props }),
 }));
 
-import { signInFailureNotice } from '../BillingSettings';
+// The component now reaches the OS notification bridge when premium drops.
+// Stub it: importing services/api drags in the daemon transport, which has no
+// business booting inside a jsdom unit test.
+vi.mock('../../../services/api', () => ({
+  sendNotification: vi.fn().mockResolvedValue(undefined),
+}));
+
+import { signInFailureNotice, premiumDropNotice } from '../BillingSettings';
 
 describe('signInFailureNotice', () => {
   it('explains an email the billing server has never seen', () => {
@@ -81,5 +88,47 @@ describe('signInFailureNotice — App Store build', () => {
   it('leaves the default (non-MAS) copy alone', () => {
     expect(signInFailureNotice({ hasSubscription: false, customerId: 'cus_1' }))
       .toMatch(/plan below/i);
+  });
+});
+
+/**
+ * 2026-08-27: a signed-in profile refreshed to "no subscription" and the app
+ * simply re-rendered as Free — premium features stopped with no message.
+ */
+describe('premiumDropNotice', () => {
+  const premium = { hasSubscription: true, status: 'active', premiumAccess: true };
+
+  it('says nothing when access is kept', () => {
+    expect(premiumDropNotice(premium, premium)).toBe(null);
+  });
+
+  it('says nothing when there was no access to lose', () => {
+    const free = { hasSubscription: false, customerId: 'cus_123' };
+    expect(premiumDropNotice(free, free)).toBe(null);
+    expect(premiumDropNotice(null, free)).toBe(null);
+  });
+
+  it('announces a subscription that ended between two refreshes', () => {
+    const msg = premiumDropNotice(premium, { hasSubscription: true, status: 'canceled' });
+    expect(msg).toMatch(/Premium access ended on this device/i);
+    expect(msg).toMatch(/ended/i);
+  });
+
+  it('announces a customer whose subscription is simply gone', () => {
+    const msg = premiumDropNotice(premium, { hasSubscription: false, customerId: 'cus_V2LwNvtWmdRnO0' });
+    expect(msg).toMatch(/Premium access ended on this device/i);
+    expect(msg).toMatch(/No active subscription/i);
+  });
+
+  it('names a lost device seat rather than a lost subscription', () => {
+    const msg = premiumDropNotice(premium, {
+      hasSubscription: true, status: 'active', premiumAccess: true, clientAccessGranted: false,
+    });
+    expect(msg).toMatch(/this device could not be activated/i);
+  });
+
+  it('keeps App Store copy free of external purchase steering', () => {
+    const msg = premiumDropNotice(premium, { hasSubscription: false, customerId: 'cus_123' }, { appStore: true });
+    expect(msg).not.toMatch(/plan below/i);
   });
 });
