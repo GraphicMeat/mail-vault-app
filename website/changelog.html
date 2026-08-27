@@ -152,6 +152,29 @@
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
               <span><strong>Spellcheck can be turned off while you write.</strong> The toolbar in the message window has a new button at its right-hand end. Press it and the red underlines stop — in the message and in the subject line — and press it again and they come back. MailVault remembers which way you left it, so it stays that way for the next message and after a restart, rather than switching itself back on with every new window. The signature editor in Settings is the same editor, so it follows the same switch.</span>
             </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>"Report a bug" now offers somewhere public to put it.</strong> The button in the sidebar opened a message addressed to one inbox: every report was a private thread between one person and the developer, and the next person to hit the same thing had nothing to search. It now asks where the report should land. "Report on GitHub" opens a new thread in the Bug Reports section of the project's discussions, where it is searchable and where you are told when it is fixed. "Email the developer" is the message as before, with the app version, platform and account details already filled in, for anything you would rather not post. "Browse discussions" opens the list, because the answer may be there already.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Refer a friend.</strong> A second button under it opens a new message with nothing filled in but the pitch: what MailVault does, the five things it is for, and a link to the site. Address it to someone and send.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </span>
+            Changed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A "your only copy" message no longer paints its whole row gold.</strong> The loudest surface in the app was spent saying something the row already said three other ways: the symbol beside the sender, the label on the open message, and the band above it. The gold wash also had to switch off the highlight that follows the pointer, so the one row you most wanted to click was the one row that did not respond to the cursor. The row now looks like every other row and behaves like one; the symbol, the label and the band still carry the claim.</span>
+            </li>
           </ul>
         </div>
 
@@ -178,6 +201,30 @@
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
               <span><strong>MailVault says when Premium stops applying to this computer.</strong> A subscription can end between one check and the next — it lapses, a payment fails, or the device loses its place to another machine. Until now nothing was said: the Billing tab quietly went back to reading "Free", the features that need Premium stopped, and the only way to find out was to notice something missing. MailVault now says so plainly in Settings → Billing, explaining which of those happened, and sends a notification so the message arrives even when Settings is not open. Automatic backups are deliberately left running — billing is never a reason to stop copying mail onto your own disk.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Automatic backups no longer run without a subscription.</strong> Asked by someone who wanted to know why backup notifications kept arriving on an install that had never signed in to a paid account. The per-account backup switches were gated; the "Automatic Backup" master switch above them was not — and that switch is an override that turns on every visible account at once, so a single flip on a free install backed up everything and announced each run, notifications being on by default. The check now sits on the one door every automatic run passes through, whichever of them wakes it. Manual "Back up now" is unchanged and still free. A schedule left behind by a subscription that has lapsed is kept rather than deleted: it stops running, and starts again untouched if you resubscribe.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The dot that means "your backup drive has this" no longer looks like the mark for "saved in your vault".</strong> Every row in the list carries a small symbol saying where that message lives: a cloud for one that is only on the mail server, a disk for one saved in your vault, and a different symbol again for the last copy left anywhere. A tiny dot beside that symbol says your external backup drive has a copy too. The dot was painted in the same green MailVault uses for the vault itself, so a message that was only on the server showed a green dot directly above the words "Not saved to your vault yet" — the colour said one thing and the sentence said the opposite. The dot now carries no colour of its own. Filled means the drive has it, hollow means the drive is not connected and there is no answer either way, and the colour belongs to the symbol it sits on.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>An open message now says the same thing as the row you clicked to open it.</strong> The band above a message worked out where that message lives without ever asking about the backup drive, while the symbol beside the sender's name a couple of centimetres below it did ask. One could read "On the server" while the other read "On the server and backup drive", about the same message, at the same moment. Both now read the same record, through the same piece of MailVault. The band also names the vault in its first line rather than only in the small print: a message can be on your mail server and on your backup drive and still not be in your vault, and that is the fact worth reading first.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message in Sent stops borrowing an inbox message's backup.</strong> Mail servers number messages within one folder at a time, so number 8 in your inbox and number 8 in Sent are two different messages. MailVault matched copies on the backup drive by that number alone — and the inbox view shows your replies from Sent inside its conversations, so a reply that had never been backed up could wear the mark of an unrelated inbox message that had. Backup copies are now matched by folder as well as by number, MailVault reads the Sent folder's backups alongside the folder you are looking at, and a message in a folder it has not read is reported as unknown instead of as "not on your backup drive" — an answer nobody had asked for.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>MailVault stops mentioning a backup drive you never set up.</strong> The small dot beside each message's symbol has three states: filled when your backup drive holds a copy, hollow when the drive is not connected and there is no answer either way, and absent when there is no copy on it. MailVault could not tell "the drive is unplugged" apart from "there is no drive", so every message belonging to someone who had never chosen a backup location wore the hollow dot, and the message you opened said "Backup drive not connected — can't verify" — a complaint about a feature that had never been turned on. With no backup location configured, nothing is drawn and nothing is said. A drive that has been set up and is not reachable still reports itself as exactly that.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The line under the mailbox name says what it is counting.</strong> It read "1,213 of 1,630 loaded in your vault", which reads like something still loading, and it sat directly under another count whose "of" meant the whole mailbox on the server — two lines, two meanings, one word. It now reads "Vault: 1,213 of 1,630 loaded": of the messages MailVault has loaded into the list so far, that many are saved in your vault.</span>
             </li>
           </ul>
         </div>
