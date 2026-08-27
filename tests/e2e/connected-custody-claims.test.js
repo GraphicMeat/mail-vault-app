@@ -115,6 +115,37 @@ describe('Custody claims', function () {
     return true;
   }, title);
 
+  /**
+   * Archive ONE row through its own hover button — a different workflow from
+   * `archive()` below, and the distinction matters.
+   *
+   * The selection bar routes to `saveEmailsLocally`, which rebuilds
+   * `localEmails` from `readLocalEmailIndex` and therefore carries custody by
+   * construction. The row's own button routes to `saveEmailLocally`, which
+   * rebuilds from the vault files. Only the second could drop the stamp, so
+   * only the second proves anything about it.
+   *
+   * The button lives in a `group-hover:visible` strip — `visibility: hidden`,
+   * so it has a box and takes a synthetic click without a real hover.
+   */
+  async function archiveRowButton(subject) {
+    const clicked = await browser.execute((needle) => {
+      for (const row of document.querySelectorAll('[data-testid="email-row"]')) {
+        if (!(row.innerText || '').includes(needle)) continue;
+        const btn = row.querySelector('button[title="Archive"]');
+        if (!btn) return false;
+        btn.click();
+        return true;
+      }
+      return false;
+    }, subject);
+    expect(clicked).toBe(true);
+    await browser.waitUntil(async () => !!(await rowFor(subject))?.icon?.startsWith('archived'), {
+      timeout: 60_000, interval: 300,
+      timeoutMsg: `"${subject}" never became an archived row after the row's own Archive button`,
+    });
+  }
+
   /** Archive the named row through the selection bar, and wait for the vault glyph. */
   async function archive(subject) {
     expect(await clickRowCheckbox(subject)).toBe(true);
@@ -392,6 +423,57 @@ describe('Custody claims', function () {
         timeoutMsg: `"${sweptSubject}" did not come back gold after a reload`,
       });
       expect(gold.icon).toMatch(/^local-only/);
+    });
+
+    /**
+     * A proof belongs to one message, and archiving a DIFFERENT one must not
+     * spend it.
+     *
+     * Every workflow that writes the vault rebuilds `localEmails` for the whole
+     * mailbox afterwards, and `custodySource` derives the row's colour from
+     * `_origin` / `serverDeleted` / `serverAbsent` on those very rows. The
+     * rebuild used to come from bare `db.getLocalEmails`, which builds rows out
+     * of `.eml` headers and knows nothing about local-index.json — so one
+     * archive re-derived every other row in the mailbox as an ordinary vault
+     * copy and the gold went out, silently, until something else happened to
+     * call `getArchivedEmails`.
+     *
+     * It has to be `archiveRowButton`, not `archive`: the selection bar's bulk
+     * path reads the index first and was never capable of losing the stamp.
+     * The first version of this case used the bar and passed against the bug.
+     *
+     * Placed last on purpose: it needs a mailbox that already holds a row with
+     * real proof behind it, and the sweep above just left one.
+     */
+    it('does not spend that verdict when the next message is archived', async function () {
+      expect(sweptSubject).toBeTruthy();
+      await switchToFolder(YODA, 'INBOX');
+
+      // The oldest rendered message that is neither the gold row nor already
+      // in the vault — oldest for the same reason the first case in this file
+      // takes the oldest, and not-yet-archived because `saveEmailLocally`
+      // fails outright on a message the vault has already cached.
+      const subjectOf = (r) => r.text.match(/Yoda message \d+/)?.[0] || null;
+      const fresh = (await rows()).filter((r) => {
+        const s = subjectOf(r);
+        return s && s !== sweptSubject && !r.icon?.startsWith('archived') && !r.icon?.startsWith('local-only');
+      });
+      expect(fresh.length).toBeGreaterThan(0);
+      await archiveRowButton(subjectOf(fresh[fresh.length - 1]));
+
+      // Sampled across the re-derivation rather than read once after it: the
+      // quiet frame arrives WITH the rebuilt list, so a single settled read
+      // taken a moment later can miss it entirely.
+      const seen = await iconsSeenFor(sweptSubject, 6_000);
+      expect(seen.length).toBeGreaterThan(0);
+      expect(seen.filter((id) => !id.startsWith('local-only'))).toEqual([]);
+
+      // And the viewer agrees, from the same rows the list derived.
+      expect(await openRow(sweptSubject)).toBe(true);
+      await browser.waitUntil(async () => !!(await bandText()), {
+        timeout: 30_000, interval: 200, timeoutMsg: 'Custody band never rendered after the second archive',
+      });
+      expect(await bandText()).toContain('only copy');
     });
   });
 });
