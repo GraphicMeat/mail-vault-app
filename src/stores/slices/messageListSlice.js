@@ -18,7 +18,8 @@ import {
   loadEmailRange as _loadEmailRange,
 } from '../../services/workflows/loadMoreEmails';
 import { findSentMailboxPath } from '../../utils/sentFolder';
-import { emailScopeKey } from './unifiedHelpers';
+import { emailScopeKey, _resolveMailboxPath } from './unifiedHelpers';
+import { getAccountCacheMailboxes } from '../../services/cacheManager';
 
 // Module-level flag change counter — used in updateSortedEmails fingerprint
 let _flagChangeCounter = 0;
@@ -212,14 +213,34 @@ export const createMessageListSlice = (set, get) => ({
   // paint. See slices/serverUids.js for why the two travel together.
   serverUids: NO_SERVER_UIDS,
 
-  // Uids present in the external backup mirror, keyed "<accountId>:<uid>".
-  // null means "could not determine" — no backup location, or the drive is not
-  // connected. Never conflate that with an empty Set, which is the positive
-  // claim that nothing in this mailbox is mirrored.
+  // Uids present in the external backup mirror, keyed
+  // "<accountId>:<mailbox>:<uid>". null means "could not determine" — no backup
+  // location, or the drive is not connected. Never conflate that with an empty
+  // Set, which is the positive claim that nothing scanned is mirrored.
   //
-  // Keyed by account on purpose: archivedEmailIds is a flat uid Set and
-  // collides across accounts in unified inbox. Not repeating that here.
+  // Keyed by account AND mailbox on purpose. A uid names a message only inside
+  // one mailbox, and the INBOX view merges Sent copies into its threads
+  // (getChatEmails), so both live in this list at once. Keyed by account alone,
+  // Sent uid 4102 matched INBOX's mirror entry 4102 and a message that had
+  // never been backed up wore a filled dot. archivedEmailIds is the flat-Set
+  // version of the same mistake — not repeating it here.
   backedUpKeys: null,
+
+  // Whether an external backup location is configured at all. `false` says the
+  // dot's whole axis does not apply — there is nowhere for a copy to be — and
+  // is NOT the same claim as `backedUpKeys === null`, which is a drive that
+  // exists and could not be read. `backup_scan_uids` answers null to both,
+  // which is why this is asked separately, and only when a scan comes back
+  // empty-handed. Without it every message in a vault with no backup drive
+  // carried "Backup drive not connected — can't verify", a complaint about a
+  // feature the user had never turned on.
+  backupConfigured: null,
+
+  // Which "<accountId>:<mailbox>" scopes the last scan actually read. A row
+  // outside them has NO answer: absence from backedUpKeys is not evidence about
+  // a mailbox nobody opened, and reporting it as "not on the backup drive"
+  // would be the same unearned claim the gold row exists to prevent.
+  backedUpScopes: null,
 
   // Pre-sorted emails for performance (memoization)
   sortedEmails: [],
@@ -341,16 +362,34 @@ export const createMessageListSlice = (set, get) => ({
     const generation = ++_backedUpGeneration;
     // Guarded setter — an older in-flight call resolving after a newer one
     // must drop its result on the floor instead of clobbering it.
-    const commit = (backedUpKeys) => {
-      if (generation === _backedUpGeneration) set({ backedUpKeys });
+    const commit = (backedUpKeys, backedUpScopes = null, backupConfigured = true) => {
+      if (generation === _backedUpGeneration) set({ backedUpKeys, backedUpScopes, backupConfigured });
     };
 
     const { activeAccountId, activeMailbox, unifiedInbox, accounts, unifiedFolder } = get();
     const targets = unifiedInbox
-      ? (accounts || []).map(a => ({ id: a.id, email: a.email, mailbox: unifiedFolder || 'INBOX' }))
+      // Per account, through the SAME resolver loadUnifiedInbox stamps its rows
+      // with. A unified Sent view is 'Sent' to the picker and '[Gmail]/Sent
+      // Mail' to one of the accounts in it; scanning the picker's name would
+      // read a folder no row claims to be in.
+      ? (accounts || []).map(a => ({
+          id: a.id,
+          email: a.email,
+          mailbox: _resolveMailboxPath(getAccountCacheMailboxes(a.id) || [], unifiedFolder || 'INBOX'),
+        }))
       : (() => {
           const a = (accounts || []).find(x => x.id === activeAccountId);
-          return a && activeMailbox ? [{ id: a.id, email: a.email, mailbox: activeMailbox }] : [];
+          if (!a || !activeMailbox) return [];
+          // Sent copies are merged into INBOX threads and appear in this list
+          // wearing a dot of their own, so the Sent mirror has to be read too —
+          // scanning only the active mailbox left every one of those rows
+          // answerable solely by uid collision. One extra readdir, and
+          // backup_scan_uids already early-returns when no drive is configured.
+          const sentPath = get().getSentMailboxPath();
+          const boxes = sentPath && sentPath !== activeMailbox
+            ? [activeMailbox, sentPath]
+            : [activeMailbox];
+          return boxes.map(mailbox => ({ id: a.id, email: a.email, mailbox }));
         })();
 
     // No resolvable target (e.g. mid account-switch) is itself a
@@ -359,6 +398,7 @@ export const createMessageListSlice = (set, get) => ({
     if (!targets.length) { commit(null); return; }
 
     const keys = new Set();
+    const scopes = new Set();
     for (const t of targets) {
       let uids;
       try {
@@ -369,10 +409,23 @@ export const createMessageListSlice = (set, get) => ({
       }
       // One unreadable target makes the whole answer unknown. A partial set
       // would render "not backed up" for accounts we simply could not scan.
-      if (uids === null) { commit(null); return; }
-      for (const uid of uids) keys.add(`${t.id}:${uid}`);
+      //
+      // Unless there is no backup drive at all, which is not an unknown: ask,
+      // once, on the only path that can reach it.
+      if (uids === null) {
+        let configured = true;
+        try {
+          configured = (await api.backupGetExternalLocation())?.status !== 'not_configured';
+        } catch (e) {
+          console.warn('[refreshBackedUpUids] backupGetExternalLocation failed:', e);
+        }
+        commit(null, null, configured);
+        return;
+      }
+      scopes.add(`${t.id}:${t.mailbox}`);
+      for (const uid of uids) keys.add(`${t.id}:${t.mailbox}:${uid}`);
     }
-    commit(keys);
+    commit(keys, scopes);
   },
 
   // ── Passthrough wrappers to workflow functions ──

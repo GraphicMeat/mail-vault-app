@@ -46,9 +46,11 @@ vi.mock('../../services/db', () => ({
 }));
 const mockFetchEmailLight = vi.fn().mockResolvedValue(null);
 const mockBackupScanUids = vi.fn().mockResolvedValue(null);
+const mockBackupGetExternalLocation = vi.fn().mockResolvedValue({ status: 'ready' });
 vi.mock('../../services/api', () => ({
   fetchEmailLight: (...args) => mockFetchEmailLight(...args),
   backupScanUids: (...args) => mockBackupScanUids(...args),
+  backupGetExternalLocation: (...args) => mockBackupGetExternalLocation(...args),
 }));
 vi.mock('../../services/authUtils', () => ({
   hasValidCredentials: () => true,
@@ -85,11 +87,12 @@ vi.mock('../safeStorage', () => ({
 
 const mockGetRestoreDescriptor = vi.fn().mockReturnValue(null);
 const mockSaveRestoreDescriptor = vi.fn();
+const mockGetAccountCacheMailboxes = vi.fn(() => null);
 vi.mock('../../services/cacheManager', () => ({
   getRestoreDescriptor: (...args) => mockGetRestoreDescriptor(...args),
   saveRestoreDescriptor: (...args) => mockSaveRestoreDescriptor(...args),
   invalidateRestoreDescriptors: () => {},
-  getAccountCacheMailboxes: () => null,
+  getAccountCacheMailboxes: (...args) => mockGetAccountCacheMailboxes(...args),
   listGraphMessages: vi.fn().mockResolvedValue({ headers: [], graphMessageIds: [] }),
   getGraphMessageId: () => null,
   resolveGraphMessageId: async () => null,
@@ -754,6 +757,17 @@ describe('unified inbox — one row per message across its three sources', () =>
 });
 
 describe('refreshBackedUpUids', () => {
+  // `mailboxes` decides whether a Sent target exists, so a neighbour's fixture
+  // leaking in would silently change how many scans each test expects.
+  beforeEach(() => {
+    mockBackupScanUids.mockReset();
+    mockBackupGetExternalLocation.mockReset();
+    mockBackupGetExternalLocation.mockResolvedValue({ status: 'ready' });
+    useMailStore.setState({
+      mailboxes: [], backedUpKeys: null, backedUpScopes: null, backupConfigured: null, unifiedFolder: null,
+    });
+  });
+
   // Renamed from "...so unified inbox cannot collide" — unifiedInbox is false
   // and only one account is registered here, so no collision is exercised.
   // This test only pins the compound-key format for a single target; the
@@ -770,9 +784,10 @@ describe('refreshBackedUpUids', () => {
     await useMailStore.getState().refreshBackedUpUids();
 
     const keys = useMailStore.getState().backedUpKeys;
-    expect(keys.has('acct-1:11')).toBe(true);
-    expect(keys.has('acct-1:12')).toBe(true);
-    expect(keys.has('acct-2:11')).toBe(false);
+    expect(keys.has('acct-1:INBOX:11')).toBe(true);
+    expect(keys.has('acct-1:INBOX:12')).toBe(true);
+    expect(keys.has('acct-2:INBOX:11')).toBe(false);
+    expect(useMailStore.getState().backedUpScopes).toEqual(new Set(['acct-1:INBOX']));
   });
 
   it('reports null — not an empty set — when the mirror cannot be read', async () => {
@@ -783,12 +798,88 @@ describe('refreshBackedUpUids', () => {
       activeMailbox: 'INBOX',
       unifiedInbox: false,
       accounts: [{ id: 'acct-1', email: 'luke@mock.test' }],
-      backedUpKeys: new Set(['acct-1:11']),
+      backedUpKeys: new Set(['acct-1:INBOX:11']),
+      backedUpScopes: new Set(['acct-1:INBOX']),
     });
 
     await useMailStore.getState().refreshBackedUpUids();
 
     expect(useMailStore.getState().backedUpKeys).toBeNull();
+    // The scope list has to go with it — a stale scope would make the next
+    // reader treat an unanswerable row as answered.
+    expect(useMailStore.getState().backedUpScopes).toBeNull();
+  });
+
+  // A drive that exists and could not be read, and a drive that was never set
+  // up, are the same `null` out of backup_scan_uids and two different things to
+  // say. Conflating them put "Backup drive not connected — can't verify" on
+  // every message belonging to a user who had never configured one.
+  describe('no backup location at all', () => {
+    const noDrive = async () => {
+      mockBackupScanUids.mockResolvedValue(null);
+      mockBackupGetExternalLocation.mockResolvedValue({ status: 'not_configured' });
+      useMailStore.setState({
+        activeAccountId: 'acct-1',
+        activeMailbox: 'INBOX',
+        unifiedInbox: false,
+        accounts: [{ id: 'acct-1', email: 'luke@mock.test' }],
+      });
+      await useMailStore.getState().refreshBackedUpUids();
+    };
+
+    it('records that there is no drive, rather than an unreadable one', async () => {
+      await noDrive();
+      expect(useMailStore.getState().backupConfigured).toBe(false);
+      expect(useMailStore.getState().backedUpKeys).toBeNull();
+    });
+
+    it('still reports an unreadable configured drive as unknown', async () => {
+      mockBackupScanUids.mockResolvedValue(null);
+      mockBackupGetExternalLocation.mockResolvedValue({ status: 'disconnected' });
+      useMailStore.setState({
+        activeAccountId: 'acct-1',
+        activeMailbox: 'INBOX',
+        unifiedInbox: false,
+        accounts: [{ id: 'acct-1', email: 'luke@mock.test' }],
+      });
+
+      await useMailStore.getState().refreshBackedUpUids();
+
+      expect(useMailStore.getState().backupConfigured).toBe(true);
+      expect(useMailStore.getState().backedUpKeys).toBeNull();
+    });
+
+    it('assumes a drive exists when the location cannot be read either', async () => {
+      // Fail closed: claiming "no drive" on an error would silently drop the
+      // dot for someone who has one.
+      mockBackupScanUids.mockResolvedValue(null);
+      mockBackupGetExternalLocation.mockRejectedValue(new Error('nope'));
+      useMailStore.setState({
+        activeAccountId: 'acct-1',
+        activeMailbox: 'INBOX',
+        unifiedInbox: false,
+        accounts: [{ id: 'acct-1', email: 'luke@mock.test' }],
+      });
+
+      await useMailStore.getState().refreshBackedUpUids();
+
+      expect(useMailStore.getState().backupConfigured).toBe(true);
+    });
+
+    it('does not ask about the location when the scan answered', async () => {
+      mockBackupScanUids.mockResolvedValue([11]);
+      useMailStore.setState({
+        activeAccountId: 'acct-1',
+        activeMailbox: 'INBOX',
+        unifiedInbox: false,
+        accounts: [{ id: 'acct-1', email: 'luke@mock.test' }],
+      });
+
+      await useMailStore.getState().refreshBackedUpUids();
+
+      expect(mockBackupGetExternalLocation).not.toHaveBeenCalled();
+      expect(useMailStore.getState().backupConfigured).toBe(true);
+    });
   });
 
   it('unified inbox: one account failing to scan makes the whole answer null, not a partial set', async () => {
@@ -820,7 +911,7 @@ describe('refreshBackedUpUids', () => {
       activeMailbox: 'INBOX',
       unifiedInbox: false,
       accounts: [],
-      backedUpKeys: new Set(['acct-9:1']),
+      backedUpKeys: new Set(['acct-9:INBOX:1']),
     });
 
     await useMailStore.getState().refreshBackedUpUids();
@@ -857,8 +948,129 @@ describe('refreshBackedUpUids', () => {
     await call1;
 
     const keys = useMailStore.getState().backedUpKeys;
-    expect(keys.has('acct-1:99')).toBe(true);
-    expect(keys.has('acct-1:11')).toBe(false);
+    expect(keys.has('acct-1:INBOX:99')).toBe(true);
+    expect(keys.has('acct-1:INBOX:11')).toBe(false);
+  });
+
+  // The INBOX view merges Sent copies into its threads, so those rows are on
+  // screen wearing a dot. Scanning only the active mailbox left every one of
+  // them with no mirror entry of its own — and, before the key carried a
+  // mailbox, answerable purely by uid collision with INBOX.
+  describe('Sent, because INBOX threads show Sent rows', () => {
+    const withSent = (over = {}) => useMailStore.setState({
+      activeAccountId: 'acct-1',
+      activeMailbox: 'INBOX',
+      unifiedInbox: false,
+      accounts: [{ id: 'acct-1', email: 'luke@mock.test' }],
+      mailboxes: [{ path: 'INBOX' }, { path: 'Sent', specialUse: '\\Sent' }],
+      ...over,
+    });
+
+    it('scans the Sent mirror as well as the active mailbox', async () => {
+      mockBackupScanUids.mockImplementation(async (_email, mailbox) =>
+        mailbox === 'INBOX' ? [11] : [4102]);
+      withSent();
+
+      await useMailStore.getState().refreshBackedUpUids();
+
+      expect(mockBackupScanUids.mock.calls.map(c => c[1]).sort()).toEqual(['INBOX', 'Sent']);
+      expect(useMailStore.getState().backedUpScopes)
+        .toEqual(new Set(['acct-1:INBOX', 'acct-1:Sent']));
+    });
+
+    it('keeps the two mailboxes\' uid spaces apart', async () => {
+      // Same uid, both folders, only INBOX mirrored. Keyed by account alone
+      // this is indistinguishable and the Sent row inherited INBOX's answer.
+      mockBackupScanUids.mockImplementation(async (_email, mailbox) =>
+        mailbox === 'INBOX' ? [4102] : []);
+      withSent();
+
+      await useMailStore.getState().refreshBackedUpUids();
+
+      const keys = useMailStore.getState().backedUpKeys;
+      expect(keys.has('acct-1:INBOX:4102')).toBe(true);
+      expect(keys.has('acct-1:Sent:4102')).toBe(false);
+    });
+
+    it('does not scan Sent twice when it is the active mailbox', async () => {
+      mockBackupScanUids.mockResolvedValue([1]);
+      withSent({ activeMailbox: 'Sent' });
+
+      await useMailStore.getState().refreshBackedUpUids();
+
+      expect(mockBackupScanUids).toHaveBeenCalledTimes(1);
+      expect(useMailStore.getState().backedUpScopes).toEqual(new Set(['acct-1:Sent']));
+    });
+
+    it('scans only the active mailbox when the account has no Sent folder', async () => {
+      mockBackupScanUids.mockResolvedValue([1]);
+      withSent({ mailboxes: [{ path: 'INBOX' }] });
+
+      await useMailStore.getState().refreshBackedUpUids();
+
+      expect(mockBackupScanUids).toHaveBeenCalledTimes(1);
+      expect(useMailStore.getState().backedUpScopes).toEqual(new Set(['acct-1:INBOX']));
+    });
+
+    it('an unreadable Sent mirror makes the whole answer unknown', async () => {
+      // Same rule as a failed account in unified inbox: a partial set would
+      // render "not backed up" for the half nobody could read.
+      mockBackupScanUids.mockImplementation(async (_email, mailbox) =>
+        mailbox === 'INBOX' ? [11] : null);
+      withSent();
+
+      await useMailStore.getState().refreshBackedUpUids();
+
+      expect(useMailStore.getState().backedUpKeys).toBeNull();
+      expect(useMailStore.getState().backedUpScopes).toBeNull();
+    });
+  });
+
+  // The unified picker's folder name is not every account's path for it. Rows
+  // are stamped with `_resolveMailboxPath`'s answer, so the scan has to ask the
+  // same question or it reads a folder no row claims to be in.
+  it('resolves each account\'s own path for a unified folder', async () => {
+    mockGetAccountCacheMailboxes.mockImplementation((id) => id === 'acct-1'
+      ? [{ path: '[Gmail]/Sent Mail', name: 'Sent Mail', specialUse: '\\Sent' }]
+      : [{ path: 'Sent', name: 'Sent', specialUse: '\\Sent' }]);
+    mockBackupScanUids.mockResolvedValue([11]);
+    useMailStore.setState({
+      unifiedInbox: true,
+      unifiedFolder: 'Sent',
+      accounts: [
+        { id: 'acct-1', email: 'luke@mock.test' },
+        { id: 'acct-2', email: 'leia@mock.test' },
+      ],
+    });
+
+    await useMailStore.getState().refreshBackedUpUids();
+    mockGetAccountCacheMailboxes.mockImplementation(() => null);
+
+    expect(mockBackupScanUids.mock.calls.map(c => c[1]).sort())
+      .toEqual(['Sent', '[Gmail]/Sent Mail']);
+    expect(useMailStore.getState().backedUpScopes)
+      .toEqual(new Set(['acct-1:[Gmail]/Sent Mail', 'acct-2:Sent']));
+    expect(useMailStore.getState().backedUpKeys.has('acct-1:[Gmail]/Sent Mail:11')).toBe(true);
+  });
+
+  it('unified inbox keys each account separately under its own folder', async () => {
+    mockBackupScanUids.mockImplementation(async (email) =>
+      email === 'luke@mock.test' ? [11] : [11]);
+    useMailStore.setState({
+      unifiedInbox: true,
+      unifiedFolder: 'INBOX',
+      accounts: [
+        { id: 'acct-1', email: 'luke@mock.test' },
+        { id: 'acct-2', email: 'leia@mock.test' },
+      ],
+    });
+
+    await useMailStore.getState().refreshBackedUpUids();
+
+    const keys = useMailStore.getState().backedUpKeys;
+    expect(keys.has('acct-1:INBOX:11')).toBe(true);
+    expect(keys.has('acct-2:INBOX:11')).toBe(true);
+    expect(keys.size).toBe(2);
   });
 });
 

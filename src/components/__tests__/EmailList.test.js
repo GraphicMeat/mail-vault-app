@@ -675,3 +675,43 @@ describe('thread cache follows the list it was built from', () => {
     expect(lastVirtualizerConfig.count).toBe(3);
   });
 });
+
+// "1,213 of 1,630 loaded in your vault" was read as a download progress bar,
+// and it sat one line under a count whose "of" meant the SERVER total. Two
+// adjacent lines, two populations, one preposition.
+describe('vault share line', () => {
+  // This file has no global cleanup — without it the previous test's DOM is
+  // still mounted and queryByTestId answers about it.
+  afterEach(() => cleanup());
+
+  const row = (uid, isArchived) => ({
+    uid, isArchived, subject: `s${uid}`, from: 'a@b.c', date: '2026-01-01T00:00:00Z', flags: ['\\Seen'],
+  });
+
+  it('leads with the vault and counts only the loaded window', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    useMailStore.setState({
+      totalEmails: 5000,
+      sortedEmails: [row(1, true), row(2, true), row(3, false)],
+    });
+
+    const { EmailList } = await import('../EmailList.jsx');
+    render(React.createElement(EmailList.type));
+
+    const text = screen.getByTestId('email-list-vault-share').textContent;
+    expect(text).toBe('Vault: 2 of 3 loaded');
+    // The server total is the OTHER line's denominator and must not leak here.
+    expect(text).not.toContain('5,000');
+  });
+
+  it('renders nothing at all when no window is loaded', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    useMailStore.setState({ totalEmails: 0, sortedEmails: [] });
+
+    const { EmailList } = await import('../EmailList.jsx');
+    render(React.createElement(EmailList.type));
+
+    expect(screen.queryByTestId('email-list-vault-share')).toBeNull();
+  });
+});
+

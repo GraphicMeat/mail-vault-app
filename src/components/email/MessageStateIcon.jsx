@@ -35,7 +35,10 @@ export function describeMessageState(email, { backedUp = false, serverKnown = fa
       icon: 'cloud',
       tone: 'server',
       dot,
-      label: dot === 'filled' ? 'On the server and backup drive' : 'On the server',
+      // The vault absence belongs in the LABEL here. "On the server and backup
+      // drive" names two places, neither of them the vault, and a user scanning
+      // only the bold line reads that as safe.
+      label: dot === 'filled' ? 'On the server and backup drive — not in your vault' : 'On the server',
       detail: dot === 'filled'
         ? 'Not in your vault — restore it to read it here.'
         : dot === 'hollow'
@@ -106,8 +109,13 @@ const TONE_CLASS = {
   'only-copy': 'text-mail-only-copy',
 };
 
+// Deliberately hueless. The dot is a MODIFIER: it rides on all three base
+// glyphs, so painting it in `--mail-local` (Vault Emerald, the "on your disk"
+// token) put a green in-your-vault pip on a blue server-only cloud sitting
+// directly above the words "Not saved to your vault yet". Fill vs outline
+// carries this axis; colour is reserved for the base glyph alone.
 const DOT_CLASS = {
-  filled: 'bg-mail-local border-mail-local',
+  filled: 'bg-mail-text border-mail-text',
   hollow: 'bg-transparent border-mail-text-muted',
 };
 
@@ -202,13 +210,42 @@ export function MessageStateIcon({ email, size = 14, backedUp = false, serverKno
 }
 
 /**
+ * Does the backup mirror hold this row — true / false / null for "no answer".
+ *
+ * The ONE place the mirror key is built. It was computed inline in
+ * ConnectedStateIcon and not at all in EmailViewer, so the viewer's band said
+ * "On the server" while the row icon two lines below it said "On the server and
+ * backup drive" about the same message. One builder, both callers.
+ *
+ * Scope, not just uid: a uid identifies a message inside one mailbox only.
+ */
+export function useBackedUp(email) {
+  const backedUpKeys = useMailStore(s => s.backedUpKeys);
+  const backedUpScopes = useMailStore(s => s.backedUpScopes);
+  const backupConfigured = useMailStore(s => s.backupConfigured);
+  const activeAccountId = useMailStore(s => s.activeAccountId);
+  const activeMailbox = useMailStore(s => s.activeMailbox);
+  // No backup drive at all: there is nowhere for a second copy to be, so the
+  // axis does not apply and nothing is drawn or said. Checked BEFORE the null
+  // test, which is the different case of a drive that exists and went unread.
+  if (backupConfigured === false) return false;
+  if (!email || backedUpKeys === null) return null;
+  const accountId = email._accountId || activeAccountId;
+  // A row that carries no folder tag is from the active view by construction —
+  // the same rule custodyRowFor matches rows by.
+  const mailbox = email._mailbox || (activeMailbox === 'UNIFIED' ? 'INBOX' : activeMailbox);
+  const scope = `${accountId}:${mailbox}`;
+  // Absence from a mailbox nobody read is not evidence that the drive lacks it.
+  if (backedUpScopes && !backedUpScopes.has(scope)) return null;
+  return backedUpKeys.has(`${scope}:${email.uid}`);
+}
+
+/**
  * Store-connected form. Rows use this; the plain MessageStateIcon stays pure
  * for tests and for the legend, which has no email to describe.
  */
 export function ConnectedStateIcon({ email, size = 14 }) {
-  const backedUpKeys = useMailStore(s => s.backedUpKeys);
+  const backedUp = useBackedUp(email);
   const serverKnown = useMailStore(s => s.serverUids.complete);
-  const key = `${email._accountId || useMailStore.getState().activeAccountId}:${email.uid}`;
-  const backedUp = backedUpKeys === null ? null : backedUpKeys.has(key);
   return <MessageStateIcon email={email} size={size} backedUp={backedUp} serverKnown={serverKnown} />;
 }

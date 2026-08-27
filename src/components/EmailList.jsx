@@ -80,7 +80,7 @@ const LEGEND_ENTRIES = [
   },
   {
     id: 'legend-backed-up',
-    glyph: <span className="w-[6px] h-[6px] rounded-full border bg-mail-local border-mail-local" />,
+    glyph: <span className="w-[6px] h-[6px] rounded-full border bg-mail-text border-mail-text" />,
     text: 'On backup drive',
     label: 'On your backup drive',
     detail: 'Filled means your backup drive has it too. Hollow means the drive is not connected, so there is no answer either way.',
@@ -883,7 +883,7 @@ function EmailListComponent() {
                     <span style={{ transform: `scaleX(${vaultShare.pct / 100})` }} />
                   </span>
                   <span data-testid="email-list-vault-share" className="text-[11px] text-mail-text-muted whitespace-nowrap">
-                    {vaultShare.inVault.toLocaleString()} of {vaultShare.loaded.toLocaleString()} loaded in your vault
+                    Vault: {vaultShare.inVault.toLocaleString()} of {vaultShare.loaded.toLocaleString()} loaded
                   </span>
                 </div>
               )}

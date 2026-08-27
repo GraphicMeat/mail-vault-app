@@ -506,6 +506,19 @@ export async function backupScanUids(email, mailbox) {
   return null;
 }
 
+/**
+ * The configured external backup location, or null when it cannot be read.
+ * Only `status` is used here, and only to tell the two halves of
+ * `backupScanUids` returning null apart: a drive that is not connected is
+ * "unknown", a location that was never set up is "there is no such place".
+ */
+export async function backupGetExternalLocation() {
+  if (IS_TAURI) {
+    return tauriInvoke('backup_get_external_location');
+  }
+  return null;
+}
+
 // ── Mail storage location (vault) ─────────────────────────────────────────────
 
 export async function vaultGetStatus() {

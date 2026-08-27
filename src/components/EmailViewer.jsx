@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { getRealAttachments, replaceCidUrls } from '../services/attachmentUtils';
 import * as db from '../services/db';
-import { describeMessageState } from './email/MessageStateIcon';
+import { describeMessageState, useBackedUp } from './email/MessageStateIcon';
 import { custodyProof, custodyRowFor } from '../stores/slices/custody';
 import { probeServerCopy } from '../services/workflows/probeServerCopy';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
@@ -122,7 +122,12 @@ function EmailViewerComponent({ onComposeReply }) {
     serverDeleted: selectedEmail?.serverDeleted,
     serverAbsent: selectedEmail?.serverAbsent,
   };
-  const custody = describeMessageState(custodySubject, { serverKnown });
+  // The band used to omit `backedUp` entirely, so it defaulted false and could
+  // never mention the drive — while ConnectedStateIcon in the sender line right
+  // below it read the store and did. Same message, two statements, 40px apart.
+  // Read the row, through the same key builder the rows use.
+  const backedUp = useBackedUp(custodyRow || selectedEmail);
+  const custody = describeMessageState(custodySubject, { serverKnown, backedUp });
   // Who may be asked. A vault copy the app has no proof about, obviously — and
   // also a gold row whose proof is a sweep, because a server can change its
   // mind: a message restored from the Bin, or re-delivered, leaves that verdict

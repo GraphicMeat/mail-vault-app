@@ -180,45 +180,169 @@ describe('MessageStateIcon', () => {
 describe('ConnectedStateIcon', () => {
   afterEach(() => cleanup());
 
+  // Every fixture states the scope it scanned. Absence from backedUpKeys only
+  // means "not mirrored" for a mailbox that was actually read.
+  const store = (over = {}) => ({
+    backedUpKeys: null,
+    backedUpScopes: null,
+    backupConfigured: true,
+    serverUids: { uids: new Set(), complete: true },
+    activeAccountId: 'acc1',
+    activeMailbox: 'INBOX',
+    ...over,
+  });
+  const dotOf = () => document.querySelector('[data-dot]')?.getAttribute('data-dot') ?? null;
+
   // The one rule the whole task hinges on: backedUpKeys === null ("could not
   // determine") must reach the icon as backedUp: null (hollow dot), never
   // collapse via ?.has()/|| into false ("not mirrored" — a different claim).
   it('renders a hollow dot when backedUpKeys is null, not no dot at all', () => {
-    mockStoreState = { backedUpKeys: null, serverUids: { uids: new Set(), complete: true }, activeAccountId: 'acc1' };
+    mockStoreState = store({ backedUpKeys: null });
     render(<ConnectedStateIcon email={{ uid: 5, _accountId: 'acc1', source: 'server', isArchived: false }} />);
     expect(screen.getByTestId('msg-state-icon').getAttribute('data-state')).toBe('server-only-backup-unknown');
-    expect(document.querySelector('[data-dot="hollow"]')).not.toBeNull();
+    expect(dotOf()).toBe('hollow');
   });
 
-  it('renders a filled dot when the accountId:uid key is present in backedUpKeys', () => {
-    mockStoreState = { backedUpKeys: new Set(['acc1:5']), serverUids: { uids: new Set(), complete: true }, activeAccountId: 'acc1' };
-    render(<ConnectedStateIcon email={{ uid: 5, _accountId: 'acc1', source: 'server', isArchived: false }} />);
+  it('renders a filled dot when the accountId:mailbox:uid key is present in backedUpKeys', () => {
+    mockStoreState = store({ backedUpKeys: new Set(['acc1:INBOX:5']), backedUpScopes: new Set(['acc1:INBOX']) });
+    render(<ConnectedStateIcon email={{ uid: 5, _accountId: 'acc1', _mailbox: 'INBOX', source: 'server', isArchived: false }} />);
     expect(screen.getByTestId('msg-state-icon').getAttribute('data-state')).toBe('server-only-backed-up');
-    expect(document.querySelector('[data-dot="filled"]')).not.toBeNull();
+    expect(dotOf()).toBe('filled');
   });
 
   it('renders no dot when backedUpKeys is a defined Set without this key (proven not mirrored)', () => {
-    mockStoreState = { backedUpKeys: new Set(['acc1:999']), serverUids: { uids: new Set(), complete: true }, activeAccountId: 'acc1' };
-    render(<ConnectedStateIcon email={{ uid: 5, _accountId: 'acc1', source: 'server', isArchived: false }} />);
+    mockStoreState = store({ backedUpKeys: new Set(['acc1:INBOX:999']), backedUpScopes: new Set(['acc1:INBOX']) });
+    render(<ConnectedStateIcon email={{ uid: 5, _accountId: 'acc1', _mailbox: 'INBOX', source: 'server', isArchived: false }} />);
     expect(screen.getByTestId('msg-state-icon').getAttribute('data-state')).toBe('server-only');
-    expect(document.querySelector('[data-dot]')).toBeNull();
+    expect(dotOf()).toBeNull();
   });
 
   it('falls back to the active account id when the email carries none', () => {
-    mockStoreState = { backedUpKeys: new Set(['acc1:5']), serverUids: { uids: new Set(), complete: true }, activeAccountId: 'acc1' };
+    mockStoreState = store({ backedUpKeys: new Set(['acc1:INBOX:5']), backedUpScopes: new Set(['acc1:INBOX']) });
     render(<ConnectedStateIcon email={{ uid: 5, source: 'server', isArchived: false }} />);
-    expect(document.querySelector('[data-dot="filled"]')).not.toBeNull();
+    expect(dotOf()).toBe('filled');
+  });
+
+  it('falls back to the active mailbox when the row carries no folder tag', () => {
+    mockStoreState = store({
+      activeMailbox: 'Archive',
+      backedUpKeys: new Set(['acc1:Archive:5']),
+      backedUpScopes: new Set(['acc1:Archive']),
+    });
+    render(<ConnectedStateIcon email={{ uid: 5, _accountId: 'acc1', source: 'server', isArchived: false }} />);
+    expect(dotOf()).toBe('filled');
+  });
+
+  it('reads a unified row as INBOX when it carries no folder tag', () => {
+    mockStoreState = store({
+      activeMailbox: 'UNIFIED',
+      backedUpKeys: new Set(['acc2:INBOX:5']),
+      backedUpScopes: new Set(['acc2:INBOX']),
+    });
+    render(<ConnectedStateIcon email={{ uid: 5, _accountId: 'acc2', source: 'server', isArchived: false }} />);
+    expect(dotOf()).toBe('filled');
+  });
+
+  // The bug this key shape exists for. INBOX threads merge Sent copies
+  // (getChatEmails stamps them `_mailbox: <sent path>`), and a uid names a
+  // message only inside one mailbox — so keyed by account alone, Sent uid 4102
+  // matched INBOX's mirror entry 4102 and wore a filled dot it never earned.
+  it('does not let an INBOX mirror entry answer for a Sent row with the same uid', () => {
+    mockStoreState = store({
+      backedUpKeys: new Set(['acc1:INBOX:4102']),
+      backedUpScopes: new Set(['acc1:INBOX', 'acc1:Sent']),
+    });
+    render(<ConnectedStateIcon email={{ uid: 4102, _accountId: 'acc1', _mailbox: 'Sent', source: 'server', isArchived: false }} />);
+    expect(screen.getByTestId('msg-state-icon').getAttribute('data-state')).toBe('server-only');
+    expect(dotOf()).toBeNull();
+  });
+
+  it('still answers the INBOX row that mirror entry really belongs to', () => {
+    mockStoreState = store({
+      backedUpKeys: new Set(['acc1:INBOX:4102']),
+      backedUpScopes: new Set(['acc1:INBOX', 'acc1:Sent']),
+    });
+    render(<ConnectedStateIcon email={{ uid: 4102, _accountId: 'acc1', _mailbox: 'INBOX', source: 'server', isArchived: false }} />);
+    expect(dotOf()).toBe('filled');
+  });
+
+  // Same shape as backedUpKeys === null, one scope down: nobody read this
+  // mailbox, so "not on the backup drive" is a claim we have not earned.
+  it('says unknown, not "not mirrored", for a mailbox the scan never read', () => {
+    mockStoreState = store({
+      backedUpKeys: new Set(['acc1:INBOX:5']),
+      backedUpScopes: new Set(['acc1:INBOX']),
+    });
+    render(<ConnectedStateIcon email={{ uid: 5, _accountId: 'acc1', _mailbox: 'Drafts', source: 'server', isArchived: false }} />);
+    expect(screen.getByTestId('msg-state-icon').getAttribute('data-state')).toBe('server-only-backup-unknown');
+    expect(dotOf()).toBe('hollow');
+  });
+
+  it('says unknown for a row belonging to an account the scan never read', () => {
+    mockStoreState = store({
+      backedUpKeys: new Set(['acc1:INBOX:5']),
+      backedUpScopes: new Set(['acc1:INBOX']),
+    });
+    render(<ConnectedStateIcon email={{ uid: 5, _accountId: 'acc2', _mailbox: 'INBOX', source: 'server', isArchived: false }} />);
+    expect(dotOf()).toBe('hollow');
+  });
+
+  // A user who has never set up a backup drive should not be told about one.
+  // `backedUpKeys === null` says "could not read the drive"; this says there is
+  // no drive, and the axis simply does not apply.
+  it('draws no dot at all when no backup location is configured', () => {
+    mockStoreState = store({ backupConfigured: false, backedUpKeys: null });
+    render(<ConnectedStateIcon email={{ uid: 5, _accountId: 'acc1', _mailbox: 'INBOX', source: 'local-only', isArchived: true }} />);
+    expect(screen.getByTestId('msg-state-icon').getAttribute('data-state')).toBe('local-only');
+    expect(dotOf()).toBeNull();
+  });
+
+  it('still draws the hollow dot for a configured drive it could not read', () => {
+    mockStoreState = store({ backupConfigured: true, backedUpKeys: null });
+    render(<ConnectedStateIcon email={{ uid: 5, _accountId: 'acc1', _mailbox: 'INBOX', source: 'local-only', isArchived: true }} />);
+    expect(screen.getByTestId('msg-state-icon').getAttribute('data-state')).toBe('local-only-backup-unknown');
+    expect(dotOf()).toBe('hollow');
   });
 
   it('renders the only-copy tone for a row the list stamped local-only', () => {
-    mockStoreState = { backedUpKeys: new Set(), serverUids: { uids: new Set(), complete: true }, activeAccountId: 'acc1' };
-    render(<ConnectedStateIcon email={{ uid: 5, _accountId: 'acc1', source: 'local-only', isArchived: true }} />);
+    mockStoreState = store({ backedUpKeys: new Set(), backedUpScopes: new Set(['acc1:INBOX']) });
+    render(<ConnectedStateIcon email={{ uid: 5, _accountId: 'acc1', _mailbox: 'INBOX', source: 'local-only', isArchived: true }} />);
     expect(screen.getByTestId('msg-state-icon').getAttribute('data-state')).toBe('local-only');
   });
 
   it('leaves an archived row alone when the only thing missing is the uid set', () => {
-    mockStoreState = { backedUpKeys: new Set(), serverUids: { uids: new Set(), complete: true }, activeAccountId: 'acc1' };
-    render(<ConnectedStateIcon email={{ uid: 5, _accountId: 'acc1', source: 'local', isArchived: true }} />);
+    mockStoreState = store({ backedUpKeys: new Set(), backedUpScopes: new Set(['acc1:INBOX']) });
+    render(<ConnectedStateIcon email={{ uid: 5, _accountId: 'acc1', _mailbox: 'INBOX', source: 'local', isArchived: true }} />);
     expect(screen.getByTestId('msg-state-icon').getAttribute('data-state')).toBe('archived');
+  });
+
+  // Regression guard for the contradiction Rokas reported: the dot is a
+  // MODIFIER riding on all three base glyphs, so it must not be painted in any
+  // base state's colour token. Green pip + blue cloud + "Not saved to your
+  // vault yet" was one visual channel answering two questions.
+  it('paints the backup dot in no custody colour at all', () => {
+    mockStoreState = store({ backedUpKeys: new Set(['acc1:INBOX:5']), backedUpScopes: new Set(['acc1:INBOX']) });
+    render(<ConnectedStateIcon email={{ uid: 5, _accountId: 'acc1', _mailbox: 'INBOX', source: 'server', isArchived: false }} />);
+    const cls = document.querySelector('[data-dot="filled"]').getAttribute('class');
+    for (const token of ['mail-local', 'mail-server', 'mail-only-copy']) {
+      expect(cls).not.toContain(token);
+    }
+  });
+});
+
+// The bold line is what a scanning eye reads. "On the server and backup drive"
+// named two places, neither of them the vault, and left the one fact that
+// matters to a detail line the user may never open.
+describe('server-only labels never imply the vault has it', () => {
+  it('names the vault absence in the label when the drive has it too', () => {
+    expect(describeMessageState(server, { backedUp: true, serverKnown: true }).label)
+      .toContain('not in your vault');
+  });
+
+  it('says so in every server-only variant, label or detail', () => {
+    for (const backedUp of [false, true, null]) {
+      const s = describeMessageState(server, { backedUp, serverKnown: true });
+      expect(`${s.label} ${s.detail}`.toLowerCase()).toContain('vault');
+    }
   });
 });
