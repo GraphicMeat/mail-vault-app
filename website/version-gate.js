@@ -64,7 +64,7 @@
         if (!latest || !/^\d+\.\d+\.\d+$/.test(latest)) return;
         applyToChangelog(latest);
         if (!document.querySelector('[data-whats-new]')) return;
-        return fetch('/whats-new.json', { credentials: 'omit' })
+        return fetch('/whats-new.json?v=2', { credentials: 'omit' })
           .then(function (r) { return r.ok ? r.json() : {}; })
           .then(function (entries) { applyToHomepage(latest, entries); });
       })
