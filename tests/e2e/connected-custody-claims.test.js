@@ -475,5 +475,62 @@ describe('Custody claims', function () {
       });
       expect(await bandText()).toContain('only copy');
     });
+
+    /**
+     * The same theft, by the opposite workflow: taking a message OUT of the
+     * vault must not spend another message's proof either.
+     *
+     * `removeLocalEmail` rebuilds `localEmails` from bare `db.getLocalEmails`
+     * with no index read in front of it at all — not even the
+     * `readLocalEmailIndex` fallback the archive paths have. So it is the
+     * strictest witness in this file for the stamp inside `getLocalEmails`:
+     * there is no second source it could accidentally get custody from.
+     *
+     * And unlike Archive, the selection bar is the RIGHT control here.
+     * `handleUnarchive` loops `removeLocalEmail` per uid — the bar and the row
+     * menu reach the same unsafe rebuild, so the bulk path proves as much as
+     * the single one and is the easier click.
+     *
+     * Runs last: it needs both a gold row and an ordinary archived row to take
+     * away, and the case above leaves exactly that pair behind.
+     */
+    it('does not spend that verdict when a different message leaves the vault', async function () {
+      expect(sweptSubject).toBeTruthy();
+      await switchToFolder(YODA, 'INBOX');
+
+      const subjectOf = (r) => r.text.match(/Yoda message \d+/)?.[0] || null;
+      // Archived but NOT gold — unarchiving the proven row would destroy the
+      // very thing under test, and `handleUnarchive` filters the selection to
+      // archived uids, so a non-archived pick would make this a no-op that
+      // passes against anything.
+      const victim = (await rows()).find((r) => {
+        const t = subjectOf(r);
+        return t && t !== sweptSubject && r.icon?.startsWith('archived');
+      });
+      expect(victim).toBeTruthy();
+      const victimSubject = subjectOf(victim);
+
+      expect(await clickRowCheckbox(victimSubject)).toBe(true);
+      expect(await clickBarButton('Unarchive selected')).toBe(true);
+      await browser.waitUntil(async () => {
+        const r = await rowFor(victimSubject);
+        return !!r && !r.icon?.startsWith('archived');
+      }, {
+        timeout: 60_000, interval: 300,
+        timeoutMsg: `"${victimSubject}" never left the vault`,
+      });
+
+      // Sampled across the re-derivation, not read once after it — same reason
+      // as the case above: the quiet frame arrives WITH the rebuilt list.
+      const seen = await iconsSeenFor(sweptSubject, 6_000);
+      expect(seen.length).toBeGreaterThan(0);
+      expect(seen.filter((id) => !id.startsWith('local-only'))).toEqual([]);
+
+      expect(await openRow(sweptSubject)).toBe(true);
+      await browser.waitUntil(async () => !!(await bandText()), {
+        timeout: 30_000, interval: 200, timeoutMsg: 'Custody band never rendered after the unarchive',
+      });
+      expect(await bandText()).toContain('only copy');
+    });
   });
 });
