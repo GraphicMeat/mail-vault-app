@@ -532,5 +532,76 @@ describe('Custody claims', function () {
       });
       expect(await bandText()).toContain('only copy');
     });
+
+    /**
+     * The last of the three unguarded rebuilds: `purgeEverywhere`.
+     *
+     * It refreshes the active group with a bare `db.getLocalEmails` in a
+     * `Promise.all` beside the two id-set reads, so — like `saveEmailLocally`
+     * and `removeLocalEmail` — it had no way to learn custody before the stamp
+     * moved inside `getLocalEmails`. Destroying one message must not quietly
+     * downgrade the claim the app makes about a different one, and this is the
+     * workflow where that claim matters most: the row it leaves alone really is
+     * the only copy in existence.
+     *
+     * Bar → "Delete everywhere" → the popover's own confirm. Two buttons carry
+     * that same label, so the confirm is matched as the one WITHOUT a `title`
+     * — the bar's has `title="Delete everywhere"`, the popover's has none.
+     *
+     * Runs last, and archives its own victim first: the cases above have spent
+     * most of yoda's healthy messages, and 907/908/909 are the fault fixtures.
+     */
+    it('does not spend that verdict when another message is destroyed everywhere', async function () {
+      expect(sweptSubject).toBeTruthy();
+      await switchToFolder(YODA, 'INBOX');
+
+      const subjectOf = (r) => r.text.match(/Yoda message \d+/)?.[0] || null;
+      const candidates = (await rows()).filter((r) => {
+        const t = subjectOf(r);
+        return t && t !== sweptSubject && !r.icon?.startsWith('local-only');
+      });
+      expect(candidates.length).toBeGreaterThan(0);
+      const victimSubject = subjectOf(candidates[candidates.length - 1]);
+
+      // Give it a vault copy first, so "everywhere" has all three places to
+      // reach. A purge of a server-only row exercises the same rebuild, but it
+      // would not be the case anyone means by this button.
+      if (!(await rowFor(victimSubject))?.icon?.startsWith('archived')) {
+        await archiveRowButton(victimSubject);
+      }
+
+      expect(await clickRowCheckbox(victimSubject)).toBe(true);
+      expect(await clickBarButton('Delete everywhere')).toBe(true);
+      const confirmed = await browser.waitUntil(async () => browser.execute(() => {
+        for (const btn of document.querySelectorAll('button:not([title])')) {
+          if ((btn.textContent || '').trim() !== 'Delete everywhere') continue;
+          if (btn.offsetHeight === 0) continue;
+          btn.click();
+          return true;
+        }
+        return false;
+      }), {
+        timeout: 15_000, interval: 300,
+        timeoutMsg: 'Delete-everywhere confirmation never became clickable',
+      });
+      expect(confirmed).toBe(true);
+
+      await browser.waitUntil(async () => !(await rowFor(victimSubject)), {
+        timeout: 60_000, interval: 300,
+        timeoutMsg: `"${victimSubject}" was never destroyed`,
+      });
+
+      // Sampled across the re-derivation, not read once after it — same reason
+      // as the two cases above.
+      const seen = await iconsSeenFor(sweptSubject, 6_000);
+      expect(seen.length).toBeGreaterThan(0);
+      expect(seen.filter((id) => !id.startsWith('local-only'))).toEqual([]);
+
+      expect(await openRow(sweptSubject)).toBe(true);
+      await browser.waitUntil(async () => !!(await bandText()), {
+        timeout: 30_000, interval: 200, timeoutMsg: 'Custody band never rendered after the purge',
+      });
+      expect(await bandText()).toContain('only copy');
+    });
   });
 });
