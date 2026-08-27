@@ -19,13 +19,32 @@ if (IS_TAURI) {
 // ── Daemon command registry ─────────────────────────────────────────────────
 
 const DAEMON_COMMANDS = {
-  // Maildir — only route commands whose response shapes match between daemon and Tauri.
-  // maildir_list excluded: daemon returns {uids, count}, Tauri returns MaildirEmailSummary[]
-  // maildir_read/read_light/read_light_batch excluded: different response shapes
-  'maildir_store': 'maildir.store',
-  'maildir_exists': 'maildir.exists',
-  'maildir_delete': 'maildir.delete',
-  'maildir_storage_stats': 'maildir.storage_stats',
+  // Maildir — NOT routed. The daemon and Tauri are two independent
+  // implementations of this family, and all four commands we had routed
+  // disagreed with their Tauri twin:
+  //
+  //   maildir_exists      daemon {exists: bool}, Tauri a bare bool. `{exists:
+  //                       false}` is truthy, so isEmailSaved said "already in
+  //                       the vault" about every message once the daemon's
+  //                       heartbeat connected — and archiveEmail then failed on
+  //                       the uid maildir_list (never routed) had never heard of.
+  //   maildir_storage_stats  daemon core::StorageStats {total_size, total_emails,
+  //                       mailbox_count}, Tauri {totalBytes, totalMB, emailCount}.
+  //                       Not one field name in common.
+  //   maildir_store       not a response mismatch but a FILENAME one: core writes
+  //                       `<uid>:archived,seen:<ts>.eml`, Tauri writes `<uid>:2,AS`,
+  //                       and Tauri's parse_flags_from_filename only understands
+  //                       `:2,`. A message the daemon stored lists with no flags
+  //                       and never reads as archived.
+  //   maildir_delete      compatible today (both match on the `<uid>:` prefix) —
+  //                       but it bought nothing: daemonCall goes through
+  //                       invoke('daemon_rpc') and then a socket, for what is one
+  //                       local readdir either way. Kept out so the family has one
+  //                       writer and one filename format.
+  //
+  // Previously excluded here for the same reason, and still excluded:
+  // maildir_list (daemon {uids, count} vs Tauri MaildirEmailSummary[]),
+  // maildir_read/read_light/read_light_batch (different response shapes).
 
   // Cache — ALL cache operations fall through to Tauri.
   // Tauri uses sidecar format (per-UID JSON files + _meta.json).

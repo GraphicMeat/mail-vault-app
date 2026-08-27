@@ -46,16 +46,22 @@ export async function archiveEmail(accountId, mailbox, uid) {
   await initDB();
   if (!invoke) return;
 
+  // Rust hands back a number and takes a u32, so the compare below and the
+  // set_flags call have to agree with `isEmailSaved`'s parseInt — a caller that
+  // reaches here holding the string "30" would otherwise pass the exists check
+  // and then fail to find its own message.
+  const numericUid = Number(uid);
+
   try {
     const summaries = await invoke('maildir_list', { accountId, mailbox, requireFlag: null });
-    const summary = summaries.find(s => s.uid === uid);
+    const summary = summaries.find(s => s.uid === numericUid);
     if (!summary) throw new Error(`Email UID ${uid} not found in Maildir`);
 
     const newFlags = [...summary.flags];
     if (!newFlags.includes('archived')) {
       newFlags.push('archived');
     }
-    await invoke('maildir_set_flags', { accountId, mailbox, uid, flags: newFlags });
+    await invoke('maildir_set_flags', { accountId, mailbox, uid: numericUid, flags: newFlags });
   } catch (error) {
     console.warn('[db.js] Failed to archive email:', error);
     throw error;
@@ -562,7 +568,10 @@ export async function isEmailSaved(accountId, mailbox, uid) {
   await initDB();
   if (!invoke) return false;
   try {
-    return await invoke('maildir_exists', { accountId, mailbox, uid: parseInt(uid, 10) });
+    // `=== true`, not the raw value: this is a two-process answer, and a
+    // transport that ever hands back an envelope instead of a bool would make
+    // every message read as already-archived. Callers branch on this.
+    return await invoke('maildir_exists', { accountId, mailbox, uid: parseInt(uid, 10) }) === true;
   } catch {
     return false;
   }
