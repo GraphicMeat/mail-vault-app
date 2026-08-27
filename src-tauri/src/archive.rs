@@ -79,6 +79,9 @@ pub async fn run_with_backup(
     let errors = Arc::new(AtomicUsize::new(0));
     let bw_limited = Arc::new(AtomicBool::new(false));
     let ext_failures = Arc::new(AtomicUsize::new(0));
+    // The server's own words for the last message that failed. Without it a
+    // run that lost one message reports a count and nothing to act on.
+    let last_err_msg: Arc<std::sync::Mutex<Option<String>>> = Arc::new(std::sync::Mutex::new(None));
     let mut set: JoinSet<Option<serde_json::Value>> = JoinSet::new();
 
     // Get the IMAP pool from managed state
@@ -103,6 +106,7 @@ pub async fn run_with_backup(
         let bp = backup_path.clone();
         let ae = account_email.clone();
         let ext_failures = Arc::clone(&ext_failures);
+        let last_err_msg = Arc::clone(&last_err_msg);
 
         set.spawn(async move {
             let _permit = sem.acquire().await.unwrap();
@@ -149,6 +153,9 @@ pub async fn run_with_backup(
                     } else {
                         last_error
                     };
+                    if let Ok(mut slot) = last_err_msg.lock() {
+                        *slot = Some(last_error.clone());
+                    }
                     let c = completed.load(Ordering::Relaxed);
                     let e = errors.load(Ordering::Relaxed);
                     let is_cancelled = cancel.load(Ordering::Relaxed);
@@ -227,6 +234,8 @@ pub async fn run_with_backup(
         active: false,
         last_error: if bandwidth_limited {
             Some("Daily download limit reached for this provider. Backup stopped — it will pick up where it left off after the limit resets (usually within 1 hour, up to 24 hours).".to_string())
+        } else if final_errors > 0 {
+            last_err_msg.lock().ok().and_then(|slot| slot.clone())
         } else {
             None
         },

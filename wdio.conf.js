@@ -127,13 +127,21 @@ const MOCK_ACCOUNTS = [
     // the name decomposed, so only the combining diaeresis is escaped and the
     // plain "u" stays literal, which is why the app printed
     // "Bokelmu&Awg-hle". Parked on yoda: nothing else reads its folder list.
-    extraMailbox: { name: 'Bokelmu&Awg-hle', count: 3, subjectPrefix: 'Yoda umlaut' },
+    //   - Its uids start at 9101 so a fault can name a message in THIS folder
+    //     and nowhere else: faults match a uid with no mailbox scoping, and the
+    //     default range (1..3) is also Sent's and Archive's.
+    extraMailbox: { name: 'Bokelmu&Awg-hle', count: 3, subjectPrefix: 'Yoda umlaut', uidStart: 9101 },
     faults: [
       slowCommand('MOVE', 4000),
       slowCommand('EXPUNGE', 4000),
       ...unreadableBody(907, 3000),
       ...unreachableMessage(908),
       ...vanishedMessage(909),
+      // One message of the umlaut folder's three is refused outright. That
+      // folder is LAST in yoda's LIST order, so connected-backup-partial-failure
+      // can back it up alone (skipFolders: 5) and get a run that saves 2 of 3 —
+      // the shape that used to notify "Backup failed - Unknown error".
+      ...unreachableMessage(9102),
     ],
   },
 ];

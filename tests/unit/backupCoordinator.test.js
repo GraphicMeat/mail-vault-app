@@ -397,6 +397,108 @@ describe('BackupCoordinator — backup execution', () => {
   });
 });
 
+/**
+ * 2026-08-27: a run that saved 788 of 789 messages notified
+ * "Backup failed - Unknown error. Will retry on next idle." The one refused
+ * message flipped the whole run to failed, and the backend sent no error text
+ * to put in its place. Both halves are asserted here.
+ */
+describe('BackupCoordinator — a run that lost some messages', () => {
+  beforeEach(resetCoordinator);
+
+  const partialResult = {
+    emails_backed_up: 788,
+    errors: 1,
+    duration_secs: 389,
+    success: true,
+    error_message: '1 of 789 messages could not be fetched. Last error: IMAP fetch failed: UID FETCH 799 failed',
+  };
+
+  it('records degraded, not failed', async () => {
+    api.backupRunAccount.mockResolvedValueOnce(partialResult);
+    mockSettingsState.backupNotifyOnFailure = true;
+    backupScheduler.queueBackup('acc-1');
+    await new Promise(r => setTimeout(r, 100));
+
+    expect(mockSettingsState.updateBackupState).toHaveBeenCalledWith('acc-1', expect.objectContaining({
+      lastStatus: 'degraded',
+      lastError: partialResult.error_message,
+    }));
+  });
+
+  it('notifies "partially complete" and never says "Unknown error"', async () => {
+    api.backupRunAccount.mockResolvedValueOnce(partialResult);
+    mockSettingsState.backupNotifyOnFailure = true;
+    backupScheduler.queueBackup('acc-1');
+    await new Promise(r => setTimeout(r, 100));
+
+    expect(api.sendNotification).toHaveBeenCalledTimes(1);
+    const [title, body] = api.sendNotification.mock.calls[0];
+    expect(title).toContain('Backup partially complete');
+    expect(title).not.toContain('failed');
+    expect(body).toContain('788 emails backed up');
+    expect(body).toContain('UID FETCH 799 failed');
+    expect(body).not.toContain('Unknown error');
+  });
+
+  it('keeps the history entry honest — success with a count of what was lost', async () => {
+    api.backupRunAccount.mockResolvedValueOnce(partialResult);
+    backupScheduler.queueBackup('acc-1');
+    await new Promise(r => setTimeout(r, 100));
+
+    expect(mockSettingsState.addBackupHistoryEntry).toHaveBeenCalledWith('acc-1', expect.objectContaining({
+      success: true,
+      errors: 1,
+      emailsBackedUp: 788,
+      error: partialResult.error_message,
+    }));
+  });
+
+  it('resolves a manual run as degraded so the button does not claim failure', async () => {
+    api.backupRunAccount.mockResolvedValueOnce(partialResult);
+    const result = await backupScheduler.triggerManualBackup('acc-1');
+    expect(result.status).toBe('degraded');
+    expect(result.message).toBe(partialResult.error_message);
+  });
+
+  it('still reports a run with no errors as plain success', async () => {
+    api.backupRunAccount.mockResolvedValueOnce({
+      emails_backed_up: 5, errors: 0, duration_secs: 2, success: true,
+    });
+    mockSettingsState.backupNotifyOnSuccess = true;
+    backupScheduler.queueBackup('acc-1');
+    await new Promise(r => setTimeout(r, 100));
+
+    expect(mockSettingsState.updateBackupState).toHaveBeenCalledWith('acc-1', expect.objectContaining({
+      lastStatus: 'success',
+    }));
+    expect(api.sendNotification.mock.calls[0][0]).toContain('Backup complete');
+    mockSettingsState.backupNotifyOnSuccess = false;
+  });
+
+  it('an external-copy failure alone still reads as partial', async () => {
+    api.backupRunAccount.mockResolvedValueOnce({
+      emails_backed_up: 12, errors: 0, duration_secs: 3, success: true,
+      external_copy_ok: false, external_copy_failed_count: 2,
+      external_copy_error: '2 emails failed to copy to external backup',
+    });
+    mockSettingsState.backupNotifyOnFailure = true;
+    backupScheduler.queueBackup('acc-1');
+    await new Promise(r => setTimeout(r, 100));
+
+    expect(mockSettingsState.updateBackupState).toHaveBeenCalledWith('acc-1', expect.objectContaining({
+      lastStatus: 'degraded',
+    }));
+    const [title, body] = api.sendNotification.mock.calls[0];
+    expect(title).toContain('Backup partially complete');
+    expect(body).toContain('external backup');
+  });
+
+  afterEach(() => {
+    mockSettingsState.backupNotifyOnFailure = false;
+  });
+});
+
 describe('BackupCoordinator — manual backup result contract', () => {
   beforeEach(resetCoordinator);
 

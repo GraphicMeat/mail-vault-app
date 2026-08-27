@@ -658,6 +658,9 @@ async fn run_imap_backup_inner(
     let mut total_backed_up = 0usize;
     let mut total_errors = 0usize;
     let mut total_ext_failures = 0usize;
+    // The server's words for the last message that could not be fetched. A
+    // count alone leaves the user with "something failed" and nowhere to look.
+    let mut last_message_error: Option<String> = None;
 
     info!(
         "backup: starting for {} ({} selectable folders)",
@@ -774,6 +777,11 @@ async fn run_imap_backup_inner(
             total_backed_up += archive_result.completed;
             total_errors += archive_result.errors;
             total_ext_failures += archive_result.external_copy_failures;
+            if archive_result.errors > 0 && !archive_result.bandwidth_limited {
+                if let Some(ref e) = archive_result.last_error {
+                    last_message_error = Some(e.clone());
+                }
+            }
             if archive_result.bandwidth_limited {
                 // archive already set the shared cancel flag — the folder loop
                 // breaks on the next iteration and the checkpoint allows resume
@@ -817,11 +825,13 @@ async fn run_imap_backup_inner(
         emails_backed_up: total_backed_up,
         errors: total_errors,
         duration_secs: duration,
-        success: !cancelled && total_errors == 0,
+        // A message the server refused is a partial result, not a failed run:
+        // the other N-1 are on disk and re-running is what fixes the one.
+        success: !cancelled,
         error_message: if bandwidth_limited {
             Some("Daily download limit reached for this provider. Backup stopped — it will pick up where it left off after the limit resets (usually within 1 hour, up to 24 hours).".to_string())
         } else {
-            None
+            partial_error_message(total_errors, total_backed_up, last_message_error.as_deref())
         },
         cancelled,
         completed_folders,
@@ -958,6 +968,9 @@ async fn run_graph_backup(
     let mut total_backed_up = 0usize;
     let mut total_errors = 0usize;
     let mut total_ext_failures = 0usize;
+    // The server's words for the last message that could not be fetched. A
+    // count alone leaves the user with "something failed" and nowhere to look.
+    let mut last_message_error: Option<String> = None;
 
     info!(
         "backup(graph): starting for account {} ({} folders, skipping first {})",
@@ -1068,6 +1081,7 @@ async fn run_graph_backup(
                             msg.id, folder_name, e
                         );
                         total_errors += 1;
+                        last_message_error = Some(e.to_string());
                     }
                 }
             }
@@ -1109,8 +1123,8 @@ async fn run_graph_backup(
         emails_backed_up: total_backed_up,
         errors: total_errors,
         duration_secs: duration,
-        success: !cancelled && total_errors == 0,
-        error_message: None,
+        success: !cancelled,
+        error_message: partial_error_message(total_errors, total_backed_up, last_message_error.as_deref()),
         cancelled,
         completed_folders,
         external_copy_ok: total_ext_failures == 0,
@@ -1118,6 +1132,28 @@ async fn run_graph_backup(
             Some(format!("{} emails failed to copy to external backup", total_ext_failures))
         } else { None },
         external_copy_failed_count: total_ext_failures,
+    })
+}
+
+/// What to tell the user when a run finished but some messages did not.
+///
+/// `None` when nothing failed — the caller renders a plain success. Otherwise
+/// the count AND the server's own words, because "Unknown error" on an
+/// otherwise complete backup is what trains people to ignore the alarm.
+fn partial_error_message(errors: usize, backed_up: usize, last_error: Option<&str>) -> Option<String> {
+    if errors == 0 {
+        return None;
+    }
+    let attempted = backed_up + errors;
+    let head = format!(
+        "{} of {} message{} could not be fetched",
+        errors,
+        attempted,
+        if attempted == 1 { "" } else { "s" }
+    );
+    Some(match last_error {
+        Some(e) if !e.trim().is_empty() => format!("{}. Last error: {}", head, e.trim()),
+        _ => format!("{}.", head),
     })
 }
 
@@ -1510,5 +1546,37 @@ mod purge_queue_tests {
             !leftover.contains_key("malformed-no-pipe"),
             "a key with no '|' separator must be dropped, not left queued forever"
         );
+    }
+}
+
+#[cfg(test)]
+mod partial_error_tests {
+    use super::partial_error_message;
+
+    #[test]
+    fn no_errors_says_nothing() {
+        assert_eq!(partial_error_message(0, 788, None), None);
+    }
+
+    /// The 2026-08-27 report: 788 of 789 saved, and the notification said
+    /// "Backup failed - Unknown error" because this string was `None`.
+    #[test]
+    fn one_failure_names_the_count_and_the_server() {
+        let msg = partial_error_message(1, 788, Some("IMAP fetch failed: UID FETCH 799 failed"))
+            .expect("a run with errors must explain itself");
+        assert!(msg.contains("1 of 789 messages"), "got {msg}");
+        assert!(msg.contains("UID FETCH 799 failed"), "got {msg}");
+    }
+
+    #[test]
+    fn falls_back_to_the_count_when_the_error_is_blank() {
+        let msg = partial_error_message(2, 0, Some("   ")).unwrap();
+        assert_eq!(msg, "2 of 2 messages could not be fetched.");
+    }
+
+    #[test]
+    fn singular_when_one_message_was_attempted() {
+        let msg = partial_error_message(1, 0, None).unwrap();
+        assert_eq!(msg, "1 of 1 message could not be fetched.");
     }
 }

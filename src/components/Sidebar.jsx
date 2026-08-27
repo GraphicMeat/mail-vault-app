@@ -140,6 +140,8 @@ function BackupStatusIcon({ accountId, onClick }) {
 
   const isFailed = backupState?.lastStatus === 'failed';
   const isSuccess = backupState?.lastStatus === 'success';
+  // Partial run: the vault got most of it, but something did not arrive.
+  const isDegraded = backupState?.lastStatus === 'degraded';
   const lastBackup = backupState?.lastBackupTime || 0;
   const neverBackedUp = lastBackup === 0;
 
@@ -152,13 +154,14 @@ function BackupStatusIcon({ accountId, onClick }) {
   // Show green if last backup succeeded — even if slightly overdue, it means the backup
   // ran fine and the scheduler just hasn't had a chance to run again yet.
   // Show amber only for failures, never-backed-up, or overdue WITHOUT a success status.
-  const showWarning = isFailed || neverBackedUp || (isOverdue && !isSuccess);
+  const showWarning = isFailed || isDegraded || neverBackedUp || (isOverdue && !isSuccess);
 
   const icon = showWarning
     ? <AlertCircle size={12} className="text-mail-warning flex-shrink-0" />
     : <CheckCircle2 size={12} className="text-mail-success flex-shrink-0" />;
 
   const title = isFailed ? 'Backup failed — click to view'
+    : isDegraded ? 'Backup incomplete — click to view'
     : neverBackedUp ? 'Never backed up — click to configure'
     : isOverdue && !isSuccess ? 'Backup overdue — click to view'
     : 'Backup up to date';

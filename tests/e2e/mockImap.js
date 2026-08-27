@@ -524,8 +524,12 @@ export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, 
   // that to scope a real backup_run_account call to just this folder via
   // skipFolders — skipping every folder ahead of it in the list.
   if (extraMailbox) {
+    // `uidStart` keeps this folder's uids out of every other folder's range.
+    // Faults are per-ACCOUNT with no mailbox scoping, so a fault aimed at a
+    // message here would otherwise also match the same uid in INBOX or Sent.
     mailboxes.push(mailbox(extraMailbox.name, extraMailbox.count, {
       owner, attrs: ['\\HasNoChildren'], subjectPrefix: extraMailbox.subjectPrefix,
+      uidStart: extraMailbox.uidStart || 1,
     }));
   }
 

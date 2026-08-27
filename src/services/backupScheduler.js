@@ -12,6 +12,24 @@ const SHARE_UNLOCK_COOLDOWN_MS = 7 * 86_400_000;
 const RETRY_DELAYS = [30_000, 120_000, 300_000]; // 30s, 2min, 5min
 
 /**
+ * Body for the "partially complete" notification.
+ *
+ * Both halves are partial results, and either can be the only one: messages the
+ * server refused to send, and messages that reached the vault but not the
+ * external mirror. The backend's own words (`error_message`) carry the count
+ * and the server's error, so they lead.
+ */
+export function partialBackupNotice(entry, result = {}) {
+  const parts = [];
+  if (entry.error) parts.push(entry.error);
+  else if (entry.errors > 0) parts.push(`${entry.errors} message(s) could not be fetched.`);
+  if (entry.externalCopyOk === false) {
+    parts.push(`${result.external_copy_failed_count || entry.externalCopyFailedCount || 'Some'} failed to copy to external backup.`);
+  }
+  return `${entry.emailsBackedUp} emails backed up. ${parts.join(' ')}`.trim();
+}
+
+/**
  * Lifecycle states for the backup coordinator.
  * Only 'idle' and 'running' allow new work to start.
  * Paused states block queue processing until resumed.
@@ -141,6 +159,12 @@ class BackupCoordinator {
    */
   checkAndQueueDue() {
     if (this._isPaused()) return;
+
+    // ponytail: no premium check here on purpose. The toggle that creates a
+    // schedule is premium-gated (BackupAccountCard), but a schedule that already
+    // exists keeps running after a subscription lapses — billing state must never
+    // be the reason someone's mail stops being copied to disk. The lapse itself
+    // is announced by BillingSettings' premiumDropNotice.
 
     const settings = useSettingsStore.getState();
     const mailState = useMailStore.getState();
@@ -313,22 +337,28 @@ class BackupCoordinator {
       this._checkpoints.delete(accountId);
 
       const externalDegraded = result.external_copy_ok === false;
+      // Messages the server refused. The run still saved everything else, so
+      // this is a partial result — the same shape as a degraded external copy,
+      // never a failed backup (2026-08-27: 788 of 789 saved, reported failed).
+      const messageErrors = result.errors || 0;
       const entry = {
         timestamp: Date.now(),
         emailsBackedUp: result.emails_backed_up || 0,
         durationSecs: result.duration_secs || ((Date.now() - startTime) / 1000),
         success: result.success !== false,
+        errors: messageErrors,
         error: result.error_message || null,
         externalCopyOk: result.external_copy_ok !== false,
         externalCopyError: result.external_copy_error || null,
         externalCopyFailedCount: result.external_copy_failed_count || 0,
       };
+      const degraded = entry.success && (externalDegraded || messageErrors > 0);
 
       const storeNow = useSettingsStore.getState();
       storeNow.addBackupHistoryEntry(accountId, entry);
       storeNow.updateBackupState(accountId, {
         lastBackupTime: Date.now(),
-        lastStatus: entry.success ? (externalDegraded ? 'degraded' : 'success') : 'failed',
+        lastStatus: entry.success ? (degraded ? 'degraded' : 'success') : 'failed',
         lastError: entry.error || (externalDegraded ? result.external_copy_error : null),
         emailsBackedUp: (storeNow.backupState[accountId]?.emailsBackedUp || 0) + entry.emailsBackedUp
       });
@@ -352,15 +382,15 @@ class BackupCoordinator {
       }
 
       // Send notification
-      if (entry.success && !externalDegraded && storeNow.backupNotifyOnSuccess) {
+      if (entry.success && !degraded && storeNow.backupNotifyOnSuccess) {
         api.sendNotification(
           `Backup complete - ${account.email}`,
           `${entry.emailsBackedUp} new emails backed up.`
         ).catch(() => {});
-      } else if (entry.success && externalDegraded && storeNow.backupNotifyOnFailure) {
+      } else if (degraded && storeNow.backupNotifyOnFailure) {
         api.sendNotification(
           `Backup partially complete - ${account.email}`,
-          `${entry.emailsBackedUp} emails backed up locally, but ${result.external_copy_failed_count || 'some'} failed to copy to external backup.`
+          partialBackupNotice(entry, result)
         ).catch(() => {});
       } else if (!entry.success && storeNow.backupNotifyOnFailure) {
         api.sendNotification(
@@ -374,7 +404,7 @@ class BackupCoordinator {
       // MAS builds must not reference external purchases at all.
       let showedBackupUpsell = false;
       try {
-        if (!IS_APPSTORE_BUILD && isManual && entry.success && !externalDegraded
+        if (!IS_APPSTORE_BUILD && isManual && entry.success && !degraded
             && !hasPremiumAccess(storeNow.billingProfile) && !storeNow.upsellBackupShown) {
           storeNow.markUpsellBackupShown();
           useBackupStore.getState().setBackupUpsell({ emailsBackedUp: entry.emailsBackedUp });
@@ -393,7 +423,7 @@ class BackupCoordinator {
       // a completed backup as failed and — for automatic backups — re-queues
       // up to three more runs of work that was already done.
       try {
-        if (!IS_APPSTORE_BUILD && entry.success && !externalDegraded
+        if (!IS_APPSTORE_BUILD && entry.success && !degraded
             && !hasPremiumAccess(storeNow.billingProfile) && !showedBackupUpsell) {
           const grantActive = !!(storeNow.shareGrant?.expiresAt && storeNow.shareGrant.expiresAt > Date.now());
           const sinceLast = Date.now() - (storeNow.shareUnlockLastShownAt || 0);
@@ -408,8 +438,8 @@ class BackupCoordinator {
 
       this._retryCount.delete(accountId);
       this._resolveManual(accountId, {
-        status: entry.success ? (externalDegraded ? 'degraded' : 'success') : 'failed',
-        message: entry.error,
+        status: entry.success ? (degraded ? 'degraded' : 'success') : 'failed',
+        message: entry.error || (externalDegraded ? result.external_copy_error : null),
       });
     } catch (err) {
       console.error(`[backup] Backup failed for ${account.email}:`, err);
