@@ -21,117 +21,30 @@
  * run would not exercise that choice.
  */
 
-import { openSettings, clickSettingsNav, closeSettings, waitForApp } from './helpers.js';
+import { waitForApp, closeSettings } from './helpers.js';
+import {
+  CUSTOMERS, installMockBilling, setBillingMode, setBillingEmail,
+  billingState, settingsText, seedSignedIn, openBillingAs,
+} from './mockBilling.js';
 
-const PREMIUM_CUSTOMER = 'cus_premium_mock';
-const LAPSED_CUSTOMER = 'cus_lapsed_mock';
+const PREMIUM_CUSTOMER = CUSTOMERS.premium;
+const LAPSED_CUSTOMER = CUSTOMERS.lapsed;
 
 describe('Billing — premium that stops applying to this device', function () {
   this.timeout(180_000);
 
   let signedInEmail = null;
 
-  /**
-   * Answer /api/billing/* in the page, and let the spec pick the answer.
-   * `window.__MV_BILLING_MODE__` is read per request, so one install covers the
-   * drop and its control.
-   */
-  async function installBillingStub() {
-    await browser.execute(() => {
-      if (window.__MV_BILLING_STUB_INSTALLED__) return;
-      const realFetch = window.fetch.bind(window);
-      const json = (body) => new Response(JSON.stringify(body), {
-        status: 200, headers: { 'Content-Type': 'application/json' },
-      });
-      window.__MV_BILLING_MODE__ = 'lapsed';
-      // The canonical email the real server echoes for this customer. The
-      // refresh queries by customerId alone, so without this the stub would
-      // answer with a different address and the app would (correctly) adopt it.
-      window.__MV_BILLING_EMAIL__ = '';
-      window.fetch = (input, init) => {
-        const url = String((input && input.url) || input || '');
-        if (url.includes('/api/billing/subscription-status')) {
-          const q = new URL(url, 'https://stub.invalid').searchParams;
-          const live = window.__MV_BILLING_MODE__ === 'premium';
-          return Promise.resolve(json({
-            customerId: q.get('customerId') || 'cus_stub',
-            customerEmail: q.get('email') || window.__MV_BILLING_EMAIL__ || 'billing@mock.test',
-            currentClientId: q.get('clientId') || null,
-            hasSubscription: live,
-            status: live ? 'active' : null,
-            priceId: live ? 'price_stub_yearly' : null,
-            interval: live ? 'year' : null,
-            currentPeriodEnd: live ? '2027-01-01T00:00:00.000Z' : null,
-            cancelAtPeriodEnd: false,
-            premiumAccess: live,
-            clientLimit: 5,
-            activeClientCount: live ? 1 : 0,
-            activeClients: [],
-            clientAccessGranted: live,
-          }));
-        }
-        if (url.includes('/api/billing/pricing')) {
-          return Promise.resolve(json({ currency: 'eur', currencySource: 'stub', plans: [] }));
-        }
-        return realFetch(input, init);
-      };
-      window.__MV_BILLING_STUB_INSTALLED__ = true;
-    });
-  }
-
-  const setBillingMode = (mode) =>
-    browser.execute((m) => { window.__MV_BILLING_MODE__ = m; }, mode);
-
-  /** Sign this device in on `customerId`, last checked long enough ago to refresh. */
-  async function seedSignedIn(customerId, email) {
-    await browser.execute((cid, mail) => {
-      window.__SETTINGS_STORE__.setState({
-        billingEmail: mail,
-        billingProfile: {
-          customerId: cid,
-          customerEmail: mail,
-          hasSubscription: true,
-          status: 'active',
-          interval: 'year',
-          premiumAccess: true,
-          clientAccessGranted: true,
-        },
-        // Stale: the Billing tab refreshes on mount only when the cached answer
-        // is older than its threshold.
-        billingLastChecked: 1,
-        shareGrant: null,
-      });
-    }, customerId, email);
-  }
-
-  const billingState = () => browser.execute(() => {
-    const s = window.__SETTINGS_STORE__.getState();
-    return {
-      billingEmail: s.billingEmail,
-      hasSubscription: !!s.billingProfile?.hasSubscription,
-      customerId: s.billingProfile?.customerId || null,
-      lastChecked: s.billingLastChecked || 0,
-    };
-  });
-
-  const settingsText = () => browser.execute(() =>
-    document.querySelector('[data-testid="settings-page"]')?.innerText || '');
-
   /** Seed, open Settings → Billing, and let the mount refresh run. */
-  async function openBillingSignedInOn(customerId) {
-    await closeSettings().catch(() => {});
-    await seedSignedIn(customerId, signedInEmail);
-    await openSettings();
-    expect(await clickSettingsNav('Billing')).toBe(true);
-  }
+  const openBillingSignedInOn = (customerId) => openBillingAs(customerId, signedInEmail);
 
   before(async function () {
     await waitForApp();
     // The account list the Billing tab reads from — three seeded accounts, not one.
     expect(browser.mockAccounts.length).toBeGreaterThan(1);
     signedInEmail = browser.mockAccounts[0].email;
-    await installBillingStub();
-    await browser.execute((mail) => { window.__MV_BILLING_EMAIL__ = mail; }, signedInEmail);
+    await installMockBilling();
+    await setBillingEmail(signedInEmail);
   });
 
   after(async function () {
