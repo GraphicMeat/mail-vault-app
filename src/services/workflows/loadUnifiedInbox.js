@@ -126,6 +126,20 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
   if (signal.aborted) return;
 
   const allEmails = [];
+  // Three sources feed this list and they overlap: the restore descriptor's
+  // 50-row window (the prewarm writes one per account from the same cache the
+  // disk read below returns), those disk headers, and the pre-unified
+  // snapshot. Only the snapshot used to dedupe, so every row the descriptor
+  // held arrived twice — a doubled list, doubled counters, and two identical
+  // copies of every message inside the threads built from it. UID alone is not
+  // a key across accounts; account + uid is, within one folder.
+  const seenKeys = new Set();
+  const pushUnique = (email) => {
+    const key = `${email._accountId}:${email.uid}`;
+    if (seenKeys.has(key)) return;
+    seenKeys.add(key);
+    allEmails.push(email);
+  };
   const diskFetchPromises = [];
   const resolvedPathsByAccount = new Map();
 
@@ -138,7 +152,7 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
     const restored = _getRestore(account.id, resolvedPath, get().viewMode || 'all');
     if (restored?.firstWindow?.length) {
       for (const email of restored.firstWindow) {
-        allEmails.push({ ...email, _accountEmail: account.email, _accountId: account.id, _mailbox: resolvedPath });
+        pushUnique({ ...email, _accountEmail: account.email, _accountId: account.id, _mailbox: resolvedPath });
       }
     }
     diskFetchPromises.push(
@@ -152,7 +166,7 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
   if (diskFetchPromises.length > 0) {
     const diskResults = await Promise.all(diskFetchPromises);
     for (const emails of diskResults) {
-      allEmails.push(...emails);
+      for (const email of emails) pushUnique(email);
     }
   }
 
@@ -165,17 +179,13 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
         mailboxesByAccount.get(preUnifiedSnapshot.activeAccountId) || [],
         targetFolder
       );
-      const existingUids = new Set(allEmails.map(e => `${e._accountId}:${e.uid}`));
       for (const email of preUnifiedSnapshot.emails) {
-        const key = `${preUnifiedSnapshot.activeAccountId}:${email.uid}`;
-        if (!existingUids.has(key)) {
-          allEmails.push({
-            ...email,
-            _accountEmail: activeAccount.email,
-            _accountId: activeAccount.id,
-            _mailbox: email._mailbox || snapshotMailbox,
-          });
-        }
+        pushUnique({
+          ...email,
+          _accountEmail: activeAccount.email,
+          _accountId: activeAccount.id,
+          _mailbox: email._mailbox || snapshotMailbox,
+        });
       }
     }
   }

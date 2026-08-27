@@ -443,8 +443,16 @@ function EmailListComponent() {
     () => searchActive ? null : (activeMailbox === 'INBOX' ? getChatEmails() : sortedEmails),
     [searchActive, getChatEmails, sortedEmails, sentEmails, activeMailbox]
   );
+  // The `_accountId` stamps belong in the key. `threadedDisplay` matches cached
+  // threads to rows by `accountId:uid`, and entering unified inbox swaps the
+  // account's own INBOX rows for the SAME messages re-stamped with an
+  // `_accountId` — same count, same first and last UID, so a key built from
+  // those alone cannot tell the two lists apart. It kept the threads built from
+  // the un-stamped rows, nothing matched them, and the list rendered zero rows
+  // over a full store. (Only visible once the unified list stopped arriving
+  // doubled, which had kept the two counts different.)
   const threadFingerprint = useMemo(
-    () => mergedEmails ? `${activeAccountId}-${activeMailbox}-${viewMode}-${mergedEmails.length}-${mergedEmails[0]?.uid || 0}-${mergedEmails[mergedEmails.length - 1]?.uid || 0}-${flagSeq}-${archivedSize}-${alertCount}` : '',
+    () => mergedEmails ? `${activeAccountId}-${activeMailbox}-${viewMode}-${mergedEmails.length}-${mergedEmails[0]?.uid || 0}-${mergedEmails[mergedEmails.length - 1]?.uid || 0}-${mergedEmails[0]?._accountId || ''}-${mergedEmails[mergedEmails.length - 1]?._accountId || ''}-${flagSeq}-${archivedSize}-${alertCount}` : '',
     [mergedEmails, flagSeq, viewMode, archivedSize, alertCount, activeAccountId, activeMailbox]
   );
 

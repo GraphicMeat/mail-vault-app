@@ -673,6 +673,86 @@ describe('unified inbox — server uid completeness never carries a stale true',
   });
 });
 
+// The unified list is fed from three sources that all cover the same rows: the
+// in-memory restore descriptor's 50-row window, the 500 headers read off disk,
+// and the pre-unified snapshot. Only the snapshot was deduped, so every message
+// the prewarm descriptor held arrived twice — one row per copy in the list, and
+// two identical messages inside every thread built from it.
+describe('unified inbox — one row per message across its three sources', () => {
+  const ACCOUNT = { id: 'acct-1', email: 'a@example.com' };
+
+  const headers = [
+    { uid: 1, subject: 'Newest', date: '2026-08-26T20:28:00Z' },
+    { uid: 2, subject: 'Middle', date: '2026-08-26T20:07:00Z' },
+    { uid: 3, subject: 'Oldest', date: '2026-08-25T09:00:00Z' },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetCachedMailboxes.mockResolvedValue([]);
+    mockGetSavedEmailIds.mockResolvedValue(new Set());
+    mockGetArchivedEmailIds.mockResolvedValue(new Set());
+    mockReadLocalEmailIndex.mockResolvedValue(null);
+    mockGetLocalEmails.mockResolvedValue([]);
+    mockGetEmailHeadersPartial.mockResolvedValue({ emails: headers, totalEmails: headers.length });
+    mockGetRestoreDescriptor.mockReturnValue(null);
+  });
+
+  function keysOf(rows) {
+    return rows.map(e => `${e._accountId}:${e.uid}`);
+  }
+
+  it('does not repeat a message the restore descriptor and the disk cache both hold', async () => {
+    // Exactly what _prewarmAccountCaches writes: the first slice of the same
+    // headers getEmailHeadersPartial returns a moment later.
+    mockGetRestoreDescriptor.mockReturnValue({
+      accountId: ACCOUNT.id,
+      mailbox: 'INBOX',
+      viewMode: 'all',
+      firstWindow: headers.slice(0, 2),
+    });
+
+    useMailStore.setState({
+      accounts: [ACCOUNT],
+      unifiedInbox: true,
+      unifiedFolder: 'INBOX',
+      viewMode: 'all',
+      emails: [],
+      localEmails: [],
+      sortedEmails: [],
+      _sortedEmailsFingerprint: '',
+    });
+
+    await useMailStore.getState().loadUnifiedInbox(null, 'INBOX');
+
+    const keys = keysOf(useMailStore.getState().sortedEmails);
+    expect([...new Set(keys)].sort()).toEqual(keys.slice().sort());
+    expect(keys).toHaveLength(3);
+    expect(useMailStore.getState().totalEmails).toBe(3);
+  });
+
+  it('does not repeat a message the pre-unified snapshot and the disk cache both hold', async () => {
+    useMailStore.setState({
+      accounts: [ACCOUNT],
+      unifiedInbox: true,
+      unifiedFolder: 'INBOX',
+      viewMode: 'all',
+      emails: [],
+      localEmails: [],
+      sortedEmails: [],
+      _sortedEmailsFingerprint: '',
+    });
+
+    await useMailStore.getState().loadUnifiedInbox(
+      { activeAccountId: ACCOUNT.id, emails: headers.slice(0, 1) },
+      'INBOX',
+    );
+
+    const keys = keysOf(useMailStore.getState().sortedEmails);
+    expect(keys).toHaveLength(3);
+  });
+});
+
 describe('refreshBackedUpUids', () => {
   // Renamed from "...so unified inbox cannot collide" — unifiedInbox is false
   // and only one account is registered here, so no collision is exercised.

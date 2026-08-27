@@ -15,6 +15,7 @@ import {
   waitForApp,
   waitForEmails,
   pressKey,
+  switchToFolder,
 } from './helpers.js';
 
 describe('Unified Inbox', function () {
@@ -72,18 +73,16 @@ describe('Unified Inbox', function () {
     expect(clicked).toBe(true);
     await browser.pause(2000);
 
-    // Verify emails are visible
-    const hasEmails = await browser.execute(() => {
-      const rows = document.querySelectorAll(
-        '[data-testid="email-row"], [class*="email-row"], [class*="EmailRow"]',
-      );
-      if (rows.length > 0) return true;
-      // Fallback: virtualized rows
-      const virtualRows = document.querySelectorAll('[style*="position: absolute"][style*="top:"]');
-      return virtualRows.length > 2;
-    });
+    // Real rows, not "something is absolutely positioned". This is the only
+    // guard on the list actually painting in unified mode: a thread cache that
+    // outlives the list it was built from renders zero rows over a full store,
+    // and the old fallback below counted enough unrelated positioned elements
+    // to call that a pass.
+    const rowCount = await browser.execute(
+      () => document.querySelectorAll('[data-testid="email-row"]').length,
+    );
 
-    expect(hasEmails).toBe(true);
+    expect(rowCount).toBeGreaterThan(0);
   });
 
   it('should show colored account indicator dots on email rows', async function () {
@@ -160,5 +159,95 @@ describe('Unified Inbox', function () {
     if (hasDots) {
       console.warn('[unified-inbox] Account dots still visible after clicking account — unified may still be active');
     }
+  });
+
+  // The unified list is stitched from two sources that cover the same rows: the
+  // restore descriptor's 50-row window (written for every account visited this
+  // session, and by the startup prewarm) and the headers read off disk. The
+  // merge only deduped the third source, the pre-unified snapshot, so every row
+  // an account's descriptor held arrived twice — a doubled list, doubled
+  // counters, and two identical copies of every message inside its thread.
+  //
+  // Visiting both accounts first is what arms the descriptors; without it the
+  // assertion passes on a broken build.
+  it('lists each message once after both accounts have been visited', async function () {
+    const { TEST_EMAIL, TEST_EMAIL2 } = browser.testEnv;
+    await switchToFolder(TEST_EMAIL2, 'INBOX');
+    await switchToFolder(TEST_EMAIL, 'INBOX');
+
+    const clicked = await browser.execute(() => {
+      const btn = document.querySelector('[data-testid="all-inboxes-btn"]');
+      if (!btn) return false;
+      btn.click();
+      return true;
+    });
+    expect(clicked).toBe(true);
+
+    // `activeMailbox` flips to UNIFIED synchronously on the click, while the
+    // list it names arrives later — read too early and this asserts on the
+    // previous single-account rows, which are unique no matter what the merge
+    // does. Both accounts visited above must be present, and the progressive
+    // chunk loop must have drained.
+    await browser.waitUntil(async () => browser.execute(() => {
+      const s = window.__MAIL_STORE__?.getState?.();
+      if (!s || s.activeMailbox !== 'UNIFIED' || s.loadingProgress) return false;
+      return new Set(s.sortedEmails.map(e => e._accountId).filter(Boolean)).size >= 2;
+    }), { timeout: 30_000, timeoutMsg: 'unified inbox never finished loading both accounts' });
+
+    const { duplicates, total } = await browser.execute(() => {
+      const rows = window.__MAIL_STORE__.getState().sortedEmails;
+      const seen = new Set();
+      const duplicates = [];
+      for (const r of rows) {
+        const key = `${r._accountId}:${r._mailbox}:${r.uid}`;
+        if (seen.has(key)) duplicates.push(`${key} — ${r.subject}`);
+        seen.add(key);
+      }
+      return { duplicates: duplicates.slice(0, 5), total: rows.length };
+    });
+
+    expect(total).toBeGreaterThan(0);
+    expect(duplicates).toEqual([]);
+  });
+
+  // The reported symptom, at the surface the user actually sees: a thread in
+  // the unified list opened onto four rows that were two messages, each drawn
+  // twice with the same sender and the same timestamp. Runs on the unified
+  // view the previous case leaves open.
+  it('opens a unified thread with every message drawn once', async function () {
+    // The unified list is hundreds of rows across three accounts and only a
+    // window of it is rendered, so this pages down until a thread row appears
+    // rather than reading the first screen and giving up.
+    let threadCount = 0;
+    await browser.waitUntil(async () => {
+      threadCount = await browser.execute(() => {
+        const row = [...document.querySelectorAll('[data-testid="email-row"]')]
+          .find(r => r.offsetHeight > 0 && Number(r.getAttribute('data-thread-count') || 1) > 1);
+        if (row) {
+          row.click();
+          return Number(row.getAttribute('data-thread-count'));
+        }
+        const list = [...document.querySelectorAll('div')]
+          .find(d => d.scrollHeight > d.clientHeight + 200 && d.clientHeight > 200);
+        if (list) {
+          const next = list.scrollTop + list.clientHeight * 0.9;
+          list.scrollTop = next < list.scrollHeight ? next : 0;
+        }
+        return 0;
+      });
+      if (!threadCount) return false;
+      return browser.execute(() => (document.body.textContent || '').includes('messages in thread'));
+    }, { timeout: 60_000, interval: 500, timeoutMsg: 'no multi-message thread row in the unified list' });
+
+    const { headers, distinct } = await browser.execute(() => {
+      const texts = [...document.querySelectorAll('[data-testid="thread-email-header"]')]
+        .map(h => (h.textContent || '').replace(/\s+/g, ' ').trim());
+      return { headers: texts.length, distinct: new Set(texts).size };
+    });
+
+    // A duplicated message repeats its sender and its timestamp verbatim, so
+    // the header text is identical and the distinct count falls short.
+    expect(headers).toBe(threadCount);
+    expect(distinct).toBe(headers);
   });
 });

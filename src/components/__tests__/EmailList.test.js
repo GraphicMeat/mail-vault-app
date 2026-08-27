@@ -11,7 +11,7 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
 
 // Track useVirtualizer calls
 let lastVirtualizerConfig = null;
@@ -610,5 +610,68 @@ describe('formatListCount', () => {
   it('names the loaded window when the filter can only see part of the mailbox', async () => {
     const { formatListCount } = await import('../EmailList.jsx');
     expect(formatListCount({ shown: 12, loaded: 741, total: 15067, unreadOnly: true })).toBe('12 unread of 741 loaded');
+  });
+});
+
+// The thread cache key used to name only account, mailbox, view mode, row
+// count, and the first and last UID. Switching into unified inbox produces two
+// lists that agree on every one of those — the account's own INBOX rows, and a
+// moment later the same messages re-stamped with `_accountId` once the unified
+// load lands. The threads built from the un-stamped rows survived the swap,
+// `threadedDisplay` matched them by `accountId:uid`, nothing matched, and the
+// list rendered zero rows with a full store behind it. The stamps are part of
+// the key now.
+describe('thread cache follows the list it was built from', () => {
+  const rows = (count, stamped) =>
+    Array.from({ length: count }, (_, i) => ({
+      uid: i + 1,
+      subject: `Email ${i + 1}`,
+      from: [{ address: `sender${i}@test.com`, name: `Sender ${i}` }],
+      to: [{ address: 'me@test.com' }],
+      date: new Date(2024, 0, 1, 0, 0, i).toISOString(),
+      flags: ['\\Seen'],
+      source: 'server',
+      isArchived: false,
+      ...(stamped ? { _accountId: 'acc1', _mailbox: 'INBOX' } : {}),
+    }));
+
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 5)); });
+
+  afterEach(async () => {
+    cleanup();
+    const { useMailStore } = await import('../../stores/mailStore');
+    useMailStore.setState({
+      activeMailbox: 'INBOX',
+      unifiedInbox: false,
+      sortedEmails: mockEmails,
+      totalEmails: 500,
+    });
+  });
+
+  it('rebuilds when a same-length list is replaced by account-stamped rows', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    // The frame right after the click: the view is already unified, the rows
+    // are still the outgoing account's.
+    useMailStore.setState({
+      activeMailbox: 'UNIFIED',
+      unifiedInbox: true,
+      sortedEmails: rows(3, false),
+      totalEmails: 3,
+    });
+
+    // `.type` is the unmemoized component. The export is `memo()`d and takes no
+    // props, so a plain rerender bails out before the body runs — and this test
+    // is about what the body's caches do on a re-render, not about memo.
+    const { EmailList } = await import('../EmailList.jsx');
+    const { rerender } = render(React.createElement(EmailList.type));
+    await settle();
+    expect(lastVirtualizerConfig.count).toBe(3);
+
+    // The unified load lands: same three messages, same UIDs, now stamped.
+    useMailStore.setState({ sortedEmails: rows(3, true) });
+    rerender(React.createElement(EmailList.type));
+    await settle();
+
+    expect(lastVirtualizerConfig.count).toBe(3);
   });
 });
