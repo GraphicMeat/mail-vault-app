@@ -46,6 +46,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Loader,
+  Gift,
 } from 'lucide-react';
 
 const MAILBOX_ICONS = {
@@ -574,7 +575,7 @@ function TransferStatsHoverBubble({ pos, stats, onClick, onMouseEnter, onMouseLe
   );
 }
 
-export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup, onOpenAccounts, onOpenDataUsage, onReportBug }) {
+export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup, onOpenAccounts, onOpenDataUsage, onReportBug, onReferFriend }) {
   const accounts = useAccountStore(s => s.accounts);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   const mailboxes = useAccountStore(s => s.mailboxes);
@@ -925,36 +926,42 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         </div>}
 
         {/* Footer icons */}
-        <div className="w-full py-2 border-t border-mail-border flex flex-col items-center gap-1">
-          <Button variant="ghost" icon size="md"
+        <div className="w-full py-2 border-t border-mail-border flex flex-col items-center gap-0.5">
+          <Button variant="ghost" icon size="sm"
             onClick={toggleTheme}
             title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           >
             {theme === 'dark' ? (
-              <Sun size={16} className="text-mail-text-muted" />
+              <Sun size={15} className="text-mail-text-muted" />
             ) : (
-              <Moon size={16} className="text-mail-text-muted" />
+              <Moon size={15} className="text-mail-text-muted" />
             )}
           </Button>
-          <Button variant="ghost" icon size="md"
+          <Button variant="ghost" icon size="sm"
             onClick={refreshCurrentView}
             title="Refresh emails"
           >
-            <RefreshCw size={16} className={`text-mail-text-muted ${loading || loadingMore || manualRefreshSpinning ? 'animate-spin' : ''}`} />
+            <RefreshCw size={15} className={`text-mail-text-muted ${loading || loadingMore || manualRefreshSpinning ? 'animate-spin' : ''}`} />
           </Button>
           {/* Backup in progress indicator (collapsed) */}
           <CollapsedBackupIcon onOpenBackup={onOpenBackup} />
-          <Button variant="ghost" icon size="md"
+          <Button variant="ghost" icon size="sm"
             onClick={onOpenSettings}
             title="Settings"
           >
-            <Settings size={16} className="text-mail-text-muted" />
+            <Settings size={15} className="text-mail-text-muted" />
           </Button>
-          <Button variant="ghost" icon size="md"
+          <Button variant="ghost" icon size="sm"
             onClick={onReportBug}
             title="Report a bug"
           >
-            <Bug size={16} className="text-mail-text-muted" />
+            <Bug size={15} className="text-mail-text-muted" />
+          </Button>
+          <Button variant="ghost" icon size="sm"
+            onClick={onReferFriend}
+            title="Refer a friend"
+          >
+            <Gift size={15} className="text-mail-text-muted" />
           </Button>
           {totalEmails > 0 && (
             <div
@@ -1409,18 +1416,25 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
 
       {/* Footer */}
       <div className="p-3 border-t border-mail-border space-y-0.5">
-        <Button variant="ghost" fullWidth className="justify-start p-2"
+        <Button variant="ghost" fullWidth size="xs" className="justify-start"
           onClick={onOpenSettings}
         >
-          <Settings size={16} />
+          <Settings size={14} />
           Settings
         </Button>
-        <Button variant="ghost" fullWidth className="justify-start p-2"
+        <Button variant="ghost" fullWidth size="xs" className="justify-start"
           onClick={onReportBug}
           title="Report a bug"
         >
-          <Bug size={16} />
+          <Bug size={14} />
           Report a bug
+        </Button>
+        <Button variant="ghost" fullWidth size="xs" className="justify-start"
+          onClick={onReferFriend}
+          title="Refer a friend"
+        >
+          <Gift size={14} />
+          Refer a friend
         </Button>
         {totalEmails > 0 && (
           <div className="flex items-center gap-2 px-4 mt-1 text-xs text-mail-text-muted">

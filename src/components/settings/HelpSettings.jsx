@@ -41,7 +41,7 @@ export function HelpSettings({ onClose, onReportBug }) {
             <div>
               <div className="font-medium text-mail-text">Report a Bug</div>
               <div className="text-sm text-mail-text-muted">
-                Send a bug report email to the developer
+                Report on GitHub, or email the developer
               </div>
             </div>
             <Button variant="primary"

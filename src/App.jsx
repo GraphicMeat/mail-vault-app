@@ -26,6 +26,7 @@ import { MoveToFolderDropdown } from './components/MoveToFolderDropdown';
 import { MigrationToast } from './components/MigrationToast';
 import { KeychainToast } from './components/KeychainToast';
 import { VaultAlertBanner } from './components/VaultAlertBanner';
+import { BugReportDialog } from './components/BugReportDialog';
 import ShareUnlockModal from './components/ShareUnlockModal';
 import BackupUpsellModal from './components/BackupUpsellModal.jsx';
 import RestoreModal from './components/RestoreModal.jsx';
@@ -259,6 +260,7 @@ function App() {
   const [settingsInitialTab, setSettingsInitialTab] = useState(null);
   const [settingsInitialAccountId, setSettingsInitialAccountId] = useState(null);
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
+  const [showBugModal, setShowBugModal] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [pendingOperation, setPendingOperation] = useState(null);
   const [updateInfo, setUpdateInfo] = useState(null);
@@ -404,7 +406,7 @@ function App() {
     }
   }, [layoutMode, setListPaneSize, setListPaneHeight, sidebarCollapsed]);
 
-  const handleReportBug = useCallback(() => {
+  const composeBugEmail = useCallback(() => {
     const os = navigator.platform || navigator.userAgent || 'Unknown';
     const accountCount = accounts.length;
     const activeAccount = accounts.find(a => a.id === activeAccountId);
@@ -432,7 +434,32 @@ function App() {
         ].join('')
       }
     });
+    setShowBugModal(false);
   }, [accounts, activeAccountId]);
+
+  // The button opens the choice of channel; the email template above is only
+  // one of them (GitHub Discussions is the one others can find later).
+  const handleReportBug = useCallback(() => setShowBugModal(true), []);
+
+  const handleReferFriend = useCallback(() => {
+    setComposeState({
+      initialData: {
+        subject: 'You should try MailVault',
+        body: [
+          '<p>I have been using MailVault and thought of you.</p>',
+          '<p>It archives your IMAP email to your own computer, so you can clear out a full mailbox on the server and still have every message — searchable, offline, forever.</p>',
+          '<ul>',
+          '<li><strong>Your mail, your disk.</strong> Plain .eml files in a folder you choose. No lock-in, no cloud.</li>',
+          '<li><strong>Delete from the server with confidence.</strong> Every message shows where it lives: on the server, in your vault, or your only copy.</li>',
+          '<li><strong>Search everything offline</strong> — across every account and folder.</li>',
+          '<li><strong>Works with any IMAP mailbox</strong> — Gmail, iCloud, Fastmail, your own server.</li>',
+          '<li><strong>Free and open source</strong> for macOS and Linux.</li>',
+          '</ul>',
+          '<p><a href="https://mailvaultapp.com">https://mailvaultapp.com</a></p>',
+        ].join('')
+      }
+    });
+  }, [setComposeState]);
 
   // Debug: log accounts changes
   useEffect(() => {
@@ -741,6 +768,7 @@ function App() {
           onOpenAccounts={(accountId) => { setSettingsInitialTab('accounts'); setSettingsInitialAccountId(accountId || null); setShowSettings(true); }}
           onOpenDataUsage={(accountId) => { setSettingsInitialTab('data-usage'); setSettingsInitialAccountId(accountId || null); setShowSettings(true); }}
           onReportBug={handleReportBug}
+          onReferFriend={handleReferFriend}
         />
       </div>
 
@@ -948,6 +976,12 @@ function App() {
         </AnimatePresence>
       </Suspense>
       </ChunkErrorBoundary>
+
+      <BugReportDialog
+        open={showBugModal}
+        onClose={() => setShowBugModal(false)}
+        onEmail={composeBugEmail}
+      />
 
       {/* Pending bulk operation resume banner */}
       {pendingOperation && (
