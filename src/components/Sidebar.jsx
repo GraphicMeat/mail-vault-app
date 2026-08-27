@@ -1423,8 +1423,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           Report a bug
         </Button>
         {totalEmails > 0 && (
-          <div className="flex items-center gap-1.5 px-2 mt-1 text-xs text-mail-text-muted">
-            <HardDrive size={12} />
+          <div className="flex items-center gap-2 px-4 mt-1 text-xs text-mail-text-muted">
+            <span className="w-4 flex justify-center"><HardDrive size={12} /></span>
             {cacheFilling ? (
               <span>{cachedCount.toLocaleString()} / {totalEmails.toLocaleString()} emails</span>
             ) : (
