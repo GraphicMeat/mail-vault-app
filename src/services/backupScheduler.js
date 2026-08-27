@@ -160,13 +160,15 @@ class BackupCoordinator {
   checkAndQueueDue() {
     if (this._isPaused()) return;
 
-    // ponytail: no premium check here on purpose. The toggle that creates a
-    // schedule is premium-gated (BackupAccountCard), but a schedule that already
-    // exists keeps running after a subscription lapses — billing state must never
-    // be the reason someone's mail stops being copied to disk. The lapse itself
-    // is announced by BillingSettings' premiumDropNotice.
-
     const settings = useSettingsStore.getState();
+
+    // Automatic backups are premium. No subscription — no unattended run, and no
+    // surprise "Backup complete" notification for someone who never signed in.
+    // A schedule left enabled by a lapsed subscription stops here too; the lapse
+    // itself is announced by BillingSettings' premiumDropNotice. Manual
+    // "Back up now" stays free — triggerManualBackup never comes through here.
+    if (!hasPremiumAccess(settings.billingProfile)) return;
+
     const mailState = useMailStore.getState();
     const accounts = mailState.accounts || [];
     const { backupGlobalEnabled, backupGlobalConfig, backupSchedules, hiddenAccounts, backupState } = settings;

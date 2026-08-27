@@ -183,13 +183,36 @@ describe('Billing — premium that stops applying to this device', function () {
     expect(state.customerId).toBe(PREMIUM_CUSTOMER);
   });
 
-  it('leaves automatic backups alone — billing never stops copying mail to disk', async function () {
+  it('stops automatic backups when premium lapses, and keeps the schedule for the day it comes back', async function () {
     const accountId = browser.mockAccounts[0].id;
-    // A schedule that already exists keeps running after premium lapses; only
-    // the toggle that creates one is gated.
+    // `_queueRunning` parks the queue so a due check cannot start a real backup
+    // against the mock server — the queue contents are what is being asserted.
+    const dueCheck = (id) => {
+      const s = window.__BACKUP_SCHEDULER__;
+      s._queue = [];
+      s._queueRunning = true;
+      s.checkAndQueueDue();
+      const queued = [...s._queue];
+      s._queue = [];
+      s._queueRunning = false;
+      return {
+        queued,
+        paused: s._isPaused(),
+        scheduleEnabled: !!window.__SETTINGS_STORE__.getState().backupSchedules?.[id]?.enabled,
+      };
+    };
+
     await browser.execute((id) => {
-      window.__SETTINGS_STORE__.getState().setBackupSchedule(id, { enabled: true, interval: 'daily' });
+      window.__SETTINGS_STORE__.getState().setBackupSchedule(id, { enabled: true, interval: 'hourly', hourlyInterval: 1 });
     }, accountId);
+
+    // Control: with the live subscription still signed in, this account is due
+    // and does get queued. Without this the assertion below passes vacuously.
+    await setBillingMode('premium');
+    await openBillingSignedInOn(PREMIUM_CUSTOMER);
+    const live = await browser.execute(dueCheck, accountId);
+    expect(live.paused).toBe(false);   // a paused scheduler queues nothing either
+    expect(live.queued).toContain(accountId);
 
     await setBillingMode('lapsed');
     await openBillingSignedInOn(LAPSED_CUSTOMER);
@@ -197,8 +220,9 @@ describe('Billing — premium that stops applying to this device', function () {
       timeout: 30_000, interval: 500, timeoutMsg: 'the drop never landed, so this asserts nothing',
     });
 
-    const schedule = await browser.execute((id) =>
-      window.__SETTINGS_STORE__.getState().backupSchedules?.[id] || null, accountId);
-    expect(schedule?.enabled).toBe(true);
+    const lapsed = await browser.execute(dueCheck, accountId);
+    expect(lapsed.queued).toEqual([]);
+    // The schedule is kept, not deleted: resubscribing restores it untouched.
+    expect(lapsed.scheduleEnabled).toBe(true);
   });
 });

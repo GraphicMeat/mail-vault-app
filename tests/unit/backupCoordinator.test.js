@@ -35,9 +35,13 @@ const mockSettingsState = {
   shareUnlockLastShownAt: 0,
   markShareUnlockShown: vi.fn(),
 };
+// Default false: the upsell / share-unlock branches under _runBackup need a
+// free user. Automatic-scheduling tests flip it on, because checkAndQueueDue
+// refuses to queue anything without premium.
+let mockPremium = false;
 vi.mock('../../src/stores/settingsStore', () => ({
   useSettingsStore: { getState: () => mockSettingsState },
-  hasPremiumAccess: () => false,
+  hasPremiumAccess: () => mockPremium,
 }));
 
 // Mock backupStore
@@ -90,6 +94,7 @@ function resetCoordinator() {
   backupScheduler._pausedAccountId = null;
   backupScheduler._manualIds = new Set();
   mockBackupState.activeBackup = null;
+  mockPremium = false;
   vi.clearAllMocks();
 }
 
@@ -212,6 +217,7 @@ describe('BackupCoordinator — gate enforcement', () => {
     const mailMod = await import('../../src/stores/mailStore');
     const orig = mailMod.useMailStore.getState;
     mailMod.useMailStore.getState = () => ({ accounts: mockAccounts, loading: true });
+    mockPremium = true;
     mockSettingsState.backupGlobalEnabled = true;
     backupScheduler.checkAndQueueDue();
     expect(backupScheduler._queue).toEqual([]);
@@ -221,6 +227,7 @@ describe('BackupCoordinator — gate enforcement', () => {
 
   it('checkAndQueueDue skips when paused', () => {
     backupScheduler._state = State.PAUSED_OFFLINE;
+    mockPremium = true;
     mockSettingsState.backupGlobalEnabled = true;
     backupScheduler.checkAndQueueDue();
     expect(backupScheduler._queue).toEqual([]);
@@ -612,7 +619,31 @@ describe('computeNextEligibleTime', () => {
 });
 
 describe('BackupCoordinator — checkAndQueueDue', () => {
-  beforeEach(resetCoordinator);
+  beforeEach(() => {
+    resetCoordinator();
+    mockPremium = true;
+  });
+
+  it('queues nothing without premium, however due the accounts are', () => {
+    mockPremium = false;
+    mockSettingsState.backupGlobalEnabled = true;
+    mockSettingsState.backupGlobalConfig = { interval: 'hourly', hourlyInterval: 1 };
+    mockSettingsState.backupSchedules = { 'acc-1': { enabled: true, interval: 'hourly', hourlyInterval: 1 } };
+    mockSettingsState.backupState = { 'acc-1': { lastBackupTime: Date.now() - 2 * 3600_000 } };
+    backupScheduler._queueRunning = true;
+    backupScheduler.checkAndQueueDue();
+    expect(backupScheduler._queue).toEqual([]);
+    // Negative control: same state, premium on — these accounts really are due.
+    mockPremium = true;
+    backupScheduler.checkAndQueueDue();
+    expect(backupScheduler._queue).toContain('acc-1');
+    expect(backupScheduler._queue).toContain('acc-2');
+    mockSettingsState.backupGlobalEnabled = false;
+    mockSettingsState.backupGlobalConfig = { interval: 'daily', timeOfDay: '03:00', dayOfWeek: 1 };
+    mockSettingsState.backupSchedules = {};
+    mockSettingsState.backupState = {};
+    backupScheduler._queueRunning = false;
+  });
 
   it('queues accounts that are due for backup', () => {
     // Use hourly config to avoid timeOfDay alignment issues

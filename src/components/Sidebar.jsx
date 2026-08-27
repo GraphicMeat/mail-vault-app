@@ -136,6 +136,9 @@ function BackupStatusIcon({ accountId, onClick }) {
   const backupGlobalEnabled = useSettingsStore(s => s.backupGlobalEnabled);
   const backupGlobalConfig = useSettingsStore(s => s.backupGlobalConfig);
   const schedule = useSettingsStore(s => s.backupSchedules?.[accountId]);
+  const billingProfile = useSettingsStore(s => s.billingProfile);
+  // No premium, no automatic runs — so no schedule health to report.
+  if (!hasPremiumAccess(billingProfile)) return null;
   if (!schedule?.enabled && !backupGlobalEnabled) return null;
 
   const isFailed = backupState?.lastStatus === 'failed';

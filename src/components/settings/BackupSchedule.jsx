@@ -61,10 +61,16 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
               Backups run automatically when the app is idle
             </p>
           </div>
-          <ToggleSwitch active={backupGlobalEnabled} onClick={() => setBackupGlobalEnabled(!backupGlobalEnabled)} />
+          {/* Free: the switch reads off because nothing runs — the per-account
+              cards below carry the upsell. */}
+          <ToggleSwitch
+            active={isPaidUser && backupGlobalEnabled}
+            onClick={isPaidUser ? () => setBackupGlobalEnabled(!backupGlobalEnabled) : undefined}
+            disabled={!isPaidUser}
+          />
         </div>
 
-        {backupGlobalEnabled && (
+        {isPaidUser && backupGlobalEnabled && (
           <div className="space-y-3 pt-3 border-t border-mail-border">
             <div className="bg-mail-bg rounded-lg p-3">
               <p className="text-xs text-mail-text-muted">
@@ -87,7 +93,7 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
         )}
 
         {/* Back up all now button + live progress */}
-        <div className={`${backupGlobalEnabled ? 'pt-3 border-t border-mail-border mt-3' : 'pt-3'} space-y-2`}>
+        <div className={`${isPaidUser && backupGlobalEnabled ? 'pt-3 border-t border-mail-border mt-3' : 'pt-3'} space-y-2`}>
           {activeBackup && activeBackup.active && (
             <div className="bg-mail-bg rounded-lg p-3 space-y-2">
               <div className="flex items-center gap-2">

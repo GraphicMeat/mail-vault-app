@@ -28,6 +28,12 @@ if (import.meta.env.VITE_E2E === '1') {
   import('./stores/searchStore').then(({ useSearchStore }) => {
     window.__SEARCH_STORE__ = useSearchStore;
   });
+  // The scheduler itself, because "automatic backups are premium" is invisible
+  // from the DOM: a stored schedule looks identical whether or not the checker
+  // will ever act on it. The queue after a checkAndQueueDue() IS the assertion.
+  import('./services/backupScheduler').then(({ backupScheduler }) => {
+    window.__BACKUP_SCHEDULER__ = backupScheduler;
+  });
   // Below the stores: the two-process seam. `maildir_exists` and
   // `maildir_storage_stats` used to be answered by the daemon in a shape the
   // app read as a bare bool / camelCase struct, and a wrong shape looks exactly
