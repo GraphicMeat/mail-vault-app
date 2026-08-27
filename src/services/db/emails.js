@@ -5,6 +5,7 @@ import { send as transportSend } from '../transport.js';
 import { initDB, initBasic, accountDir } from './accounts.js';
 import { mailboxPathFromVaultDir } from '../../stores/slices/unifiedHelpers.js';
 import { normalizeMessageId } from '../../utils/emailParser.js';
+import { custodySource } from '../../stores/slices/custody.js';
 
 // Transport-aware invoke: tries daemon socket first, falls back to Tauri invoke
 const invoke = (cmd, args) => transportSend(cmd, args);
@@ -204,14 +205,19 @@ export async function getLocalEmails(accountId, mailbox) {
         });
       }
     }
-    // NOT stamped with custody here on purpose. These rows become `localEmails`
-    // and the stamp belongs on them, but reading the index from this function
-    // breaks the folder switch: it runs on the hot path that activateAccount
-    // awaits, and the extra read left the list loading forever (proved on the
-    // e2e runner, 6/6 red, green the moment this line came out). The rows that
-    // carry custody today come from getArchivedEmails, which reads the index
-    // once for the whole mailbox. See the note above custodyStamper.
-    return emails;
+    // These rows become `localEmails`, so custody belongs on them: unstamped, an
+    // archived message loses `_origin` / `serverDeleted` / `serverAbsent`
+    // whenever this path builds the row instead of getArchivedEmails, and the
+    // gold band goes quiet about a message it should be shouting about.
+    //
+    // A note here used to forbid this read — "it sits on the folder-switch path
+    // activateAccount awaits, and left the list loading forever". Both halves
+    // were wrong. activateAccount never calls this function, and the e2e reds
+    // that seemed to prove it were a neighbouring session on the shared runner
+    // pkilling `mock-imap-server` by name. Measured with the line in:
+    // maildir_repair_generation 0.74ms avg / 30ms max, the other three reads
+    // under 0.3ms avg. Covered by __tests__/vaultRowCustody.test.js.
+    return emails.map(custodyStamper(await getLocalIndexMeta(accountId, mailbox)));
   } catch {
     return [];
   }
@@ -294,9 +300,8 @@ export async function getLocalIndexMeta(accountId, mailbox) {
  * which knows anything about provenance, so the stamp is what lets custody tell
  * a staged send from an archived server message.
  *
- * `getLocalEmails` builds vault rows too and deliberately does NOT stamp: it
- * sits on the folder-switch path activateAccount awaits, and adding an index
- * read there left the message list loading forever.
+ * `getLocalEmails` stamps with it too, for the same reason and off the same
+ * per-mailbox read.
  */
 export function custodyStamper(meta) {
   return (e) => {
@@ -520,6 +525,9 @@ export async function getAllLocalEmails(accountId, mailboxes = []) {
       // The directory name is sanitised and lossy — pass the SERVER path it
       // came from, so `_mailbox` on these rows is something IMAP can SELECT.
       const mailbox = mailboxPathFromVaultDir(mbEntry.name, mailboxes);
+      // One call per vault directory, and `getLocalEmails` reads that mailbox's
+      // index once for the whole batch — so custody costs one file read per
+      // MAILBOX here, never one per message.
       const emails = await getLocalEmails(accountId, mailbox);
       allEmails.push(...emails);
     }
@@ -698,6 +706,12 @@ export async function searchLocalEmails(accountId, query, filters = {}) {
   }).map(email => ({
     ...email,
     isLocal: true,
-    source: 'local'
+    // Not a constant: `describeMessageState` reads `email.source` and only
+    // falls back to `custodySource` when the field is absent, so a hardcoded
+    // 'local' outranks every proof the rows above now carry — a message the
+    // server was asked about and does not have rendered as an ordinary vault
+    // copy in search while the same message was gold in the folder list. Same
+    // derivation the list itself uses (stores/slices/messageListSlice.js).
+    source: custodySource(email)
   }));
 }
