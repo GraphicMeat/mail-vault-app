@@ -1,0 +1,128 @@
+import React, { useState } from 'react';
+import { ImageDown, FileCode2, Loader } from 'lucide-react';
+import { Dialog } from '../ui/Dialog';
+import { Button } from '../ui/Button';
+import { Z } from '../ui/layers';
+import { hasPremiumAccess, useSettingsStore } from '../../stores/settingsStore';
+import { buildExport } from '../../services/export/exportService';
+import { saveOneFile, saveFilesToDirectory } from '../../services/export/exportSaver';
+import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
+
+// The label reads "Image" over a hint, but the accessible name is just the
+// choice: "One tall image" and "Separate images" both contain the word image,
+// and a radio group where three options answer to /image/ is one nobody — a
+// screen reader user included — can pick from by name.
+function Choice({ name, value, checked, onChange, icon: Icon, label, hint }) {
+  return (
+    <label className={`flex items-start gap-2 p-3 rounded-lg border cursor-pointer transition-colors
+      ${checked ? 'border-mail-accent bg-mail-accent-tint' : 'border-mail-border hover:border-mail-accent/50'}`}>
+      <input type="radio" name={name} value={value} checked={checked} aria-label={label}
+        onChange={() => onChange(value)} className="mt-0.5" />
+      <span className="flex-1">
+        <span className="flex items-center gap-1.5 text-sm text-mail-text font-medium">
+          {Icon && <Icon size={14} />}{label}
+        </span>
+        {hint && <span className="block text-xs text-mail-text-muted mt-0.5">{hint}</span>}
+      </span>
+    </label>
+  );
+}
+
+export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgrade, onShowSamples }) {
+  const billingProfile = useSettingsStore(s => s.billingProfile);
+  const isPremium = hasPremiumAccess(billingProfile);
+
+  const [format, setFormat] = useState('image');
+  const [layout, setLayout] = useState('single');
+  const [mirror, setMirror] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState(null);
+
+  const isThread = messages.length > 1;
+  const showLayout = format === 'image' && isThread;
+
+  const run = async () => {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await buildExport({ messages, format, layout, mirror, account, mailbox });
+      if (!result.ok) {
+        setNotice(result.reason === 'premium'
+          ? 'Export is a Premium feature.'
+          : 'This message could not be exported.');
+        return;
+      }
+      if (result.files.length === 1) await saveOneFile(result.files[0], 'Export');
+      else await saveFilesToDirectory(result.files, 'Export');
+
+      if (result.partial) {
+        const n = result.failures.length;
+        setNotice(`Exported. ${n} message${n === 1 ? '' : 's'} could not be exported: `
+          + result.failures.map(f => f.subject || f.uid).join(', '));
+      } else {
+        onClose?.();
+      }
+    } catch (err) {
+      setNotice(`Export failed: ${err.message || err}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} z={Z.dialog} portal size="md"
+      title={`Export ${isThread ? `${messages.length} messages` : 'message'}`}
+      panelBg="bg-mail-surface">
+      {!isPremium ? (
+        <>
+          <p className="text-sm text-mail-text-muted">
+            Save a message or a whole thread as an image, or as a single HTML file that keeps working offline.
+            Exporting is a Premium feature.
+          </p>
+          <div className="flex flex-col gap-2">
+            <Button variant="primary" size="lg" fullWidth onClick={() => onUpgrade?.()}>Upgrade</Button>
+            <Button variant="ghost" size="sm" fullWidth onClick={() => onShowSamples?.()}>See samples</Button>
+            <PremiumFeaturesLink className="self-center mt-1" />
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            <Choice name="mv-export-format" value="image" checked={format === 'image'} onChange={setFormat}
+              icon={ImageDown} label="Image" hint="PNG, exactly as it reads" />
+            <Choice name="mv-export-format" value="html" checked={format === 'html'} onChange={setFormat}
+              icon={FileCode2} label="HTML" hint="One file, folds by date" />
+          </div>
+
+          {showLayout && (
+            <div className="grid grid-cols-2 gap-2">
+              <Choice name="mv-export-layout" value="single" checked={layout === 'single'} onChange={setLayout}
+                label="One tall image" hint="Split into pages if very long" />
+              <Choice name="mv-export-layout" value="separate" checked={layout === 'separate'} onChange={setLayout}
+                label="Separate images" hint="One file per message" />
+            </div>
+          )}
+
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input type="checkbox" checked={mirror} onChange={e => setMirror(e.target.checked)} className="mt-0.5" />
+            <span>
+              <span className="block text-sm text-mail-text">Mirror remote content</span>
+              <span className="block text-xs text-mail-text-muted">
+                Fetches images from the senders' servers so the file works offline.
+              </span>
+            </span>
+          </label>
+
+          {notice && <p className="text-xs text-mail-danger">{notice}</p>}
+
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={onClose} disabled={busy}>Cancel</Button>
+            <Button variant="primary" size="sm" onClick={run} disabled={busy}>
+              {busy ? <Loader size={14} className="animate-spin" /> : 'Export'}
+            </Button>
+          </div>
+        </>
+      )}
+    </Dialog>
+  );
+}
