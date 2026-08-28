@@ -1522,6 +1522,15 @@ fn save_attachment_to(
         .decode(&content_base64)
         .map_err(|e| format!("Failed to decode base64: {}", e))?;
 
+    // A "Save As" destination always exists, but an export written into a
+    // cache subdirectory of our own naming does not. fs::write does not create
+    // parents, so it is created here — once, for every caller — rather than in
+    // a second write command that would drift from this one.
+    if let Some(parent) = std::path::Path::new(&dest_path).parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create destination directory: {}", e))?;
+    }
+
     fs::write(&dest_path, &decoded)
         .map_err(|e| format!("Failed to write file: {}", e))?;
 
@@ -5362,6 +5371,22 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn save_attachment_to_creates_missing_parent_directories() {
+        use base64::Engine;
+        let dir = tempfile::tempdir().unwrap();
+        // Two levels that do not exist yet — what openInDefaultApp asks for
+        // the first time an export is opened on a fresh machine.
+        let dest = dir.path().join("mailvault-export").join("nested").join("shot.png");
+        let written = save_attachment_to(
+            "shot.png".into(),
+            base64::engine::general_purpose::STANDARD.encode(b"pixels"),
+            dest.to_string_lossy().to_string(),
+        )
+        .expect("write into a missing directory should succeed");
+        assert_eq!(std::fs::read(&written).unwrap(), b"pixels");
+    }
 
     // -- Fixtures --
 
