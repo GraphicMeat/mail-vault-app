@@ -26,7 +26,8 @@ vi.mock('../../../stores/mailStore', () => ({ useMailStore: { getState: () => ({
 
 const { buildExport } = await import('../exportService');
 
-const header = (uid) => ({ uid, from: `s${uid}@x.test`, date: new Date('2026-08-12T09:14:00'), subject: 'Root', messageId: `<${uid}@x>` });
+// String date, exactly as the store holds it.
+const header = (uid) => ({ uid, from: `s${uid}@x.test`, date: '2026-08-12T09:14:00', subject: 'Root', messageId: `<${uid}@x>` });
 const base = { account: 'r@x.test', mailbox: 'INBOX', mirror: false, format: 'image', layout: 'separate' };
 
 beforeEach(() => resolveMessageBody.mockReset());
@@ -55,5 +56,22 @@ describe('hydration', () => {
     expect(out.files).toHaveLength(1);
     expect(out.failures[0]).toMatchObject({ uid: 2 });
     expect(out.failures[0].error).toMatch(/mismatch/i);
+  });
+});
+
+// The loaded body carries its own `date`, as a string. Spreading it over the
+// header put that string back on top of the coercion, and every exported name
+// and header card threw "getFullYear is not a function" — against real mail
+// only, because a fixture that already has `html` never hydrates at all. That
+// is why this case supplies a body-shaped result rather than a bare html field.
+describe('the hydrated body does not overwrite the header', () => {
+  it('keeps a usable date when the loaded body brings a string one', async () => {
+    resolveMessageBody.mockResolvedValue({
+      ok: true,
+      email: { html: '<p>loaded</p>', date: '2026-08-12T09:14:00', subject: 'Root' },
+    });
+    const out = await buildExport({ ...base, messages: [header(1)] });
+    expect(out.ok).toBe(true);
+    expect(out.files[0].name).toContain('2026-08-12');
   });
 });

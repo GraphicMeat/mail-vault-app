@@ -71,3 +71,34 @@ describe('openInDefaultApp', () => {
     expect(shellOpen).toHaveBeenCalledWith('/cache/mailvault-export/shot.png');
   });
 });
+
+// The e2e seam exists because WebDriver cannot drive a native save panel. Both
+// directions are asserted: a shipped build must never read the override, and
+// an e2e build must never open the panel.
+describe('the e2e destination seam', () => {
+  it('is inert in a normal build — the panel still decides', async () => {
+    window.__MV_EXPORT_DEST__ = '/forced/path.png';
+    save.mockResolvedValue('/picked/path.png');
+    const out = await saveOneFile(file, 't');
+    expect(save).toHaveBeenCalled();
+    expect(out).toBe('/picked/path.png');
+    delete window.__MV_EXPORT_DEST__;
+  });
+
+  it('takes the injected path and opens no panel when built for e2e', async () => {
+    vi.stubEnv('VITE_E2E', '1');
+    vi.resetModules();
+    const { saveOneFile: e2eSaveOneFile } = await import('../exportSaver');
+    window.__MV_EXPORT_DEST__ = '/forced/path.png';
+
+    const out = await e2eSaveOneFile(file, 't');
+
+    expect(save).not.toHaveBeenCalled();
+    expect(out).toBe('/forced/path.png');
+    expect(invoke.mock.calls[0][1].destPath).toBe('/forced/path.png');
+
+    delete window.__MV_EXPORT_DEST__;
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+});

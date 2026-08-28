@@ -14,6 +14,13 @@ import { getEmailBodyContent } from '../../utils/emailIframeTemplate';
 // without a subscription. Everything else meets the gate below.
 export const SAMPLE = Symbol('sample');
 
+// e2e fault injection. A suite that only ever sees the happy path cannot tell
+// an absence-assertion that holds from one that was never reachable, so the
+// specs force each failure and check what the app does with it. Compiled out
+// of a shipped build.
+const E2E = Boolean(import.meta.env?.VITE_E2E);
+const forcedFailure = () => (E2E ? (globalThis.window?.__MV_FORCE_EXPORT_FAILURE__ ?? null) : null);
+
 export async function fetchAssetViaTauri(url) {
   const { invoke } = window.__TAURI__.core;
   return invoke('fetch_remote_asset', { url });
@@ -23,6 +30,11 @@ const toBase64 = (canvas) => {
   const url = canvas.toDataURL('image/png');
   return url.slice(url.indexOf(',') + 1);
 };
+
+// A stored message carries `date` as a STRING — every reader in the app says
+// `new Date(e.date)`. The naming, the header card and the thread document all
+// call Date methods on it, and subtracting two strings to sort gives NaN.
+const asDate = (value) => (value instanceof Date ? value : new Date(value));
 
 const utf8ToBase64 = (text) =>
   btoa(String.fromCharCode(...new TextEncoder().encode(text)));
@@ -48,7 +60,12 @@ async function hydrate(message) {
   if (message.html) return message;
   const result = await resolveMessageBody(message, useMailStore.getState());
   if (!result.ok) throw new Error(result.reason);
-  return { ...message, ...result.email };
+  // The body is merged UNDER the header's date, not over it. The loaded body
+  // carries its own `date`, as a string, so a plain spread put the raw string
+  // back on top of the coercion below and every name and header card threw
+  // "getFullYear is not a function" — but only against real mail, because a
+  // fixture that already holds a body never takes this path at all.
+  return { ...message, ...result.email, date: asDate(message.date) };
 }
 
 export async function buildExport({
@@ -60,15 +77,23 @@ export async function buildExport({
     if (!hasPremiumAccess(billingProfile)) return { ok: false, reason: 'premium', files: [], failures: [] };
   }
 
+  if (forcedFailure() === 'render') return { ok: false, reason: 'render', files: [], failures: [] };
+  const forceMirrorFailure = forcedFailure() === 'mirror';
+
   const stats = { mirrored: 0, failed: 0, pixelsRemoved: 0, bytes: 0 };
-  const ordered = [...messages].sort((a, b) => a.date - b.date);
+  const ordered = [...messages]
+    .map(m => (m.date instanceof Date ? m : { ...m, date: asDate(m.date) }))
+    .sort((a, b) => a.date - b.date);
   const failures = [];
   const prepared = [];
 
   for (const message of ordered) {
     try {
       const full = await hydrate(message);
-      prepared.push({ message: full, body: await prepareBody(full, mirror, fetchAsset, stats) });
+      const fetcher = forceMirrorFailure
+        ? async () => { throw new Error('forced mirror failure'); }
+        : fetchAsset;
+      prepared.push({ message: full, body: await prepareBody(full, mirror, fetcher, stats) });
     } catch (err) {
       // One body that will not load is not a failed export of the other forty.
       failures.push({ uid: message.uid, subject: message.subject, error: String(err.message || err) });

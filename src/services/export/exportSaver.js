@@ -3,6 +3,13 @@
 
 const CACHE_SUBDIR = 'mailvault-export';
 
+// WebDriver cannot drive a native macOS save panel, so under VITE_E2E the
+// destination is injected instead of picked. Inert in a shipped build: the
+// flag is compiled out, and the globals only exist while a spec sets them.
+const E2E = Boolean(import.meta.env?.VITE_E2E);
+const injectedPath = () => (E2E ? (globalThis.window?.__MV_EXPORT_DEST__ ?? null) : null);
+const injectedDir = () => (E2E ? (globalThis.window?.__MV_EXPORT_DIR__ ?? null) : null);
+
 async function writeFile(file, destPath) {
   const { invoke } = window.__TAURI__.core;
   return invoke('save_attachment_to', {
@@ -13,16 +20,22 @@ async function writeFile(file, destPath) {
 }
 
 export async function saveOneFile(file, title) {
-  const { save } = await import('@tauri-apps/plugin-dialog');
-  const destPath = await save({ defaultPath: file.name, title });
+  const forced = injectedPath();
+  const destPath = forced ?? await (async () => {
+    const { save } = await import('@tauri-apps/plugin-dialog');
+    return save({ defaultPath: file.name, title });
+  })();
   if (!destPath) return null;
   await writeFile(file, destPath);
   return destPath;
 }
 
 export async function saveFilesToDirectory(files, title) {
-  const { open } = await import('@tauri-apps/plugin-dialog');
-  const dir = await open({ directory: true, multiple: false, title });
+  const forcedDir = injectedDir();
+  const dir = forcedDir ?? await (async () => {
+    const { open } = await import('@tauri-apps/plugin-dialog');
+    return open({ directory: true, multiple: false, title });
+  })();
   if (!dir) return null;
 
   const { join } = await import('@tauri-apps/api/path');

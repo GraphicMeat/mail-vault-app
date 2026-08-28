@@ -125,3 +125,70 @@ describe('partial results', () => {
     expect(out.files).toHaveLength(0);
   });
 });
+
+// The forced-failure hook is what makes the e2e absence-assertions non-vacuous.
+// It must not fire in a shipped build, and it must not outrank the gate — a
+// free user is refused for being free, whatever the fault flag says.
+describe('the e2e fault seam', () => {
+  it('is inert in a normal build', async () => {
+    globalThis.window.__MV_FORCE_EXPORT_FAILURE__ = 'render';
+    const out = await buildExport({ messages: [thread[0]], format: 'image', layout: 'single', ...base });
+    expect(out.ok).toBe(true);
+    delete globalThis.window.__MV_FORCE_EXPORT_FAILURE__;
+  });
+
+  it('fails the render when built for e2e, and still refuses a free user first', async () => {
+    vi.stubEnv('VITE_E2E', '1');
+    vi.resetModules();
+    const { buildExport: e2eBuildExport } = await import('../exportService');
+    globalThis.window.__MV_FORCE_EXPORT_FAILURE__ = 'render';
+
+    const forced = await e2eBuildExport({ messages: [thread[0]], format: 'image', layout: 'single', ...base });
+    expect(forced).toMatchObject({ ok: false, reason: 'render' });
+
+    hasPremiumAccess.mockReturnValue(false);
+    const free = await e2eBuildExport({ messages: [thread[0]], format: 'image', layout: 'single', ...base });
+    expect(free.reason).toBe('premium');
+
+    delete globalThis.window.__MV_FORCE_EXPORT_FAILURE__;
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+});
+
+// Every fixture above builds a real Date, which is not what the app stores: a
+// message from the store carries `date` as a string, and the whole UI says
+// `new Date(e.date)` at each read. The export called Date methods on it
+// directly and threw "getFullYear is not a function" the first time it ran
+// against real mail — green unit tests and all.
+describe('a message straight from the store', () => {
+  const stored = (n, iso) => ({ ...message(n, iso), date: iso });
+
+  it('exports when date is a string, not a Date', async () => {
+    const out = await buildExport({
+      messages: [stored(1, '2026-08-12T09:14:00')], format: 'image', layout: 'single', ...base,
+    });
+    expect(out.ok).toBe(true);
+    expect(out.files[0].name).toContain('2026-08-12');
+  });
+
+  it('orders a thread by date even when the dates are strings', async () => {
+    const out = await buildExport({
+      messages: [stored(2, '2026-08-20T11:30:00'), stored(1, '2026-08-12T09:14:00')],
+      format: 'image', layout: 'separate', ...base,
+    });
+    expect(out.files.map(f => f.name)).toEqual([
+      expect.stringMatching(/^01 - 2026-08-12 /),
+      expect.stringMatching(/^02 - 2026-08-20 /),
+    ]);
+  });
+
+  it('builds the HTML thread document from string dates', async () => {
+    const out = await buildExport({
+      messages: [stored(1, '2026-08-12T09:14:00'), stored(2, '2026-08-20T11:30:00')],
+      format: 'html', layout: 'single', ...base,
+    });
+    expect(out.ok).toBe(true);
+    expect(atob(out.files[0].base64)).toContain('2026');
+  });
+});

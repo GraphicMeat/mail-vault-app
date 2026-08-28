@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ImageDown, FileCode2, Loader } from 'lucide-react';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
@@ -37,6 +37,17 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
   const [mirror, setMirror] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
+
+  // The dialog is mounted once in App and only toggles `open`, so its state
+  // outlives a close. Format, layout and mirror staying put is the useful half
+  // — someone who exports HTML once usually means it again. The notice is the
+  // other half: without this, the error from a failed export is still sitting
+  // there when the next one opens, describing something that never happened.
+  useEffect(() => {
+    if (!open) return;
+    setNotice(null);
+    setBusy(false);
+  }, [open]);
 
   const isThread = messages.length > 1;
   const showLayout = format === 'image' && isThread;

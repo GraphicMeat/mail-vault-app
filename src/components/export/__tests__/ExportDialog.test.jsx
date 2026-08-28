@@ -119,3 +119,20 @@ describe('ExportDialog', () => {
     expect(saveOneFile).not.toHaveBeenCalled();
   });
 });
+
+// One dialog instance serves all four entry points, so its state survives a
+// close. Anything that describes the LAST export must not greet the next one.
+describe('reopening the dialog', () => {
+  it('does not show the previous failure', async () => {
+    buildExport.mockResolvedValue({ ok: false, reason: 'render', files: [], failures: [] });
+    const { rerender } = render(<ExportDialog {...props} messages={messages} />);
+    fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
+    await screen.findByText(/could not be exported/i);
+
+    rerender(<ExportDialog {...props} open={false} messages={messages} />);
+    rerender(<ExportDialog {...props} open messages={messages} />);
+
+    expect(screen.queryByText(/could not be exported/i)).toBeNull();
+    expect(screen.getByRole('button', { name: /^export$/i })).toBeTruthy();
+  });
+});
