@@ -528,17 +528,46 @@ function _syncUnreadBadge(useMailStore, accountId, mailbox) {
   useSettingsStore.getState().setUnreadForAccount(accountId, unread);
 }
 
+// The vault half of a read-state change.
+//
+// `localEmails` holds the rows the list gets from the vault; a row that is only
+// in the vault is in NO other array, so a mutation that maps `emails` alone
+// leaves it untouched — the change never reaches the screen. Identity matters
+// too: the array is replaced only when a row actually changed, because
+// updateSortedEmails memoises on it.
+function _mapLocalSeen(localEmails, matches, read) {
+  if (!localEmails?.length || !localEmails.some(matches)) return localEmails;
+  return localEmails.map(e => matches(e) ? { ...e, flags: _withSeen(e.flags, read) } : e);
+}
+
+// local-index.json is where a vault row's flags are read back from on the next
+// load, so without this the row reverts to unread on the next folder switch.
+// `local_index_append` upserts by uid: re-append the entry with new flags.
+// Silent on a message the vault does not hold — that is the ordinary case.
+async function _persistVaultSeen(useMailStore, accountId, mailbox, uid, read) {
+  try {
+    if (!useMailStore.getState().archivedEmailIds?.has(uid)) return;
+    const entry = await db.getLocalIndexEntry(accountId, mailbox, uid);
+    if (!entry) return;
+    await api.appendLocalIndex(accountId, mailbox, [{ ...entry, flags: _withSeen(entry.flags, read) }]);
+  } catch (e) {
+    console.warn('[applySeenLocally] Failed to persist vault read state for uid', uid, e);
+  }
+}
+
 // Land one message's \Seen change on every surface that renders read state:
 // the list row, the open viewer copy, the cached body, the derived lists and
 // the sidebar badge. The body cache is the easy one to miss — it freezes the
 // flags the message had when it was fetched, so skipping it makes the next
 // open of that message show the stale state and offer the wrong next action.
 export function applySeenLocally(useMailStore, { accountId, mailbox, uid, read, isUnified = false }) {
+  const matches = (e) => (isUnified ? (e._accountId === accountId && e.uid === uid) : (e.uid === uid));
   useMailStore.setState(state => ({
-    emails: state.emails.map(e => {
-      const match = isUnified ? (e._accountId === accountId && e.uid === uid) : (e.uid === uid);
-      return match ? { ...e, flags: _withSeen(e.flags, read) } : e;
-    }),
+    emails: state.emails.map(e => matches(e) ? { ...e, flags: _withSeen(e.flags, read) } : e),
+    // A vault-only row lives in `localEmails` and never in `emails` — see
+    // deriveDisplayRows, which pushes it into the list from there. Mapping
+    // only `emails` is why marking one read did nothing at all on screen.
+    localEmails: _mapLocalSeen(state.localEmails, matches, read),
     selectedEmail: state.selectedEmail?.uid === uid
       ? { ...state.selectedEmail, flags: _withSeen(state.selectedEmail.flags, read) }
       : state.selectedEmail,
@@ -549,6 +578,7 @@ export function applySeenLocally(useMailStore, { accountId, mailbox, uid, read, 
 
   _refreshAfterFlagChange(useMailStore);
   _syncUnreadBadge(useMailStore, accountId, mailbox);
+  _persistVaultSeen(useMailStore, accountId, mailbox, uid, read);
 }
 
 
@@ -620,9 +650,12 @@ async function _markSelected(read) {
   const keySet = new Set(keys);
   const selKeyOf = (e) => (isUnified ? _selKey(e) : e.uid);
 
+  const matches = (e) => keySet.has(selKeyOf(e));
   useMailStore.setState(s => ({
-    emails: s.emails.map(e => keySet.has(selKeyOf(e)) ? { ...e, flags: _withSeen(e.flags, read) } : e),
-    selectedEmail: s.selectedEmail && keySet.has(selKeyOf(s.selectedEmail))
+    emails: s.emails.map(e => matches(e) ? { ...e, flags: _withSeen(e.flags, read) } : e),
+    // Vault-only rows are reached through `localEmails`, not `emails`.
+    localEmails: _mapLocalSeen(s.localEmails, matches, read),
+    selectedEmail: s.selectedEmail && matches(s.selectedEmail)
       ? { ...s.selectedEmail, flags: _withSeen(s.selectedEmail.flags, read) }
       : s.selectedEmail,
     selectedEmailIds: new Set(),
@@ -650,6 +683,10 @@ async function _markSelected(read) {
       const rawMailbox = ctx?.mailbox || state.activeMailbox;
       const mailbox = rawMailbox === 'UNIFIED' ? 'INBOX' : rawMailbox;
       let account = ctx?.account || accounts.find(a => a.id === accountId);
+      // The vault copy is written whatever the server says: a vault-only
+      // message has no server copy to fail against, and the row on screen has
+      // already changed.
+      _persistVaultSeen(useMailStore, accountId, mailbox, realUid, read);
       account = await ensureFreshToken(account);
       await _setSeenOnServer(account, accountId, mailbox, realUid, read);
     } catch (e) {
