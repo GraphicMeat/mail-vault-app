@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email Tracker Blocking — Strip Tracking Pixels Before They Load | MailVault</title>
+  <meta name="description" content="MailVault detects the tracking pixels hidden in marketing email and strips them out of the HTML before the message renders. See before and after, the tracking code itself, and what a single 1×1 pixel tells the sender.">
+  <meta name="robots" content="index, follow">
+  <meta name="keywords" content="email tracking pixel, block email trackers, spy pixel, read receipt blocker, email privacy, tracking pixel blocker mac, stop email tracking, mailchimp tracking pixel, sendgrid open tracking">
+  <link rel="canonical" href="https://mailvaultapp.com/features/email-tracker-blocking.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/features/email-tracker-blocking.html">
+  <meta property="og:title" content="Email Tracker Blocking — Strip Tracking Pixels Before They Load">
+  <meta property="og:description" content="Marketing email hides a 1×1 image that reports back the moment you open it. MailVault removes it from the HTML before the message is rendered.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Email Tracker Blocking — Strip Tracking Pixels Before They Load">
+  <meta name="twitter:description" content="Marketing email hides a 1×1 image that reports back the moment you open it. MailVault removes it from the HTML before the message is rendered.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    @keyframes mv-ping { 0% { opacity: 1; transform: scale(1); } 75%, 100% { opacity: 0; transform: scale(2.2); } }
+    .mv-ping { animation: mv-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite; }
+    @media (prefers-reduced-motion: reduce) { .mv-ping { animation: none; } }
+  </style>
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "Email Tracker Blocking — Strip Tracking Pixels Before They Load",
+    "description": "MailVault detects tracking pixels hidden in email and strips them from the HTML before the message renders. Detection is free; blocking is part of MailVault Premium.",
+    "url": "https://mailvaultapp.com/features/email-tracker-blocking.html",
+    "author": { "@type": "Organization", "name": "MailVault" },
+    "publisher": {
+      "@type": "Organization",
+      "name": "MailVault",
+      "logo": { "@type": "ImageObject", "url": "https://mailvaultapp.com/icon-128.png" }
+    },
+    "datePublished": "2026-08-28",
+    "dateModified": "2026-08-28",
+    "image": "https://mailvaultapp.com/og-image.png"
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What is an email tracking pixel?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "A tracking pixel is a tiny image, usually 1×1 and invisible, embedded in an HTML email. Your mail client requests it from the sender's server the moment the message renders, which tells the sender that you opened the email, when, how many times, your IP address and your mail client."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How does MailVault block tracking pixels?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "MailVault parses the email body before it is rendered and removes the beacon elements from the HTML. Nothing is requested, so there is no connection for the sender to log. Detection and removal run entirely on your device — no part of an email is sent anywhere."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I see which company was tracking me?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Every message with a tracker gets a glyph next to its subject. Clicking it names the tracking vendor, the request URL and why it was flagged. That detection is free for every MailVault user; removing the beacon is part of Premium."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is tracker blocking free in MailVault?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Detection is free forever — you always get to see that a message tracked you and which vendor sent the beacon. Stripping the beacon out before it loads is part of MailVault Premium, $4/month or $25/year, with a 14-day free trial on the yearly plan."
+        }
+      }
+    ]
+  }
+  </script>
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault logo" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Features</a>
+          <a href="/pricing.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Pricing</a>
+          <a href="/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="Toggle theme">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Download
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Features</a>
+          <a href="/pricing.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Pricing</a>
+          <a href="/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-28 pb-16">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <!-- Hero -->
+      <header class="mb-12">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 mb-5">
+          Premium feature
+        </div>
+        <h1 class="text-4xl sm:text-5xl font-extrabold leading-tight mb-5">
+          The pixel that reports back when you open an email
+        </h1>
+        <p class="text-lg text-slate-600 dark:text-slate-400 mb-6">
+          Most marketing mail carries a hidden 1×1 image. Your mail client requests it the instant the
+          message renders, and that request tells the sender you read it — when, how often, and from
+          roughly where. MailVault finds those beacons and takes them out of the HTML
+          <strong>before</strong> the message is rendered, so the request never happens.
+        </p>
+        <div class="flex flex-wrap gap-3">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="inline-flex lamp-bg text-white px-6 py-3 rounded-lg font-medium hover:opacity-90 transition-opacity">Download MailVault</a>
+          <a href="/pricing.html" class="inline-flex px-6 py-3 rounded-lg font-medium border border-slate-300 dark:border-slate-700 hover:border-primary-500 transition-colors">See pricing</a>
+        </div>
+      </header>
+
+      <!-- Before / after -->
+      <section class="mb-14" aria-labelledby="before-after">
+        <h2 id="before-after" class="text-2xl sm:text-3xl font-bold mb-2">Before and after</h2>
+        <p class="text-slate-600 dark:text-slate-400 mb-6">
+          The same newsletter, rendered twice. On the left the beacon loads and the sender is told.
+          On the right MailVault has already removed it — nothing else about the message changes.
+        </p>
+
+        <div class="grid sm:grid-cols-2 gap-4">
+          <!-- BEFORE -->
+          <figure class="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-800">
+            <figcaption class="px-4 py-2 text-xs font-semibold flex items-center gap-2 bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+              Before — the beacon fires
+            </figcaption>
+            <div class="p-4 bg-white">
+              <div class="text-sm font-semibold text-slate-900">Your weekly digest</div>
+              <div class="text-xs text-slate-500 mb-3">news@mailer.example.com</div>
+              <p class="text-sm text-slate-700 m-0 mb-3">Hi there — here is what you missed this week.</p>
+              <div class="h-8 rounded bg-slate-100 mb-3"></div>
+              <div class="flex items-center gap-2 text-xs text-red-600">
+                <span class="relative inline-flex w-2 h-2">
+                  <span class="mv-ping absolute inline-flex w-2 h-2 rounded-full bg-red-400"></span>
+                  <span class="relative inline-flex w-2 h-2 rounded-full bg-red-500"></span>
+                </span>
+                1×1 pixel loading from mailer.example.com
+              </div>
+            </div>
+            <div class="px-4 py-3 text-xs bg-slate-50 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700">
+              <strong class="text-slate-800 dark:text-slate-200">The sender's dashboard now says:</strong>
+              opened 14:32, Vilnius, Apple Mail on macOS, 3rd open today.
+            </div>
+          </figure>
+
+          <!-- AFTER -->
+          <figure class="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-800">
+            <figcaption class="px-4 py-2 text-xs font-semibold flex items-center gap-2 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
+              After — the beacon is gone
+            </figcaption>
+            <div class="p-4 bg-white">
+              <div class="text-sm font-semibold text-slate-900">Your weekly digest</div>
+              <div class="text-xs text-slate-500 mb-3">news@mailer.example.com</div>
+              <p class="text-sm text-slate-700 m-0 mb-3">Hi there — here is what you missed this week.</p>
+              <div class="h-8 rounded bg-slate-100 mb-3"></div>
+              <div class="flex items-center gap-2 text-xs text-emerald-700">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                1 tracking pixel removed before render
+              </div>
+            </div>
+            <div class="px-4 py-3 text-xs bg-slate-50 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700">
+              <strong class="text-slate-800 dark:text-slate-200">The sender's dashboard now says:</strong>
+              nothing. No request was ever made.
+            </div>
+          </figure>
+        </div>
+      </section>
+
+      <!-- The code -->
+      <section class="mb-14" aria-labelledby="the-code">
+        <h2 id="the-code" class="text-2xl sm:text-3xl font-bold mb-2">What the tracking code looks like</h2>
+        <p class="text-slate-600 dark:text-slate-400 mb-6">
+          This is a real shape of beacon, lifted from a marketing template. It is one line, it is
+          invisible, and it is at the bottom of a message you were happy to receive.
+        </p>
+
+        <div class="space-y-4">
+          <div>
+            <div class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">In the email you received</div>
+            <pre class="p-4 rounded-xl bg-slate-900 text-slate-100 text-xs sm:text-sm overflow-x-auto"><code>&lt;img src="https://mailer.example.com/o/open.php?u=8f21c0&amp;id=a91f&amp;e=you%40yourdomain.com"
+     width="1" height="1" border="0"
+     style="display:none;height:1px;width:1px" alt=""&gt;</code></pre>
+          </div>
+          <div>
+            <div class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">After MailVault clears it</div>
+            <pre class="p-4 rounded-xl bg-slate-900 text-slate-100 text-xs sm:text-sm overflow-x-auto"><code>&lt;span data-mv-tracker-blocked="Mailchimp" hidden&gt;&lt;/span&gt;</code></pre>
+          </div>
+        </div>
+
+        <p class="text-sm text-slate-600 dark:text-slate-400 mt-4">
+          Note the <code class="px-1 rounded bg-slate-200 dark:bg-slate-800">e=</code> parameter: your
+          address, in the URL. That is how an open is tied to <em>you</em> and not just to "someone".
+        </p>
+      </section>
+
+      <!-- What it leaks -->
+      <section class="mb-14" aria-labelledby="what-it-leaks">
+        <h2 id="what-it-leaks" class="text-2xl sm:text-3xl font-bold mb-6">What that one pixel tells the sender</h2>
+        <ul class="grid sm:grid-cols-2 gap-4">
+          <li class="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <strong class="block mb-1">That you opened it</strong>
+            <span class="text-sm text-slate-600 dark:text-slate-400">And every time you re-open it after that.</span>
+          </li>
+          <li class="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <strong class="block mb-1">When, to the minute</strong>
+            <span class="text-sm text-slate-600 dark:text-slate-400">Which also gives away your working hours and time zone.</span>
+          </li>
+          <li class="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <strong class="block mb-1">Your IP address</strong>
+            <span class="text-sm text-slate-600 dark:text-slate-400">So, roughly, where you were when you read it.</span>
+          </li>
+          <li class="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <strong class="block mb-1">Your device and mail client</strong>
+            <span class="text-sm text-slate-600 dark:text-slate-400">From the user agent attached to the request.</span>
+          </li>
+        </ul>
+      </section>
+
+      <!-- Free vs premium -->
+      <section class="mb-14" aria-labelledby="free-premium">
+        <h2 id="free-premium" class="text-2xl sm:text-3xl font-bold mb-2">Seeing it is free. Stopping it is Premium.</h2>
+        <p class="text-slate-600 dark:text-slate-400 mb-6">
+          Every MailVault user gets the warning: a glyph beside the subject, next to the phishing and
+          domain-mismatch icons, that names the tracking company when you click it. Removing the
+          beacon before it loads is part of Premium.
+        </p>
+
+        <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-100 dark:bg-slate-800">
+              <tr>
+                <th scope="col" class="text-left font-semibold px-4 py-3">&nbsp;</th>
+                <th scope="col" class="text-left font-semibold px-4 py-3">Free</th>
+                <th scope="col" class="text-left font-semibold px-4 py-3">Premium</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200 dark:divide-slate-700 bg-white dark:bg-slate-900/40">
+              <tr>
+                <td class="px-4 py-3 text-slate-700 dark:text-slate-300">Tracker detection on every message</td>
+                <td class="px-4 py-3 text-emerald-600 dark:text-emerald-400">Yes</td>
+                <td class="px-4 py-3 text-emerald-600 dark:text-emerald-400">Yes</td>
+              </tr>
+              <tr>
+                <td class="px-4 py-3 text-slate-700 dark:text-slate-300">See which company is tracking you</td>
+                <td class="px-4 py-3 text-emerald-600 dark:text-emerald-400">Yes</td>
+                <td class="px-4 py-3 text-emerald-600 dark:text-emerald-400">Yes</td>
+              </tr>
+              <tr>
+                <td class="px-4 py-3 text-slate-700 dark:text-slate-300">Beacon stripped before the message renders</td>
+                <td class="px-4 py-3 text-slate-500 dark:text-slate-400">—</td>
+                <td class="px-4 py-3 text-emerald-600 dark:text-emerald-400">Yes</td>
+              </tr>
+              <tr>
+                <td class="px-4 py-3 text-slate-700 dark:text-slate-300">Applies in the reading pane, threads, chat view and pop-out windows</td>
+                <td class="px-4 py-3 text-slate-500 dark:text-slate-400">—</td>
+                <td class="px-4 py-3 text-emerald-600 dark:text-emerald-400">Yes</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="mt-6 p-6 rounded-xl border border-primary-500/30 bg-primary-500/5">
+          <h3 class="text-lg font-semibold mb-1">Turn it on in MailVault Premium</h3>
+          <p class="text-sm text-slate-600 dark:text-slate-400 mb-4">
+            <span data-mv-price="{monthly}/month or {yearly}/year">$4/month or $25/year</span>, with a
+            14-day free trial on the yearly plan. Premium also covers scheduled backups, cross-account
+            migration, Email Cleanup and Time Capsule.
+          </p>
+          <div class="flex flex-wrap gap-3">
+            <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="inline-flex lamp-bg text-white px-5 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">Download &amp; start trial</a>
+            <a href="/pricing.html" class="inline-flex px-5 py-2.5 rounded-lg font-medium border border-slate-300 dark:border-slate-700 hover:border-primary-500 transition-colors">Compare plans</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- How it works -->
+      <section class="mb-14" aria-labelledby="how-it-works">
+        <h2 id="how-it-works" class="text-2xl sm:text-3xl font-bold mb-6">How MailVault finds them</h2>
+        <div class="space-y-4 text-slate-700 dark:text-slate-300">
+          <p>
+            <strong>Known endpoints.</strong> MailVault ships a bundled list of nearly 500
+            open-tracking URL patterns — Mailchimp, SendGrid, HubSpot, Mailgun, Klaviyo, Marketo,
+            Salesloft, Superhuman, Mailtrack, Yesware and hundreds more. It merges the block list
+            from
+            <a href="https://github.com/apparition47/MailTrackerBlocker" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">MailTrackerBlocker</a>
+            (the macOS Mail spy-pixel plugin, itself seeded from HEY's and Simplify Gmail's lists)
+            with the public
+            <a href="https://github.com/OneClickLab/ugly-email-trackers" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">Ugly Email list</a>,
+            and adds the senders both of them predate.
+          </p>
+          <p>
+            <strong>Why not Brave's or Mozilla's list?</strong> Those are web tracker lists — the
+            script and beacon hosts a browser blocks on a page. Email open-tracking runs through
+            different endpoints entirely, so the email-specific lists above are the ones that
+            actually catch what arrives in your inbox.
+          </p>
+          <p>
+            <strong>Shape.</strong> A beacon that is not on the list still gives itself away: an image
+            declared 1×1, or hidden with <code class="px-1 rounded bg-slate-200 dark:bg-slate-800">display:none</code>,
+            or sitting inside a collapsed container. Images you can actually see are left alone.
+          </p>
+          <p>
+            <strong>Request path.</strong> Paths that only ever serve beacons —
+            <code class="px-1 rounded bg-slate-200 dark:bg-slate-800">/open</code>,
+            <code class="px-1 rounded bg-slate-200 dark:bg-slate-800">/pixel</code>,
+            <code class="px-1 rounded bg-slate-200 dark:bg-slate-800">/wf/open</code> — are flagged even
+            from a host nobody has catalogued yet.
+          </p>
+          <p>
+            <strong>All of it locally.</strong> The blocklist is bundled with the app and updated in
+            releases. MailVault never fetches a list at runtime and never uploads any part of your
+            mail: an app that phoned a server to ask which pixels to block would have replaced one
+            tracker with another.
+          </p>
+        </div>
+      </section>
+
+      <!-- FAQ -->
+      <section class="mb-14" aria-labelledby="faq">
+        <h2 id="faq" class="text-2xl sm:text-3xl font-bold mb-6">Questions</h2>
+        <div class="space-y-5">
+          <div>
+            <h3 class="font-semibold mb-1">Does blocking break the email?</h3>
+            <p class="text-slate-600 dark:text-slate-400 text-sm">
+              No. A tracking pixel is invisible by design — removing it changes nothing you could see.
+              Real images, logos and photos are untouched.
+            </p>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-1">What about tracked links?</h3>
+            <p class="text-slate-600 dark:text-slate-400 text-sm">
+              MailVault's free link-safety scanner already flags links that redirect through a tracking
+              domain, and warns before you open one. Tracker blocking handles the beacons that fire
+              without any click at all.
+            </p>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-1">Can I still see what was blocked?</h3>
+            <p class="text-slate-600 dark:text-slate-400 text-sm">
+              Yes — the glyph changes to a crossed-out eye and lists every beacon that was removed,
+              with its vendor and URL. The Tracker Blocking screen in Settings also keeps a running
+              count of what has been found in your mail.
+            </p>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-1">Does this work on Linux as well as macOS?</h3>
+            <p class="text-slate-600 dark:text-slate-400 text-sm">
+              Yes. It is part of the message renderer, so it behaves identically on both platforms.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <p class="text-sm text-slate-500 dark:text-slate-400">
+        See <a href="/features.html" class="text-primary-500 hover:text-primary-600 underline">all features</a>,
+        the <a href="/pricing.html" class="text-primary-500 hover:text-primary-600 underline">pricing</a>, or
+        read the <a href="/faq.html" class="text-primary-500 hover:text-primary-600 underline">FAQ</a>.
+      </p>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault logo" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/docs.html" class="hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacy</a>
+          <a href="/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Terms</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. All rights reserved.
+        </p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+  <script defer src="/pricing-localize.js?v=1"></script>
+
+</body>
+</html>

@@ -314,6 +314,21 @@ export const createMessageListSlice = (set, get) => ({
       }
     }
 
+    // Same treatment for tracker verdicts: the scan needs the body, which only
+    // exists once a message has been opened, so the row reads the persisted
+    // summary rather than re-deriving anything.
+    const { trackerAlerts } = useSettingsStore.getState();
+    if (trackerAlerts && Object.keys(trackerAlerts).length > 0) {
+      const state = get();
+      for (const e of result) {
+        if (e._trackerInfo) continue;
+        const key = emailScopeKey(e, state);
+        if (!key) continue;
+        const info = trackerAlerts[key];
+        if (info) e._trackerInfo = info;
+      }
+    }
+
     // Detect sender impersonation + reply-to domain mismatch
     if (linkSafetyEnabled) {
       for (const e of result) {

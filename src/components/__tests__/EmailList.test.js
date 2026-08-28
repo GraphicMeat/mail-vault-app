@@ -163,12 +163,18 @@ vi.mock('../../stores/settingsStore', () => {
     setEmailListGrouping: vi.fn(),
     layoutMode: 'three-column',
     accountColors: {},
+    // Rows subscribe to this to decide whether the tracker glyph reads
+    // "blocked" or "tracks you"; without a profile it is simply off.
+    trackerBlockingEnabled: true,
+    billingProfile: null,
   };
   return {
     useSettingsStore: vi.fn((selector) => selector(state)),
     getAccountColor: () => '#888',
     getAccountInitial: () => 'T',
     hashColor: () => '#888',
+    hasPremiumAccess: () => false,
+    isTrackerBlockingActive: () => false,
   };
 });
 

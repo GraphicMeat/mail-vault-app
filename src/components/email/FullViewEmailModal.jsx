@@ -3,15 +3,16 @@ import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { useAccountStore } from '../../stores/accountStore';
 import { useMailStore } from '../../stores/mailStore';
-import { resolveEmailLocation } from '../../stores/slices/unifiedHelpers';
+import { resolveEmailLocation, emailScopeKey } from '../../stores/slices/unifiedHelpers';
 import { useSelectionStore } from '../../stores/selectionStore';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { useSettingsStore, isTrackerBlockingActive } from '../../stores/settingsStore';
 import { motion } from 'framer-motion';
 import { formatDateTime } from '../../utils/dateFormat';
 import { X, Loader } from 'lucide-react';
 import { AttachmentItem } from '../EmailViewer';
 import { getRealAttachments, replaceCidUrls } from '../../services/attachmentUtils';
 import { checkLinkAlert } from '../../utils/linkSafety';
+import { scanTrackers } from '../../utils/trackerDetect';
 import { LinkSafetyModal } from '../LinkSafetyModal';
 import { openMailtoCompose, addressesToHtml } from '../../utils/mailto';
 
@@ -26,6 +27,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
   const [fetchedEmail, setFetchedEmail] = useState(null);
   const [linkSafetyAlert, setLinkSafetyAlert] = useState(null);
   const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
+  const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
   const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
 
   // Fetch full email content if not already available
@@ -71,6 +73,12 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
       // handler already knows what to do with.
       addressesToHtml(email.text || email.textBody || '(No content)')
     }</pre>`;
+
+    // Full-view is a fourth renderer of the same body; blocking holds here too.
+    const cidResolved = replaceCidUrls(htmlBody, email.attachments);
+    const bodyForFrame = trackerBlocking
+      ? scanTrackers(cidResolved, emailScopeKey(email, useMailStore.getState())).cleanedBodyHtml
+      : cidResolved;
 
     return `
       <!DOCTYPE html>
@@ -120,10 +128,10 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
             }
           </style>
         </head>
-        <body>${replaceCidUrls(htmlBody, email.attachments)}</body>
+        <body>${bodyForFrame}</body>
       </html>
     `;
-  }, [email]);
+  }, [email, trackerBlocking]);
 
   // Handle escape key to close
   useEffect(() => {

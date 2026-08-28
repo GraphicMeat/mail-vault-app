@@ -260,6 +260,17 @@ function App() {
   const [settingsInitialTab, setSettingsInitialTab] = useState(null);
   const [settingsInitialAccountId, setSettingsInitialAccountId] = useState(null);
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
+  // A leaf asked for a Settings tab (the tracker glyph's upsell, from a row or
+  // the reading pane). Consume the request so the same tab can be asked for
+  // again after the dialog closes.
+  const settingsRequest = useMailStore(s => s.settingsRequest);
+  useEffect(() => {
+    if (!settingsRequest) return;
+    if (settingsRequest.tab) setSettingsInitialTab(settingsRequest.tab);
+    setShowSettings(true);
+    useMailStore.getState().clearSettingsRequest();
+  }, [settingsRequest]);
+
   const [showBugModal, setShowBugModal] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [pendingOperation, setPendingOperation] = useState(null);

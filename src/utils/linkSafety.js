@@ -32,7 +32,7 @@ const MAX_CACHE = 500;
  * Hashing keeps the entry small instead of parking a second copy of every body
  * in memory.
  */
-function bodyStamp(html) {
+export function bodyStamp(html) {
   let h = 0x811c9dc5;
   for (let i = 0; i < html.length; i++) {
     h = Math.imul(h ^ html.charCodeAt(i), 0x01000193);

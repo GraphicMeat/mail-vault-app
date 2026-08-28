@@ -127,6 +127,14 @@
       },
       {
         "@type": "Question",
+        "name": "Can MailVault block email tracking pixels?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Every message MailVault opens is checked for tracking pixels — the hidden 1x1 images marketing mail uses to report back when you open it, how often, from which IP address and on which client. A small eye appears beside the subject on any message that carries one, and clicking it names the tracking company and shows the exact URL the pixel would have called. Detection is free for everyone. MailVault Premium also strips those beacons out of the HTML before the message is rendered, so the request is never made and the sender is told nothing. Nearly 500 known tracking endpoints ship with the app; the list is bundled and updated in releases, never fetched from a server at runtime."
+        }
+      },
+      {
+        "@type": "Question",
         "name": "Is my data secure?",
         "acceptedAnswer": {
           "@type": "Answer",
@@ -441,6 +449,20 @@
           <div class="faq-answer">
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               MailVault is designed with privacy first. Your email credentials are stored in the macOS Keychain or the Linux Secret Service, never in a plain file. All data stays on your machine — there is no cloud sync, no tracking, no analytics, and no data mining. The app is open source so you can verify the code yourself.
+            </p>
+          </div>
+        </div>
+
+        <div id="block-email-trackers" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">Can MailVault block email tracking pixels?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              Yes. Every message MailVault opens is checked for tracking pixels — the hidden 1x1 images marketing mail uses to report back when you open it, how often, from which IP address and on which client. A small eye appears beside the subject on any message that carries one, and clicking it names the tracking company and shows the exact URL the pixel would have called. Detection is free for everyone. MailVault Premium also strips those beacons out of the HTML before the message is rendered, so the request is never made and the sender is told nothing. Nearly 500 known tracking endpoints ship with the app; the list is bundled and updated in releases, never fetched from a server at runtime. <a href="/features/email-tracker-blocking.html" class="text-primary-500 hover:text-primary-600 underline">See how it works, before and after</a>.
             </p>
           </div>
         </div>

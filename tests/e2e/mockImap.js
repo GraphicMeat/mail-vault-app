@@ -291,6 +291,57 @@ export const PHISH_LINK_TEXT = 'https://bank.test/login';
 /** Where it actually goes. */
 export const PHISH_LINK_HREF = 'https://evil.test/login';
 
+// ── Tracking pixel fixture ──────────────────────────────────────────────────
+// A newsletter carrying one real image and one Mailchimp open beacon. The
+// beacon is what connected-tracker-blocking.test.js asserts on, in both
+// directions: present in the rendered frame for a free profile, gone (and
+// replaced by the blocked marker) with premium.
+
+export const TRACKER_SUBJECT = 'Weekly digest with a tracking pixel';
+export const TRACKER_BODY_MARKER = 'Here is what you missed this week';
+/** The beacon. A known vendor endpoint, so detection does not lean on shape. */
+export const TRACKER_PIXEL_URL = 'https://mv-mock.list-manage.com/track/open.php?u=mock&id=42';
+/** Label utils/trackerList.js gives that endpoint. */
+export const TRACKER_VENDOR = 'Mailchimp';
+/** A real image in the same body — proof blocking removes the beacon only. */
+export const TRACKER_REAL_IMAGE = 'https://cdn.mock.test/newsletter-hero.png';
+
+/** A newsletter whose body carries a real image and one open-tracking beacon. */
+function trackerMessage({ uid, owner, day }) {
+  const { internalDate, header } = stamp(day);
+  const boundary = 'MockMvTracker';
+  return {
+    uid,
+    flags: ['\\Seen'],
+    internal_date: internalDate,
+    modseq: uid,
+    raw: [
+      'From: Mock Newsletter <news@mailer.mock.test>',
+      `To: ${owner}`,
+      `Subject: ${TRACKER_SUBJECT}`,
+      `Date: ${header}`,
+      `Message-ID: <mock-tracker-${uid}-${owner}>`,
+      'MIME-Version: 1.0',
+      `Content-Type: multipart/alternative; boundary="${boundary}"`,
+      '',
+      `--${boundary}`,
+      'Content-Type: text/plain; charset=UTF-8',
+      '',
+      TRACKER_BODY_MARKER,
+      '',
+      `--${boundary}`,
+      'Content-Type: text/html; charset=UTF-8',
+      '',
+      `<p id="mv-tracker-body">${TRACKER_BODY_MARKER}</p>`
+        + `<img id="mv-real-image" src="${TRACKER_REAL_IMAGE}" width="480" height="120" alt="hero">`
+        + `<img src="${TRACKER_PIXEL_URL}" width="1" height="1" style="display:none" alt="">`,
+      '',
+      `--${boundary}--`,
+      '',
+    ].join('\n'),
+  };
+}
+
 /** An HTML message whose body says which message it is. */
 function htmlMarkerMessage({ uid, owner, from, subject, marker, day }) {
   const { internalDate, header } = stamp(day);
@@ -476,6 +527,14 @@ export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, 
           messageId: long(1), inReplyTo: long(0), references: [long(0)], day: 71,
         }),
       ]);
+
+      // The tracking-pixel newsletter. Same guard as the rest of this block:
+      // mailboxes whose exact totals other specs assert on are left alone.
+      // day 55 on purpose: newer than the generic mail (day == uid, so <= 41)
+      // but older than every thread fixture above, which keeps the TOP of the
+      // list exactly as it was — connected-move-to-folder acts on row 0, and
+      // moving this fixture out of INBOX would break the spec below it.
+      append(inboxBox, [trackerMessage({ uid: rootUid + 6, owner, day: 55 })]);
 
       append(sentBox, [
         threadMessage({

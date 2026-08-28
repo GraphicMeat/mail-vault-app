@@ -235,6 +235,23 @@ export const useSettingsStore = create(
       // migration below — every entry is recomputed on next open.
       linkAlerts: {}, // { [`${accountId}-${mailbox}-${uid}`]: 'red'|'yellow' }
       unreadPerAccount: {}, // { [accountId]: number } — persisted unread counts
+      // Tracker blocking (premium). DETECTION runs for everyone — a free
+      // user still gets told that the message they opened phoned home and who
+      // it phoned; only the strip is gated. Effective state is
+      // `isTrackerBlockingActive()`, never this flag on its own.
+      trackerBlockingEnabled: true,
+      // Persisted tracker verdicts, keyed `accountId-mailbox-uid` — same
+      // scoping rule as linkAlerts: a bare UID is unique inside ONE mailbox.
+      trackerAlerts: {}, // { [key]: { count, vendors: string[] } }
+      setTrackerBlockingEnabled: (v) => {
+        // Gate the writer too. A lapsed subscriber flipping the switch back on
+        // must not leave a stored `true` that reads as "blocking is running".
+        if (!hasPremiumAccess(get().billingProfile)) return;
+        set({ trackerBlockingEnabled: v });
+      },
+      setTrackerAlert: (key, info) => set(s => (
+        key && info ? { trackerAlerts: { ...s.trackerAlerts, [key]: info } } : s
+      )),
       setLinkSafetyEnabled: (v) => set({ linkSafetyEnabled: v }),
       setLinkSafetyClickConfirm: (v) => set({ linkSafetyClickConfirm: v }),
       // `key` comes from emailScopeKey(email, mailState). Unresolvable message
@@ -818,6 +835,8 @@ export const useSettingsStore = create(
           billingLastChecked: null,
           linkSafetyEnabled: true,
           linkSafetyClickConfirm: true,
+          trackerBlockingEnabled: true,
+          trackerAlerts: {},
           cleanupRules: [],
           activeMigration: null,
           migrationHistory: [],
@@ -885,6 +904,18 @@ export function isShareGrantActive() {
   } catch {
     return false;
   }
+}
+
+/**
+ * Is tracker blocking actually stripping beacons right now?
+ *
+ * Two conditions, one answer: the user asked for it AND the subscription is
+ * live. Every render site asks this instead of reading `trackerBlockingEnabled`
+ * — a stale `true` from a lapsed subscription must not read as protection.
+ */
+export function isTrackerBlockingActive(state) {
+  const s = state || useSettingsStore.getState();
+  return !!s?.trackerBlockingEnabled && hasPremiumAccess(s?.billingProfile);
 }
 
 export function hasPremiumAccess(billingProfile) {

@@ -33,9 +33,11 @@ import { LinkSafetyModal } from './LinkSafetyModal';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon } from './SenderAlertIcon';
 import { ReplyToAlertIcon } from './ReplyToAlertIcon';
+import { TrackerAlertIcon } from './TrackerAlertIcon';
+import { scanTrackers, getCachedTrackers, summarizeTrackers } from '../utils/trackerDetect';
 import { getCachedAlerts } from '../utils/linkSafety';
 import { emailScopeKey } from '../stores/slices/unifiedHelpers';
-import { useSettingsStore } from '../stores/settingsStore';
+import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
 import { useThemeStore } from '../stores/themeStore';
 import { buildEmailIframeHtml, getEmailBodyContent, getContextMenuColors, measureEmailIframeHeight } from '../utils/emailIframeTemplate';
 import { getDarkReaderInlineScripts } from '../utils/darkReaderInject';
@@ -70,6 +72,9 @@ function EmailViewerComponent({ onComposeReply }) {
   const serverKnown = useMailStore(s => s.serverUids.complete);
 
   const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
+  // Effective state, not the raw flag: a stale `true` left behind by a lapsed
+  // subscription must not render as protection. See isTrackerBlockingActive.
+  const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
   const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
   const emailViewerTheme = useSettingsStore(s => s.emailViewerTheme);
   const signatureDisplay = useSettingsStore(s => s.signatureDisplay);
@@ -294,17 +299,20 @@ function EmailViewerComponent({ onComposeReply }) {
   // of having quietly always said what it now says.
   const custodyLanded = useCustodyLanding(scopeKey, custody.tone);
 
-  const { iframeContent, scanAlertLevel } = useMemo(() => {
-    if (!selectedEmail?.html) return { iframeContent: '', scanAlertLevel: null };
+  const { iframeContent, scanAlertLevel, trackerSummary } = useMemo(() => {
+    if (!selectedEmail?.html) return { iframeContent: '', scanAlertLevel: null, trackerSummary: null };
     const bodyHtml = getEmailBodyContent(replaceCidUrls(selectedEmail.html, selectedEmail.attachments));
     // Scan body HTML (stable per uid → cacheable); theme/DR is layered on
     // top via buildEmailIframeHtml so toggling theme doesn't invalidate the
     // scan cache or strip Dark Reader scripts from a cached modifiedHtml.
-    let renderedBody = bodyHtml;
+    // Tracker detection runs for everyone — the glyph tells a free user their
+    // mail phoned home. Only the SWAP to the cleaned body is premium.
+    const trackerScan = scanTrackers(bodyHtml, scopeKey);
+    let renderedBody = trackerBlocking ? trackerScan.cleanedBodyHtml : bodyHtml;
     let indicatorStyle = '';
     let alertLevel = null;
     if (linkSafetyEnabled) {
-      const scan = scanEmailLinks(bodyHtml, scopeKey);
+      const scan = scanEmailLinks(renderedBody, scopeKey);
       renderedBody = scan.modifiedBodyHtml;
       indicatorStyle = scan.indicatorStyle;
       alertLevel = scan.maxAlertLevel;
@@ -320,8 +328,8 @@ function EmailViewerComponent({ onComposeReply }) {
       extraHead,
       extraBody: `${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}`,
     });
-    return { iframeContent: html, scanAlertLevel: alertLevel };
-  }, [selectedEmail?.html, scopeKey, linkSafetyEnabled, effectiveEmailTheme, signatureDisplay]);
+    return { iframeContent: html, scanAlertLevel: alertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers) };
+  }, [selectedEmail?.html, scopeKey, linkSafetyEnabled, trackerBlocking, effectiveEmailTheme, signatureDisplay]);
 
   // Persist link alert to store + settings (outside render, in useEffect)
   useEffect(() => {
@@ -336,6 +344,22 @@ function EmailViewerComponent({ onComposeReply }) {
       useSettingsStore.getState().setLinkAlert(scopeKey, scanAlertLevel);
     }
   }, [scanAlertLevel, scopeKey]);
+
+  // Same round trip for the tracker verdict: onto the open message, onto every
+  // row that IS this message (scoped key, not the uid — in unified inbox every
+  // account's uid 41 would light up), and into settings so the glyph survives
+  // a restart without re-fetching the body.
+  useEffect(() => {
+    if (!trackerSummary || !selectedEmail) return;
+    const current = selectedEmail._trackerInfo;
+    if (current && current.count === trackerSummary.count) return;
+    useMailStore.setState(state => ({
+      selectedEmail: { ...state.selectedEmail, _trackerInfo: trackerSummary },
+      emails: state.emails.map(e => scopeKey && emailScopeKey(e, state) === scopeKey ? { ...e, _trackerInfo: trackerSummary } : e),
+      sortedEmails: state.sortedEmails.map(e => scopeKey && emailScopeKey(e, state) === scopeKey ? { ...e, _trackerInfo: trackerSummary } : e),
+    }));
+    useSettingsStore.getState().setTrackerAlert(scopeKey, trackerSummary);
+  }, [trackerSummary, scopeKey]);
 
   // Auto-resize iframe and apply dark mode overrides
   useEffect(() => {
@@ -512,6 +536,12 @@ function EmailViewerComponent({ onComposeReply }) {
           <SenderAlertIcon level={selectedEmail._senderAlert} email={selectedEmail} size={18} />
           <ReplyToAlertIcon mismatch={selectedEmail._replyToMismatch} size={18} />
           <LinkAlertIcon level={selectedEmail._linkAlert} size={18} alerts={getCachedAlerts(scopeKey)} />
+          <TrackerAlertIcon
+            info={selectedEmail._trackerInfo || trackerSummary}
+            trackers={getCachedTrackers(scopeKey)}
+            blocked={trackerBlocking}
+            size={18}
+          />
           {selectedEmail.subject}
         </h1>
       </div>
@@ -589,8 +619,11 @@ function EmailViewerComponent({ onComposeReply }) {
               // Build a standalone document so the popup matches the in-app
               // view: charset declared, plus inline Dark Reader when dark.
               const bodyHtml = getEmailBodyContent(replaceCidUrls(selectedEmail.html, selectedEmail.attachments));
+              // The popup is a second renderer of the same mail — a beacon
+              // stripped in the pane but left in the window still fires.
+              const popupBody = trackerBlocking ? scanTrackers(bodyHtml, scopeKey).cleanedBodyHtml : bodyHtml;
               const popupHtml = buildEmailIframeHtml({
-                bodyHtml,
+                bodyHtml: popupBody,
                 themeTag: effectiveEmailTheme,
                 extraHead: emailDarkMode ? getDarkReaderInlineScripts() : '',
               });

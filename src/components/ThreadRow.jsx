@@ -7,6 +7,8 @@ import { useMailStore } from '../stores/mailStore';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
 import { ReplyToAlertIcon, getThreadReplyToMismatch } from './ReplyToAlertIcon';
+import { TrackerAlertIcon, getThreadTrackerInfo } from './TrackerAlertIcon';
+import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
 import { RowActionMenu } from './RowActionMenu';
 import { RowActionMenuItems } from './RowActionMenuItems';
 import { formatEmailDate } from '../utils/dateFormat';
@@ -29,6 +31,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
   // message's custody, so that is what hands over.
   const serverKnown = useMailStore(s => s.serverUids.complete);
   const scopeKey = emailScopeKey(thread?.lastEmail, useMailStore.getState());
+  const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
   const custodyTone = thread?.lastEmail
     ? describeMessageState(thread.lastEmail, { serverKnown }).tone
     : null;
@@ -111,6 +114,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
         {(() => { const sa = getSenderAlertLevel(thread.emails); return sa ? <SenderAlertIcon level={sa.level} email={sa.email} /> : null; })()}
         <ReplyToAlertIcon mismatch={getThreadReplyToMismatch(thread.emails)} />
         <LinkAlertIcon level={getLinkAlertLevel(thread.emails)} alerts={getAlertsForEmails(thread.emails, useMailStore.getState())} />
+        <TrackerAlertIcon info={getThreadTrackerInfo(thread.emails)} blocked={trackerBlocking} />
         <span dir="auto" className={`flex-1 min-w-0 truncate ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
           {displayText(thread.subject, '(No subject)')}
         </span>
@@ -161,6 +165,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
   // message's custody, so that is what hands over.
   const serverKnown = useMailStore(s => s.serverUids.complete);
   const scopeKey = emailScopeKey(thread?.lastEmail, useMailStore.getState());
+  const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
   const custodyTone = thread?.lastEmail
     ? describeMessageState(thread.lastEmail, { serverKnown }).tone
     : null;
@@ -239,6 +244,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
           {(() => { const sa = getSenderAlertLevel(thread.emails); return sa ? <SenderAlertIcon level={sa.level} email={sa.email} size={12} /> : null; })()}
           <ReplyToAlertIcon mismatch={getThreadReplyToMismatch(thread.emails)} size={12} />
           <LinkAlertIcon level={getLinkAlertLevel(thread.emails)} size={12} alerts={getAlertsForEmails(thread.emails, useMailStore.getState())} />
+          <TrackerAlertIcon info={getThreadTrackerInfo(thread.emails)} blocked={trackerBlocking} size={12} />
           {/* flex-1 min-w-0: same shrink-to-nothing hazard as the row above. */}
           <span dir="auto" className={`flex-1 min-w-0 truncate text-sm leading-snug ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
             {displayText(thread.subject, '(No subject)')}

@@ -42,6 +42,14 @@ const SURFACES = [
     style: 'early-return',
   },
   {
+    tab: 'Tracker Blocking',
+    // Neither style above: the demonstration (before/after, the beacon's own
+    // markup) renders for everyone — selling the feature is what the page is
+    // for. Only the upsell card and the switch swap places.
+    lock: 'Tracker Blocking is a Premium Feature',
+    style: 'upsell-card',
+  },
+  {
     tab: 'Migration',
     lock: 'Mailbox migration lets you move emails between any two providers',
     style: 'blur-overlay',

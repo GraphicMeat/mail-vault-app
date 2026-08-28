@@ -12,7 +12,7 @@ vi.mock('../safeStorage', () => {
   };
 });
 
-const { useSettingsStore } = await import('../settingsStore');
+const { useSettingsStore, isTrackerBlockingActive } = await import('../settingsStore');
 
 describe('settingsStore defaults', () => {
   it('has cacheLimitMB default of 128', () => {
@@ -157,5 +157,50 @@ describe('spellcheckEnabled', () => {
     useSettingsStore.getState().setSpellcheckEnabled(false);
     useSettingsStore.getState().resetSettings();
     expect(useSettingsStore.getState().spellcheckEnabled).toBe(true);
+  });
+});
+
+describe('tracker blocking is premium', () => {
+  const PREMIUM = { hasSubscription: true, status: 'active', premiumAccess: true };
+  const FREE = { hasSubscription: false };
+
+  it('defaults the flag on so a new subscriber is protected without hunting for a switch', () => {
+    useSettingsStore.getState().resetSettings();
+    expect(useSettingsStore.getState().trackerBlockingEnabled).toBe(true);
+  });
+
+  it('is NOT active for a free profile, however the flag reads', () => {
+    useSettingsStore.setState({ billingProfile: FREE, trackerBlockingEnabled: true, shareGrant: null });
+    // The flag alone is what a lapsed subscription leaves behind. Reading it
+    // directly would render the "blocked" glyph over a beacon that fired.
+    expect(useSettingsStore.getState().trackerBlockingEnabled).toBe(true);
+    expect(isTrackerBlockingActive(useSettingsStore.getState())).toBe(false);
+  });
+
+  it('is active only when a live subscription and the switch agree', () => {
+    useSettingsStore.setState({ billingProfile: PREMIUM, trackerBlockingEnabled: true, shareGrant: null });
+    expect(isTrackerBlockingActive(useSettingsStore.getState())).toBe(true);
+
+    useSettingsStore.setState({ trackerBlockingEnabled: false });
+    expect(isTrackerBlockingActive(useSettingsStore.getState())).toBe(false);
+  });
+
+  it('refuses the setter without premium, and honours it with', () => {
+    useSettingsStore.setState({ billingProfile: FREE, trackerBlockingEnabled: false, shareGrant: null });
+    useSettingsStore.getState().setTrackerBlockingEnabled(true);
+    expect(useSettingsStore.getState().trackerBlockingEnabled).toBe(false);
+
+    // Negative control: the setter does work — it is the gate that refused.
+    useSettingsStore.setState({ billingProfile: PREMIUM });
+    useSettingsStore.getState().setTrackerBlockingEnabled(true);
+    expect(useSettingsStore.getState().trackerBlockingEnabled).toBe(true);
+  });
+
+  it('stores a tracker verdict per scoped key, and drops one with no key', () => {
+    useSettingsStore.setState({ trackerAlerts: {} });
+    const info = { count: 2, vendors: ['MailChimp'] };
+    useSettingsStore.getState().setTrackerAlert('acct-1-INBOX-41', info);
+    useSettingsStore.getState().setTrackerAlert(null, info);
+    expect(useSettingsStore.getState().trackerAlerts).toEqual({ 'acct-1-INBOX-41': info });
   });
 });

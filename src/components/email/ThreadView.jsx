@@ -10,7 +10,7 @@ import { resolveEmailLocation } from '../../stores/slices/unifiedHelpers';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../../utils/iframeQuoteFolding';
 import { splitQuotedContent } from '../../utils/quoteFolding';
 import { splitSignature, hashSignature } from '../../utils/signatureFolding';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { useSettingsStore, isTrackerBlockingActive } from '../../stores/settingsStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { buildEmailIframeHtml, getEmailBodyContent, measureEmailIframeHeight } from '../../utils/emailIframeTemplate';
 import { getDarkReaderInlineScripts } from '../../utils/darkReaderInject';
@@ -24,6 +24,7 @@ import { EmailSenderInfo } from './EmailSenderInfo';
 import { EmailActionBar } from './EmailActionBar';
 import { AttachmentItem } from './AttachmentBar';
 import { scanEmailLinks, checkLinkAlert } from '../../utils/linkSafety';
+import { scanTrackers } from '../../utils/trackerDetect';
 import { emailScopeKey } from '../../stores/slices/unifiedHelpers';
 import { getSenderName } from '../../utils/emailParser';
 import { LinkSafetyModal } from '../LinkSafetyModal';
@@ -40,6 +41,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
   const [sigExpanded, setSigExpanded] = useState(false);
   const [linkSafetyAlert, setLinkSafetyAlert] = useState(null);
   const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
+  const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
   const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
   const appTheme = useThemeStore(s => s.theme);
   const theme = effectiveTheme ?? appTheme;
@@ -68,11 +70,13 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
     const bodyHtml = getEmailBodyContent(htmlWithCid);
     // Scan body (stable per uid → cacheable); wrap with iframe template so
     // theme toggles don't invalidate the scan cache.
-    let renderedBody = bodyHtml;
+    // Strip beacons before anything renders them — a thread view that skipped
+    // this would fire every pixel the reading pane just blocked.
+    let renderedBody = trackerBlocking ? scanTrackers(bodyHtml, scopeKey).cleanedBodyHtml : bodyHtml;
     let indicatorStyle = '';
     let alertLevel = null;
     if (linkSafetyEnabled) {
-      const scan = scanEmailLinks(bodyHtml, scopeKey);
+      const scan = scanEmailLinks(renderedBody, scopeKey);
       renderedBody = scan.modifiedBodyHtml;
       indicatorStyle = scan.indicatorStyle;
       alertLevel = scan.maxAlertLevel;
@@ -87,7 +91,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
       extraBody: `${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}`,
     });
     return { iframeContent: html, scanAlertLevel: alertLevel };
-  }, [loadedEmail?.html, scopeKey, signatureDisplay, linkSafetyEnabled, theme]);
+  }, [loadedEmail?.html, scopeKey, signatureDisplay, linkSafetyEnabled, trackerBlocking, theme]);
 
   // Persist link alert outside render
   useEffect(() => {
@@ -375,8 +379,10 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, arch
               const rawHtml = loaded?.html || '';
               if (!rawHtml) return;
               const bodyHtml = getEmailBodyContent(rawHtml);
+              // Same body, second window — strip there too.
+              const popupBody = trackerBlocking ? scanTrackers(bodyHtml, scopeKey).cleanedBodyHtml : bodyHtml;
               const popupHtml = buildEmailIframeHtml({
-                bodyHtml,
+                bodyHtml: popupBody,
                 themeTag: effectiveTheme,
                 extraHead: emailDarkMode ? getDarkReaderInlineScripts() : '',
               });

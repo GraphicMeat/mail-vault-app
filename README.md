@@ -58,6 +58,7 @@ Pick a year — or a custom range — and archive, delete, or archive-and-delete
 
 - **Link safety** — a warning when a link's text is not where the link goes, with both URLs shown side by side before anything opens.
 - **Sender checks** — SPF, DKIM and DMARC badges, display-name impersonation warnings, and From/Reply-To mismatch alerts.
+- **Tracker blocking** *(Premium)* — the hidden pixels that report when you opened a message are found on every mail, named on the row, and stripped out of the HTML before it renders. Detection is free; removal comes with a subscription.
 - **Credentials in the OS keychain** — macOS Keychain, Linux Secret Service. Never in a config file.
 - **Sandboxed on macOS**, no cloud service, no tracking, no telemetry.
 

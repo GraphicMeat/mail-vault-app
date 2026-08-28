@@ -20,6 +20,14 @@ export const createUiSlice = (set, get) => ({
   // Pre-sorted emails fingerprint for memoization
   _sortedEmailsFingerprint: '',
 
+  // A leaf component asking for a Settings tab. App owns the dialog; rows,
+  // the reading pane and the thread view are all too deep to prop-drill an
+  // opener down to, and the tracker glyph's upsell has to reach one from
+  // every one of them.
+  settingsRequest: null, // { tab: string, at: number }
+  requestSettingsTab: (tab) => set({ settingsRequest: { tab, at: Date.now() } }),
+  clearSettingsRequest: () => set({ settingsRequest: null }),
+
   // Bulk save progress
   bulkSaveProgress: null, // { total, completed, errors, active }
   exportProgress: null, // { total, completed, active, mode: 'export'|'import' }

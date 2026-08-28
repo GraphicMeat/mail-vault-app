@@ -1,7 +1,7 @@
 import { Button } from './ui/Button';
 import React from 'react';
 import { displayText } from '../utils/bidiText';
-import { getAccountColor } from '../stores/settingsStore';
+import { getAccountColor, useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
 import { getSenderName } from '../utils/emailParser';
 import { getCachedAlerts } from '../utils/linkSafety';
 import { useMailStore } from '../stores/mailStore';
@@ -10,6 +10,7 @@ import { useCustodyLanding } from '../hooks/useCustodyLanding';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon } from './SenderAlertIcon';
 import { ReplyToAlertIcon } from './ReplyToAlertIcon';
+import { TrackerAlertIcon } from './TrackerAlertIcon';
 import { RowActionMenu } from './RowActionMenu';
 import { RowActionMenuItems } from './RowActionMenuItems';
 import { formatEmailDate } from '../utils/dateFormat';
@@ -28,6 +29,9 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
   // the same string, for the same reason.
   const scopeKey = emailScopeKey(email, useMailStore.getState());
   const alerts = getCachedAlerts(scopeKey);
+  // Whether the glyph reads "blocked" or "tracks you" is a live setting, not a
+  // property of the row's data — subscribe so a toggle repaints every row.
+  const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
 
   const handleSave = async (e) => {
     e.stopPropagation();
@@ -105,6 +109,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
         <SenderAlertIcon level={email._senderAlert} email={email} />
         <ReplyToAlertIcon mismatch={email._replyToMismatch} />
         <LinkAlertIcon level={email._linkAlert} alerts={alerts} />
+        <TrackerAlertIcon info={email._trackerInfo} blocked={trackerBlocking} />
         <span dir="auto" className={`flex-1 min-w-0 truncate ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
           {displayText(email.subject, '(No subject)')}
         </span>
@@ -147,6 +152,9 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
   // the same string, for the same reason.
   const scopeKey = emailScopeKey(email, useMailStore.getState());
   const alerts = getCachedAlerts(scopeKey);
+  // Whether the glyph reads "blocked" or "tracks you" is a live setting, not a
+  // property of the row's data — subscribe so a toggle repaints every row.
+  const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
 
   const handleSave = async (e) => {
     e.stopPropagation();
@@ -209,6 +217,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
           <SenderAlertIcon level={email._senderAlert} email={email} size={12} />
           <ReplyToAlertIcon mismatch={email._replyToMismatch} size={12} />
           <LinkAlertIcon level={email._linkAlert} size={12} alerts={alerts} />
+          <TrackerAlertIcon info={email._trackerInfo} blocked={trackerBlocking} size={12} />
           {/* flex-1 min-w-0: same shrink-to-nothing hazard as the row above. */}
           <span dir="auto" className={`flex-1 min-w-0 truncate text-sm leading-snug ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
             {displayText(email.subject, '(No subject)')}

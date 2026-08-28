@@ -33,8 +33,9 @@ import { getRealAttachments, replaceCidUrls } from '../services/attachmentUtils'
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../utils/iframeQuoteFolding';
 import { splitQuotedContent } from '../utils/quoteFolding';
 import { splitSignature } from '../utils/signatureFolding';
-import { useSettingsStore } from '../stores/settingsStore';
+import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
 import { scanEmailLinks, checkLinkAlert } from '../utils/linkSafety';
+import { scanTrackers } from '../utils/trackerDetect';
 import { emailScopeKey } from '../stores/slices/unifiedHelpers';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { MAIL_DARK_TEXT } from '../utils/mailChrome';
@@ -263,6 +264,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
   const archivedEmailIds = useMessageListStore(s => s.archivedEmailIds);
   const signatureDisplay = useSettingsStore(s => s.signatureDisplay);
   const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
+  const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
   const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   const activeMailbox = useAccountStore(s => s.activeMailbox);
@@ -339,11 +341,14 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     const quoteBorder = fromUser ? 'rgba(255,255,255,0.3)' : '#d1d5db';
 
     const rawBody = replaceCidUrls(mergedEmail.html, mergedEmail.attachments);
-    let scannedBody = rawBody;
+    const chatScopeKey = emailScopeKey(email, useMailStore.getState());
+    // Chat bubbles render the same body a third time — blocking has to hold
+    // here too, or switching to Chat view undoes it.
+    let scannedBody = trackerBlocking ? scanTrackers(rawBody, chatScopeKey).cleanedBodyHtml : rawBody;
     let indicatorStyle = '';
     let chatAlertLevel = null;
     if (linkSafetyEnabled) {
-      const scan = scanEmailLinks(rawBody, emailScopeKey(email, useMailStore.getState()));
+      const scan = scanEmailLinks(scannedBody, chatScopeKey);
       scannedBody = scan.modifiedBodyHtml;
       indicatorStyle = scan.indicatorStyle;
       chatAlertLevel = scan.maxAlertLevel;
@@ -399,7 +404,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
       </html>
     `;
     return { html: builtHtml, alertLevel: chatAlertLevel };
-  }, [mergedEmail.html, fromUser, signatureDisplay, linkSafetyEnabled]);
+  }, [mergedEmail.html, fromUser, signatureDisplay, linkSafetyEnabled, trackerBlocking]);
 
   // iframeContent useMemo now returns { html, alertLevel } — extract for srcDoc and alert
   const iframeHtmlContent = iframeContent?.html || '';

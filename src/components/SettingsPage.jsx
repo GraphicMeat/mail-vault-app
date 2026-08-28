@@ -19,6 +19,7 @@ import {
   Settings,
   ChevronLeft,
   Gauge,
+  EyeOff,
 } from 'lucide-react';
 import { GeneralSettings } from './settings/GeneralSettings';
 import { AccountSettings } from './settings/AccountSettings';
@@ -35,11 +36,13 @@ import { AISettings } from './settings/AISettings';
 import { DaemonSettings } from './settings/DaemonSettings';
 import { TimeCapsuleSettings } from './settings/TimeCapsuleSettings';
 import { CleanupView } from './settings/CleanupSettings';
+import { TrackerBlockingView } from './settings/TrackerBlockingView';
 import { TimeCapsuleView } from './TimeCapsule';
 
 const featureTabs = [
   { id: 'cleanup', label: 'Email Cleanup', icon: Sparkles },
   { id: 'time-capsule', label: 'Time Capsule', icon: Clock },
+  { id: 'tracking', label: 'Tracker Blocking', icon: EyeOff },
   { id: 'migration', label: 'Migration', icon: ArrowLeftRight },
   { id: 'backup', label: 'Backup & Restore', icon: Clock },
 ];
@@ -207,6 +210,10 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
               subView === 'config'
                 ? <TimeCapsuleSettings />
                 : <TimeCapsuleView accountId={selectedFeatureAccountId} onDetailChange={setFeatureDetailActive} onUpgrade={() => handleTabChange('billing')} />
+            )}
+
+            {activeTab === 'tracking' && (
+              <TrackerBlockingView onUpgrade={() => handleTabChange('billing')} />
             )}
 
             {activeTab === 'general' && (
