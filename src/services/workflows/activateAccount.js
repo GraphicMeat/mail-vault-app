@@ -456,6 +456,16 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       if (e.isArchived) restoredArchivedIds.add(e.uid);
     }
 
+    // A newer activation has already aborted this one — the awaits above are
+    // where that happens. Painting anyway puts the OLD mailbox back and then
+    // re-enters activateAccount for it below, so the switch the user made last
+    // is the one that loses. That is what a double click looks like: two
+    // activations in flight, and the first one writing last.
+    if (signal.aborted) {
+      activationTrace.end('aborted-before-restore');
+      return;
+    }
+
     useMailStore.setState({
       activeAccountId: accountId,
       activeMailbox: restored.mailbox || mailbox,
@@ -497,6 +507,10 @@ export async function activateAccount(accountId, mailbox, options = {}) {
     get().updateSortedEmails();
     activationTrace.mark('descriptor-restored', { paintedCount: painted.length });
 
+    if (signal.aborted) {
+      activationTrace.end('aborted-after-restore');
+      return;
+    }
     get().activateAccount(accountId, restored.mailbox || mailbox, { _backgroundRefresh: true }).catch(() => {});
     setTimeout(() => get().loadSentHeaders(accountId), 150);
 
@@ -506,6 +520,13 @@ export async function activateAccount(accountId, mailbox, options = {}) {
 
   invalidateChatAndThreadCaches();
   setLoadEmailsRetried(false);
+
+  // Same reason as the restore path above: an activation that has already been
+  // superseded must not write its own account and mailbox over the newer one.
+  if (signal.aborted) {
+    activationTrace.end('aborted-before-clear');
+    return;
+  }
 
   if (!isBackgroundRefresh) {
     useMailStore.setState({
