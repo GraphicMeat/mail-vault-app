@@ -20,6 +20,7 @@ mod archive;
 mod backup;
 mod commands;
 mod dns; // keeps the DNS-health-probe layer; resolver core comes from mailvault_core
+mod export_fetch;
 mod external_location;
 mod github;
 // graph/imap/oauth2 now live in mailvault_core (shared with src-daemon).
@@ -4931,6 +4932,7 @@ fn main() {
             load_graph_id_map,
             save_attachment,
             save_attachment_to,
+            export_fetch::fetch_remote_asset,
             show_in_folder,
             open_file,
             open_with_dialog,
