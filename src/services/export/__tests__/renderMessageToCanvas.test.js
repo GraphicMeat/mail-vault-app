@@ -46,6 +46,15 @@ describe('mountExportFrame', () => {
     dispose();
   });
 
+  // Whether a scrollbar takes layout space differs machine to machine. Left to
+  // the machine, an always-show-scrollbars Mac renders the column 15px narrower
+  // than the canvas is told it is, and rasterizes the scrollbars into the PNG.
+  it('takes the scrollbar out of the measured width', async () => {
+    const { doc, dispose } = await mountExportFrame('<!doctype html><body>hi</body>', { loadTimeoutMs: 10 });
+    expect(doc.documentElement.style.overflow).toBe('hidden');
+    dispose();
+  });
+
   it('removes the frame on dispose', async () => {
     const { dispose } = await mountExportFrame('<!doctype html><body>hi</body>', { loadTimeoutMs: 10 });
     const before = document.querySelectorAll('iframe').length;

@@ -33,6 +33,13 @@ export async function mountExportFrame(html, { loadTimeoutMs = FRAME_LOAD_TIMEOU
 
     const doc = iframe.contentDocument;
 
+    // Whether a scrollbar takes layout space is a property of the MACHINE, not
+    // of the mail: on a Mac set to always-show scrollbars the frame's usable
+    // width is 15px under EXPORT_WIDTH_PX, the column overflows it, and the
+    // scrollbars are rasterized into the PNG along with the cut-off edge.
+    // Hidden here so the measurement and the canvas agree everywhere.
+    doc.documentElement.style.overflow = 'hidden';
+
     // Everything that changes layout has to settle before the height is read,
     // or the frame is measured mid-load and the bottom of the mail is cut off.
     if (doc.fonts?.ready) await doc.fonts.ready;
