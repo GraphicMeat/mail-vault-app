@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
-import { Eye, EyeOff, Lock, ShieldCheck } from 'lucide-react';
+import { ExternalLink, Eye, EyeOff, Lock, ShieldCheck } from 'lucide-react';
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
+import { openInBrowser } from '../../services/billingApi';
 import { usePremiumPriceBlurb } from '../../hooks/usePremiumPricing.js';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
 import { TRACKER_PATTERNS } from '../../utils/trackerList';
@@ -15,6 +16,21 @@ const TRACKER_SAMPLE = `<img src="https://mailer.example.com/o/open.php`
      style="display:none;height:1px;width:1px" alt="">`;
 
 const CLEANED_SAMPLE = `<span data-mv-tracker-blocked="Mailchimp" hidden></span>`;
+
+/** Where the bundled endpoint list comes from — the two upstreams named in
+ *  utils/trackerList.js, in the order that file merges them. */
+const SOURCES = [
+  {
+    label: 'Ugly Email',
+    licence: 'MIT',
+    url: 'https://github.com/OneClickLab/ugly-email-trackers',
+  },
+  {
+    label: 'MailTrackerBlocker',
+    licence: 'BSD-3-Clause',
+    url: 'https://github.com/apparition47/MailTrackerBlocker',
+  },
+];
 
 /** What the sender learns when that one pixel loads. */
 const LEAKED = [
@@ -204,6 +220,22 @@ export function TrackerBlockingView({ onUpgrade }) {
           from the MailTrackerBlocker and Ugly Email lists. The list ships in the app and is updated
           with each release — MailVault never fetches one at runtime.
         </p>
+        {/* Named upstreams, linked. A blocklist whose provenance is a sentence
+            is a claim; one you can open and read is a citation. */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2">
+          {SOURCES.map(source => (
+            <button
+              key={source.url}
+              type="button"
+              onClick={() => openInBrowser(source.url).catch(() => {})}
+              className="inline-flex items-center gap-1 text-[11px] text-mail-text-muted hover:text-mail-accent-text transition-colors"
+            >
+              {source.label}
+              <span className="text-mail-text-muted/60">· {source.licence}</span>
+              <ExternalLink size={10} />
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
