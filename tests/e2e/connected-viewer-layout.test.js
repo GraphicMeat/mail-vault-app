@@ -19,6 +19,21 @@
  * The fix is `min-w-0` on the row (it fits again) plus `overflow: clip` on the
  * boxes that clip it (it can no longer be scrolled away even if it did not).
  * Both halves are asserted here: the row fits, AND scrolling it is impossible.
+ *
+ * 2026-08-28 — the same shape, one box further out: the DOCUMENT. Reported as
+ * "i can somehow scroll the whole view", with the whole three-pane UI dragged
+ * ~600px off the bottom of the window. Nothing overflowed — the app root is
+ * exactly 100vh — so this was elastic overscroll: the webview rubber-bands its
+ * own document scroll view even with zero overflow, and with no scrollbar the
+ * user cannot put it back. Fixed with `overscroll-behavior: none` plus a
+ * non-visible root overflow in `src/styles/index.css`.
+ *
+ * Which of the two assertions below actually goes red on the pre-fix build:
+ * the COMPUTED-STYLE one. The poke test passed before the fix too (there was
+ * never any real overflow to scroll) — it is the standing invariant, kept so a
+ * future too-tall element cannot quietly make the document a scroller again.
+ * The bounce itself cannot be driven from here: WebKit's rubber-band comes from
+ * real trackpad gesture phases, which a synthesized wheel event does not carry.
  */
 
 import { waitForApp, waitForEmails } from './helpers.js';
@@ -180,5 +195,58 @@ describe('Viewer layout with a long subject', function () {
         timeoutMsg: `viewer still showed the long-subject thread after clicking "${target.text}"`,
       },
     );
+  });
+
+  it('declares the document unscrollable and unbounceable in this webview', async function () {
+    // Read back from the live webview, not from the stylesheet: `overflow: clip`
+    // and `overscroll-behavior` both need Safari 16, and the app ships down to
+    // macOS 11. A WebKit that drops them reports `visible` / `''` here, which is
+    // exactly the build where the bug is still live — so this must not pass on
+    // an empty string.
+    const css = await browser.execute(() => {
+      const root = getComputedStyle(document.documentElement);
+      const body = getComputedStyle(document.body);
+      return {
+        rootOverflowY: root.overflowY,
+        rootOverscrollY: root.overscrollBehaviorY,
+        bodyOverscrollY: body.overscrollBehaviorY,
+      };
+    });
+    // `clip` where it parses, `hidden` on the pre-16 fallback — never `visible`.
+    expect(css.rootOverflowY).not.toBe('visible');
+    expect(css.rootOverscrollY).toBe('none');
+    expect(css.bodyOverscrollY).toBe('none');
+  });
+
+  it('cannot be scrolled vertically into a state the user cannot undo', async function () {
+    const poked = await browser.execute(() => {
+      const de = document.documentElement;
+      const moved = [];
+      for (const el of [de, document.body]) {
+        el.scrollTop = 99_999;
+        if (el.scrollTop > 0) moved.push({ tag: el.tagName, scrollTop: el.scrollTop });
+      }
+      window.scrollTo(0, 99_999);
+      if (window.scrollY > 0) moved.push({ tag: 'window', scrollTop: window.scrollY });
+      const app = document.getElementById('root')?.firstElementChild;
+      return {
+        moved,
+        overflowY: de.scrollHeight - de.clientHeight,
+        appTop: app ? Math.round(app.getBoundingClientRect().top) : null,
+        appHeight: app ? Math.round(app.getBoundingClientRect().height) : null,
+        innerHeight: window.innerHeight,
+      };
+    });
+    // Nothing at the document level may hold a vertical offset, and there must
+    // be nothing to hold one: the app root is the window, exactly.
+    expect(poked.moved).toEqual([]);
+    expect(poked.overflowY).toBe(0);
+    expect(poked.appTop).toBe(0);
+    expect(poked.appHeight).toBe(poked.innerHeight);
+
+    // The horizontal invariant survives the vertical poke — the same box.
+    const g = await shellGeometry();
+    expect(g.leftmost).toBeGreaterThanOrEqual(0);
+    expect(g.rightmost).toBeLessThanOrEqual(g.innerWidth);
   });
 });

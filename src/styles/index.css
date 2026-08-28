@@ -182,6 +182,28 @@ html.platform-mac .overflow-x-scroll {
   overflow: clip;
 }
 
+/* The document itself must never move. The app root is exactly 100vh, so there
+   is nothing to scroll to — but the webview rubber-bands the document anyway,
+   and one hard two-finger flick drags the whole three-pane UI off the bottom of
+   the window, with no scrollbar to put it back. `overscroll-behavior: none`
+   removes the bounce; a non-visible root overflow means the document can never
+   become a real scroll container either. The `.truncate` warning above does not
+   apply here — the root has zero overflow to scroll, so `hidden` has nothing to
+   slide out of view; it is only the pre-16 fallback for `clip`. */
+html,
+body {
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+html {
+  /* `hidden` first: the app ships down to macOS 11, whose WebKit drops both
+     `clip` and `overscroll-behavior`, and a non-visible root overflow is what
+     stops the document bounce there. `clip` wins wherever it parses. */
+  overflow: hidden;
+  overflow: clip;
+}
+
 body {
   font-family: 'Instrument Sans', system-ui, sans-serif;
   background-color: var(--mail-bg);
