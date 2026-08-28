@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { FileCode2 } from 'lucide-react';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { Z } from '../ui/layers';
@@ -31,6 +32,10 @@ async function renderSamples() {
 export function ExportUpsellModal({ open, onClose, onUpgrade }) {
   const [samples, setSamples] = useState(cached);
   const [failed, setFailed] = useState(false);
+  // A dead Open button with a swallowed error is indistinguishable from one
+  // that was never wired up: the shell plugin refused the file path and the
+  // `.catch(() => {})` around it meant nothing ever said so.
+  const [notice, setNotice] = useState(null);
 
   useEffect(() => {
     if (!open || samples) return;
@@ -42,7 +47,7 @@ export function ExportUpsellModal({ open, onClose, onUpgrade }) {
   }, [open, samples]);
 
   return (
-    <Dialog open={open} onClose={onClose} z={Z.alert} portal size="lg"
+    <Dialog open={open} onClose={onClose} z={Z.alert} portal size="xl"
       title="Export any message or thread"
       panelBg="bg-mail-surface">
       <p className="text-sm text-mail-text-muted">
@@ -64,22 +69,29 @@ export function ExportUpsellModal({ open, onClose, onUpgrade }) {
                 <img
                   src={`data:image/png;base64,${sample.file.base64}`}
                   alt={`${sample.label} sample`}
-                  className="w-full h-28 object-cover object-top rounded bg-white"
+                  className="w-full h-44 object-cover object-top rounded bg-white"
                 />
               ) : (
-                <div className="w-full h-28 rounded bg-mail-surface-hover flex items-center justify-center text-xs text-mail-text-muted text-center px-2">
+                <div className="w-full h-44 rounded bg-mail-surface-hover flex flex-col items-center justify-center gap-2 text-xs text-mail-text-muted text-center px-2">
+                  <FileCode2 size={28} className="text-mail-text-muted/70" />
                   Self-contained HTML
                 </div>
               )}
               <span className="text-xs text-mail-text">{sample.label}</span>
-              <div className="flex gap-1">
-                <Button variant="ghost" size="sm" onClick={() => openInDefaultApp(sample.file).catch(() => {})}>Open</Button>
-                <Button variant="ghost" size="sm" onClick={() => saveOneFile(sample.file, 'Save sample').catch(() => {})}>Save</Button>
+              {/* Two real buttons on one line, not ghost text: these are the
+                  only way to actually look at a sample before paying. */}
+              <div className="grid grid-cols-2 gap-1.5 mt-auto">
+                <Button variant="secondary" size="sm" fullWidth
+                  onClick={() => { setNotice(null); openInDefaultApp(sample.file).catch(e => setNotice(`Could not open the sample. (${e?.message || e})`)); }}>Open</Button>
+                <Button variant="secondary" size="sm" fullWidth
+                  onClick={() => { setNotice(null); saveOneFile(sample.file, 'Save sample').catch(e => setNotice(`Could not save the sample. (${e?.message || e})`)); }}>Save</Button>
               </div>
             </div>
           ))}
         </div>
       )}
+
+      {notice && <p className="text-xs text-mail-danger">{notice}</p>}
 
       <div className="flex flex-col gap-2">
         <Button variant="primary" size="lg" fullWidth onClick={() => onUpgrade?.()}>Upgrade</Button>
