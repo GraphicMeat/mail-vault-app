@@ -54,11 +54,15 @@ export async function saveFilesToDirectory(files, title) {
   return failed.length ? { dir, written, failed } : { dir, written };
 }
 
+// `open_file`, not the shell plugin: shell:allow-open validates its argument
+// against the URL pattern (http/https/mailto/tel), so handing it a file path
+// is rejected — which is why "Open" on a sample did nothing at all. The Rust
+// command is the same one the attachment bar has always used.
 export async function openInDefaultApp(file) {
   const { appCacheDir, join } = await import('@tauri-apps/api/path');
   const destPath = await join(await appCacheDir(), CACHE_SUBDIR, file.name);
   await writeFile(file, destPath);
-  const { open } = await import('@tauri-apps/plugin-shell');
-  await open(destPath);
+  const { invoke } = window.__TAURI__.core;
+  await invoke('open_file', { path: destPath });
   return destPath;
 }

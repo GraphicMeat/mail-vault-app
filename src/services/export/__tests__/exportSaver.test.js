@@ -68,7 +68,15 @@ describe('openInDefaultApp', () => {
   it('writes into the cache dir and hands the path to the OS', async () => {
     await openInDefaultApp(file);
     expect(invoke.mock.calls[0][1].destPath).toBe('/cache/mailvault-export/shot.png');
-    expect(shellOpen).toHaveBeenCalledWith('/cache/mailvault-export/shot.png');
+    expect(invoke).toHaveBeenCalledWith('open_file', { path: '/cache/mailvault-export/shot.png' });
+  });
+
+  // shell:allow-open validates its argument against a URL pattern, so a file
+  // path handed to the shell plugin is rejected and the button does nothing.
+  // That is the bug this test exists to keep fixed.
+  it('never routes a file path through the shell plugin', async () => {
+    await openInDefaultApp(file);
+    expect(shellOpen).not.toHaveBeenCalled();
   });
 });
 
