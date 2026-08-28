@@ -85,12 +85,13 @@ describe('Sidebar support buttons', function () {
     expect(urls.email).toBe(null);
   });
 
-  it('puts email last, warns about logs, and paints the maker logo from the bundle', async function () {
+  it('takes feature requests too, puts email last, warns about logs, and paints the maker logo', async function () {
     const footer = await browser.execute((sel) => {
       const dialog = document.querySelector(sel);
       const img = dialog.querySelector('[data-testid="bug-maker-logo"] img');
       return {
         order: [...dialog.querySelectorAll('[data-testid^="bug-option-"]')].map(el => el.dataset.testid),
+        idea: dialog.querySelector('[data-testid="bug-option-idea"] button')?.getAttribute('data-url') || null,
         note: dialog.querySelector('[data-testid="bug-privacy-note"]')?.textContent || '',
         x: dialog.querySelector('[data-testid="bug-follow-x"]')?.dataset.url || null,
         maker: dialog.querySelector('[data-testid="bug-maker-logo"]')?.dataset.url || null,
@@ -99,7 +100,10 @@ describe('Sidebar support buttons', function () {
       };
     }, DIALOG);
 
-    expect(footer.order).toEqual(['bug-option-github', 'bug-option-discussions', 'bug-option-email']);
+    expect(footer.order).toEqual([
+      'bug-option-github', 'bug-option-idea', 'bug-option-discussions', 'bug-option-email',
+    ]);
+    expect(footer.idea).toBe('https://github.com/GraphicMeat/mail-vault-app/discussions/new?category=ideas');
     expect(footer.note).toContain('logs');
     expect(footer.note).toContain('email addresses');
     expect(footer.x).toBe('https://x.com/GraphicMeat');

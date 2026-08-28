@@ -1,11 +1,12 @@
 import React from 'react';
-import { Bug, Github, Mail, MessagesSquare } from 'lucide-react';
+import { Bug, Github, Lightbulb, Mail, MessagesSquare } from 'lucide-react';
 import { Dialog, Button, XLogo } from './ui';
 import { openInBrowser } from '../services/billingApi';
 import logoUrl from '../assets/graphicmeat-logo.webp';
 
 const GH_DISCUSSIONS = 'https://github.com/GraphicMeat/mail-vault-app/discussions';
 const GH_NEW_BUG = `${GH_DISCUSSIONS}/new?category=bug-reports`;
+const GH_NEW_IDEA = `${GH_DISCUSSIONS}/new?category=ideas`;
 const X_PROFILE = 'https://x.com/GraphicMeat';
 const MAKER_SITE = 'https://graphicmeat.com';
 
@@ -14,6 +15,10 @@ const MAKER_SITE = 'https://graphicmeat.com';
  * next person who hits the same thing, and email is a dead end for everyone
  * but the sender — so email sits last, as the private fallback for anything
  * that should not be posted in the open.
+ *
+ * The dialog also takes feature requests. Someone who has just hit something
+ * wrong is the same person who knows what the app should have done instead,
+ * and this is the only moment MailVault has their attention on the subject.
  */
 export function BugReportDialog({ open, onClose, onEmail }) {
   const openAndClose = (url) => () => { openInBrowser(url).catch(() => {}); onClose(); };
@@ -30,10 +35,20 @@ export function BugReportDialog({ open, onClose, onEmail }) {
       onClick: openAndClose(GH_NEW_BUG),
     },
     {
+      testid: 'bug-option-idea',
+      icon: Lightbulb,
+      title: 'Suggest a feature',
+      subtitle: 'The thing you wish MailVault did — ask for it here',
+      action: 'Open',
+      variant: 'subtle',
+      url: GH_NEW_IDEA,
+      onClick: openAndClose(GH_NEW_IDEA),
+    },
+    {
       testid: 'bug-option-discussions',
       icon: MessagesSquare,
       title: 'Browse discussions',
-      subtitle: 'Someone may have reported it already',
+      subtitle: 'Someone may have reported it — or asked for it — already',
       action: 'Open',
       variant: 'subtle',
       url: GH_DISCUSSIONS,
@@ -54,9 +69,9 @@ export function BugReportDialog({ open, onClose, onEmail }) {
     <Dialog
       open={open}
       onClose={onClose}
-      title="Report a bug"
+      title="Report a bug or suggest a feature"
       icon={<Bug size={20} className="text-mail-accent-text" />}
-      description="Pick where it should land."
+      description="Report something broken, or ask for something missing."
       size="lg"
       data-testid="bug-report-dialog"
     >
