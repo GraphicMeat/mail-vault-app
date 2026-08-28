@@ -591,6 +591,21 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const loadingMore = useSyncStore(s => s.loadingMore);
   const manualRefreshSpinning = useAccountStore(s => s.manualRefreshSpinning);
   const activateAccount = useAccountStore(s => s.activateAccount);
+
+  // Single click resumes the folder you last read in that account; double click
+  // is the shortcut straight to its Inbox. Bound on the row WRAPPER so all
+  // three layouts (collapsed, tag cloud, expanded) get it from one place.
+  //
+  // Unconditional on purpose. A dblclick lands while the click's own activation
+  // is still in flight, and the store it would be tested against is mid-switch:
+  // a guard that skipped "already on this inbox" read the placeholder INBOX the
+  // restore path paints first, returned, and let the click's real mailbox land
+  // last. activateAccount aborts whatever is in flight, so the later call is
+  // the one that wins — as long as it is actually made.
+  const activateInbox = useCallback(
+    (accountId) => activateAccount(accountId, 'INBOX'),
+    [activateAccount],
+  );
   const setViewMode = useUiStore(s => s.setViewMode);
   const retryKeychainAccess = useAccountStore(s => s.retryKeychainAccess);
   const unreadPerAccount = useSettingsStore(s => s.unreadPerAccount);
@@ -846,6 +861,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
               ref={el => { hoverRowRefs.current[account.id] = el; }}
               onMouseEnter={() => handleAccountHoverStart(account.id)}
               onMouseLeave={scheduleHoverClose}
+              onDoubleClick={() => activateInbox(account.id)}
             >
               <CollapsedAccountButton
                 account={account}
@@ -1059,6 +1075,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                     ref={el => { hoverRowRefs.current[account.id] = el; }}
                     onMouseEnter={() => handleAccountHoverStart(account.id)}
                     onMouseLeave={scheduleHoverClose}
+                    onDoubleClick={() => activateInbox(account.id)}
                   >
                     <TagCloudAccountBubble
                       account={account}
@@ -1144,6 +1161,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                 ref={el => { hoverRowRefs.current[account.id] = el; }}
                 onMouseEnter={() => handleAccountHoverStart(account.id)}
                 onMouseLeave={scheduleHoverClose}
+                onDoubleClick={() => activateInbox(account.id)}
               >
                 <ExpandedAccountRow
                   account={account}
