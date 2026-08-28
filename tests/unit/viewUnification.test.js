@@ -125,6 +125,35 @@ describe('EmailSenderInfo', () => {
     expect(screen.getByText('noreply@example.com')).toBeTruthy();
   });
 
+  // The custody band above the sender line (EmailViewer) is the open message's
+  // one statement about where it lives, and it reads the row's derivation.
+  // A glyph here could only restate it from `archivedEmailIds` — a uid set —
+  // and did so wrongly: "On the server · Not saved to your vault yet" under a
+  // band reading "Saved in your vault".
+  it.each(['single', 'thread'])('renders no custody glyph beside the sender name (%s)', (variant) => {
+    const { container } = render(
+      React.createElement(EmailSenderInfo, {
+        email: testEmail,
+        variant,
+        expanded: true,
+        onToggle: vi.fn(),
+        archivedEmailIds: new Set(),
+      })
+    );
+    // Not vacuous: the header did render, and the test below proves this
+    // selector still matches a real glyph.
+    expect(container.textContent).toContain('Test Sender');
+    expect(container.querySelector('[data-testid="msg-state-icon"]')).toBeNull();
+  });
+
+  it('control: the selector the check above uses does match a rendered glyph', async () => {
+    const { MessageStateIcon } = await import('../../src/components/email/MessageStateIcon.jsx');
+    const { container } = render(
+      React.createElement(MessageStateIcon, { email: { uid: 1, isArchived: false } })
+    );
+    expect(container.querySelector('[data-testid="msg-state-icon"]')).toBeTruthy();
+  });
+
   it('does not define or export SenderBadge', async () => {
     const mod = await import('../../src/components/email/EmailSenderInfo.jsx');
     expect(mod.SenderBadge).toBeUndefined();

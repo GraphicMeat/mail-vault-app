@@ -51,6 +51,30 @@ describe('Custody claims', function () {
   const bandText = () => browser.execute(() =>
     document.querySelector('[data-testid="email-custody-band"]')?.innerText || null);
 
+  /**
+   * How many custody glyphs the OPEN MESSAGE carries — the answer must be zero.
+   *
+   * The band is the viewer's one custody statement, and it reads the row's
+   * derivation (custodyRowFor). The sender line used to carry a second glyph a
+   * few centimetres below it, derived instead from `archivedEmailIds` — a uid
+   * set — so a message the band called "Saved in your vault" wore a blue cloud
+   * saying "On the server · Not saved to your vault yet".
+   *
+   * Scoped through the band's own parent rather than the whole document: the
+   * list's rows carry glyphs by design, including thread children that are not
+   * inside an `email-row`. `null` means no message is open, which is a
+   * different answer from zero.
+   */
+  const viewerIconCount = () => browser.execute(() => {
+    const band = document.querySelector('[data-testid="email-custody-band"]');
+    if (!band || !band.parentElement) return null;
+    return band.parentElement.querySelectorAll('[data-testid="msg-state-icon"]').length;
+  });
+
+  /** Glyphs anywhere on screen — the control that keeps the check above honest. */
+  const totalIconCount = () => browser.execute(() =>
+    document.querySelectorAll('[data-testid="msg-state-icon"]').length);
+
   const clickCheckServer = () => browser.execute(() => {
     const btn = document.querySelector('[data-testid="custody-check-server"]');
     if (!btn || btn.offsetHeight === 0) return false;
@@ -263,6 +287,11 @@ describe('Custody claims', function () {
         // The contradiction, in the words it used to print.
         expect(band).not.toContain('only copy');
         expect(band).not.toContain('Deleted from the server');
+
+        // ONE statement, not two. Controlled by the total: rows still carry
+        // glyphs, so a zero here cannot be a testid that stopped matching.
+        expect(await totalIconCount()).toBeGreaterThan(0);
+        expect(await viewerIconCount()).toBe(0);
       });
     });
   }

@@ -10,12 +10,11 @@ import {
 } from 'lucide-react';
 import { SenderVerificationBadge } from './EmailHeaderComponent';
 import { SenderInfoPopover } from './SenderInfoPopover';
-import { ConnectedStateIcon } from './MessageStateIcon';
 import { getSenderName } from '../../utils/emailParser';
 
 /**
  * Shared sender info component with three variants: single, thread, chat.
- * Renders avatar, sender name, email, storage icon, DKIM shield, insights button,
+ * Renders avatar, sender name, email, DKIM shield, insights button,
  * To/CC, timestamp, and "via" indicator in a unified layout.
  */
 export const EmailSenderInfo = memo(function EmailSenderInfo({
@@ -44,11 +43,15 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
   const initial = senderName ? senderName[0].toUpperCase() : '?';
   const hasDistinctName = email?.from?.name && email.from.name !== email.from.address;
 
-  // `email` here is `selectedEmail` (or a thread email) — fetched fresh from
-  // IMAP/Maildir for its body, not derived through the row pipeline, so it
-  // never carries `.isArchived`. archivedEmailIds is the live store Set and
-  // stays the source of truth, same as the ternary this replaced.
-  const stateEmail = { ...email, isArchived: !!archivedEmailIds?.has(email.uid) };
+  // No custody glyph here. The band directly above this line already states
+  // where the message lives, in words, from the ROW's derivation
+  // (EmailViewer — custodyRowFor). This line could only ever restate it from a
+  // weaker one: `email` is the viewer's own fetched copy, which never carries
+  // `.isArchived`, so the glyph fell back to `archivedEmailIds.has(uid)` — a
+  // uid set — and printed "On the server · Not saved to your vault yet" under a
+  // band reading "Saved in your vault". Two statements 40px apart, and the
+  // small one was wrong. archivedEmailIds is still passed on to the popover,
+  // which is the only custody statement on ITS surface.
 
   // Extract mailing list name from List-Id
   const listId = email?.listId || email?.headers?.['list-id'];
@@ -97,11 +100,6 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0 flex-1">
-            {/* Storage icon */}
-            <span className="flex-shrink-0">
-              <ConnectedStateIcon email={stateEmail} size={12} />
-            </span>
-
             {/* Sender name — click opens Sender Details (parity with chat view) */}
             <span
               className="text-sm font-semibold text-mail-text truncate cursor-pointer hover:underline"

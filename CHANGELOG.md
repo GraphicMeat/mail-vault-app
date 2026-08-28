@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- **An open message no longer carries a second, quieter claim about where it lives.** The band across the top of a message says where that message is kept — in your vault, on the mail server, or the last copy left anywhere — and a small symbol beside the sender's name said it again, a couple of centimetres below. The two were worked out differently: the band reads the same record as the row you clicked, while the symbol asked only whether the message was in the folder on screen. So a message the band called "Saved in your vault" wore a blue cloud that read "On the server — not saved to your vault yet". The symbol beside the sender is gone; the band is the message's one statement, and every row in the list keeps its own.
+
 ## [2.10.4] - 2026-08-27
 
 ### Added
