@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { resolveMessageBody } from '../services/export/bodyResolver';
-import { resolveEmailLocation, emailKey } from '../stores/slices/unifiedHelpers';
+import { resolveEmailLocation, emailKey, bodyMatchesHeader } from '../stores/slices/unifiedHelpers';
 
 const CONCURRENCY = 3;
 

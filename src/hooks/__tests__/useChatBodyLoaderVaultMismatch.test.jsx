@@ -30,9 +30,14 @@ vi.mock('../../services/attachmentUtils', () => ({
   hydrateInlineImages: async (e) => e,
 }));
 
+// The body cache the loader consults BEFORE it goes anywhere. Every test here
+// left it empty, so the cache-hit branch had never once executed — which is how
+// that branch shipped calling a helper the file no longer imported, and threw
+// ReferenceError on the first real thread that had a body cached.
+let cacheHit = null;
 const store = {
   accounts: [{ id: 'acc1', email: 'rare@graphicmeat.com' }],
-  getFromCache: () => null,
+  getFromCache: () => cacheHit,
   addToCache: vi.fn(),
 };
 
@@ -83,6 +88,7 @@ describe('useChatBodyLoader — vault copy under a reissued uid', () => {
     mockGetLocalEmailLight.mockReset();
     mockFetchEmailLight.mockReset();
     store.addToCache.mockReset();
+    cacheHit = null;
   });
   afterEach(() => cleanup());
 
@@ -107,6 +113,27 @@ describe('useChatBodyLoader — vault copy under a reissued uid', () => {
 
     await waitFor(() => expect(entryFor(result)?.status).toBe('loaded'));
     expect(mockFetchEmailLight).not.toHaveBeenCalled();
+  });
+
+  it('serves a cached body that answers for this row, without any read', async () => {
+    cacheHit = SERVER_COPY;
+
+    const { result } = renderHook(() => useChatBodyLoader([ROW]));
+
+    expect(entryFor(result).status).toBe('loaded');
+    expect(entryFor(result).email).toMatchObject(SERVER_COPY);
+    expect(mockGetLocalEmailLight).not.toHaveBeenCalled();
+    expect(mockFetchEmailLight).not.toHaveBeenCalled();
+  });
+
+  it('ignores a cached body that is another message and loads this one', async () => {
+    cacheHit = STALE_VAULT_COPY;
+    mockGetLocalEmailLight.mockResolvedValue(SERVER_COPY);
+
+    const { result } = renderHook(() => useChatBodyLoader([ROW]));
+
+    await waitFor(() => expect(entryFor(result)?.status).toBe('loaded'));
+    expect(entryFor(result).email).toMatchObject(SERVER_COPY);
   });
 
   it('still refuses a SERVER body that contradicts the row', async () => {
