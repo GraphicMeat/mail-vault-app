@@ -32,8 +32,23 @@
   </url>
   <url>
     <loc>https://mailvaultapp.com/blog.html</loc>
-    <lastmod>2026-07-02</lastmod>
+    <lastmod>2026-08-28</lastmod>
     <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/blog/cloud-backup-vendor-reads-your-email.html</loc>
+    <lastmod>2026-08-28</lastmod>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/blog/gdpr-fines-indefinite-email-retention.html</loc>
+    <lastmod>2026-08-25</lastmod>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://mailvaultapp.com/blog/ms365-100gb-mailbox-price-hike.html</loc>
+    <lastmod>2026-08-20</lastmod>
+    <priority>0.5</priority>
   </url>
   <url>
     <loc>https://mailvaultapp.com/blog/email-provider-not-a-backup.html</loc>
