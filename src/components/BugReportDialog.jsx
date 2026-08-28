@@ -1,17 +1,23 @@
 import React from 'react';
 import { Bug, Github, Mail, MessagesSquare } from 'lucide-react';
-import { Dialog, Button } from './ui';
+import { Dialog, Button, XLogo } from './ui';
 import { openInBrowser } from '../services/billingApi';
+import logoUrl from '../assets/graphicmeat-logo.webp';
 
 const GH_DISCUSSIONS = 'https://github.com/GraphicMeat/mail-vault-app/discussions';
 const GH_NEW_BUG = `${GH_DISCUSSIONS}/new?category=bug-reports`;
+const X_PROFILE = 'https://x.com/GraphicMeat';
+const MAKER_SITE = 'https://graphicmeat.com';
 
 /**
  * Where a bug report goes. GitHub first: a public thread is searchable by the
  * next person who hits the same thing, and email is a dead end for everyone
- * but the sender.
+ * but the sender — so email sits last, as the private fallback for anything
+ * that should not be posted in the open.
  */
 export function BugReportDialog({ open, onClose, onEmail }) {
+  const openAndClose = (url) => () => { openInBrowser(url).catch(() => {}); onClose(); };
+
   const options = [
     {
       testid: 'bug-option-github',
@@ -21,16 +27,7 @@ export function BugReportDialog({ open, onClose, onEmail }) {
       action: 'Open',
       variant: 'primary',
       url: GH_NEW_BUG,
-      onClick: () => { openInBrowser(GH_NEW_BUG).catch(() => {}); onClose(); },
-    },
-    {
-      testid: 'bug-option-email',
-      icon: Mail,
-      title: 'Email the developer',
-      subtitle: 'Private, with your app and account details filled in',
-      action: 'Compose',
-      variant: 'subtle',
-      onClick: onEmail,
+      onClick: openAndClose(GH_NEW_BUG),
     },
     {
       testid: 'bug-option-discussions',
@@ -40,7 +37,16 @@ export function BugReportDialog({ open, onClose, onEmail }) {
       action: 'Open',
       variant: 'subtle',
       url: GH_DISCUSSIONS,
-      onClick: () => { openInBrowser(GH_DISCUSSIONS).catch(() => {}); onClose(); },
+      onClick: openAndClose(GH_DISCUSSIONS),
+    },
+    {
+      testid: 'bug-option-email',
+      icon: Mail,
+      title: 'Email the developer',
+      subtitle: 'Private, with your app and account details filled in',
+      action: 'Compose',
+      variant: 'subtle',
+      onClick: onEmail,
     },
   ];
 
@@ -69,6 +75,38 @@ export function BugReportDialog({ open, onClose, onEmail }) {
             <Button variant={variant} size="sm" onClick={onClick} data-url={url}>{action}</Button>
           </div>
         ))}
+      </div>
+
+      <p className="text-xs text-mail-text-muted leading-relaxed" data-testid="bug-privacy-note">
+        A GitHub thread is public. Keep sensitive data out of it, and never upload
+        logs there — logs carry email addresses. If a log would help, send it over
+        email instead.
+      </p>
+
+      <div className="pt-3 border-t border-mail-border flex flex-col items-center gap-3">
+        <button
+          type="button"
+          data-testid="bug-follow-x"
+          data-url={X_PROFILE}
+          onClick={openAndClose(X_PROFILE)}
+          className="inline-flex items-center gap-2 text-xs text-mail-text-muted hover:text-mail-text transition-colors"
+        >
+          <XLogo size={14} /> Follow on X
+        </button>
+
+        <div className="flex flex-col items-center gap-1 text-xs text-mail-text-muted">
+          <span>Cooked over an <span className="text-mail-accent-text font-medium">open GPU</span> by</span>
+          <button
+            type="button"
+            data-testid="bug-maker-logo"
+            data-url={MAKER_SITE}
+            aria-label="Graphic Meat"
+            onClick={openAndClose(MAKER_SITE)}
+            className="hover:opacity-80 transition-opacity"
+          >
+            <img src={logoUrl} alt="Graphic Meat" width="128" height="128" className="w-32 h-32" />
+          </button>
+        </div>
       </div>
     </Dialog>
   );

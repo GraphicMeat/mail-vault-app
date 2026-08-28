@@ -5,8 +5,9 @@
  * else could read. It now opens a dialog that offers GitHub Discussions first
  * — so what matters here is that the button reaches the dialog, that the two
  * GitHub rows carry the live URLs (a webview cannot follow an external open,
- * so the URL is asserted at the control), and that the email channel still
- * lands in compose with the bug template. "Refer a friend" is the second new
+ * so the URL is asserted at the control), that email sits last as the private
+ * fallback and still lands in compose with the bug template, and that the
+ * footer's warning and Graphic Meat logo render. "Refer a friend" is the second new
  * button: compose with the pitch and the website link, and no recipient.
  */
 
@@ -82,6 +83,28 @@ describe('Sidebar support buttons', function () {
     expect(urls.browse).toBe('https://github.com/GraphicMeat/mail-vault-app/discussions');
     // The email row is not a link — it hands off to compose in-app.
     expect(urls.email).toBe(null);
+  });
+
+  it('puts email last, warns about logs, and paints the maker logo from the bundle', async function () {
+    const footer = await browser.execute((sel) => {
+      const dialog = document.querySelector(sel);
+      const img = dialog.querySelector('[data-testid="bug-maker-logo"] img');
+      return {
+        order: [...dialog.querySelectorAll('[data-testid^="bug-option-"]')].map(el => el.dataset.testid),
+        note: dialog.querySelector('[data-testid="bug-privacy-note"]')?.textContent || '',
+        x: dialog.querySelector('[data-testid="bug-follow-x"]')?.dataset.url || null,
+        maker: dialog.querySelector('[data-testid="bug-maker-logo"]')?.dataset.url || null,
+        // The logo is a bundled asset, so this also proves it clears the app CSP.
+        logoPainted: !!img && img.complete && img.naturalWidth > 0,
+      };
+    }, DIALOG);
+
+    expect(footer.order).toEqual(['bug-option-github', 'bug-option-discussions', 'bug-option-email']);
+    expect(footer.note).toContain('logs');
+    expect(footer.note).toContain('email addresses');
+    expect(footer.x).toBe('https://x.com/GraphicMeat');
+    expect(footer.maker).toBe('https://graphicmeat.com');
+    expect(footer.logoPainted).toBe(true);
   });
 
   it('still fills the bug template when the email channel is picked', async function () {

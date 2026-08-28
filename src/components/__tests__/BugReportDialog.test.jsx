@@ -3,7 +3,8 @@
 // The bug button used to go straight to an email nobody else could read. The
 // dialog exists so a report can land in a public thread instead — so what this
 // guards is the routing: three channels, the two GitHub ones on the live
-// discussion URLs, and the email one still reaching the compose template.
+// discussion URLs, email last as the private fallback, and the warning that
+// stops a log full of email addresses being pasted into a public thread.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import React from 'react';
@@ -46,5 +47,34 @@ describe('BugReportDialog', () => {
     click('bug-option-email');
     expect(onEmail).toHaveBeenCalled();
     expect(openInBrowser).not.toHaveBeenCalled();
+  });
+
+  it('offers email last — the public thread is the first thing read', () => {
+    render(<BugReportDialog open onClose={() => {}} onEmail={() => {}} />);
+    const order = [...screen.getByTestId('bug-report-dialog').querySelectorAll('[data-testid^="bug-option-"]')]
+      .map(el => el.dataset.testid);
+    expect(order).toEqual(['bug-option-github', 'bug-option-discussions', 'bug-option-email']);
+  });
+
+  it('warns against posting logs to the public thread, and names email as the way to send them', () => {
+    render(<BugReportDialog open onClose={() => {}} onEmail={() => {}} />);
+    const note = screen.getByTestId('bug-privacy-note').textContent;
+    expect(note).toMatch(/logs/i);
+    expect(note).toMatch(/email addresses/i);
+    expect(note).toMatch(/email instead/i);
+  });
+
+  it('links the X profile and the maker site', () => {
+    const onClose = vi.fn();
+    render(<BugReportDialog open onClose={onClose} onEmail={() => {}} />);
+
+    fireEvent.click(screen.getByTestId('bug-follow-x'));
+    expect(openInBrowser).toHaveBeenCalledWith('https://x.com/GraphicMeat');
+
+    fireEvent.click(screen.getByTestId('bug-maker-logo'));
+    expect(openInBrowser).toHaveBeenCalledWith('https://graphicmeat.com');
+
+    expect(screen.getByAltText('Graphic Meat')).toBeTruthy();
+    expect(screen.getByTestId('bug-report-dialog').textContent).toContain('Cooked over an');
   });
 });
