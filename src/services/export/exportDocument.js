@@ -62,16 +62,25 @@ export function provenanceHtml({ account, mailbox, messages, stats }) {
 export const EXPORT_CSS = `
   :root { color-scheme: light; }
   html, body { margin: 0; padding: 0; background: #ffffff; }
-  body { width: ${EXPORT_WIDTH_PX}px; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #16181d; }
+  /* max-width, not width: the rasterizer renders in a frame of exactly
+     EXPORT_WIDTH_PX so it measures the same either way, while the HTML export
+     opens in a window of any size — and a fixed width there is a horizontal
+     scrollbar on every screen narrower than the column. */
+  body { max-width: ${EXPORT_WIDTH_PX}px; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #16181d; }
+  /* Mail is full of fixed-width tables and unbreakable URLs. Contained here so
+     the message scrolls with the page instead of sideways inside its frame. */
+  .mv-body { overflow-wrap: anywhere; }
+  .mv-body table { max-width: 100%; }
+  .mv-body pre { white-space: pre-wrap; word-break: break-word; }
   .mv-head { padding: 20px 24px 14px; border-bottom: 1px solid #e3e5ea; }
-  .mv-subject { margin: 0 0 10px; font-size: 18px; font-weight: 600; }
+  .mv-subject { margin: 0 0 10px; font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
   .mv-meta { border-collapse: collapse; font-size: 12.5px; }
   .mv-l { padding: 1px 10px 1px 0; color: #6b7280; vertical-align: top; white-space: nowrap; }
-  .mv-v { padding: 1px 0; }
+  .mv-v { padding: 1px 0; overflow-wrap: anywhere; }
   .mv-body { padding: 18px 24px; }
   .mv-body img { max-width: 100%; height: auto; }
   .mv-prov { padding: 12px 24px 18px; border-top: 1px solid #e3e5ea; color: #6b7280; font-size: 11.5px; }
-  .mv-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+  .mv-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; overflow-wrap: anywhere; }
   .mv-mark { margin-top: 6px; color: #9aa1ab; }
 `;
 

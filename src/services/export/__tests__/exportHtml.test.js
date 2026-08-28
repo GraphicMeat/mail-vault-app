@@ -5,6 +5,7 @@
 // src/components/** to jsdom.
 import { describe, it, expect } from 'vitest';
 import { buildThreadDocument } from '../exportHtml';
+import { EXPORT_WIDTH_PX } from '../exportDocument';
 
 const messages = [
   { from: 'Ana Brandt <ana@sizzlemedia.co>', to: 'Rowan Marsh <rowan@primecut.studio>',
@@ -77,8 +78,53 @@ describe('buildThreadDocument', () => {
     expect(html).not.toMatch(/srcdoc="[^"]*<p class="x"/);
   });
 
-  it('contains no script element anywhere', () => {
-    expect(build()).not.toContain('<script');
+  // The enhancement script sizes the frames after a reflow and drives the
+  // fold-all buttons. Exactly one, in the outer document — a second <script>
+  // means an email's own made it through into a srcdoc.
+  it('carries one script, and none inside a message frame', () => {
+    const html = build();
+    expect(html.match(/<script/g)).toHaveLength(1);
+    expect(html).toContain('data-mv-all');
+    expect(html).not.toMatch(/srcdoc="[^"]*&lt;script/);
+  });
+
+  it('lays out for any window rather than one fixed column', () => {
+    const html = build();
+    expect(html).toContain('width=device-width');
+    expect(html).not.toContain(`content="width=${EXPORT_WIDTH_PX}"`);
+    expect(html).toContain('@media (max-width: 820px)');
+  });
+
+  it('lists every message in the rail, oldest first', () => {
+    const html = build();
+    const rail = html.slice(html.indexOf('<ol class="mv-toc"'), html.indexOf('</ol>'));
+    expect(rail.match(/<a href="#mv-m\d+"/g)).toHaveLength(3);
+    expect(rail.indexOf('#mv-m1')).toBeLessThan(rail.indexOf('#mv-m3'));
+    // Anchors have somewhere to land.
+    for (const n of [1, 2, 3]) expect(html).toContain(`id="mv-m${n}"`);
+  });
+
+  it('gives the rail a fold and an unfold control', () => {
+    const html = build();
+    expect(html).toContain('data-mv-all="open"');
+    expect(html).toContain('data-mv-all="close"');
+  });
+
+  // A single message has no chronology to list and nothing to fold — the rail
+  // would be a control panel for one already-open message.
+  it('drops the rail when there is only one message', () => {
+    const html = buildThreadDocument({
+      messages: [messages[0]], bodies: [bodies[0]], heights: [heights[0]], ...meta,
+    });
+    // The stylesheet always carries the rail's rules and the script always
+    // looks for its buttons; it is the MARKUP that must be absent.
+    expect(html).not.toContain('<nav class="mv-rail"');
+    expect(html).not.toContain('<ol class="mv-toc"');
+    expect(html).not.toContain('<button type="button" data-mv-all');
+    expect(html).toContain('mv-solo');
+    // The one message is still open, and still sized to the window.
+    expect(html).toContain('<details open');
+    expect(html).toContain('<script');
   });
 
   it('carries the provenance footer', () => {
