@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { formatDateTime, formatDateOnly } from '../utils/dateFormat';
 import { IS_APPSTORE_BUILD } from '../utils/buildFlags.js';
+import { PremiumFeaturesLink } from './PremiumFeaturesLink';
 import { usePremiumPriceBlurb } from '../hooks/usePremiumPricing.js';
 import { mailboxLabel } from '../utils/imapUtf7';
 
@@ -120,6 +121,7 @@ function PremiumGate({ onUpgrade }) {
             Upgrade
           </Button>
         )}
+        <PremiumFeaturesLink className="mt-4" />
     </div>
   );
 }

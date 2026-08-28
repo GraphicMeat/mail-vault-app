@@ -10,6 +10,7 @@ import {
 } from '../../services/billingApi';
 import { sendNotification } from '../../services/api';
 import { ConfirmDialog } from '../ConfirmDialog';
+import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
 import { Toast } from '../Toast';
 import { formatDateLong, formatTime } from '../../utils/dateFormat';
 import { pricingRecord } from '../../utils/pricing';
@@ -26,6 +27,7 @@ import {
   Mail,
   ArrowLeftRight,
   Trash2,
+  ImageDown,
   Monitor,
   X,
   LogOut,
@@ -755,13 +757,17 @@ export function BillingSettings() {
             <p className="text-xs font-semibold text-mail-accent-text uppercase tracking-wide mb-2">Premium</p>
             <ul className="space-y-2">
               {[[Clock, 'Scheduled automatic backups'], [CheckCircle2, 'Backup health & status management'],
-                [ArrowLeftRight, 'Cross-account mailbox migration'], [Trash2, 'Auto-cleanup rules']].map(([Icon, text]) => (
+                [ArrowLeftRight, 'Cross-account mailbox migration'], [Trash2, 'Auto-cleanup rules'],
+                [ImageDown, 'Export emails as image or HTML']].map(([Icon, text]) => (
                 <li key={text} className="flex items-start gap-2 text-xs text-mail-text">
                   <Icon size={12} className="text-mail-accent-text mt-0.5 flex-shrink-0" />{text}
                 </li>
               ))}
             </ul>
           </div>
+        </div>
+        <div className="mt-4 pt-3 border-t border-mail-border">
+          <PremiumFeaturesLink />
         </div>
       </div>
 

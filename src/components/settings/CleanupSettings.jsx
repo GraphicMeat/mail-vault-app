@@ -9,6 +9,7 @@ import * as classificationService from '../../services/classificationService';
 import { bulkOperationManager } from '../../services/BulkOperationManager';
 import { ensureFreshToken } from '../../services/authUtils';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags.js';
+import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
 import { usePremiumPriceBlurb } from '../../hooks/usePremiumPricing.js';
 // Lazy-loaded in openPreview to avoid circular import at startup
 let _getRealAttachments = null;
@@ -523,6 +524,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
             Upgrade
           </Button>
         )}
+        <PremiumFeaturesLink className="mt-4" />
       </div>
     );
   } else if (summaryLoading && !hasResults && !isClassifying) {

@@ -1,6 +1,7 @@
 import React from 'react';
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { Clock, Lock, Info } from 'lucide-react';
+import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
 
 export function TimeCapsuleSettings() {
   const billingProfile = useSettingsStore(s => s.billingProfile);
@@ -19,6 +20,7 @@ export function TimeCapsuleSettings() {
           <p className="text-xs text-mail-text-muted max-w-md mx-auto">
             Travel back in time through your mailbox. Time Capsule takes lightweight snapshots of your email so you can browse any folder as it looked on a past date — and restore emails you may have lost.
           </p>
+          <PremiumFeaturesLink className="mt-4" />
         </div>
       </div>
     );

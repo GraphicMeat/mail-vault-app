@@ -5,6 +5,7 @@ import { useLearningStore } from '../../stores/learningStore';
 import { useAccountStore } from '../../stores/accountStore';
 import { exportRules, previewImport, importRules } from '../../services/ruleExporter';
 import * as classificationService from '../../services/classificationService';
+import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
 import {
   Sparkles, Trash2, AlertCircle, XCircle, Upload, FileDown, Lock,
   Info, Brain, ChevronDown, ChevronRight, Save, Plus,
@@ -84,6 +85,7 @@ export function AISettings() {
           <p className="text-xs text-mail-text-muted max-w-md mx-auto">
             Local AI-powered email classification, cleanup suggestions, and learned rules are available with a Premium subscription.
           </p>
+          <PremiumFeaturesLink className="mt-4" />
         </div>
       </div>
     );
