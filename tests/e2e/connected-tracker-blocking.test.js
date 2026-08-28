@@ -32,6 +32,15 @@ const frameSource = () => browser.execute(() => {
   return frame ? (frame.getAttribute('srcdoc') || '') : '';
 });
 
+/** The tracker glyph inside the LIST, ignoring the one in the reading pane. */
+const rowGlyph = (subject) => browser.execute((needle) => {
+  const row = [...document.querySelectorAll('[data-testid="email-row"]')]
+    .find((r) => r.offsetHeight > 0 && (r.innerText || '').includes(needle));
+  if (!row) return null;
+  const el = row.querySelector('[data-testid="tracker-alert-icon"]');
+  return el ? { blocked: el.getAttribute('data-blocked'), title: el.getAttribute('title') } : null;
+}, subject);
+
 /** The tracker glyph as the row/viewer renders it, or null. */
 const glyph = () => browser.execute(() => {
   const el = document.querySelector('[data-testid="tracker-alert-icon"]');
@@ -181,6 +190,36 @@ describe('Tracker blocking', function () {
     expect((await glyph()).blocked).toBe('false');
 
     await browser.execute(() => window.__SETTINGS_STORE__.getState().setTrackerBlockingEnabled(true));
+  });
+
+  // The list is where the feature is worth anything: a warning that only shows
+  // on the message you already opened warns you about nothing. The verdict is
+  // written once, by whichever surface rendered the body, and the row reads it
+  // back from settings.
+  it('leaves the glyph on the row after the message is closed', async function () {
+    await setPremium(false);
+    await clearSelection();
+    await openTrackerMessage();
+    await clearSelection();
+
+    await browser.waitUntil(async () => !!(await rowGlyph(TRACKER_SUBJECT)), {
+      timeout: 20_000,
+      interval: 400,
+      timeoutMsg: 'the row lost the tracker glyph as soon as the message was deselected',
+    });
+    const icon = await rowGlyph(TRACKER_SUBJECT);
+    expect(icon.blocked).toBe('false');
+    expect(icon.title).toContain('This email tracks you');
+
+    // Negative control: an ordinary message must NOT inherit the verdict —
+    // the summary is keyed per message, and a glyph on every row would be
+    // indistinguishable from a glyph that means nothing.
+    const others = await browser.execute((needle) => {
+      const rows = [...document.querySelectorAll('[data-testid="email-row"]')]
+        .filter((r) => r.offsetHeight > 0 && !(r.innerText || '').includes(needle));
+      return rows.filter((r) => r.querySelector('[data-testid="tracker-alert-icon"]')).length;
+    }, TRACKER_SUBJECT);
+    expect(others).toBe(0);
   });
 
   it('refuses to arm the switch for a free profile', async function () {

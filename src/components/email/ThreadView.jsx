@@ -26,7 +26,8 @@ import { EmailActionBar } from './EmailActionBar';
 import { useExportStore } from '../../stores/exportStore';
 import { AttachmentItem } from './AttachmentBar';
 import { scanEmailLinks, checkLinkAlert } from '../../utils/linkSafety';
-import { scanTrackers } from '../../utils/trackerDetect';
+import { scanTrackers, summarizeTrackers } from '../../utils/trackerDetect';
+import { recordTrackerSummary } from '../../services/trackerVerdicts';
 import { emailScopeKey } from '../../stores/slices/unifiedHelpers';
 import { getSenderName } from '../../utils/emailParser';
 import { LinkSafetyModal } from '../LinkSafetyModal';
@@ -66,15 +67,19 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
 
   const scopeKey = emailScopeKey(email, useMailStore.getState());
 
-  const { iframeContent, scanAlertLevel: threadScanAlert } = useMemo(() => {
-    if (!loadedEmail?.html) return { iframeContent: '', scanAlertLevel: null };
+  const { iframeContent, scanAlertLevel: threadScanAlert, trackerSummary } = useMemo(() => {
+    if (!loadedEmail?.html) return { iframeContent: '', scanAlertLevel: null, trackerSummary: null };
     const htmlWithCid = replaceCidUrls(loadedEmail.html, loadedEmail.attachments);
     const bodyHtml = getEmailBodyContent(htmlWithCid);
     // Scan body (stable per uid → cacheable); wrap with iframe template so
     // theme toggles don't invalidate the scan cache.
     // Strip beacons before anything renders them — a thread view that skipped
     // this would fire every pixel the reading pane just blocked.
-    let renderedBody = trackerBlocking ? scanTrackers(bodyHtml, scopeKey).cleanedBodyHtml : bodyHtml;
+    // Detection runs for everyone; only the swap to the cleaned body is
+    // premium. Scanning only when blocking was on left a free user's row with
+    // no glyph for a message they had read right here.
+    const trackerScan = scanTrackers(bodyHtml, scopeKey);
+    let renderedBody = trackerBlocking ? trackerScan.cleanedBodyHtml : bodyHtml;
     let indicatorStyle = '';
     let alertLevel = null;
     if (linkSafetyEnabled) {
@@ -92,8 +97,12 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
       extraHead,
       extraBody: `${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}`,
     });
-    return { iframeContent: html, scanAlertLevel: alertLevel };
+    return { iframeContent: html, scanAlertLevel: alertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers) };
   }, [loadedEmail?.html, scopeKey, signatureDisplay, linkSafetyEnabled, trackerBlocking, theme]);
+
+  // The thread is a second reader of the same body: what it finds has to reach
+  // the row, or the glyph means "you opened this in the reading pane".
+  useEffect(() => { recordTrackerSummary(scopeKey, trackerSummary); }, [trackerSummary, scopeKey]);
 
   // Persist link alert outside render
   useEffect(() => {

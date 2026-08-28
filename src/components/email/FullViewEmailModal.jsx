@@ -13,6 +13,7 @@ import { AttachmentItem } from '../EmailViewer';
 import { getRealAttachments, replaceCidUrls } from '../../services/attachmentUtils';
 import { checkLinkAlert } from '../../utils/linkSafety';
 import { scanTrackers } from '../../utils/trackerDetect';
+import { recordTrackerVerdict } from '../../services/trackerVerdicts';
 import { LinkSafetyModal } from '../LinkSafetyModal';
 import { openMailtoCompose, addressesToHtml } from '../../utils/mailto';
 
@@ -64,6 +65,16 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
 
   // Use fetched email or fall back to initial
   const email = fetchedEmail || initialEmail;
+
+  // Fourth renderer, same duty: record what the body carries so the row it was
+  // opened from shows the glyph. `scanTrackers` is cached per key + body
+  // fingerprint, so this is not a second parse of the same message.
+  useEffect(() => {
+    if (!email?.html) return;
+    const key = emailScopeKey(email, useMailStore.getState());
+    if (!key) return;
+    recordTrackerVerdict(key, scanTrackers(replaceCidUrls(email.html, email.attachments), key).trackers);
+  }, [email]);
 
   // Build full HTML content for iframe
   const iframeContent = useMemo(() => {

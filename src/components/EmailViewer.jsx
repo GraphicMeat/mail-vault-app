@@ -36,6 +36,7 @@ import { SenderAlertIcon } from './SenderAlertIcon';
 import { ReplyToAlertIcon } from './ReplyToAlertIcon';
 import { TrackerAlertIcon } from './TrackerAlertIcon';
 import { scanTrackers, getCachedTrackers, summarizeTrackers } from '../utils/trackerDetect';
+import { recordTrackerSummary } from '../services/trackerVerdicts';
 import { getCachedAlerts } from '../utils/linkSafety';
 import { emailScopeKey } from '../stores/slices/unifiedHelpers';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
@@ -354,12 +355,7 @@ function EmailViewerComponent({ onComposeReply }) {
     if (!trackerSummary || !selectedEmail) return;
     const current = selectedEmail._trackerInfo;
     if (current && current.count === trackerSummary.count) return;
-    useMailStore.setState(state => ({
-      selectedEmail: { ...state.selectedEmail, _trackerInfo: trackerSummary },
-      emails: state.emails.map(e => scopeKey && emailScopeKey(e, state) === scopeKey ? { ...e, _trackerInfo: trackerSummary } : e),
-      sortedEmails: state.sortedEmails.map(e => scopeKey && emailScopeKey(e, state) === scopeKey ? { ...e, _trackerInfo: trackerSummary } : e),
-    }));
-    useSettingsStore.getState().setTrackerAlert(scopeKey, trackerSummary);
+    recordTrackerSummary(scopeKey, trackerSummary);
   }, [trackerSummary, scopeKey]);
 
   // Auto-resize iframe and apply dark mode overrides

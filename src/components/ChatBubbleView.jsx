@@ -35,7 +35,8 @@ import { splitQuotedContent } from '../utils/quoteFolding';
 import { splitSignature } from '../utils/signatureFolding';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
 import { scanEmailLinks, checkLinkAlert } from '../utils/linkSafety';
-import { scanTrackers } from '../utils/trackerDetect';
+import { scanTrackers, summarizeTrackers } from '../utils/trackerDetect';
+import { recordTrackerSummary } from '../services/trackerVerdicts';
 import { emailScopeKey } from '../stores/slices/unifiedHelpers';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { MAIL_DARK_TEXT } from '../utils/mailChrome';
@@ -344,7 +345,10 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     const chatScopeKey = emailScopeKey(email, useMailStore.getState());
     // Chat bubbles render the same body a third time — blocking has to hold
     // here too, or switching to Chat view undoes it.
-    let scannedBody = trackerBlocking ? scanTrackers(rawBody, chatScopeKey).cleanedBodyHtml : rawBody;
+    // Scan either way — the verdict below is what paints the row's glyph, and
+    // a free user reading in chat view deserves the same warning.
+    const trackerScan = scanTrackers(rawBody, chatScopeKey);
+    let scannedBody = trackerBlocking ? trackerScan.cleanedBodyHtml : rawBody;
     let indicatorStyle = '';
     let chatAlertLevel = null;
     if (linkSafetyEnabled) {
@@ -403,12 +407,19 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
         <body>${scannedBody}${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}</body>
       </html>
     `;
-    return { html: builtHtml, alertLevel: chatAlertLevel };
+    return { html: builtHtml, alertLevel: chatAlertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers), scopeKey: chatScopeKey };
   }, [mergedEmail.html, fromUser, signatureDisplay, linkSafetyEnabled, trackerBlocking]);
 
   // iframeContent useMemo now returns { html, alertLevel } — extract for srcDoc and alert
   const iframeHtmlContent = iframeContent?.html || '';
   const chatScanAlert = iframeContent?.alertLevel || null;
+  const chatTrackerSummary = iframeContent?.trackerSummary || null;
+
+  // Third renderer of the same body, third chance to be the only view someone
+  // reads a message in.
+  useEffect(() => {
+    recordTrackerSummary(iframeContent?.scopeKey, chatTrackerSummary);
+  }, [chatTrackerSummary, iframeContent?.scopeKey]);
 
   // Persist link alert outside render
   useEffect(() => {

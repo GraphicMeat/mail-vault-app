@@ -10,6 +10,7 @@ import { useUiStore } from '../stores/uiStore';
 import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore, getAccountInitial, hashColor } from '../stores/settingsStore';
 import { shouldPrefetch } from '../services/cachePressure';
+import { backfillTrackerVerdicts } from '../services/trackerVerdicts';
 import { buildThreads, groupBySender, getSenderName, filterUnread, threadRowMembers } from '../utils/emailParser';
 import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
@@ -691,6 +692,32 @@ function EmailListComponent() {
       return () => clearTimeout(timer);
     }
   }, [virtualizer, threadedDisplay.length, hasMoreEmails, loadingMore, searchActive, viewMode, loadMoreEmails]);
+
+  // Tracker verdicts for rows nobody has opened. The scan needs a body and the
+  // header cache has none, so the glyph used to appear only on messages that
+  // had been read — invisible on a list of a thousand tracked newsletters.
+  // Bodies already in the vault answer for free; this reads only what is on
+  // screen, and only once per message.
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    let timer = null;
+    const run = () => {
+      const headers = [];
+      for (const item of virtualizer.getVirtualItems()) {
+        const row = threadedDisplay[item.index];
+        if (!row) continue;
+        if (row.type === 'thread') headers.push(...row.thread.emails);
+        else if (row.email) headers.push(row.email);
+      }
+      backfillTrackerVerdicts(headers);
+    };
+    // Settle, then read. Mid-fling the visible window is a different set every
+    // frame, and each one would cost a vault read per row.
+    const arm = () => { clearTimeout(timer); timer = setTimeout(run, 400); };
+    arm();
+    container?.addEventListener('scroll', arm, { passive: true });
+    return () => { clearTimeout(timer); container?.removeEventListener('scroll', arm); };
+  }, [virtualizer, threadedDisplay]);
 
   // Idle memory trim — after scrolling settles, check pressure and trim if needed
   const scrollIdleTimerRef = useRef(null);
