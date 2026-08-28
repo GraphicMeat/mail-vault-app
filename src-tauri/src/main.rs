@@ -41,7 +41,7 @@ use cocoa::base::nil;
 #[cfg(target_os = "macos")]
 use cocoa::foundation::NSString;
 #[cfg(target_os = "macos")]
-use objc::{msg_send, sel, sel_impl};
+use objc::{class, msg_send, sel, sel_impl};
 
 // Global log directory
 struct LogDir(PathBuf);
@@ -4773,6 +4773,22 @@ fn main() {
         };
         eprintln!("PANIC at {}: {}", location, payload);
     }));
+
+    // WebKit keeps its continuous-spell-checking state in NSUserDefaults and reads
+    // it once, early. The key is absent in a fresh app domain, so the checker never
+    // runs and the compose editor paints no squiggles no matter what its
+    // `spellcheck` attribute says. Safari writes the same key; register ours before
+    // any webview exists. Registration domain, not the app domain: a user who turns
+    // spelling off in the webview's own context menu writes the app domain, and that
+    // choice has to keep winning.
+    #[cfg(target_os = "macos")]
+    unsafe {
+        let key = NSString::alloc(nil).init_str("WebContinuousSpellCheckingEnabled");
+        let on: cocoa::base::id = msg_send![class!(NSNumber), numberWithBool: cocoa::base::YES];
+        let defaults: cocoa::base::id = msg_send![class!(NSDictionary), dictionaryWithObject: on forKey: key];
+        let user_defaults: cocoa::base::id = msg_send![class!(NSUserDefaults), standardUserDefaults];
+        let _: () = msg_send![user_defaults, registerDefaults: defaults];
+    }
 
     // Under WebDriver automation (tauri-wd sets this), single-instance protection is an
     // anti-feature: each spec launches a fresh app instance, and a leftover instance from a
