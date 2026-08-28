@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { MailOpen, Mail, Archive, ArchiveRestore, FolderSymlink, Trash2, ShieldX } from 'lucide-react';
+import { MailOpen, Mail, Archive, ArchiveRestore, FolderSymlink, Trash2, ShieldX, ImageDown } from 'lucide-react';
 import { useMailStore } from '../stores/mailStore';
 import { _selKey, resolveEmailLocation } from '../stores/slices/unifiedHelpers';
 import { describeServerDelete, describeDeleteEverywhere } from '../utils/custodyCopy';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { MenuItem } from './ui/Popover';
+import { useExportStore } from '../stores/exportStore';
 
 /**
  * Contents of a row's 3-dot menu.
@@ -115,6 +116,15 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
           Unarchive
         </MenuItem>
       )}
+
+      <MenuItem onClick={(e) => {
+        e.stopPropagation();
+        useExportStore.getState().openExport({ messages: emails });
+        onClose();
+      }}>
+        <ImageDown size={14} />
+        Export…
+      </MenuItem>
 
       <div className="relative">
         <MenuItem onClick={(e) => { e.stopPropagation(); setShowMove(v => !v); }}>

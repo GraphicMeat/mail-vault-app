@@ -176,4 +176,17 @@ describe('EmailActionBar — context rules', () => {
     expect(handlers.onToggleRead).not.toHaveBeenCalled();
     expect(handlers.onArchive).not.toHaveBeenCalled();
   });
+  it('shows an export button only when a handler is passed', () => {
+    renderBar();
+    expect(labels()).not.toContain('Export');
+    cleanup();
+    renderBar({ handlers: allHandlers({ onExport: vi.fn() }) });
+    expect(labels()).toContain('Export');
+  });
+
+  it('hands the open message to the export handler', () => {
+    const handlers = renderBar({ handlers: allHandlers({ onExport: vi.fn() }) });
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+    expect(handlers.onExport).toHaveBeenCalledWith(EMAIL);
+  });
 });

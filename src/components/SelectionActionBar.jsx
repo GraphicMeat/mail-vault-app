@@ -4,10 +4,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useSelectionStore } from '../stores/selectionStore';
 import { useMessageListStore } from '../stores/messageListStore';
 import {
-  MailOpen, Mail, Trash2, Archive, ArchiveRestore, X, AlertTriangle, FolderSymlink, ShieldX
+  MailOpen, Mail, Trash2, Archive, ArchiveRestore, X, AlertTriangle, FolderSymlink, ShieldX, ImageDown
 } from 'lucide-react';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { vaultClause } from '../utils/custodyCopy';
+import { useMailStore } from '../stores/mailStore';
+import { _selKey } from '../stores/slices/unifiedHelpers';
+import { useExportStore } from '../stores/exportStore';
 
 export function SelectionActionBar() {
   const selectedEmailIds = useSelectionStore(s => s.selectedEmailIds);
@@ -49,6 +52,18 @@ export function SelectionActionBar() {
       return /^\d+$/.test(raw) ? Number(raw) : raw;
     }
     return key;
+  };
+
+  // The bar holds selection KEYS, not messages, so the rows are resolved back
+  // out of the store — by the same key the checkbox wrote. Matching on uid
+  // alone would pull a second account's message into a unified selection.
+  // A key the render window cannot resolve is simply not in the list, and the
+  // dialog's own heading counts what it is actually about to export.
+  const exportSelected = () => {
+    const { sortedEmails = [], activeMailbox } = useMailStore.getState();
+    const isUnified = activeMailbox === 'UNIFIED';
+    const messages = sortedEmails.filter(e => selectedEmailIds.has(isUnified ? _selKey(e) : e.uid));
+    if (messages.length) useExportStore.getState().openExport({ messages });
   };
 
   // Determine archive state of selected emails. The counts, not just the
@@ -157,6 +172,17 @@ export function SelectionActionBar() {
             </Button>
 
             <div className="w-px h-6 bg-mail-border" />
+
+            {/* Export */}
+            <button
+              onClick={exportSelected}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors
+                         text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover"
+              title="Export selected"
+            >
+              <ImageDown size={15} />
+              <span className="text-xs font-medium">Export</span>
+            </button>
 
             {/* Archive — show when any unarchived emails selected */}
             {hasUnarchived && (

@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Reply, ReplyAll, Forward, Archive, Trash2, FolderInput, MailOpen, Mail, ExternalLink, Code, Sun, Moon } from 'lucide-react';
+import { Reply, ReplyAll, Forward, Archive, Trash2, FolderInput, MailOpen, Mail, ExternalLink, Code, Sun, Moon, ImageDown } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useSettingsStore } from '../../stores/settingsStore';
 
@@ -37,6 +37,7 @@ export const EmailActionBar = memo(function EmailActionBar({
   onToggleRead,
   onOpenInWindow,
   onViewSource,
+  onExport,
   onToggleEmailTheme,
   emailThemeDark,
   isArchived,
@@ -148,6 +149,16 @@ export const EmailActionBar = memo(function EmailActionBar({
           icon={Code}
           label="Source"
           onClick={() => onViewSource(email)}
+          compact={compact}
+        />
+      )}
+
+      {/* Export */}
+      {onExport && (
+        <ActionButton
+          icon={ImageDown}
+          label="Export"
+          onClick={() => onExport(email)}
           compact={compact}
         />
       )}

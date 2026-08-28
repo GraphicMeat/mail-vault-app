@@ -17,11 +17,13 @@ import { getDarkReaderInlineScripts } from '../../utils/darkReaderInject';
 import {
   Paperclip,
   Archive,
+  ImageDown,
 } from 'lucide-react';
 import { getRealAttachments, replaceCidUrls } from '../../services/attachmentUtils';
 import { SenderInsightsPanel } from '../SenderInsightsPanel';
 import { EmailSenderInfo } from './EmailSenderInfo';
 import { EmailActionBar } from './EmailActionBar';
+import { useExportStore } from '../../stores/exportStore';
 import { AttachmentItem } from './AttachmentBar';
 import { scanEmailLinks, checkLinkAlert } from '../../utils/linkSafety';
 import { scanTrackers } from '../../utils/trackerDetect';
@@ -550,6 +552,16 @@ export function ThreadView({ thread, onComposeReply }) {
             {thread.messageCount} message{thread.messageCount !== 1 ? 's' : ''} in thread
           </span>
         </div>
+
+        <button
+          onClick={() => useExportStore.getState().openExport({ messages: sortedEmails })}
+          title="Export thread"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 ml-2 rounded-lg text-sm font-medium
+                     text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover transition-colors"
+        >
+          <ImageDown size={14} />
+          Export
+        </button>
 
         {!allArchived && (
           <button

@@ -27,6 +27,7 @@ import { SenderInsightsPanel } from './SenderInsightsPanel';
 import { ThreadView } from './email/ThreadView';
 import { EmailSenderInfo } from './email/EmailSenderInfo';
 import { EmailActionBar } from './email/EmailActionBar';
+import { useExportStore } from '../stores/exportStore';
 import { AttachmentItem, DownloadAllButton } from './email/AttachmentBar';
 import { scanEmailLinks, checkLinkAlert } from '../utils/linkSafety';
 import { LinkSafetyModal } from './LinkSafetyModal';
@@ -630,6 +631,7 @@ function EmailViewerComponent({ onComposeReply }) {
               invoke('open_email_window', { html: popupHtml, title: selectedEmail.subject || 'Email' });
             }}
             onViewSource={toggleRawSource}
+            onExport={(email) => useExportStore.getState().openExport({ messages: [email] })}
             onToggleEmailTheme={() => setEmailThemeOverride(emailDarkMode ? 'light' : 'dark')}
             emailThemeDark={emailDarkMode}
             isArchived={isArchived}

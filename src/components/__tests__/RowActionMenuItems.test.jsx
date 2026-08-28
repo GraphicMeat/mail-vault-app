@@ -78,6 +78,11 @@ useMailStore.getState = () => useMailStoreMock.getState();
 
 vi.mock('../../stores/mailStore', () => ({ useMailStore }));
 
+const openExport = vi.fn();
+vi.mock('../../stores/exportStore', () => ({
+  useExportStore: { getState: () => ({ openExport }) },
+}));
+
 import { RowActionMenuItems } from '../RowActionMenuItems';
 
 const baseEmail = (overrides) => ({
@@ -399,5 +404,32 @@ describe('RowActionMenuItems', () => {
       const calls = useMailStoreMock.getState().setSelection.mock.calls;
       expect(calls[calls.length - 1][0]).toEqual([1, 2, 3]);
     });
+  });
+});
+
+describe('export from a row', () => {
+  beforeEach(() => {
+    useMailStoreMock.setState(initialStoreState());
+    openExport.mockClear();
+  });
+  afterEach(() => cleanup());
+
+  it('offers Export on every row', () => {
+    render(<RowActionMenuItems emails={[baseEmail()]} actions={makeActions()} onRequestDelete={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.getByText('Export…')).toBeTruthy();
+  });
+
+  // The menu is opened from one row but a thread row stands for its whole set,
+  // so what it exports is every message the row represents — not just the one
+  // whose glyph was clicked.
+  it('hands over every message the row stands for, and closes the menu', () => {
+    const emails = [baseEmail({ uid: 1 }), baseEmail({ uid: 2 })];
+    const onClose = vi.fn();
+    render(<RowActionMenuItems emails={emails} actions={makeActions()} onRequestDelete={vi.fn()} onClose={onClose} />);
+
+    fireEvent.click(screen.getByText('Export…'));
+
+    expect(openExport).toHaveBeenCalledWith({ messages: emails });
+    expect(onClose).toHaveBeenCalled();
   });
 });

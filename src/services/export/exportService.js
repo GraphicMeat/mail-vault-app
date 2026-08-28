@@ -6,6 +6,8 @@ import { planPages, stitchPages } from './imagePacker';
 import { buildThreadDocument } from './exportHtml';
 import { singleName, threadName, threadMemberName, pageName } from './exportNaming';
 import { replaceCidUrls } from '../attachmentUtils';
+import { resolveMessageBody } from './bodyResolver';
+import { useMailStore } from '../../stores/mailStore';
 import { getEmailBodyContent } from '../../utils/emailIframeTemplate';
 
 // Samples run the real pipeline over fixture data, so they must reach it
@@ -39,6 +41,16 @@ async function prepareBody(message, mirror, fetchAsset, totals) {
   return html;
 }
 
+// A row menu and the bulk bar hand over headers, not bodies. Loading one goes
+// through the same guarded path the reading pane uses — never a second copy of
+// the vault-then-server sequence.
+async function hydrate(message) {
+  if (message.html) return message;
+  const result = await resolveMessageBody(message, useMailStore.getState());
+  if (!result.ok) throw new Error(result.reason);
+  return { ...message, ...result.email };
+}
+
 export async function buildExport({
   messages, format, layout = 'single', mirror = true, account, mailbox,
   gate, fetchAsset = fetchAssetViaTauri,
@@ -55,7 +67,8 @@ export async function buildExport({
 
   for (const message of ordered) {
     try {
-      prepared.push({ message, body: await prepareBody(message, mirror, fetchAsset, stats) });
+      const full = await hydrate(message);
+      prepared.push({ message: full, body: await prepareBody(full, mirror, fetchAsset, stats) });
     } catch (err) {
       // One body that will not load is not a failed export of the other forty.
       failures.push({ uid: message.uid, subject: message.subject, error: String(err.message || err) });

@@ -56,8 +56,19 @@ const useMailStoreMock = create(() => ({
   getSelectionSummary: vi.fn(() => ({ threads: 2, emails: 2 })),
 }));
 
+// getState as well as the hook: the Export button resolves selection keys back
+// to rows imperatively, and a double that is only callable as a hook throws the
+// moment someone clicks it — while every render-only test stays green.
 vi.mock('../../stores/mailStore', () => ({
-  useMailStore: (selector) => useMailStoreMock(selector),
+  useMailStore: Object.assign(
+    (selector) => useMailStoreMock(selector),
+    { getState: () => useMailStoreMock.getState() },
+  ),
+}));
+
+const openExport = vi.fn();
+vi.mock('../../stores/exportStore', () => ({
+  useExportStore: { getState: () => ({ openExport }) },
 }));
 
 import { SelectionActionBar } from '../SelectionActionBar';
@@ -179,5 +190,63 @@ describe('SelectionActionBar selection count', () => {
     useMailStoreMock.setState({ getSelectionSummary: vi.fn(() => ({ threads: 65, emails: 65 })) });
     render(<SelectionActionBar />);
     expect(screen.getByText('65 selected')).toBeTruthy();
+  });
+});
+
+describe('SelectionActionBar export', () => {
+  const row = (uid, accountId) => ({ uid, subject: `m${uid}`, _accountId: accountId });
+
+  beforeEach(() => {
+    openExport.mockClear();
+    useMailStoreMock.setState({
+      selectedEmailIds: new Set([1, 2]),
+      archivedEmailIds: new Set(),
+      activeMailbox: 'INBOX',
+      sortedEmails: [row(1), row(2), row(3)],
+      clearSelection: vi.fn(),
+      saveSelectedLocally: vi.fn(),
+      markSelectedAsRead: vi.fn(),
+      markSelectedAsUnread: vi.fn(),
+      deleteSelectedFromServer: vi.fn().mockResolvedValue(),
+      purgeSelectedEverywhere: vi.fn().mockResolvedValue({ deleted: 0, failed: 0, queuedBackup: 0, needsResync: 0 }),
+      removeLocalEmail: vi.fn(),
+      getSelectionSummary: vi.fn(() => ({ threads: 2, emails: 2 })),
+    });
+  });
+  afterEach(() => cleanup());
+
+  it('offers an export button while a selection is live', () => {
+    render(<SelectionActionBar />);
+    expect(screen.getByTitle('Export selected')).toBeTruthy();
+  });
+
+  it('hands over only the selected rows', () => {
+    render(<SelectionActionBar />);
+    fireEvent.click(screen.getByTitle('Export selected'));
+    expect(openExport).toHaveBeenCalledTimes(1);
+    expect(openExport.mock.calls[0][0].messages.map(m => m.uid)).toEqual([1, 2]);
+  });
+
+  // A unified selection key is accountId:uid. Resolving on the bare uid would
+  // sweep in the other account's message 1 — the row that merges folders,
+  // acting across them.
+  it('does not pull another account\'s message with the same uid into a unified selection', () => {
+    useMailStoreMock.setState({
+      activeMailbox: 'UNIFIED',
+      selectedEmailIds: new Set(['acct-1:1']),
+      sortedEmails: [row(1, 'acct-1'), row(1, 'acct-2')],
+    });
+    render(<SelectionActionBar />);
+    fireEvent.click(screen.getByTitle('Export selected'));
+    const sent = openExport.mock.calls[0][0].messages;
+    expect(sent).toHaveLength(1);
+    expect(sent[0]._accountId).toBe('acct-1');
+  });
+
+  it('opens nothing when no selected key resolves to a loaded row', () => {
+    useMailStoreMock.setState({ selectedEmailIds: new Set([99]), sortedEmails: [row(1), row(2)] });
+    render(<SelectionActionBar />);
+    fireEvent.click(screen.getByTitle('Export selected'));
+    expect(openExport).not.toHaveBeenCalled();
   });
 });

@@ -29,6 +29,9 @@ import { VaultAlertBanner } from './components/VaultAlertBanner';
 import { BugReportDialog } from './components/BugReportDialog';
 import ShareUnlockModal from './components/ShareUnlockModal';
 import BackupUpsellModal from './components/BackupUpsellModal.jsx';
+import { ExportDialog } from './components/export/ExportDialog.jsx';
+import { ExportUpsellModal } from './components/export/ExportUpsellModal.jsx';
+import { useExportStore } from './stores/exportStore.js';
 import RestoreModal from './components/RestoreModal.jsx';
 import ChangeServerModal from './components/ChangeServerModal.jsx';
 // BackupToast removed — backup progress now shows in sidebar via BackupIndicator
@@ -256,6 +259,12 @@ function App() {
       openCompose(val);
     }
   }, [openCompose]);
+  const exportTarget = useExportStore(s => s.target);
+  const showExportSamples = useExportStore(s => s.showSamples);
+  const closeExport = useExportStore(s => s.closeExport);
+  const openSamples = useExportStore(s => s.openSamples);
+  const closeSamples = useExportStore(s => s.closeSamples);
+
   const [showSettings, setShowSettings] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState(null);
   const [settingsInitialAccountId, setSettingsInitialAccountId] = useState(null);
@@ -947,6 +956,22 @@ function App() {
       <RestoreTray />
       <ShareUnlockModal onSubscribe={() => { setSettingsInitialTab('billing'); setShowSettings(true); }} />
       <BackupUpsellModal onUpgrade={() => { setSettingsInitialTab('billing'); setShowSettings(true); }} />
+
+      {/* Export — one dialog and one upsell for all four entry points */}
+      <ExportDialog
+        open={Boolean(exportTarget)}
+        messages={exportTarget?.messages || []}
+        account={exportTarget?.account}
+        mailbox={exportTarget?.mailbox}
+        onClose={closeExport}
+        onUpgrade={() => { closeExport(); setSettingsInitialTab('billing'); setShowSettings(true); }}
+        onShowSamples={() => { closeExport(); openSamples(); }}
+      />
+      <ExportUpsellModal
+        open={showExportSamples}
+        onClose={closeSamples}
+        onUpgrade={() => { closeSamples(); setSettingsInitialTab('billing'); setShowSettings(true); }}
+      />
       <RestoreModal />
       <ChangeServerModal />
 
