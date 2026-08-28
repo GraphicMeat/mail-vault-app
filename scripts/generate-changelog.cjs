@@ -341,7 +341,8 @@ ${articles}
       });
     });
   </script>
-  <script defer src="/version-gate.js?v=1"></script>
+  <!-- ?v=N is the Cloudflare cache bust; keep it in step with website/index.html -->
+  <script defer src="/version-gate.js?v=4"></script>
 </body>
 </html>
 `;

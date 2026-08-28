@@ -129,11 +129,79 @@
       <h1 class="text-4xl font-bold mb-2">Changelog</h1>
       <p class="text-slate-500 dark:text-slate-400 mb-10">New features, improvements, and fixes in every release.</p>
 
+      <article class="mb-16" data-version="2.11.0">
+        <div class="flex items-center gap-3 mb-6">
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.11.0</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">August 28, 2026</span>
+          <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            </span>
+            Added
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Any message or thread can now be saved as a picture or as a single web page.</strong> Mail is the one archive most people cannot hand to anyone else: forwarding it changes the headers, a screenshot cuts off at the window edge, and printing to PDF renders whatever the printer stylesheet felt like. MailVault now exports a message, or a whole conversation, as a PNG image of exactly what you were reading — or as one self-contained HTML file. The HTML folds every message in the thread behind a line giving its date and sender, so a forty-message conversation opens as a list you expand one message at a time, and it runs on nothing at all: no JavaScript, no fonts to fetch, no server to be alive. Remote images are fetched once, during the export, and written into the file itself, so it still reads years later with the network unplugged — and every file says underneath which account and folder it came from, each message's identifier, and how many remote images were mirrored in, how many the sender's server would not give up, and how many tracking pixels were dropped rather than fetched. Nothing that can execute survives the export: an exported file is opened outside MailVault, where none of the protections around the reading pane apply, so scripts, frames and handlers are taken out before the bytes are written. A conversation too tall for one image is split into numbered pages rather than shrunk, because a soft picture is a worse record than a second file. Export sits in the open message's toolbar, in the thread header, in any row's menu and in the bar that appears when rows are ticked — and where a message's body is not loaded yet, MailVault fetches it the same guarded way the reading pane does, so a thread exports whole rather than half. This is a Premium feature; without a subscription the same button shows three samples MailVault renders on the spot with the very same code, which you can open or save to see exactly what you would get.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>On Linux, MailVault now says why spelling is not being checked, and what to install.</strong> Linux has no spell checker of its own: the dictionary comes from your distribution, and a minimal desktop install often has none — which looks exactly like a button that does not work. MailVault now checks what is there. Where a dictionary is installed the red underlines appear and the toolbar button turns them off and on as usual; where none is, the button opens the instructions instead — the one-line install command for Debian, Ubuntu, Fedora, Arch and openSUSE, how to pick a different language, and a link to the guide on the website. When several dictionaries are installed, MailVault checks against the one matching your system language. The snap package now carries English dictionaries of its own, because a confined snap cannot see the ones installed on the rest of the system, and the .deb suggests one at install time.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>MailVault now tells you when an email is watching you, and can stop it.</strong> Most marketing mail carries a hidden image, usually a single transparent pixel, that your mail program fetches from the sender's server the moment the message opens. That one fetch reports back that you read it, at what minute, how many times you came back to it, roughly where you were, and what you read it on — none of which you agreed to. Every message MailVault opens is now checked for those beacons, and a small eye appears beside the subject, on the row and above the open message, next to the marks for a faked sender and a mismatched reply address. Click it and MailVault names the company doing the tracking and shows the exact address the pixel would have called. That much is free, for everyone, forever. With a subscription MailVault also takes the beacon out of the message before it is drawn, so nothing is ever requested and the sender is told nothing at all; the eye closes to say so. It works in the reading pane, in threads, in Chat view and in a popped-out message window, and there is a Tracker Blocking screen under Features that shows the same email side by side, tracked and cleared, with the tracking code itself spelled out. Nearly 500 known tracking addresses ship with the app — merged from the MailTrackerBlocker and Ugly Email projects and extended with senders newer than both — and the list is bundled and updated in releases. MailVault never asks a server which pixels to block: doing that would be one more thing reporting on what you read.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            </span>
+            Fixed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Spellcheck marks misspelled words on macOS.</strong> The button that turns spellchecking off and on has been in the message toolbar since 2.10.4, and on macOS it never had anything to turn on: the checker built into the system stays off until an app asks for it, and MailVault never asked. Words went unmarked whichever way the button was set — the setting was real, the underlines were not. MailVault now asks at startup, so misspellings are marked the way they are in every other Mac app, and the button does what it has been saying it does.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </span>
+            Changed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>An open message no longer carries a second, quieter claim about where it lives.</strong> The band across the top of a message says where that message is kept — in your vault, on the mail server, or the last copy left anywhere — and a small symbol beside the sender's name said it again, a couple of centimetres below. The two were worked out differently: the band reads the same record as the row you clicked, while the symbol asked only whether the message was in the folder on screen. So a message the band called "Saved in your vault" wore a blue cloud that read "On the server — not saved to your vault yet". The symbol beside the sender is gone; the band is the message's one statement, and every row in the list keeps its own.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The “Report a bug” dialog now takes what should exist, not only what is broken.</strong> Someone who has just hit something wrong is the same person who knows what the app should have done instead, and that dialog is the only moment MailVault has their attention on the subject. It now offers “Suggest a feature” as its second row, filing into the Ideas section of the project’s discussions rather than Bug reports, and its heading says so. Email moved down below “Browse discussions”, because email is the private fallback and a public thread is the one the next person with the same problem can find — and the dialog now says what an email can cost: MailVault’s logs carry every address the app has seen, so a log is something you attach deliberately rather than by default. The dialog also carries a link to follow the project, and says who makes MailVault.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A locked feature now says what else Premium covers.</strong> Every surface that asks for a subscription carried its own short pitch for the one thing it was gating and nothing about the rest, so seeing the whole list meant going looking for it. They now share a single “See everything in Premium” link out to the feature page, and one locked screen is enough. App Store builds do not show it, for the same reason they do not show the price: that page carries the web subscription’s price, and a Mac App Store build must not advertise a purchase made outside it.</span>
+            </li>
+          </ul>
+        </div>
+
+      </article>
       <article class="mb-16" data-version="2.10.4">
         <div class="flex items-center gap-3 mb-6">
           <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.10.4</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">August 27, 2026</span>
-          <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
         </div>
 
         <div class="mb-8">
@@ -3787,6 +3855,7 @@
       });
     });
   </script>
-  <script defer src="/version-gate.js?v=3"></script>
+  <!-- ?v=N is the Cloudflare cache bust; keep it in step with website/index.html -->
+  <script defer src="/version-gate.js?v=4"></script>
 </body>
 </html>
