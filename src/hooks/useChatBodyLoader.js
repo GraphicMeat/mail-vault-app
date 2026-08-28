@@ -1,11 +1,8 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { useMailStore, getGraphMessageId, graphMessageToEmail } from '../stores/mailStore';
+import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import * as db from '../services/db';
-import * as api from '../services/api';
-import { ensureFreshToken } from '../services/authUtils';
-import { hydrateInlineImages } from '../services/attachmentUtils';
-import { resolveEmailLocation, bodyMatchesHeader, emailKey } from '../stores/slices/unifiedHelpers';
+import { resolveMessageBody } from '../services/export/bodyResolver';
+import { resolveEmailLocation, emailKey } from '../stores/slices/unifiedHelpers';
 
 const CONCURRENCY = 3;
 
@@ -104,63 +101,32 @@ export function useChatBodyLoader(topicEmails) {
         return;
       }
       const { accountId: resolvedAccountId, mailbox: resolvedMailbox } = loc;
-      const resolvedAccount = store.accounts.find(a => a.id === resolvedAccountId) || null;
       const cacheKey = `${resolvedAccountId}-${resolvedMailbox}-${uid}`;
 
       try {
-        let freshAccount = resolvedAccount;
-        if (freshAccount) {
-          try { freshAccount = await ensureFreshToken(freshAccount); } catch (_) {}
-        }
-
-        // 1. Check Maildir .eml (fast disk read)
-        let emailBody = await db.getLocalEmailLight(resolvedAccountId, resolvedMailbox, uid);
-
-        // The vault is keyed (accountId, mailbox, uid) and carries no per-file
-        // generation proof, so a uid it archived under an older UIDVALIDITY
-        // names a different message. Discard that copy and fall through to the
-        // server, which owns the uid the row was built from. Treating it as a
-        // dead end printed the row's subject where its body belongs.
-        if (emailBody && !bodyMatchesHeader(email, emailBody)) {
-          console.warn('[useChatBodyLoader] Vault copy belongs to another message — asking the server', {
-            uid, mailbox: resolvedMailbox, account: resolvedAccountId,
-          });
-          emailBody = null;
-        }
-
-        // 2. Fetch from server if not on disk
-        if (!emailBody && freshAccount) {
-          if (freshAccount.oauth2Transport === 'graph') {
-            const graphId = getGraphMessageId(resolvedAccountId, resolvedMailbox, uid);
-            if (graphId) {
-              const graphMsg = await api.graphGetMessage(freshAccount.oauth2AccessToken, graphId);
-              emailBody = graphMessageToEmail(graphMsg, uid);
-              api.graphCacheMime(freshAccount.oauth2AccessToken, graphId, resolvedAccountId, resolvedMailbox, uid)
-                .catch(() => {});
-            }
-          } else {
-            emailBody = await api.fetchEmailLight(freshAccount, uid, resolvedMailbox, resolvedAccountId);
-          }
-        }
+        // The vault-then-server sequence, with its custody guards, lives in
+        // resolveMessageBody so the export resolves a body exactly the way the
+        // reading pane does. What stays here is what is the hook's: capped
+        // concurrency, retry, and the per-bubble notify.
+        const resolved = await resolveMessageBody(email, store);
 
         if (cancelled) return;
 
-        // Last line of defence: a body whose Message-ID contradicts the header
-        // belongs to another message. Drop it rather than render it. This one
-        // is the server's own answer for this uid, so a retry only asks the
-        // same question again.
-        if (emailBody && !bodyMatchesHeader(email, emailBody)) {
+        // A body whose Message-ID contradicts the header is the server's own
+        // answer for this uid, so a retry only asks the same question again.
+        if (!resolved.ok && /mismatch/i.test(resolved.reason || '')) {
           console.warn('[useChatBodyLoader] Body/header Message-ID mismatch — discarding', {
             uid, mailbox: resolvedMailbox, account: resolvedAccountId,
           });
-          emailBody = null;
           retryCount = MAX_RETRIES;
         }
 
-        if (emailBody) {
-          emailBody = await hydrateInlineImages(emailBody, resolvedAccountId, resolvedMailbox);
-          store.addToCache(cacheKey, emailBody, cacheLimitMB);
-          bodiesMap.set(key, { status: 'loaded', email: { ...emailBody, _accountId: resolvedAccountId } });
+        if (resolved.ok) {
+          // The cached entry now carries _accountId. It is a superset of what
+          // was cached before and every reader spreads it, so nothing reads a
+          // field that changed meaning.
+          store.addToCache(cacheKey, resolved.email, cacheLimitMB);
+          bodiesMap.set(key, { status: 'loaded', email: resolved.email });
         } else if (retryCount < MAX_RETRIES) {
           // Retry after a short delay
           await new Promise(r => setTimeout(r, 1000 * (retryCount + 1)));
