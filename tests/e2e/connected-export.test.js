@@ -105,6 +105,22 @@ async function clickExportEntry(title = 'Export') {
   await browser.waitUntil(dialogOpen, { timeout: 10_000, timeoutMsg: 'the export dialog never opened' });
 }
 
+/** Dismiss any export dialog that is still up, and wait until it is gone. */
+async function closeExportDialog() {
+  await browser.execute(() => {
+    const d = [...document.querySelectorAll('[role="dialog"]')]
+      .find(el => el.offsetHeight > 0 && /Export/.test(el.textContent || ''));
+    if (!d) return;
+    const labels = ['Maybe later', 'Cancel'];
+    const btn = [...d.querySelectorAll('button')]
+      .find(b => labels.includes((b.textContent || '').trim()));
+    if (btn) btn.click();
+    else d.parentElement?.querySelector('.absolute.inset-0')?.click();
+  });
+  await browser.waitUntil(async () => !(await dialogOpen()),
+    { timeout: 10_000, interval: 250, timeoutMsg: 'an export dialog stayed open' });
+}
+
 /** Pick a radio inside the dialog by its aria-label. */
 async function choose(label) {
   const picked = await browser.execute((name) => {
@@ -226,7 +242,7 @@ describe('Export', function () {
     expect(bytes.length).toBeGreaterThan(5000);
   });
 
-  it('writes a thread as one zero-JavaScript HTML file that folds', async function () {
+  it('writes a thread as one HTML file that folds, reflows and lists itself', async function () {
     const dest = path.join(OUT, 'thread.html');
     await openThread(2);
     await clickExportEntry('Export thread');
@@ -237,12 +253,32 @@ describe('Export', function () {
     await waitForFile(dest);
 
     const html = fs.readFileSync(dest, 'utf8');
-    expect(html).not.toContain('<script');
     expect((html.match(/<details/g) || []).length).toBeGreaterThanOrEqual(2);
     expect(html).not.toContain('<details open');
+    // The message frames stay inert whatever the outer document may run: the
+    // sandbox, not the CSP, is what guarantees it.
     expect((html.match(/sandbox="allow-same-origin"/g) || []).length).toBeGreaterThanOrEqual(2);
     expect(html).not.toContain('allow-scripts');
     expect(html).toContain('Exported from MailVault');
+
+    // One script, in the outer document only. A second one means an email's own
+    // survived into a srcdoc.
+    expect((html.match(/<script/g) || []).length).toBe(1);
+    expect(html).not.toMatch(/srcdoc="[^"]*&lt;script/);
+
+    // Reads at any width — the fixed 820px column was a horizontal scrollbar on
+    // every screen narrower than itself, inside every message frame as well.
+    expect(html).toContain('width=device-width');
+    expect(html).not.toMatch(/content="width=\d+"/);
+    expect(html).toContain('@media (max-width:');
+
+    // The rail: the thread in order, with the two controls over it.
+    expect(html).toContain('data-mv-all="open"');
+    expect(html).toContain('data-mv-all="close"');
+    const rail = html.slice(html.indexOf('<ol class="mv-toc"'), html.indexOf('</ol>'));
+    const anchors = rail.match(/#mv-m\d+/g) || [];
+    expect(anchors.length).toBeGreaterThanOrEqual(2);
+    for (const a of anchors) expect(html).toContain(`id="${a.slice(1)}"`);
   });
 
   it('writes one numbered PNG per message into a directory', async function () {
@@ -293,35 +329,43 @@ describe('Export', function () {
 
   describe('what a free user gets', function () {
     before(async function () { await setPremium(false); });
-    after(async function () { await setPremium(true); });
+    after(async function () {
+      await closeExportDialog();
+      await setPremium(true);
+    });
+    // The samples modal is mounted once in App and only toggles `open`, so a
+    // spec that leaves it up blocks the next one's click on the message row.
+    beforeEach(async function () { await closeExportDialog(); });
 
-    it('offers the upsell and no export control', async function () {
+    // Every control the export dialog offers is premium, so for a free user it
+    // was a gate in front of a gate: Upgrade, or click through to the samples.
+    // The click now lands on the samples, which carry Upgrade themselves.
+    it('goes straight to the samples, with no gate dialog in front', async function () {
       await openFirstMessage();
       await clickExportEntry();
 
-      const text = await exportDialog();
-      expect(text).toContain('Premium');
-
-      const controls = await browser.execute(() => {
+      const shown = await browser.execute(() => {
         const d = [...document.querySelectorAll('[role="dialog"]')]
           .find(el => el.offsetHeight > 0 && /Export/.test(el.textContent || ''));
-        const labels = [...d.querySelectorAll('button')].map(b => (b.textContent || '').trim());
-        return { labels, radios: d.querySelectorAll('input[type="radio"]').length };
+        if (!d) return null;
+        return {
+          title: (d.querySelector('h2, h3')?.textContent || '').trim(),
+          labels: [...d.querySelectorAll('button')].map(b => (b.textContent || '').trim()),
+          radios: d.querySelectorAll('input[type="radio"]').length,
+        };
       });
-      expect(controls.labels).toContain('Upgrade');
-      expect(controls.labels).toContain('See samples');
-      expect(controls.labels).not.toContain('Export');
-      expect(controls.radios).toBe(0);
+      expect(shown).not.toBeNull();
+      expect(shown.title).toContain('Export any message or thread');
+      expect(shown.labels).toContain('Upgrade');
+      // The step that no longer exists.
+      expect(shown.labels).not.toContain('See samples');
+      expect(shown.labels).not.toContain('Export');
+      expect(shown.radios).toBe(0);
     });
 
-    it('renders live samples it can open, without a subscription', async function () {
+    it('renders live samples, each with its own Open and Save', async function () {
       await openFirstMessage();
       await clickExportEntry();
-      await browser.execute(() => {
-        const d = [...document.querySelectorAll('[role="dialog"]')]
-          .find(el => el.offsetHeight > 0 && /Export/.test(el.textContent || ''));
-        [...d.querySelectorAll('button')].find(b => (b.textContent || '').trim() === 'See samples')?.click();
-      });
 
       // The samples run the real pipeline, so this waits on pixels, not paint.
       await browser.waitUntil(async () => browser.execute(() =>
@@ -333,6 +377,32 @@ describe('Export', function () {
         [...document.querySelectorAll('[role="dialog"] button')].map(b => (b.textContent || '').trim()));
       expect(buttons.filter(b => b === 'Open')).toHaveLength(3);
       expect(buttons.filter(b => b === 'Save')).toHaveLength(3);
+    });
+
+    // "Open" used to hand a file path to the shell plugin, whose scope only
+    // validates URLs, so it was rejected and the button did nothing — and the
+    // handler swallowed the rejection, so nothing said so. The visible proof is
+    // the absence of the notice the handler now shows on failure.
+    it('opens a sample without reporting a failure', async function () {
+      await openFirstMessage();
+      await clickExportEntry();
+      await browser.waitUntil(async () => browser.execute(() =>
+        [...document.querySelectorAll('img[alt*="sample"]')].filter(i => i.naturalWidth > 0).length === 2),
+      { timeout: 120_000, interval: 1000, timeoutMsg: 'the samples never decoded' });
+
+      await browser.execute(() => {
+        const d = [...document.querySelectorAll('[role="dialog"]')]
+          .find(el => el.offsetHeight > 0 && /Export/.test(el.textContent || ''));
+        [...d.querySelectorAll('button')].find(b => (b.textContent || '').trim() === 'Open')?.click();
+      });
+
+      await browser.pause(2000);
+      const notice = await browser.execute(() => {
+        const d = [...document.querySelectorAll('[role="dialog"]')]
+          .find(el => el.offsetHeight > 0 && /Export/.test(el.textContent || ''));
+        return d ? (d.textContent || '').match(/Could not open the sample\.[^]*/)?.[0] || null : null;
+      });
+      expect(notice).toBeNull();
     });
   });
 
@@ -367,7 +437,11 @@ describe('Export', function () {
       // Whatever remote content the fixture carried is now named as missing
       // rather than silently dropped; the footer states the ratio either way.
       expect(html).toContain('Exported from MailVault');
-      expect(html).not.toContain('<script');
+      // A failed mirror must not change what the document is allowed to run:
+      // the one enhancement script, and nothing inside a message frame.
+      expect((html.match(/<script/g) || []).length).toBe(1);
+      expect(html).not.toMatch(/srcdoc="[^"]*&lt;script/);
+      expect(html).not.toContain('allow-scripts');
     });
   });
 });
