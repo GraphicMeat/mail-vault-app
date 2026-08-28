@@ -32,6 +32,7 @@ mod pending_delete;
 mod restore;
 pub use mailvault_core::oauth2;
 mod smtp;
+mod spellcheck;
 mod vault;
 
 #[cfg(target_os = "macos")]
@@ -4893,6 +4894,7 @@ fn main() {
 
     let app = builder
         .invoke_handler(tauri::generate_handler![
+            spellcheck::spellcheck_status,
             log_from_frontend,
             install_pending_update,
             get_client_info,
@@ -5035,6 +5037,13 @@ fn main() {
             vault_get_status, vault_inspect_folder, vault_adopt, vault_move_to, vault_move_to_default, vault_reset
         ])
         .setup(|app| {
+            // WebKitGTK's checker is off until it is switched on, and it needs a
+            // dictionary on disk to say anything. Everywhere else the OS checks
+            // spelling; this is a no-op there.
+            if let Some(window) = app.get_webview_window("main") {
+                spellcheck::enable_for_window(&window);
+            }
+
             // Set up logging to app log directory
             let log_dir = get_log_dir(&app.handle());
             let _guard = setup_logging(&log_dir);

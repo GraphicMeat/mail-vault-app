@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+- **On Linux, MailVault now says why spelling is not being checked, and what to install.** Linux has no spell checker of its own: the dictionary comes from your distribution, and a minimal desktop install often has none — which looks exactly like a button that does not work. MailVault now checks what is there. Where a dictionary is installed the red underlines appear and the toolbar button turns them off and on as usual; where none is, the button opens the instructions instead — the one-line install command for Debian, Ubuntu, Fedora, Arch and openSUSE, how to pick a different language, and a link to the guide on the website. When several dictionaries are installed, MailVault checks against the one matching your system language. The snap package now carries English dictionaries of its own, because a confined snap cannot see the ones installed on the rest of the system, and the .deb suggests one at install time.
+
+### Fixed
+- **Spellcheck marks misspelled words on macOS.** The button that turns spellchecking off and on has been in the message toolbar since 2.10.4, and on macOS it never had anything to turn on: the checker built into the system stays off until an app asks for it, and MailVault never asked. Words went unmarked whichever way the button was set — the setting was real, the underlines were not. MailVault now asks at startup, so misspellings are marked the way they are in every other Mac app, and the button does what it has been saying it does.
+
 ### Changed
 - **An open message no longer carries a second, quieter claim about where it lives.** The band across the top of a message says where that message is kept — in your vault, on the mail server, or the last copy left anywhere — and a small symbol beside the sender's name said it again, a couple of centimetres below. The two were worked out differently: the band reads the same record as the row you clicked, while the symbol asked only whether the message was in the folder on screen. So a message the band called "Saved in your vault" wore a blue cloud that read "On the server — not saved to your vault yet". The symbol beside the sender is gone; the band is the message's one statement, and every row in the list keeps its own.
 

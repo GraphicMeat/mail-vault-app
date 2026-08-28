@@ -57,6 +57,9 @@ libc = "0.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "3", features = ["sync-secret-service"] }
+# Already in the lock through wry — the switch for WebKitGTK's spell checker
+# lives on the web context, which nothing in tauri's API surface exposes.
+webkit2gtk = "2.0"
 tauri-plugin-updater = "2"
 signal-hook = "0.3"
 

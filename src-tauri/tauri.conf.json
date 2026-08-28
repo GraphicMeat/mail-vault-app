@@ -46,6 +46,11 @@
       "icons/icon.ico"
     ],
     "longDescription": "A modern, reactive email client that supports local email storage. Save your emails locally forever, even after they're deleted from the server.",
+    "linux": {
+      "deb": {
+        "recommends": ["hunspell-en-us"]
+      }
+    },
     "macOS": {
       "entitlements": "entitlements.plist",
       "exceptionDomain": "",

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
@@ -10,6 +10,8 @@ import {
   List, ListOrdered, Quote, Code, Link as LinkIcon, Undo, Redo, RemoveFormatting, SpellCheck
 } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useSpellcheckStatus } from '../hooks/useSpellcheckStatus';
+import { SpellcheckHelpDialog } from './SpellcheckHelpDialog';
 
 function ToolbarButton({ onClick, active, disabled, title, children }) {
   return (
@@ -36,6 +38,14 @@ function ToolbarDivider() {
 function Toolbar({ editor }) {
   const spellcheckEnabled = useSettingsStore((s) => s.spellcheckEnabled ?? true);
   const setSpellcheckEnabled = useSettingsStore((s) => s.setSpellcheckEnabled);
+  const spellcheckStatus = useSpellcheckStatus();
+  const [helpOpen, setHelpOpen] = useState(false);
+
+  // Linux with no dictionary installed: the attribute would still be written
+  // and WebKit would still have nothing to check against, so the button stops
+  // claiming to be a switch and becomes the way to fix it.
+  const noDictionary = !!spellcheckStatus?.needsDictionary
+    && spellcheckStatus.dictionaries.length === 0;
 
   const setLink = useCallback(() => {
     const previousUrl = editor.getAttributes('link').href;
@@ -112,12 +122,22 @@ function Toolbar({ editor }) {
       <ToolbarDivider />
 
       <ToolbarButton
-        onClick={toggleSpellcheck}
-        active={spellcheckEnabled}
-        title={spellcheckEnabled ? 'Spellcheck on — click to turn off' : 'Spellcheck off — click to turn on'}
+        onClick={noDictionary ? () => setHelpOpen(true) : toggleSpellcheck}
+        active={!noDictionary && spellcheckEnabled}
+        title={
+          noDictionary
+            ? 'Spellcheck needs a dictionary — click to see how to install one'
+            : spellcheckEnabled ? 'Spellcheck on — click to turn off' : 'Spellcheck off — click to turn on'
+        }
       >
         <SpellCheck size={S} />
       </ToolbarButton>
+
+      <SpellcheckHelpDialog
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        confined={!!spellcheckStatus?.confined}
+      />
     </div>
   );
 }

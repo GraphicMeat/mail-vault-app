@@ -18,6 +18,8 @@ apps:
     extensions: [gnome]
     environment:
       WEBKIT_DISABLE_COMPOSITING_MODE: "1"
+      # The absolute paths hunspell searches belong to the base snap, not to us.
+      DICPATH: $SNAP/usr/share/hunspell
       SSL_CERT_FILE: $SNAP/etc/ssl/certs/ca-certificates.crt
       SSL_CERT_DIR: $SNAP/etc/ssl/certs
     plugs:
@@ -35,6 +37,15 @@ parts:
     plugin: dump
     source: snap-staging/
     stage-packages:
+      # Spell checking. A confined snap cannot see dictionaries installed on the
+      # host, so it carries its own; enchant-2 comes with it because WebKitGTK
+      # looks words up through enchant, and its `enchant-lsmod-2` is how the app
+      # asks what is actually available rather than guessing from a directory.
+      # More languages are a line each — the in-app dialog and the FAQ cover
+      # anything not staged here.
+      - enchant-2
+      - hunspell-en-us
+      - hunspell-en-gb
       - libwebkit2gtk-4.1-0
       - libgtk-3-0
       - libayatana-appindicator3-1

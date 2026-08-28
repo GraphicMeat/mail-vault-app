@@ -236,6 +236,14 @@
           "@type": "Answer",
           "text": "Yes. MailVault can move its mail store — messages, header caches, attachment cache and folder lists — to any folder on any drive, so a large archive can live on an external SSD or a second internal disk instead of your startup volume. Only mail data moves: accounts, settings and logs stay in the app's own folder so the app can always start and tell you if the drive is missing. Moving is done safely: MailVault copies everything to the new folder, verifies every file arrived at the correct size, switches over, and only then deletes the originals. An interrupted move can be run again and picks up where it left off. The new folder is stamped with a marker file so MailVault can recognise it later and refuse a folder belonging to a different store. If the drive is not connected at launch, MailVault reports the folder as missing rather than silently starting a second, divergent archive in the default location — reconnect the drive, or point the app at the folder again. This is separate from the external backup location: the moved folder is the live store, an external backup location is an extra cold copy."
         }
+      },
+      {
+        "@type": "Question",
+        "name": "Why is spellcheck not underlining anything on Linux?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Because no spelling dictionary is installed. On macOS and Windows the system provides one; on Linux the dictionary comes from your distribution, and a minimal desktop install often has none. MailVault checks spelling through WebKitGTK, which looks words up via enchant and hunspell, so it can only underline once a hunspell dictionary is present. Install one for your language and restart MailVault: on Debian, Ubuntu or Mint run sudo apt install hunspell-en-us; on Fedora sudo dnf install hunspell-en; on Arch or Manjaro sudo pacman -S hunspell-en_us; on openSUSE sudo zypper install myspell-en_US. Swap the language code for your own — hunspell-de-de, hunspell-fr and so on — and MailVault will pick the dictionary that matches your system language. The spellcheck button in the message toolbar tells you which case you are in: it toggles underlines when a dictionary is present, and opens these instructions when none is. The snap build cannot see dictionaries installed on the host because it is strictly confined, so it carries its own; if it reports none, use the .deb package instead."
+        }
       }
     ]
   }
@@ -731,6 +739,39 @@
               </p>
               <p class="text-sm">
                 <strong>Not the same as a second copy.</strong> This changes where the <em>live</em> store lives. An <a href="#external-backup-location" class="text-primary-500 hover:underline">external backup location</a> adds an extra cold copy on top of it. Using both — mail store on a fast external SSD, cold copy on a NAS — is a reasonable setup.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- FAQ: Linux spellcheck dictionary -->
+        <div id="linux-spellcheck-dictionary" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">Why is spellcheck not underlining anything on Linux?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                Because there is no spelling dictionary on the machine. macOS and Windows ship one with the system; on Linux the dictionary comes from your distribution, and a minimal desktop install often has none. MailVault checks spelling through WebKitGTK, which looks words up through enchant and hunspell — so it can only underline once a hunspell dictionary is installed.
+              </p>
+              <p>
+                <strong>The button in the message toolbar tells you which case you are in.</strong> With a dictionary present it toggles the underlines on and off, and MailVault remembers the setting. With none, it opens these same instructions instead of pretending to be a switch.
+              </p>
+              <p><strong>Install a dictionary for your language:</strong></p>
+              <div class="space-y-2 font-mono text-sm">
+                <div><span class="text-slate-500 dark:text-slate-500">Debian, Ubuntu, Mint</span><br><code>sudo apt install hunspell-en-us</code></div>
+                <div><span class="text-slate-500 dark:text-slate-500">Fedora</span><br><code>sudo dnf install hunspell-en</code></div>
+                <div><span class="text-slate-500 dark:text-slate-500">Arch, Manjaro</span><br><code>sudo pacman -S hunspell-en_us</code></div>
+                <div><span class="text-slate-500 dark:text-slate-500">openSUSE</span><br><code>sudo zypper install myspell-en_US</code></div>
+              </div>
+              <p>
+                Swap the language code for your own — <code>hunspell-de-de</code>, <code>hunspell-fr</code>, and so on. You can install several; MailVault checks against the one that matches your system language, and against all of them if none matches. <strong>Restart MailVault afterwards</strong> — the checker is set up when the app starts.
+              </p>
+              <p>
+                <strong>The snap build is a special case.</strong> A strictly confined snap cannot see dictionaries installed on the host, so it carries its own copy. If the snap reports no dictionary, install the .deb package instead — it uses the dictionaries already on your system.
               </p>
             </div>
           </div>
