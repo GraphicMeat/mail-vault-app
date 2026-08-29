@@ -21,11 +21,11 @@ import en from '../../i18n/locales/en.json';
 const SRC = readFileSync(resolve(process.cwd(), 'src/components/Sidebar.jsx'), 'utf8');
 
 const EXPECTED = [
-  'sidebar.passwordMissing', 'sidebar.retry', 'sidebar.noInternet',
+  'sidebar.passwordMissing', 'common.retry', 'sidebar.noInternet',
   'sidebar.microsoftIssue', 'sidebar.oauth2Expired', 'sidebar.timedOut',
   'sidebar.serverError', 'sidebar.viewErrorDetails', 'sidebar.retryConnection',
   'sidebar.repointAccount', 'sidebar.lastNDays', 'sidebar.loading',
-  'sidebar.errorDetails', 'sidebar.errorDetailsLabel', 'sidebar.close',
+  'sidebar.errorDetails', 'sidebar.errorDetailsLabel', 'common.close',
   'sidebar.expandSidebar', 'sidebar.compose', 'sidebar.allInboxes',
   'sidebar.addAccount', 'sidebar.refreshEmails', 'sidebar.settings',
   'sidebar.reportABug', 'sidebar.referAFriend', 'sidebar.mail', 'sidebar.vault',

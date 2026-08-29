@@ -387,7 +387,7 @@ export const ConnectionErrorCard = memo(function ConnectionErrorCard({
             </div>
             <Button variant="ghost" icon size="xs" className="hover:bg-mail-warning/20"
               onClick={retryKeychainAccess}
-              title={t('sidebar.retry')}
+              title={t('common.retry')}
             >
               <RefreshCw size={12} />
             </Button>
@@ -788,7 +788,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                 icon
                 size="xs"
                 onClick={() => setShowErrorModal(false)}
-                aria-label={t('sidebar.close')}
+                aria-label={t('common.close')}
               >
                 <X size={14} />
               </Button>
