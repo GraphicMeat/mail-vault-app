@@ -199,7 +199,7 @@ mod imp {
 
         if let Err(e) = spawn_result {
             let _ = take_purchase_waiter(product_id);
-            return Err(format!("failed to enqueue payment: {e}"));
+            return Err(format!("E_IAP_PAYMENT: failed to enqueue payment: {e}"));
         }
 
         rx.await
@@ -227,7 +227,7 @@ mod imp {
 
         if let Err(e) = spawn_result {
             let _ = take_restore_waiter();
-            return Err(format!("failed to start restore: {e}"));
+            return Err(format!("E_IAP_RESTORE: failed to start restore: {e}"));
         }
 
         rx.await

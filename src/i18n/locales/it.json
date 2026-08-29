@@ -1472,5 +1472,10 @@
   "menu.file_submenu": "File",
   "menu.show": "Mostra MailVault",
   "menu.tray_view_logs": "Vedi i log",
-  "menu.quit": "Esci"
+  "menu.quit": "Esci",
+  "errors.E_UID_NOT_IN_MAILDIR": "Quel messaggio non è nella tua cassaforte",
+  "errors.E_MAILBOX_EMPTY": "Nessun messaggio trovato in quella cartella",
+  "errors.E_VAULT_UNAVAILABLE": "La cartella di archiviazione della posta non è disponibile",
+  "errors.E_IAP_PAYMENT": "Non è stato possibile avviare l'acquisto",
+  "errors.E_IAP_RESTORE": "Non è stato possibile avviare il ripristino"
 }

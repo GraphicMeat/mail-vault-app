@@ -1472,5 +1472,10 @@
   "menu.file_submenu": "Archivo",
   "menu.show": "Mostrar MailVault",
   "menu.tray_view_logs": "Ver registros",
-  "menu.quit": "Salir"
+  "menu.quit": "Salir",
+  "errors.E_UID_NOT_IN_MAILDIR": "Ese mensaje no está en tu bóveda",
+  "errors.E_MAILBOX_EMPTY": "No se encontraron mensajes en esa carpeta",
+  "errors.E_VAULT_UNAVAILABLE": "Tu carpeta de almacenamiento de correo no está disponible",
+  "errors.E_IAP_PAYMENT": "No se pudo iniciar la compra",
+  "errors.E_IAP_RESTORE": "No se pudo iniciar la restauración"
 }

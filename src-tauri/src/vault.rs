@@ -172,7 +172,7 @@ pub fn root(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
         if let Ok(guard) = state.inner.lock() {
             if let Some(ref r) = *guard {
                 return match r.error {
-                    Some(ref e) => Err(format!("Mail storage folder unavailable: {}", e)),
+                    Some(ref e) => Err(format!("E_VAULT_UNAVAILABLE: Mail storage folder unavailable: {}", e)),
                     None => Ok(r.root.clone()),
                 };
             }

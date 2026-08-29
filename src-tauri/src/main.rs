@@ -3270,7 +3270,7 @@ fn maildir_set_flags(
     let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
     let old_path = match find_file_by_uid(&cur_dir, uid) {
         Some(p) => p,
-        None => return Err(format!("Email UID {} not found in Maildir", uid)),
+        None => return Err(format!("E_UID_NOT_IN_MAILDIR: Email UID {} not found in Maildir", uid)),
     };
 
     let new_filename = build_maildir_filename(uid, &flags);
@@ -4077,7 +4077,7 @@ async fn export_mbox(
     let cur_dir = base.join("Maildir").join(&account_id).join(&safe_mailbox).join("cur");
 
     if !cur_dir.exists() {
-        return Err(format!("No emails found for mailbox '{}'", mailbox));
+        return Err(format!("E_MAILBOX_EMPTY: No emails found for mailbox '{}'", mailbox));
     }
 
     let mut file = fs::File::create(&dest_path)

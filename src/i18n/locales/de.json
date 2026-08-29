@@ -1472,5 +1472,10 @@
   "menu.file_submenu": "Datei",
   "menu.show": "MailVault anzeigen",
   "menu.tray_view_logs": "Protokolle ansehen",
-  "menu.quit": "Beenden"
+  "menu.quit": "Beenden",
+  "errors.E_UID_NOT_IN_MAILDIR": "Diese Nachricht liegt nicht in deinem Tresor",
+  "errors.E_MAILBOX_EMPTY": "In diesem Ordner wurden keine Nachrichten gefunden",
+  "errors.E_VAULT_UNAVAILABLE": "Dein Mail-Speicherordner ist nicht verfügbar",
+  "errors.E_IAP_PAYMENT": "Der Kauf konnte nicht gestartet werden",
+  "errors.E_IAP_RESTORE": "Die Wiederherstellung konnte nicht gestartet werden"
 }

@@ -1472,5 +1472,10 @@
   "menu.file_submenu": "Fichier",
   "menu.show": "Afficher MailVault",
   "menu.tray_view_logs": "Voir les journaux",
-  "menu.quit": "Quitter"
+  "menu.quit": "Quitter",
+  "errors.E_UID_NOT_IN_MAILDIR": "Ce message n'est pas dans votre coffre",
+  "errors.E_MAILBOX_EMPTY": "Aucun message trouvé dans ce dossier",
+  "errors.E_VAULT_UNAVAILABLE": "Votre dossier de stockage du courrier est indisponible",
+  "errors.E_IAP_PAYMENT": "L'achat n'a pas pu être lancé",
+  "errors.E_IAP_RESTORE": "La restauration n'a pas pu être lancée"
 }

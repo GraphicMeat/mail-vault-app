@@ -325,7 +325,7 @@ pub async fn imap_get_email(
         // (see `uid_still_present`), so it is a claim the server made and not
         // an empty stream we read as absence. Say which uid and which mailbox:
         // "Email not found" told the reader nothing they could act on.
-        None => Err(format!("Message UID {} is no longer in {}", uid, mb_name)),
+        None => Err(format!("E_UID_GONE: Message UID {} is no longer in {}", uid, mb_name)),
     }
 }
 

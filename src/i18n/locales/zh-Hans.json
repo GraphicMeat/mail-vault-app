@@ -1472,5 +1472,10 @@
   "menu.file_submenu": "文件",
   "menu.show": "显示 MailVault",
   "menu.tray_view_logs": "查看日志",
-  "menu.quit": "退出"
+  "menu.quit": "退出",
+  "errors.E_UID_NOT_IN_MAILDIR": "该邮件不在你的保险库中",
+  "errors.E_MAILBOX_EMPTY": "该文件夹中未找到邮件",
+  "errors.E_VAULT_UNAVAILABLE": "你的邮件存储文件夹不可用",
+  "errors.E_IAP_PAYMENT": "无法开始购买",
+  "errors.E_IAP_RESTORE": "无法开始恢复"
 }

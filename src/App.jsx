@@ -52,7 +52,7 @@ import { setComposeOpener } from './services/localDrafts';
 import { setMailtoComposeOpener } from './utils/mailto';
 import { version } from '../package.json';
 import { decodeImapUtf7 } from './utils/imapUtf7';
-import { t as tr, useT  } from './i18n/index.js';
+import { tErr, t as tr, useT  } from './i18n/index.js';
 
 // Surfaces that only exist once the user asks for them. Keeping them in the
 // startup chunk cost ~1.1 MB of JavaScript that has to parse before the first
@@ -933,7 +933,7 @@ function App() {
 
       <AnimatePresence>
         {error && (
-          <Toast message={error} onClose={clearError} type={errorToast.type} duration={errorToast.duration} />
+          <Toast message={tErr(error)} onClose={clearError} type={errorToast.type} duration={errorToast.duration} />
         )}
       </AnimatePresence>
 

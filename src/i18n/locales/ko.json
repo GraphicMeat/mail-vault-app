@@ -1472,5 +1472,10 @@
   "menu.file_submenu": "파일",
   "menu.show": "MailVault 표시",
   "menu.tray_view_logs": "로그 보기",
-  "menu.quit": "종료"
+  "menu.quit": "종료",
+  "errors.E_UID_NOT_IN_MAILDIR": "그 메시지는 보관함에 없습니다",
+  "errors.E_MAILBOX_EMPTY": "그 폴더에서 메시지를 찾지 못했습니다",
+  "errors.E_VAULT_UNAVAILABLE": "메일 저장 폴더를 사용할 수 없습니다",
+  "errors.E_IAP_PAYMENT": "구매를 시작하지 못했습니다",
+  "errors.E_IAP_RESTORE": "복원을 시작하지 못했습니다"
 }

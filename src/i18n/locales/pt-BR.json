@@ -1472,5 +1472,10 @@
   "menu.file_submenu": "Arquivo",
   "menu.show": "Mostrar o MailVault",
   "menu.tray_view_logs": "Ver registros",
-  "menu.quit": "Sair"
+  "menu.quit": "Sair",
+  "errors.E_UID_NOT_IN_MAILDIR": "Essa mensagem não está no seu cofre",
+  "errors.E_MAILBOX_EMPTY": "Nenhuma mensagem encontrada nessa pasta",
+  "errors.E_VAULT_UNAVAILABLE": "Sua pasta de armazenamento de correio está indisponível",
+  "errors.E_IAP_PAYMENT": "Não foi possível iniciar a compra",
+  "errors.E_IAP_RESTORE": "Não foi possível iniciar a restauração"
 }

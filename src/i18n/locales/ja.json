@@ -1472,5 +1472,10 @@
   "menu.file_submenu": "ファイル",
   "menu.show": "MailVault を表示",
   "menu.tray_view_logs": "ログを表示",
-  "menu.quit": "終了"
+  "menu.quit": "終了",
+  "errors.E_UID_NOT_IN_MAILDIR": "そのメッセージは保管庫にありません",
+  "errors.E_MAILBOX_EMPTY": "そのフォルダにメッセージが見つかりません",
+  "errors.E_VAULT_UNAVAILABLE": "メールの保存フォルダを利用できません",
+  "errors.E_IAP_PAYMENT": "購入を開始できませんでした",
+  "errors.E_IAP_RESTORE": "復元を開始できませんでした"
 }
