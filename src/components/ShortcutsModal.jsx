@@ -3,46 +3,46 @@ import { X, Keyboard } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
-import { useT } from '../i18n/index.js';
+import { t as tr, useT  } from '../i18n/index.js';
 
-const ACTION_LABELS = {
-  nextEmail: 'Next email',
-  prevEmail: 'Previous email',
-  goToInbox: 'Go to Inbox',
-  goToSent: 'Go to Sent',
-  goToDrafts: 'Go to Drafts',
-  reply: 'Reply',
-  replyAll: 'Reply all',
-  forward: 'Forward',
-  archive: 'Archive',
-  delete: 'Delete',
-  moveToFolder: 'Move to folder',
-  compose: 'Compose',
-  toggleSelect: 'Select / deselect',
-  escape: 'Clear selection / close',
-  focusSearch: 'Search',
-  showShortcuts: 'Show shortcuts',
-  openSettings: 'Open settings',
-};
+const ACTION_LABELS = () => ({
+  nextEmail: tr('settings.shortcuts.nextEmail'),
+  prevEmail: tr('settings.shortcuts.previousEmail'),
+  goToInbox: tr('settings.shortcuts.goInbox'),
+  goToSent: tr('settings.shortcuts.goSent'),
+  goToDrafts: tr('settings.shortcuts.goDrafts'),
+  reply: tr('chat.bubble.reply'),
+  replyAll: tr('settings.shortcuts.replyAll'),
+  forward: tr('settings.shortcuts.forward'),
+  archive: tr('common.archive'),
+  delete: tr('common.delete'),
+  moveToFolder: tr('rowMenu.moveFolder'),
+  compose: tr('sidebar.compose'),
+  toggleSelect: tr('settings.shortcuts.selectDeselect'),
+  escape: tr('settings.shortcuts.clearSelectionClose'),
+  focusSearch: tr('search.search'),
+  showShortcuts: tr('settings.shortcuts.showShortcuts'),
+  openSettings: tr('settings.shortcuts.openSettings'),
+});
 
-const CATEGORIES = [
+const CATEGORIES = () => ([
   {
-    title: 'Navigation',
+    title: tr('settings.shortcuts.navigation'),
     actions: ['nextEmail', 'prevEmail', 'goToInbox', 'goToSent', 'goToDrafts'],
   },
   {
-    title: 'Actions',
+    title: tr('settings.shortcuts.actions'),
     actions: ['reply', 'replyAll', 'forward', 'archive', 'delete', 'moveToFolder', 'compose'],
   },
   {
-    title: 'Selection',
+    title: tr('settings.shortcuts.selection'),
     actions: ['toggleSelect', 'escape'],
   },
   {
     title: 'UI',
     actions: ['focusSearch', 'showShortcuts', 'openSettings'],
   },
-];
+]);
 
 /** Map modifier names to display symbols */
 function formatModifier(mod) {
@@ -83,7 +83,7 @@ function KeyBadge({ children }) {
 }
 
 function ShortcutRow({ action, keybinding }) {
-  const label = ACTION_LABELS[action] || action;
+  const label = ACTION_LABELS()[action] || action;
   const keys = parseKeybinding(keybinding);
 
   return (
@@ -128,7 +128,7 @@ export function ShortcutsModal({ onClose }) {
         {/* Body */}
         <div className="px-5 py-4 max-h-[70vh] overflow-y-auto">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
-            {CATEGORIES.map((category) => (
+            {CATEGORIES().map((category) => (
               <div key={category.title}>
                 <h3 className="text-xs font-semibold text-mail-text uppercase tracking-wider mb-2">
                   {category.title}

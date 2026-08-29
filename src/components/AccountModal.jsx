@@ -7,10 +7,10 @@ import { isPersonalMicrosoftEmail } from '../services/graphConfig';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Mail, Lock, Server, Eye, EyeOff, Check, AlertCircle, Loader, Wand2, Shield, ChevronRight } from 'lucide-react';
 import { describeConnectionError } from '../utils/connectionError';
-import { t, useT  } from '../i18n/index.js';
+import { t as tr, t, useT   } from '../i18n/index.js';
 
 // Common email provider configurations
-export const PROVIDER_CONFIGS = {
+export const PROVIDER_CONFIGS = () => ({
   gmail: {
     name: 'Gmail',
     domains: ['gmail.com', 'googlemail.com'],
@@ -18,31 +18,31 @@ export const PROVIDER_CONFIGS = {
     imapPort: 993,
     smtpHost: 'smtp.gmail.com',
     smtpPort: 587,
-    note: 'Sign in with your Google account',
+    note: tr('account.signGoogleAccount'),
     supportsOAuth2: true,
     oauth2Provider: 'google'
   },
   outlook: {
-    name: 'Outlook / Microsoft 365',
+    name: tr('account.outlookMicrosoft365'),
     domains: ['outlook.com', 'hotmail.com', 'live.com', 'msn.com'],
     imapHost: 'outlook.office365.com',
     imapPort: 993,
     smtpHost: 'smtp.office365.com',
     smtpPort: 587,
-    note: 'Sign in with your Microsoft account',
+    note: tr('account.signMicrosoftAccount'),
     supportsOAuth2: true,
     oauth2Provider: 'microsoft'
   },
   yahoo: {
-    name: 'Yahoo Mail',
+    name: tr('account.yahooMail'),
     domains: ['yahoo.com', 'yahoo.co.uk', 'yahoo.co.jp', 'yahoo.fr', 'yahoo.de', 'yahoo.it', 'yahoo.es', 'yahoo.com.br', 'yahoo.com.au', 'yahoo.ca', 'yahoo.in', 'ymail.com', 'rocketmail.com', 'myyahoo.com'],
     imapHost: 'imap.mail.yahoo.com',
     imapPort: 993,
     smtpHost: 'smtp.mail.yahoo.com',
     smtpPort: 587,
-    note: 'Yahoo requires an App Password',
+    note: tr('account.yahooRequiresAppPassword'),
     helpUrl: 'https://login.yahoo.com/myc/security/app-passwords',
-    helpLabel: 'Generate App Password'
+    helpLabel: tr('account.generateAppPassword')
   },
   icloud: {
     name: 'iCloud Mail',
@@ -53,27 +53,27 @@ export const PROVIDER_CONFIGS = {
     smtpPort: 587,
     note: 'iCloud requires an App-Specific Password',
     helpUrl: 'https://support.apple.com/en-us/102654',
-    helpLabel: 'Generate App-Specific Password'
+    helpLabel: tr('account.generateAppSpecificPassword')
   },
   aol: {
-    name: 'AOL Mail',
+    name: tr('account.aolMail'),
     domains: ['aol.com'],
     imapHost: 'imap.aol.com',
     imapPort: 993,
     smtpHost: 'smtp.aol.com',
     smtpPort: 587,
-    note: 'AOL requires an App Password',
+    note: tr('account.aolRequiresAppPassword'),
     helpUrl: 'https://help.aol.com/articles/Create-and-manage-app-password',
-    helpLabel: 'Generate App Password'
+    helpLabel: tr('account.generateAppPassword')
   },
   zoho: {
-    name: 'Zoho Mail',
+    name: tr('account.zohoMail'),
     domains: ['zoho.com', 'zohomail.com'],
     imapHost: 'imap.zoho.com',
     imapPort: 993,
     smtpHost: 'smtp.zoho.com',
     smtpPort: 587,
-    note: 'Enable IMAP in Zoho settings'
+    note: tr('account.enableImapZohoSettings')
   },
   protonmail: {
     name: 'Proton Mail Bridge',
@@ -83,9 +83,9 @@ export const PROVIDER_CONFIGS = {
     imapSecurity: 'starttls',
     smtpHost: '127.0.0.1',
     smtpPort: 1025,
-    note: 'MailVault connects through the Proton Mail Bridge app running locally on your machine — install and sign in to Bridge first.',
+    note: tr('account.mailvaultConnectsThroughProtonMail'),
     helpUrl: 'https://mailvaultapp.com/faq.html#proton-mail-bridge',
-    helpLabel: 'Setup guide'
+    helpLabel: tr('account.setupGuide')
   },
   fastmail: {
     name: 'Fastmail',
@@ -94,16 +94,16 @@ export const PROVIDER_CONFIGS = {
     imapPort: 993,
     smtpHost: 'smtp.fastmail.com',
     smtpPort: 587,
-    note: 'Use an App Password and sign in with your Fastmail login address. To send from an alias, set "Send Mail As" in Settings → Accounts after the account is added.'
+    note: tr('account.useAppPasswordSignFastmail')
   }
-};
+});
 
 // Try to detect provider from email domain
 export function detectProvider(email) {
   const domain = email.split('@')[1]?.toLowerCase();
   if (!domain) return null;
 
-  for (const [key, config] of Object.entries(PROVIDER_CONFIGS)) {
+  for (const [key, config] of Object.entries(PROVIDER_CONFIGS())) {
     if (config.domains?.includes(domain)) {
       return { key, config };
     }
@@ -216,7 +216,7 @@ export function AccountModal({ onClose }) {
   const handleProviderSelect = (key) => {
     const config = key === 'custom'
       ? { imapHost: '', imapPort: 993, smtpHost: '', smtpPort: 587 }
-      : PROVIDER_CONFIGS[key];
+      : PROVIDER_CONFIGS()[key];
 
     setProvider(key);
     setFormData(prev => ({
@@ -509,7 +509,7 @@ export function AccountModal({ onClose }) {
     }
   };
 
-  const providerConfig = provider && PROVIDER_CONFIGS[provider];
+  const providerConfig = provider && PROVIDER_CONFIGS()[provider];
   const showOAuth2Option = providerConfig?.supportsOAuth2;
   const isFastmail = provider === 'fastmail' || isFastmailAccount(formData);
 
@@ -537,7 +537,7 @@ export function AccountModal({ onClose }) {
         <div className="p-6 overflow-y-auto">
           {step === 1 ? (
             <div className="grid grid-cols-2 gap-2">
-              {Object.entries(PROVIDER_CONFIGS).map(([key, config]) => (
+              {Object.entries(PROVIDER_CONFIGS()).map(([key, config]) => (
                 <button
                   key={key}
                   onClick={() => handleProviderSelect(key)}
