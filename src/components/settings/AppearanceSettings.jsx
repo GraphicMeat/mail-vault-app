@@ -16,6 +16,7 @@ import {
   List,
   PenTool,
 } from 'lucide-react';
+import { useT } from '../../i18n/index.js';
 
 // The shell forces the stacked layout below 768px (App.jsx). Without this the
 // three-column card would take a click and change nothing — a control that
@@ -36,6 +37,7 @@ function useWindowIsNarrow() {
 }
 
 export function AppearanceSettings() {
+  const t = useT();
   const windowIsNarrow = useWindowIsNarrow();
   const { theme, toggleTheme } = useThemeStore();
   const {
@@ -69,15 +71,15 @@ export function AppearanceSettings() {
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <Palette size={18} className="text-mail-accent-text" />
-          Appearance
+          {t('settings.appearance.appearance')}
         </h4>
 
         <div className="space-y-4">
           <div className="flex items-center justify-between py-2">
             <div>
-              <div className="font-medium text-mail-text">Theme</div>
+              <div className="font-medium text-mail-text">{t('settings.appearance.theme')}</div>
               <div className="text-sm text-mail-text-muted">
-                Choose between light and dark mode
+                {t('settings.appearance.chooseBetweenLightDarkMode')}
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -92,7 +94,7 @@ export function AppearanceSettings() {
 
           {/* Email viewer theme — how email bodies render, independent of app theme */}
           <div className="pt-4 border-t border-mail-border">
-            <div className="font-medium text-mail-text mb-1">Email viewer theme</div>
+            <div className="font-medium text-mail-text mb-1">{t('settings.appearance.emailViewerTheme')}</div>
             <div className="text-sm text-mail-text-muted mb-3">
               Some people prefer a dark app but like reading emails in light mode. Set the default theme for email content here — the per-email Light/Dark button always overrides.
             </div>
@@ -101,17 +103,17 @@ export function AppearanceSettings() {
               onChange={(e) => setEmailViewerTheme(e.target.value)}
               className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg text-mail-text focus:border-mail-accent transition-all cursor-pointer"
             >
-              <option value="system">Match app theme</option>
-              <option value="light">Always light</option>
-              <option value="dark">Always dark</option>
+              <option value="system">{t('settings.appearance.matchAppTheme')}</option>
+              <option value="light">{t('settings.appearance.alwaysLight')}</option>
+              <option value="dark">{t('settings.appearance.alwaysDark')}</option>
             </select>
           </div>
 
           {/* Date Format */}
           <div className="pt-4 border-t border-mail-border">
-            <div className="font-medium text-mail-text mb-1">Date Format</div>
+            <div className="font-medium text-mail-text mb-1">{t('settings.appearance.dateFormat')}</div>
             <div className="text-sm text-mail-text-muted mb-3">
-              Controls how dates appear in the email list
+              {t('settings.appearance.controlsHowDatesAppearEmail')}
             </div>
             <select
               value={dateFormat}
@@ -123,7 +125,7 @@ export function AppearanceSettings() {
               <option value="dd/MM/yyyy">DD/MM/YYYY (Europe)</option>
               <option value="yyyy-MM-dd">YYYY-MM-DD (ISO)</option>
               <option value="dd MMM yyyy">DD MMM YYYY (e.g., 25 Feb 2024)</option>
-              <option value="custom">Custom...</option>
+              <option value="custom">{t('settings.appearance.custom')}</option>
             </select>
             {dateFormat === 'custom' && (
               <div className="mt-3">
@@ -131,7 +133,7 @@ export function AppearanceSettings() {
                   type="text"
                   value={customDateFormat}
                   onChange={(e) => setCustomDateFormat(e.target.value)}
-                  placeholder="e.g., dd.MM.yyyy"
+                  placeholder={t('settings.appearance.eGDdMmYyyy')}
                   className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg text-mail-text focus:border-mail-accent transition-all"
                 />
                 <p className="text-xs text-mail-text-muted mt-1">
@@ -140,16 +142,16 @@ export function AppearanceSettings() {
               </div>
             )}
             <div className="mt-2 flex items-center gap-4 text-xs text-mail-text-muted">
-              <span>Today: <span className="text-mail-text">{formatEmailDate(new Date().toISOString())}</span></span>
-              <span>Older: <span className="text-mail-text">{formatEmailDate('2023-06-15T10:00:00Z')}</span></span>
+              <span>{t('settings.appearance.today')} <span className="text-mail-text">{formatEmailDate(new Date().toISOString())}</span></span>
+              <span>{t('settings.appearance.older')} <span className="text-mail-text">{formatEmailDate('2023-06-15T10:00:00Z')}</span></span>
             </div>
           </div>
 
           {/* Time Format */}
           <div className="pt-4 border-t border-mail-border">
-            <div className="font-medium text-mail-text mb-1">Time Format</div>
+            <div className="font-medium text-mail-text mb-1">{t('settings.appearance.timeFormat')}</div>
             <div className="text-sm text-mail-text-muted mb-3">
-              Controls how times appear across the app
+              {t('settings.appearance.controlsHowTimesAppearAcross')}
             </div>
             <select
               value={timeFormat}
@@ -161,24 +163,24 @@ export function AppearanceSettings() {
               <option value="24h">24-hour (14:30)</option>
             </select>
             <div className="mt-2 text-xs text-mail-text-muted">
-              Now: <span className="text-mail-text">{formatEmailDate(new Date().toISOString())}</span>
+              {t('settings.appearance.now')} <span className="text-mail-text">{formatEmailDate(new Date().toISOString())}</span>
             </div>
           </div>
 
           {/* Action Button Style */}
           <div className="pt-4 border-t border-mail-border">
-            <div className="font-medium text-mail-text mb-1">Action button style</div>
+            <div className="font-medium text-mail-text mb-1">{t('settings.appearance.actionButtonStyle')}</div>
             <div className="text-sm text-mail-text-muted mb-3">
-              Choose how email action buttons are displayed
+              {t('settings.appearance.chooseHowEmailActionButtons')}
             </div>
             <select
               value={actionButtonDisplay}
               onChange={(e) => setActionButtonDisplay(e.target.value)}
               className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg text-mail-text focus:border-mail-accent transition-all cursor-pointer"
             >
-              <option value="icon-only">Icons only</option>
-              <option value="icon-label">Icons and labels</option>
-              <option value="text-only">Labels only</option>
+              <option value="icon-only">{t('settings.appearance.iconsOnly')}</option>
+              <option value="icon-label">{t('settings.appearance.iconsLabels')}</option>
+              <option value="text-only">{t('settings.appearance.labelsOnly')}</option>
             </select>
           </div>
         </div>
@@ -188,11 +190,11 @@ export function AppearanceSettings() {
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <LayoutGrid size={18} className="text-mail-accent-text" />
-          Layout
+          {t('settings.appearance.layout')}
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">
-          Choose how emails are displayed. Drag the divider between panes to resize.
+          {t('settings.appearance.chooseHowEmailsDisplayedDrag')}
         </p>
 
         {windowIsNarrow && (
@@ -217,7 +219,7 @@ export function AppearanceSettings() {
             </div>
             <div className="flex items-center gap-2 text-sm font-medium text-mail-text">
               <Columns size={16} />
-              Three Columns
+              {t('settings.appearance.threeColumns')}
             </div>
             <span className="text-xs text-mail-text-muted">
               Sidebar | List | Content
@@ -240,10 +242,10 @@ export function AppearanceSettings() {
             </div>
             <div className="flex items-center gap-2 text-sm font-medium text-mail-text">
               <Rows size={16} />
-              Two Columns
+              {t('settings.appearance.twoColumns')}
             </div>
             <span className="text-xs text-mail-text-muted">
-              List above Content
+              {t('settings.appearance.listAboveContent')}
             </span>
           </button>
         </div>
@@ -253,11 +255,11 @@ export function AppearanceSettings() {
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <LayoutGrid size={18} className="text-mail-accent-text" />
-          Sidebar Style
+          {t('settings.appearance.sidebarStyle')}
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">
-          How accounts and folders appear in the sidebar. Tag cloud packs more into less space.
+          {t('settings.appearance.howAccountsFoldersAppearSidebar')}
         </p>
 
         <div className="grid grid-cols-2 gap-3">
@@ -274,8 +276,8 @@ export function AppearanceSettings() {
               <div className="h-2 bg-mail-border rounded w-full" />
               <div className="h-2 bg-mail-border rounded w-4/6" />
             </div>
-            <span className="text-sm font-medium text-mail-text">List</span>
-            <span className="text-xs text-mail-text-muted">One row per item</span>
+            <span className="text-sm font-medium text-mail-text">{t('settings.appearance.list')}</span>
+            <span className="text-xs text-mail-text-muted">{t('settings.appearance.oneRowPerItem')}</span>
           </button>
 
           <button
@@ -293,8 +295,8 @@ export function AppearanceSettings() {
               <div className="h-2.5 bg-mail-border rounded-full w-10" />
               <div className="h-2.5 bg-mail-border rounded-full w-8" />
             </div>
-            <span className="text-sm font-medium text-mail-text">Tag Cloud</span>
-            <span className="text-xs text-mail-text-muted">Compact bubbles</span>
+            <span className="text-sm font-medium text-mail-text">{t('settings.appearance.tagCloud')}</span>
+            <span className="text-xs text-mail-text-muted">{t('settings.appearance.compactBubbles')}</span>
           </button>
         </div>
       </div>
@@ -303,11 +305,11 @@ export function AppearanceSettings() {
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <MessageSquare size={18} className="text-mail-accent-text" />
-          View Style
+          {t('settings.appearance.viewStyle')}
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">
-          Choose how to display your emails. Traditional list view or chat-style conversation view.
+          {t('settings.appearance.chooseHowDisplayEmailsTraditional')}
         </p>
 
         <div className="grid grid-cols-2 gap-3">
@@ -325,10 +327,10 @@ export function AppearanceSettings() {
             </div>
             <div className="flex items-center gap-2 text-sm font-medium text-mail-text">
               <List size={16} />
-              List View
+              {t('settings.appearance.listView')}
             </div>
             <span className="text-xs text-mail-text-muted">
-              Traditional email list
+              {t('settings.appearance.traditionalEmailList')}
             </span>
           </button>
 
@@ -346,10 +348,10 @@ export function AppearanceSettings() {
             </div>
             <div className="flex items-center gap-2 text-sm font-medium text-mail-text">
               <MessageSquare size={16} />
-              Chat View
+              {t('settings.appearance.chatView')}
             </div>
             <span className="text-xs text-mail-text-muted">
-              Conversation style
+              {t('settings.appearance.conversationStyle')}
             </span>
           </button>
         </div>
@@ -359,11 +361,11 @@ export function AppearanceSettings() {
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <List size={18} className="text-mail-accent-text" />
-          Email List Style
+          {t('settings.appearance.emailListStyle')}
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">
-          Choose how emails appear in the list.
+          {t('settings.appearance.chooseHowEmailsAppearList')}
         </p>
 
         <div className="grid grid-cols-2 gap-3">
@@ -386,8 +388,8 @@ export function AppearanceSettings() {
                 <div className="h-2 bg-mail-border rounded w-8" />
               </div>
             </div>
-            <span className="text-sm font-medium text-mail-text">Default</span>
-            <span className="text-xs text-mail-text-muted">Single line per email</span>
+            <span className="text-sm font-medium text-mail-text">{t('settings.appearance.default')}</span>
+            <span className="text-xs text-mail-text-muted">{t('settings.appearance.singleLinePerEmail')}</span>
           </button>
 
           <button
@@ -410,7 +412,7 @@ export function AppearanceSettings() {
               </div>
               <div className="h-2 bg-mail-border rounded w-3/4" />
             </div>
-            <span className="text-sm font-medium text-mail-text">Compact</span>
+            <span className="text-sm font-medium text-mail-text">{t('settings.appearance.compact')}</span>
             <span className="text-xs text-mail-text-muted">Sender + subject on two lines</span>
           </button>
         </div>
@@ -420,10 +422,10 @@ export function AppearanceSettings() {
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <List size={18} className="text-mail-accent-text" />
-          Thread Sort Order
+          {t('settings.appearance.threadSortOrder')}
         </h4>
         <p className="text-sm text-mail-text-muted mb-4">
-          Choose how emails are ordered within a thread conversation.
+          {t('settings.appearance.chooseHowEmailsOrderedWithin')}
         </p>
         <div className="grid grid-cols-2 gap-3">
           <button
@@ -434,8 +436,8 @@ export function AppearanceSettings() {
                         : 'border-mail-border hover:border-mail-accent/50'}`}
           >
             <ChevronDown size={24} className="text-mail-text-muted" />
-            <span className="text-sm font-medium text-mail-text">Oldest First</span>
-            <span className="text-xs text-mail-text-muted">Conversation flows top to bottom</span>
+            <span className="text-sm font-medium text-mail-text">{t('settings.appearance.oldestFirst')}</span>
+            <span className="text-xs text-mail-text-muted">{t('settings.appearance.conversationFlowsTopBottom')}</span>
           </button>
           <button
             onClick={() => setThreadSortOrder('newest-first')}
@@ -445,8 +447,8 @@ export function AppearanceSettings() {
                         : 'border-mail-border hover:border-mail-accent/50'}`}
           >
             <ChevronUp size={24} className="text-mail-text-muted" />
-            <span className="text-sm font-medium text-mail-text">Newest First</span>
-            <span className="text-xs text-mail-text-muted">Latest reply at the top</span>
+            <span className="text-sm font-medium text-mail-text">{t('settings.appearance.newestFirst')}</span>
+            <span className="text-xs text-mail-text-muted">{t('settings.appearance.latestReplyTop')}</span>
           </button>
         </div>
       </div>
@@ -455,10 +457,10 @@ export function AppearanceSettings() {
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <PenTool size={18} className="text-mail-accent-text" />
-          Signature Display
+          {t('settings.appearance.signatureDisplay')}
         </h4>
         <p className="text-sm text-mail-text-muted mb-4">
-          Control how email signatures appear in threads and conversations.
+          {t('settings.appearance.controlHowEmailSignaturesAppear')}
         </p>
         <div className="grid grid-cols-2 gap-3">
           {[

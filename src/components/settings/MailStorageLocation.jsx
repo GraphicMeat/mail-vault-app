@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { AlertCircle, FolderOpen, HardDrive, Loader } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import * as api from '../../services/api';
+import { useT } from '../../i18n/index.js';
 
 /**
  * Where the working copy of the mail lives. Default is the app's own storage;
@@ -12,6 +13,7 @@ import * as api from '../../services/api';
  * writes, so exactly one of them is live at a time.
  */
 export default function MailStorageLocation() {
+  const t = useT();
   const vaultStatus = useSettingsStore(s => s.vaultStatus);
   const setVaultStatus = useSettingsStore(s => s.setVaultStatus);
   const [busy, setBusy] = useState(null); // 'move' | 'adopt' | 'reset' | null
@@ -120,7 +122,7 @@ export default function MailStorageLocation() {
     <div className="bg-mail-surface border border-mail-border rounded-xl p-5 space-y-4">
       <h4 className="font-semibold text-mail-text flex items-center gap-2">
         <HardDrive size={18} className="text-mail-accent-text" />
-        Where your mail is stored
+        {t('settings.mailLocation.whereMailStored')}
       </h4>
 
       <p className="text-xs text-mail-text-muted">
@@ -156,7 +158,7 @@ export default function MailStorageLocation() {
             <div className="h-full bg-mail-accent transition-all" style={{ width: `${pct}%` }} />
           </div>
           <p className="text-xs text-mail-text-muted">
-            Nothing is deleted until every file has been copied and checked.
+            {t('settings.mailLocation.nothingDeletedUntilEveryFile')}
           </p>
         </div>
       )}
@@ -174,18 +176,18 @@ export default function MailStorageLocation() {
           onClick={handleAdopt}
           disabled={busy !== null}
           className="text-xs font-medium px-3 py-2 rounded-lg border border-mail-border text-mail-text hover:bg-mail-surface-hover disabled:opacity-50 transition-colors"
-          title="Point MailVault at a folder that already holds your mail"
+          title={t('settings.mailLocation.pointMailvaultFolderAlreadyHolds')}
         >
-          Use existing folder
+          {t('settings.mailLocation.useExistingFolder')}
         </button>
         {isCustom && (
           <button
             onClick={() => (missing ? handleReset(false) : setConfirmReset(true))}
             disabled={busy !== null}
             className="text-xs text-mail-text-muted hover:text-mail-text px-2 py-2 disabled:opacity-50"
-            title="Go back to storing mail in the app's own storage"
+            title={t('settings.mailLocation.goBackStoringMailApp')}
           >
-            Reset to default
+            {t('common.resetToDefault')}
           </button>
         )}
       </div>
@@ -193,7 +195,7 @@ export default function MailStorageLocation() {
       {confirmReset && (
         <div className="bg-mail-bg border border-mail-border rounded-lg p-3 space-y-2">
           <p className="text-xs text-mail-text">
-            Bring your mail back to the default location, or leave it in the current folder?
+            {t('settings.mailLocation.bringMailBackDefaultLocation')}
           </p>
           <p className="text-xs text-mail-text-muted">
             Leaving it there means MailVault reads whatever is in its own storage — usually nothing —
@@ -204,18 +206,18 @@ export default function MailStorageLocation() {
               onClick={() => handleReset(true)}
               className="text-xs font-medium px-3 py-2 rounded-lg bg-mail-accent-fill text-white hover:opacity-90"
             >
-              Move mail back
+              {t('settings.mailLocation.moveMailBack')}
             </button>
             <button
               onClick={() => handleReset(false)}
               className="text-xs font-medium px-3 py-2 rounded-lg border border-mail-border text-mail-text hover:bg-mail-surface-hover"
             >
-              Leave it there
+              {t('settings.mailLocation.leaveThere')}
             </button>
             <Button variant="ghost" size="xs" className="text-xs py-2"
               onClick={() => setConfirmReset(false)}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
           </div>
         </div>

@@ -22,8 +22,10 @@ import {
 } from 'lucide-react';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
 import { ConfirmDialog } from '../ConfirmDialog';
+import { useT } from '../../i18n/index.js';
 
 export function StorageSettings({ accounts, onUpgrade }) {
+  const t = useT();
   const priceBlurb = usePremiumPriceBlurb();
   // A native confirm() can only offer OK/Cancel, so the button on the most
   // destructive action in the app could not name what it was about to erase.
@@ -126,13 +128,13 @@ export function StorageSettings({ accounts, onUpgrade }) {
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <Database size={18} className="text-mail-accent-text" />
-          Storage Status
+          {t('settings.storage.storageStatus')}
         </h4>
 
         <div className="flex items-center gap-3 p-3 bg-mail-local-tint border border-mail-local/20 rounded-lg mb-4">
           <div className="w-3 h-3 bg-mail-success rounded-full animate-pulse" />
           <span className="text-sm text-mail-text">
-            Your emails are stored securely in local storage
+            {t('settings.storage.emailsStoredSecurelyLocalStorage')}
           </span>
         </div>
 
@@ -146,14 +148,14 @@ export function StorageSettings({ accounts, onUpgrade }) {
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <HardDrive size={18} className="text-mail-accent-text" />
-          Local Email Caching
+          {t('settings.storage.localEmailCaching')}
         </h4>
 
         <div className="space-y-4">
           <div>
             <div className="flex items-center justify-between mb-3">
               <label className="text-sm font-medium text-mail-text">
-                Cache Duration
+                {t('settings.storage.cacheDuration')}
               </label>
               <span className="text-sm font-medium text-mail-accent-text">
                 {localCacheDurationMonths === 0 ? 'All emails' :
@@ -188,7 +190,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                 <span className="text-[10px] text-mail-text-muted">3 mo</span>
                 <span className="text-[10px] text-mail-text-muted">6 mo</span>
                 <span className="text-[10px] text-mail-text-muted">1 year</span>
-                <span className="text-[10px] text-mail-text-muted">All</span>
+                <span className="text-[10px] text-mail-text-muted">{t('settings.storage.all')}</span>
               </div>
             </div>
           </div>
@@ -196,7 +198,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
           {/* Local storage usage */}
           <div className="flex items-center justify-between p-3 bg-mail-bg rounded-lg">
             <div>
-              <div className="text-sm text-mail-text">Local storage usage</div>
+              <div className="text-sm text-mail-text">{t('settings.storage.localStorageUsage')}</div>
               <div className="text-xs text-mail-local">
                 {localStorageUsage ? (
                   <>
@@ -224,7 +226,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
           {orphanStats?.count > 0 && (
             <div className="flex items-center justify-between p-3 bg-mail-bg rounded-lg">
               <div className="pr-4">
-                <div className="text-sm text-mail-text">Messages from a previous server</div>
+                <div className="text-sm text-mail-text">{t('settings.storage.messagesPreviousServer')}</div>
                 <div className="text-xs text-mail-text-muted">
                   {orphanStats.count.toLocaleString()} saved {orphanStats.count === 1 ? 'message' : 'messages'}
                   {' '}({(orphanStats.bytes / (1024 * 1024)).toFixed(1)} MB) that this server no longer has.
@@ -238,7 +240,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                   className="flex items-center gap-2 shrink-0 px-3 py-1.5 text-sm font-medium rounded-lg border border-mail-danger text-mail-danger hover:bg-mail-danger-tint transition-colors disabled:opacity-50"
                 >
                   <Trash2 size={14} />
-                  Delete
+                  {t('common.delete')}
                 </button>
               ) : (
                 <div className="flex items-center gap-2 shrink-0">
@@ -246,7 +248,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                     onClick={() => setPurgeOrphansConfirm(false)}
                     disabled={purgingOrphans}
                   >
-                    Cancel
+                    {t('common.cancel')}
                   </Button>
                   <Button variant="danger" size="sm"
                     onClick={async () => {
@@ -278,9 +280,9 @@ export function StorageSettings({ accounts, onUpgrade }) {
           {/* Clear cache */}
           <div className="flex items-center justify-between p-3 bg-mail-bg rounded-lg">
             <div>
-              <div className="text-sm text-mail-text">Clear cached emails</div>
+              <div className="text-sm text-mail-text">{t('settings.storage.clearCachedEmails')}</div>
               <div className="text-xs text-mail-text-muted">
-                Removes all cached .eml files and re-syncs. Archived emails are preserved.
+                {t('settings.storage.removesAllCachedEmlFiles')}
               </div>
             </div>
             {!clearCacheConfirm ? (
@@ -290,7 +292,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                 className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg border border-mail-danger text-mail-danger hover:bg-mail-danger-tint transition-colors disabled:opacity-50"
               >
                 <Trash2 size={14} />
-                Clear Cache
+                {t('settings.storage.clearCache')}
               </button>
             ) : (
               <div className="flex items-center gap-2">
@@ -298,7 +300,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                   onClick={() => setClearCacheConfirm(false)}
                   disabled={clearingCache}
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </Button>
                 <Button variant="danger" size="sm"
                   onClick={async () => {
@@ -371,7 +373,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
           Auto-Cleanup
           {!isPaidUser && (
             <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-mail-accent-fill text-white rounded-full">
-              Premium
+              {t('common.premium')}
             </span>
           )}
         </h4>
@@ -384,24 +386,24 @@ export function StorageSettings({ accounts, onUpgrade }) {
               <div className="space-y-2 mb-3">
                 <div className="flex items-center justify-between p-2.5 bg-mail-bg rounded-lg">
                   <div className="flex items-center gap-3 text-sm text-mail-text">
-                    <span>INBOX</span>
-                    <span className="text-mail-text-muted">All accounts</span>
-                    <span className="text-mail-text-muted">Older than 90 days</span>
-                    <span className="text-mail-text-muted">Archive locally then delete</span>
+                    <span>{t('settings.storage.inbox')}</span>
+                    <span className="text-mail-text-muted">{t('settings.storage.allAccounts')}</span>
+                    <span className="text-mail-text-muted">{t('settings.storage.olderThan90Days')}</span>
+                    <span className="text-mail-text-muted">{t('settings.storage.archiveLocallyThenDelete')}</span>
                   </div>
                 </div>
                 <div className="flex items-center justify-between p-2.5 bg-mail-bg rounded-lg">
                   <div className="flex items-center gap-3 text-sm text-mail-text">
-                    <span>Trash</span>
-                    <span className="text-mail-text-muted">All accounts</span>
-                    <span className="text-mail-text-muted">Older than 30 days</span>
-                    <span className="text-mail-text-muted">Delete from server</span>
+                    <span>{t('settings.storage.trash')}</span>
+                    <span className="text-mail-text-muted">{t('settings.storage.allAccounts')}</span>
+                    <span className="text-mail-text-muted">{t('settings.storage.olderThan30Days')}</span>
+                    <span className="text-mail-text-muted">{t('settings.storage.deleteServer')}</span>
                   </div>
                 </div>
               </div>
               <div className="flex gap-2">
-                <div className="px-3 py-1.5 text-sm bg-mail-accent/10 text-mail-accent-text rounded-lg">Add Rule</div>
-                <div className="px-3 py-1.5 text-sm bg-mail-surface-hover text-mail-text rounded-lg">Run All Now</div>
+                <div className="px-3 py-1.5 text-sm bg-mail-accent/10 text-mail-accent-text rounded-lg">{t('settings.storage.addRule')}</div>
+                <div className="px-3 py-1.5 text-sm bg-mail-surface-hover text-mail-text rounded-lg">{t('settings.storage.runAllNow')}</div>
               </div>
             </div>
 
@@ -412,9 +414,9 @@ export function StorageSettings({ accounts, onUpgrade }) {
                   <Clock size={20} className="text-mail-accent-text" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-mail-text mb-1">Premium Feature</p>
+                  <p className="text-sm font-semibold text-mail-text mb-1">{t('common.premiumFeature')}</p>
                   <p className="text-xs text-mail-text-muted max-w-[280px]">
-                    Automatically clean up old emails with custom rules. Set per-folder age thresholds, choose to archive or delete, and keep your mailbox tidy.
+                    {t('settings.storage.automaticallyCleanUpOldEmails')}
                   </p>
                   {/* MAS builds must not advertise the web subscription — no external
                       purchase price, no path to Stripe checkout. */}
@@ -424,7 +426,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                 </div>
                 {!IS_APPSTORE_BUILD && onUpgrade && (
                   <Button variant="primary" size="sm" pill className="text-xs font-semibold" onClick={onUpgrade}>
-                    Upgrade
+                    {t('common.upgrade')}
                   </Button>
                 )}
               </div>
@@ -434,7 +436,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
           /* Full rule management UI for paid users */
           <div className="space-y-4">
             <p className="text-sm text-mail-text-muted">
-              Automatically clean up old emails with custom rules. Rules run in the background periodically.
+              {t('settings.storage.automaticallyCleanUpOldEmails2')}
             </p>
 
             {/* Existing rules list */}
@@ -473,7 +475,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                           setCleanupAction(rule.action);
                         }}
                         className="p-1.5 text-mail-text-muted hover:text-mail-accent-text rounded-md hover:bg-mail-surface transition-colors opacity-0 group-hover:opacity-100"
-                        title="Edit rule"
+                        title={t('settings.storage.editRule')}
                       >
                         <Pencil size={14} />
                       </button>
@@ -483,7 +485,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                             onClick={() => setCleanupDeleteConfirm(null)}
                             className="px-2 py-1 text-xs text-mail-text-muted hover:bg-mail-surface rounded transition-colors"
                           >
-                            Cancel
+                            {t('common.cancel')}
                           </button>
                           <button
                             onClick={() => {
@@ -492,14 +494,14 @@ export function StorageSettings({ accounts, onUpgrade }) {
                             }}
                             className="px-2 py-1 text-xs text-mail-danger hover:bg-mail-danger-tint rounded transition-colors"
                           >
-                            Delete
+                            {t('common.delete')}
                           </button>
                         </div>
                       ) : (
                         <button
                           onClick={() => setCleanupDeleteConfirm(rule.id)}
                           className="p-1.5 text-mail-text-muted hover:text-mail-danger rounded-md hover:bg-mail-surface transition-colors opacity-0 group-hover:opacity-100"
-                          title="Delete rule"
+                          title={t('settings.storage.deleteRule')}
                         >
                           <Trash2 size={14} />
                         </button>
@@ -512,7 +514,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
 
             {cleanupRules.length === 0 && !cleanupForm && (
               <div className="text-center py-6 text-mail-text-muted text-sm">
-                No cleanup rules yet. Add a rule to get started.
+                {t('settings.storage.noCleanupRulesYetAdd')}
               </div>
             )}
 
@@ -528,7 +530,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                   <div className="flex items-start gap-2 p-3 bg-mail-warning-tint border border-mail-warning rounded-lg">
                     <AlertTriangle size={16} className="text-mail-warning shrink-0 mt-0.5" />
                     <p className="text-xs text-mail-warning">
-                      Auto-cleanup rules run automatically. Deleted emails cannot be recovered from server.
+                      {t('settings.storage.autoCleanupRulesRunAutomatically')}
                     </p>
                   </div>
                 )}
@@ -536,13 +538,13 @@ export function StorageSettings({ accounts, onUpgrade }) {
                 <div className="grid grid-cols-2 gap-3">
                   {/* Account dropdown */}
                   <div>
-                    <label className="text-xs text-mail-text-muted mb-1 block">Account</label>
+                    <label className="text-xs text-mail-text-muted mb-1 block">{t('settings.storage.account')}</label>
                     <select
                       value={cleanupAccount}
                       onChange={(e) => setCleanupAccount(e.target.value)}
                       className="w-full px-3 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent"
                     >
-                      <option value="all">All accounts</option>
+                      <option value="all">{t('settings.storage.allAccounts')}</option>
                       {accounts
                         .filter(a => !hiddenAccounts?.[a.id])
                         .map(a => (
@@ -554,7 +556,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
 
                   {/* Folder dropdown */}
                   <div>
-                    <label className="text-xs text-mail-text-muted mb-1 block">Folder</label>
+                    <label className="text-xs text-mail-text-muted mb-1 block">{t('common.folder')}</label>
                     <select
                       value={cleanupFolder}
                       onChange={(e) => setCleanupFolder(e.target.value)}
@@ -568,7 +570,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
 
                   {/* Age threshold */}
                   <div>
-                    <label className="text-xs text-mail-text-muted mb-1 block">Older than</label>
+                    <label className="text-xs text-mail-text-muted mb-1 block">{t('settings.storage.olderThan')}</label>
                     <div className="flex gap-2">
                       <input
                         type="number"
@@ -588,25 +590,25 @@ export function StorageSettings({ accounts, onUpgrade }) {
                         }}
                         className="flex-1 px-3 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent"
                       >
-                        <option value="days">days</option>
-                        <option value="months">months</option>
+                        <option value="days">{t('settings.storage.days')}</option>
+                        <option value="months">{t('settings.storage.months')}</option>
                       </select>
                     </div>
                     {cleanupUnit === 'days' && cleanupAge < 7 && cleanupAge > 0 && (
-                      <p className="text-[10px] text-mail-danger mt-1">Minimum 7 days</p>
+                      <p className="text-[10px] text-mail-danger mt-1">{t('settings.storage.minimum7Days')}</p>
                     )}
                   </div>
 
                   {/* Action dropdown */}
                   <div>
-                    <label className="text-xs text-mail-text-muted mb-1 block">Action</label>
+                    <label className="text-xs text-mail-text-muted mb-1 block">{t('settings.storage.action')}</label>
                     <select
                       value={cleanupAction}
                       onChange={(e) => setCleanupAction(e.target.value)}
                       className="w-full px-3 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent"
                     >
-                      <option value="delete">Delete from server</option>
-                      <option value="archive-then-delete">Archive locally then delete</option>
+                      <option value="delete">{t('settings.storage.deleteServer')}</option>
+                      <option value="archive-then-delete">{t('settings.storage.archiveLocallyThenDelete')}</option>
                     </select>
                   </div>
                 </div>
@@ -619,7 +621,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                     }}
                     className="px-3 py-1.5 text-sm text-mail-text-muted hover:bg-mail-surface rounded-lg transition-colors"
                   >
-                    Cancel
+                    {t('common.cancel')}
                   </button>
                   <button
                     onClick={() => {
@@ -667,7 +669,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                   className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-mail-accent/10 text-mail-accent-text rounded-lg hover:bg-mail-accent/20 transition-colors"
                 >
                   <Plus size={14} />
-                  Add Rule
+                  {t('settings.storage.addRule')}
                 </button>
                 {cleanupRules.length > 0 && (
                   <button
@@ -711,11 +713,11 @@ export function StorageSettings({ accounts, onUpgrade }) {
         <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
           <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
             <FolderOpen size={18} className="text-mail-accent-text" />
-            Advanced: Custom Storage Folder
+            {t('settings.storage.advancedCustomStorageFolder')}
           </h4>
 
           <p className="text-sm text-mail-text-muted mb-3">
-            Choose where your vault lives. Any folder on this computer or an attached drive works.
+            {t('settings.storage.chooseWhereVaultLivesAny')}
           </p>
           <div className="flex gap-2">
             <div className="flex-1 px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
@@ -742,16 +744,16 @@ export function StorageSettings({ accounts, onUpgrade }) {
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <Shield size={18} className="text-mail-accent-text" />
-          Security
+          {t('settings.storage.security')}
         </h4>
 
         <div className="text-mail-text-muted text-sm">
           <p className="mb-3">
-            Password protection for your local storage is coming soon.
+            {t('settings.storage.passwordProtectionLocalStorageComing')}
           </p>
           <div className="flex items-center gap-2 text-mail-accent-text">
             <Shield size={16} />
-            <span>This feature is under development</span>
+            <span>{t('settings.storage.featureUnderDevelopment')}</span>
           </div>
         </div>
       </div>
@@ -760,7 +762,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
       <div className="bg-mail-surface border border-mail-danger/30 rounded-xl p-5">
         <h4 className="font-semibold text-mail-danger mb-4 flex items-center gap-2">
           <Trash2 size={18} />
-          Danger Zone
+          {t('settings.storage.dangerZone')}
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">
@@ -771,14 +773,14 @@ export function StorageSettings({ accounts, onUpgrade }) {
           onClick={() => setShowClearConfirm(true)}
         >
           <Trash2 size={16} />
-          Empty the vault
+          {t('settings.storage.emptyVault')}
         </Button>
       </div>
 
       <ConfirmDialog
         isOpen={showClearConfirm}
         onClose={() => !clearing && setShowClearConfirm(false)}
-        title="Empty your vault on this computer?"
+        title={t('settings.storage.emptyVaultComputer')}
         description="Every email in your vault, every account, and every setting is deleted from this computer. Mail still on the server can be downloaded again; anything the server no longer has has no other copy. This cannot be undone."
         confirmLabel="Empty the vault"
         destructive

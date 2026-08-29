@@ -7,6 +7,9 @@ const AUDIT = resolve(process.cwd(), 'scripts/i18n-audit.mjs');
 // Every task appends the files it drained. A file listed here can never regress.
 const DONE = [
   'src/components/Sidebar.jsx',
+  'src/components/settings/StorageSettings.jsx',
+  'src/components/settings/AppearanceSettings.jsx',
+  'src/components/settings/MailStorageLocation.jsx',
 ];
 
 function audit(mode, files) {
