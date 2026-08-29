@@ -3,6 +3,7 @@ import { Bug, Github, Lightbulb, Mail, MessagesSquare } from 'lucide-react';
 import { Dialog, Button, XLogo } from './ui';
 import { openInBrowser } from '../services/billingApi';
 import logoUrl from '../assets/graphicmeat-logo.webp';
+import { useT } from '../i18n/index.js';
 
 const GH_DISCUSSIONS = 'https://github.com/GraphicMeat/mail-vault-app/discussions';
 const GH_NEW_BUG = `${GH_DISCUSSIONS}/new?category=bug-reports`;
@@ -21,6 +22,7 @@ const MAKER_SITE = 'https://graphicmeat.com';
  * and this is the only moment MailVault has their attention on the subject.
  */
 export function BugReportDialog({ open, onClose, onEmail }) {
+  const t = useT();
   const openAndClose = (url) => () => { openInBrowser(url).catch(() => {}); onClose(); };
 
   const options = [
@@ -69,7 +71,7 @@ export function BugReportDialog({ open, onClose, onEmail }) {
     <Dialog
       open={open}
       onClose={onClose}
-      title="Report a bug or suggest a feature"
+      title={t('bugReport.reportBugSuggestFeature')}
       icon={<Bug size={20} className="text-mail-accent-text" />}
       description="Report something broken, or ask for something missing."
       size="lg"
@@ -106,20 +108,20 @@ export function BugReportDialog({ open, onClose, onEmail }) {
           onClick={openAndClose(X_PROFILE)}
           className="inline-flex items-center gap-2 text-xs text-mail-text-muted hover:text-mail-text transition-colors"
         >
-          <XLogo size={14} /> Follow on X
+          <XLogo size={14} /> {t('bugReport.followX')}
         </button>
 
         <div className="flex flex-col items-center gap-1 text-xs text-mail-text-muted">
-          <span>Cooked over an <span className="text-mail-accent-text font-medium">open GPU</span> by</span>
+          <span>{t('bugReport.cookedOver')} <span className="text-mail-accent-text font-medium">{t('bugReport.openGpu')}</span> {t('bugReport.by')}</span>
           <button
             type="button"
             data-testid="bug-maker-logo"
             data-url={MAKER_SITE}
-            aria-label="Graphic Meat"
+            aria-label={t('bugReport.graphicMeat')}
             onClick={openAndClose(MAKER_SITE)}
             className="hover:opacity-80 transition-opacity"
           >
-            <img src={logoUrl} alt="Graphic Meat" width="128" height="128" className="w-32 h-32" />
+            <img src={logoUrl} alt={t('bugReport.graphicMeat')} width="128" height="128" className="w-32 h-32" />
           </button>
         </div>
       </div>

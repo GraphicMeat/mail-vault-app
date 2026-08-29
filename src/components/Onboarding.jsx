@@ -10,6 +10,7 @@ import {
   HardDrive,
   EyeOff
 } from 'lucide-react';
+import { useT } from '../i18n/index.js';
 
 // Each card used to state a claim in the title and repeat it in the
 // description ("Secure Password Storage" / "Passwords stored securely in
@@ -40,6 +41,7 @@ const features = [
 ];
 
 export function Onboarding() {
+  const t = useT();
   const { setOnboardingComplete } = useSettingsStore();
 
   const handleComplete = () => {
@@ -56,10 +58,10 @@ export function Onboarding() {
         {/* Logo */}
         <div className="text-center mb-3">
           <h1 className="text-2xl font-display font-bold text-mail-text">
-            <span className="text-mail-accent-text">Mail</span>Vault
+            <span className="text-mail-accent-text">{t('onboarding.mail')}</span>{t('onboarding.vault')}
           </h1>
           <p className="text-xs text-mail-text-muted">
-            Read your mail. Keep your mail.
+            {t('onboarding.readMailKeepMail')}
           </p>
         </div>
 
@@ -72,10 +74,10 @@ export function Onboarding() {
             </div>
             <div>
               <h2 className="text-base font-semibold text-mail-text">
-                Where your data lives
+                {t('onboarding.whereDataLives')}
               </h2>
               <p className="text-xs text-mail-text-muted">
-                All of it on this computer, before you add an account
+                {t('onboarding.allComputerBeforeAddAccount')}
               </p>
             </div>
           </div>
@@ -111,7 +113,7 @@ export function Onboarding() {
               <Key size={14} className="text-mail-warning flex-shrink-0" />
               <div>
                 <h4 className="font-medium text-xs text-mail-warning">
-                  Your keychain will ask for permission
+                  {t('onboarding.keychainWillAskPermission')}
                 </h4>
                 <p className="text-[10px] text-mail-text-muted">
                   Choose &ldquo;Always Allow&rdquo; the first time, or it asks again on every sync.
@@ -129,7 +131,7 @@ export function Onboarding() {
                         hover:bg-mail-accent-hover text-white font-medium rounded-lg
                         transition-colors text-xs"
             >
-              Get Started
+              {t('onboarding.getStarted')}
               <Mail size={14} />
             </button>
           </div>

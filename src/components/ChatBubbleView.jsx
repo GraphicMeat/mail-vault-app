@@ -44,6 +44,7 @@ import { openMailtoCompose } from '../utils/mailto';
 import { AddressText } from './email/AddressText';
 
 export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail, onBack, onReply }) {
+  const t = useT();
   const scrollRef = useRef(null);
   const stickToBottomRef = useRef(true);
   const [showOriginal, setShowOriginal] = useState(null); // email uid or null
@@ -237,7 +238,7 @@ export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail,
           onClick={() => handleReplyToEmail(latestEmail, 'reply')}
         >
           <Reply size={18} />
-          Reply
+          {t('chat.bubble.reply')}
         </button>
       </div>
 
@@ -255,6 +256,7 @@ export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail,
 }
 
 const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avatarColor, initials, isOriginalVisible, onToggleOriginal, onReply, onReplyAll, onForward, onOpenFullView, bodiesMapRef, registerListener }) {
+  const t = useT();
   const iframeRef = useRef(null);
   const [quotesExpanded, setQuotesExpanded] = useState(false);
   const [sigExpanded, setSigExpanded] = useState(false);
@@ -559,13 +561,13 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
               ? 'chat-bubble-sent rounded-br-md'
               : 'chat-bubble-received rounded-bl-md'
           }`}
-          title="Double-click to open in new window"
+          title={t('chat.bubble.doubleClickOpenNewWindow')}
         >
           {/* Message Content */}
           {isOriginalVisible ? (
             <div className="px-4 py-2.5 space-y-2">
               <div className="text-xs opacity-70 font-medium pb-1 border-b border-current/20">
-                Original message:
+                {t('chat.bubble.originalMessage')}
               </div>
               {mergedEmail.html ? (
                 <iframe
@@ -574,7 +576,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
                   className="w-full border-0 rounded"
                   style={{ minHeight: '100px', maxHeight: '400px' }}
                   sandbox="allow-same-origin allow-popups allow-scripts"
-                  title="Email content"
+                  title={t('chat.bubble.emailContent')}
                 />
               ) : (
                 <div className="whitespace-pre-wrap break-words text-sm">
@@ -590,7 +592,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
                 className="w-full border-0"
                 style={{ minHeight: '50px', maxHeight: '400px' }}
                 sandbox="allow-same-origin allow-popups allow-scripts"
-                title="Email content"
+                title={t('chat.bubble.emailContent')}
               />
             </div>
           ) : hasDisplayableContent ? (
@@ -649,7 +651,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
             <div className="px-4 py-3 flex items-center gap-2">
               <Loader size={14} className={`animate-spin flex-shrink-0 ${fromUser ? 'text-white/70' : 'text-mail-text-muted'}`} />
               <span className={`text-sm ${fromUser ? 'text-white/70' : 'text-mail-text-muted'}`}>
-                Loading...
+                {t('chat.bubble.loading')}
               </span>
             </div>
           ) : (
@@ -666,7 +668,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
                 }`}
               >
                 <ExternalLink size={12} />
-                Open in new window
+                {t('chat.bubble.openNewWindow')}
               </button>
             </div>
           )}
@@ -696,7 +698,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
               fromUser ? 'border-white/20' : 'border-mail-border'
             }`}>
               <Paperclip size={14} className="opacity-70" />
-              <span className="text-xs opacity-70">Attachments</span>
+              <span className="text-xs opacity-70">{t('chat.bubble.attachments')}</span>
             </div>
           )}
         </div>
@@ -722,7 +724,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
           <button
             onClick={handleOpenFullView}
             className="flex items-center gap-1 text-[10px] text-mail-text-muted hover:text-mail-accent-text"
-            title="Open in new window"
+            title={t('chat.bubble.openNewWindow')}
           >
             <ExternalLink size={10} />
           </button>
@@ -765,3 +767,4 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
 });
 
 export { OriginalEmailModal } from './email/OriginalEmailModal';
+import { useT } from '../i18n/index.js';

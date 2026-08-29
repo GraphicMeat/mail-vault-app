@@ -2,12 +2,14 @@ import React from 'react';
 import { useComposeStore } from '../stores/composeStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader, Check, AlertTriangle, RefreshCw, X } from 'lucide-react';
+import { useT } from '../i18n/index.js';
 
 // Renders one bubble per in-flight or errored send. Mirrors the minimized
 // compose bubble style so the compose → send → success/error flow all lives
 // on the same visual surface. Successes auto-dismiss; errors stay until the
 // user retries or dismisses (which restores the compose window).
 export function OutboxTray({ onRestoreDraft }) {
+  const t = useT();
   const items = useComposeStore(s => s.outboxItems);
   const retryOutbox = useComposeStore(s => s.retryOutbox);
   const dismissOutbox = useComposeStore(s => s.dismissOutbox);
@@ -65,8 +67,8 @@ export function OutboxTray({ onRestoreDraft }) {
                   }}
                   className="flex-shrink-0 p-1 rounded-md text-mail-text-muted
                              hover:bg-mail-surface-hover hover:text-mail-text transition-colors"
-                  title="Cancel send and restore draft"
-                  aria-label="Cancel send"
+                  title={t('outbox.cancelSendRestoreDraft')}
+                  aria-label={t('outbox.cancelSend')}
                 >
                   <X size={14} />
                 </button>
@@ -77,10 +79,10 @@ export function OutboxTray({ onRestoreDraft }) {
                     onClick={() => retryOutbox(item.id)}
                     className="flex items-center gap-1 px-2 py-1 text-xs font-medium
                                text-mail-accent-text hover:bg-mail-surface-hover rounded-md transition-colors"
-                    title="Retry send"
+                    title={t('outbox.retrySend')}
                   >
                     <RefreshCw size={12} />
-                    Retry
+                    {t('common.retry')}
                   </button>
                   <button
                     onClick={() => {
@@ -89,10 +91,10 @@ export function OutboxTray({ onRestoreDraft }) {
                     }}
                     className="flex items-center gap-1 px-2 py-1 text-xs font-medium
                                text-mail-text-muted hover:bg-mail-surface-hover rounded-md transition-colors"
-                    title="Dismiss and restore draft"
+                    title={t('outbox.dismissRestoreDraft')}
                   >
                     <X size={12} />
-                    Edit
+                    {t('outbox.edit')}
                   </button>
                 </div>
               )}

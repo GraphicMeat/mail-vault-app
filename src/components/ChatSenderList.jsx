@@ -14,11 +14,13 @@ import { useMailStore } from '../stores/mailStore';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useT } from '../i18n/index.js';
 
 const INITIAL_VISIBLE = 50;
 const LOAD_MORE_COUNT = 50;
 
 export function ChatSenderList({ onSelectSender }) {
+  const t = useT();
   // getChatEmails already merges emails/localEmails/sentEmails internally
   const {
     getChatEmails,
@@ -96,9 +98,9 @@ export function ChatSenderList({ onSelectSender }) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-mail-text-muted p-8">
         <MessageSquare size={48} className="mb-4 opacity-50" />
-        <p className="text-center">No conversations yet</p>
+        <p className="text-center">{t('chat.senders.noConversationsYet')}</p>
         <p className="text-sm mt-2 text-center">
-          Your email conversations will appear here
+          {t('chat.senders.emailConversationsWillAppearHere')}
         </p>
       </div>
     );
@@ -114,7 +116,7 @@ export function ChatSenderList({ onSelectSender }) {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search conversations..."
+            placeholder={t('chat.senders.searchConversations')}
             className="w-full pl-9 pr-4 py-1.5 bg-mail-bg border border-mail-border rounded-lg
                       text-mail-text placeholder-mail-text-muted text-sm
                       focus:border-mail-accent focus:outline-none"
@@ -126,7 +128,7 @@ export function ChatSenderList({ onSelectSender }) {
       <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto">
         {filteredCorrespondents.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 text-mail-text-muted">
-            <p className="text-sm">No matches found</p>
+            <p className="text-sm">{t('chat.senders.noMatchesFound')}</p>
           </div>
         ) : (
           <>
@@ -140,7 +142,7 @@ export function ChatSenderList({ onSelectSender }) {
             ))}
             {hasMore && (
               <div className="py-3 text-center text-xs text-mail-text-muted">
-                Loading more...
+                {t('chat.senders.loadingMore')}
               </div>
             )}
           </>

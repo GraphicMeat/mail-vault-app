@@ -13,6 +13,7 @@ import {
   xIntentUrl,
   linkedinShareUrl,
 } from '../config/shareUnlock';
+import { useT } from '../i18n/index.js';
 
 const invoke = () => window.__TAURI__?.core?.invoke;
 
@@ -22,6 +23,7 @@ const invoke = () => window.__TAURI__?.core?.invoke;
  * an eligible backup; grants free premium for starring + sharing.
  */
 export default function ShareUnlockModal({ onSubscribe }) {
+  const t = useT();
   const shareUnlock = useBackupStore(s => s.shareUnlock);
   const clearShareUnlock = useBackupStore(s => s.clearShareUnlock);
   const shareGrant = useSettingsStore(s => s.shareGrant);
@@ -148,11 +150,11 @@ export default function ShareUnlockModal({ onSubscribe }) {
                   <Gift size={20} className="text-mail-accent-text" />
                 </div>
                 <div>
-                  <h2 id={titleId} className="text-base font-semibold text-mail-text">Unlock premium — free</h2>
+                  <h2 id={titleId} className="text-base font-semibold text-mail-text">{t('shareUnlock.unlockPremiumFree')}</h2>
                   <p className="text-xs text-mail-text-muted">{milestone}</p>
                 </div>
               </div>
-              <Button variant="ghost" icon size="xs" onClick={close} aria-label="Close">
+              <Button variant="ghost" icon size="xs" onClick={close} aria-label={t('common.close')}>
                 <XIcon size={18} />
               </Button>
             </div>
@@ -209,11 +211,11 @@ export default function ShareUnlockModal({ onSubscribe }) {
               {claimDate ? (
                 <span className="text-mail-accent-text font-medium">Premium unlocked until {claimDate}</span>
               ) : (
-                <span className="text-mail-text-muted">Pick any action to start</span>
+                <span className="text-mail-text-muted">{t('shareUnlock.pickAnyActionStart')}</span>
               )}
             </div>
             <Button variant="ghost" size="xs" onClick={close}>
-              Maybe later
+              {t('shareUnlock.maybeLater')}
             </Button>
           </div>
     </Dialog>
@@ -236,6 +238,7 @@ function RowShell({ icon, label, days, done, children }) {
 }
 
 function GithubRow({ done, gh, onStart, onOpenRepo, onRecheck }) {
+  const t = useT();
   let control;
   if (done) {
     control = <DoneBadge />;
@@ -244,19 +247,19 @@ function GithubRow({ done, gh, onStart, onOpenRepo, onRecheck }) {
   } else if (gh.stage === 'awaiting') {
     control = (
       <div className="text-right">
-        <div className="text-[11px] text-mail-text-muted">Enter code on GitHub</div>
+        <div className="text-[11px] text-mail-text-muted">{t('shareUnlock.enterCodeGithub')}</div>
         <code className="text-sm font-mono font-semibold text-mail-accent-text tracking-widest">{gh.userCode}</code>
       </div>
     );
   } else if (gh.stage === 'needs_star') {
     control = (
       <div className="flex flex-col items-end gap-1">
-        <BtnPrimary onClick={onOpenRepo}><Star size={13} /> Star repo</BtnPrimary>
-        <button onClick={onRecheck} className="text-[11px] text-mail-accent-text hover:underline">I starred it — verify</button>
+        <BtnPrimary onClick={onOpenRepo}><Star size={13} /> {t('shareUnlock.starRepo')}</BtnPrimary>
+        <button onClick={onRecheck} className="text-[11px] text-mail-accent-text hover:underline">{t('shareUnlock.iStarredVerify')}</button>
       </div>
     );
   } else {
-    control = <BtnPrimary onClick={onStart}><Star size={13} /> Star</BtnPrimary>;
+    control = <BtnPrimary onClick={onStart}><Star size={13} /> {t('shareUnlock.star')}</BtnPrimary>;
   }
   return (
     <div>
@@ -273,17 +276,19 @@ function GithubRow({ done, gh, onStart, onOpenRepo, onRecheck }) {
 }
 
 function SocialRow({ icon, label, days, done, revealed, onOpen, onClaim }) {
+  const t = useT();
   let control;
   if (done) control = <DoneBadge />;
-  else if (revealed) control = <BtnPrimary onClick={onClaim}><Check size={13} /> I shared — claim</BtnPrimary>;
-  else control = <BtnPrimary onClick={onOpen}><ExternalLink size={13} /> Share</BtnPrimary>;
+  else if (revealed) control = <BtnPrimary onClick={onClaim}><Check size={13} /> {t('shareUnlock.iSharedClaim')}</BtnPrimary>;
+  else control = <BtnPrimary onClick={onOpen}><ExternalLink size={13} /> {t('shareUnlock.share')}</BtnPrimary>;
   return <RowShell icon={icon} label={label} days={days} done={done}>{control}</RowShell>;
 }
 
 function DoneBadge() {
+  const t = useT();
   return (
     <span className="flex items-center gap-1 text-xs font-medium text-mail-success">
-      <Check size={15} /> Done
+      <Check size={15} /> {t('common.done')}
     </span>
   );
 }

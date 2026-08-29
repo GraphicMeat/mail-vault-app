@@ -5,8 +5,10 @@ import { ToastShell } from './ui/ToastShell';
 import { CheckCircle2, Loader2, AlertTriangle } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore.js';
 import * as api from '../services/api.js';
+import { useT } from '../i18n/index.js';
 
 export function MigrationToast({ showSettings, onOpenSettings }) {
+  const t = useT();
   const activeMigration = useSettingsStore(s => s.activeMigration);
   const incompleteMigration = useSettingsStore(s => s.incompleteMigration);
   const [dismissed, setDismissed] = useState(false);
@@ -105,19 +107,19 @@ export function MigrationToast({ showSettings, onOpenSettings }) {
         <ToastShell position="bottom-right" className="w-72">
           {showDiscardDialog ? (
             <div className="space-y-2">
-              <p className="text-sm font-semibold text-mail-text">Discard incomplete migration?</p>
-              <p className="text-xs text-mail-text-muted">Choose what to do with emails already copied to the destination.</p>
-              <p className="text-xs text-mail-text-muted italic">Removal is best-effort. If the connection drops, some emails may remain at the destination.</p>
+              <p className="text-sm font-semibold text-mail-text">{t('migration.toast.discardIncompleteMigration')}</p>
+              <p className="text-xs text-mail-text-muted">{t('migration.toast.chooseWhatDoEmailsAlready')}</p>
+              <p className="text-xs text-mail-text-muted italic">{t('migration.toast.removalBestEffortIfConnection')}</p>
               {removeError && (
                 <p className="text-xs text-mail-danger">{removeError}</p>
               )}
               <div className="flex items-center gap-2">
-                <Button variant="secondary" size="xs" className="text-xs" onClick={handleDiscardKeep}>Keep emails</Button>
+                <Button variant="secondary" size="xs" className="text-xs" onClick={handleDiscardKeep}>{t('migration.toast.keepEmails')}</Button>
                 <Button variant="danger" size="xs" className="text-xs" onClick={handleDiscardRemove} disabled={removing}>
                   {removing && <Loader2 size={10} className="animate-spin" />}
                   Remove emails
                 </Button>
-                <button onClick={(e) => { e.stopPropagation(); setShowDiscardDialog(false); }} className="text-xs text-mail-text-muted">Go back</button>
+                <button onClick={(e) => { e.stopPropagation(); setShowDiscardDialog(false); }} className="text-xs text-mail-text-muted">{t('migration.toast.goBack')}</button>
               </div>
             </div>
           ) : (
@@ -125,13 +127,13 @@ export function MigrationToast({ showSettings, onOpenSettings }) {
               <div className="flex items-center gap-2">
                 <AlertTriangle size={16} className="text-mail-warning flex-shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-mail-text">Incomplete migration found</p>
+                  <p className="text-sm font-semibold text-mail-text">{t('migration.toast.incompleteMigrationFound')}</p>
                   <p className="text-xs text-mail-text-muted">{currentFolder}: {migrated_emails}/{total_emails} emails migrated</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 mt-2">
-                <Button variant="primary" size="xs" className="text-xs" onClick={handleResume}>Resume</Button>
-                <Button variant="secondary" size="xs" className="text-xs" onClick={handleDiscard}>Discard</Button>
+                <Button variant="primary" size="xs" className="text-xs" onClick={handleResume}>{t('common.resume')}</Button>
+                <Button variant="secondary" size="xs" className="text-xs" onClick={handleDiscard}>{t('common.discard')}</Button>
               </div>
             </>
           )}
@@ -150,11 +152,11 @@ export function MigrationToast({ showSettings, onOpenSettings }) {
         {status === 'completed' ? (
           <div className="flex items-center gap-2">
             <CheckCircle2 size={16} className="text-mail-success flex-shrink-0" />
-            <span className="text-sm font-semibold text-mail-text">Migration complete</span>
+            <span className="text-sm font-semibold text-mail-text">{t('migration.toast.migrationComplete')}</span>
           </div>
         ) : status === 'paused' ? (
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-mail-text">Paused</span>
+            <span className="text-sm font-semibold text-mail-text">{t('migration.toast.paused')}</span>
           </div>
         ) : (
           <>

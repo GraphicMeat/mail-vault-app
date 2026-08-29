@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   HardDrive, Trash2, Check, AlertCircle, Minimize2, Maximize2, X, Shield
 } from 'lucide-react';
+import { useT } from '../i18n/index.js';
 
 const PHASE_LABELS = {
   archive: 'Downloading',
@@ -22,6 +23,7 @@ const PHASE_ICONS = {
 };
 
 export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
+  const t = useT();
   const [minimized, setMinimized] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
@@ -157,14 +159,14 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
                 <>
                   <Button variant="ghost" icon size="xs" className="hover:bg-mail-border"
                     onClick={() => setMinimized(true)}
-                    title="Minimize"
+                    title={t('common.minimize')}
                   >
                     <Minimize2 size={14} className="text-mail-text-muted" />
                   </Button>
                   <Button variant="ghost" size="xs" className="hover:bg-mail-border hover:text-mail-danger"
                     onClick={() => setShowCancelConfirm(true)}
                   >
-                    Cancel
+                    {t('common.cancel')}
                   </Button>
                 </>
               ) : null}
@@ -174,21 +176,21 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
           {/* Cancel confirmation */}
           {showCancelConfirm && (
             <div className="px-4 py-3 bg-mail-danger/5 border-b border-mail-border">
-              <p className="text-xs text-mail-text mb-2">Cancel operation? Already archived emails will be kept.</p>
+              <p className="text-xs text-mail-text mb-2">{t('bulk.progress.cancelOperationAlreadyArchivedEmails')}</p>
               <div className="flex gap-2">
                 <button
                   onClick={() => setShowCancelConfirm(false)}
                   className="px-3 py-1 text-xs bg-mail-surface border border-mail-border rounded-lg
                             hover:bg-mail-surface-hover transition-colors text-mail-text"
                 >
-                  Continue
+                  {t('bulk.progress.continue')}
                 </button>
                 <button
                   onClick={() => { setShowCancelConfirm(false); onCancel(); }}
                   className="px-3 py-1 text-xs bg-mail-danger text-white rounded-lg
                             hover:bg-mail-danger/90 transition-colors"
                 >
-                  Yes, Stop
+                  {t('bulk.progress.yesStop')}
                 </button>
               </div>
             </div>

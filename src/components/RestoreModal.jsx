@@ -6,8 +6,10 @@ import { Z } from './ui/layers';
 import { useSettingsStore } from '../stores/settingsStore.js';
 import { restoreManager } from '../services/restoreManager.js';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
+import { useT } from '../i18n/index.js';
 
 export default function RestoreModal() {
+  const t = useT();
   const detected = useSettingsStore((s) => s.restoreDetected);
   const active = useSettingsStore((s) => s.activeRestore);
   const clearDetected = useSettingsStore((s) => s.clearRestoreDetected);
@@ -55,7 +57,7 @@ export default function RestoreModal() {
     >
         <div className="flex items-center justify-between mb-3">
           <h2 id={titleId} className="flex items-center gap-2 text-lg font-semibold text-mail-text">
-            <UploadCloud size={18} /> Restore emails to server
+            <UploadCloud size={18} /> {t('restore.restoreEmailsServer')}
           </h2>
         </div>
 
@@ -74,7 +76,7 @@ export default function RestoreModal() {
             </ul>
             <div className="flex justify-end gap-2">
               <Button variant="secondary" onClick={() => dismissRestore(detected.accountId)}>
-                Not now
+                {t('restore.notNow')}
               </Button>
               <Button variant="primary" onClick={onStart}>
                 Restore {localTotal}
@@ -95,7 +97,7 @@ export default function RestoreModal() {
             </div>
             <div className="flex justify-end mt-4">
               <Button variant="secondary" onClick={() => restoreManager.cancel()}>
-                Cancel
+                {t('common.cancel')}
               </Button>
             </div>
           </div>
@@ -104,14 +106,14 @@ export default function RestoreModal() {
         {done && (
           <div className="text-sm">
             <div className="flex items-center gap-2 mb-2 text-mail-success">
-              <CheckCircle2 size={16} /> Restore complete
+              <CheckCircle2 size={16} /> {t('restore.restoreComplete')}
             </div>
             <div className="text-mail-text-muted">
               {active.uploaded_emails} uploaded · {active.skipped_emails} skipped · {active.failed_emails} failed
             </div>
             <div className="flex justify-end mt-4">
               <Button variant="primary" onClick={onClose}>
-                Done
+                {t('common.done')}
               </Button>
             </div>
           </div>

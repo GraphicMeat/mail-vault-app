@@ -3,6 +3,7 @@ import { X, Keyboard } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
+import { useT } from '../i18n/index.js';
 
 const ACTION_LABELS = {
   nextEmail: 'Next email',
@@ -98,6 +99,7 @@ function ShortcutRow({ action, keybinding }) {
 }
 
 export function ShortcutsModal({ onClose }) {
+  const t = useT();
   const keyboardShortcuts = useSettingsStore(s => s.keyboardShortcuts);
 
   const titleId = useId();
@@ -116,9 +118,9 @@ export function ShortcutsModal({ onClose }) {
         <div className="flex items-center justify-between px-5 py-4 border-b border-mail-border">
           <h2 id={titleId} className="text-lg font-semibold text-mail-text flex items-center gap-2">
             <Keyboard size={20} className="text-mail-accent-text" />
-            Keyboard Shortcuts
+            {t('shortcuts.keyboardShortcuts')}
           </h2>
-          <Button variant="ghost" icon size="xs" onClick={onClose} aria-label="Close">
+          <Button variant="ghost" icon size="xs" onClick={onClose} aria-label={t('common.close')}>
             <X size={18} />
           </Button>
         </div>
@@ -148,7 +150,7 @@ export function ShortcutsModal({ onClose }) {
         {/* Footer hint */}
         <div className="px-5 py-3 border-t border-mail-border">
           <p className="text-xs text-mail-text-muted text-center">
-            Press <KeyBadge>?</KeyBadge> to toggle this panel
+            {t('shortcuts.press')} <KeyBadge>?</KeyBadge> {t('shortcuts.togglePanel')}
           </p>
         </div>
     </Dialog>

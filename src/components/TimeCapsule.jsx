@@ -15,6 +15,7 @@ import { IS_APPSTORE_BUILD } from '../utils/buildFlags.js';
 import { PremiumFeaturesLink } from './PremiumFeaturesLink';
 import { usePremiumPriceBlurb } from '../hooks/usePremiumPricing.js';
 import { mailboxLabel } from '../utils/imapUtf7';
+import { useT } from '../i18n/index.js';
 
 const ROW_HEIGHT = 56;
 
@@ -22,6 +23,7 @@ const ROW_HEIGHT = 56;
  * Time Capsule — settings-style modal for browsing point-in-time mailbox snapshots.
  */
 export function TimeCapsuleView({ accountId, onDetailChange, onUpgrade }) {
+  const t = useT();
   const store = useSnapshotStore();
   const resolvedAccountId = accountId || useAccountStore(s => s.activeAccountId);
   const accounts = useAccountStore(s => s.accounts);
@@ -69,7 +71,7 @@ export function TimeCapsuleView({ accountId, onDetailChange, onUpgrade }) {
               : `Snapshot — ${formatSnapshotDate(store.activeSnapshot?.timestamp)}`}
           </span>
           {page === 'browser' && (
-            <span className="text-xs text-mail-text-muted shrink-0 ml-1">Read-only</span>
+            <span className="text-xs text-mail-text-muted shrink-0 ml-1">{t('timeCapsule.readOnly')}</span>
           )}
         </div>
       )}
@@ -102,11 +104,12 @@ export function TimeCapsuleView({ accountId, onDetailChange, onUpgrade }) {
 // ── Premium Gate ──────────────────────────────────────────────────────────
 
 function PremiumGate({ onUpgrade }) {
+  const t = useT();
   const priceBlurb = usePremiumPriceBlurb();
   return (
     <div className="flex flex-col items-center justify-center h-full px-8 text-center">
       <Lock size={40} className="text-mail-text-muted mb-4" />
-      <h3 className="text-base font-semibold text-mail-text mb-2">Time Capsule is a Premium Feature</h3>
+      <h3 className="text-base font-semibold text-mail-text mb-2">{t('timeCapsule.timeCapsulePremiumFeature')}</h3>
       <p className="text-sm text-mail-text-muted max-w-md">
         Browse your mailbox as it was at any point in time. Restore deleted emails with one click.
         Snapshots are created automatically after each backup.
@@ -118,7 +121,7 @@ function PremiumGate({ onUpgrade }) {
         )}
         {!IS_APPSTORE_BUILD && onUpgrade && (
           <Button variant="primary" size="sm" pill className="mt-4 text-xs" onClick={onUpgrade}>
-            Upgrade
+            {t('common.upgrade')}
           </Button>
         )}
         <PremiumFeaturesLink className="mt-4" />
@@ -129,13 +132,14 @@ function PremiumGate({ onUpgrade }) {
 // ── Snapshot List ─────────────────────────────────────────────────────────
 
 function SnapshotList({ snapshots, loading, creating, error, confirmDelete, onOpen, onCreate, onDelete, onConfirmDelete, accountEmail }) {
+  const t = useT();
   return (
     <div className="p-6 space-y-6 overflow-y-auto h-full">
       {/* Header card */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <div className="flex items-center justify-between">
           <div>
-            <h4 className="text-sm font-semibold text-mail-text">Mailbox Snapshots</h4>
+            <h4 className="text-sm font-semibold text-mail-text">{t('timeCapsule.mailboxSnapshots')}</h4>
             <p className="text-xs text-mail-text-muted mt-0.5">
               {accountEmail ? `Point-in-time records for ${accountEmail}` : 'Select an account to view snapshots'}
             </p>
@@ -163,7 +167,7 @@ function SnapshotList({ snapshots, loading, creating, error, confirmDelete, onOp
       ) : snapshots.length === 0 ? (
         <div className="bg-mail-surface border border-mail-border rounded-xl p-8 text-center">
           <Calendar size={32} className="text-mail-text-muted mx-auto mb-3" />
-          <p className="text-sm font-medium text-mail-text mb-1">No snapshots yet</p>
+          <p className="text-sm font-medium text-mail-text mb-1">{t('timeCapsule.noSnapshotsYet')}</p>
           <p className="text-xs text-mail-text-muted">Snapshots are created automatically after each backup, or click "Take Snapshot" above.</p>
         </div>
       ) : (
@@ -188,8 +192,8 @@ function SnapshotList({ snapshots, loading, creating, error, confirmDelete, onOp
               <div className="opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
                 {confirmDelete === snap.filename ? (
                   <div className="flex items-center gap-1">
-                    <button onClick={() => onDelete(snap.filename)} className="px-2.5 py-1 text-xs font-medium text-mail-danger hover:bg-mail-danger/20 rounded-lg">Delete</button>
-                    <button onClick={() => onConfirmDelete(null)} className="px-2.5 py-1 text-xs text-mail-text-muted hover:bg-mail-surface-hover rounded-lg">Cancel</button>
+                    <button onClick={() => onDelete(snap.filename)} className="px-2.5 py-1 text-xs font-medium text-mail-danger hover:bg-mail-danger/20 rounded-lg">{t('common.delete')}</button>
+                    <button onClick={() => onConfirmDelete(null)} className="px-2.5 py-1 text-xs text-mail-text-muted hover:bg-mail-surface-hover rounded-lg">{t('common.cancel')}</button>
                   </div>
                 ) : (
                   <button onClick={() => onConfirmDelete(snap.filename)} className="p-1.5 rounded-lg hover:bg-mail-danger/20 text-mail-text-muted hover:text-mail-danger transition-colors">
@@ -208,6 +212,7 @@ function SnapshotList({ snapshots, loading, creating, error, confirmDelete, onOp
 // ── Snapshot Browser (split pane: folder tabs + virtualized list) ─────────
 
 function SnapshotBrowser({ accountId }) {
+  const t = useT();
   const mailboxList = useSnapshotStore(s => s.mailboxList);
   const selectedMailbox = useSnapshotStore(s => s.selectedMailbox);
   const selectMailbox = useSnapshotStore(s => s.selectMailbox);
@@ -273,7 +278,7 @@ function SnapshotBrowser({ accountId }) {
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         {emails.length === 0 ? (
           <div className="flex items-center justify-center h-full">
-            <p className="text-sm text-mail-text-muted">No emails in this folder</p>
+            <p className="text-sm text-mail-text-muted">{t('timeCapsule.noEmailsFolder')}</p>
           </div>
         ) : (
           <div style={{ height: virtualizer.getTotalSize() + 'px', position: 'relative' }}>
@@ -327,11 +332,12 @@ function SnapshotBrowser({ accountId }) {
 // ── Read-only Email Viewer (reuses AttachmentItem for downloads) ─────────
 
 function SnapshotViewer({ email, loading, accountId, mailbox }) {
+  const t = useT();
   if (loading) {
     return <div className="flex items-center justify-center h-full"><Loader size={20} className="animate-spin text-mail-text-muted" /></div>;
   }
   if (!email) {
-    return <div className="flex items-center justify-center h-full"><p className="text-sm text-mail-text-muted">Email not found in local storage</p></div>;
+    return <div className="flex items-center justify-center h-full"><p className="text-sm text-mail-text-muted">{t('timeCapsule.emailNotFoundLocalStorage')}</p></div>;
   }
 
   const from = typeof email.from === 'object'
@@ -348,17 +354,17 @@ function SnapshotViewer({ email, loading, accountId, mailbox }) {
     <div className="flex flex-col h-full overflow-hidden">
       {/* Read-only banner */}
       <div className="px-6 py-1.5 bg-mail-warning-tint border-b border-mail-warning/20 shrink-0">
-        <p className="text-[11px] text-mail-warning font-medium text-center">Read-only snapshot view — no actions available</p>
+        <p className="text-[11px] text-mail-warning font-medium text-center">{t('timeCapsule.readOnlySnapshotViewNo')}</p>
       </div>
 
       {/* Email header */}
       <div className="px-6 py-4 border-b border-mail-border shrink-0">
         <h3 className="text-lg font-semibold text-mail-text mb-2">{email.subject || '(No subject)'}</h3>
         <div className="text-sm text-mail-text-muted space-y-0.5">
-          <p><span className="text-mail-text-muted font-medium w-12 inline-block">From</span> <span className="text-mail-text">{from}</span></p>
-          {to && <p><span className="text-mail-text-muted font-medium w-12 inline-block">To</span> <span className="text-mail-text">{to}</span></p>}
-          {cc && <p><span className="text-mail-text-muted font-medium w-12 inline-block">Cc</span> <span className="text-mail-text">{cc}</span></p>}
-          <p><span className="text-mail-text-muted font-medium w-12 inline-block">Date</span> <span className="text-mail-text">{formatDateTime(email.date)}</span></p>
+          <p><span className="text-mail-text-muted font-medium w-12 inline-block">{t('common.from')}</span> <span className="text-mail-text">{from}</span></p>
+          {to && <p><span className="text-mail-text-muted font-medium w-12 inline-block">{t('common.to')}</span> <span className="text-mail-text">{to}</span></p>}
+          {cc && <p><span className="text-mail-text-muted font-medium w-12 inline-block">{t('timeCapsule.cc')}</span> <span className="text-mail-text">{cc}</span></p>}
+          <p><span className="text-mail-text-muted font-medium w-12 inline-block">{t('timeCapsule.date')}</span> <span className="text-mail-text">{formatDateTime(email.date)}</span></p>
         </div>
       </div>
 
@@ -369,7 +375,7 @@ function SnapshotViewer({ email, loading, accountId, mailbox }) {
         ) : email.text || email.textBody ? (
           <pre className="text-sm text-mail-text whitespace-pre-wrap font-sans px-6 py-4">{email.text || email.textBody}</pre>
         ) : (
-          <p className="text-sm text-mail-text-muted italic px-6 py-4">No message body available</p>
+          <p className="text-sm text-mail-text-muted italic px-6 py-4">{t('timeCapsule.noMessageBodyAvailable')}</p>
         )}
       </div>
 
@@ -398,6 +404,7 @@ function SnapshotViewer({ email, loading, accountId, mailbox }) {
 
 /** Sandboxed HTML email body — mirrors the main EmailViewer's iframe approach. */
 function EmailHtmlBody({ html }) {
+  const t = useT();
   const iframeRef = useRef(null);
   const [height, setHeight] = useState(400);
 
@@ -405,7 +412,7 @@ function EmailHtmlBody({ html }) {
     const iframe = iframeRef.current;
     if (!iframe) return;
 
-    // Extract body content to avoid nesting <html> in <html>
+    // Extract body content to avoid nesting <html> {t('timeCapsule.in')} <html>
     let body = html;
     const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
     if (bodyMatch) body = bodyMatch[1];
@@ -435,7 +442,7 @@ function EmailHtmlBody({ html }) {
       ref={iframeRef}
       sandbox="allow-same-origin"
       style={{ width: '100%', height: `${height}px`, border: 'none' }}
-      title="Snapshot email body"
+      title={t('timeCapsule.snapshotEmailBody')}
     />
   );
 }

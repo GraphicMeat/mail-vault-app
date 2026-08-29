@@ -52,6 +52,7 @@ import { setComposeOpener } from './services/localDrafts';
 import { setMailtoComposeOpener } from './utils/mailto';
 import { version } from '../package.json';
 import { decodeImapUtf7 } from './utils/imapUtf7';
+import { useT } from './i18n/index.js';
 
 // Surfaces that only exist once the user asks for them. Keeping them in the
 // startup chunk cost ~1.1 MB of JavaScript that has to parse before the first
@@ -116,6 +117,7 @@ const debugLog = (...args) => {
 };
 
 function App() {
+  const t = useT();
   const init = useAccountStore(s => s.init);
   const accounts = useAccountStore(s => s.accounts);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
@@ -724,9 +726,9 @@ function App() {
         <div className="h-screen bg-mail-bg flex items-center justify-center pt-8">
           <div className="text-center">
             <h1 className="text-4xl font-display font-bold text-mail-text mb-4">
-              <span className="text-mail-accent-text">Mail</span>Vault
+              <span className="text-mail-accent-text">{t('app.mail')}</span>{t('app.vault')}
             </h1>
-            <p className="text-mail-text-muted mb-4">Loading your accounts...</p>
+            <p className="text-mail-text-muted mb-4">{t('app.loadingAccounts')}</p>
             <RefreshCw size={24} className="animate-spin text-mail-accent-text mx-auto" />
           </div>
         </div>
@@ -741,10 +743,10 @@ function App() {
         >
           <div className="mb-8">
             <h1 className="text-4xl font-display font-bold text-mail-text mb-2">
-              <span className="text-mail-accent-text">Mail</span>Vault
+              <span className="text-mail-accent-text">{t('app.mail')}</span>{t('app.vault')}
             </h1>
             <p className="text-mail-text-muted">
-              A reactive email client with local storage
+              {t('app.reactiveEmailClientLocalStorage')}
             </p>
           </div>
 
@@ -753,7 +755,7 @@ function App() {
             className="px-6 py-3 bg-mail-accent-fill hover:bg-mail-accent-hover text-white
                        font-medium rounded-lg transition-colors duration-200"
           >
-            Add Your First Account
+            {t('app.addFirstAccount')}
           </button>
 
           <ChunkErrorBoundary name="Add account">
@@ -1039,7 +1041,7 @@ function App() {
               className="px-3 py-1.5 text-sm font-medium bg-mail-accent-fill text-white rounded-lg
                         hover:bg-mail-accent/90 transition-colors"
             >
-              Resume
+              {t('common.resume')}
             </button>
             <button
               onClick={async () => {
@@ -1048,7 +1050,7 @@ function App() {
               }}
               className="px-3 py-1.5 text-sm text-mail-text-muted hover:bg-mail-border rounded-lg transition-colors"
             >
-              Discard
+              {t('common.discard')}
             </button>
           </div>
         </div>

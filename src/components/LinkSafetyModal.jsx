@@ -2,8 +2,10 @@ import React from 'react';
 import { AlertTriangle, ExternalLink } from 'lucide-react';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
+import { useT } from '../i18n/index.js';
 
 export function LinkSafetyModal({ alert, onOpenAnyway, onCancel }) {
+  const t = useT();
   const isRed = alert?.level === 'red';
   const iconColor = isRed ? 'text-mail-danger' : 'text-mail-warning';
   const title = isRed ? 'Dangerous Link Detected' : 'Suspicious Link Detected';
@@ -37,7 +39,7 @@ export function LinkSafetyModal({ alert, onOpenAnyway, onCancel }) {
       footer={
         <>
           <Button variant="secondary" size="lg" onClick={onCancel} className="flex-1">
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             size="lg"
@@ -46,19 +48,19 @@ export function LinkSafetyModal({ alert, onOpenAnyway, onCancel }) {
             className={`flex-1 ${isRed ? 'border border-mail-danger/30' : 'bg-mail-warning-tint border-mail-warning/30 text-mail-warning hover:bg-mail-warning/20'}`}
           >
             <ExternalLink size={14} />
-            Open Anyway
+            {t('linkSafety.openAnyway')}
           </Button>
         </>
       }
     >
       <div className="p-3 rounded-lg bg-mail-surface border border-mail-border">
-        <div className="text-xs text-mail-text-muted mb-1">Link text says:</div>
+        <div className="text-xs text-mail-text-muted mb-1">{t('linkSafety.linkTextSays')}</div>
         <div className="text-sm font-mono text-mail-text break-all">{alert?.textContent || '(no text)'}</div>
         {textDomain && <div className="text-xs text-mail-success mt-0.5">{textDomain}</div>}
       </div>
 
       <div className="p-3 rounded-lg bg-mail-surface border border-mail-border">
-        <div className="text-xs text-mail-text-muted mb-1">Actually redirects to:</div>
+        <div className="text-xs text-mail-text-muted mb-1">{t('linkSafety.actuallyRedirects')}</div>
         <div className="text-sm font-mono text-mail-text break-all">{alert?.actualUrl}</div>
         {actualDomain && <div className={`text-xs ${isRed ? 'text-mail-danger' : 'text-mail-warning'} mt-0.5`}>{actualDomain}</div>}
       </div>

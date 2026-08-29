@@ -65,3 +65,22 @@ describe('i18n-audit strings mode', () => {
     expect(run('strings', f)).toBe('');
   });
 });
+
+describe('i18n-audit and the extractor agree about string literals', () => {
+  it('does not report HTML held in a single-quoted string', () => {
+    const f = fixture("function X() {\n  const body = ['<p>Hello there</p>'].join('');\n  return <div>{body}</div>;\n}\n");
+    expect(run('strings', f)).toBe('');
+  });
+
+  it('does not report HTML held in a template literal', () => {
+    const f = fixture('function X() {\n  const h = `<p><strong>Original Message</strong></p>`;\n  return <div>{h}</div>;\n}\n');
+    expect(run('strings', f)).toBe('');
+  });
+
+  it('still reports a real JSX text node in the same file as a literal', () => {
+    const f = fixture("function X() {\n  const h = '<p>In a literal</p>';\n  return <div>Real text node</div>;\n}\n");
+    const out = run('strings', f);
+    expect(out).toMatch(/Real text node/);
+    expect(out).not.toMatch(/In a literal/);
+  });
+});

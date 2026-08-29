@@ -5,6 +5,7 @@ import { Button } from './ui/Button';
 import { Download, X, Clock, SkipForward, AlertCircle, RefreshCw } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { version as currentVersion } from '../../package.json';
+import { useT } from '../i18n/index.js';
 
 /**
  * Render changelog markdown with basic formatting:
@@ -64,6 +65,7 @@ function renderInlineMarkdown(text) {
 }
 
 export function UpdateModal({ updateInfo, onClose }) {
+  const t = useT();
   const [state, setState] = useState('idle'); // 'idle' | 'downloading' | 'installing' | 'error'
   const [errorMsg, setErrorMsg] = useState('');
   const [downloadPercent, setDownloadPercent] = useState(0);
@@ -170,7 +172,7 @@ export function UpdateModal({ updateInfo, onClose }) {
               </p>
             </div>
             {state === 'idle' && (
-              <Button variant="ghost" icon size="xs" onClick={onClose} aria-label="Later">
+              <Button variant="ghost" icon size="xs" onClick={onClose} aria-label={t('update.later')}>
                 <X size={18} />
               </Button>
             )}
@@ -194,7 +196,7 @@ export function UpdateModal({ updateInfo, onClose }) {
                                hover:text-mail-text hover:bg-mail-surface rounded-lg transition-colors"
                   >
                     <SkipForward size={14} />
-                    Skip Version
+                    {t('update.skipVersion')}
                   </button>
                   <button
                     onClick={handleRemindLater}
@@ -202,7 +204,7 @@ export function UpdateModal({ updateInfo, onClose }) {
                                bg-mail-surface hover:bg-mail-border rounded-lg transition-colors"
                   >
                     <Clock size={14} />
-                    Remind Later
+                    {t('update.remindLater')}
                   </button>
                 </div>
                 <button
@@ -211,7 +213,7 @@ export function UpdateModal({ updateInfo, onClose }) {
                              bg-mail-accent-fill hover:bg-mail-accent-hover rounded-lg transition-colors"
                 >
                   <Download size={14} />
-                  Update Now
+                  {t('update.updateNow')}
                 </button>
               </div>
             </>
@@ -240,8 +242,8 @@ export function UpdateModal({ updateInfo, onClose }) {
           {state === 'installing' && (
             <div className="px-5 py-8 flex flex-col items-center gap-3">
               <RefreshCw size={24} className="text-mail-accent-text animate-spin" />
-              <p className="text-sm text-mail-text">Installing update...</p>
-              <p className="text-xs text-mail-text-muted">The app will restart automatically</p>
+              <p className="text-sm text-mail-text">{t('update.installingUpdate')}</p>
+              <p className="text-xs text-mail-text-muted">{t('update.appWillRestartAutomatically')}</p>
             </div>
           )}
 
@@ -251,7 +253,7 @@ export function UpdateModal({ updateInfo, onClose }) {
               <div className="flex items-start gap-3 p-4 bg-mail-danger-tint border border-mail-danger/20 rounded-lg mb-4">
                 <AlertCircle size={20} className="text-mail-danger flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-medium text-mail-text">Failed to install update</p>
+                  <p className="text-sm font-medium text-mail-text">{t('update.failedInstallUpdate')}</p>
                   <p className="text-xs text-mail-text-muted mt-1">
                     {errorMsg.includes('os error 30') || errorMsg.includes('Read-only')
                       ? 'The app cannot update itself due to file system restrictions. Please download the new version manually.'
@@ -275,7 +277,7 @@ export function UpdateModal({ updateInfo, onClose }) {
                   className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium
                              bg-mail-surface hover:bg-mail-border text-mail-text rounded-lg transition-colors"
                 >
-                  Close
+                  {t('common.close')}
                 </button>
               </div>
             </div>

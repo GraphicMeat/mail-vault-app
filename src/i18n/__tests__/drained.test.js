@@ -58,6 +58,23 @@ const DONE = [
   'src/components/BulkSaveProgress.jsx',
   'src/components/RowActionMenu.jsx',
   'src/components/email/SenderInfoPopover.jsx',
+  'src/App.jsx',
+  'src/components/TimeCapsule.jsx',
+  'src/components/BulkOperationsModal.jsx',
+  'src/components/ShareUnlockModal.jsx',
+  'src/components/MigrationToast.jsx',
+  'src/components/ChatBubbleView.jsx',
+  'src/components/UpdateModal.jsx',
+  'src/components/Onboarding.jsx',
+  'src/components/BugReportDialog.jsx',
+  'src/components/OutboxTray.jsx',
+  'src/components/SpellcheckHelpDialog.jsx',
+  'src/components/RestoreModal.jsx',
+  'src/components/BulkOperationProgress.jsx',
+  'src/components/ChatSenderList.jsx',
+  'src/components/BackupUpsellModal.jsx',
+  'src/components/ShortcutsModal.jsx',
+  'src/components/LinkSafetyModal.jsx',
 ];
 
 function audit(mode, files) {

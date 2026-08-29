@@ -29,13 +29,33 @@ const IGNORE = /^(https?|www\.|[A-Za-z]+\(|\d+$)/;
 // everywhere else.
 const IGNORE_FILES = new Set(['src/i18n/T.jsx']);
 
+/**
+ * HTML held in a JS string literal — `'<p>Text</p>'` in an array, a template
+ * literal building an email body — is byte-identical to a JSX text node. It is
+ * NOT extractable the same way: injecting `{t(…)}` there either breaks the
+ * quoting or, worse, compiles fine and renders `{t('compose.x')}` as visible
+ * text in a sent email. That actually happened once here and survived both a
+ * green build and 1796 passing tests.
+ *
+ * The extractor refuses to edit inside a literal, so the audit must refuse to
+ * report inside one — otherwise the drain check can never reach clean. Strings
+ * in literals are localized by hand with `${t(…)}` in a template literal.
+ */
+const LITERAL = /'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g;
+
+function literalRanges(src) {
+  return [...src.matchAll(LITERAL)].map(m => [m.index, m.index + m[0].length]);
+}
+
 function jsxStrings(src) {
+  const ranges = literalRanges(src);
+  const inLiteral = (i) => ranges.some(([a, b]) => i >= a && i < b);
   const out = [];
   for (const m of src.matchAll(TEXT)) {
     const v = m[3].trim();
-    if (v && !IGNORE.test(v)) out.push(v);
+    if (v && !IGNORE.test(v) && !inLiteral(m.index)) out.push(v);
   }
-  for (const m of src.matchAll(PROP)) out.push(m[1]);
+  for (const m of src.matchAll(PROP)) if (!inLiteral(m.index)) out.push(m[1]);
   return out;
 }
 

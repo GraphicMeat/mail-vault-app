@@ -7,6 +7,7 @@ import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import * as db from '../services/db';
 import { vaultClause } from '../utils/custodyCopy';
+import { useT } from '../i18n/index.js';
 
 const ACTION_STYLES = {
   archive: {
@@ -71,6 +72,7 @@ function actionBg(color, pct) {
 }
 
 export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
+  const t = useT();
   const bulkSession = useMessageListStore(s => s.bulkSession);
   const setBulkSession = useMessageListStore(s => s.setBulkSession);
   const setSelection = useMessageListStore(s => s.setSelection);
@@ -404,7 +406,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                 ? CONFIRM_COPY[selectedAction].title
                 : step === 1 ? 'Bulk Email Operations' : `Choose Action for ${selectedCount.toLocaleString()} Emails`}
             </h2>
-            <Button variant="ghost" icon size="xs" onClick={handleMinimize} aria-label="Minimize" title="Minimize — the selection is kept">
+            <Button variant="ghost" icon size="xs" onClick={handleMinimize} aria-label={t('common.minimize')} title={t('bulk.ops.minimizeSelectionKept')}>
               <X size={18} />
             </Button>
           </div>
@@ -427,7 +429,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                 <Button variant="ghost" className="hover:bg-mail-border"
                   onClick={() => setShowDeleteConfirm(false)}
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </Button>
                 <button
                   onClick={handleDeleteConfirm}
@@ -460,7 +462,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
               {/* Per-year buttons */}
               {emailYears.length > 0 && (
                 <div className="mb-4">
-                  <label className="text-xs font-medium text-mail-text-muted uppercase tracking-wide mb-2 block">By Year</label>
+                  <label className="text-xs font-medium text-mail-text-muted uppercase tracking-wide mb-2 block">{t('bulk.ops.year')}</label>
                   <div className="flex flex-wrap gap-2">
                     {emailYears.map(([year, count]) => {
                       const isActive = selectedRange?.type === 'year' && selectedRange?.year === year;
@@ -484,7 +486,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
 
               {/* Relative presets */}
               <div className="mb-4">
-                <label className="text-xs font-medium text-mail-text-muted uppercase tracking-wide mb-2 block">Presets</label>
+                <label className="text-xs font-medium text-mail-text-muted uppercase tracking-wide mb-2 block">{t('bulk.ops.presets')}</label>
                 <div className="flex flex-wrap gap-2">
                   {[
                     { type: 'today', label: 'Today' },
@@ -523,7 +525,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                   }`}
                 >
                   <Calendar size={14} />
-                  Custom Range
+                  {t('bulk.ops.customRange')}
                 </button>
                 {selectedRange?.type === 'custom' && (
                   <div className="flex items-center gap-2">
@@ -534,7 +536,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                       className="px-2 py-1.5 text-sm bg-mail-surface border border-mail-border rounded-lg
                                 text-mail-text focus:border-mail-accent outline-none"
                     />
-                    <span className="text-mail-text-muted text-sm">to</span>
+                    <span className="text-mail-text-muted text-sm">{t('bulk.ops.to')}</span>
                     <input
                       type="date"
                       value={customTo}
@@ -555,7 +557,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                   <Button variant="ghost" className="hover:bg-mail-border"
                     onClick={handleCancel}
                   >
-                    Cancel
+                    {t('common.cancel')}
                   </Button>
                   <button
                     onClick={() => setStep(2)}
@@ -563,7 +565,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                     className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-mail-accent-fill text-white
                               rounded-lg hover:bg-mail-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Next
+                    {t('bulk.ops.next')}
                     <ArrowRight size={14} />
                   </button>
                 </div>
@@ -580,7 +582,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                 <span>{selectedCount.toLocaleString()} on server</span>
                 <span>·</span>
                 <span>{archivedSelectedCount.toLocaleString()} archived here</span>
-                {hasBackupConfigured && (<><span>·</span><span>backup configured</span></>)}
+                {hasBackupConfigured && (<><span>·</span><span>{t('bulk.ops.backupConfigured')}</span></>)}
               </div>
               {/* Warning for locally-stored emails */}
               {hasArchivedSelected && (
@@ -589,7 +591,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                   <p className="text-xs text-mail-text">
                     Your vault already holds some of these emails, so deleting them from the server is safe.
                     Unarchiving is the risky one: it deletes the vault copy, and anything already gone
-                    from the server is then <strong>lost for good</strong>.
+                    from the server is then <strong>{t('bulk.ops.lostGood')}</strong>.
                   </p>
                 </div>
               )}
@@ -676,7 +678,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                             hover:bg-mail-border rounded-lg transition-colors"
                 >
                   <ArrowLeft size={14} />
-                  Back
+                  {t('bulk.ops.back')}
                 </button>
                 <button
                   onClick={handleConfirm}

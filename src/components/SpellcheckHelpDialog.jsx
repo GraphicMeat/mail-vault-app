@@ -2,6 +2,7 @@ import React from 'react';
 import { SpellCheck } from 'lucide-react';
 import { Dialog, Button } from './ui';
 import { openInBrowser } from '../services/billingApi';
+import { useT } from '../i18n/index.js';
 
 export const SPELLCHECK_FAQ_URL = 'https://mailvaultapp.com/faq.html#linux-spellcheck-dictionary';
 
@@ -27,24 +28,25 @@ const COMMANDS = [
  *                            on the host cannot reach the app
  */
 export function SpellcheckHelpDialog({ open, onClose, confined = false }) {
+  const t = useT();
   return (
     <Dialog
       open={open}
       onClose={onClose}
       portal
       size="md"
-      title="Spellcheck needs a dictionary"
+      title={t('spellcheck.spellcheckNeedsDictionary')}
       data-testid="spellcheck-help-dialog"
       icon={<SpellCheck size={18} className="text-mail-accent-text" />}
       footer={
         <div className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={onClose}>Close</Button>
+          <Button variant="secondary" onClick={onClose}>{t('common.close')}</Button>
           <Button
             variant="primary"
             onClick={() => { openInBrowser(SPELLCHECK_FAQ_URL).catch(() => {}); }}
             data-testid="spellcheck-help-guide"
           >
-            Read the guide
+            {t('spellcheck.readGuide')}
           </Button>
         </div>
       }
@@ -76,8 +78,8 @@ export function SpellcheckHelpDialog({ open, onClose, confined = false }) {
               ))}
             </div>
             <p className="text-mail-text-muted">
-              For another language, swap the country code — <code className="font-mono text-xs">hunspell-de-de</code>,{' '}
-              <code className="font-mono text-xs">hunspell-fr</code>, and so on. MailVault
+              {t('spellcheck.anotherLanguageSwapCountryCode')} <code className="font-mono text-xs">{t('spellcheck.hunspellDeDe')}</code>,{' '}
+              <code className="font-mono text-xs">{t('spellcheck.hunspellFr')}</code>, and so on. MailVault
               picks the dictionary that matches your system language.
             </p>
           </>

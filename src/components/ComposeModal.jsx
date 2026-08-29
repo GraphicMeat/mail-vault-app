@@ -278,7 +278,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     const originalTo = replyTo.to?.map(t => t.address).join(', ') || '';
 
     // Build quoted content as HTML — stored separately for collapsible display
-    const quotedHeaderHtml = `<p><strong>{t('compose.originalMessage')}</strong><br>From: ${fromName} &lt;${fromAddress}&gt;<br>Date: ${originalDate}<br>Subject: ${originalSubject}<br>To: ${originalTo}</p>`;
+    const quotedHeaderHtml = `<p><strong>${t('compose.originalMessage')}</strong><br>From: ${fromName} &lt;${fromAddress}&gt;<br>Date: ${originalDate}<br>Subject: ${originalSubject}<br>To: ${originalTo}</p>`;
     const quotedBodyHtml = replyTo.html
       ? replyTo.html
       : textToHtml(replyTo.text || '');
