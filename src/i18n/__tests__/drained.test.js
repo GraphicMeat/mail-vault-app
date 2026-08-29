@@ -13,6 +13,9 @@ const DONE = [
   'src/components/settings/AccountSettings.jsx',
   'src/components/settings/AISettings.jsx',
   'src/components/settings/SendAsVerifyModal.jsx',
+  'src/components/settings/MigrationSettings.jsx',
+  'src/components/settings/BehaviorSettings.jsx',
+  'src/components/settings/ShortcutsSettings.jsx',
 ];
 
 function audit(mode, files) {

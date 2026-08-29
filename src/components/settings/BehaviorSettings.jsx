@@ -3,8 +3,10 @@ import React from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ToggleSwitch } from './ToggleSwitch';
 import { RefreshCw, SendHorizontal, Eye, Search, Clock, Filter } from 'lucide-react';
+import { useT } from '../../i18n/index.js';
 
 export function BehaviorSettings() {
+  const t = useT();
   const {
     refreshInterval,
     setRefreshInterval,
@@ -35,19 +37,19 @@ export function BehaviorSettings() {
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <RefreshCw size={18} className="text-mail-accent-text" />
-          Email Sync
+          {t('settings.behavior.emailSync')}
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">
-          Automatically check for new emails at regular intervals.
+          {t('settings.behavior.automaticallyCheckNewEmailsRegular')}
         </p>
 
         <div className="space-y-4">
           <div className="flex items-center justify-between py-2">
             <div>
-              <div className="font-medium text-mail-text">Refresh on app launch</div>
+              <div className="font-medium text-mail-text">{t('settings.behavior.refreshAppLaunch')}</div>
               <div className="text-sm text-mail-text-muted">
-                Check for new emails when the app starts
+                {t('settings.behavior.checkNewEmailsWhenApp')}
               </div>
             </div>
             <ToggleSwitch
@@ -58,7 +60,7 @@ export function BehaviorSettings() {
 
           <div>
             <label className="block text-sm font-medium text-mail-text mb-2">
-              Auto-refresh interval
+              {t('settings.behavior.autoRefreshInterval')}
             </label>
             <select
               value={refreshInterval}
@@ -67,16 +69,16 @@ export function BehaviorSettings() {
                         text-mail-text focus:border-mail-accent transition-all
                         cursor-pointer"
             >
-              <option value={0}>Never</option>
-              <option value={1}>Every minute</option>
-              <option value={5}>Every 5 minutes</option>
-              <option value={15}>Every 15 minutes</option>
-              <option value={30}>Every 30 minutes</option>
-              <option value={60}>Every hour</option>
-              <option value={120}>Every 2 hours</option>
-              <option value={360}>Every 6 hours</option>
-              <option value={720}>Every 12 hours</option>
-              <option value={1440}>Every 24 hours</option>
+              <option value={0}>{t('settings.behavior.never')}</option>
+              <option value={1}>{t('settings.behavior.everyMinute')}</option>
+              <option value={5}>{t('settings.behavior.every5Minutes')}</option>
+              <option value={15}>{t('settings.behavior.every15Minutes')}</option>
+              <option value={30}>{t('settings.behavior.every30Minutes')}</option>
+              <option value={60}>{t('settings.behavior.everyHour')}</option>
+              <option value={120}>{t('settings.behavior.every2Hours')}</option>
+              <option value={360}>{t('settings.behavior.every6Hours')}</option>
+              <option value={720}>{t('settings.behavior.every12Hours')}</option>
+              <option value={1440}>{t('settings.behavior.every24Hours')}</option>
             </select>
           </div>
 
@@ -107,18 +109,18 @@ export function BehaviorSettings() {
       <div data-testid="settings-undo-send" className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <SendHorizontal size={18} className="text-mail-accent-text" />
-          Sending
+          {t('settings.behavior.sending')}
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">
-          Configure send behavior and undo options.
+          {t('settings.behavior.configureSendBehaviorUndoOptions')}
         </p>
 
         <div className="space-y-4">
           <div>
-            <label className="block font-medium text-mail-text mb-1">Send Delay</label>
+            <label className="block font-medium text-mail-text mb-1">{t('settings.behavior.sendDelay')}</label>
             <div className="text-sm text-mail-text-muted mb-3">
-              Delay outgoing emails so you can undo before they're sent. You can override this per-email in the compose window.
+              {t('settings.behavior.delayOutgoingEmailsSoCan')}
             </div>
             <select
               value={sendDelay ?? 0}
@@ -126,7 +128,7 @@ export function BehaviorSettings() {
               className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
                         text-mail-text focus:border-mail-accent transition-all cursor-pointer"
             >
-              <option value={0}>Off — send immediately</option>
+              <option value={0}>{t('settings.behavior.offSendImmediately')}</option>
               <option value={15}>15 seconds</option>
               <option value={30}>30 seconds</option>
               <option value={60}>1 minute</option>
@@ -138,7 +140,7 @@ export function BehaviorSettings() {
             {(sendDelay ?? 0) > 0 && (
               <p className="mt-2 text-xs text-mail-warning flex items-center gap-1.5">
                 <span>⚠</span>
-                Your computer must stay awake during the delay. If it sleeps, the email will be sent when it wakes.
+                {t('settings.behavior.computerMustStayAwakeDuring')}
               </p>
             )}
           </div>
@@ -149,17 +151,17 @@ export function BehaviorSettings() {
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <Eye size={18} className="text-mail-accent-text" />
-          Mark as Read
+          {t('settings.behavior.markRead')}
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">
-          Choose when opened emails are marked as read.
+          {t('settings.behavior.chooseWhenOpenedEmailsMarked')}
         </p>
 
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-mail-text mb-2">
-              Mark emails as read
+              {t('settings.behavior.markEmailsRead')}
             </label>
             <select
               value={markAsReadMode}
@@ -168,9 +170,9 @@ export function BehaviorSettings() {
                         text-mail-text focus:border-mail-accent transition-all
                         cursor-pointer"
             >
-              <option value="delay">After a short delay</option>
-              <option value="auto">Immediately when opened</option>
-              <option value="manual">Manually only</option>
+              <option value="delay">{t('settings.behavior.afterShortDelay')}</option>
+              <option value="auto">{t('settings.behavior.immediatelyWhenOpened')}</option>
+              <option value="manual">{t('settings.behavior.manuallyOnly')}</option>
             </select>
             <p className="text-xs text-mail-text-muted mt-1">
               {markAsReadMode === 'delay'
@@ -185,7 +187,7 @@ export function BehaviorSettings() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-sm font-medium text-mail-text">
-                  Delay before marking as read
+                  {t('settings.behavior.delayBeforeMarkingRead')}
                 </label>
                 <span className="text-sm font-medium text-mail-accent-text">
                   {markAsReadDelay} {markAsReadDelay === 1 ? 'second' : 'seconds'}
@@ -214,11 +216,11 @@ export function BehaviorSettings() {
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <Search size={18} className="text-mail-accent-text" />
-          Search
+          {t('settings.behavior.search')}
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">
-          Configure search behavior and history settings.
+          {t('settings.behavior.configureSearchBehaviorHistorySettings')}
         </p>
 
         <div className="space-y-4">
@@ -226,7 +228,7 @@ export function BehaviorSettings() {
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-sm font-medium text-mail-text">
-                Search history limit
+                {t('settings.behavior.searchHistoryLimit')}
               </label>
               <span className="text-sm font-medium text-mail-accent-text">
                 {searchHistoryLimit} searches
@@ -252,7 +254,7 @@ export function BehaviorSettings() {
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-sm font-medium text-mail-text">
-                Popular filters period
+                {t('settings.behavior.popularFiltersPeriod')}
               </label>
               <span className="text-sm font-medium text-mail-accent-text">
                 {filterHistoryPeriodDays >= 30 && filterHistoryPeriodDays < 60
@@ -286,7 +288,7 @@ export function BehaviorSettings() {
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-sm font-medium text-mail-text">
-                Number of popular filters to show
+                {t('settings.behavior.numberPopularFiltersShow')}
               </label>
               <span className="text-sm font-medium text-mail-accent-text">
                 {topFiltersLimit} filters
@@ -313,7 +315,7 @@ export function BehaviorSettings() {
             <div className="flex items-center gap-2">
               <Clock size={14} className="text-mail-text-muted" />
               <div>
-                <div className="text-sm text-mail-text">Search history</div>
+                <div className="text-sm text-mail-text">{t('settings.behavior.searchHistory')}</div>
                 <div className="text-xs text-mail-text-muted">
                   {searchHistory.length} saved searches
                 </div>
@@ -323,7 +325,7 @@ export function BehaviorSettings() {
               onClick={clearSearchHistory}
               disabled={searchHistory.length === 0}
             >
-              Clear
+              {t('common.clear')}
             </Button>
           </div>
 
@@ -332,7 +334,7 @@ export function BehaviorSettings() {
             <div className="flex items-center gap-2">
               <Filter size={14} className="text-mail-text-muted" />
               <div>
-                <div className="text-sm text-mail-text">Filter history</div>
+                <div className="text-sm text-mail-text">{t('settings.behavior.filterHistory')}</div>
                 <div className="text-xs text-mail-text-muted">
                   {filterUsageHistory.length} filter uses tracked
                 </div>
@@ -342,7 +344,7 @@ export function BehaviorSettings() {
               onClick={clearFilterHistory}
               disabled={filterUsageHistory.length === 0}
             >
-              Clear
+              {t('common.clear')}
             </Button>
           </div>
         </div>

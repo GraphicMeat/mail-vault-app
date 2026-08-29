@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useSettingsStore, DEFAULT_SHORTCUTS } from '../../stores/settingsStore';
 import { ToggleSwitch } from './ToggleSwitch';
 import { Keyboard, ChevronUp, ChevronDown, RotateCcw } from 'lucide-react';
+import { useT } from '../../i18n/index.js';
 
 export function ShortcutsSettings() {
+  const t = useT();
   const {
     keyboardShortcuts,
     keyboardShortcutsEnabled,
@@ -135,20 +137,20 @@ export function ShortcutsSettings() {
       <div data-testid="settings-shortcuts" className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <Keyboard size={18} className="text-mail-accent-text" />
-          Keyboard Shortcuts
+          {t('settings.shortcuts.keyboardShortcuts')}
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">
-          Customize keyboard shortcuts. Click a binding to change it.
+          {t('settings.shortcuts.customizeKeyboardShortcutsClickBinding')}
         </p>
 
         <div className="space-y-4">
           {/* Master toggle */}
           <div className="flex items-center justify-between py-2">
             <div>
-              <div className="font-medium text-mail-text">Enable keyboard shortcuts</div>
+              <div className="font-medium text-mail-text">{t('settings.shortcuts.enableKeyboardShortcuts')}</div>
               <div className="text-sm text-mail-text-muted">
-                Use keyboard shortcuts to navigate and perform actions
+                {t('settings.shortcuts.useKeyboardShortcutsNavigatePerform')}
               </div>
             </div>
             <ToggleSwitch
@@ -185,7 +187,7 @@ export function ShortcutsSettings() {
                           <div className="flex items-center gap-2">
                             {duplicate && (
                               <span className="text-xs text-mail-warning" title={`Also bound to "${SHORTCUT_ACTION_LABELS[duplicate]}"`}>
-                                Duplicate
+                                {t('settings.shortcuts.duplicate')}
                               </span>
                             )}
                             <button
@@ -219,7 +221,7 @@ export function ShortcutsSettings() {
                               <button
                                 onClick={() => setKeyboardShortcut(action, defaultBinding)}
                                 className="p-1 text-mail-text-muted hover:text-mail-text rounded transition-colors"
-                                title="Reset to default"
+                                title={t('common.resetToDefault')}
                               >
                                 <RotateCcw size={13} />
                               </button>
@@ -240,7 +242,7 @@ export function ShortcutsSettings() {
                             hover:bg-mail-border rounded-lg transition-colors flex items-center gap-2"
                 >
                   <RotateCcw size={14} />
-                  Reset All to Defaults
+                  {t('settings.shortcuts.resetAllDefaults')}
                 </button>
               </div>
             </div>

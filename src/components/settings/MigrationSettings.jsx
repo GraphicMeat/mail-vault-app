@@ -17,6 +17,7 @@ import { formatDateTime } from '../../utils/dateFormat.js';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags.js';
 import { usePremiumPriceBlurb } from '../../hooks/usePremiumPricing.js';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
+import { useT } from '../../i18n/index.js';
 
 function formatDuration(secs) {
   if (!secs || secs < 1) return '< 1s';
@@ -108,6 +109,7 @@ function AccountRow({ account, selected, disabled, disabledLabel, accountColors,
 }
 
 export default function MigrationSettings({ onUpgrade }) {
+  const t = useT();
   const priceBlurb = usePremiumPriceBlurb();
   const billingProfile = useSettingsStore(s => s.billingProfile);
   const isPaidUser = hasPremiumAccess(billingProfile);
@@ -334,7 +336,7 @@ export default function MigrationSettings({ onUpgrade }) {
               </p>
               {showDiscardConfirm ? (
                 <div className="bg-mail-surface rounded-lg p-3">
-                  <p className="text-sm text-mail-text mb-3">Discard incomplete migration? Progress will be lost.</p>
+                  <p className="text-sm text-mail-text mb-3">{t('settings.migration.discardIncompleteMigrationProgressWill')}</p>
                   <div className="flex gap-2">
                     <button
                       onClick={() => {
@@ -343,12 +345,12 @@ export default function MigrationSettings({ onUpgrade }) {
                       }}
                       className="text-sm text-mail-danger hover:text-mail-danger/80"
                     >
-                      Discard
+                      {t('common.discard')}
                     </button>
                     <Button variant="ghost" size="sm" className="p-0"
                       onClick={() => setShowDiscardConfirm(false)}
                     >
-                      Keep
+                      {t('settings.migration.keep')}
                     </Button>
                   </div>
                 </div>
@@ -362,12 +364,12 @@ export default function MigrationSettings({ onUpgrade }) {
                     }}
                     className="bg-mail-accent-fill text-white rounded-lg px-4 py-2 text-sm font-semibold"
                   >
-                    Resume Migration
+                    {t('settings.migration.resumeMigration')}
                   </button>
                   <Button variant="ghost" size="sm" className="p-0"
                     onClick={() => setShowDiscardConfirm(true)}
                   >
-                    Discard
+                    {t('common.discard')}
                   </Button>
                 </div>
               )}
@@ -410,8 +412,8 @@ export default function MigrationSettings({ onUpgrade }) {
           <AnimatePresence mode="wait">
             {step === 1 && (
               <motion.div key="step1" {...stepAnimation}>
-                <h4 className="text-sm font-semibold text-mail-text mb-1">Select source account</h4>
-                <p className="text-xs text-mail-text-muted mb-4">Choose the account to migrate emails from</p>
+                <h4 className="text-sm font-semibold text-mail-text mb-1">{t('settings.migration.selectSourceAccount')}</h4>
+                <p className="text-xs text-mail-text-muted mb-4">{t('settings.migration.chooseAccountMigrateEmails')}</p>
                 <div className="space-y-2">
                   {accounts.map(account => (
                     <AccountRow
@@ -428,8 +430,8 @@ export default function MigrationSettings({ onUpgrade }) {
 
             {step === 2 && (
               <motion.div key="step2" {...stepAnimation}>
-                <h4 className="text-sm font-semibold text-mail-text mb-1">Select destination account</h4>
-                <p className="text-xs text-mail-text-muted mb-4">Choose where to migrate emails to</p>
+                <h4 className="text-sm font-semibold text-mail-text mb-1">{t('settings.migration.selectDestinationAccount')}</h4>
+                <p className="text-xs text-mail-text-muted mb-4">{t('settings.migration.chooseWhereMigrateEmails')}</p>
                 <div className="space-y-2">
                   {accounts.map(account => (
                     <AccountRow
@@ -448,8 +450,8 @@ export default function MigrationSettings({ onUpgrade }) {
 
             {step === 3 && (
               <motion.div key="step3" {...stepAnimation}>
-                <h4 className="text-sm font-semibold text-mail-text mb-1">Select folders to migrate</h4>
-                <p className="text-xs text-mail-text-muted mb-4">All folders are selected by default</p>
+                <h4 className="text-sm font-semibold text-mail-text mb-1">{t('settings.migration.selectFoldersMigrate')}</h4>
+                <p className="text-xs text-mail-text-muted mb-4">{t('settings.migration.allFoldersSelectedDefault')}</p>
 
                 {loadingFolders ? (
                   <div className="flex items-center justify-center py-12">
@@ -464,7 +466,7 @@ export default function MigrationSettings({ onUpgrade }) {
                         onChange={toggleAllFolders}
                         className="w-4 h-4 rounded border-mail-border accent-[var(--mail-accent)]"
                       />
-                      <span className="text-sm text-mail-text">Select All</span>
+                      <span className="text-sm text-mail-text">{t('settings.migration.selectAll')}</span>
                       <span className="text-xs text-mail-text-muted ml-auto">{folderMappings.length} folders</span>
                     </div>
                     <div className="max-h-80 overflow-y-auto space-y-1">
@@ -510,24 +512,24 @@ export default function MigrationSettings({ onUpgrade }) {
 
             {step === 4 && (
               <motion.div key="step4" {...stepAnimation}>
-                <h4 className="text-sm font-semibold text-mail-text mb-4">Review migration</h4>
+                <h4 className="text-sm font-semibold text-mail-text mb-4">{t('settings.migration.reviewMigration')}</h4>
 
                 {/* Summary card */}
                 <div className="bg-mail-surface rounded-lg p-4 space-y-3 mb-4">
                   <SummaryRow label="Source" account={sourceAccount} accountColors={accountColors} />
                   <SummaryRow label="Destination" account={destAccount} accountColors={accountColors} />
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-mail-text-muted">Folders</span>
+                    <span className="text-mail-text-muted">{t('settings.migration.folders')}</span>
                     <span className="text-mail-text">{selectedMappings.length} folders</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-mail-text-muted">Emails</span>
+                    <span className="text-mail-text-muted">{t('settings.migration.emails')}</span>
                     <span className="text-mail-text">
                       {isCounting ? `${totalEmails.toLocaleString()}+ emails (counting...)` : `~${totalEmails.toLocaleString()} emails`}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-mail-text-muted">Estimated time</span>
+                    <span className="text-mail-text-muted">{t('settings.migration.estimatedTime')}</span>
                     <span className="text-mail-text">~{etaMinutes} min</span>
                   </div>
                 </div>
@@ -542,9 +544,9 @@ export default function MigrationSettings({ onUpgrade }) {
                       className="mt-0.5 accent-mail-accent"
                     />
                     <div>
-                      <span className="text-sm text-mail-text font-medium">Include emails from your vault</span>
+                      <span className="text-sm text-mail-text font-medium">{t('settings.migration.includeEmailsVault')}</span>
                       <p className="text-xs text-mail-text-muted mt-0.5">
-                        Also upload the .eml files in your vault to the destination server. Without this, only what is on the source server moves.
+                        {t('settings.migration.alsoUploadEmlFilesVault')}
                       </p>
                     </div>
                   </label>
@@ -553,9 +555,9 @@ export default function MigrationSettings({ onUpgrade }) {
                 {/* Folder mapping table */}
                 <div className="max-h-60 overflow-y-auto">
                   <div className="grid grid-cols-[1fr_auto_1fr] gap-2 text-xs text-mail-text-muted font-medium mb-2 px-2">
-                    <span>Source Folder</span>
+                    <span>{t('settings.migration.sourceFolder')}</span>
                     <span />
-                    <span>Destination Folder</span>
+                    <span>{t('settings.migration.destinationFolder')}</span>
                   </div>
                   {selectedMappings.map((mapping, i) => (
                     <div key={i} className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center text-sm px-2 py-1.5 rounded hover:bg-mail-surface-hover">
@@ -580,7 +582,7 @@ export default function MigrationSettings({ onUpgrade }) {
               <Button variant="secondary" className="bg-transparent"
                 onClick={() => setStep(s => s - 1)}
               >
-                Back
+                {t('settings.migration.back')}
               </Button>
             ) : <div />}
             <button
@@ -593,7 +595,7 @@ export default function MigrationSettings({ onUpgrade }) {
               {starting ? (
                 <span className="flex items-center gap-2">
                   <Loader size={14} className="animate-spin" />
-                  Starting...
+                  {t('settings.migration.starting')}
                 </span>
               ) : step === 4 ? 'Start Migration' : 'Next'}
             </button>
@@ -603,7 +605,7 @@ export default function MigrationSettings({ onUpgrade }) {
 
       {/* Migration History */}
       <div className="mt-6">
-        <h4 className="text-sm font-semibold text-mail-text mb-3">Migration History</h4>
+        <h4 className="text-sm font-semibold text-mail-text mb-3">{t('settings.migration.migrationHistory')}</h4>
         {migrationHistory.length > 0 ? (
           <div className="space-y-2">
             {migrationHistory.map((entry) => (
@@ -628,9 +630,9 @@ export default function MigrationSettings({ onUpgrade }) {
           </div>
         ) : (
           <div className="text-center py-8">
-            <h5 className="text-sm font-semibold text-mail-text mb-1">No migrations yet</h5>
+            <h5 className="text-sm font-semibold text-mail-text mb-1">{t('settings.migration.noMigrationsYet')}</h5>
             <p className="text-xs text-mail-text-muted max-w-[280px] mx-auto">
-              Select a source and destination account to move your emails between providers.
+              {t('settings.migration.selectSourceDestinationAccountMove')}
             </p>
           </div>
         )}
@@ -651,9 +653,9 @@ export default function MigrationSettings({ onUpgrade }) {
                 <ArrowLeftRight size={20} className="text-mail-accent-text" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-mail-text mb-1">Premium Feature</p>
+                <p className="text-sm font-semibold text-mail-text mb-1">{t('common.premiumFeature')}</p>
                 <p className="text-xs text-mail-text-muted text-center max-w-[280px]">
-                  Mailbox migration lets you move emails between any two providers.
+                  {t('settings.migration.mailboxMigrationLetsMoveEmails')}
                 </p>
                 {/* MAS builds must not advertise the web subscription — no external
                     purchase price, no path to Stripe checkout. */}
@@ -663,7 +665,7 @@ export default function MigrationSettings({ onUpgrade }) {
               </div>
               {!IS_APPSTORE_BUILD && onUpgrade && (
                 <Button variant="primary" size="sm" pill className="text-xs font-semibold" onClick={onUpgrade}>
-                  Upgrade
+                  {t('common.upgrade')}
                 </Button>
               )}
             </div>
@@ -711,6 +713,7 @@ function StatusBadge({ status }) {
 }
 
 function LiveLogSection() {
+  const t = useT();
   const logEntries = useSettingsStore(s => s.migrationLogEntries);
   const [expanded, setExpanded] = useState(true);
   const containerRef = useRef(null);
@@ -738,7 +741,7 @@ function LiveLogSection() {
       {expanded && (
         <div ref={containerRef} onScroll={handleScroll} className="max-h-48 overflow-y-auto font-mono text-xs p-2 space-y-1">
           {logEntries.length === 0 ? (
-            <p className="text-mail-text-muted italic">Log entries will appear here during migration.</p>
+            <p className="text-mail-text-muted italic">{t('settings.migration.logEntriesWillAppearHere')}</p>
           ) : (
             logEntries.map((entry, i) => (
               <div key={i} className="flex items-center gap-1 text-mail-text-muted whitespace-nowrap">
@@ -771,6 +774,7 @@ function RateLimitCountdown({ initialSeconds }) {
 }
 
 function ProgressView({ migration, accounts, accountColors, onPause, onResume, onCancel, showCancelConfirm, onConfirmCancel, onCancelCancel, cancelRemoving, cancelRemoveError }) {
+  const t = useT();
   const isPaused = migration.status === 'paused';
   const [isPausing, setIsPausing] = useState(false);
   const srcAccount = accounts.find(a => a.email === migration.source_email);
@@ -904,18 +908,18 @@ function ProgressView({ migration, accounts, accountColors, onPause, onResume, o
             }}
             className="bg-mail-accent-fill text-white rounded-lg px-4 py-2 text-sm font-semibold flex items-center gap-2"
           >
-            <Play size={14} /> Resume
+            <Play size={14} /> {t('common.resume')}
           </button>
         ) : isPausing ? (
           <button disabled className="bg-mail-surface border border-mail-border rounded-lg px-4 py-2 text-sm font-semibold opacity-70 flex items-center gap-2">
-            <Loader2 size={14} className="animate-spin" /> Pausing...
+            <Loader2 size={14} className="animate-spin" /> {t('settings.migration.pausing')}
           </button>
         ) : (
           <Button
             onClick={() => { setIsPausing(true); onPause(); }}
             className="bg-mail-warning-tint text-mail-warning font-semibold hover:bg-mail-warning/20"
           >
-            <Pause size={14} /> Pause
+            <Pause size={14} /> {t('settings.migration.pause')}
           </Button>
         )}
         <Dialog
@@ -924,31 +928,31 @@ function ProgressView({ migration, accounts, accountColors, onPause, onResume, o
           role="alertdialog"
           size="sm"
           panelBg="bg-mail-surface"
-          title="Cancel migration?"
+          title={t('settings.migration.cancelMigration')}
           description="Migration will stop. Choose what to do with emails already copied to the destination."
           footer={
             <div className="flex items-center gap-2 w-full">
-              <Button variant="secondary" size="sm" onClick={() => onConfirmCancel('keep')}>Keep emails</Button>
+              <Button variant="secondary" size="sm" onClick={() => onConfirmCancel('keep')}>{t('settings.migration.keepEmails')}</Button>
               <Button
                 variant="danger"
                 size="sm"
                 onClick={() => onConfirmCancel('remove')}
                 loading={cancelRemoving}
               >
-                Remove emails
+                {t('settings.migration.removeEmails')}
               </Button>
-              <Button variant="ghost" size="sm" onClick={onCancelCancel} className="ml-auto" data-autofocus>Go back</Button>
+              <Button variant="ghost" size="sm" onClick={onCancelCancel} className="ml-auto" data-autofocus>{t('settings.migration.goBack')}</Button>
             </div>
           }
         >
-          <p className="text-xs text-mail-text-muted italic">Removal is best-effort. If the connection drops, some emails may remain at the destination.</p>
+          <p className="text-xs text-mail-text-muted italic">{t('settings.migration.removalBestEffortIfConnection')}</p>
           {cancelRemoveError && (
             <p className="text-xs text-mail-danger">{cancelRemoveError}</p>
           )}
         </Dialog>
         {!showCancelConfirm && (
           <Button variant="link" size="sm" className="text-sm" onClick={onCancel}>
-            Cancel Migration
+            {t('settings.migration.cancelMigration2')}
           </Button>
         )}
       </div>
@@ -957,6 +961,7 @@ function ProgressView({ migration, accounts, accountColors, onPause, onResume, o
 }
 
 function CompletionView({ migration, onDone }) {
+  const t = useT();
   const isFailed = migration.status === 'failed';
   const isCancelled = migration.status === 'cancelled';
 
@@ -983,7 +988,7 @@ function CompletionView({ migration, onDone }) {
         onClick={onDone}
         className="bg-mail-accent-fill text-white rounded-lg px-4 py-2 text-sm font-semibold mt-6"
       >
-        Done
+        {t('common.done')}
       </button>
     </div>
   );
