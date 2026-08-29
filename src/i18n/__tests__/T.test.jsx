@@ -4,6 +4,16 @@ import { describe, it, expect, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, cleanup } from '@testing-library/react';
 import { T } from '../T.jsx';
+import en from '../locales/en.json';
+
+/**
+ * The slot fixtures live here, not in the shipped catalog. They existed only to
+ * exercise <T>, and shipping them meant every user carried them and eight
+ * translators were asked to translate them. `t()` reads the catalog object by
+ * reference, so seeding it here is enough.
+ */
+en['test.inline'] = 'Read the <0>privacy policy</0> first';
+en['test.inlineVar'] = 'Hi {{name}}, see the <0>docs</0> now';
 
 afterEach(cleanup);
 

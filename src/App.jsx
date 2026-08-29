@@ -468,14 +468,16 @@ function App() {
       initialData: {
         subject: tr('app.shouldTryMailvault'),
         body: [
-          '<p>I have been using MailVault and thought of you.</p>',
-          '<p>It archives your IMAP email to your own computer, so you can clear out a full mailbox on the server and still have every message — searchable, offline, forever.</p>',
+          // Prose goes through the catalog; the markup stays literal, so a
+          // translator receives sentences rather than HTML to preserve.
+          `<p>${tr('referral.intro')}</p>`,
+          `<p>${tr('referral.what')}</p>`,
           '<ul>',
-          '<li><strong>Your mail, your disk.</strong> Plain .eml files in a folder you choose. No lock-in, no cloud.</li>',
-          '<li><strong>Delete from the server with confidence.</strong> Every message shows where it lives: on the server, in your vault, or your only copy.</li>',
-          '<li><strong>Search everything offline</strong> — across every account and folder.</li>',
-          '<li><strong>Works with any IMAP mailbox</strong> — Gmail, iCloud, Fastmail, your own server.</li>',
-          '<li><strong>Free and open source</strong> for macOS and Linux.</li>',
+          `<li><strong>${tr('referral.ownDiskTitle')}</strong> ${tr('referral.ownDiskBody')}</li>`,
+          `<li><strong>${tr('referral.confidenceTitle')}</strong> ${tr('referral.confidenceBody')}</li>`,
+          `<li><strong>${tr('referral.offlineTitle')}</strong> ${tr('referral.offlineBody')}</li>`,
+          `<li><strong>${tr('referral.anyImapTitle')}</strong> ${tr('referral.anyImapBody')}</li>`,
+          `<li><strong>${tr('referral.freeTitle')}</strong> ${tr('referral.freeBody')}</li>`,
           '</ul>',
           '<p><a href="https://mailvaultapp.com">https://mailvaultapp.com</a></p>',
         ].join('')

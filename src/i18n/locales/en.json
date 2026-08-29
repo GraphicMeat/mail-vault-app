@@ -3,8 +3,6 @@
   "sidebar.lastNDays": "Last {{n}} days",
   "inbox.unread_one": "{{count}} unread message",
   "inbox.unread_other": "{{count}} unread messages",
-  "test.inline": "Read the <0>privacy policy</0> first",
-  "test.inlineVar": "Hi {{name}}, see the <0>docs</0> now",
   "errors.connectionFailed": "Connection failed",
   "errors.imapTimeout": "IMAP timeout",
   "errors.E_UID_GONE": "Message no longer on the server",
@@ -1518,5 +1516,17 @@
   "alert.tracker.removed_one": "MailVault removed a tracking pixel from this email before it rendered. The sender was not told that you opened it.",
   "alert.tracker.removed_other": "MailVault removed {{count}} tracking pixels from this email before it rendered. The sender was not told that you opened it.",
   "alert.tracker.loaded_one": "A hidden tracking pixel loaded when this email opened. The sender now knows when you read it, how often, and roughly where you were.",
-  "alert.tracker.loaded_other": "{{count}} hidden tracking pixels loaded when this email opened. The sender now knows when you read it, how often, and roughly where you were."
+  "alert.tracker.loaded_other": "{{count}} hidden tracking pixels loaded when this email opened. The sender now knows when you read it, how often, and roughly where you were.",
+  "referral.intro": "I have been using MailVault and thought of you.",
+  "referral.what": "It archives your IMAP email to your own computer, so you can clear out a full mailbox on the server and still have every message — searchable, offline, forever.",
+  "referral.ownDiskTitle": "Your mail, your disk.",
+  "referral.ownDiskBody": "Plain .eml files in a folder you choose. No lock-in, no cloud.",
+  "referral.confidenceTitle": "Delete from the server with confidence.",
+  "referral.confidenceBody": "Every message shows where it lives: on the server, in your vault, or your only copy.",
+  "referral.offlineTitle": "Search everything offline",
+  "referral.offlineBody": "— across every account and folder.",
+  "referral.anyImapTitle": "Works with any IMAP mailbox",
+  "referral.anyImapBody": "— Gmail, iCloud, Fastmail, your own server.",
+  "referral.freeTitle": "Free and open source",
+  "referral.freeBody": "for macOS and Linux."
 }
