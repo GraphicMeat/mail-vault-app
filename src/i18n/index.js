@@ -86,3 +86,35 @@ export function useT() {
   useSettingsStore(s => s.language);
   return t;
 }
+
+const _E_CODE = /^(E_[A-Z0-9_]+):\s*([\s\S]*)$/;
+
+/**
+ * Rokas is the only support person here. A screenshot of a translated error is
+ * unreadable to him; an untranslated one is unreadable to the user. So a
+ * translated error carries both:
+ *
+ *   "Verbindung fehlgeschlagen (Connection failed)"
+ *
+ * The bracket appears ONLY when a translation was actually applied. In English,
+ * with no translation, or where the translation happens to match, the English
+ * stands alone — otherwise it reads "Connection failed (Connection failed)".
+ *
+ * A Rust error prefixed `E_CODE: ` keeps its tail as the bracketed English,
+ * because that tail still holds the UID, folder or status code worth screenshotting.
+ */
+export function tErr(input, vars) {
+  const raw = typeof input === 'string' ? input : String(input?.message ?? input);
+  const m = _E_CODE.exec(raw);
+  const key = m ? `errors.${m[1]}` : raw;
+  const english = m ? m[2] : (en[key] ?? raw);
+
+  if (_locale === 'en') return _interp(english, vars);
+
+  const localized = _catalog[key];
+  if (localized === undefined) return _interp(english, vars);
+
+  const l = _interp(localized, vars);
+  const e = _interp(english, vars);
+  return l === e ? e : `${l} (${e})`;
+}

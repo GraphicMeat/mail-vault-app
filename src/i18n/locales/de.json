@@ -1,4 +1,7 @@
 {
   "sidebar.allInboxes": "Alle Posteingänge",
-  "sidebar.lastNDays": "Letzte {{n}} Tage"
+  "sidebar.lastNDays": "Letzte {{n}} Tage",
+  "errors.connectionFailed": "Verbindung fehlgeschlagen",
+  "errors.imapTimeout": "IMAP timeout",
+  "errors.E_UID_GONE": "Nachricht ist nicht mehr auf dem Server"
 }

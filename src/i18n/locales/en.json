@@ -4,5 +4,8 @@
   "inbox.unread_one": "{{count}} unread message",
   "inbox.unread_other": "{{count}} unread messages",
   "test.inline": "Read the <0>privacy policy</0> first",
-  "test.inlineVar": "Hi {{name}}, see the <0>docs</0> now"
+  "test.inlineVar": "Hi {{name}}, see the <0>docs</0> now",
+  "errors.connectionFailed": "Connection failed",
+  "errors.imapTimeout": "IMAP timeout",
+  "errors.E_UID_GONE": "Message no longer on the server"
 }
