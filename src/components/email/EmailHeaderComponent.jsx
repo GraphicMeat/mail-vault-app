@@ -15,10 +15,12 @@ import {
 } from 'lucide-react';
 import { checkSenderVerification, parseAuthResults } from '../../utils/senderCheck';
 import { getSenderName } from '../../utils/emailParser';
+import { useT } from '../../i18n/index.js';
 
 // ── Auth Detail Popover ────────────────────────────────────────────────
 
 export function AuthDetailPopover({ email, onClose, anchorRect }) {
+  const t = useT();
   const popoverRef = useRef(null);
   const auth = useMemo(() => parseAuthResults(email?.authenticationResults), [email?.authenticationResults]);
   const verification = useMemo(() => checkSenderVerification(email), [email?.from, email?.replyTo, email?.returnPath, email?.authenticationResults]);
@@ -67,17 +69,17 @@ export function AuthDetailPopover({ email, onClose, anchorRect }) {
          className={`${position ? 'fixed' : 'absolute top-full left-0 mt-1'} z-50 bg-mail-surface border border-mail-border rounded-lg p-3 min-w-[240px] max-w-[320px]`}
          style={position || undefined}
          onClick={(e) => e.stopPropagation()}>
-      <div className="text-xs font-semibold text-mail-text mb-2">Sender Details</div>
+      <div className="text-xs font-semibold text-mail-text mb-2">{t('email.header.senderDetails')}</div>
 
       {/* Sender identity */}
       <div className="space-y-1 mb-2 text-xs">
         <div className="flex items-start gap-2">
-          <span className="text-mail-text-muted w-16 flex-shrink-0">From</span>
+          <span className="text-mail-text-muted w-16 flex-shrink-0">{t('common.from')}</span>
           <span className="text-mail-text break-all">{email?.from?.address || 'unknown'}</span>
         </div>
         {email?.from?.name && email.from.name !== email.from.address && (
           <div className="flex items-start gap-2">
-            <span className="text-mail-text-muted w-16 flex-shrink-0">Name</span>
+            <span className="text-mail-text-muted w-16 flex-shrink-0">{t('email.header.name')}</span>
             <span className="text-mail-text break-all">{email.from.name}</span>
           </div>
         )}
@@ -98,33 +100,33 @@ export function AuthDetailPopover({ email, onClose, anchorRect }) {
       {/* Authentication results */}
       {hasAuth ? (
         <div className="space-y-1.5 border-t border-mail-border pt-2">
-          <div className="text-xs font-semibold text-mail-text mb-1">Authentication</div>
+          <div className="text-xs font-semibold text-mail-text mb-1">{t('email.header.authentication')}</div>
           <div className="flex items-center gap-2 text-xs">
             <StatusDot result={auth.spf} />
-            <span className="text-mail-text-muted w-12">SPF</span>
+            <span className="text-mail-text-muted w-12">{t('email.header.spf')}</span>
             <span className="text-mail-text">{auth.spf || 'none'}</span>
           </div>
           <div className="flex items-center gap-2 text-xs">
             <StatusDot result={auth.dkim} />
-            <span className="text-mail-text-muted w-12">DKIM</span>
+            <span className="text-mail-text-muted w-12">{t('email.header.dkim')}</span>
             <span className="text-mail-text">{auth.dkim || 'none'}</span>
           </div>
           <div className="flex items-center gap-2 text-xs">
             <StatusDot result={auth.dmarc} />
-            <span className="text-mail-text-muted w-12">DMARC</span>
+            <span className="text-mail-text-muted w-12">{t('email.header.dmarc')}</span>
             <span className="text-mail-text">{auth.dmarc || 'none'}</span>
           </div>
           {replyToAddr && (
             <div className="flex items-center gap-2 text-xs border-t border-mail-border pt-1.5 mt-1.5">
               <span className={`inline-block w-2 h-2 rounded-full ${replyToMatches ? 'bg-mail-success' : 'bg-mail-warning'}`} />
-              <span className="text-mail-text-muted">Reply-To</span>
+              <span className="text-mail-text-muted">{t('email.header.reply')}</span>
               <span className="text-mail-text">{replyToMatches ? 'matches sender' : replyToAddr}</span>
             </div>
           )}
         </div>
       ) : senderIssues.length === 0 ? (
         <div className="text-xs text-mail-text-muted border-t border-mail-border pt-2">
-          No authentication data available for this email. The sender's mail server did not include SPF, DKIM, or DMARC headers.
+          {t('email.header.noAuthenticationDataAvailableEmail')}
         </div>
       ) : null}
     </div>
@@ -169,6 +171,7 @@ export function SenderVerificationBadge({ email, size = 14 }) {
 // ── Email Header ────────────────────────────────────────────────────────────
 
 export function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, loadingRaw, showInsights, onToggleInsights }) {
+  const t = useT();
   return (
     <div
       className="p-4 border-b border-mail-border cursor-pointer"
@@ -197,7 +200,7 @@ export function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, l
               data-testid="sender-insights-toggle"
               onClick={(e) => { e.stopPropagation(); onToggleInsights?.(); }}
               className={`p-0.5 rounded transition-colors flex-shrink-0 ${showInsights ? 'text-mail-accent-text' : 'text-mail-text-muted hover:text-mail-text'}`}
-              title="Sender insights"
+              title={t('email.header.senderInsights')}
             >
               <Info size={14} />
             </button>

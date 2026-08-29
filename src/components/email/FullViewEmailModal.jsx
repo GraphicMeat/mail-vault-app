@@ -16,9 +16,11 @@ import { scanTrackers } from '../../utils/trackerDetect';
 import { recordTrackerVerdict } from '../../services/trackerVerdicts';
 import { LinkSafetyModal } from '../LinkSafetyModal';
 import { openMailtoCompose, addressesToHtml } from '../../utils/mailto';
+import { useT } from '../../i18n/index.js';
 
 // Full-screen modal for viewing complete email with HTML rendering
 export function FullViewEmailModal({ email: initialEmail, onClose }) {
+  const t = useT();
   const selectEmail = useSelectionStore(s => s.selectEmail);
   const selectedEmail = useSelectionStore(s => s.selectedEmail);
   const loadingEmail = useSelectionStore(s => s.loadingEmail);
@@ -198,7 +200,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
       onClose={onClose}
       size="custom"
       panelBg="bg-mail-surface"
-      aria-label="Full message"
+      aria-label={t('email.fullView.fullMessage')}
       className="flex-col"
       panelClassName="flex-1 m-4 rounded-2xl overflow-hidden flex flex-col"
     >
@@ -209,7 +211,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
               {email.subject || '(No subject)'}
             </h2>
           </div>
-          <Button variant="ghost" icon onClick={onClose} aria-label="Close" className="flex-shrink-0">
+          <Button variant="ghost" icon onClick={onClose} aria-label={t('common.close')} className="flex-shrink-0">
             <X size={20} />
           </Button>
         </div>
@@ -217,19 +219,19 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
         {/* Email Meta */}
         <div className="px-4 py-3 border-b border-mail-border bg-mail-surface space-y-1 text-sm">
           <div className="flex gap-2">
-            <span className="text-mail-text-muted w-14 flex-shrink-0">From:</span>
+            <span className="text-mail-text-muted w-14 flex-shrink-0">{t('email.fullView.from')}</span>
             <span className="text-mail-text truncate">
               {email.from?.name ? `${email.from.name} <${email.from.address}>` : email.from?.address}
             </span>
           </div>
           <div className="flex gap-2">
-            <span className="text-mail-text-muted w-14 flex-shrink-0">To:</span>
+            <span className="text-mail-text-muted w-14 flex-shrink-0">{t('email.fullView.to')}</span>
             <span className="text-mail-text truncate">
               {email.to?.map(t => t.name ? `${t.name} <${t.address}>` : t.address).join(', ')}
             </span>
           </div>
           <div className="flex gap-2">
-            <span className="text-mail-text-muted w-14 flex-shrink-0">Date:</span>
+            <span className="text-mail-text-muted w-14 flex-shrink-0">{t('email.fullView.date')}</span>
             <span className="text-mail-text">
               {email.date ? formatDateTime(email.date) : ''}
             </span>
@@ -242,7 +244,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
             <div className="absolute inset-0 flex items-center justify-center bg-mail-bg">
               <div className="flex flex-col items-center gap-3">
                 <Loader size={32} className="text-mail-accent-text animate-spin" />
-                <span className="text-sm text-mail-text-muted">Loading email content...</span>
+                <span className="text-sm text-mail-text-muted">{t('email.fullView.loadingEmailContent')}</span>
               </div>
             </div>
           ) : (
@@ -251,7 +253,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
               srcDoc={iframeContent}
               className="w-full h-full border-0"
               sandbox="allow-same-origin allow-popups allow-scripts"
-              title="Full email content"
+              title={t('email.fullView.fullEmailContent')}
             />
           )}
         </div>

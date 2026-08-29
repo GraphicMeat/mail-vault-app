@@ -3,6 +3,7 @@ import React, { useEffect } from 'react';
 import { useUiStore } from '../stores/uiStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HardDrive, Check, X, AlertCircle, Download, Upload } from 'lucide-react';
+import { useT } from '../i18n/index.js';
 
 // Use targeted selectors to avoid re-rendering on every store change
 const selectProgress = (s) => s.bulkSaveProgress;
@@ -58,6 +59,7 @@ const MODE_CONFIG = {
 };
 
 function BulkSaveProgressInner({ progress, onDismiss, onCancel, mode = 'archive' }) {
+  const t = useT();
   const { total, completed, errors = 0, active } = progress;
   const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
   // Treat as complete when all emails are processed, even if active flag is stale
@@ -132,7 +134,7 @@ function BulkSaveProgressInner({ progress, onDismiss, onCancel, mode = 'archive'
             <Button variant="ghost" size="xs" className="hover:bg-mail-border hover:text-mail-danger"
               onClick={onCancel}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
           ) : null}
         </div>

@@ -6,6 +6,7 @@ import { describeServerDelete, describeDeleteEverywhere } from '../utils/custody
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { MenuItem } from './ui/Popover';
 import { useExportStore } from '../stores/exportStore';
+import { useT } from '../i18n/index.js';
 
 /**
  * Contents of a row's 3-dot menu.
@@ -20,6 +21,7 @@ import { useExportStore } from '../stores/exportStore';
  * representative message.
  */
 export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }) {
+  const t = useT();
   const { saveEmailsLocally, removeLocalEmail, deleteEmailFromServer } = actions;
   const setSelection = useMailStore(s => s.setSelection);
   const markSelectedAsRead = useMailStore(s => s.markSelectedAsRead);
@@ -82,13 +84,13 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
       {hasUnread && (
         <MenuItem onClick={(e) => { e.stopPropagation(); runOnThisRow(markSelectedAsRead); }}>
           <MailOpen size={14} />
-          Mark as read
+          {t('rowMenu.markRead')}
         </MenuItem>
       )}
       {hasRead && (
         <MenuItem onClick={(e) => { e.stopPropagation(); runOnThisRow(markSelectedAsUnread); }}>
           <Mail size={14} />
-          Mark as unread
+          {t('rowMenu.markUnread')}
         </MenuItem>
       )}
 
@@ -101,7 +103,7 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
           }}
         >
           <Archive size={14} />
-          Archive
+          {t('common.archive')}
         </MenuItem>
       )}
       {hasArchived && (
@@ -113,7 +115,7 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
           }}
         >
           <ArchiveRestore size={14} />
-          Unarchive
+          {t('rowMenu.unarchive')}
         </MenuItem>
       )}
 
@@ -129,7 +131,7 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
       <div className="relative">
         <MenuItem onClick={(e) => { e.stopPropagation(); setShowMove(v => !v); }}>
           <FolderSymlink size={14} />
-          Move to folder
+          {t('rowMenu.moveFolder')}
         </MenuItem>
         {showMove && (
           <div className="absolute left-full top-0 ml-1">
@@ -181,7 +183,7 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
           }}
         >
           <Trash2 size={14} />
-          Delete from server
+          {t('rowMenu.deleteServer')}
         </MenuItem>
       )}
 
@@ -208,7 +210,7 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
           }}
         >
           <ShieldX size={14} />
-          Delete everywhere
+          {t('rowMenu.deleteEverywhere')}
         </MenuItem>
       )}
     </>

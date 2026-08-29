@@ -4,6 +4,7 @@ import { useSelectionStore } from '../stores/selectionStore';
 import { FolderSymlink, Search, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { mailboxLabel, decodeImapUtf7 } from '../utils/imapUtf7';
+import { useT } from '../i18n/index.js';
 
 /**
  * Flatten a mailbox tree into a flat list, skipping noselect folders.
@@ -22,6 +23,7 @@ function flattenMailboxes(mailboxes, depth = 0) {
 }
 
 export function MoveToFolderDropdown({ uids, onClose, anchorRect }) {
+  const t = useT();
   const mailboxes = useAccountStore(s => s.mailboxes);
   const activeMailbox = useAccountStore(s => s.activeMailbox);
   const moveEmails = useSelectionStore(s => s.moveEmails);
@@ -121,7 +123,7 @@ export function MoveToFolderDropdown({ uids, onClose, anchorRect }) {
             data-testid="move-folder-search"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            placeholder="Search folders..."
+            placeholder={t('moveTo.searchFolders')}
             className="bg-transparent text-sm text-mail-text placeholder:text-mail-text-muted outline-none w-full"
           />
         </div>
@@ -131,7 +133,7 @@ export function MoveToFolderDropdown({ uids, onClose, anchorRect }) {
       <div className="max-h-64 overflow-y-auto py-1">
         {folders.length === 0 ? (
           <div className="px-4 py-3 text-sm text-mail-text-muted text-center">
-            No folders found
+            {t('moveTo.noFoldersFound')}
           </div>
         ) : (
           folders.map((folder) => (
@@ -154,7 +156,7 @@ export function MoveToFolderDropdown({ uids, onClose, anchorRect }) {
       {moving && (
         <div className="flex items-center gap-2 px-3 py-2 border-t border-mail-border text-sm text-mail-text-muted">
           <Loader2 size={14} className="animate-spin" />
-          Moving...
+          {t('moveTo.moving')}
         </div>
       )}
 

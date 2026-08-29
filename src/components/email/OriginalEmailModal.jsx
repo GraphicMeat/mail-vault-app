@@ -3,23 +3,25 @@ import { Paperclip, X, Download } from 'lucide-react';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { formatDateTime } from '../../utils/dateFormat';
+import { useT } from '../../i18n/index.js';
 
 // Modal for viewing full original email
 export function OriginalEmailModal({ email, onClose }) {
+  const t = useT();
   return (
     <Dialog
       open={Boolean(email)}
       onClose={onClose}
       size="xl"
       padded={false}
-      aria-label="Original email"
+      aria-label={t('email.original.originalEmail')}
       panelClassName="max-h-[80vh] overflow-hidden"
     >
       <>
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-mail-border">
-            <h3 className="font-semibold text-mail-text">Original Email</h3>
-            <Button variant="ghost" icon size="sm" onClick={onClose} aria-label="Close">
+            <h3 className="font-semibold text-mail-text">{t('email.original.originalEmail2')}</h3>
+            <Button variant="ghost" icon size="sm" onClick={onClose} aria-label={t('common.close')}>
               <X size={18} />
             </Button>
           </div>
@@ -27,23 +29,23 @@ export function OriginalEmailModal({ email, onClose }) {
           {/* Email Details */}
           <div className="p-4 border-b border-mail-border space-y-2 text-sm">
             <div className="flex gap-2">
-              <span className="text-mail-text-muted w-16">From:</span>
+              <span className="text-mail-text-muted w-16">{t('email.original.from')}</span>
               <span className="text-mail-text">
                 {email?.from?.name} &lt;{email?.from?.address}&gt;
               </span>
             </div>
             <div className="flex gap-2">
-              <span className="text-mail-text-muted w-16">To:</span>
+              <span className="text-mail-text-muted w-16">{t('email.original.to')}</span>
               <span className="text-mail-text">
                 {email?.to?.map(t => `${t.name || ''} <${t.address}>`).join(', ')}
               </span>
             </div>
             <div className="flex gap-2">
-              <span className="text-mail-text-muted w-16">Subject:</span>
+              <span className="text-mail-text-muted w-16">{t('email.original.subject')}</span>
               <span className="text-mail-text font-medium">{email?.subject}</span>
             </div>
             <div className="flex gap-2">
-              <span className="text-mail-text-muted w-16">Date:</span>
+              <span className="text-mail-text-muted w-16">{t('email.original.date')}</span>
               <span className="text-mail-text">
                 {formatDateTime(email?.date)}
               </span>
@@ -60,7 +62,7 @@ export function OriginalEmailModal({ email, onClose }) {
           {/* Attachments */}
           {email?.attachments?.length > 0 && (
             <div className="px-4 py-3 border-t border-mail-border">
-              <h4 className="text-sm font-medium text-mail-text mb-2">Attachments</h4>
+              <h4 className="text-sm font-medium text-mail-text mb-2">{t('email.original.attachments')}</h4>
               <div className="flex flex-wrap gap-2">
                 {email.attachments.map((att, i) => (
                   <div

@@ -4,6 +4,7 @@ import { Info } from 'lucide-react';
 import { SenderVerificationBadge } from './EmailHeaderComponent';
 import { ConnectedStateIcon } from './MessageStateIcon';
 import { getSenderName } from '../../utils/emailParser';
+import { useT } from '../../i18n/index.js';
 
 /**
  * Portal-based sender info popover for chat view.
@@ -16,6 +17,7 @@ export const SenderInfoPopover = memo(function SenderInfoPopover({
   onClose,
   archivedEmailIds,
 }) {
+  const t = useT();
   const popoverRef = useRef(null);
   const previousFocusRef = useRef(null);
 
@@ -86,7 +88,7 @@ export const SenderInfoPopover = memo(function SenderInfoPopover({
       style={{ top: position.top, left: position.left }}
     >
         {/* Heading */}
-        <div className="text-xs font-semibold text-mail-text mb-2">Sender Details</div>
+        <div className="text-xs font-semibold text-mail-text mb-2">{t('email.senderPopover.senderDetails')}</div>
 
         {/* Avatar + sender name + email row */}
         <div className="flex items-center gap-2 mb-2">

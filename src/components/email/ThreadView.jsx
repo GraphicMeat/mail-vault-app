@@ -35,10 +35,12 @@ import { LinkAlertIcon } from '../LinkAlertIcon';
 import { MAIL_DARK_BG, MAIL_DARK_TEXT } from '../../utils/mailChrome';
 import { openMailtoCompose } from '../../utils/mailto';
 import { AddressText } from './AddressText';
+import { useT } from '../../i18n/index.js';
 
 // ── Thread Email Item Content ────────────────────────────────────────────────
 
 function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, signatureDisplay, shouldShowSignature, effectiveTheme }) {
+  const t = useT();
   const iframeRef = useRef(null);
   const [quotesExpanded, setQuotesExpanded] = useState(false);
   const [sigExpanded, setSigExpanded] = useState(false);
@@ -204,7 +206,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
   if (!loadedEmail) {
     return loadError ? (
       <div className="py-3 text-sm text-mail-text-muted" data-testid="thread-body-error">
-        Couldn't load this message from the vault or the server.
+        {t('email.thread.couldnTLoadMessageVault')}
       </div>
     ) : (
       <div className="py-3 text-sm text-mail-text-muted italic">
@@ -463,6 +465,7 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, arch
 // ── Thread View (shows all emails in a thread) ──────────────────────────────
 
 export function ThreadView({ thread, onComposeReply }) {
+  const t = useT();
   const savedEmailIds = useMessageListStore(s => s.savedEmailIds);
   const archivedEmailIds = useMessageListStore(s => s.archivedEmailIds);
   const saveEmailsLocally = useSelectionStore(s => s.saveEmailsLocally);
@@ -564,12 +567,12 @@ export function ThreadView({ thread, onComposeReply }) {
 
         <button
           onClick={() => useExportStore.getState().openExport({ messages: sortedEmails })}
-          title="Export thread"
+          title={t('email.thread.exportThread')}
           className="flex items-center gap-1.5 px-2.5 py-1.5 ml-2 rounded-lg text-sm font-medium
                      text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover transition-colors"
         >
           <ImageDown size={14} />
-          Export
+          {t('common.export')}
         </button>
 
         {!allArchived && (

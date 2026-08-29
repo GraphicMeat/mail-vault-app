@@ -20,8 +20,10 @@ import {
   Paperclip,
   Archive,
 } from 'lucide-react';
+import { useT } from '../i18n/index.js';
 
 export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
+  const t = useT();
   const handleOpenMenu = React.useCallback(() => onOpenMenu(rowId), [onOpenMenu, rowId]);
   const { saveEmailLocally } = actions;
   // Scan results are cached per `accountId-mailbox-uid`; a bare uid would pull
@@ -126,7 +128,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
           <Button variant="ghost" icon size="sm" className="press hover:bg-mail-border"
             onClick={handleSave}
             disabled={isSaving}
-            title="Archive"
+            title={t('common.archive')}
           >
             {isSaving ? (
               <RefreshCw size={14} className="animate-spin text-mail-accent-text" />
@@ -145,6 +147,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
 });
 
 export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, email, isSelected, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
+  const t = useT();
   const handleOpenMenu = React.useCallback(() => onOpenMenu(rowId), [onOpenMenu, rowId]);
   const { saveEmailLocally } = actions;
   // Scan results are cached per `accountId-mailbox-uid`; a bare uid would pull
@@ -231,7 +234,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
       {/* Hover actions */}
       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible bg-mail-surface-hover rounded-md px-1">
         {!email.isArchived && (
-          <Button variant="ghost" icon size="xs" className="press hover:bg-mail-border" onClick={handleSave} disabled={isSaving} title="Archive">
+          <Button variant="ghost" icon size="xs" className="press hover:bg-mail-border" onClick={handleSave} disabled={isSaving} title={t('common.archive')}>
             {isSaving ? <RefreshCw size={13} className="animate-spin text-mail-accent-text" />
               : <Archive size={13} className="text-mail-text-muted hover:text-mail-local" />}
           </Button>

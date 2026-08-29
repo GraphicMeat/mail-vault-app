@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, ListChecks } from 'lucide-react';
 import { useMailStore } from '../stores/mailStore';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
+import { useT } from '../i18n/index.js';
 
 /**
  * Minimized bulk-operations session.
@@ -24,6 +25,7 @@ import { decodeImapUtf7 } from '../utils/imapUtf7';
  * `selectedEmailIds`, so there is nothing for them to disagree about.
  */
 export function BulkSelectionBubble() {
+  const t = useT();
   const bulkSession = useMailStore(s => s.bulkSession);
   const bulkModalOpen = useMailStore(s => s.bulkModalOpen);
   const selectedEmailIds = useMailStore(s => s.selectedEmailIds);
@@ -56,7 +58,7 @@ export function BulkSelectionBubble() {
               onClick={openBulkModal}
               data-testid="bulk-selection-bubble-reopen"
               className="flex items-center gap-2 px-1 py-0.5 rounded-lg hover:bg-mail-surface-hover transition-colors"
-              title="Back to bulk operations"
+              title={t('selection.bubble.backBulkOperations')}
             >
               <ListChecks size={15} className="text-mail-accent-text flex-shrink-0" />
               <span className="text-sm text-mail-text whitespace-nowrap">
@@ -69,7 +71,7 @@ export function BulkSelectionBubble() {
             </button>
             <Button variant="ghost" icon size="sm"
               onClick={endBulkSession}
-              title="End bulk selection"
+              title={t('selection.bubble.endBulkSelection')}
             >
               <X size={14} className="text-mail-text-muted" />
             </Button>

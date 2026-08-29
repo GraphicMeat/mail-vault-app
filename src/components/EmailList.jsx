@@ -49,6 +49,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { EmailRow, CompactEmailRow } from './EmailRow';
 import { ThreadRow, CompactThreadRow } from './ThreadRow';
 import { ConnectedStateIcon, StateTooltip } from './email/MessageStateIcon';
+import { useT } from '../i18n/index.js';
 
 const ROW_HEIGHT_DEFAULT = 56;
 const ROW_HEIGHT_COMPACT = 52;
@@ -151,6 +152,7 @@ export function formatListCount({ shown, loaded, total, unreadOnly }) {
 }
 
 function EmailListComponent() {
+  const t = useT();
   // Individual selectors — component only re-renders when these specific fields change
   const loading = useSyncStore(s => s.loading);
   const loadingMore = useSyncStore(s => s.loadingMore);
@@ -869,7 +871,7 @@ function EmailListComponent() {
           {searchActive ? (
             <div className="flex items-center gap-2">
               <Search size={16} className="text-mail-accent-text" />
-              <span className="text-lg font-semibold text-mail-text">Search Results</span>
+              <span className="text-lg font-semibold text-mail-text">{t('list.searchResults')}</span>
               <span className="text-sm text-mail-text-muted">
                 ({displayEmails.length} found)
               </span>
@@ -881,7 +883,7 @@ function EmailListComponent() {
                 className="ml-2 px-2 py-0.5 text-xs bg-mail-bg border border-mail-border rounded
                           text-mail-text-muted hover:text-mail-text hover:border-mail-accent transition-colors"
               >
-                Clear
+                {t('common.clear')}
               </button>
             </div>
           ) : (
@@ -960,7 +962,7 @@ function EmailListComponent() {
                 ? 'bg-mail-accent/10 text-mail-accent-text'
                 : 'hover:bg-mail-border text-mail-text-muted'
             }`}
-            title="Search emails"
+            title={t('list.searchEmails')}
           >
             <Search size={18} />
           </button>
@@ -1028,7 +1030,7 @@ function EmailListComponent() {
             {unreadOnly && !searchActive ? (
               <>
                 <Mail size={48} className="mb-4 opacity-50" />
-                <p>No unread messages</p>
+                <p>{t('list.noUnreadMessages')}</p>
                 <p className="text-sm mt-2">
                   {sortedEmails.length > 0
                     ? `${sortedEmails.length.toLocaleString()} loaded ${sortedEmails.length === 1 ? 'message has' : 'messages have'} all been read`
@@ -1039,14 +1041,14 @@ function EmailListComponent() {
                   className="mt-4 px-4 py-2 bg-mail-surface border border-mail-border rounded-lg
                             text-sm hover:border-mail-accent transition-colors"
                 >
-                  Show all messages
+                  {t('list.showAllMessages')}
                 </button>
               </>
             ) : searchActive ? (
               <>
                 <Search size={48} className="mb-4 opacity-50" />
-                <p>No results found</p>
-                <p className="text-sm mt-2">Try different keywords or adjust your filters</p>
+                <p>{t('list.noResultsFound')}</p>
+                <p className="text-sm mt-2">{t('list.tryDifferentKeywordsAdjustFilters')}</p>
                 <button
                   onClick={() => {
                     clearSearch();
@@ -1055,14 +1057,14 @@ function EmailListComponent() {
                   className="mt-4 px-4 py-2 bg-mail-surface border border-mail-border rounded-lg
                             text-sm hover:border-mail-accent transition-colors"
                 >
-                  Clear search
+                  {t('list.clearSearch')}
                 </button>
               </>
             ) : viewMode === 'local' ? (
               <>
                 <HardDrive size={48} className="mb-4 opacity-50" />
-                <p>Nothing in your vault from this folder</p>
-                <p className="text-sm mt-2">Switch to Server, then archive what you want to keep. A copy lands here on your disk.</p>
+                <p>{t('list.nothingVaultFolder')}</p>
+                <p className="text-sm mt-2">{t('list.switchServerThenArchiveWhat')}</p>
               </>
             ) : viewMode === 'server' ? (
               <>
@@ -1074,20 +1076,20 @@ function EmailListComponent() {
                   <>
                     <ServerOff size={48} className="mb-4 opacity-50" />
                     <p>Can&rsquo;t reach the server</p>
-                    <p className="text-sm mt-2">This folder may not be empty — nothing was loaded. The account in the sidebar shows why, and retries from there.</p>
+                    <p className="text-sm mt-2">{t('list.folderMayNotEmptyNothing')}</p>
                   </>
                 ) : (
                   <>
                     <Cloud size={48} className="mb-4 opacity-50" />
-                    <p>Nothing on the server in this folder</p>
-                    <p className="text-sm mt-2">Anything you already archived is still in your vault.</p>
+                    <p>{t('list.nothingServerFolder')}</p>
+                    <p className="text-sm mt-2">{t('list.anythingAlreadyArchivedStillVault')}</p>
                   </>
                 )}
               </>
             ) : (
               <>
                 <Layers size={48} className="mb-4 opacity-50" />
-                <p>No emails in this folder</p>
+                <p>{t('list.noEmailsFolder')}</p>
               </>
             )}
           </div>
@@ -1096,7 +1098,7 @@ function EmailListComponent() {
           senderGroups === null ? (
             <div className="flex items-center justify-center h-32 text-mail-text-muted">
               <RefreshCw size={16} className="animate-spin mr-2" />
-              Grouping...
+              {t('list.grouping')}
             </div>
           ) : senderGroups.length === 0 ? null : (
             <div style={{ height: senderVirtualizer.getTotalSize() + 'px', position: 'relative' }}>
@@ -1233,7 +1235,7 @@ function EmailListComponent() {
                               {item.email._fromSentFolder ? 'You' : getSenderName(item.email)}
                             </span>
                             {item.email._fromSentFolder && (
-                              <span className="text-[10px] px-1 py-0.5 rounded bg-mail-accent/10 text-mail-accent-text font-medium">Sent</span>
+                              <span className="text-[10px] px-1 py-0.5 rounded bg-mail-accent/10 text-mail-accent-text font-medium">{t('list.sent')}</span>
                             )}
                           </div>
                           {item.email.snippet && (
@@ -1421,6 +1423,7 @@ function EmailListComponent() {
 }
 
 function RowDeleteConfirmModal({ pending, onCancel, onConfirm }) {
+  const t = useT();
   const descId = useId();
 
   return (
@@ -1440,7 +1443,7 @@ function RowDeleteConfirmModal({ pending, onCancel, onConfirm }) {
           {/* Cancel takes first focus: nothing destructive is ever one stray
               Return away. */}
           <Button variant="ghost" size="sm" onClick={onCancel} data-autofocus>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button variant="danger" size="sm" onClick={onConfirm}>
             <Trash2 size={14} /> {pending?.copy.confirmLabel}

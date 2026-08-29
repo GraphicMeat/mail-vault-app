@@ -7,6 +7,7 @@ import { buildExport, SAMPLE } from '../../services/export/exportService';
 import { saveOneFile, openInDefaultApp } from '../../services/export/exportSaver';
 import { SAMPLE_MESSAGE, SAMPLE_THREAD, SAMPLE_META } from '../../utils/exportSampleData';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
+import { useT } from '../../i18n/index.js';
 
 // Rendered once per session. The samples go through the real pipeline on
 // fixture data — if the renderer breaks, the upsell shows it before a customer
@@ -30,6 +31,7 @@ async function renderSamples() {
 }
 
 export function ExportUpsellModal({ open, onClose, onUpgrade }) {
+  const t = useT();
   const [samples, setSamples] = useState(cached);
   const [failed, setFailed] = useState(false);
   // A dead Open button with a swallowed error is indistinguishable from one
@@ -48,7 +50,7 @@ export function ExportUpsellModal({ open, onClose, onUpgrade }) {
 
   return (
     <Dialog open={open} onClose={onClose} z={Z.alert} portal size="xl"
-      title="Export any message or thread"
+      title={t('export.upsell.exportAnyMessageThread')}
       panelBg="bg-mail-surface">
       <p className="text-sm text-mail-text-muted">
         Save mail as a dated image, or as a single HTML file that folds a thread into a list you can
@@ -57,7 +59,7 @@ export function ExportUpsellModal({ open, onClose, onUpgrade }) {
 
       {failed && (
         <p className="text-xs text-mail-text-muted">
-          Previews could not be generated on this machine, but the export itself is unaffected.
+          {t('export.upsell.previewsCouldNotGeneratedMachine')}
         </p>
       )}
 
@@ -74,7 +76,7 @@ export function ExportUpsellModal({ open, onClose, onUpgrade }) {
               ) : (
                 <div className="w-full h-44 rounded bg-mail-surface-hover flex flex-col items-center justify-center gap-2 text-xs text-mail-text-muted text-center px-2">
                   <FileCode2 size={28} className="text-mail-text-muted/70" />
-                  Self-contained HTML
+                  {t('export.upsell.selfContainedHtml')}
                 </div>
               )}
               <span className="text-xs text-mail-text">{sample.label}</span>
@@ -82,9 +84,9 @@ export function ExportUpsellModal({ open, onClose, onUpgrade }) {
                   only way to actually look at a sample before paying. */}
               <div className="grid grid-cols-2 gap-1.5 mt-auto">
                 <Button variant="secondary" size="sm" fullWidth
-                  onClick={() => { setNotice(null); openInDefaultApp(sample.file).catch(e => setNotice(`Could not open the sample. (${e?.message || e})`)); }}>Open</Button>
+                  onClick={() => { setNotice(null); openInDefaultApp(sample.file).catch(e => setNotice(`Could not open the sample. (${e?.message || e})`)); }}>{t('common.open')}</Button>
                 <Button variant="secondary" size="sm" fullWidth
-                  onClick={() => { setNotice(null); saveOneFile(sample.file, 'Save sample').catch(e => setNotice(`Could not save the sample. (${e?.message || e})`)); }}>Save</Button>
+                  onClick={() => { setNotice(null); saveOneFile(sample.file, 'Save sample').catch(e => setNotice(`Could not save the sample. (${e?.message || e})`)); }}>{t('common.save')}</Button>
               </div>
             </div>
           ))}
@@ -94,8 +96,8 @@ export function ExportUpsellModal({ open, onClose, onUpgrade }) {
       {notice && <p className="text-xs text-mail-danger">{notice}</p>}
 
       <div className="flex flex-col gap-2">
-        <Button variant="primary" size="lg" fullWidth onClick={() => onUpgrade?.()}>Upgrade</Button>
-        <Button variant="ghost" size="sm" fullWidth onClick={onClose} data-autofocus>Maybe later</Button>
+        <Button variant="primary" size="lg" fullWidth onClick={() => onUpgrade?.()}>{t('common.upgrade')}</Button>
+        <Button variant="ghost" size="sm" fullWidth onClick={onClose} data-autofocus>{t('export.upsell.maybeLater')}</Button>
         <PremiumFeaturesLink className="self-center mt-1" />
       </div>
     </Dialog>

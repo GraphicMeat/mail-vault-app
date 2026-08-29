@@ -12,6 +12,7 @@ import {
   AppWindow,
   Check,
 } from 'lucide-react';
+import { useT } from '../../i18n/index.js';
 
 function getCleanBase64(content) {
   let base64Content = content;
@@ -61,6 +62,7 @@ function browserDownload(attachment) {
 }
 
 function AttachmentContextMenu({ x, y, downloadedPath, onDownload, onSaveAs, onOpen, onOpenWith, onShowInFolder, onClose }) {
+  const t = useT();
   const menuRef = useRef(null);
   const [position, setPosition] = useState({ x, y });
 
@@ -86,31 +88,31 @@ function AttachmentContextMenu({ x, y, downloadedPath, onDownload, onSaveAs, onO
         <>
           <MenuItem onClick={onOpen}>
             <ExternalLink size={14} />
-            Open
+            {t('common.open')}
           </MenuItem>
           <MenuItem onClick={onOpenWith}>
             <AppWindow size={14} />
-            Open With...
+            {t('email.attachments.open')}
           </MenuItem>
           <div className="my-1 border-t border-mail-border" />
           <MenuItem onClick={onSaveAs}>
             <Save size={14} />
-            Save As...
+            {t('email.attachments.save')}
           </MenuItem>
           <MenuItem onClick={onShowInFolder}>
             <FolderOpen size={14} />
-            Show in Folder
+            {t('email.attachments.showFolder')}
           </MenuItem>
         </>
       ) : (
         <>
           <MenuItem onClick={onDownload}>
             <Download size={14} />
-            Download
+            {t('email.attachments.download')}
           </MenuItem>
           <MenuItem onClick={onSaveAs}>
             <Save size={14} />
-            Save As...
+            {t('email.attachments.save')}
           </MenuItem>
         </>
       )}
@@ -119,6 +121,7 @@ function AttachmentContextMenu({ x, y, downloadedPath, onDownload, onSaveAs, onO
 }
 
 export function AttachmentItem({ attachment, attachmentIndex, emailUid, account, folder, accountId: accountIdProp, mailbox: mailboxProp, compact }) {
+  const t = useT();
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState(null);
   const [downloadedPath, setDownloadedPath] = useState(null);
@@ -309,9 +312,9 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, account,
             {error ? (
               <span className="text-mail-danger">{error}</span>
             ) : justDownloaded ? (
-              <span className="text-mail-success">Downloaded</span>
+              <span className="text-mail-success">{t('email.attachments.downloaded')}</span>
             ) : downloadedPath ? (
-              <span className="text-mail-text-muted">Click to open</span>
+              <span className="text-mail-text-muted">{t('email.attachments.clickOpen')}</span>
             ) : (
               formatSize(attachment.size)
             )}
@@ -353,6 +356,7 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, account,
 }
 
 export function DownloadAllButton({ attachments, emailUid, account, folder }) {
+  const t = useT();
   const [downloading, setDownloading] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const isTauri = !!window.__TAURI__;
@@ -426,7 +430,7 @@ export function DownloadAllButton({ attachments, emailUid, account, folder }) {
       ) : (
         <>
           <Download size={14} />
-          <span>Download All</span>
+          <span>{t('email.attachments.downloadAll')}</span>
         </>
       )}
     </button>

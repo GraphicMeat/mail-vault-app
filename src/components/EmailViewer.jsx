@@ -50,10 +50,12 @@ import { AddressText } from './email/AddressText';
 
 // Re-export AttachmentItem for any external consumers
 export { AttachmentItem } from './email/AttachmentBar';
+import { useT } from '../i18n/index.js';
 
 // ── Single Email Viewer ─────────────────────────────────────────────────────
 
 function EmailViewerComponent({ onComposeReply }) {
+  const t = useT();
   const selectedEmail = useSelectionStore(s => s.selectedEmail);
   const selectedEmailSource = useSelectionStore(s => s.selectedEmailSource);
   const selectedThread = useSelectionStore(s => s.selectedThread);
@@ -500,7 +502,7 @@ function EmailViewerComponent({ onComposeReply }) {
       <div className="flex-1 flex items-center justify-center bg-mail-bg h-full min-h-0">
         <div className="text-center text-mail-text-muted">
           <FileText size={48} className="mx-auto mb-4 opacity-30" />
-          <p>Select an email to read</p>
+          <p>{t('viewer.selectEmailRead')}</p>
         </div>
       </div>
     );
@@ -678,7 +680,7 @@ function EmailViewerComponent({ onComposeReply }) {
                 className="w-full border-0 h-full"
                 style={{ minHeight: '300px', display: 'block', maxWidth: '100%' }}
                 sandbox="allow-same-origin allow-popups allow-scripts"
-                title="Email content"
+                title={t('viewer.emailContent')}
                 onContextMenu={e => e.preventDefault()}
               />
             </div>
@@ -692,7 +694,7 @@ function EmailViewerComponent({ onComposeReply }) {
             >
               <AlertTriangle size={28} className="text-mail-warning" />
               <div>
-                <p className="text-sm font-medium text-mail-text">Couldn’t load this message</p>
+                <p className="text-sm font-medium text-mail-text">{t('viewer.couldnTLoadMessage')}</p>
                 <p className="text-xs text-mail-text-muted mt-1 max-w-md break-words">
                   {selectedEmail._bodyError}
                 </p>
@@ -704,7 +706,7 @@ function EmailViewerComponent({ onComposeReply }) {
                           border border-mail-border rounded-lg hover:bg-mail-surface-hover transition-colors"
               >
                 <RefreshCw size={14} />
-                Try again
+                {t('viewer.tryAgain')}
               </button>
             </div>
           ) : (
@@ -761,7 +763,7 @@ function EmailViewerComponent({ onComposeReply }) {
               onClick={e => e.stopPropagation()}
               className="bg-mail-surface border border-mail-border rounded-xl p-6 max-w-sm mx-4"
             >
-              <h3 className="text-lg font-semibold text-mail-text mb-2">Delete email?</h3>
+              <h3 className="text-lg font-semibold text-mail-text mb-2">{t('viewer.deleteEmail')}</h3>
               <p className="text-sm text-mail-text-muted mb-4">
                 {isArchived
                   ? 'This email is archived locally. Deleting from server will keep the archived copy.'
@@ -771,12 +773,12 @@ function EmailViewerComponent({ onComposeReply }) {
                 <Button variant="secondary" className="bg-mail-bg"
                   onClick={() => setConfirmDelete(false)}
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </Button>
                 <Button variant="danger"
                   onClick={confirmDeleteEmail}
                 >
-                  Delete
+                  {t('common.delete')}
                 </Button>
               </div>
             </motion.div>
@@ -813,7 +815,7 @@ function EmailViewerComponent({ onComposeReply }) {
                 <Button variant="secondary" className="bg-mail-bg"
                   onClick={() => setConfirmUnarchive(false)}
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </Button>
                 <Button variant="danger"
                   onClick={confirmRemoveLocal}

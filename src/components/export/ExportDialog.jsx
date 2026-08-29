@@ -7,6 +7,7 @@ import { hasPremiumAccess, useSettingsStore } from '../../stores/settingsStore';
 import { buildExport } from '../../services/export/exportService';
 import { saveOneFile, saveFilesToDirectory } from '../../services/export/exportSaver';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
+import { useT } from '../../i18n/index.js';
 
 // The label reads "Image" over a hint, but the accessible name is just the
 // choice: "One tall image" and "Separate images" both contain the word image,
@@ -29,6 +30,7 @@ function Choice({ name, value, checked, onChange, icon: Icon, label, hint }) {
 }
 
 export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgrade, onShowSamples }) {
+  const t = useT();
   const billingProfile = useSettingsStore(s => s.billingProfile);
   const isPremium = hasPremiumAccess(billingProfile);
 
@@ -91,8 +93,8 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
             Exporting is a Premium feature.
           </p>
           <div className="flex flex-col gap-2">
-            <Button variant="primary" size="lg" fullWidth onClick={() => onUpgrade?.()}>Upgrade</Button>
-            <Button variant="ghost" size="sm" fullWidth onClick={() => onShowSamples?.()}>See samples</Button>
+            <Button variant="primary" size="lg" fullWidth onClick={() => onUpgrade?.()}>{t('common.upgrade')}</Button>
+            <Button variant="ghost" size="sm" fullWidth onClick={() => onShowSamples?.()}>{t('export.dialog.seeSamples')}</Button>
             <PremiumFeaturesLink className="self-center mt-1" />
           </div>
         </>
@@ -117,9 +119,9 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
           <label className="flex items-start gap-2 cursor-pointer">
             <input type="checkbox" checked={mirror} onChange={e => setMirror(e.target.checked)} className="mt-0.5" />
             <span>
-              <span className="block text-sm text-mail-text">Mirror remote content</span>
+              <span className="block text-sm text-mail-text">{t('export.dialog.mirrorRemoteContent')}</span>
               <span className="block text-xs text-mail-text-muted">
-                Fetches images from the senders' servers so the file works offline.
+                {t('export.dialog.fetchesImagesSendersServersSo')}
               </span>
             </span>
           </label>
@@ -127,7 +129,7 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
           {notice && <p className="text-xs text-mail-danger">{notice}</p>}
 
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" size="sm" onClick={onClose} disabled={busy}>Cancel</Button>
+            <Button variant="ghost" size="sm" onClick={onClose} disabled={busy}>{t('common.cancel')}</Button>
             <Button variant="primary" size="sm" onClick={run} disabled={busy}>
               {busy ? <Loader size={14} className="animate-spin" /> : 'Export'}
             </Button>

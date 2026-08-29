@@ -11,6 +11,7 @@ import {
 import { SenderVerificationBadge } from './EmailHeaderComponent';
 import { SenderInfoPopover } from './SenderInfoPopover';
 import { getSenderName } from '../../utils/emailParser';
+import { useT } from '../../i18n/index.js';
 
 /**
  * Shared sender info component with three variants: single, thread, chat.
@@ -31,6 +32,7 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
   onAvatarClick,
   onNameClick,
 }) {
+  const t = useT();
   const [headerExpanded, setHeaderExpanded] = useState(false);
   // Sender Details popover (parity with chat view) — anchored to the clicked element
   const [detailsAnchor, setDetailsAnchor] = useState(null);
@@ -92,7 +94,7 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
       <div
         className="w-8 h-8 bg-mail-accent rounded-full flex items-center justify-center flex-shrink-0 cursor-pointer"
         onClick={openDetails}
-        title="Sender details"
+        title={t('email.sender.senderDetails')}
       >
         <span className="text-white font-semibold text-xs">{initial}</span>
       </div>
@@ -130,7 +132,7 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
               data-testid="sender-insights-toggle"
               onClick={(e) => { e.stopPropagation(); onToggleInsights?.(); }}
               className={`p-0.5 rounded transition-colors flex-shrink-0 ${showInsights ? 'text-mail-accent-text' : 'text-mail-text-muted hover:text-mail-text'}`}
-              title="Sender insights"
+              title={t('email.sender.senderInsights')}
             >
               <Info size={12} />
             </button>

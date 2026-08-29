@@ -11,8 +11,10 @@ import { vaultClause } from '../utils/custodyCopy';
 import { useMailStore } from '../stores/mailStore';
 import { _selKey } from '../stores/slices/unifiedHelpers';
 import { useExportStore } from '../stores/exportStore';
+import { useT } from '../i18n/index.js';
 
 export function SelectionActionBar() {
+  const t = useT();
   const selectedEmailIds = useSelectionStore(s => s.selectedEmailIds);
   const archivedEmailIds = useMessageListStore(s => s.archivedEmailIds);
   const clearSelection = useSelectionStore(s => s.clearSelection);
@@ -160,13 +162,13 @@ export function SelectionActionBar() {
             {/* Actions */}
             <Button variant="ghost" icon size="md"
               onClick={() => handleAction(markSelectedAsRead)}
-              title="Mark as read"
+              title={t('selection.markRead')}
             >
               <MailOpen size={16} className="text-mail-text-muted" />
             </Button>
             <Button variant="ghost" icon size="md"
               onClick={() => handleAction(markSelectedAsUnread)}
-              title="Mark as unread"
+              title={t('selection.markUnread')}
             >
               <Mail size={16} className="text-mail-text-muted" />
             </Button>
@@ -178,10 +180,10 @@ export function SelectionActionBar() {
               onClick={exportSelected}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors
                          text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover"
-              title="Export selected"
+              title={t('selection.exportSelected')}
             >
               <ImageDown size={15} />
-              <span className="text-xs font-medium">Export</span>
+              <span className="text-xs font-medium">{t('common.export')}</span>
             </button>
 
             {/* Archive — show when any unarchived emails selected */}
@@ -191,10 +193,10 @@ export function SelectionActionBar() {
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-mail-local"
                 onMouseEnter={e => e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--mail-local) 10%, transparent)'}
                 onMouseLeave={e => e.currentTarget.style.backgroundColor = ''}
-                title="Archive selected"
+                title={t('selection.archiveSelected')}
               >
                 <Archive size={15} />
-                <span className="text-xs font-medium">Archive</span>
+                <span className="text-xs font-medium">{t('common.archive')}</span>
               </button>
             )}
             {/* Unarchive — show when any archived emails selected */}
@@ -204,10 +206,10 @@ export function SelectionActionBar() {
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-mail-warning"
                 onMouseEnter={e => e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--mail-warning) 10%, transparent)'}
                 onMouseLeave={e => e.currentTarget.style.backgroundColor = ''}
-                title="Unarchive selected"
+                title={t('selection.unarchiveSelected')}
               >
                 <ArchiveRestore size={15} />
-                <span className="text-xs font-medium">Unarchive</span>
+                <span className="text-xs font-medium">{t('selection.unarchive')}</span>
               </button>
             )}
             <div className="relative">
@@ -215,10 +217,10 @@ export function SelectionActionBar() {
                 ref={moveButtonRef}
                 onClick={() => setShowMoveDropdown(v => !v)}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-mail-text-muted hover:bg-mail-surface-hover"
-                title="Move to folder"
+                title={t('selection.moveFolder')}
               >
                 <FolderSymlink size={15} />
-                <span className="text-xs font-medium">Move</span>
+                <span className="text-xs font-medium">{t('selection.move')}</span>
               </button>
               {showMoveDropdown && (
                 <div className="absolute bottom-full mb-2 left-0">
@@ -235,20 +237,20 @@ export function SelectionActionBar() {
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-mail-danger"
               onMouseEnter={e => e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--mail-danger) 10%, transparent)'}
               onMouseLeave={e => e.currentTarget.style.backgroundColor = ''}
-              title="Delete from server"
+              title={t('selection.deleteServer')}
             >
               <Trash2 size={15} />
-              <span className="text-xs font-medium">Delete</span>
+              <span className="text-xs font-medium">{t('common.delete')}</span>
             </button>
             <button
               onClick={handleDeleteEverywhere}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-mail-danger"
               onMouseEnter={e => e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--mail-danger) 10%, transparent)'}
               onMouseLeave={e => e.currentTarget.style.backgroundColor = ''}
-              title="Delete everywhere"
+              title={t('selection.deleteEverywhere')}
             >
               <ShieldX size={15} />
-              <span className="text-xs font-medium">Delete everywhere</span>
+              <span className="text-xs font-medium">{t('selection.deleteEverywhere')}</span>
             </button>
 
             <div className="w-px h-6 bg-mail-border" />
@@ -256,7 +258,7 @@ export function SelectionActionBar() {
             {/* Clear */}
             <Button variant="ghost" icon size="md"
               onClick={clearSelection}
-              title="Clear selection"
+              title={t('selection.clearSelection')}
             >
               <X size={16} className="text-mail-text-muted" />
             </Button>
@@ -286,7 +288,7 @@ export function SelectionActionBar() {
                     onClick={() => setDeleteMode(null)}
                     className="px-3 py-1.5 text-xs text-mail-text-muted hover:bg-mail-border rounded-lg transition-colors"
                   >
-                    Cancel
+                    {t('common.cancel')}
                   </button>
                   <button
                     onClick={confirmDelete}

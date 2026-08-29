@@ -20,9 +20,11 @@ import {
   Paperclip,
   Archive,
 } from 'lucide-react';
+import { useT } from '../i18n/index.js';
 
 // Thread row for default layout — shows collapsed thread with participant names and count
 export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelected, onSelectThread, onSetSelection, anyChecked, style, actions, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
+  const t = useT();
   const handleOpenMenu = React.useCallback(() => onOpenMenu(rowId), [onOpenMenu, rowId]);
   const { saveEmailsLocally } = actions;
 
@@ -137,7 +139,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
           <Button variant="ghost" icon size="sm" className="press hover:bg-mail-border"
             onClick={handleArchiveThread}
             disabled={isSaving}
-            title="Archive thread"
+            title={t('thread.archiveThread')}
           >
             {isSaving ? (
               <RefreshCw size={14} className="animate-spin text-mail-accent-text" />
@@ -157,6 +159,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
 
 // Compact thread row for compact layout
 export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, thread, isSelected, onSelectThread, onSetSelection, anyChecked, style, actions, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
+  const t = useT();
   const handleOpenMenu = React.useCallback(() => onOpenMenu(rowId), [onOpenMenu, rowId]);
   const { saveEmailsLocally } = actions;
 
@@ -258,7 +261,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
       {/* Hover actions */}
       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible bg-mail-surface-hover rounded-md px-1">
         {!allArchived && (
-          <Button variant="ghost" icon size="xs" className="press hover:bg-mail-border" onClick={handleArchiveThread} disabled={isSaving} title="Archive thread">
+          <Button variant="ghost" icon size="xs" className="press hover:bg-mail-border" onClick={handleArchiveThread} disabled={isSaving} title={t('thread.archiveThread')}>
             {isSaving ? <RefreshCw size={13} className="animate-spin text-mail-accent-text" />
               : <Archive size={13} className="text-mail-text-muted hover:text-mail-local" />}
           </Button>

@@ -22,6 +22,7 @@ import {
   Trash2,
   TrendingUp
 } from 'lucide-react';
+import { useT } from '../i18n/index.js';
 
 const LOCATION_OPTIONS = [
   { id: 'all', label: 'All', icon: Layers },
@@ -32,6 +33,7 @@ const LOCATION_OPTIONS = [
 ];
 
 export function SearchBar() {
+  const t = useT();
   const searchQuery = useSearchStore(s => s.searchQuery);
   const searchFilters = useSearchStore(s => s.searchFilters);
   const searchActive = useSearchStore(s => s.searchActive);
@@ -193,7 +195,7 @@ export function SearchBar() {
             value={localQuery}
             onChange={(e) => setLocalQuery(e.target.value)}
             onFocus={() => searchHistory.length > 0 && setShowHistory(true)}
-            placeholder="Search emails..."
+            placeholder={t('search.searchEmails')}
             className="w-full pl-9 pr-20 py-2 bg-mail-bg border border-mail-border rounded-lg
                       text-mail-text placeholder-mail-text-muted text-sm
                       focus:border-mail-accent focus:outline-none transition-colors"
@@ -250,7 +252,7 @@ export function SearchBar() {
               >
                 <h4 className="font-medium text-mail-text mb-3 flex items-center gap-2">
                   <Filter size={14} />
-                  Search Filters
+                  {t('search.searchFilters')}
                 </h4>
 
                 <div className="space-y-3">
@@ -258,7 +260,7 @@ export function SearchBar() {
                   <div>
                     <label className="text-xs text-mail-text-muted mb-1 flex items-center gap-1">
                       <Folder size={12} />
-                      Folder
+                      {t('common.folder')}
                     </label>
                     <select
                       value={searchFilters.folder}
@@ -267,7 +269,7 @@ export function SearchBar() {
                                 text-sm text-mail-text focus:border-mail-accent focus:outline-none"
                     >
                       <option value="current">Current folder ({decodeImapUtf7(activeMailbox)})</option>
-                      <option value="all">All folders</option>
+                      <option value="all">{t('search.allFolders')}</option>
                       {/* Flattened: a nested folder is a search target like any
                           other, and the top-level list left 50 of bson73's 59
                           unpickable. */}
@@ -290,7 +292,7 @@ export function SearchBar() {
                       type="text"
                       value={searchFilters.sender}
                       onChange={(e) => handleFilterChange('sender', e.target.value)}
-                      placeholder="Email or name..."
+                      placeholder={t('search.emailName')}
                       className="w-full px-3 py-1.5 bg-mail-bg border border-mail-border rounded-lg
                                 text-sm text-mail-text placeholder-mail-text-muted
                                 focus:border-mail-accent focus:outline-none"
@@ -302,7 +304,7 @@ export function SearchBar() {
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-xs text-mail-text-muted flex items-center gap-1">
                         <Calendar size={12} />
-                        Date range
+                        {t('search.dateRange')}
                       </label>
                       {(searchFilters.dateFrom || searchFilters.dateTo) && (
                         <button
@@ -312,7 +314,7 @@ export function SearchBar() {
                           }}
                           className="text-xs text-mail-text-muted hover:text-mail-accent-text transition-colors"
                         >
-                          Reset
+                          {t('common.reset')}
                         </button>
                       )}
                     </div>
@@ -391,8 +393,8 @@ export function SearchBar() {
                       </div>
                     </div>
                     <div className="flex justify-between mt-1 text-[10px] text-mail-text-muted">
-                      <span>From</span>
-                      <span>To</span>
+                      <span>{t('common.from')}</span>
+                      <span>{t('common.to')}</span>
                     </div>
                   </div>
 
@@ -405,7 +407,7 @@ export function SearchBar() {
                       className="custom-checkbox"
                     />
                     <Paperclip size={12} className="text-mail-text-muted" />
-                    <span className="text-sm text-mail-text">Has attachments</span>
+                    <span className="text-sm text-mail-text">{t('search.hasAttachments')}</span>
                   </label>
 
                   {/* Clear filters */}
@@ -424,7 +426,7 @@ export function SearchBar() {
                     className="w-full mt-2 px-3 py-1.5 text-sm text-mail-text-muted
                               hover:text-mail-text hover:bg-mail-bg rounded-lg transition-colors"
                   >
-                    Clear all filters
+                    {t('search.clearAllFilters')}
                   </button>
                 </div>
               </motion.div>
@@ -438,7 +440,7 @@ export function SearchBar() {
           className="px-4 py-2 bg-mail-accent-fill hover:bg-mail-accent-hover text-white
                     font-medium rounded-lg text-sm transition-colors"
         >
-          Search
+          {t('search.search')}
         </button>
       </form>
 
@@ -488,13 +490,13 @@ export function SearchBar() {
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-xs font-medium text-mail-text-muted flex items-center gap-1">
                     <Clock size={12} />
-                    Recent searches
+                    {t('search.recentSearches')}
                   </h4>
                   <button
                     onClick={clearSearchHistory}
                     className="text-xs text-mail-text-muted hover:text-mail-danger transition-colors"
                   >
-                    Clear all
+                    {t('search.clearAll')}
                   </button>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -545,7 +547,7 @@ export function SearchBar() {
             </span>
           ) : (
             <>
-              Found <span className="font-medium text-mail-text">{searchResults.length}</span> results
+              {t('search.found')} <span className="font-medium text-mail-text">{searchResults.length}</span> results
               {searchFilters.folder === 'current' && ` in ${decodeImapUtf7(activeMailbox)}`}
               {searchFilters.folder === 'all' && ' in all folders'}
               {searchResults.length > 0 && (
