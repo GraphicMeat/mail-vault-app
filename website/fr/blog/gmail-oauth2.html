@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="fr" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ajouter OAuth2 pour Gmail : un seul flux, deux fournisseurs - Blog MailVault</title>
+  <meta name="description" content="Comment nous avons ajouté OAuth2 pour Gmail à MailVault en rendant le flux OAuth2 Microsoft existant indépendant du fournisseur.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/fr/blog/gmail-oauth2.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/fr/blog/gmail-oauth2.html">
+  <meta property="og:title" content="Ajouter OAuth2 pour Gmail : un seul flux, deux fournisseurs - Blog MailVault">
+  <meta property="og:description" content="Comment nous avons ajouté OAuth2 pour Gmail à MailVault en rendant le flux OAuth2 Microsoft existant indépendant du fournisseur.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="fr_FR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Ajouter OAuth2 pour Gmail : un seul flux, deux fournisseurs - Blog MailVault">
+  <meta name="twitter:description" content="Comment nous avons ajouté OAuth2 pour Gmail à MailVault en rendant le flux OAuth2 Microsoft existant indépendant du fournisseur.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/gmail-oauth2.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/gmail-oauth2.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/gmail-oauth2.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/gmail-oauth2.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/gmail-oauth2.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/gmail-oauth2.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/gmail-oauth2.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/gmail-oauth2.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/gmail-oauth2.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/gmail-oauth2.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/fr/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/fr/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Fonctionnalités</a>
+          <a href="/fr/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Cas d'usage</a>
+          <a href="/fr/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/fr/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="Changer de thème">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Télécharger
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/fr/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Fonctionnalités</a>
+          <a href="/fr/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Cas d'usage</a>
+          <a href="/fr/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/fr/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Télécharger</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/fr/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Retour au blog
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-02-20" class="text-sm text-primary-500 font-medium">20 février 2026</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Ajouter OAuth2 pour Gmail : un seul flux, deux fournisseurs</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>4 min de lecture</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Quand nous avons livré OAuth2 pour Microsoft en v1.2.0, l'objectif était clair : permettre aux utilisateurs de se connecter avec leur compte Microsoft existant plutôt que de générer un mot de passe d'application. Cela fonctionnait bien pour les comptes Outlook, Hotmail et M365. L'étape suivante allait de soi : Gmail &mdash; le fournisseur d'e-mail le plus utilisé au monde.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Pourquoi OAuth2 compte</h3>
+
+          <p>
+            Google restreint l'accès à IMAP depuis des années. Si vous avez activé la 2FA (et vous devriez), il vous faut un <a href="https://support.google.com/accounts/answer/185833" class="text-primary-500 hover:text-primary-600 underline">mot de passe d'application</a> pour utiliser un client de messagerie tiers. Les mots de passe d'application fonctionnent, mais ils sont obscurs, faciles à oublier, et donnent l'impression d'un bricolage. OAuth2 permet à l'utilisateur de cliquer sur « Se connecter avec Google », de s'authentifier dans son navigateur et de revenir dans l'application &mdash; aucun mot de passe recopié, aucune page de réglages à explorer.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">L'implémentation</h3>
+
+          <p>
+            MailVault disposait déjà d'un flux OAuth2 PKCE fonctionnel pour Microsoft, écrit en Rust. L'architecture a trois parties : un serveur TCP de rappel local sur <code>localhost:19876</code> qui reçoit la redirection après la connexion dans le navigateur, une fonction d'échange qui troque le code d'autorisation contre des jetons d'accès et de rafraîchissement, et l'authentification SASL XOAUTH2 pour IMAP et SMTP.
+          </p>
+
+          <p>
+            Ajouter Google supposait de rendre tout cela indépendant du fournisseur. Au lieu de coder en dur les points d'accès de Microsoft, nous avons refactorisé le module OAuth2 en Rust pour qu'il accepte la configuration du fournisseur à l'exécution &mdash; URL d'autorisation, URL de jeton, portées et identifiant client viennent tous de l'interface au moment où le flux démarre.
+          </p>
+
+          <p>
+            Pour l'identifiant client, nous avons suivi la même approche que pour Microsoft : utiliser un identifiant de client public bien connu. Thunderbird, le client de messagerie open source de Mozilla, enregistre des clients OAuth2 publics chez Google comme chez Microsoft. MailVault utilise l'identifiant client Google de Thunderbird (<code>406964657835-aq8lmia8j95dhl1a2bvharmfk3t1hgqj.apps.googleusercontent.com</code>) avec la portée <code>https://mail.google.com/</code>, qui donne un accès IMAP et SMTP complet.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Ce qui a changé dans le code</h3>
+
+          <p>
+            Côté Rust, il fallait une nouvelle commande <code>oauth2_start</code> qui accepte des paramètres propres au fournisseur (URL d'autorisation, URL de jeton, portées, identifiant client) au lieu de supposer Microsoft. Le serveur de rappel et la logique PKCE n'ont pas bougé &mdash; OAuth2 reste OAuth2, quel que soit le fournisseur.
+          </p>
+
+          <p>
+            Côté frontend, le composant <code>AccountModal</code> affiche désormais un bouton « Se connecter avec Google » pour les comptes Gmail, à côté de l'option de repli « Utiliser plutôt un mot de passe d'application ». Le bouton déclenche le même flux OAuth2, simplement avec les points d'accès et les portées de Google au lieu de ceux de Microsoft. Après authentification, le jeton d'accès sert à l'authentification SASL XOAUTH2, en IMAP (<code>imap.gmail.com</code>) comme en SMTP (<code>smtp.gmail.com</code>).
+          </p>
+
+          <p>
+            Le rafraîchissement des jetons fonctionne exactement comme pour Microsoft : quand un jeton d'accès expire (en général au bout d'une heure), MailVault le renouvelle automatiquement avec le jeton de rafraîchissement stocké. L'utilisateur n'a jamais à se réauthentifier, sauf s'il révoque l'accès depuis les réglages de son compte Google.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Le résultat</h3>
+
+          <p>
+            Les utilisateurs de Gmail peuvent désormais cliquer sur un bouton, se connecter via la page de connexion standard de Google, et utiliser MailVault immédiatement. Pas de mot de passe d'application, aucun réglage IMAP à chercher, pas d'interrupteur « applications moins sécurisées ». Cela fonctionne avec la 2FA, Google Workspace et les comptes Gmail personnels.
+          </p>
+
+          <p>
+            La même infrastructure OAuth2 est maintenant prête pour tout futur fournisseur qui prend en charge OAuth2 standard &mdash; le module Rust est entièrement indépendant du fournisseur.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/fr/docs.html" class="hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/fr/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Confidentialité</a>
+          <a href="/fr/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Conditions</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. Tous droits réservés.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="Choisir une langue" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/blog/gmail-oauth2.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/blog/gmail-oauth2.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/blog/gmail-oauth2.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/blog/gmail-oauth2.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/blog/gmail-oauth2.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/blog/gmail-oauth2.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/blog/gmail-oauth2.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/blog/gmail-oauth2.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/blog/gmail-oauth2.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

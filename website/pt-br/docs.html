@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Docs — MailVault</title>
+  <meta name="description" content="Documentação, guias de configuração e fluxos de arquivamento do MailVault. Aprenda a arquivar e-mails localmente, liberar espaço no servidor e configurar suas contas.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/pt-br/docs.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/pt-br/docs.html">
+  <meta property="og:title" content="Docs — MailVault">
+  <meta property="og:description" content="Documentação, guias de configuração e fluxos de arquivamento do MailVault. Aprenda a arquivar e-mails localmente, liberar espaço no servidor e configurar suas contas.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="pt_BR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Docs — MailVault">
+  <meta name="twitter:description" content="Documentação, guias de configuração e fluxos de arquivamento do MailVault. Aprenda a arquivar e-mails localmente, liberar espaço no servidor e configurar suas contas.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/docs.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/docs.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/docs.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/docs.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/docs.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/docs.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/docs.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/docs.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/docs.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/docs.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/pt-br/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="Logo do MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/pt-br/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Recursos</a>
+          <a href="/pt-br/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Casos de uso</a>
+          <a href="/pt-br/docs.html" class="text-primary-500 font-medium">Docs</a>
+          <a href="/pt-br/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="Alternar tema">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Download
+          </a>
+          <!-- Mobile menu button -->
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile menu -->
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/pt-br/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Recursos</a>
+          <a href="/pt-br/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Casos de uso</a>
+          <a href="/pt-br/docs.html" class="px-3 py-2 rounded-lg text-primary-500 font-medium">Docs</a>
+          <a href="/pt-br/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <h1 class="text-4xl font-bold mb-2">Documentação</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-12">Guias, fluxos de trabalho e respostas para tirar o máximo do MailVault.</p>
+
+      <!-- Guides -->
+      <h2 class="text-2xl font-bold mb-4">Guias</h2>
+      <div class="space-y-4 mb-12">
+
+        <a href="/pt-br/guides/archive-imap-emails-locally.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Como arquivar e-mails IMAP localmente</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Aprenda a baixar e arquivar seus e-mails IMAP no armazenamento local no macOS e no Linux.</p>
+        </a>
+
+        <a href="/pt-br/guides/free-up-email-storage.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Como liberar espaço de e-mail</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Caixa postal cheia? Arquive os e-mails localmente e depois apague-os do servidor com segurança para recuperar espaço.</p>
+        </a>
+
+        <a href="/pt-br/guides/keep-emails-after-server-deletion.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Como manter e-mails depois de apagá-los do servidor</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Apague e-mails do seu servidor sem perdê-los. Arquive localmente primeiro e guarde para sempre.</p>
+        </a>
+
+        <a href="/pt-br/guides/mailstore-alternative-mac.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Melhor alternativa ao MailStore para Mac</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Procurando uma alternativa ao MailStore no Mac? Compare o MailVault &mdash; gratuito, código aberto, nativo do macOS.</p>
+        </a>
+
+        <a href="/pt-br/guides/gmail-storage-full.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Armazenamento do Gmail cheio? Veja como resolver</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">O que realmente libera espaço no Gmail, em ordem de esforço &mdash; e como impedir que o problema volte.</p>
+        </a>
+
+        <a href="/pt-br/guides/download-all-gmail-emails.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Como baixar todos os seus e-mails do Gmail</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Google Takeout ou um arquivo IMAP &mdash; como cada um funciona e qual você realmente quer.</p>
+        </a>
+
+        <a href="/pt-br/guides/backup-email-before-closing-account.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Faça backup do e-mail antes de encerrar uma conta</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Um checklist passo a passo para copiar todas as pastas antes de uma conta ser encerrada de vez.</p>
+        </a>
+
+        <a href="/pt-br/guides/yahoo-mail-backup.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Como fazer backup do Yahoo Mail</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">O Yahoo não aceita senhas de aplicativo &mdash; veja o fluxo de conexão que realmente funciona.</p>
+        </a>
+
+        <a href="/pt-br/guides/leave-gmail-keep-your-emails.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Como sair do Gmail sem perder seus e-mails</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Trocando de provedor? Arquive primeiro seu histórico do Gmail e depois migre no seu ritmo.</p>
+        </a>
+
+        <a href="/pt-br/guides/imap-backup-tool-checklist.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Ferramenta de backup IMAP: o que procurar</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Um checklist honesto para avaliar qualquer ferramenta de backup de e-mail &mdash; formato de arquivo, autenticação e posse dos dados.</p>
+        </a>
+
+        <a href="/pt-br/guides/outlook-hotmail-mailbox-full.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Caixa postal do Outlook.com / Hotmail cheia?</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Como ver o que está ocupando seu armazenamento e arquivar e-mails antigos antes de pagar por mais.</p>
+        </a>
+
+        <a href="/pt-br/guides/export-icloud-mail.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Como exportar o iCloud Mail para o seu computador</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">O iCloud não tem botão de exportação &mdash; veja a configuração de IMAP e de senha de aplicativo que funciona.</p>
+        </a>
+
+        <a href="/pt-br/guides/delete-thousands-of-old-emails-safely.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Como apagar milhares de e-mails antigos com segurança</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Um processo seguro para apagar e-mails antigos em massa sem perder nada de que você possa precisar depois.</p>
+        </a>
+
+        <a href="/pt-br/guides/email-archiving-for-freelancers.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Arquivamento de e-mail para freelancers e pequenas empresas</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">O e-mail do cliente costuma ser seu único registro de escopo e de aprovações &mdash; como guardá-lo para sempre.</p>
+        </a>
+
+      </div>
+
+      <!-- Compare -->
+      <h2 class="text-2xl font-bold mb-4">Comparações</h2>
+      <div class="space-y-4 mb-12">
+
+        <a href="/pt-br/compare/mailvault-vs-apple-mail.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">MailVault vs Apple Mail</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Como o arquivamento dedicado do MailVault se compara ao Apple Mail para backup local de e-mail.</p>
+        </a>
+
+        <a href="/pt-br/compare/mailvault-vs-thunderbird.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">MailVault vs Thunderbird</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Compare fluxos de arquivamento, formatos de armazenamento e qual é melhor para retenção de e-mail.</p>
+        </a>
+
+        <a href="/pt-br/compare/mailvault-vs-paying-for-storage.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">MailVault vs pagar por mais armazenamento</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Pare de pagar por mais espaço de e-mail. Arquive localmente e reduza seu plano.</p>
+        </a>
+
+      </div>
+
+      <!-- Reference -->
+      <h2 class="text-2xl font-bold mb-4">Referência</h2>
+      <div class="space-y-4">
+
+        <a href="/pt-br/faq.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">FAQ</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Perguntas comuns sobre o MailVault, formatos de e-mail, armazenamento, segurança e provedores.</p>
+        </a>
+
+        <a href="/pt-br/features.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Todos os recursos</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Lista completa de recursos, com detalhes sobre gerenciamento de e-mail, segurança, desempenho e mais.</p>
+        </a>
+
+        <a href="/changelog.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Changelog</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Histórico de versões e o que há de novo em cada uma.</p>
+        </a>
+
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="Logo do MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/pt-br/docs.html" class="hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/pt-br/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacidade</a>
+          <a href="/pt-br/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Termos</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. Todos os direitos reservados.
+        </p>
+      </div>
+    </div>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+            <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+        <span>Preparado em uma <span class="text-primary-500 font-semibold">GPU aberta</span> por</span>
+        <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
+          <img src="/graphicmeat-logo.webp" alt="Feito pela Graphic Meat" class="w-full max-w-[400px] h-auto" width="512" height="512" loading="lazy" decoding="async">
+        </a>
+      </div>
+    </div>
+
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="Escolha um idioma" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/docs.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/docs.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/docs.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/docs.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/docs.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/docs.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/docs.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/docs.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/docs.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    // Initialize theme
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MailVault 与 Thunderbird 在本地邮件留存上的对比</title>
+  <meta name="description" content="MailVault 与 Thunderbird 在本地归档邮件上的对比。对比归档流程、存储格式，以及哪一个更适合邮件备份和长期留存。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/compare/mailvault-vs-thunderbird.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/compare/mailvault-vs-thunderbird.html">
+  <meta property="og:title" content="MailVault 与 Thunderbird 在本地邮件留存上的对比">
+  <meta property="og:description" content="MailVault 与 Thunderbird 在本地归档邮件上的对比。对比归档流程、存储格式，以及哪一个更适合邮件备份和长期留存。">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MailVault 与 Thunderbird 在本地邮件留存上的对比">
+  <meta name="twitter:description" content="MailVault 与 Thunderbird 在本地归档邮件上的对比。对比归档流程、存储格式，以及哪一个更适合邮件备份和长期留存。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+  </style>
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "MailVault 与 Thunderbird 在本地邮件留存上的对比",
+  "description": "MailVault 与 Thunderbird 在本地归档邮件上的对比。对比归档流程、存储格式，以及哪一个更适合邮件备份和长期留存。",
+  "url": "https://mailvaultapp.com/zh/compare/mailvault-vs-thunderbird.html",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "datePublished": "2026-03-15",
+  "dateModified": "2026-03-15",
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/compare/mailvault-vs-thunderbird.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/compare/mailvault-vs-thunderbird.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/compare/mailvault-vs-thunderbird.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/compare/mailvault-vs-thunderbird.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/compare/mailvault-vs-thunderbird.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/compare/mailvault-vs-thunderbird.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/compare/mailvault-vs-thunderbird.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/compare/mailvault-vs-thunderbird.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/compare/mailvault-vs-thunderbird.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/compare/mailvault-vs-thunderbird.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/zh/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/zh/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="切换主题">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            下载
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/zh/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">下载</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/zh/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        返回首页
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">MailVault 与 Thunderbird 在本地邮件留存上的对比</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>5 分钟阅读</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Thunderbird 是现有开源邮件客户端里能力最强的之一。它已经存在二十多年，支持扩展，自带日历，也把邮件存在本地。如果你想要一个功能齐全的桌面邮件客户端，Thunderbird 是个扎实的选择。
+          </p>
+
+          <p>
+            但当目标明确是<strong>为长期留存而归档邮件</strong>时，Thunderbird 的通用型设计就带来了一些取舍，而专做归档的工具可以避开它们。下面是两者在邮件备份和本地存储上的对比。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">功能对比</h3>
+
+          <div class="scroll-x overflow-x-auto">
+            <table class="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-300 dark:border-slate-600">
+                  <th class="py-3 pr-4 font-semibold">功能</th>
+                  <th class="py-3 pr-4 font-semibold">Thunderbird</th>
+                  <th class="py-3 font-semibold">MailVault</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-600 dark:text-slate-400">
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">存储格式</td>
+                  <td class="py-3 pr-4">mbox（每个文件夹一个文件）</td>
+                  <td class="py-3">Maildir（每封邮件一个 .eml 文件）</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">批量归档流程</td>
+                  <td class="py-3 pr-4">手动 &mdash; 拖到「本地文件夹」</td>
+                  <td class="py-3">专用 &mdash; 选中、归档、跟踪进度</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">归档 + 从服务器删除</td>
+                  <td class="py-3 pr-4">没有内置流程</td>
+                  <td class="py-3">支持 &mdash; 先归档到本地，再从服务器删除</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">后台缓存</td>
+                  <td class="py-3 pr-4">按需同步</td>
+                  <td class="py-3">带重试的并发流水线</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">损坏风险</td>
+                  <td class="py-3 pr-4">较高 &mdash; 每个文件夹一个 mbox 文件</td>
+                  <td class="py-3">较低 &mdash; 每封邮件一个文件</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">邮件可迁移性</td>
+                  <td class="py-3 pr-4">需要导出或复制配置目录</td>
+                  <td class="py-3">标准 .eml 文件，随处复制</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">完整邮件客户端</td>
+                  <td class="py-3 pr-4">是 &mdash; 撰写、日历、扩展</td>
+                  <td class="py-3">基础 &mdash; 阅读、回复、撰写</td>
+                </tr>
+                <tr>
+                  <td class="py-3 pr-4">插件 / 扩展</td>
+                  <td class="py-3 pr-4">生态庞大</td>
+                  <td class="py-3">不支持</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <figure class="pt-2">
+            <img src="/screenshots/selection-dialog-1440.webp" srcset="/screenshots/selection-dialog-720.webp 720w, /screenshots/selection-dialog-1440.webp 1440w, /screenshots/selection-dialog-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 704px" alt="MailVault 批量选择对话框，带日期范围预设和归档操作" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" loading="lazy" width="1440" height="928" decoding="async">
+            <figcaption class="mt-3 text-sm text-slate-500 dark:text-slate-400">MailVault 里的批量归档：挑一个范围，选择归档或归档并删除，看着它跑完。</figcaption>
+          </figure>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">存储格式这个问题</h3>
+
+          <p>
+            这是最重要的技术差异。Thunderbird 用的是 <strong>mbox</strong>，这种格式把一个文件夹里的每封邮件串成一个文件。一个装着 10000 封邮件的文件夹就是一个大文件。它有个实际的坏处：这个文件一旦损坏 &mdash; 写入时崩溃、磁盘出错，或者压缩过程被打断 &mdash; 你可能会丢掉整个文件夹。
+          </p>
+
+          <p>
+            MailVault 用的是 <strong>Maildir</strong>，每封邮件都存成一个独立的 <code>.eml</code> 文件。一个文件坏了，受影响的只有那一封邮件。归档的其余部分毫发无损。对看重数据完整性的长期归档来说，Maildir 是更稳妥的选择。
+          </p>
+
+          <p>
+            还有可移植性上的好处。一个 <code>.eml</code> 文件就是一封标准的 RFC 5322 邮件。你可以用任何邮件客户端打开它、把它作为附件发出去，或者导入到另一个系统里。而要从 Thunderbird 的 mbox 文件里取出单封邮件，需要专门的工具。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">归档流程</h3>
+
+          <p>
+            Thunderbird 也能归档邮件，但流程是手动的。你选中邮件，把它们移到「本地文件夹」，然后祈祷那个 mbox 文件保持健康。它没有内置「把这些邮件归档到本地，然后从服务器移除以腾出空间」这个概念。删除那一步得你自己来，还要小心，先确认本地副本是完整的。
+          </p>
+
+          <p>
+            MailVault 正是围绕这套流程做的。选中你想归档的邮件，点归档，看着进度条走完。归档之后，你就可以放心地从服务器删掉它们。后台缓存流水线会确保邮件（包括附件）完整下载之后，才算归档完成。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">什么时候 Thunderbird 更合适</h3>
+
+          <p>
+            作为<em>邮件客户端</em>，Thunderbird 比 MailVault 强得多。如果你需要一个日常主力邮件工具，带日历集成、联系人管理、扩展、邮件过滤器或多身份支持，Thunderbird 是更强的选择。它的扩展生态几乎让你什么都能定制。对于希望用一个应用满足全部邮件需求的资深用户，Thunderbird 很难被取代。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">什么时候 MailVault 更合适</h3>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>专做归档：</strong>如果你的目标就是归档旧邮件、腾出服务器空间，MailVault 这套为此而生的流程比 Thunderbird 的手工做法更快也更稳妥。</li>
+            <li><strong>数据安全：</strong>Maildir 格式消除了 mbox 文件天生的单点失效风险。</li>
+            <li><strong>简单：</strong>MailVault 是一个专注的工具。你不必为了归档邮件去学一个复杂的邮件客户端。</li>
+            <li><strong>清理服务器：</strong>先归档再删除是产品的一等功能，而不是一串手工步骤。</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">它们可以配合得很好</h3>
+
+          <p>
+            MailVault 并不打算取代 Thunderbird 作为日常邮件客户端。很多用户用 Thunderbird（或别的客户端）处理日常邮件，需要归档旧邮件、清理服务器存储或做可迁移备份时才用 MailVault。这两个工具服务于不同目的，彼此互补。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">开始归档</h3>
+
+          <p>
+            MailVault 免费，支持任何 IMAP 邮件账户。几分钟设置好，归档你的旧邮件，把服务器空间拿回来。
+          </p>
+
+          <p>
+            <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="inline-flex lamp-bg text-white px-6 py-3 rounded-lg font-medium hover:opacity-90 transition-opacity no-underline">免费下载 MailVault</a>
+          </p>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400">
+            查看<a href="/zh/features.html" class="text-primary-500 hover:text-primary-600 underline">全部功能</a>、读一读<a href="/zh/faq.html" class="text-primary-500 hover:text-primary-600 underline">常见问题</a>，或者把 MailVault 与 <a href="/zh/compare/mailvault-vs-apple-mail.html" class="text-primary-500 hover:text-primary-600 underline">Apple Mail</a> 和<a href="/zh/compare/mailvault-vs-paying-for-storage.html" class="text-primary-500 hover:text-primary-600 underline">花钱买更多空间</a>作比较。
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/zh/docs.html" class="hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="hover:text-primary-500 transition-colors">博客</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">隐私</a>
+          <a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">更新日志</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">条款</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 保留所有权利。
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="选择语言" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/compare/mailvault-vs-thunderbird.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/compare/mailvault-vs-thunderbird.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/compare/mailvault-vs-thunderbird.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/compare/mailvault-vs-thunderbird.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/compare/mailvault-vs-thunderbird.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/compare/mailvault-vs-thunderbird.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/compare/mailvault-vs-thunderbird.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/compare/mailvault-vs-thunderbird.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/compare/mailvault-vs-thunderbird.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+</body>
+</html>

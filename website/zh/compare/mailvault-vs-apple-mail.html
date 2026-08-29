@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MailVault 与 Apple Mail 的邮件归档对比 — 哪个更好？</title>
+  <meta name="description" content="对比 MailVault 与 Apple Mail 在本地邮件归档上的表现。看看为什么在备份和清理服务器这件事上，MailVault 的专用归档流程胜过 Apple Mail。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/compare/mailvault-vs-apple-mail.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/compare/mailvault-vs-apple-mail.html">
+  <meta property="og:title" content="MailVault 与 Apple Mail 的邮件归档对比 — 哪个更好？">
+  <meta property="og:description" content="对比 MailVault 与 Apple Mail 在本地邮件归档上的表现。看看为什么在备份和清理服务器这件事上，MailVault 的专用归档流程胜过 Apple Mail。">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MailVault 与 Apple Mail 的邮件归档对比 — 哪个更好？">
+  <meta name="twitter:description" content="对比 MailVault 与 Apple Mail 在本地邮件归档上的表现。看看为什么在备份和清理服务器这件事上，MailVault 的专用归档流程胜过 Apple Mail。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+  </style>
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "MailVault 与 Apple Mail 的邮件归档对比 — 哪个更好？",
+  "description": "对比 MailVault 与 Apple Mail 在本地邮件归档上的表现。看看为什么在备份和清理服务器这件事上，MailVault 的专用归档流程胜过 Apple Mail。",
+  "url": "https://mailvaultapp.com/zh/compare/mailvault-vs-apple-mail.html",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "datePublished": "2026-03-15",
+  "dateModified": "2026-03-15",
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/compare/mailvault-vs-apple-mail.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/compare/mailvault-vs-apple-mail.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/compare/mailvault-vs-apple-mail.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/compare/mailvault-vs-apple-mail.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/compare/mailvault-vs-apple-mail.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/compare/mailvault-vs-apple-mail.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/compare/mailvault-vs-apple-mail.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/compare/mailvault-vs-apple-mail.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/compare/mailvault-vs-apple-mail.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/compare/mailvault-vs-apple-mail.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/zh/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/zh/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="切换主题">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            下载
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/zh/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">下载</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/zh/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        返回首页
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">MailVault 与 Apple Mail 的邮件归档对比 &mdash; 哪个更好？</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>5 分钟阅读</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Apple Mail 是一款出色的邮件客户端。每台 Mac 都自带它，它和 iCloud 同步顺畅，处理日常邮件也毫不费力。如果你的目标是读信和写信，Apple Mail 干得很好。
+          </p>
+
+          <p>
+            但 Apple Mail 从来就不是为<strong>邮件归档</strong>而设计的。如果你要把旧邮件备份到本地、腾出服务器空间，或者为重要邮件维护一份可移植的归档，它的局限很快就会显出来。这正是 MailVault 派上用场的地方。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">核心差别</h3>
+
+          <p>
+            Apple Mail 是一个<strong>通用邮件客户端</strong>。MailVault 是一个<strong>专门做邮件归档的工具</strong>。它们解决的是不同的问题，只有当手上的任务是归档、备份或清理服务器时，拿它们作比较才有意义。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">功能对比</h3>
+
+          <div class="scroll-x overflow-x-auto">
+            <table class="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-300 dark:border-slate-600">
+                  <th class="py-3 pr-4 font-semibold">功能</th>
+                  <th class="py-3 pr-4 font-semibold">Apple Mail</th>
+                  <th class="py-3 font-semibold">MailVault</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-600 dark:text-slate-400">
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">批量归档邮件</td>
+                  <td class="py-3 pr-4">不支持</td>
+                  <td class="py-3">支持 &mdash; 一次选中并归档数百封</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">归档 + 从服务器删除</td>
+                  <td class="py-3 pr-4">不支持</td>
+                  <td class="py-3">支持 &mdash; 先存到本地，再从服务器移除</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">存储格式</td>
+                  <td class="py-3 pr-4">专有数据库（emlx）</td>
+                  <td class="py-3">标准 .eml 文件（Maildir）</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">导出为 .eml</td>
+                  <td class="py-3 pr-4">一次一封，手动拖放</td>
+                  <td class="py-3">批量导出，ZIP 下载</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">归档进度跟踪</td>
+                  <td class="py-3 pr-4">不支持</td>
+                  <td class="py-3">支持 &mdash; 实时进度，可取消</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">离线访问归档邮件</td>
+                  <td class="py-3 pr-4">有限（取决于缓存）</td>
+                  <td class="py-3">完整 &mdash; 所有归档邮件都能离线访问</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">后台缓存</td>
+                  <td class="py-3 pr-4">没有专门的流水线</td>
+                  <td class="py-3">支持 &mdash; 并发后台下载</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">日常邮件客户端</td>
+                  <td class="py-3 pr-4">支持 &mdash; 功能完整</td>
+                  <td class="py-3">基础 &mdash; 阅读、回复、撰写</td>
+                </tr>
+                <tr>
+                  <td class="py-3 pr-4">iCloud / macOS 集成</td>
+                  <td class="py-3 pr-4">深度系统集成</td>
+                  <td class="py-3">独立应用</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <figure class="pt-2">
+            <img src="/screenshots/state-icons-1440.webp" srcset="/screenshots/state-icons-720.webp 720w, /screenshots/state-icons-1440.webp 1440w, /screenshots/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 704px" alt="MailVault 收件箱，逐封显示仅在服务器、已归档、仅在本地的状态图标" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" loading="lazy" width="1440" height="928" decoding="async">
+            <figcaption class="mt-3 text-sm text-slate-500 dark:text-slate-400">每一行都会告诉你这封邮件在哪里：在服务器上、在你的本地保险库里，还是只在这台 Mac 上。</figcaption>
+          </figure>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">什么时候 Apple Mail 更合适</h3>
+
+          <p>
+            如果你主要需要一个日常使用的邮件客户端，那么在 Mac 上很难有比 Apple Mail 更好的选择。它与 macOS 紧密结合 &mdash; Spotlight 会索引你的邮件，接力功能让你在 iPhone 上继续，iCloud 让一切保持同步。它的规则、贵宾联系人和智能邮箱让整理来信变得简单。就发送、接收和管理活跃邮件而言，Apple Mail 是专门为此打磨的。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">什么时候 MailVault 更合适</h3>
+
+          <p>
+            当目标从<em>使用</em>邮件转向<em>保存</em>邮件时，MailVault 才显出长处。以下是它更合适的常见场景：
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>清理服务器空间：</strong>你的邮箱满了，而服务商要收钱才给更多空间。把旧邮件归档到本地，从服务器上删掉，空间收回来了，东西一样没丢。</li>
+            <li><strong>合规与留存：</strong>出于法律或监管原因你必须保留邮件，但又不想让它们无限期地待在远端服务器上。</li>
+            <li><strong>可移植的备份：</strong>MailVault 把邮件存成标准的 .eml 文件。你可以用任何邮件客户端打开它们、搬到另一台机器上，或者备份到移动硬盘。Apple Mail 的专有数据库不是为可移植性设计的。</li>
+            <li><strong>更换服务商：</strong>如果你要从一家邮件服务商换到另一家，MailVault 让你在关掉旧账户之前把里面的一切都归档下来。</li>
+            <li><strong>离线优先的访问：</strong>MailVault 里归档过的邮件随时可用，断网也一样。Apple Mail 的离线访问取决于它缓存了什么。</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">存储格式很重要</h3>
+
+          <p>
+            Apple Mail 把邮件存在一个内部数据库里，用的是 <code>.emlx</code> 格式，外加一个配套的 SQLite 索引。只要你一直待在 Apple Mail 里，这没什么问题，但要把单封邮件取出来做备份或迁移就很麻烦。数据库一旦损坏，恢复起来很困难。
+          </p>
+
+          <p>
+            MailVault 用的是 <strong>Maildir</strong> 格式 &mdash; 每封邮件都是磁盘上一个独立的 <code>.eml</code> 文件。这和全世界的邮件服务器用的是同一种标准格式。就算 MailVault 明天就消失，你归档的邮件仍然能被 Thunderbird、Outlook 或任何支持 .eml 文件的客户端读取。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">它不是替代品</h3>
+
+          <p>
+            MailVault 并不是 Apple Mail 的完全替代品。它无意成为你的主力邮件客户端。它没有日历集成、智能邮箱或贵宾联系人。而它做的事 &mdash; 归档、本地留存和清理服务器 &mdash; 它做得比任何通用邮件客户端都好，因为那就是它存在的全部理由。
+          </p>
+
+          <p>
+            很多用户两个都用：Apple Mail 处理日常邮件，MailVault 做定期归档和备份。两者配合得很好。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">准备好开始归档了吗？</h3>
+
+          <p>
+            MailVault 免费，支持任何 IMAP 邮件账户 &mdash; Gmail、Outlook、Yahoo、iCloud 等等。下载它，接上你的账户，几分钟就能开始归档。
+          </p>
+
+          <p>
+            <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="inline-flex lamp-bg text-white px-6 py-3 rounded-lg font-medium hover:opacity-90 transition-opacity no-underline">免费下载 MailVault</a>
+          </p>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400">
+            查看<a href="/zh/features.html" class="text-primary-500 hover:text-primary-600 underline">全部功能</a>、读一读<a href="/zh/faq.html" class="text-primary-500 hover:text-primary-600 underline">常见问题</a>，或者把 MailVault 与 <a href="/zh/compare/mailvault-vs-thunderbird.html" class="text-primary-500 hover:text-primary-600 underline">Thunderbird</a> 和<a href="/zh/compare/mailvault-vs-paying-for-storage.html" class="text-primary-500 hover:text-primary-600 underline">花钱买更多空间</a>作比较。
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/zh/docs.html" class="hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="hover:text-primary-500 transition-colors">博客</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">隐私</a>
+          <a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">更新日志</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">条款</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 保留所有权利。
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="选择语言" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/compare/mailvault-vs-apple-mail.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/compare/mailvault-vs-apple-mail.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/compare/mailvault-vs-apple-mail.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/compare/mailvault-vs-apple-mail.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/compare/mailvault-vs-apple-mail.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/compare/mailvault-vs-apple-mail.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/compare/mailvault-vs-apple-mail.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/compare/mailvault-vs-apple-mail.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/compare/mailvault-vs-apple-mail.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+</body>
+</html>

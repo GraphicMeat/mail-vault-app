@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="it" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MailVault e Thunderbird per la conservazione locale della posta</title>
+  <meta name="description" content="MailVault e Thunderbird per archiviare le email in locale. Confronta i flussi di archiviazione, i formati di memorizzazione e quale dei due è meglio per backup e conservazione della posta.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/it/compare/mailvault-vs-thunderbird.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/it/compare/mailvault-vs-thunderbird.html">
+  <meta property="og:title" content="MailVault e Thunderbird per la conservazione locale della posta">
+  <meta property="og:description" content="MailVault e Thunderbird per archiviare le email in locale. Confronta i flussi di archiviazione, i formati di memorizzazione e quale dei due è meglio per backup e conservazione della posta.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="it_IT">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MailVault e Thunderbird per la conservazione locale della posta">
+  <meta name="twitter:description" content="MailVault e Thunderbird per archiviare le email in locale. Confronta i flussi di archiviazione, i formati di memorizzazione e quale dei due è meglio per backup e conservazione della posta.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+  </style>
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "MailVault e Thunderbird per la conservazione locale della posta",
+  "description": "MailVault e Thunderbird per archiviare le email in locale. Confronta i flussi di archiviazione, i formati di memorizzazione e quale dei due è meglio per backup e conservazione della posta.",
+  "url": "https://mailvaultapp.com/it/compare/mailvault-vs-thunderbird.html",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "datePublished": "2026-03-15",
+  "dateModified": "2026-03-15",
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/compare/mailvault-vs-thunderbird.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/compare/mailvault-vs-thunderbird.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/compare/mailvault-vs-thunderbird.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/compare/mailvault-vs-thunderbird.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/compare/mailvault-vs-thunderbird.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/compare/mailvault-vs-thunderbird.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/compare/mailvault-vs-thunderbird.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/compare/mailvault-vs-thunderbird.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/compare/mailvault-vs-thunderbird.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/compare/mailvault-vs-thunderbird.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/it/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/it/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Funzioni</a>
+          <a href="/it/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Casi d'uso</a>
+          <a href="/it/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="Cambia tema">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Download
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/it/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Funzioni</a>
+          <a href="/it/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Casi d'uso</a>
+          <a href="/it/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/it/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Torna alla home
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">MailVault e Thunderbird per la conservazione locale della posta</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>5 min di lettura</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Thunderbird è uno dei client di posta open source più capaci in circolazione. Esiste da oltre vent'anni, supporta le estensioni, include un calendario e conserva le email in locale. Se vuoi un client di posta desktop completo, Thunderbird è una scelta solida.
+          </p>
+
+          <p>
+            Ma quando l'obiettivo preciso è <strong>archiviare le email per conservarle a lungo</strong>, l'impostazione generalista di Thunderbird introduce compromessi che uno strumento dedicato all'archiviazione evita. Ecco come si confrontano i due per il backup della posta e l'archiviazione locale.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Confronto delle funzioni</h3>
+
+          <div class="scroll-x overflow-x-auto">
+            <table class="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-300 dark:border-slate-600">
+                  <th class="py-3 pr-4 font-semibold">Funzione</th>
+                  <th class="py-3 pr-4 font-semibold">Thunderbird</th>
+                  <th class="py-3 font-semibold">MailVault</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-600 dark:text-slate-400">
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">Formato di archiviazione</td>
+                  <td class="py-3 pr-4">mbox (un file per cartella)</td>
+                  <td class="py-3">Maildir (un file .eml per email)</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">Flusso di archiviazione in blocco</td>
+                  <td class="py-3 pr-4">Manuale &mdash; trascinamento nelle cartelle locali</td>
+                  <td class="py-3">Dedicato &mdash; seleziona, archivia, segui l'avanzamento</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">Archiviazione + eliminazione dal server</td>
+                  <td class="py-3 pr-4">Nessun flusso integrato</td>
+                  <td class="py-3">Sì &mdash; archivia in locale, poi elimina dal server</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">Caching in background</td>
+                  <td class="py-3 pr-4">Sincronizzazione su richiesta</td>
+                  <td class="py-3">Pipeline in parallelo con nuovi tentativi</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">Rischio di corruzione</td>
+                  <td class="py-3 pr-4">Più alto &mdash; un unico file mbox per cartella</td>
+                  <td class="py-3">Più basso &mdash; un file per email</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">Portabilità delle email</td>
+                  <td class="py-3 pr-4">Richiede un'esportazione o la copia del profilo</td>
+                  <td class="py-3">Normali file .eml, copiali dove vuoi</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 pr-4">Client di posta completo</td>
+                  <td class="py-3 pr-4">Sì &mdash; scrittura, calendario, estensioni</td>
+                  <td class="py-3">Di base &mdash; leggi, rispondi, scrivi</td>
+                </tr>
+                <tr>
+                  <td class="py-3 pr-4">Componenti aggiuntivi / estensioni</td>
+                  <td class="py-3 pr-4">Ecosistema ampio</td>
+                  <td class="py-3">No</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <figure class="pt-2">
+            <img src="/screenshots/selection-dialog-1440.webp" srcset="/screenshots/selection-dialog-720.webp 720w, /screenshots/selection-dialog-1440.webp 1440w, /screenshots/selection-dialog-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 704px" alt="Finestra di selezione in blocco di MailVault con intervalli di date preimpostati e azioni di archiviazione" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" loading="lazy" width="1440" height="928" decoding="async">
+            <figcaption class="mt-3 text-sm text-slate-500 dark:text-slate-400">Archiviazione in blocco in MailVault: scegli un intervallo, decidi se archiviare o archiviare ed eliminare, e guardala andare.</figcaption>
+          </figure>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">La questione del formato di archiviazione</h3>
+
+          <p>
+            È la differenza tecnica più importante. Thunderbird usa <strong>mbox</strong>, un formato che concatena tutte le email di una cartella in un unico file. Una cartella con 10.000 email è un solo file di grandi dimensioni. Questo ha uno svantaggio pratico: se quel file si corrompe &mdash; per un crash durante la scrittura, un errore del disco o una compattazione interrotta &mdash; puoi perdere l'intera cartella.
+          </p>
+
+          <p>
+            MailVault usa <strong>Maildir</strong>, dove ogni email è salvata come singolo file <code>.eml</code>. Se un file si corrompe, ne risente solo quella email. Il resto del tuo archivio resta intatto. Per un'archiviazione a lungo termine, in cui conta l'integrità dei dati, Maildir è la scelta più sicura.
+          </p>
+
+          <p>
+            C'è anche un vantaggio in termini di portabilità. Un file <code>.eml</code> è un normale messaggio RFC 5322. Puoi aprirlo in qualsiasi client di posta, allegarlo a un'altra email o importarlo in un altro sistema. I file mbox di Thunderbird richiedono strumenti specifici per estrarre i singoli messaggi.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Il flusso di archiviazione</h3>
+
+          <p>
+            Thunderbird può archiviare le email, ma il flusso è manuale. Selezioni i messaggi, li sposti nelle cartelle locali e speri che il file mbox resti sano. Non esiste un concetto integrato di "archivia queste email in locale e poi rimuovile dal server per liberare spazio". Il passaggio di eliminazione dovresti farlo tu, con attenzione, assicurandoti prima che la copia locale sia completa.
+          </p>
+
+          <p>
+            MailVault è stato costruito proprio intorno a questo flusso. Seleziona le email che vuoi archiviare, fai clic su archivia e guarda la barra di avanzamento. Una volta archiviate, puoi eliminarle dal server con tranquillità. La pipeline di caching in background garantisce che le email siano scaricate per intero (allegati compresi) prima che l'archiviazione sia considerata conclusa.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Quando è meglio Thunderbird</h3>
+
+          <p>
+            Come <em>client di posta</em> Thunderbird è molto più completo di MailVault. Se ti serve uno strumento quotidiano per la posta, con integrazione del calendario, gestione dei contatti, estensioni, filtri e supporto per più identità, Thunderbird è l'opzione più forte. Il suo ecosistema di estensioni ti permette di personalizzare quasi tutto. Per chi vuole una sola applicazione per ogni esigenza di posta, Thunderbird è difficile da battere.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Quando è meglio MailVault</h3>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Archiviazione dedicata:</strong> Se il tuo obiettivo è proprio archiviare le vecchie email e liberare spazio sul server, il flusso di lavoro pensato apposta da MailVault è più rapido e più sicuro dell'approccio manuale di Thunderbird.</li>
+            <li><strong>Sicurezza dei dati:</strong> Il formato Maildir elimina il rischio di singolo punto di guasto insito nei file mbox.</li>
+            <li><strong>Semplicità:</strong> MailVault è uno strumento mirato. Non devi imparare a usare un client di posta complesso solo per archiviare la tua posta.</li>
+            <li><strong>Pulizia del server:</strong> Il flusso archivia-poi-elimina è una funzione di prima classe, non una procedura manuale in più passaggi.</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Funzionano bene insieme</h3>
+
+          <p>
+            MailVault non prova a sostituire Thunderbird come client di posta quotidiano. Molti usano Thunderbird (o un altro client) per la posta di tutti i giorni e MailVault quando devono archiviare messaggi vecchi, liberare spazio sul server o creare backup portabili. I due strumenti servono a scopi diversi e si completano.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Comincia ad archiviare</h3>
+
+          <p>
+            MailVault è gratuito e funziona con qualsiasi account di posta IMAP. Configuralo in pochi minuti, archivia le tue vecchie email e riprenditi lo spazio sul server.
+          </p>
+
+          <p>
+            <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="inline-flex lamp-bg text-white px-6 py-3 rounded-lg font-medium hover:opacity-90 transition-opacity no-underline">Scarica MailVault gratis</a>
+          </p>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400">
+            Guarda <a href="/it/features.html" class="text-primary-500 hover:text-primary-600 underline">tutte le funzioni</a>, leggi le <a href="/it/faq.html" class="text-primary-500 hover:text-primary-600 underline">FAQ</a> oppure confronta MailVault con <a href="/it/compare/mailvault-vs-apple-mail.html" class="text-primary-500 hover:text-primary-600 underline">Apple Mail</a> e con il <a href="/it/compare/mailvault-vs-paying-for-storage.html" class="text-primary-500 hover:text-primary-600 underline">pagare per più spazio</a>.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/it/docs.html" class="hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacy</a>
+          <a href="/it/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Termini</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. Tutti i diritti riservati.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="Scegli una lingua" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/compare/mailvault-vs-thunderbird.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/compare/mailvault-vs-thunderbird.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/compare/mailvault-vs-thunderbird.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/compare/mailvault-vs-thunderbird.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/compare/mailvault-vs-thunderbird.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/compare/mailvault-vs-thunderbird.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/compare/mailvault-vs-thunderbird.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/compare/mailvault-vs-thunderbird.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/compare/mailvault-vs-thunderbird.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+</body>
+</html>

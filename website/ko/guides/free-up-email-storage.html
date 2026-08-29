@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>오래된 메일을 잃지 않고 메일 저장 공간을 확보하는 방법 — MailVault</title>
+  <meta name="description" content="메일함이 가득 찼습니까? MailVault로 메일을 로컬에 보관한 다음 서버에서 안전하게 삭제하십시오. 아무것도 잃지 않고 Gmail, Outlook, IMAP 저장 공간을 확보하십시오.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ko/guides/free-up-email-storage.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ko/guides/free-up-email-storage.html">
+  <meta property="og:title" content="오래된 메일을 잃지 않고 메일 저장 공간을 확보하는 방법 — MailVault">
+  <meta property="og:description" content="메일함이 가득 찼습니까? MailVault로 메일을 로컬에 보관한 다음 서버에서 안전하게 삭제하십시오. 아무것도 잃지 않고 Gmail, Outlook, IMAP 저장 공간을 확보하십시오.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ko_KR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="오래된 메일을 잃지 않고 메일 저장 공간을 확보하는 방법 — MailVault">
+  <meta name="twitter:description" content="메일함이 가득 찼습니까? MailVault로 메일을 로컬에 보관한 다음 서버에서 안전하게 삭제하십시오. 아무것도 잃지 않고 Gmail, Outlook, IMAP 저장 공간을 확보하십시오.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "오래된 메일을 잃지 않고 메일 저장 공간을 확보하는 방법",
+  "description": "메일함이 가득 찼습니까? MailVault로 메일을 로컬에 보관한 다음 서버에서 안전하게 삭제하십시오. 아무것도 잃지 않고 Gmail, Outlook, IMAP 저장 공간을 확보하십시오.",
+  "url": "https://mailvaultapp.com/ko/guides/free-up-email-storage.html",
+  "datePublished": "2026-03-15",
+  "dateModified": "2026-03-15",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/free-up-email-storage.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/ko/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/ko/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="테마 전환">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            다운로드
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/ko/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">다운로드</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/ko/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        홈으로 돌아가기
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">오래된 메일을 잃지 않고 메일 저장 공간을 확보하는 방법</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>5분 분량</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            어느 날 아침 메일을 열었더니 <strong>"메일함이 거의 가득 찼습니다"</strong>라는 경고가 보입니다. Gmail은 Gmail, Google Drive, Google Photos가 함께 쓰는 15 GB를 줍니다. Outlook은 15 GB를 줍니다. 그 한도에 닿으면 새 메일을 받지 못합니다. 이것은 가상의 상황이 아닙니다 &mdash; 수백만 명에게 실제로 일어나는 일이고, 흔히 듣는 조언은 나쁘거나 비쌉니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">흔한 (나쁜) 해결책</h3>
+
+          <p>
+            메일함이 차면 대부분 다음 중 하나를 시도합니다. 어느 것도 훌륭하지 않습니다:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>저장 공간을 더 사기</strong> &mdash; Google One은 100 GB에 $1.99/월부터, Microsoft 365는 $6.99/월부터입니다. 되기는 하지만 공간을 영원히 빌리는 셈입니다. 메일은 계속 늘고 청구서도 함께 늡니다. 원인이 아니라 증상을 다루는 것입니다.</li>
+            <li><strong>오래된 메일을 닥치는 대로 지우기</strong> &mdash; 크기순으로 정렬해 큰 것부터 지우고 휴지통을 비웁니다. 빠르지만 위험합니다. 3년 전의 그 첨부파일이 중요한 계약서의 유일한 사본일 수도 있습니다. 지우고 비워 버리면 끝입니다.</li>
+            <li><strong>수동으로 .mbox 내보내기</strong> &mdash; Google Takeout으로 Gmail 전체를 .mbox 파일 하나로 내려받을 수 있습니다. 문제는 .mbox 파일이 통짜라 검색하기 어렵고, 큰 파일은 대부분의 메일 클라이언트가 버거워한다는 점입니다. 백업이지 쓸 만한 보관본은 아닙니다.</li>
+            <li><strong>메일을 그냥 안 쓰기</strong> &mdash; 현실적인 선택지가 아닙니다.</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">더 나은 대안: 로컬에 보관한 다음 삭제</h3>
+
+          <p>
+            더 나은 작업 흐름이 있습니다. 간직할 메일을 로컬 디스크로 내려받고, 보관본이 완전한지 확인한 다음, 그 메일을 서버에서 삭제하는 것입니다. 서버 저장 공간이 확보되면서도 모든 메일은 자기 컴퓨터에서 검색하고 열어 볼 수 있습니다.
+          </p>
+
+          <p>
+            핵심은 <strong>로컬 보관과 서버 삭제가 별개의 두 단계</strong>라는 것입니다. 먼저 보관하고, 전부 저장되었는지 확인한 다음, 그때 서버에서 지웁니다. 데이터 손실도, 불안도 없습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailVault에서는 이렇게 됩니다</h3>
+
+          <p>
+            MailVault는 이 작업 흐름을 간단하게 만들어 주는 macOS와 Linux용 무료 데스크톱 앱입니다. 단계별 과정은 다음과 같습니다:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>계정 연결</strong> &mdash; Gmail, Outlook, Yahoo, 그 밖의 어떤 IMAP 계정이든 MailVault에 추가하십시오. TLS로 안전하게 연결하며 Google과 Microsoft는 OAuth2를 지원합니다.</li>
+            <li><strong>보관할 메일 선택</strong> &mdash; 메일함을 살펴보며 로컬에 저장할 메일을 고르십시오. 메시지 하나씩, 대화 전체, 또는 날짜 범위로 한 번에 고를 수 있습니다.</li>
+            <li><strong>디스크에 보관</strong> &mdash; MailVault가 메일 전체를 &mdash; 헤더, 본문, HTML 서식, 모든 첨부파일까지 &mdash; 내려받아 메시지마다 표준 <code>.eml</code> 파일로 컴퓨터에 저장합니다. 파일은 계정과 폴더별로 Maildir 구조에 정리됩니다.</li>
+            <li><strong>보관본 확인</strong> &mdash; 서버에서 무엇이든 지우기 전에 MailVault에서 보관한 메일 몇 통을 열어 온전한지 확인하십시오. 첨부파일이 멀쩡한지 보고, 특정 메시지를 검색해 거기 있는지 확인하십시오.</li>
+            <li><strong>서버에서 삭제</strong> &mdash; 로컬 보관본이 완전하다고 확신이 서면 보관한 메일을 서버에서 지우십시오. 서버 저장 공간은 비지만 모든 메시지는 디스크에 남습니다.</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">얼마나 되찾을 수 있습니까?</h3>
+
+          <p>
+            어떤 메일함에서든 저장 공간을 가장 많이 잡아먹는 것은 첨부파일입니다. PDF 청구서와 문서 첨부, 이미지 파일이 정기적으로 오간 몇 년치 메일이면 5-10 GB는 쉽게 찹니다. 예컨대 2년보다 오래된 메일을 보관한 뒤 지우면 할당량의 상당 부분을 되찾을 수 있습니다.
+          </p>
+
+          <p>
+            메일 자체(첨부 없는 텍스트와 HTML 본문)는 비교적 작습니다. 전형적인 메일 본문은 5-50 KB입니다. 저장 공간을 먹어 치우는 것은 첨부파일입니다. 전부 로컬에 보관한 뒤 첨부가 많은 오래된 메일을 서버에서 지우면, 최소한의 수고로 가장 많은 공간을 되찾습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Google Takeout이나 IMAP 내보내기를 쓰면 안 됩니까?</h3>
+
+          <p>
+            Google Takeout을 비롯한 내보내기 도구는 모든 메일이 담긴 통짜 <code>.mbox</code> 파일 하나를 줍니다. 여기에는 몇 가지 문제가 있습니다:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>검색 불가</strong> &mdash; .mbox 파일은 그저 거대한 텍스트 덩어리입니다. 다른 메일 클라이언트로 가져오지 않고서는 그 안을 검색하거나 메시지를 하나씩 살펴보기가 어렵습니다.</li>
+            <li><strong>손상 위험</strong> &mdash; 파일이 손상되면 보관본 전체를 잃을 수 있습니다. (MailVault가 쓰는) 개별 <code>.eml</code> 파일이라면 파일 하나가 손상되어도 메일 한 통에만 영향이 갑니다.</li>
+            <li><strong>전부 아니면 전무</strong> &mdash; Takeout은 전부 내보냅니다. 특정 폴더나 날짜 범위만 골라 보관할 수 없습니다.</li>
+            <li><strong>이어지는 작업 흐름 없음</strong> &mdash; Takeout은 일회성 내보내기입니다. 주기적으로 보관하고 공간을 비우는 작업 흐름을 주지는 않습니다.</li>
+          </ul>
+
+          <p>
+            MailVault는 메일을 각각 개별 <code>.eml</code> 파일로 저장합니다 &mdash; 어떤 메일 클라이언트든 열 수 있는 RFC 5322 표준 형식입니다. 보관본이 독점 형식이나 특정 도구에 묶이지 않습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">백그라운드 캐싱: 보관본을 자동으로 쌓기</h3>
+
+          <p>
+            메일을 일일이 고르지 않고 메일함 전체를 보관하고 싶다면 MailVault에는 백그라운드 캐싱 기능이 있습니다. 받은편지함을 살펴보는 동안 백그라운드에서 메일 내용을 내려받아 메일함 전체의 로컬 보관본을 조금씩 쌓아 갑니다. 전부 로컬에 캐시되고 나면 완전한 사본이 있다는 것을 알고 서버에서 지울 수 있습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">최종 결과</h3>
+
+          <p>
+            오래된 메일을 보관하고 삭제하고 나면 이렇게 됩니다:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li>서버의 메일함이 가벼워집니다 &mdash; 여유 공간이 늘고, 경고도 없고, 매달 나가는 저장 비용도 없습니다.</li>
+            <li>완전한 로컬 보관본이 생깁니다 &mdash; 모든 메일을 여전히 열고 검색할 수 있으며 첨부파일도 온전합니다.</li>
+            <li>표준 파일 &mdash; 외장 드라이브, NAS, 원하는 클라우드 저장소에 백업할 수 있는 <code>.eml</code> 파일입니다.</li>
+            <li>업체 종속이 없습니다 &mdash; 메일이 어떤 독자 규격에도 갇히지 않습니다.</li>
+          </ul>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">메일 저장 공간에 돈 그만 쓰기</p>
+            <p class="text-sm mb-4">MailVault로 메일을 로컬에 보관한 다음 서버에서 안전하게 삭제하십시오. 무료 오픈소스이며 계정 가입도 필요 없습니다.</p>
+            <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+              MailVault 다운로드
+            </a>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            <a href="/ko/guides/archive-imap-emails-locally.html" class="text-primary-500 hover:text-primary-600 underline">로컬 IMAP 보관이 작동하는 방식</a>을 자세히 보거나, <a href="/ko/guides/keep-emails-after-server-deletion.html" class="text-primary-500 hover:text-primary-600 underline">서버에서 삭제한 뒤에도 메일을 안전하게 지키기</a>를 읽어 보십시오. <a href="/ko/features.html" class="text-primary-500 hover:text-primary-600 underline">전체 기능</a>을 보거나 <a href="/ko/faq.html" class="text-primary-500 hover:text-primary-600 underline">자주 묻는 질문</a>을 확인해도 좋습니다.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/ko/docs.html" class="hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="hover:text-primary-500 transition-colors">블로그</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">개인정보</a>
+          <a href="/ko/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">변경 내역</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">약관</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 모든 권리 보유.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="언어 선택" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

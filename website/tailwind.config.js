@@ -8,6 +8,9 @@ export default {
     './pricing-localize.js',
     '!./node_modules/**',
     '!./api/**',
+    // Generated locale copies only ever carry classes their English source
+    // already had, so scanning 300+ of them buys nothing and costs build time.
+    '!./{de,fr,es,it,pt-br,ja,ko,zh}/**',
   ],
   theme: {
     extend: {

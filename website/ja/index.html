@@ -1,0 +1,1866 @@
+<!DOCTYPE html>
+<html lang="ja" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MailVault — IMAPのメールをローカルにアーカイブ | MacとLinuxでサーバー容量を空ける</title>
+  <meta name="description" content="メールボックスがいっぱいですか。IMAPのメールをローカルにアーカイブしてから、安心してサーバーから削除できます。MailVaultはすべてを標準的な.emlファイルとして保存し、オフラインでも検索できる状態を保ちます。macOS &amp; Linux向けの無料・オープンソースのアプリです。">
+  <meta name="robots" content="index, follow">
+  <meta name="keywords" content="email archive mac, email backup locally, free up email storage, IMAP backup, offline email archive, local email retention, archive emails before deleting, mailbox full solution, eml files, Maildir, email compliance, MailStore alternative mac">
+  <link rel="canonical" href="https://mailvaultapp.com/ja/">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/ja/">
+  <meta property="og:title" content="MailVault — IMAPのメールをローカルにアーカイブ | サーバー容量を空ける">
+  <meta property="og:description" content="メールボックスがいっぱいですか。IMAPのメールをローカルにアーカイブしてから、安心してサーバーから削除できます。すべてをオフラインでも検索できる状態に保ちます。macOS &amp; Linux向けの無料・オープンソースのアプリです。">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ja_JP">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MailVault — IMAPのメールをローカルにアーカイブ | サーバー容量を空ける">
+  <meta name="twitter:description" content="メールボックスがいっぱいですか。IMAPのメールをローカルにアーカイブしてから、安心してサーバーから削除できます。すべてをオフラインでも検索できる状態に保ちます。macOS &amp; Linux向けの無料・オープンソースのアプリです。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+  </style>
+
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "MailVault",
+  "description": "macOSとLinuxで、IMAPのメールをローカルにアーカイブします。サーバーの容量を空け、すべてを標準的な.emlファイルとしてオフラインでも検索できる状態に保ちます。無料・オープンソースのメールアーカイブアプリです。",
+  "operatingSystem": "macOS, Linux",
+  "applicationCategory": "BusinessApplication",
+  "applicationSubCategory": "EmailApplication",
+  "softwareVersion": "2.11.0",
+  "datePublished": "2026-08-28",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "downloadUrl": "https://github.com/GraphicMeat/mail-vault-app/releases/latest",
+  "featureList": [
+    "Maildir形式でのメールのローカル保存",
+    "プライバシー優先の設計 — クラウドなし、トラッキングなし",
+    "あらゆるメールプロバイダーに対応するIMAPサポート",
+    "GmailのOAuth2サインイン",
+    "Microsoft 365のOAuth2サインイン",
+    "Outlook.comアカウント向けのMicrosoft Graph API",
+    "オフラインでのメール閲覧",
+    "絞り込みと検索履歴を備えた全文検索",
+    "ZIPバックアップの書き出しと読み込み",
+    "メールのスレッド表示（Gmailスタイルの会話）",
+    "チャット形式の会話表示",
+    "引用の折りたたみと署名の折りたたみ",
+    "送信者の検証バッジ（SPF/DKIM/DMARC）",
+    "メールトラッカーのブロック（トラッキングピクセルの検出と除去）",
+    "進捗表示付きのメール一括アーカイブ",
+    "カスタムアバターに対応したマルチアカウント",
+    "ダークテーマとライトテーマ",
+    "サイズを変えられるペインによる3カラム／2カラムのレイアウト",
+    "CONDSTOREの差分同期とCOMPRESS=DEFLATE",
+    "17,000通以上に対応する仮想スクロール",
+    "ネイティブのデスクトップアプリ（Electronではなく Tauri）",
+    "macOSのキーチェーンとLinuxのSecret Serviceへの認証情報の保存",
+    "バックグラウンド同期に対応したシステムトレイ",
+    "アプリ内の変更履歴と進捗バーを備えた自動更新",
+    "統合受信トレイ — すべてのアカウントをまとめた表示",
+    "主要な操作すべてに対応したキーボードショートカット。割り当ては変更可能",
+    "フォルダへ移動 — サーバー上のフォルダ間でメールを整理し直せます",
+    "遅延時間を設定できる送信の取り消し",
+    "メールのテンプレート — 定型文を保存して再利用",
+    "スマートな送信者の傾向 — 連絡先ごとのやりとりの履歴と頻度",
+    "送信者でグループ化 — 受信トレイを連絡先ごとに整理し、送信した返信も同じ流れに表示",
+    "リンクの安全性 — フィッシングリンクの検出と、送信者のなりすましの警告",
+    "通知のカスタマイズ — アカウントごと、フォルダごとに設定",
+    "Snap Storeと.debパッケージによるLinux対応（x86_64とaarch64）",
+    "WaylandとX11のディスプレイサーバーに対応"
+  ],
+  "screenshot": "https://mailvaultapp.com/og-image.png",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  }
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "MailVault",
+  "url": "https://mailvaultapp.com/ja/",
+  "logo": "https://mailvaultapp.com/icon-128.png",
+  "sameAs": [
+    "https://github.com/GraphicMeat/mail-vault-app"
+  ]
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "MailVault",
+  "url": "https://mailvaultapp.com/ja/"
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="#" onclick="window.scrollTo({top:0,behavior:'smooth'});return false;" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVaultのロゴ" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/ja/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">機能</a>
+          <a href="/ja/pricing.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">料金</a>
+          <a href="/ja/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">活用例</a>
+          <a href="/ja/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">ドキュメント</a>
+          <a href="/ja/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">ブログ</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/>
+            </svg>
+            <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+            </svg>
+          </button>
+          <a href="#download" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            ダウンロード
+          </a>
+          <!-- Mobile menu button -->
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile menu -->
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/ja/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">機能</a>
+          <a href="/ja/pricing.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">料金</a>
+          <a href="/ja/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">活用例</a>
+          <a href="/ja/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">ドキュメント</a>
+          <a href="/ja/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">ブログ</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">ダウンロード</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main>
+
+  <!-- Hero Section -->
+  <section aria-label="ヒーロー" class="min-h-screen flex items-center pt-16 relative overflow-hidden">
+    <!-- Background decoration -->
+    <div class="absolute inset-0 overflow-hidden pointer-events-none">
+      <div class="absolute -top-40 -right-40 w-80 h-80 bg-primary-500/20 rounded-full blur-3xl"></div>
+      <div class="absolute -bottom-40 -left-40 w-80 h-80 bg-primary-500/10 rounded-full blur-3xl"></div>
+    </div>
+
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-20 relative">
+      <div class="grid lg:grid-cols-2 gap-12 items-center">
+        <div>
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium mb-6">
+            <span class="w-2 h-2 bg-primary-500 rounded-full animate-pulse"></span>
+            macOS &amp; Linuxで提供中
+          </div>
+
+          <h1 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight mb-6">
+            メールボックスはいっぱいです。<span class="lamp-text">アーカイブまでそうである必要はありません。</span>
+          </h1>
+
+          <p class="text-lg sm:text-xl text-slate-600 dark:text-slate-400 mb-8 leading-relaxed">
+            IMAPのメールを<span class="c-vault">ローカルに</span>アーカイブしてから、<span class="c-server">サーバーから</span>安心して削除しましょう。MailVaultはすべてのメールを標準的な.emlファイルとして保ち、オフラインでも検索して開けるようにします — ずっとです。
+          </p>
+
+          <div class="custody-intro mb-8 max-w-md">
+            <div class="custody-rule mb-3" aria-hidden="true"><i></i><i></i><i></i></div>
+            <p class="text-sm text-slate-600 dark:text-slate-300">
+              どのメッセージも、それがどこにあるかを示します — <span class="c-server">サーバー上</span>、<span class="c-vault">保管庫の中</span>、あるいは<span class="c-onlycopy">唯一のコピー</span>。
+            </p>
+          </div>
+
+          <div class="flex flex-col gap-3 mb-5 max-w-xs">
+            <a id="hero-download" href="#download" class="lamp-bg text-white px-8 py-4 rounded-xl font-semibold text-lg hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2 w-full shadow-lg shadow-primary-500/30 press">
+              <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
+              </svg>
+              <span id="hero-download-text">無料でダウンロード</span>
+            </a>
+            <a href="#download" class="text-center text-sm text-slate-500 dark:text-slate-400 hover:text-primary-500 transition-colors">すべてのプラットフォームと形式 &darr;</a>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-3 mb-8">
+            <button id="want-this-btn" class="press group inline-flex items-center gap-2.5 pl-4 pr-3 py-3 rounded-xl border-2 border-pink-400 text-pink-600 dark:text-pink-400 hover:bg-pink-50 dark:hover:bg-pink-900/20 transition-colors">
+              <svg id="vote-heart" class="w-6 h-6 shrink-0 text-pink-500 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"/>
+              </svg>
+              <span class="font-semibold text-lg">これが欲しい！</span>
+              <span id="vote-count" class="min-w-[2.5rem] px-2.5 py-1 bg-pink-100 dark:bg-pink-900/50 rounded-lg text-lg font-bold tabular-nums">--</span>
+            </button>
+
+            <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener" class="press group inline-flex items-center gap-2.5 pl-4 pr-3 py-3 rounded-xl border-2 border-onlycopy-400 text-onlycopy-700 dark:text-onlycopy-400 hover:bg-onlycopy-50 dark:hover:bg-onlycopy-900/20 transition-colors">
+              <svg class="w-6 h-6 shrink-0 text-onlycopy-400 group-hover:scale-110 transition-transform" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+              </svg>
+              <span class="font-semibold text-lg">GitHubでスターを付ける</span>
+              <span id="github-stars" class="min-w-[2.5rem] px-2.5 py-1 bg-onlycopy-100 dark:bg-onlycopy-900/50 rounded-lg text-lg font-bold tabular-nums">--</span>
+            </a>
+          </div>
+
+          <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-500 dark:text-slate-400">
+            <div class="flex items-center gap-2">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+              </svg>
+              無料 &amp; オープンソース
+            </div>
+            <div class="flex items-center gap-2">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+              </svg>
+              トラッキングもテレメトリもなし
+            </div>
+            <div class="flex items-center gap-2">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+              </svg>
+              サーバーから削除、手元には保持
+            </div>
+          </div>
+        </div>
+
+        <div class="relative">
+          <div class="hero-arrive">
+            <!-- App Screenshot -->
+            <div class="relative rounded-2xl overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-700">
+              <img id="app-screenshot" fetchpriority="high" src="/screenshots/thread-view-1440.webp" srcset="screenshots/thread-view-720.webp 720w, screenshots/thread-view-1440.webp 1440w, screenshots/thread-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 518px" alt="ローカルへのバックアップに備え、スレッド表示された会話とともに受信トレイを表示しているMailVaultのメールアーカイブアプリ" class="w-full h-auto" data-expandable-image width="1440" height="928" decoding="async">
+            </div>
+          </div>
+
+          <!-- Floating badges -->
+          <div class="absolute -left-4 top-1/4 glass rounded-lg px-4 py-2 shadow-lg">
+            <div class="flex items-center gap-2">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+              </svg>
+              <span class="text-sm font-medium">安全</span>
+            </div>
+          </div>
+
+          <div class="absolute -right-4 bottom-1/4 glass rounded-lg px-4 py-2 shadow-lg">
+            <div class="flex items-center gap-2">
+              <svg class="w-5 h-5 text-primary-500" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/>
+              </svg>
+              <span class="text-sm font-medium">高速</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Origin Story Section -->
+  <section aria-label="MailVaultを作った理由" class="py-20 bg-white dark:bg-slate-800/50">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="max-w-3xl mx-auto">
+        <div class="text-center mb-10">
+          <h2 class="text-3xl sm:text-4xl font-bold mb-6">
+            私たちが作った理由 — <span class="lamp-text">MailVault</span>
+          </h2>
+        </div>
+
+        <div class="relative p-8 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+          <svg class="absolute top-6 left-6 w-10 h-10 text-primary-200 dark:text-primary-800" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983z"/>
+          </svg>
+
+          <div class="pl-6">
+            <p class="text-lg text-slate-600 dark:text-slate-400 leading-relaxed mb-4">
+              友人のトマスは物流の仕事をしています。数か月おきに、彼は同じ壁にぶつかります。10GBのメールボックスがまたいっぱいになるのです。
+            </p>
+            <p class="text-lg text-slate-600 dark:text-slate-400 leading-relaxed mb-4">
+              彼の受信トレイは、CMR書類、請求書、出荷の確認、顧客とのやりとりで埋まっていて、どれも重い添付ファイル付きです。単純に削除するわけにはいきません。規制でこれらの記録の保管が義務づけられていますし、顧客との紛争を解決するのにも必要だからです。
+            </p>
+            <p class="text-lg text-slate-600 dark:text-slate-400 leading-relaxed mb-4">
+              そのため、メールボックスがいっぱいになるたびに彼は行き詰まります。サーバーの容量を買い足すか、手作業でメールをデスクトップのフォルダに書き出すか、法律で保管が求められている書類を失う危険を冒すか。
+            </p>
+            <p class="text-lg text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
+              だから私たちはMailVaultを作りました。メールをローカルに同期し、サーバーの容量を空け、すべてを検索・閲覧できる状態のまま永久に保ちます。保存コストとコンプライアンスのどちらかを選ぶ必要はもうありません。
+            </p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Problem Section -->
+  <section aria-label="メールのリスク" class="py-20">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="max-w-3xl mx-auto text-center mb-16">
+        <h2 class="text-3xl sm:text-4xl font-bold mb-6">
+          あなたのメールは危険にさらされています
+        </h2>
+        <p class="text-lg text-slate-600 dark:text-slate-400">
+          メールプロバイダーは、いつでもメッセージを削除したり、失ったり、アクセスを制限したりできます。大切な思い出、領収書、記録が予告なく消えてしまいます。
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-2 lg:grid-cols-5 gap-6">
+        <div class="text-center p-6">
+          <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+            <svg class="w-8 h-8 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-semibold mb-2">サーバーからの削除</h3>
+          <p class="text-slate-600 dark:text-slate-400">
+            サーバーから削除されたメールは、二度と戻りません。復元する手段はありません。
+          </p>
+        </div>
+
+        <div class="text-center p-6">
+          <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
+            <svg class="w-8 h-8 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-semibold mb-2">アカウントのロックアウト</h3>
+          <p class="text-slate-600 dark:text-slate-400">
+            アカウントにアクセスできなくなれば、何年分ものやりとりにもアクセスできなくなります。
+          </p>
+        </div>
+
+        <div class="text-center p-6">
+          <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center">
+            <svg class="w-8 h-8 text-amber-700 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-semibold mb-2">クラウドへの依存</h3>
+          <p class="text-slate-600 dark:text-slate-400">
+            インターネットがなければアクセスもできません。データが回線に左右されるべきではありません。
+          </p>
+        </div>
+
+        <div class="text-center p-6">
+          <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+            <svg class="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-semibold mb-2">バックアップの手段がない</h3>
+          <p class="text-slate-600 dark:text-slate-400">
+            今のメールクライアントが気に入っていますか。MailVaultはバックアップ専用として、バックグラウンドで静かに動かすこともできます。
+          </p>
+        </div>
+
+        <div class="text-center p-6">
+          <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+            <svg class="w-8 h-8 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-semibold mb-2">サーバー容量の制限</h3>
+          <p class="text-slate-600 dark:text-slate-400">
+            メールボックスがいっぱいですか。ローカルには無制限にメールを保存でき、何も失わずにサーバーの容量を空けられます。
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Mentioned In Section -->
+  <section aria-label="掲載メディア" class="py-16 bg-white dark:bg-slate-800/50">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="max-w-3xl mx-auto text-center mb-10">
+        <h2 class="text-2xl sm:text-3xl font-bold mb-3">掲載メディア</h2>
+        <p class="text-slate-600 dark:text-slate-400">MailVaultは、ツールのまとめ記事、製品ディレクトリ、コミュニティでの議論で取り上げられてきました。</p>
+      </div>
+
+      <div class="max-w-4xl mx-auto grid md:grid-cols-2 gap-4">
+        <!-- TaskBounty — July 2026 -->
+        <a href="https://www.task-bounty.com/coverage-check/graphicmeat/mail-vault-app" target="_blank" rel="noopener" class="block group rounded-xl border border-slate-200 dark:border-slate-700 p-6 hover:border-primary-400 dark:hover:border-primary-500 hover:shadow-lg transition-all">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <span class="inline-block text-xs font-medium px-2 py-0.5 rounded-full bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300 mb-3">カバレッジ</span>
+              <h3 class="text-lg font-semibold text-slate-900 dark:text-white group-hover:text-primary-500 transition-colors">graphicmeat/mail-vault-app のテストカバレッジ</h3>
+              <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">TaskBounty &middot; 2026年7月</p>
+              <p class="text-sm text-slate-600 dark:text-slate-400 mt-2">第三者による計測でテストカバレッジ100%。同社のデータセットで上位1%のリポジトリでした。</p>
+            </div>
+            <svg class="w-5 h-5 text-slate-400 group-hover:text-primary-500 shrink-0 mt-1 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+              </svg>
+          </div>
+        </a>
+
+        <!-- Indie Hackers — March 2026 -->
+        <a href="https://www.indiehackers.com/post/mailvault-desktop-app-to-archive-your-emails-locally-before-you-lose-them-b39afd25d9" target="_blank" rel="noopener" class="block group rounded-xl border border-slate-200 dark:border-slate-700 p-6 hover:border-primary-400 dark:hover:border-primary-500 hover:shadow-lg transition-all">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <span class="inline-block text-xs font-medium px-2 py-0.5 rounded-full bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300 mb-3">コミュニティ</span>
+              <h3 class="text-lg font-semibold text-slate-900 dark:text-white group-hover:text-primary-500 transition-colors">MailVault — メールを失う前にローカルへアーカイブするデスクトップアプリ</h3>
+              <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Indie Hackers &middot; 2026年3月</p>
+              <p class="text-sm text-slate-600 dark:text-slate-400 mt-2">Indie Hackersのコミュニティで共有し、議論されました。</p>
+            </div>
+            <svg class="w-5 h-5 text-slate-400 group-hover:text-primary-500 shrink-0 mt-1 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+              </svg>
+          </div>
+        </a>
+
+        <!-- Hacker News — February 2026 -->
+        <a href="https://news.ycombinator.com/item?id=47177782" target="_blank" rel="noopener" class="block group rounded-xl border border-slate-200 dark:border-slate-700 p-6 hover:border-primary-400 dark:hover:border-primary-500 hover:shadow-lg transition-all">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <span class="inline-block text-xs font-medium px-2 py-0.5 rounded-full bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300 mb-3">議論</span>
+              <h3 class="text-lg font-semibold text-slate-900 dark:text-white group-hover:text-primary-500 transition-colors">MailVault – メールを.emlとしてローカルに保存する、無料でオープンソースのメールクライアント</h3>
+              <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Hacker News &middot; 2026年2月</p>
+              <p class="text-sm text-slate-600 dark:text-slate-400 mt-2">Hacker Newsに投稿され、議論されました。</p>
+            </div>
+            <svg class="w-5 h-5 text-slate-400 group-hover:text-primary-500 shrink-0 mt-1 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+              </svg>
+          </div>
+        </a>
+
+        <!-- StrictSeal mention -->
+        <a href="https://strictseal.com/blog/articles/best-productivity-tools-march-2026" target="_blank" rel="noopener" class="block group rounded-xl border border-slate-200 dark:border-slate-700 p-6 hover:border-primary-400 dark:hover:border-primary-500 hover:shadow-lg transition-all">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <span class="inline-block text-xs font-medium px-2 py-0.5 rounded-full bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300 mb-3">生産性</span>
+              <h3 class="text-lg font-semibold text-slate-900 dark:text-white group-hover:text-primary-500 transition-colors">生産性ツールのベスト — 2026年3月</h3>
+              <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">StrictSeal &middot; 2026年3月</p>
+              <p class="text-sm text-slate-600 dark:text-slate-400 mt-2">プロフェッショナル向けの生産性ツールを厳選したまとめ記事で紹介されました。</p>
+            </div>
+            <svg class="w-5 h-5 text-slate-400 group-hover:text-primary-500 shrink-0 mt-1 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+            </svg>
+          </div>
+        </a>
+      </div>
+
+      <div class="text-center mt-8">
+        <a href="/ja/mentioned-in.html" class="text-sm font-medium text-primary-500 hover:text-primary-600 transition-colors">すべての掲載を見る &rarr;</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section id="features" aria-label="機能" class="py-20">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="max-w-3xl mx-auto text-center mb-16">
+        <h2 class="text-3xl sm:text-4xl font-bold mb-6">
+          メールのアーカイブを、<span class="lamp-text">かんたんに</span>
+        </h2>
+        <p class="text-lg text-slate-600 dark:text-slate-400">
+          ローカルにアーカイブし、オフラインで閲覧し、サーバーの容量を空ける。MailVaultは、現代的なメールクライアントの使い勝手を備えた、あなたのローカルのメール保管庫です。
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-6">
+        <!-- Email Management -->
+        <div class="feature-card p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-all duration-300 hover:shadow-xl">
+          <div class="w-12 h-12 mb-4 rounded-xl lamp-bg flex items-center justify-center">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-semibold mb-3">メール管理</h3>
+          <ul class="space-y-2 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-primary-600 dark:text-primary-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>作成、返信、転送。送信の取り消しにも対応</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-primary-600 dark:text-primary-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>統合受信トレイ、キーボードショートカット、テンプレート</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-primary-600 dark:text-primary-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>フォルダへ移動 &amp; 絞り込み付きの高度な検索</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-primary-600 dark:text-primary-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>一括でのアーカイブ、削除、アーカイブ+削除</li>
+          </ul>
+        </div>
+
+        <!-- Storage & Backup -->
+        <div class="feature-card p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-all duration-300 hover:shadow-xl">
+          <div class="w-12 h-12 mb-4 rounded-xl lamp-bg flex items-center justify-center">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-semibold mb-3">保存とバックアップ</h3>
+          <ul class="space-y-2 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-primary-600 dark:text-primary-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg><a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a>と<a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml (RFC 5322)</a>の標準形式</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-primary-600 dark:text-primary-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>ワンクリックのアーカイブ &amp; バックグラウンドのキャッシュ</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-primary-600 dark:text-primary-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>ZIPでの書き出し &amp; 持ち運べる読み込み</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-primary-600 dark:text-primary-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>キャッシュのサイズ &amp; 保持期間を設定可能</li>
+          </ul>
+        </div>
+
+        <!-- Threading & Reading -->
+        <div class="feature-card p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-all duration-300 hover:shadow-xl">
+          <div class="w-12 h-12 mb-4 rounded-xl lamp-bg flex items-center justify-center">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-semibold mb-3">スレッド表示と閲覧</h3>
+          <ul class="space-y-2 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-primary-600 dark:text-primary-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Gmailスタイルのスレッド表示（JWZアルゴリズム）</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-primary-600 dark:text-primary-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>引用の折りたたみ &amp; 署名の折りたたみ</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-primary-600 dark:text-primary-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>送信者の検証バッジ（SPF/DKIM/DMARC）</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-primary-600 dark:text-primary-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>チャットビュー &amp; リストビューをワンクリックで切り替え</li>
+          </ul>
+        </div>
+
+        <!-- Performance & Security -->
+        <div class="feature-card p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-all duration-300 hover:shadow-xl">
+          <div class="w-12 h-12 mb-4 rounded-xl lamp-bg flex items-center justify-center">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-semibold mb-3">パフォーマンスとセキュリティ</h3>
+          <ul class="space-y-2 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-primary-600 dark:text-primary-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>ネイティブのRust（Tauri）製 — Electronではありません</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-primary-600 dark:text-primary-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>キーチェーン（macOS） &amp; Secret Service（Linux）</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-primary-600 dark:text-primary-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg><a href="/ja/features/email-tracker-blocking.html" class="hover:text-primary-500 underline">メールトラッカーのブロック</a> — トラッキングピクセルを描画前に除去</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-primary-600 dark:text-primary-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>17,000通以上に対応する仮想スクロール</li>
+            <li class="flex items-start gap-2"><svg class="w-5 h-5 text-primary-600 dark:text-primary-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>CONDSTOREの差分同期 &amp; DEFLATE圧縮</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="text-center mt-10">
+        <a href="/ja/features.html" class="inline-flex items-center gap-2 text-primary-500 hover:text-primary-600 font-semibold transition-colors">
+          すべての機能を見る
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+          </svg>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Chat View Section -->
+  <section aria-label="チャットビューの機能" class="py-20 bg-white dark:bg-slate-800/50 overflow-hidden">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid lg:grid-cols-2 gap-12 items-center">
+        <div>
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium mb-6">
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clip-rule="evenodd"/>
+            </svg>
+            独自の機能
+          </div>
+
+          <h2 class="text-3xl sm:text-4xl font-bold mb-6">
+            メールが<span class="lamp-text">メッセージ</span>のように
+          </h2>
+
+          <p class="text-lg text-slate-600 dark:text-slate-400 mb-6 leading-relaxed">
+            従来の受信トレイ表示に飽きていませんか。チャットビューに切り替えれば、メールを自然な会話として読めます。相手ごとのスレッド全体が、使い慣れたメッセージアプリのように流れていきます。
+          </p>
+
+          <ul class="space-y-4 mb-8">
+            <li class="flex items-start gap-3">
+              <div class="w-6 h-6 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                </svg>
+              </div>
+              <div>
+                <span class="font-medium text-slate-900 dark:text-white">会話ベースの表示</span>
+                <p class="text-slate-600 dark:text-slate-400 text-sm">相手とのメールがすべて1つの続いたスレッドにまとまります</p>
+              </div>
+            </li>
+            <li class="flex items-start gap-3">
+              <div class="w-6 h-6 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                </svg>
+              </div>
+              <div>
+                <span class="font-medium text-slate-900 dark:text-white">いつでも切り替え</span>
+                <p class="text-slate-600 dark:text-slate-400 text-sm">従来の表示とチャットビューをワンクリックで切り替えられます</p>
+              </div>
+            </li>
+            <li class="flex items-start gap-3">
+              <div class="w-6 h-6 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg class="w-4 h-4 text-primary-600 dark:text-primary-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                </svg>
+              </div>
+              <div>
+                <span class="font-medium text-slate-900 dark:text-white">見慣れていて直感的</span>
+                <p class="text-slate-600 dark:text-slate-400 text-sm">メールがiMessageやWhatsAppのように感じられます</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Visual comparison -->
+        <div class="relative">
+          <div class="grid grid-cols-2 gap-4">
+            <!-- Chat Topic List -->
+            <div class="relative">
+              <div class="absolute -top-3 left-4 px-2 py-1 bg-slate-200 dark:bg-slate-600 rounded text-xs font-medium text-slate-600 dark:text-slate-300 z-10">
+                トピック
+              </div>
+              <div class="rounded-xl border-2 border-slate-200 dark:border-slate-600 overflow-hidden shadow-lg">
+                <img src="/screenshots/chat-view-1440.webp" srcset="screenshots/chat-view-720.webp 720w, screenshots/chat-view-1440.webp 1440w, screenshots/chat-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 248px" alt="連絡先ごとにまとめた会話のトピックを表示しているMailVaultのチャットビュー" class="w-full h-auto" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
+              </div>
+            </div>
+
+            <!-- Chat Bubble View -->
+            <div class="relative">
+              <div class="absolute -top-3 left-4 px-2 py-1 lamp-bg rounded text-xs font-medium text-white z-10">
+                チャットビュー
+              </div>
+              <div class="rounded-xl border-2 border-primary-500 overflow-hidden ring-4 ring-primary-500/20 shadow-lg">
+                <img src="/screenshots/chat-view-chat-1440.webp" srcset="screenshots/chat-view-chat-720.webp 720w, screenshots/chat-view-chat-1440.webp 1440w, screenshots/chat-view-chat-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 248px" alt="メールの会話をメッセージの吹き出しとして表示しているMailVaultのチャット吹き出し表示" class="w-full h-auto" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
+              </div>
+            </div>
+          </div>
+
+          <!-- Arrow indicator -->
+          <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+            <div class="w-10 h-10 rounded-full bg-white dark:bg-slate-900 shadow-lg flex items-center justify-center">
+              <svg class="w-5 h-5 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Feature Showcase Section -->
+  <section aria-label="機能の紹介" class="py-20">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="max-w-3xl mx-auto text-center mb-16">
+        <h2 class="text-3xl sm:text-4xl font-bold mb-6">
+          <span class="lamp-text">動くところ</span>を見る
+        </h2>
+        <p class="text-lg text-slate-600 dark:text-slate-400">
+          メールの作成から、数千通の一括アーカイブまで。MailVaultは、すっきりしたネイティブのインターフェースでそのすべてを扱います。
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-8">
+        <!-- Compose Email -->
+        <div class="group">
+          <div class="rounded-2xl overflow-hidden shadow-lg border border-slate-200 dark:border-slate-700 transition-all duration-300 group-hover:shadow-xl group-hover:-translate-y-1">
+            <img src="/screenshots/compose-email-1440.webp" srcset="screenshots/compose-email-720.webp 720w, screenshots/compose-email-1440.webp 1440w, screenshots/compose-email-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 526px" alt="リッチテキスト編集を備えたMailVaultの作成・返信画面" class="w-full h-auto" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
+          </div>
+          <div class="mt-4 px-1">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-white">作成と返信</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400 mt-1">すっきりした作成画面で、返信、全員に返信、転送ができます。リッチテキストの編集と添付ファイルにも対応しています。</p>
+          </div>
+        </div>
+
+        <!-- Thread View -->
+        <div class="group">
+          <div class="rounded-2xl overflow-hidden shadow-lg border border-slate-200 dark:border-slate-700 transition-all duration-300 group-hover:shadow-xl group-hover:-translate-y-1">
+            <img src="/screenshots/chat-view-thread-1440.webp" srcset="screenshots/chat-view-thread-720.webp 720w, screenshots/chat-view-thread-1440.webp 1440w, screenshots/chat-view-thread-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 526px" alt="メールの連なりを表示しているMailVaultのスレッド会話表示" class="w-full h-auto" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
+          </div>
+          <div class="mt-4 px-1">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-white">スレッド表示された会話</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400 mt-1">メールのスレッド全体を、流れる会話として読めます。返信も転送も添付ファイルも、文脈の中に収まります。</p>
+          </div>
+        </div>
+
+        <!-- Bulk Selection -->
+        <div class="group">
+          <div class="rounded-2xl overflow-hidden shadow-lg border border-slate-200 dark:border-slate-700 transition-all duration-300 group-hover:shadow-xl group-hover:-translate-y-1">
+            <img src="/screenshots/selection-dialog-1440.webp" srcset="screenshots/selection-dialog-720.webp 720w, screenshots/selection-dialog-1440.webp 1440w, screenshots/selection-dialog-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 526px" alt="一括操作のための期間選択を備えたMailVaultの一括選択ダイアログ" class="w-full h-auto" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
+          </div>
+          <div class="mt-4 px-1">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-white">一括操作</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400 mt-1">期間、送信者、既読状態でメールを選択できます。数千通をまとめてアーカイブ、削除、保存できます。</p>
+          </div>
+        </div>
+
+        <!-- Archive Progress -->
+        <div class="group">
+          <div class="rounded-2xl overflow-hidden shadow-lg border border-slate-200 dark:border-slate-700 transition-all duration-300 group-hover:shadow-xl group-hover:-translate-y-1">
+            <img src="/screenshots/archive-progress-1440.webp" srcset="screenshots/archive-progress-720.webp 720w, screenshots/archive-progress-1440.webp 1440w, screenshots/archive-progress-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 526px" alt="一括バックアップの進行を示すMailVaultのアーカイブ進捗バー" class="w-full h-auto" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
+          </div>
+          <div class="mt-4 px-1">
+            <h3 class="text-lg font-semibold text-slate-900 dark:text-white">進捗が見えるアーカイブ</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400 mt-1">メールがローカルに保存されていく様子をその場で確認できます。いつでも中止でき、止めたところから再開できます。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How It Works Section -->
+  <section id="how-it-works" aria-label="仕組み" class="py-20 bg-white dark:bg-slate-800/50">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="max-w-3xl mx-auto text-center mb-16">
+        <h2 class="text-3xl sm:text-4xl font-bold mb-6">
+          数分で始められます
+        </h2>
+        <p class="text-lg text-slate-600 dark:text-slate-400">
+          設定は簡単で、効果は確かです。今日からメールを守り始めましょう。
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-8">
+        <div class="relative">
+          <div class="text-6xl font-bold text-primary-100 dark:text-primary-900/50 absolute -top-4 -left-2">1</div>
+          <div class="relative pt-8 pl-4">
+            <h3 class="text-xl font-semibold mb-3">ダウンロードしてインストール</h3>
+            <p class="text-slate-600 dark:text-slate-400">
+              macOSまたはLinux版のMailVaultをダウンロードします。インストールして起動してください。
+            </p>
+          </div>
+        </div>
+
+        <div class="relative">
+          <div class="text-6xl font-bold text-server-100 dark:text-server-900/50 absolute -top-4 -left-2">2</div>
+          <div class="relative pt-8 pl-4">
+            <h3 class="text-xl font-semibold mb-3">アカウントを接続</h3>
+            <p class="text-slate-600 dark:text-slate-400">
+              メールアカウントを<span class="c-server">IMAPで</span>追加します。認証情報はKeychainに安全に保管されます。
+            </p>
+          </div>
+        </div>
+
+        <div class="relative">
+          <div class="text-6xl font-bold text-vault-100 dark:text-vault-900/50 absolute -top-4 -left-2">3</div>
+          <div class="relative pt-8 pl-4">
+            <h3 class="text-xl font-semibold mb-3">メールのバックアップ完了</h3>
+            <p class="text-slate-600 dark:text-slate-400">
+              MailVaultが自動で同期し、メールを<span class="c-vault">ローカルに</span>保存します。これで完了です。
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Download Section -->
+  <section id="download" aria-label="MailVaultをダウンロード" class="py-20 bg-primary-50/60 dark:bg-primary-900/10">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="max-w-3xl mx-auto text-center">
+        <h2 class="text-3xl sm:text-4xl font-bold mb-6">
+          メールボックスの容量を空けませんか
+        </h2>
+        <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
+          MailVaultは無料でダウンロードできます。ローカルにアーカイブし、サーバーから削除し、すべてを永久に残しましょう。
+        </p>
+
+        <!-- macOS -->
+        <p class="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-500 mb-2">macOS</p>
+        <div class="flex flex-col sm:flex-row gap-3 justify-center mb-6">
+          <a id="download-dmg" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" class="lamp-bg text-white px-8 py-4 rounded-xl font-semibold text-lg hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-3">
+            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+            </svg>
+            macOS版をダウンロード
+            <span class="text-sm opacity-75">Universal</span>
+          </a>
+        </div>
+
+        <!-- Linux -->
+        <p class="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-500 mb-2">Linux</p>
+        <div class="flex flex-col items-center gap-3 mb-6">
+          <a id="download-snap" href="https://snapcraft.io/mailvault" target="_blank" rel="noopener" class="lamp-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M13.804 13.367L22 5.17v7.404l-4.674 4.674zm-3.607 3.607L22 5.17H14.15L5.523 13.798zM2 18.83l8.196-8.196 3.608 3.607L5.608 22.438H2zM2 18.83V11.38l4.72-4.72 3.607 3.608z"/></svg>
+            Snap Storeから入手
+          </a>
+          <div class="flex gap-2 justify-center text-sm">
+            <a id="download-linux-x86" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" class="text-primary-600 dark:text-primary-400 hover:underline">または.debをダウンロード（Intel / AMD）</a>
+            <span class="text-slate-600 dark:text-slate-600">|</span>
+            <a id="download-linux-arm" href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" class="text-primary-600 dark:text-primary-400 hover:underline">ARM版 .deb</a>
+          </div>
+        </div>
+
+        <div class="flex justify-center mb-4">
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-8 py-4 rounded-xl font-semibold text-lg border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-3">
+            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+            </svg>
+            GitHubで見る
+          </a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          <span id="release-version"></span>macOS 11以降 &middot; Ubuntu 22.04以降 / Debian 12以降
+        </p>
+
+        <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">
+          アカウント不要 &middot; トラッキングなし &middot; アンインストールしても保管庫はディスクに残ります
+        </p>
+
+        <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">
+          <span id="download-count" class="font-medium"></span>
+        </p>
+
+        <!-- Built with -->
+        <div class="flex items-center justify-center gap-3 mt-8 flex-wrap">
+          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 text-xs font-medium">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M23.687 11.709l-10.313-10.3a1.035 1.035 0 00-.453-.266L.905.005A.885.885 0 00.006.903l1.14 12.014a1.018 1.018 0 00.266.453L11.726 23.7a1.048 1.048 0 001.486 0l10.475-10.505a1.048 1.048 0 000-1.486zM7.543 9.493a2.756 2.756 0 110-3.897 2.756 2.756 0 010 3.897z"/></svg>
+            Rust
+          </span>
+          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400 text-xs font-medium">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M14.23 12.004a2.236 2.236 0 0 1-2.235 2.236 2.236 2.236 0 0 1-2.236-2.236 2.236 2.236 0 0 1 2.235-2.236 2.236 2.236 0 0 1 2.236 2.236zm2.648-10.69c-1.346 0-3.107.96-4.888 2.622-1.78-1.653-3.542-2.602-4.887-2.602-.31 0-.594.065-.85.196-1.645.858-1.198 4.22.684 7.23C4.733 10.293 3.6 12.053 3.6 13.62c0 3.59 3.872 5.994 8.4 5.994s8.4-2.404 8.4-5.994c0-1.564-1.128-3.322-3.327-4.862 1.877-3.008 2.327-6.37.684-7.228a1.463 1.463 0 0 0-.677-.166z"/></svg>
+            React
+          </span>
+          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 text-xs font-medium">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0L1.605 6v12L12 24l10.395-6V6L12 0zm0 2.183l8.207 4.738v9.476L12 21.134l-8.207-4.737V6.921L12 2.183z"/></svg>
+            Tauri
+          </span>
+          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">
+            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+            オープンソース
+          </span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Comparison Table Section -->
+  <section id="comparison" aria-label="MailVaultとほかのメールクライアントの比較" class="py-20">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="max-w-3xl mx-auto text-center mb-16">
+        <h2 class="text-3xl sm:text-4xl font-bold mb-6">
+          MailVaultを<span class="lamp-text">比べる</span>と
+        </h2>
+        <p class="text-lg text-slate-600 dark:text-slate-400">
+          MailVaultは、メールクライアントを完全に置き換えるものではありません。ローカルへのアーカイブ、記録の保管、サーバー容量の整理が目的なら、こちらのほうが向いています。
+        </p>
+      </div>
+
+      <div class="scroll-x overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr>
+              <th class="p-4 text-sm font-semibold text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">機能</th>
+              <th class="p-4 text-sm font-semibold text-primary-500 border-b border-slate-200 dark:border-slate-700 bg-primary-50 dark:bg-primary-900/20 rounded-tl-lg">MailVault</th>
+              <th class="p-4 text-sm font-semibold text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">Apple Mail</th>
+              <th class="p-4 text-sm font-semibold text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">Thunderbird</th>
+              <th class="p-4 text-sm font-semibold text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">Gmail（Web）</th>
+            </tr>
+          </thead>
+          <tbody class="text-sm">
+            <tr class="border-b border-slate-100 dark:border-slate-800">
+              <td class="p-4 font-medium text-slate-900 dark:text-white">メールのローカルバックアップ</td>
+              <td class="p-4 bg-primary-50/50 dark:bg-primary-900/10"><span class="text-primary-600 dark:text-primary-400 font-bold">はい</span> — ワンクリックでアーカイブ</td>
+              <td class="p-4"><span class="text-amber-700 dark:text-amber-400">一部</span> — 手作業での書き出し</td>
+              <td class="p-4"><span class="text-amber-700 dark:text-amber-400">一部</span> — ローカルフォルダ</td>
+              <td class="p-4"><span class="text-red-600 dark:text-red-400">非対応</span></td>
+            </tr>
+            <tr class="border-b border-slate-100 dark:border-slate-800">
+              <td class="p-4 font-medium text-slate-900 dark:text-white">標準の.eml形式</td>
+              <td class="p-4 bg-primary-50/50 dark:bg-primary-900/10"><span class="text-primary-600 dark:text-primary-400 font-bold">はい</span> — Maildir + RFC 5322</td>
+              <td class="p-4"><span class="text-red-600 dark:text-red-400">いいえ</span> — 独自形式の.emlx</td>
+              <td class="p-4"><span class="text-amber-700 dark:text-amber-400">一部</span> — mbox形式</td>
+              <td class="p-4"><span class="text-red-600 dark:text-red-400">非対応</span></td>
+            </tr>
+            <tr class="border-b border-slate-100 dark:border-slate-800">
+              <td class="p-4 font-medium text-slate-900 dark:text-white">オフラインでのアクセス</td>
+              <td class="p-4 bg-primary-50/50 dark:bg-primary-900/10"><span class="text-primary-600 dark:text-primary-400 font-bold">はい</span> — 完全にオフライン</td>
+              <td class="p-4"><span class="text-primary-600 dark:text-primary-400">対応</span></td>
+              <td class="p-4"><span class="text-primary-600 dark:text-primary-400">対応</span></td>
+              <td class="p-4"><span class="text-red-600 dark:text-red-400">非対応</span></td>
+            </tr>
+            <tr class="border-b border-slate-100 dark:border-slate-800">
+              <td class="p-4 font-medium text-slate-900 dark:text-white">一括アーカイブ + サーバーから削除</td>
+              <td class="p-4 bg-primary-50/50 dark:bg-primary-900/10"><span class="text-primary-600 dark:text-primary-400 font-bold">はい</span> — 進捗バー付き</td>
+              <td class="p-4"><span class="text-red-600 dark:text-red-400">非対応</span></td>
+              <td class="p-4"><span class="text-red-600 dark:text-red-400">非対応</span></td>
+              <td class="p-4"><span class="text-red-600 dark:text-red-400">非対応</span></td>
+            </tr>
+            <tr class="border-b border-slate-100 dark:border-slate-800">
+              <td class="p-4 font-medium text-slate-900 dark:text-white">ZIPバックアップの書き出し／読み込み</td>
+              <td class="p-4 bg-primary-50/50 dark:bg-primary-900/10"><span class="text-primary-600 dark:text-primary-400 font-bold">はい</span> — 持ち運べます</td>
+              <td class="p-4"><span class="text-red-600 dark:text-red-400">非対応</span></td>
+              <td class="p-4"><span class="text-red-600 dark:text-red-400">非対応</span></td>
+              <td class="p-4"><span class="text-amber-700 dark:text-amber-400">一部</span> — Google Takeout</td>
+            </tr>
+            <tr class="border-b border-slate-100 dark:border-slate-800">
+              <td class="p-4 font-medium text-slate-900 dark:text-white">チャット形式のメール表示</td>
+              <td class="p-4 bg-primary-50/50 dark:bg-primary-900/10"><span class="text-primary-600 dark:text-primary-400 font-bold">はい</span> — iMessageのように</td>
+              <td class="p-4"><span class="text-red-600 dark:text-red-400">非対応</span></td>
+              <td class="p-4"><span class="text-red-600 dark:text-red-400">非対応</span></td>
+              <td class="p-4"><span class="text-red-600 dark:text-red-400">非対応</span></td>
+            </tr>
+            <tr class="border-b border-slate-100 dark:border-slate-800">
+              <td class="p-4 font-medium text-slate-900 dark:text-white">送信者の検証（SPF/DKIM）</td>
+              <td class="p-4 bg-primary-50/50 dark:bg-primary-900/10"><span class="text-primary-600 dark:text-primary-400 font-bold">はい</span> — 目に見えるバッジ</td>
+              <td class="p-4"><span class="text-red-600 dark:text-red-400">非対応</span></td>
+              <td class="p-4"><span class="text-red-600 dark:text-red-400">非対応</span></td>
+              <td class="p-4"><span class="text-amber-700 dark:text-amber-400">一部</span> — 隠れています</td>
+            </tr>
+            <tr class="border-b border-slate-100 dark:border-slate-800">
+              <td class="p-4 font-medium text-slate-900 dark:text-white">統合受信トレイ</td>
+              <td class="p-4 bg-primary-50/50 dark:bg-primary-900/10"><span class="text-primary-600 dark:text-primary-400 font-bold">はい</span> — 全アカウントを統合</td>
+              <td class="p-4"><span class="text-primary-600 dark:text-primary-400">対応</span></td>
+              <td class="p-4"><span class="text-primary-600 dark:text-primary-400">対応</span></td>
+              <td class="p-4"><span class="text-red-600 dark:text-red-400">非対応</span></td>
+            </tr>
+            <tr class="border-b border-slate-100 dark:border-slate-800">
+              <td class="p-4 font-medium text-slate-900 dark:text-white">キーボードショートカット</td>
+              <td class="p-4 bg-primary-50/50 dark:bg-primary-900/10"><span class="text-primary-600 dark:text-primary-400 font-bold">はい</span> — 変更できます</td>
+              <td class="p-4"><span class="text-amber-700 dark:text-amber-400">一部</span> — 限定的</td>
+              <td class="p-4"><span class="text-primary-600 dark:text-primary-400">対応</span></td>
+              <td class="p-4"><span class="text-primary-600 dark:text-primary-400">対応</span></td>
+            </tr>
+            <tr class="border-b border-slate-100 dark:border-slate-800">
+              <td class="p-4 font-medium text-slate-900 dark:text-white">送信の取り消し</td>
+              <td class="p-4 bg-primary-50/50 dark:bg-primary-900/10"><span class="text-primary-600 dark:text-primary-400 font-bold">はい</span> — 遅延を設定できます</td>
+              <td class="p-4"><span class="text-primary-600 dark:text-primary-400">対応</span></td>
+              <td class="p-4"><span class="text-red-600 dark:text-red-400">非対応</span></td>
+              <td class="p-4"><span class="text-primary-600 dark:text-primary-400">対応</span></td>
+            </tr>
+            <tr class="border-b border-slate-100 dark:border-slate-800">
+              <td class="p-4 font-medium text-slate-900 dark:text-white">プライバシー（クラウドや追跡なし）</td>
+              <td class="p-4 bg-primary-50/50 dark:bg-primary-900/10"><span class="text-primary-600 dark:text-primary-400 font-bold">はい</span> — 完全にローカル</td>
+              <td class="p-4"><span class="text-amber-700 dark:text-amber-400">一部</span> — iCloudの同期</td>
+              <td class="p-4"><span class="text-primary-600 dark:text-primary-400">対応</span></td>
+              <td class="p-4"><span class="text-red-600 dark:text-red-400">いいえ</span> — Googleのサーバー</td>
+            </tr>
+            <tr>
+              <td class="p-4 font-medium text-slate-900 dark:text-white">オープンソース</td>
+              <td class="p-4 bg-primary-50/50 dark:bg-primary-900/10"><span class="text-primary-600 dark:text-primary-400 font-bold">対応</span></td>
+              <td class="p-4"><span class="text-red-600 dark:text-red-400">非対応</span></td>
+              <td class="p-4"><span class="text-primary-600 dark:text-primary-400">対応</span></td>
+              <td class="p-4"><span class="text-red-600 dark:text-red-400">非対応</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Newsletter Section -->
+  <section aria-label="ニュースレターの登録" class="py-20 bg-white dark:bg-slate-800/50">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="max-w-xl mx-auto text-center">
+        <div class="w-16 h-16 mx-auto mb-6 rounded-2xl lamp-bg flex items-center justify-center">
+          <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+          </svg>
+        </div>
+        <h2 class="text-3xl sm:text-4xl font-bold mb-4">
+          最新情報を受け取る
+        </h2>
+        <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
+          新しいリリース、機能、使い方のヒントをお知らせします。迷惑メールは送りません。いつでも解除できます。
+        </p>
+
+        <form id="newsletter-form" method="post" action="/api/subscribe" class="flex flex-col sm:flex-row gap-3">
+          <input
+            type="email"
+            name="email"
+            placeholder="メールアドレスを入力"
+            autocomplete="email"
+            maxlength="254"
+            required
+            class="flex-1 px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all"
+          >
+          <button
+            type="submit"
+            class="lamp-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity whitespace-nowrap"
+          >
+            登録
+          </button>
+        </form>
+        <p role="status" aria-live="polite" aria-atomic="true" id="newsletter-message" class="mt-4 text-sm hidden"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Community / Contact Section -->
+  <section id="community" aria-label="コミュニティとお問い合わせ" class="py-20">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="max-w-3xl mx-auto text-center mb-12">
+        <h2 class="text-3xl sm:text-4xl font-bold mb-4">
+          コミュニティに参加する
+        </h2>
+        <p class="text-lg text-slate-600 dark:text-slate-400">
+          機能のご要望、不具合の報告を通じて、MailVaultの今後を一緒に形づくってください。
+        </p>
+      </div>
+
+      <div class="max-w-4xl mx-auto grid md:grid-cols-3 gap-8" id="contact">
+        <!-- GitHub Discussions -->
+        <a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" class="group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg text-center flex flex-col items-center justify-center">
+          <div class="w-14 h-14 mx-auto mb-4 rounded-2xl bg-slate-900 dark:bg-white flex items-center justify-center">
+            <svg class="w-7 h-7 text-white dark:text-slate-900" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">GitHub Discussions</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm">
+            機能の要望、アイデアへの投票、不具合の報告、質問ができます。詳しいフィードバックにはここが最適です。
+          </p>
+        </a>
+
+        <!-- Follow on X -->
+        <a href="https://x.com/GraphicMeat" target="_blank" class="group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg text-center flex flex-col items-center justify-center">
+          <div class="w-14 h-14 mx-auto mb-4 rounded-2xl bg-black dark:bg-white flex items-center justify-center">
+            <svg class="w-6 h-6 text-white dark:text-black" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">Xでフォローする</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm">
+            最新のニュース、ヒント、開発の近況をお届けします。
+          </p>
+        </a>
+
+        <!-- Contact Us Button -->
+        <button id="open-contact-btn" class="group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg text-center flex flex-col items-center justify-center cursor-pointer w-full">
+          <div class="w-14 h-14 mx-auto mb-4 rounded-2xl lamp-bg flex items-center justify-center">
+            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">お問い合わせ</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm">
+            質問やご意見がありますか。直接メッセージをお送りください。
+          </p>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Platform Availability Section -->
+  <section aria-label="対応プラットフォーム" class="py-20 bg-white dark:bg-slate-800/50">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="max-w-3xl mx-auto text-center">
+        <h2 class="text-3xl sm:text-4xl font-bold mb-6">
+          <span class="lamp-text">macOS &amp; Linux</span>でご利用いただけます
+        </h2>
+        <p class="text-lg text-slate-600 dark:text-slate-400 mb-10">
+          MailVaultはmacOS（Intel &amp; Apple Silicon）とLinux（x86_64 &amp; aarch64）でネイティブに動作します。Windows版が必要ですか。
+        </p>
+
+        <div class="grid sm:grid-cols-3 gap-6 mb-10">
+          <!-- macOS -->
+          <div class="p-6 rounded-2xl bg-primary-50 dark:bg-primary-900/20 border-2 border-primary-500">
+            <svg class="w-10 h-10 mx-auto mb-3 text-primary-500" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+            </svg>
+            <h3 class="font-semibold text-slate-900 dark:text-white mb-1">macOS</h3>
+            <span class="inline-block px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium rounded-full">提供中</span>
+          </div>
+
+          <!-- Linux -->
+          <div class="p-6 rounded-2xl bg-primary-50 dark:bg-primary-900/20 border-2 border-primary-500">
+            <svg class="w-10 h-10 mx-auto mb-3 text-primary-500" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12.504 0c-.155 0-.311.002-.466.014C8.756.17 5.944 2.534 5.156 6.03c-.337 1.494-.182 3.09.243 4.578a18.1 18.1 0 001.2 3.126c.324.659.694 1.39.857 2.129.168.76.106 1.473-.14 2.191-.245.713-.618 1.37-.99 2.023-.37.65-.745 1.303-1.003 2.016-.258.714-.378 1.507-.168 2.31.208.795.688 1.48 1.349 1.96.66.48 1.485.762 2.324.835a7.32 7.32 0 002.6-.243 8.36 8.36 0 001.174-.423c.371-.17.741-.37 1.157-.37.416 0 .786.2 1.157.37.365.167.76.313 1.174.423a7.32 7.32 0 002.6.243c.839-.073 1.664-.356 2.324-.835.661-.48 1.141-1.165 1.349-1.96.21-.803.09-1.596-.168-2.31-.258-.713-.633-1.366-1.003-2.016-.372-.653-.745-1.31-.99-2.023-.246-.718-.308-1.431-.14-2.191.163-.74.533-1.47.857-2.129a18.1 18.1 0 001.2-3.126c.425-1.488.58-3.084.243-4.578C18.056 2.534 15.244.17 11.962.014 11.807.002 11.651 0 11.496 0h1.008z"/>
+            </svg>
+            <h3 class="font-semibold text-slate-900 dark:text-white mb-1">Linux</h3>
+            <span class="inline-block px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium rounded-full">v2.0で追加</span>
+          </div>
+
+          <!-- Windows -->
+          <div class="p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+            <svg class="w-10 h-10 mx-auto mb-3 text-slate-400" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/>
+            </svg>
+            <h3 class="font-semibold text-slate-900 dark:text-white mb-1">Windows</h3>
+            <span class="inline-block px-3 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-medium rounded-full">予定</span>
+          </div>
+        </div>
+
+        <div class="max-w-md mx-auto">
+          <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">時期はまだ未定です。決まったときにお知らせする宛先を教えてください:</p>
+          <form id="platform-notify-form" method="post" action="/api/subscribe" class="flex gap-2">
+            <input type="email" name="email" placeholder="メールアドレス" autocomplete="email" maxlength="254" required class="flex-1 px-4 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all text-sm">
+            <button type="submit" class="lamp-bg text-white px-5 py-2.5 rounded-lg font-medium text-sm hover:opacity-90 transition-opacity whitespace-nowrap">通知を受け取る</button>
+          </form>
+          <p role="status" aria-live="polite" aria-atomic="true" id="platform-notify-message" class="mt-2 text-sm hidden"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pricing Section -->
+  <section id="pricing" aria-label="料金" class="py-20 bg-white dark:bg-slate-800/50">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="max-w-3xl mx-auto text-center mb-16">
+        <h2 class="text-3xl sm:text-4xl font-bold mb-6">
+          シンプルで<span class="lamp-text">正直</span>な料金
+        </h2>
+        <p class="text-lg text-slate-600 dark:text-slate-400">
+          中心のアプリはずっと無料です。Premiumはその上に自動化を追加します。年額プランは14日間の無料トライアルから始まります。
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-6 max-w-3xl mx-auto">
+        <!-- Free -->
+        <div class="rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 text-center">
+          <h3 class="font-semibold mb-1">無料</h3>
+          <div class="text-3xl font-extrabold mb-2" data-mv-price="{zero}">$0</div>
+          <p class="text-sm text-slate-500 dark:text-slate-400">完全なメールクライアントと、無制限の手動バックアップを、ずっと無料で</p>
+        </div>
+
+        <!-- Yearly (hero) -->
+        <div class="relative rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-primary-500 p-6 text-center shadow-lg shadow-primary-500/10">
+          <span class="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full lamp-bg text-white text-xs font-bold uppercase tracking-wide whitespace-nowrap">人気</span>
+          <h3 class="font-semibold mb-1">年額</h3>
+          <div class="text-3xl font-extrabold lamp-text mb-2"><span data-mv-price="{yearly}">$25</span><span class="text-base font-medium text-slate-500 dark:text-slate-400">/年</span></div>
+          <p class="text-sm text-slate-500 dark:text-slate-400" data-mv-price="月あたり約{monthlyEquivalent} &middot; 14日間の無料トライアル">月あたり約$2 &middot; 14日間の無料トライアル</p>
+        </div>
+
+        <!-- Monthly -->
+        <div class="rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 text-center">
+          <h3 class="font-semibold mb-1">月額</h3>
+          <div class="text-3xl font-extrabold mb-2"><span data-mv-price="{monthly}">$4</span><span class="text-base font-medium text-slate-500 dark:text-slate-400">/月</span></div>
+          <p class="text-sm text-slate-500 dark:text-slate-400">いつでも解約できます</p>
+        </div>
+      </div>
+
+      <div class="text-center mt-10">
+        <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">無料でダウンロードして、好きなときにアプリ内の 設定 &rarr; お支払い からアップグレードできます。</p>
+        <a href="/ja/pricing.html" class="inline-flex items-center gap-2 text-primary-500 hover:text-primary-600 font-semibold transition-colors">
+          料金の詳細を見る
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+          </svg>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Changelog CTA Section -->
+  <section aria-label="変更履歴" class="py-20">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="max-w-2xl mx-auto text-center">
+        <div class="w-16 h-16 mx-auto mb-6 rounded-2xl bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
+          <svg class="w-8 h-8 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+          </svg>
+        </div>
+        <h2 class="text-3xl sm:text-4xl font-bold mb-4">
+          新着情報
+        </h2>
+        <p class="text-lg text-slate-600 dark:text-slate-400 mb-8" data-whats-new data-version="2.10.3">
+          v2.10.3は修正のためのリリースで、修正はどれも1つのことに関わっています。それは、MailVaultがメールを、発行したサーバーにしか意味のない番号で整理していたことです。ドメインを新しいメールホストに移すと、その番号は別のメッセージに割り当てられます。その結果、会話の中のメッセージが、本文のあるべき場所に自分自身の件名を表示したり、「ソースを表示」がまったく別のメッセージを開いたり、バックアップのたびに古いコピーを書き戻して、MailVault自身によるアーカイブの修復を黙って取り消したりしていました。さらに、幅の狭いウィンドウでクリックしたメッセージが画面の下端より下へ押し出される問題を解消し、隠れていた設定のタブを画面内に戻し、一括のアーカイブと削除の進行をスクリーンリーダーが読み上げるようにしました。
+        </p>
+        <a href="/changelog.html" class="inline-flex items-center gap-2 px-8 py-4 rounded-xl font-semibold text-lg border-2 border-primary-500 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">
+          変更履歴を見る
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+          </svg>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVaultのロゴ" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/ja/docs.html" class="hover:text-primary-500 transition-colors">ドキュメント</a>
+          <a href="/ja/blog.html" class="hover:text-primary-500 transition-colors">ブログ</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">プライバシー</a>
+          <a href="/ja/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">変更履歴</a>
+          <a href="/ja/mentioned-in.html" class="hover:text-primary-500 transition-colors">掲載メディア</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">利用規約</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 無断転載を禁じます。
+        </p>
+      </div>
+    </div>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+            <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+        <span>調理は <span class="text-primary-500 font-semibold">オープンGPUの直火</span> で、作り手は</span>
+        <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
+          <img src="/graphicmeat-logo.webp" alt="制作: Graphic Meat" class="w-full max-w-[400px] h-auto" width="512" height="512" loading="lazy" decoding="async">
+        </a>
+      </div>
+    </div>
+
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="言語を選ぶ" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <!-- Contact Modal -->
+  <div id="contact-modal" class="fixed inset-0 z-50 hidden">
+    <div id="contact-backdrop" aria-hidden="true" class="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+      <div id="contact-panel" role="dialog" aria-modal="true" aria-labelledby="contact-title" class="relative w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 p-6">
+        <button id="close-contact-btn" aria-label="閉じる" class="absolute top-4 right-4 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+          <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+
+        <div class="text-center mb-6">
+          <div class="w-12 h-12 mx-auto mb-3 rounded-xl lamp-bg flex items-center justify-center">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+            </svg>
+          </div>
+          <h3 id="contact-title" class="text-xl font-bold">メッセージを送る</h3>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">できるだけ早くご返信します。</p>
+        </div>
+
+        <form id="contact-form" method="post" action="/api/contact" class="space-y-3">
+          <!-- Honeypot: hidden from humans, bots fill it -->
+          <input type="text" name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px;opacity:0;height:0;width:0;">
+          <input type="hidden" name="_t" value="">
+
+          <input
+            type="text"
+            name="name"
+            placeholder="お名前"
+            autocomplete="name"
+            maxlength="100"
+            required
+            class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all text-sm"
+          >
+          <input
+            type="email"
+            name="email"
+            placeholder="メールアドレス"
+            autocomplete="email"
+            maxlength="254"
+            required
+            class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all text-sm"
+          >
+          <select
+            name="category"
+            class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all text-sm"
+          >
+            <option value="general">一般的なお問い合わせ</option>
+            <option value="bug">不具合の報告</option>
+            <option value="feature">機能のご要望</option>
+            <option value="other">その他</option>
+          </select>
+          <textarea
+            name="message"
+            placeholder="メッセージ"
+            maxlength="5000"
+            required
+            rows="4"
+            class="w-full px-3 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition-all text-sm resize-none"
+          ></textarea>
+          <button
+            type="submit"
+            class="w-full lamp-bg text-white px-4 py-2.5 rounded-lg font-semibold text-sm hover:opacity-90 transition-opacity"
+          >
+            メッセージを送信
+          </button>
+        </form>
+        <p role="status" aria-live="polite" aria-atomic="true" id="contact-message" class="mt-3 text-sm text-center hidden"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Strings the scripts below put on screen. Kept out of the JS so the
+       localization pipeline can translate them like any other page text;
+       website/i18n/i18n.mjs treats an application/json block as prose. -->
+  <script type="application/json" id="ui-strings">
+{
+  "downloadMac": "macOS版を無料でダウンロード",
+  "downloadLinux": "Linux版を無料でダウンロード",
+  "subscribing": "登録しています…",
+  "sending": "送信しています…",
+  "saving": "保存しています…",
+  "subscribed": "登録しました。ウェルカムメールをご確認ください。",
+  "contactSent": "メッセージを送信しました。ご記入いただいたアドレス宛てに返信します。",
+  "platformSignedUp": "登録しました — Windows版が出たらメールでお知らせします。",
+  "expandScreenshot": "スクリーンショットを拡大:",
+  "offline": "オフラインのようです。接続を確認して、もう一度お試しください。",
+  "unreachable": "サーバーに接続できませんでした。接続を確認して、もう一度お試しください。",
+  "rateLimited": "試行の回数が多すぎます。少し待ってから、もう一度お試しください。",
+  "serverError": "こちら側で問題が起きました。少し経ってから、もう一度お試しください。",
+  "submitFailed": "送信できませんでした。内容を確認して、もう一度お試しください。",
+  "subscribeFailed": "送信できませんでした。アドレスを確認して、もう一度お試しください。",
+  "contactFailed": "送信できませんでした。入力内容を確認して、もう一度お試しください。"
+}
+  </script>
+
+  <script>
+    // ============================================
+    // Configuration - Update these for your server
+    // ============================================
+    // Development: 'http://localhost:3001'
+    // Production: same-origin (empty string)
+    const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? 'http://localhost:3001'
+      : '';
+
+    // ============================================
+    // Theme Toggle
+    // ============================================
+    const themeToggle = document.getElementById('theme-toggle');
+    const html = document.documentElement;
+
+    // Check for saved theme or system preference
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      html.classList.add('dark');
+    }
+
+    themeToggle.addEventListener('click', () => {
+      html.classList.toggle('dark');
+      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
+    });
+
+    // ============================================
+    // Mobile Menu
+    // ============================================
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+
+    mobileMenuBtn.addEventListener('click', () => {
+      const isOpen = !mobileMenu.classList.contains('hidden');
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+
+    // Close mobile menu when a link is clicked
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+
+    // ============================================
+    // Values that arrive from the network
+    // ============================================
+    // `--` snapping to a number reads as a rendering glitch. One short fade
+    // says the answer came back. Re-armed by hand because assigning a class
+    // that is already present does not restart a CSS animation.
+    function replay(el, className) {
+      if (!el) return;
+      el.classList.remove(className);
+      void el.offsetWidth;
+      el.classList.add(className);
+    }
+
+    // Localized copies of this page carry a translated #ui-strings block; the
+    // English literal stays as the fallback if it is ever missing or malformed.
+    const UI = (() => {
+      try { return JSON.parse(document.getElementById('ui-strings').textContent); }
+      catch (e) { return {}; }
+    })();
+    const ui = (key, fallback) => UI[key] || fallback;
+
+    function setArrivedText(el, text) {
+      if (!el) return;
+      el.textContent = text;
+      replay(el, 'count-arrive');
+    }
+
+    // ============================================
+    // Platform-aware hero download button
+    // ============================================
+    const heroDownloadBtn = document.getElementById('hero-download');
+    const heroDownloadText = document.getElementById('hero-download-text');
+    const isMac = /Macintosh|Mac OS X/.test(navigator.userAgent);
+    const isLinux = /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
+
+    if (isMac) {
+      setArrivedText(heroDownloadText, ui('downloadMac', 'Download Free for macOS'));
+    } else if (isLinux) {
+      setArrivedText(heroDownloadText, ui('downloadLinux', 'Download Free for Linux'));
+    }
+
+    // ============================================
+    // "I want this!" Voting
+    // ============================================
+    const wantThisBtn = document.getElementById('want-this-btn');
+    const voteCountEl = document.getElementById('vote-count');
+    let hasVoted = localStorage.getItem('mailvault-voted') === 'true';
+
+    function markAsVoted() {
+      hasVoted = true;
+      localStorage.setItem('mailvault-voted', 'true');
+      wantThisBtn.classList.add('bg-pink-50', 'dark:bg-pink-900/20');
+    }
+
+    if (hasVoted) {
+      wantThisBtn.classList.add('bg-pink-50', 'dark:bg-pink-900/20');
+    }
+
+    async function fetchVoteCount() {
+      try {
+        const res = await fetch(`${API_BASE}/api/votes`);
+        const data = await res.json();
+        setArrivedText(voteCountEl, (data.count || 0).toLocaleString());
+      } catch (e) {
+        console.warn('Could not fetch vote count:', e);
+      }
+    }
+
+    wantThisBtn.addEventListener('click', async () => {
+      if (hasVoted) {
+        // Nudge the heart, not the whole button: pulsing a control that did
+        // nothing looks like it is still working on something.
+        replay(document.getElementById('vote-heart'), 'vote-landed');
+        return;
+      }
+      try {
+        const res = await fetch(`${API_BASE}/api/votes`, {
+          method: 'POST',
+          headers: { 'Accept': 'application/json' }
+        });
+        const data = await res.json();
+        setArrivedText(voteCountEl, (data.count || 0).toLocaleString());
+        replay(document.getElementById('vote-heart'), 'vote-landed');
+        markAsVoted();
+      } catch (e) {
+        console.error('Vote failed:', e);
+      }
+    });
+
+    fetchVoteCount();
+
+    // ============================================
+    // Newsletter Form
+    // ============================================
+    const newsletterForm = document.getElementById('newsletter-form');
+    const newsletterMessage = document.getElementById('newsletter-message');
+
+    // ============================================
+    // Form submission — shared behaviour
+    // ============================================
+    // Every form on this page posts to the API and reports back in the same
+    // way: the submit button goes busy and stays disabled until the request
+    // settles (a second click used to send a second message), and the status
+    // line says what actually happened. It previously reported success on
+    // every failure path — offline, 500, rate limit — which told people they
+    // were subscribed when no row had been written.
+    function setBusy(form, busy, busyLabel) {
+      form.dataset.busy = busy ? '1' : '';
+      const button = form.querySelector('[type="submit"]');
+      if (!button) return;
+      if (busy) {
+        button.dataset.idleLabel = button.dataset.idleLabel || button.textContent;
+        button.textContent = busyLabel || button.dataset.idleLabel;
+      } else if (button.dataset.idleLabel) {
+        button.textContent = button.dataset.idleLabel;
+      }
+      button.disabled = busy;
+      button.setAttribute('aria-busy', busy ? 'true' : 'false');
+      button.classList.toggle('opacity-60', busy);
+      button.classList.toggle('cursor-not-allowed', busy);
+    }
+
+    function showStatus(el, text, kind, baseClass) {
+      el.textContent = text;
+      el.className = baseClass + (kind === 'error'
+        ? ' text-red-600 dark:text-red-400'
+        : ' text-green-600 dark:text-green-400');
+      el.classList.remove('hidden');
+      replay(el, 'status-arrive');
+    }
+
+    // One sentence per failure the visitor can actually do something about.
+    async function postForm(url, body) {
+      if (navigator.onLine === false) {
+        throw new Error(ui('offline', 'You appear to be offline. Check your connection and try again.'));
+      }
+      let res;
+      try {
+        res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+      } catch (networkError) {
+        throw new Error(ui('unreachable', "Couldn't reach the server. Check your connection and try again."));
+      }
+      if (res.ok) return res.json().catch(() => ({}));
+
+      if (res.status === 429) {
+        throw new Error(ui('rateLimited', 'Too many attempts. Wait a minute and try again.'));
+      }
+      if (res.status >= 500) {
+        throw new Error(ui('serverError', 'Something went wrong on our end. Try again in a moment.'));
+      }
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || ui('submitFailed', 'That did not go through. Check the details and try again.'));
+    }
+
+    const NEWSLETTER_STATUS_CLASS = 'mt-4 text-sm';
+
+    newsletterForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (newsletterForm.dataset.busy === '1') return;
+      setBusy(newsletterForm, true, ui('subscribing', 'Subscribing…'));
+      try {
+        await postForm(`${API_BASE}/api/subscribe`, { email: newsletterForm.email.value });
+        showStatus(newsletterMessage, ui('subscribed', "You're on the list. Watch for the welcome email."), 'ok', NEWSLETTER_STATUS_CLASS);
+        newsletterForm.reset();
+      } catch (err) {
+        showStatus(newsletterMessage, err.message, 'error', NEWSLETTER_STATUS_CLASS);
+      } finally {
+        setBusy(newsletterForm, false);
+      }
+    });
+
+    // ============================================
+    // Contact Modal
+    // ============================================
+    const contactModal = document.getElementById('contact-modal');
+    const openContactBtn = document.getElementById('open-contact-btn');
+    const closeContactBtn = document.getElementById('close-contact-btn');
+    const contactBackdrop = document.getElementById('contact-backdrop');
+    const contactForm = document.getElementById('contact-form');
+    const contactMessage = document.getElementById('contact-message');
+
+    const contactPanel = document.getElementById('contact-panel');
+    const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]):not([type="hidden"]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+    let contactReturnFocus = null;
+
+    function openContactModal() {
+      contactReturnFocus = document.activeElement;
+      contactModal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+      // Set timestamp when modal opens (for timing check)
+      contactForm._t.value = Date.now().toString();
+      // The honeypot is off-screen but still focusable; skip it.
+      contactPanel.querySelector('input[name="name"]')?.focus();
+    }
+
+    function closeContactModal() {
+      contactModal.classList.add('hidden');
+      document.body.style.overflow = '';
+      contactForm.reset();
+      contactMessage.classList.add('hidden');
+      if (contactReturnFocus && document.contains(contactReturnFocus)) contactReturnFocus.focus();
+      contactReturnFocus = null;
+    }
+
+    // Tab must not walk out of an open dialog into the page behind it.
+    contactPanel.addEventListener('keydown', (e) => {
+      if (e.key !== 'Tab') return;
+      const items = [...contactPanel.querySelectorAll(FOCUSABLE)]
+        .filter(el => el.offsetWidth > 0 || el.offsetHeight > 0);
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    });
+
+    openContactBtn.addEventListener('click', openContactModal);
+    closeContactBtn.addEventListener('click', closeContactModal);
+    contactBackdrop.addEventListener('click', closeContactModal);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !contactModal.classList.contains('hidden')) closeContactModal();
+    });
+
+    const CONTACT_STATUS_CLASS = 'mt-3 text-sm text-center';
+
+    contactForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (contactForm.dataset.busy === '1') return;
+      setBusy(contactForm, true, ui('sending', 'Sending…'));
+      try {
+        await postForm(`${API_BASE}/api/contact`, {
+          name: contactForm.name.value,
+          email: contactForm.email.value,
+          category: contactForm.category.value,
+          message: contactForm.message.value,
+          website: contactForm.website.value,
+          _t: contactForm._t.value,
+        });
+        showStatus(contactMessage, ui('contactSent', "Message sent. We'll reply to the address you gave."), 'ok', CONTACT_STATUS_CLASS);
+        contactForm.reset();
+        // The form is cleared, so the text stays on screen long enough to read
+        // before the dialog goes away. Nothing is retried behind it.
+        setTimeout(() => closeContactModal(), 2500);
+      } catch (err) {
+        // Keep what they typed: a failed send must never cost the message.
+        showStatus(contactMessage, err.message, 'error', CONTACT_STATUS_CLASS);
+      } finally {
+        setBusy(contactForm, false);
+      }
+    });
+
+    // ============================================
+    // No-JavaScript form results
+    // ============================================
+    // With JS off the forms post directly and the API redirects back here with
+    // a flag. With JS on this runs too — harmless, and it means a visitor who
+    // submitted before the script finished parsing still sees an answer.
+    (function reportFormRedirect() {
+      const params = new URLSearchParams(window.location.search);
+      const results = [
+        ['subscribed', newsletterMessage, ui('subscribed', "You're on the list. Watch for the welcome email."), 'ok', NEWSLETTER_STATUS_CLASS],
+        ['subscribe_error', newsletterMessage, ui('subscribeFailed', "That didn't go through. Check the address and try again."), 'error', NEWSLETTER_STATUS_CLASS],
+        ['contacted', contactMessage, ui('contactSent', "Message sent. We'll reply to the address you gave."), 'ok', CONTACT_STATUS_CLASS],
+        ['contact_error', contactMessage, ui('contactFailed', "That didn't go through. Check the details and try again."), 'error', CONTACT_STATUS_CLASS],
+      ];
+      let matched = false;
+      for (const [flag, el, text, kind, baseClass] of results) {
+        if (!params.has(flag) || !el) continue;
+        matched = true;
+        showStatus(el, text, kind, baseClass);
+        if (flag === 'contacted' || flag === 'contact_error') openContactModal();
+      }
+      if (matched) {
+        // Drop the flag so a refresh doesn't re-announce a stale result.
+        window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+      }
+    })();
+
+    // ============================================
+    // Resolve latest download URLs from GitHub
+    // ============================================
+    fetch('https://api.github.com/repos/GraphicMeat/mail-vault-app/releases/latest')
+      .then(r => r.json())
+      .then(release => {
+        const dmg = release.assets.find(a => a.name.endsWith('.dmg'));
+        if (dmg) {
+          document.getElementById('download-dmg').href = dmg.browser_download_url;
+          if (isMac) {
+            heroDownloadBtn.href = dmg.browser_download_url;
+          }
+        }
+        if (release.tag_name) {
+          const v = document.getElementById('release-version');
+          if (v) v.textContent = 'v' + release.tag_name.replace(/^v/, '') + ' · ';
+        }
+        const debX86 = release.assets.find(a => a.name.endsWith('.deb') && a.name.includes('amd64'));
+        if (debX86) {
+          document.getElementById('download-linux-x86').href = debX86.browser_download_url;
+        }
+        const debArm = release.assets.find(a => a.name.endsWith('.deb') && (a.name.includes('arm64') || a.name.includes('aarch64')));
+        if (debArm) {
+          document.getElementById('download-linux-arm').href = debArm.browser_download_url;
+        }
+      })
+      .catch(() => {});
+
+    // ============================================
+    // GitHub star count
+    // ============================================
+    fetch('https://api.github.com/repos/GraphicMeat/mail-vault-app')
+      .then(r => r.json())
+      .then(repo => {
+        const el = document.getElementById('github-stars');
+        if (el && typeof repo.stargazers_count === 'number') {
+          setArrivedText(el, repo.stargazers_count.toLocaleString());
+        }
+      })
+      .catch(() => {});
+
+    // ============================================
+    // Download count from GitHub
+    // ============================================
+    fetch('https://api.github.com/repos/GraphicMeat/mail-vault-app/releases')
+      .then(r => r.json())
+      .then(releases => {
+        if (!Array.isArray(releases)) return;
+        let total = 0;
+        releases.forEach(r => {
+          if (r.assets) r.assets.forEach(a => { total += a.download_count || 0; });
+        });
+        if (total > 0) {
+          const el = document.getElementById('download-count');
+          if (el) el.textContent = total.toLocaleString() + ' downloads';
+        }
+      })
+      .catch(() => {});
+
+    // ============================================
+    // Platform Notify Form
+    // ============================================
+    const platformForm = document.getElementById('platform-notify-form');
+    const platformMessage = document.getElementById('platform-notify-message');
+
+    if (platformForm) {
+      platformForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (platformForm.dataset.busy === '1') return;
+        setBusy(platformForm, true, ui('saving', 'Saving…'));
+        try {
+          await postForm(`${API_BASE}/api/subscribe`, { email: platformForm.email.value });
+          showStatus(platformMessage, ui('platformSignedUp', "You're on the list — we'll email you when Windows ships."), 'ok', 'mt-2 text-sm');
+          platformForm.reset();
+        } catch (err) {
+          showStatus(platformMessage, err.message, 'error', 'mt-2 text-sm');
+        } finally {
+          setBusy(platformForm, false);
+        }
+      });
+    }
+
+    // ============================================
+    // Smooth scroll for anchor links
+    // ============================================
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        const href = this.getAttribute('href');
+        // href may have been rewritten to a direct download URL after load
+        if (!href.startsWith('#')) return;
+        e.preventDefault();
+        const target = document.querySelector(href);
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    });
+
+    // ============================================
+    // Metrics: fire-and-forget download click beacons
+    // No cookies, no IDs, doesn't block navigation
+    // ============================================
+    ['download-dmg', 'download-snap', 'download-linux-x86', 'download-linux-arm'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('click', () => {
+        try {
+          navigator.sendBeacon('/api/metrics/e', 'download_click');
+        } catch (e) {}
+      });
+    });
+
+  </script>
+
+  <!-- Lightbox Modal -->
+  <div id="lightbox-modal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true" aria-label="スクリーンショットのプレビュー">
+    <div id="lightbox-backdrop" class="absolute inset-0 bg-black/80 backdrop-blur-sm"></div>
+    <div class="absolute inset-0 flex flex-col items-center justify-center p-4 sm:p-8 pointer-events-none">
+      <button id="lightbox-close" class="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors pointer-events-auto" aria-label="プレビューを閉じる">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+      <img id="lightbox-img" src="" alt="" class="max-w-full max-h-[85vh] rounded-xl shadow-2xl object-contain pointer-events-auto">
+      <p id="lightbox-caption" class="mt-3 text-sm text-white/80 text-center max-w-2xl pointer-events-none"></p>
+    </div>
+  </div>
+
+  <!-- Screenshot Lightbox Script -->
+  <script>
+    (function() {
+      const modal = document.getElementById('lightbox-modal');
+      const backdrop = document.getElementById('lightbox-backdrop');
+      const img = document.getElementById('lightbox-img');
+      const caption = document.getElementById('lightbox-caption');
+      const closeBtn = document.getElementById('lightbox-close');
+
+      function open(src, alt) {
+        img.src = src;
+        img.alt = alt;
+        caption.textContent = alt;
+        caption.classList.toggle('hidden', !alt);
+        modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+        closeBtn.focus();
+      }
+
+      function close() {
+        modal.classList.add('hidden');
+        document.body.style.overflow = '';
+        img.src = '';
+      }
+
+      document.querySelectorAll('[data-expandable-image]').forEach(function(el) {
+        el.style.cursor = 'zoom-in';
+        el.setAttribute('tabindex', '0');
+        el.setAttribute('role', 'button');
+        el.setAttribute('aria-label', ui('expandScreenshot', 'Expand screenshot:') + ' ' + (el.alt || ''));
+        el.addEventListener('click', function() { open(el.currentSrc || el.src, el.alt); });
+        el.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(el.currentSrc || el.src, el.alt); }
+        });
+      });
+
+      closeBtn.addEventListener('click', close);
+      backdrop.addEventListener('click', close);
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && !modal.classList.contains('hidden')) close();
+      });
+    })();
+  </script>
+  <script defer src="/pricing-localize.js?v=1"></script>
+  <script defer src="/version-gate.js?v=4"></script>
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

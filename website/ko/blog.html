@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>블로그 - MailVault</title>
+  <meta name="description" content="MailVault를 만드는 과정의 뒷이야기. 개발 소식, 기술 심층 분석, 릴리스 노트를 담았습니다.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ko/blog.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/ko/blog.html">
+  <meta property="og:title" content="블로그 - MailVault">
+  <meta property="og:description" content="MailVault를 만드는 과정의 뒷이야기. 개발 소식, 기술 심층 분석, 릴리스 노트를 담았습니다.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ko_KR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="블로그 - MailVault">
+  <meta name="twitter:description" content="MailVault를 만드는 과정의 뒷이야기. 개발 소식, 기술 심층 분석, 릴리스 노트를 담았습니다.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/ko/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/ko/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="테마 전환">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            다운로드
+          </a>
+          <!-- Mobile menu button -->
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile menu -->
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/ko/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">다운로드</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <h1 class="text-4xl font-bold mb-2">블로그</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-12">MailVault를 만드는 과정의 뒷이야기</p>
+
+      <div class="space-y-6">
+
+        <!-- Cloud Backup Vendor Reads Your Email -->
+        <a href="/ko/blog/cloud-backup-vendor-reads-your-email.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-08-28" class="text-sm text-primary-500 font-medium">2026년 8월 28일</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">클라우드 백업은 업체가 내 메일을 영원히 읽을 수 있다는 뜻입니다. 로컬 백업은 나만 읽을 수 있다는 뜻입니다.</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">외부 클라우드 백업 서비스는 단일 장애점을 없애 주지 않습니다 — 지금까지 주고받은 모든 메일에 상시 접근하는 회사가 하나 더 늘어날 뿐입니다. 실제 구조상의 차이와, 로컬 백업이 그 틈을 메우는 방식을 살펴봅니다.</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>6분 분량</span>
+          </div>
+        </a>
+
+        <!-- GDPR Fines and Indefinite Retention -->
+        <a href="/ko/blog/gdpr-fines-indefinite-email-retention.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-08-25" class="text-sm text-primary-500 font-medium">2026년 8월 25일</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">GDPR 과징금 €61.1억 돌파 — "전부 영구 보관"은 컴플라이언스 위험일까요?</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">집행 규모가 2,685건에 걸쳐 €61.1억을 넘어섰고, 감독 기관은 메일의 무기한 보관 자체를 위반으로 보는 경우가 늘고 있습니다. 저장 제한 원칙이 실제로 무엇을 요구하는지, 그리고 이를 어기지 않으면서 보관본을 유지하는 방법을 정리했습니다.</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>7분 분량</span>
+          </div>
+        </a>
+
+        <!-- Microsoft 365 100GB Mailbox Price Hike -->
+        <a href="/ko/blog/ms365-100gb-mailbox-price-hike.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-08-20" class="text-sm text-primary-500 font-medium">2026년 8월 20일</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">Microsoft가 메일함을 100GB로 두 배 늘렸습니다 — 그리고 가격을 8–17% 올렸습니다</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Exchange Online 메일함은 2026년 7월과 9월 사이에 50GB에서 100GB로 늘어나며, 가격 인상이 함께 따라옵니다. 상자가 커져도 데이터를 쥐고 있는 쪽은 달라지지 않습니다 — 용량이 애초에 진짜 문제가 아니었던 이유를 짚어 봅니다.</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>6분 분량</span>
+          </div>
+        </a>
+
+        <!-- Your Email Provider Is Not a Backup -->
+        <a href="/ko/blog/email-provider-not-a-backup.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-07-15" class="text-sm text-primary-500 font-medium">2026년 7월 15일</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">이메일 제공업체는 백업이 아닙니다</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">계정 잠금, 실수로 인한 삭제, 제공업체의 정책 변경은 수년치 메일을 몇 분 만에 지워 버릴 수 있습니다. 진짜 백업이란 무엇인지, 아무 클라이언트로나 직접 백업하는 방법, 그리고 그 안에서 MailVault가 어디에 놓이는지 설명합니다.</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>6분 분량</span>
+          </div>
+        </a>
+
+        <!-- Gmail Storage Squeeze -->
+        <a href="/ko/blog/gmail-storage-squeeze.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-07-02" class="text-sm text-primary-500 font-medium">2026년 7월 2일</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">Gmail 저장 공간 압박 — 내 사본을 직접 가져야 하는 이유</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Google은 신규 계정의 무료 저장 공간을 15GB 대신 5GB로 제공하는 방안을 시험하고 있으며, 2년간 사용하지 않은 계정은 삭제합니다. MailVault가 Gmail의 사본을 사용자의 디스크에 평범한 .eml 파일로, 영구적이고 옮기기 쉬운 형태로 보관하는 방법을 소개합니다.</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>6분 분량</span>
+          </div>
+        </a>
+
+        <!-- MailVault 2.4.0 Stability -->
+        <a href="/ko/blog/mailvault-240-stability.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-04-17" class="text-sm text-primary-500 font-medium">2026년 4월 17일</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">MailVault 2.4.0: 안정성 릴리스</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">2.4.0의 뒷이야기: Outlook에서 엉뚱한 메일이 열리던 버그를 고치고, 계정 간 데이터가 섞이는 문제를 없애고, 샌드박스 안의 백그라운드 헬퍼를 길들이고, snap 릴리스를 안전하게 되돌릴 수 있게 만든 과정입니다.</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>7분 분량</span>
+          </div>
+        </a>
+
+        <!-- Refactoring MailVault -->
+        <a href="/ko/blog/refactoring-mailvault-from-monolith-to-modules.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-03-13" class="text-sm text-primary-500 font-medium">2026년 3월 13일</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">MailVault 리팩터링: 모놀리스에서 모듈로</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">MailVault 코드베이스를 리팩터링한 과정 &mdash; 4,300줄짜리 스토어를 목적이 뚜렷한 모듈로 쪼개고, 메일 로딩을 두 갈래 스트림 구조로 다시 설계하고, 기능을 하나도 망가뜨리지 않으면서 5단계 분해 계획을 세웠습니다.</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>7분 분량</span>
+          </div>
+        </a>
+
+        <!-- How We Test MailVault -->
+        <a href="/ko/blog/how-we-test-mailvault.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-03-11" class="text-sm text-primary-500 font-medium">2026년 3월 11일</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">MailVault를 테스트하는 방법: 600개가 넘는 테스트, 실제 메일, 실제 서버</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">네 겹으로 이루어진 테스트 전략을 들여다봅니다: 55개의 Rust 단위 테스트, 13개의 JavaScript 테스트 스위트, 500통의 메일을 심어 둔 실제 IMAP 서버를 상대로 하는 통합 테스트, 그리고 실제 데스크톱 앱을 직접 구동하는 종단 간 테스트입니다.</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>6분 분량</span>
+          </div>
+        </a>
+
+        <!-- Outlook OAuth Odyssey -->
+        <a href="/ko/blog/outlook-oauth-odyssey.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-02-28" class="text-sm text-primary-500 font-medium">2026년 2월 28일</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">Outlook OAuth 오디세이: IMAP은 망가졌다, Graph 만세</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Microsoft 서버 쪽 IMAP 회귀 버그 때문에 직접 Azure AD 앱을 등록하고, Rust로 Graph API 전송 계층을 통째로 만들고, 그 과정에서 연쇄적으로 터진 일곱 가지 문제를 디버깅해야 했던 이야기입니다.</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>8분 분량</span>
+          </div>
+        </a>
+
+        <!-- Gmail OAuth2 -->
+        <a href="/ko/blog/gmail-oauth2.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-02-20" class="text-sm text-primary-500 font-medium">2026년 2월 20일</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">Gmail OAuth2 추가하기: 하나의 흐름, 두 개의 제공업체</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">MailVault에 이미 있던 Microsoft OAuth2 PKCE 흐름을 제공업체에 구애받지 않도록 바꾸고 Google 로그인을 추가한 과정 — 앱 비밀번호도, 찾아 넣어야 할 IMAP 설정도 없습니다.</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>4분 분량</span>
+          </div>
+        </a>
+
+        <!-- Sandbox Signing Saga -->
+        <a href="/ko/blog/sandbox-signing-saga.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-02-18" class="text-sm text-primary-500 font-medium">2026년 2월 18일</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">macOS 샌드박스 서명 대장정 (또는 v1.4.0부터 v1.4.5까지가 존재하는 이유)</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">하루에 패치 릴리스 여섯 개. macOS 코드 서명, App Sandbox, Bun으로 컴파일한 사이드카는 잘 어울리지 않습니다 — 이를 어떻게 해결했는지 전 과정을 정리했습니다.</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>5분 분량</span>
+          </div>
+        </a>
+
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/ko/docs.html" class="hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="hover:text-primary-500 transition-colors">블로그</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">개인정보</a>
+          <a href="/ko/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">변경 내역</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">약관</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 모든 권리 보유.
+        </p>
+      </div>
+    </div>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+            <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+        <span>이 앱을 구운 곳은 <span class="text-primary-500 font-semibold">오픈 GPU</span> · 제작:</span>
+        <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
+          <img src="/graphicmeat-logo.webp" alt="Graphic Meat 제작" class="w-full max-w-[400px] h-auto" width="512" height="512" loading="lazy" decoding="async">
+        </a>
+      </div>
+    </div>
+
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="언어 선택" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/blog.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/blog.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/blog.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/blog.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/blog.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/blog.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/blog.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/blog.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/blog.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    // Initialize theme
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

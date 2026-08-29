@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Como liberar espaço de e-mail sem perder mensagens antigas — MailVault</title>
+  <meta name="description" content="Caixa postal cheia? Arquive e-mails localmente com o MailVault e depois apague-os do servidor com segurança. Libere espaço no Gmail, no Outlook ou em qualquer IMAP sem perder nada.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/pt-br/guides/free-up-email-storage.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/pt-br/guides/free-up-email-storage.html">
+  <meta property="og:title" content="Como liberar espaço de e-mail sem perder mensagens antigas — MailVault">
+  <meta property="og:description" content="Caixa postal cheia? Arquive e-mails localmente com o MailVault e depois apague-os do servidor com segurança. Libere espaço no Gmail, no Outlook ou em qualquer IMAP sem perder nada.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="pt_BR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Como liberar espaço de e-mail sem perder mensagens antigas — MailVault">
+  <meta name="twitter:description" content="Caixa postal cheia? Arquive e-mails localmente com o MailVault e depois apague-os do servidor com segurança. Libere espaço no Gmail, no Outlook ou em qualquer IMAP sem perder nada.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Como liberar espaço de e-mail sem perder mensagens antigas",
+  "description": "Caixa postal cheia? Arquive e-mails localmente com o MailVault e depois apague-os do servidor com segurança. Libere espaço no Gmail, no Outlook ou em qualquer IMAP sem perder nada.",
+  "url": "https://mailvaultapp.com/pt-br/guides/free-up-email-storage.html",
+  "datePublished": "2026-03-15",
+  "dateModified": "2026-03-15",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/free-up-email-storage.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/pt-br/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="Logo do MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/pt-br/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Recursos</a>
+          <a href="/pt-br/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Casos de uso</a>
+          <a href="/pt-br/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/pt-br/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="Alternar tema">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Download
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/pt-br/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Recursos</a>
+          <a href="/pt-br/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Casos de uso</a>
+          <a href="/pt-br/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/pt-br/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/pt-br/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Voltar ao início
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Como liberar espaço de e-mail sem perder mensagens antigas</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>5 min de leitura</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Você abre o seu e-mail numa manhã e vê o aviso: <strong>"A sua caixa postal está quase cheia."</strong> O Gmail dá 15 GB divididos entre Gmail, Google Drive e Google Photos. O Outlook dá 15 GB. Assim que você bate nesse limite, para de receber e-mails novos. Isso não é uma hipótese &mdash; acontece com milhões de pessoas, e o conselho de sempre é ruim ou caro.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">As soluções comuns (e ruins)</h3>
+
+          <p>
+            Quando a caixa postal enche, a maioria das pessoas tenta uma destas saídas. Nenhuma é boa:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Pagar por mais armazenamento</strong> &mdash; O Google One começa em $1.99/mês por 100 GB e o Microsoft 365 em $6.99/mês. Funciona, mas você aluga espaço para sempre. Os e-mails continuam crescendo, e a conta também. Você está tratando o sintoma, não a causa.</li>
+            <li><strong>Apagar e-mails antigos a esmo</strong> &mdash; Ordene por tamanho, apague os maiores, esvazie a lixeira. Rápido, mas arriscado. Aquele anexo de três anos atrás pode ser a única cópia de um contrato importante. Uma vez apagado e removido de vez, acabou.</li>
+            <li><strong>Exportar para .mbox na mão</strong> &mdash; O Google Takeout deixa você baixar o Gmail inteiro como um único arquivo .mbox. O problema: arquivos .mbox são monolíticos, difíceis de pesquisar, e a maioria dos clientes de e-mail sofre com os grandes. É um backup, não um arquivo permanente utilizável.</li>
+            <li><strong>Simplesmente parar de usar e-mail</strong> &mdash; Não é bem uma opção.</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">A alternativa inteligente: arquive localmente e depois apague</h3>
+
+          <p>
+            Existe um fluxo melhor: baixe para o seu disco local os e-mails que você quer guardar, confirme que o arquivo está completo e só então apague essas mensagens do servidor. Você libera espaço no servidor e continua com cada e-mail, pesquisável e acessível na sua própria máquina.
+          </p>
+
+          <p>
+            A ideia central é que <strong>arquivar localmente e apagar do servidor são dois passos separados</strong>. Você arquiva primeiro, confirma que está tudo salvo e só então apaga do servidor. Sem perda de dados, sem ansiedade.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Como funciona com o MailVault</h3>
+
+          <p>
+            O MailVault é um aplicativo de desktop gratuito para macOS e Linux que torna esse fluxo simples. Veja o passo a passo:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Conecte a sua conta</strong> &mdash; Adicione ao MailVault a sua conta do Gmail, do Outlook, do Yahoo ou qualquer conta IMAP. A conexão é segura, por TLS, com suporte a OAuth2 para Google e Microsoft.</li>
+            <li><strong>Selecione os e-mails a arquivar</strong> &mdash; Navegue pela sua caixa postal e selecione os e-mails que você quer salvar localmente. Dá para selecionar mensagens individuais, conversas inteiras ou fazer uma seleção em bloco por intervalo de datas.</li>
+            <li><strong>Arquive no disco</strong> &mdash; O MailVault baixa o e-mail completo &mdash; cabeçalhos, corpo, formatação HTML e todos os anexos &mdash; e salva cada mensagem como um arquivo <code>.eml</code> padrão no seu computador. Os arquivos ficam organizados em uma estrutura Maildir, por conta e por pasta.</li>
+            <li><strong>Confira o seu arquivo permanente</strong> &mdash; Antes de apagar qualquer coisa do servidor, abra alguns e-mails arquivados no MailVault para confirmar que estão completos. Verifique se os anexos estão intactos. Busque uma mensagem específica para ter certeza de que ela está lá.</li>
+            <li><strong>Apague do servidor</strong> &mdash; Quando você tiver certeza de que o arquivo local está completo, apague do servidor os e-mails arquivados. O espaço no servidor é liberado, mas você continua com todas as mensagens no seu disco.</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Quanto espaço dá para recuperar?</h3>
+
+          <p>
+            Os maiores consumidores de espaço em qualquer caixa postal são os anexos. Alguns anos de e-mail com faturas em PDF, documentos anexados e imagens facilmente ocupam de 5 a 10 GB. Arquivar e apagar e-mails com mais de dois anos, por exemplo, pode recuperar boa parte da sua cota.
+          </p>
+
+          <p>
+            Os e-mails em si (corpos em texto e HTML, sem anexos) são relativamente pequenos. Um corpo típico tem de 5 a 50 KB. São os anexos que comem seu armazenamento. Ao arquivar tudo localmente e apagar do servidor os e-mails antigos com muitos anexos, você recupera o máximo de espaço com o mínimo de esforço.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Por que não usar só o Google Takeout ou uma exportação IMAP?</h3>
+
+          <p>
+            O Google Takeout e outras ferramentas de exportação parecidas entregam um único arquivo <code>.mbox</code> monolítico com todos os seus e-mails. Isso traz vários problemas:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Não é pesquisável</strong> &mdash; Um arquivo .mbox é só um blocão de texto. Você não consegue buscar nele com facilidade nem navegar pelas mensagens individuais sem importá-lo em outro cliente de e-mail.</li>
+            <li><strong>Risco de corrupção</strong> &mdash; Se o arquivo for corrompido, você pode perder o arquivo permanente inteiro. Com arquivos <code>.eml</code> individuais (como o MailVault usa), um arquivo corrompido afeta só um e-mail.</li>
+            <li><strong>Tudo ou nada</strong> &mdash; O Takeout exporta tudo. Você não consegue arquivar seletivamente pastas ou intervalos de datas específicos.</li>
+            <li><strong>Nenhum fluxo contínuo</strong> &mdash; O Takeout é uma exportação única. Ele não dá a você um fluxo para arquivar e liberar espaço regularmente.</li>
+          </ul>
+
+          <p>
+            O MailVault guarda cada e-mail como um arquivo <code>.eml</code> individual &mdash; o formato padrão RFC 5322, que qualquer cliente de e-mail abre. O seu arquivo permanente não fica preso a nenhum formato ou ferramenta proprietária.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Cache em segundo plano: construa seu arquivo automaticamente</h3>
+
+          <p>
+            Se você quiser arquivar a caixa postal inteira sem selecionar e-mails na mão, o MailVault tem um recurso de cache em segundo plano. Ele baixa o conteúdo das mensagens enquanto você navega pela caixa de entrada, construindo aos poucos um arquivo local de toda a caixa postal. Quando tudo estiver em cache localmente, você pode apagar do servidor sabendo que tem uma cópia completa.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">O resultado final</h3>
+
+          <p>
+            Depois de arquivar e apagar os e-mails antigos, você fica com:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li>Uma caixa postal mais leve no servidor &mdash; mais espaço livre, sem mais avisos, sem mensalidade de armazenamento.</li>
+            <li>Um arquivo local completo &mdash; cada e-mail ainda acessível, pesquisável, com todos os anexos íntegros.</li>
+            <li>Arquivos padrão &mdash; arquivos <code>.eml</code> que você pode copiar para um disco externo, um NAS ou o armazenamento em nuvem que preferir.</li>
+            <li>Sem dependência de fornecedor &mdash; seus e-mails não ficam presos a nenhum formato proprietário.</li>
+          </ul>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Pare de pagar por armazenamento de e-mail</p>
+            <p class="text-sm mb-4">Arquive e-mails localmente com o MailVault e depois apague-os do servidor com segurança. Gratuito, de código aberto, sem precisar criar conta.</p>
+            <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+              Baixar o MailVault
+            </a>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            Saiba mais sobre <a href="/pt-br/guides/archive-imap-emails-locally.html" class="text-primary-500 hover:text-primary-600 underline">como funciona o arquivamento local por IMAP</a> ou leia sobre <a href="/pt-br/guides/keep-emails-after-server-deletion.html" class="text-primary-500 hover:text-primary-600 underline">como manter os e-mails a salvo depois de apagá-los do servidor</a>. Veja <a href="/pt-br/features.html" class="text-primary-500 hover:text-primary-600 underline">todos os recursos</a> ou consulte as <a href="/pt-br/faq.html" class="text-primary-500 hover:text-primary-600 underline">perguntas frequentes</a>.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="Logo do MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/pt-br/docs.html" class="hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/pt-br/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacidade</a>
+          <a href="/pt-br/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Termos</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. Todos os direitos reservados.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="Escolha um idioma" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

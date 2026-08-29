@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gmail OAuth2 추가하기: 하나의 흐름, 두 개의 제공업체 - MailVault 블로그</title>
+  <meta name="description" content="기존 Microsoft OAuth2 흐름을 제공업체 중립적으로 바꿔 MailVault에 Gmail OAuth2를 추가한 과정입니다.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ko/blog/gmail-oauth2.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ko/blog/gmail-oauth2.html">
+  <meta property="og:title" content="Gmail OAuth2 추가하기: 하나의 흐름, 두 개의 제공업체 - MailVault 블로그">
+  <meta property="og:description" content="기존 Microsoft OAuth2 흐름을 제공업체 중립적으로 바꿔 MailVault에 Gmail OAuth2를 추가한 과정입니다.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ko_KR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Gmail OAuth2 추가하기: 하나의 흐름, 두 개의 제공업체 - MailVault 블로그">
+  <meta name="twitter:description" content="기존 Microsoft OAuth2 흐름을 제공업체 중립적으로 바꿔 MailVault에 Gmail OAuth2를 추가한 과정입니다.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/gmail-oauth2.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/gmail-oauth2.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/gmail-oauth2.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/gmail-oauth2.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/gmail-oauth2.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/gmail-oauth2.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/gmail-oauth2.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/gmail-oauth2.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/gmail-oauth2.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/gmail-oauth2.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/ko/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/ko/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="테마 전환">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            다운로드
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/ko/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">다운로드</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/ko/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        블로그로 돌아가기
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-02-20" class="text-sm text-primary-500 font-medium">2026년 2월 20일</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Gmail OAuth2 추가하기: 하나의 흐름, 두 개의 제공업체</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>4분 분량</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            v1.2.0에서 Microsoft OAuth2를 내놓을 때 목표는 분명했습니다. 앱 비밀번호를 만들지 않고도 기존 Microsoft 계정으로 로그인하게 하는 것이었습니다. Outlook, Hotmail, M365 계정에서 잘 작동했습니다. 다음 차례는 자연스럽게 Gmail이었습니다 &mdash; 세계에서 가장 많이 쓰이는 이메일 제공업체입니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">OAuth2가 중요한 이유</h3>
+
+          <p>
+            Google은 여러 해에 걸쳐 IMAP 접근을 조여 왔습니다. 2단계 인증을 켜 두었다면(켜야 합니다) 제3자 메일 클라이언트를 쓰려면 <a href="https://support.google.com/accounts/answer/185833" class="text-primary-500 hover:text-primary-600 underline">앱 비밀번호</a>가 필요합니다. 앱 비밀번호는 작동하기는 하지만 찾기 어렵고, 잊기 쉽고, 우회책처럼 느껴집니다. OAuth2를 쓰면 "Google로 로그인"을 눌러 브라우저에서 인증하고 앱으로 돌아오면 됩니다 &mdash; 비밀번호를 옮겨 적을 일도, 설정 페이지를 뒤질 일도 없습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">구현 방식</h3>
+
+          <p>
+            MailVault에는 Rust로 쓴, Microsoft용으로 이미 작동하는 OAuth2 PKCE 흐름이 있었습니다. 구조는 세 부분입니다. 브라우저 로그인 뒤 리디렉션을 받는 <code>localhost:19876</code>의 로컬 TCP 콜백 서버, 인가 코드를 액세스/리프레시 토큰으로 바꾸는 토큰 교환 함수, 그리고 IMAP과 SMTP를 위한 XOAUTH2 SASL 인증입니다.
+          </p>
+
+          <p>
+            Google을 추가한다는 것은 이 모두를 제공업체에 구애받지 않게 만든다는 뜻이었습니다. Microsoft의 엔드포인트를 코드에 박아 두는 대신, Rust OAuth2 모듈이 실행 시점에 제공업체 설정을 받도록 리팩터링했습니다 &mdash; 인가 URL, 토큰 URL, 스코프, 클라이언트 ID를 모두 흐름을 시작할 때 프런트엔드에서 넘겨받습니다.
+          </p>
+
+          <p>
+            클라이언트 ID는 Microsoft 때와 같은 방식을 따랐습니다. 널리 알려진 공개 클라이언트 ID를 쓰는 것입니다. Mozilla의 오픈소스 메일 클라이언트인 Thunderbird는 Google과 Microsoft 양쪽에 공개 OAuth2 클라이언트를 등록해 두었습니다. MailVault는 Thunderbird의 Google 클라이언트 ID(<code>406964657835-aq8lmia8j95dhl1a2bvharmfk3t1hgqj.apps.googleusercontent.com</code>)를 <code>https://mail.google.com/</code> 범위와 함께 쓰며, 이 범위는 IMAP과 SMTP 전체 접근을 허용합니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">코드에서 바뀐 것</h3>
+
+          <p>
+            Rust 쪽에는 Microsoft를 전제하는 대신 제공업체별 매개변수(인증 URL, 토큰 URL, 범위, 클라이언트 ID)를 받는 새 <code>oauth2_start</code> 명령이 필요했습니다. 콜백 서버와 PKCE 로직은 그대로 두었습니다 &mdash; 제공업체가 무엇이든 OAuth2는 OAuth2입니다.
+          </p>
+
+          <p>
+            프런트엔드에서는 <code>AccountModal</code> 컴포넌트가 이제 Gmail 계정에 "Sign in with Google" 버튼을 보여 줍니다(기존의 "Use App Password instead" 대체 경로와 나란히). 이 버튼은 Microsoft 대신 Google의 엔드포인트와 범위를 쓸 뿐 같은 OAuth2 흐름을 시작합니다. 인증이 끝나면 IMAP(<code>imap.gmail.com</code>)과 SMTP(<code>smtp.gmail.com</code>) 양쪽에 액세스 토큰을 XOAUTH2 SASL로 씁니다.
+          </p>
+
+          <p>
+            양쪽에서 XOAUTH2 SASL과 함께 사용합니다. 토큰 갱신은 Microsoft와 동일하게 작동합니다. 액세스 토큰이 만료되면(보통 한 시간 뒤) MailVault가 저장해 둔 리프레시 토큰으로 자동 갱신합니다. Google 계정 설정에서 접근 권한을 직접 취소하지 않는 한 다시 인증할 일은 없습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">결과</h3>
+
+          <p>
+            이제 Gmail 사용자는 버튼 하나를 누르고 Google의 일반 로그인 페이지에서 로그인한 다음, 곧바로 MailVault를 쓸 수 있습니다. 앱 비밀번호도, 찾아 넣어야 할 IMAP 설정도, "보안 수준이 낮은 앱" 스위치도 없습니다. 2단계 인증, Google Workspace, 개인 Gmail 계정 모두에서 작동합니다.
+          </p>
+
+          <p>
+            같은 OAuth2 기반은 이제 표준 OAuth2를 지원하는 어떤 제공업체에도 그대로 쓸 수 있습니다 &mdash; Rust 모듈은 완전히 제공업체 중립적입니다.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/ko/docs.html" class="hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="hover:text-primary-500 transition-colors">블로그</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">개인정보</a>
+          <a href="/ko/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">변경 내역</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">약관</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 모든 권리 보유.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="언어 선택" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/blog/gmail-oauth2.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/blog/gmail-oauth2.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/blog/gmail-oauth2.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/blog/gmail-oauth2.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/blog/gmail-oauth2.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/blog/gmail-oauth2.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/blog/gmail-oauth2.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/blog/gmail-oauth2.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/blog/gmail-oauth2.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

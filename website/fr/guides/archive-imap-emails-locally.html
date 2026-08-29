@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="fr" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Comment archiver vos e-mails IMAP en local sur Mac et Linux — MailVault</title>
+  <meta name="description" content="Découvrez comment archiver vos e-mails IMAP sur votre disque, sous macOS et Linux. Gardez vos e-mails pour toujours en fichiers .eml, libérez de l'espace serveur et accédez à tout hors ligne.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/fr/guides/archive-imap-emails-locally.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/fr/guides/archive-imap-emails-locally.html">
+  <meta property="og:title" content="Comment archiver vos e-mails IMAP en local sur Mac et Linux — MailVault">
+  <meta property="og:description" content="Découvrez comment archiver vos e-mails IMAP sur votre disque, sous macOS et Linux. Gardez vos e-mails pour toujours en fichiers .eml, libérez de l'espace serveur et accédez à tout hors ligne.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="fr_FR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Comment archiver vos e-mails IMAP en local sur Mac et Linux — MailVault">
+  <meta name="twitter:description" content="Découvrez comment archiver vos e-mails IMAP sur votre disque, sous macOS et Linux. Gardez vos e-mails pour toujours en fichiers .eml, libérez de l'espace serveur et accédez à tout hors ligne.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Comment archiver vos e-mails IMAP en local sur Mac et Linux",
+  "description": "Découvrez comment archiver vos e-mails IMAP sur votre disque, sous macOS et Linux. Gardez vos e-mails pour toujours en fichiers .eml, libérez de l'espace serveur et accédez à tout hors ligne.",
+  "url": "https://mailvaultapp.com/fr/guides/archive-imap-emails-locally.html",
+  "datePublished": "2026-03-15",
+  "dateModified": "2026-03-15",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/archive-imap-emails-locally.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/archive-imap-emails-locally.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/archive-imap-emails-locally.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/archive-imap-emails-locally.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/archive-imap-emails-locally.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/archive-imap-emails-locally.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/archive-imap-emails-locally.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/archive-imap-emails-locally.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/archive-imap-emails-locally.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/archive-imap-emails-locally.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/fr/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/fr/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Fonctionnalités</a>
+          <a href="/fr/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Cas d'usage</a>
+          <a href="/fr/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/fr/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="Changer de thème">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Télécharger
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/fr/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Fonctionnalités</a>
+          <a href="/fr/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Cas d'usage</a>
+          <a href="/fr/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/fr/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Télécharger</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/fr/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Retour à l'accueil
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Comment archiver vos e-mails IMAP en local sur Mac &amp; Linux</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>5 min de lecture</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Vos e-mails vivent sur le serveur de quelqu'un d'autre. Chaque message que vous avez envoyé ou reçu via Gmail, Outlook, Yahoo ou n'importe quel fournisseur IMAP se trouve sur du matériel que vous ne contrôlez pas. Si le fournisseur change ses conditions, ferme un service, bloque votre compte ou a simplement une mauvaise journée, ces e-mails peuvent disparaître. La plupart des gens n'y pensent pas avant qu'il ne soit trop tard.
+          </p>
+
+          <p>
+            L'archivage local des e-mails résout ce problème en téléchargeant vos e-mails depuis le serveur et en les enregistrant en fichiers sur votre propre ordinateur. Une fois archivés en local, vos e-mails sont à vous &mdash; aucune connexion Internet requise, aucun quota de stockage, aucune dépendance à la survie d'un fournisseur.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Le problème quand les e-mails ne vivent que sur le serveur</h3>
+
+          <p>
+            IMAP est conçu pour garder les e-mails synchronisés entre un serveur et votre client de messagerie. C'est pratique au quotidien, mais cela veut dire que le serveur est l'unique source de vérité. S'il perd vos données, vous perdez vos données. Voici les risques les plus courants :
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Limites de stockage</strong> &mdash; les formules gratuites de Gmail (15 Go partagés avec Drive et Photos), d'Outlook (15 Go) et de Yahoo (1 To) finissent par se remplir. Quand c'est le cas, vous ne recevez plus de nouveaux e-mails.</li>
+            <li><strong>Blocage du compte</strong> &mdash; un mot de passe oublié, un souci d'authentification à deux facteurs ou une violation des conditions d'utilisation peuvent vous fermer définitivement l'accès à votre compte.</li>
+            <li><strong>Changements chez le fournisseur</strong> &mdash; des services ferment, fusionnent ou changent de tarifs. Google a retiré des dizaines de produits. Yahoo Mail a changé de mains plusieurs fois.</li>
+            <li><strong>Aucun accès hors ligne</strong> &mdash; sans copie locale, vous ne pouvez ni chercher ni lire vos anciens e-mails sans connexion Internet.</li>
+            <li><strong>Conformité et obligations légales</strong> &mdash; certaines professions imposent de conserver les e-mails pendant des années. S'en remettre au serveur d'un tiers pour la conformité est risqué.</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Ce que veut dire archiver en local</h3>
+
+          <p>
+            Quand vous archivez un e-mail en local, l'application télécharge le message complet &mdash; en-têtes, corps et toutes les pièces jointes &mdash; et l'enregistre en fichier sur votre disque. L'e-mail ne dépend plus du serveur. Vous pouvez le lire, le chercher, le transférer ou le sauvegarder sur un disque externe, sans jamais toucher à Internet.
+          </p>
+
+          <p>
+            Le format dans lequel ces fichiers sont enregistrés compte. Certains clients de messagerie utilisent des bases de données propriétaires qui vous enferment dans leur logiciel. Si le client cesse d'être développé, votre archive devient illisible. La meilleure approche est un format ouvert et standard.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Pourquoi .eml et Maildir comptent</h3>
+
+          <p>
+            <strong>.eml</strong> est le format de fichier standard des messages e-mail, défini par la RFC 5322. Tous les clients de messagerie, sur toutes les plateformes, savent ouvrir un fichier .eml. C'est un format en texte brut qui contient le message complet : les en-têtes, le corps (texte brut et HTML) et les pièces jointes encodées en MIME. Parce que c'est un standard, vos e-mails archivés ne sont enfermés dans aucun logiciel particulier.
+          </p>
+
+          <p>
+            <strong>Maildir</strong> est une structure de répertoires standard pour stocker du courrier. Chaque message est un fichier distinct, dans une hiérarchie de dossiers bien définie. Contrairement à mbox, qui concatène tous les messages dans un seul fichier, Maildir résiste à la corruption &mdash; si un fichier est endommagé, le reste de votre archive n'est pas touché. Il est aussi rapide à fouiller et facile à sauvegarder de façon incrémentale.
+          </p>
+
+          <p>
+            MailVault utilise les deux : les e-mails sont stockés sous forme de fichiers <code>.eml</code> individuels, dans une structure de répertoires Maildir organisée par compte et par dossier. Votre archive n'est donc qu'un dossier rempli de fichiers e-mail standard, que n'importe quel outil sait lire.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Comment MailVault archive vos e-mails</h3>
+
+          <p>
+            MailVault est une application de bureau gratuite et open source, pour macOS et Linux, qui se connecte à n'importe quel compte e-mail IMAP et archive les messages en local. Voici comment cela se passe :
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Ajoutez votre compte</strong> &mdash; saisissez vos identifiants de messagerie ou connectez-vous avec OAuth2 (Google, Microsoft, Yahoo). MailVault se connecte en IMAP sur TLS.</li>
+            <li><strong>Parcourez votre boîte mail</strong> &mdash; MailVault charge les en-têtes de vos e-mails et affiche votre boîte de réception. Vous pouvez parcourir les dossiers, chercher et lire vos e-mails comme dans n'importe quel client de messagerie.</li>
+            <li><strong>Archivez vos e-mails</strong> &mdash; sélectionnez les e-mails que vous voulez conserver et archivez-les. MailVault télécharge le message complet (en-têtes, corps, pièces jointes) et l'enregistre sur votre disque sous forme de fichier <code>.eml</code>.</li>
+            <li><strong>Mise en cache en arrière-plan</strong> &mdash; MailVault peut aussi mettre les e-mails en cache automatiquement, en arrière-plan : le contenu des messages est téléchargé au fil de votre navigation, de sorte que votre archive se constitue avec le temps, sans effort de votre part.</li>
+            <li><strong>Consultez hors ligne</strong> &mdash; les e-mails archivés sont disponibles immédiatement, même sans connexion Internet. Cherchez-les, lisez-les et exportez-les quand vous voulez.</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Les bénéfices de l'archivage local</h3>
+
+          <p>
+            Une fois vos e-mails archivés en local, vous gagnez plusieurs avantages par rapport à tout garder sur le serveur :
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Accès hors ligne</strong> &mdash; lisez et fouillez tout votre historique de courrier sans connexion Internet. Utile en déplacement, sur un réseau peu fiable, ou simplement pour travailler plus vite.</li>
+            <li><strong>Aucune dépendance à un éditeur</strong> &mdash; vos e-mails sont des fichiers <code>.eml</code> standard. Déplacez-les vers n'importe quel autre client de messagerie, sauvegardez-les sur n'importe quel support, ou écrivez des scripts pour les traiter. Vous ne dépendez ni de MailVault ni d'un autre logiciel.</li>
+            <li><strong>Libérez du stockage sur le serveur</strong> &mdash; une fois l'archivage local fait, vous pouvez <a href="/fr/guides/free-up-email-storage.html" class="text-primary-500 hover:text-primary-600 underline">supprimer les e-mails du serveur</a> pour récupérer de l'espace sans rien perdre.</li>
+            <li><strong>Conformité et conservation</strong> &mdash; gardez vos e-mails aussi longtemps que nécessaire, quelles que soient les politiques de votre fournisseur. Sauvegardez votre archive à plusieurs endroits pour la redondance.</li>
+            <li><strong>Rapidité</strong> &mdash; lire des e-mails depuis le disque local est plus rapide que d'aller les chercher sur un serveur distant à chaque fois.</li>
+            <li><strong>Confidentialité</strong> &mdash; vos e-mails archivés restent sur votre machine. Ils ne sont ni analysés, ni indexés, ni exploités à des fins publicitaires par un tiers.</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Qui a besoin d'archiver ses e-mails en local ?</h3>
+
+          <p>
+            L'archivage local a de la valeur pour toute personne qui prend son historique e-mail au sérieux. Les indépendants et consultants qui doivent conserver leurs échanges clients. Les petites entreprises qui veulent une sauvegarde indépendante de leur fournisseur. Les professionnels de secteurs réglementés (juridique, santé, finance) tenus de conserver leur correspondance. Toute personne qui change de fournisseur et veut garder un historique complet. Ou simplement quiconque s'est déjà fait piéger par la perte d'accès à un compte.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Pour commencer</h3>
+
+          <p>
+            MailVault est gratuit et open source. Il tourne sous macOS (Intel et Apple Silicon) et Linux (x86_64 et aarch64). Téléchargez-le, ajoutez votre compte IMAP, et commencez à archiver vos e-mails en local en quelques minutes.
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Télécharger MailVault gratuitement</p>
+            <p class="text-sm mb-4">Archivez vos e-mails IMAP en local, en fichiers .eml standard. Open source, aucun compte requis.</p>
+            <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+              Télécharger MailVault
+            </a>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            Des questions ? Consultez la <a href="/fr/faq.html" class="text-primary-500 hover:text-primary-600 underline">FAQ</a> ou voyez <a href="/fr/features.html" class="text-primary-500 hover:text-primary-600 underline">toutes les fonctionnalités</a>. Vous craignez de perdre des e-mails en les supprimant du serveur ? Lisez notre guide sur la <a href="/fr/guides/keep-emails-after-server-deletion.html" class="text-primary-500 hover:text-primary-600 underline">conservation des e-mails après suppression sur le serveur</a>.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/fr/docs.html" class="hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/fr/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Confidentialité</a>
+          <a href="/fr/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Conditions</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. Tous droits réservés.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="Choisir une langue" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/guides/archive-imap-emails-locally.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/guides/archive-imap-emails-locally.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/guides/archive-imap-emails-locally.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/guides/archive-imap-emails-locally.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/guides/archive-imap-emails-locally.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/guides/archive-imap-emails-locally.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/guides/archive-imap-emails-locally.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/guides/archive-imap-emails-locally.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/guides/archive-imap-emails-locally.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

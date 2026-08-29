@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="fr" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Comment exporter iCloud Mail vers votre ordinateur — MailVault</title>
+  <meta name="description" content="iCloud Mail n'a pas de bouton d'export intégré. Voici comment obtenir une copie locale et consultable de votre courrier @icloud.com ou @me.com, avec IMAP et un mot de passe spécifique à l'application.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/fr/guides/export-icloud-mail.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/fr/guides/export-icloud-mail.html">
+  <meta property="og:title" content="Comment exporter iCloud Mail vers votre ordinateur — MailVault">
+  <meta property="og:description" content="iCloud Mail n'a pas de bouton d'export intégré. Voici comment obtenir une copie locale et consultable de votre courrier @icloud.com ou @me.com, avec IMAP et un mot de passe spécifique à l'application.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="fr_FR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Comment exporter iCloud Mail vers votre ordinateur — MailVault">
+  <meta name="twitter:description" content="iCloud Mail n'a pas de bouton d'export intégré. Voici comment obtenir une copie locale et consultable de votre courrier @icloud.com ou @me.com, avec IMAP et un mot de passe spécifique à l'application.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Comment exporter iCloud Mail vers votre ordinateur",
+  "description": "iCloud Mail n'a pas de bouton d'export intégré. Voici comment obtenir une copie locale et consultable de votre courrier @icloud.com ou @me.com, avec IMAP et un mot de passe spécifique à l'application.",
+  "url": "https://mailvaultapp.com/fr/guides/export-icloud-mail.html",
+  "datePublished": "2026-07-15",
+  "dateModified": "2026-07-15",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Pourquoi ai-je besoin d'un mot de passe spécifique à l'application pour iCloud Mail ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Apple impose l'authentification à deux facteurs sur les identifiants Apple et n'autorise pas les clients de messagerie tiers à se connecter avec votre mot de passe habituel. Générez un mot de passe spécifique à l'application sur appleid.apple.com, sous Connexion et sécurité, et utilisez-le à la place."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Quels sont les réglages de serveur IMAP d'iCloud Mail ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Serveur IMAP imap.mail.me.com sur le port 993 en SSL/TLS. Pour l'envoi, serveur SMTP smtp.mail.me.com sur le port 587 en SSL/TLS, avec authentification requise. Utilisez votre adresse iCloud complète comme nom d'utilisateur."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "iCloud dispose-t-il d'un export de courrier intégré, comme Google Takeout ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Non. Apple ne propose pas d'export en un clic dédié à iCloud Mail. La façon pratique de sortir votre courrier est de connecter un client de messagerie ou un outil de sauvegarde en IMAP, avec un mot de passe spécifique à l'application."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Puis-je exporter iCloud Mail sous Windows ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Oui, en principe, avec n'importe quel client de messagerie Windows compatible IMAP et un mot de passe spécifique à l'application. MailVault, lui, fonctionne aujourd'hui sous macOS et Linux, pas sous Windows."
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/export-icloud-mail.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/export-icloud-mail.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/export-icloud-mail.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/export-icloud-mail.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/export-icloud-mail.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/export-icloud-mail.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/export-icloud-mail.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/export-icloud-mail.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/export-icloud-mail.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/export-icloud-mail.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/fr/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/fr/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Fonctionnalités</a>
+          <a href="/fr/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Cas d'usage</a>
+          <a href="/fr/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/fr/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="Changer de thème">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Télécharger
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/fr/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Fonctionnalités</a>
+          <a href="/fr/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Cas d'usage</a>
+          <a href="/fr/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/fr/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Télécharger</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/fr/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Retour à l'accueil
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Comment exporter iCloud Mail vers votre ordinateur</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>6 min de lecture</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Apple ne propose pas de bouton « exporter mon courrier » en un clic pour iCloud Mail, ce qui surprend beaucoup de gens souhaitant sauvegarder un compte @icloud.com, @me.com ou @mac.com. La bonne nouvelle, c'est qu'iCloud Mail prend pleinement en charge l'accès IMAP standard : n'importe quel client de messagerie ou outil de sauvegarde compatible IMAP peut télécharger votre courrier &mdash; il suffit de le configurer correctement, avec une étape propre à Apple : un mot de passe spécifique à l'application.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Étape 1 : générez un mot de passe spécifique à l'application</h3>
+
+          <p>
+            Apple impose l'authentification à deux facteurs sur votre identifiant Apple et n'autorise pas les applications tierces à se connecter avec votre mot de passe habituel. À la place, vous générez un mot de passe spécifique à l'application, uniquement pour l'accès au courrier :
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li>Allez sur <a href="https://appleid.apple.com" target="_blank" class="text-primary-500 hover:text-primary-600 underline">appleid.apple.com</a> et connectez-vous.</li>
+            <li>Sous Connexion et sécurité, choisissez Mots de passe pour applications.</li>
+            <li>Cliquez sur Générer un mot de passe pour application, donnez-lui un libellé comme « Sauvegarde du courrier », et Apple vous affiche un mot de passe à usage unique.</li>
+            <li>Utilisez ce mot de passe (et non votre mot de passe d'identifiant Apple habituel) quand votre client de messagerie ou votre outil de sauvegarde vous demande de vous connecter.</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Étape 2 : les réglages IMAP d'iCloud Mail</h3>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Serveur IMAP</strong> : <code>imap.mail.me.com</code>, port 993, SSL/TLS.</li>
+            <li><strong>Serveur SMTP</strong> : <code>smtp.mail.me.com</code>, port 587, SSL/TLS, authentification requise.</li>
+            <li><strong>Nom d'utilisateur</strong> : votre adresse e-mail iCloud complète (avec @icloud.com, @me.com ou @mac.com).</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Étape 3 : connectez un client ou un outil d'archivage et téléchargez tout</h3>
+
+          <p>
+            Avec le mot de passe spécifique à l'application et les réglages IMAP ci-dessus, n'importe quel client de messagerie standard peut se connecter et synchroniser votre courrier iCloud. Si vous ne faites que sauvegarder (sans prévoir d'utiliser ce client au quotidien), un outil d'archivage dédié convient mieux qu'un client complet, puisqu'il est fait pour tout télécharger et tout conserver plutôt que pour afficher votre boîte.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Pourquoi exporter iCloud Mail</h3>
+
+          <p>
+            Quelques raisons courantes de sauvegarder iCloud Mail en particulier : les paliers de stockage iCloud sont notoirement petits sur l'offre gratuite (5 Go partagés entre Mail, Photos et les sauvegardes d'appareils), et le courrier se retrouve souvent pris en étau ; certains veulent une copie de leur courrier qui ne dépende pas du fait de rester dans l'écosystème Apple ; et d'autres quittent complètement le matériel Apple et veulent emporter leur historique.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Exporter iCloud Mail avec MailVault</h3>
+
+          <p>
+            MailVault est une application de messagerie de bureau gratuite et open source, pour macOS et Linux. Ajoutez votre compte iCloud avec les réglages IMAP et le mot de passe d'application ci-dessus, sélectionnez les dossiers voulus, et MailVault télécharge chaque message dans un fichier <code>.eml</code> individuel, organisé dans une structure Maildir standard sur votre disque. Comme chaque e-mail est son propre fichier, vous obtenez une archive locale consultable et navigable &mdash; pas un énorme export qu'il faut importer ailleurs avant de pouvoir s'en servir.
+          </p>
+
+          <p>
+            L'archivage manuel est gratuit et illimité. Si vous voulez que votre sauvegarde iCloud Mail se tienne à jour automatiquement selon un calendrier, cela fait partie de MailVault Premium ($4/mois ou $25/an ; 14 jours d'essai gratuit sur l'annuel).
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Mettez iCloud Mail sur votre propre disque</p>
+            <p class="text-sm mb-4">MailVault archive iCloud Mail en fichiers .eml individuels et consultables, une fois la connexion établie avec un mot de passe spécifique à l'application. Gratuit et open source.</p>
+            <div class="flex flex-wrap gap-3">
+              <a href="/fr/#download" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+                Télécharger MailVault
+              </a>
+              <a href="/fr/pricing.html" class="inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">
+                Voir les tarifs
+              </a>
+            </div>
+          </div>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Questions fréquentes</h3>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Pourquoi ai-je besoin d'un mot de passe spécifique à l'application pour iCloud Mail ?</p>
+            <p>Apple impose l'authentification à deux facteurs sur les identifiants Apple et n'autorise pas les clients de messagerie tiers à se connecter avec votre mot de passe habituel. Générez un mot de passe spécifique à l'application sur appleid.apple.com, sous Connexion et sécurité, et utilisez-le à la place.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Quels sont les réglages de serveur IMAP d'iCloud Mail ?</p>
+            <p>Serveur IMAP imap.mail.me.com sur le port 993 en SSL/TLS. Pour l'envoi, serveur SMTP smtp.mail.me.com sur le port 587 en SSL/TLS, avec authentification requise. Utilisez votre adresse iCloud complète comme nom d'utilisateur.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">iCloud dispose-t-il d'un export de courrier intégré, comme Google Takeout ?</p>
+            <p>Non. Apple ne propose pas d'export en un clic dédié à iCloud Mail. La façon pratique de sortir votre courrier est de connecter un client de messagerie ou un outil de sauvegarde en IMAP, avec un mot de passe spécifique à l'application.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Puis-je exporter iCloud Mail sous Windows ?</p>
+            <p>Oui, en principe, avec n'importe quel client de messagerie Windows compatible IMAP et un mot de passe spécifique à l'application. MailVault, lui, fonctionne aujourd'hui sous macOS et Linux, pas sous Windows.</p>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            À lire aussi : <a href="/fr/guides/imap-backup-tool-checklist.html" class="text-primary-500 hover:text-primary-600 underline">ce qu'il faut regarder dans un outil de sauvegarde IMAP</a>, <a href="/fr/guides/archive-imap-emails-locally.html" class="text-primary-500 hover:text-primary-600 underline">comment fonctionne l'archivage IMAP local</a> et <a href="/fr/compare/mailvault-vs-apple-mail.html" class="text-primary-500 hover:text-primary-600 underline">MailVault face à Apple Mail</a>.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/fr/docs.html" class="hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/fr/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Confidentialité</a>
+          <a href="/fr/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Conditions</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. Tous droits réservés.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="Choisir une langue" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/guides/export-icloud-mail.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/guides/export-icloud-mail.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/guides/export-icloud-mail.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/guides/export-icloud-mail.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/guides/export-icloud-mail.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/guides/export-icloud-mail.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/guides/export-icloud-mail.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/guides/export-icloud-mail.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/guides/export-icloud-mail.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="fr" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Votre fournisseur d'e-mail n'est pas une sauvegarde - Blog MailVault</title>
+  <meta name="description" content="Gmail, Outlook et Yahoo ont été conçus pour distribuer le courrier, pas pour le conserver. Blocages de compte, suppressions accidentelles et changements de politique peuvent effacer des années d'e-mails en quelques minutes. Voici à quoi ressemble une vraie sauvegarde.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/fr/blog/email-provider-not-a-backup.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/fr/blog/email-provider-not-a-backup.html">
+  <meta property="og:title" content="Votre fournisseur d'e-mail n'est pas une sauvegarde">
+  <meta property="og:description" content="Gmail, Outlook et Yahoo ont été conçus pour distribuer le courrier, pas pour le conserver. Blocages de compte, suppressions accidentelles et changements de politique peuvent effacer des années d'e-mails en quelques minutes. Voici à quoi ressemble une vraie sauvegarde.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="fr_FR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Votre fournisseur d'e-mail n'est pas une sauvegarde">
+  <meta name="twitter:description" content="Gmail, Outlook et Yahoo ont été conçus pour distribuer le courrier, pas pour le conserver. Blocages de compte, suppressions accidentelles et changements de politique peuvent effacer des années d'e-mails en quelques minutes. Voici à quoi ressemble une vraie sauvegarde.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/email-provider-not-a-backup.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/email-provider-not-a-backup.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/email-provider-not-a-backup.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/email-provider-not-a-backup.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/email-provider-not-a-backup.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/email-provider-not-a-backup.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/email-provider-not-a-backup.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/email-provider-not-a-backup.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/email-provider-not-a-backup.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/email-provider-not-a-backup.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/fr/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/fr/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Fonctionnalités</a>
+          <a href="/fr/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Cas d'usage</a>
+          <a href="/fr/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/fr/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="Changer de thème">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Télécharger
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/fr/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Fonctionnalités</a>
+          <a href="/fr/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Cas d'usage</a>
+          <a href="/fr/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/fr/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Télécharger</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/fr/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Retour au blog
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-07-15" class="text-sm text-primary-500 font-medium">15 juillet 2026</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Votre fournisseur d'e-mail n'est pas une sauvegarde</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>6 min de lecture</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            La plupart des gens traitent leur boîte de réception comme un classeur. Quinze ans de reçus, de contrats, de photos envoyées par la famille, la lettre d'embauche du poste que vous occupez aujourd'hui &mdash; tout cela reste là, dans Gmail, Outlook ou Yahoo, parce que ça a toujours été là et que rien n'a jamais mal tourné. Ce passé sans incident donne l'impression que le système est sûr. Il ne l'est pas. Cela veut seulement dire que le risque ne vous est pas encore tombé dessus.
+          </p>
+
+          <p>
+            Une boîte de réception est une infrastructure faite pour <em>recevoir</em> du courrier. Elle n'a jamais été conçue comme une archive, et le fait qu'elle en tienne discrètement le rôle pendant des années ne change rien à ce qui arrive le jour où elle cesse de le faire.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Comment cela tourne mal, concrètement</h3>
+
+          <p>
+            Rien de tout cela n'exige un événement rare et spectaculaire. Ce sont des modes de défaillance ordinaires, que les forums d'assistance de n'importe quel grand fournisseur confirment couramment &mdash; nous décrivons honnêtement les catégories, pas l'histoire de quelqu'un en particulier.
+          </p>
+
+          <p>
+            <strong>Le blocage de compte.</strong> Vous perdez l'accès à votre numéro de téléphone ou à votre application d'authentification, et l'authentification à deux facteurs &mdash; ce qui protège votre compte &mdash; devient ce qui vous en exclut. Des procédures de récupération existent, mais elles sont bâties pour prouver votre identité à une machine, et elles n'aboutissent pas toujours vite, ni en votre faveur. Jusque-là, chaque e-mail que vous avez reçu est hors d'atteinte.
+          </p>
+
+          <p>
+            <strong>La suppression accidentelle.</strong> Un mauvais clic, un grand ménage un peu trop zélé, un filtre automatique qui envoie quelque chose à la corbeille au lieu d'un libellé. La plupart des fournisseurs gardent le courrier supprimé pendant une fenêtre limitée &mdash; une trentaine de jours en général &mdash; avant de le purger définitivement. Manquez cette fenêtre et c'est perdu, quelle que soit l'ancienneté du compte.
+          </p>
+
+          <p>
+            <strong>Les changements de politique du fournisseur.</strong> Les paliers de stockage rétrécissent, des fonctions passent derrière de nouvelles conditions, les comptes dormants sont récupérés. Google, par exemple, peut supprimer un compte grand public entier &mdash; Gmail, Drive, Photos, tout &mdash; après deux ans d'inactivité, une règle annoncée en 2023 (<a href="https://support.google.com/mail/answer/6374270?hl=en" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">page de gestion du stockage de Google</a>). Nous avons traité en détail le resserrement plus récent du stockage <a href="/fr/blog/gmail-storage-squeeze.html" class="text-primary-500 hover:text-primary-600 underline">dans un billet précédent</a>. Rien de tout cela n'est propre à Google &mdash; chaque fournisseur se réserve le droit de changer les conditions sous lesquelles vit votre archive, et vous l'apprenez après coup, pas avant.
+          </p>
+
+          <p>
+            <strong>La spirale du blocage 2FA.</strong> Celle-ci mérite sa propre ligne, parce qu'elle s'aggrave d'elle-même. L'adresse de récupération pointe vers un autre compte auquel vous n'avez pas accès non plus. Le numéro de téléphone de récupération n'est plus attribué. Les pièces d'identité qu'il faudrait fournir pour prouver que c'est bien vous mettent des semaines à être traitées, à supposer qu'un humain se trouve au bout de la procédure. Chaque maillon cassé de la chaîne de récupération rend le suivant plus difficile à réparer, et pendant tout ce temps, votre courrier &mdash; et tout ce qui passe par lui, réinitialisations de mot de passe, codes à deux facteurs d'autres services &mdash; est hors d'atteinte.
+          </p>
+
+          <p>
+            <strong>Le risque professionnel et institutionnel.</strong> Vous quittez un poste et le service informatique révoque votre compte le jour même. Une entreprise ferme et son domaine expire, emportant avec lui toutes les boîtes qu'il hébergeait. Un compte familial ou d'équipe change de mains. Dans tous les cas, ces e-mails n'ont jamais vraiment été « à vous » &mdash; ils vivaient sur une infrastructure contrôlée par quelqu'un d'autre, et l'accès s'est arrêté avec la relation.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Ce qu'est une vraie sauvegarde</h3>
+
+          <p>
+            La règle classique pour sauvegarder ce qui compte, c'est le 3-2-1 : trois copies de vos données, sur deux types de support différents, dont une copie hors site. Le 3-2-1 complet est excessif pour le courrier de la plupart des gens, mais le principe qui le sous-tend est exactement le bon : <strong>une copie qui vit dans les mêmes conditions que l'original n'est pas une sauvegarde, c'est un doublon.</strong>
+          </p>
+
+          <p>
+            Pour le courrier, une version allégée de cette règle suffit :
+          </p>
+
+          <p>
+            <strong>Première copie : le serveur.</strong> Votre boîte de réception vivante, où qu'elle soit. C'est ce que vous utilisez au quotidien, et c'est déjà couvert &mdash; vous n'avez rien à faire pour que cette copie existe.
+          </p>
+
+          <p>
+            <strong>Deuxième copie : en local, sur un appareil que vous maîtrisez.</strong> Un téléchargement complet de chaque dossier &mdash; Boîte de réception, Envoyés, Brouillons, Archive, libellés personnalisés &mdash; enregistré sur votre propre disque, indépendamment de l'identifiant, du mot de passe, de la 2FA et des conditions d'utilisation du fournisseur. C'est la copie qui survit à un blocage, à une suppression ou à un changement de politique, parce qu'aucun de ces événements ne touche un dossier posé sur votre ordinateur.
+          </p>
+
+          <p>
+            Si vous voulez aller plus loin, une troisième copie sur un disque externe ou sur un compte de stockage cloud distinct de celui que vous protégez complète le tableau. Mais c'est la copie deux qui change réellement votre profil de risque. La plupart des gens ont zéro copie de sauvegarde de leur courrier. Passer à une, c'est tout l'enjeu.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Le faire à la main, avec n'importe quel client</h3>
+
+          <p>
+            Vous n'avez pas besoin d'un logiciel spécial pour obtenir une copie locale. N'importe quel client de messagerie compatible IMAP peut le faire :
+          </p>
+
+          <p>
+            Ajoutez votre compte à Thunderbird, à Apple Mail ou à Outlook en IMAP (pas en POP, qui peut laisser le courrier côté serveur de façon incohérente). Une fois le compte connecté et chaque dossier synchronisé, la plupart des clients gardent tout le stock de messages en cache sur le disque &mdash; celui de Thunderbird, par exemple, est un simple dossier de fichiers sous son répertoire de profil. De là, vous pouvez copier ce dossier sur un disque externe, ou archiver à la main, message par message, en fichiers <code>.eml</code>, par glisser-déposer ou via un menu d'export.
+          </p>
+
+          <p>
+            Ça marche. C'est aussi lent, facile à faire à moitié sans s'en rendre compte (oublier Envoyés ou Brouillons est l'erreur classique), et quelque chose qu'il faut penser à refaire, parce qu'une sauvegarde faite une fois il y a deux ans n'est pas une sauvegarde de ce qui est dans votre boîte aujourd'hui.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Où MailVault s'inscrit</h3>
+
+          <p>
+            C'est exactement l'écart que MailVault est fait pour combler. C'est une application de bureau gratuite, pour macOS et Linux, qui se connecte à votre compte e-mail IMAP ou OAuth existant et archive chaque dossier en fichiers <code>.eml</code> individuels sur votre propre disque &mdash; le même format ouvert et universel que n'importe quel client sait lire, sans base de données propriétaire qui lierait votre archive à une application. Les sauvegardes manuelles sont gratuites et illimitées, point ; vos données locales ne sont jamais placées derrière un paywall.
+          </p>
+
+          <p>
+            Si vous voulez que cela se fasse automatiquement plutôt que « quand vous y pensez », les sauvegardes programmées qui tournent toutes seules sont une fonctionnalité premium à $4/mois ou $25/an — la formule annuelle comprend 14 jours d'essai, pour juger si cela en vaut la peine avant de payer quoi que ce soit.
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Votre boîte de réception n'est pas une sauvegarde. Offrez-vous-en une.</p>
+            <p class="text-sm mb-4">MailVault archive chaque dossier en fichiers .eml consultables et portables sur votre propre disque &mdash; gratuit et illimité pour les sauvegardes manuelles.</p>
+            <div class="flex flex-wrap gap-3">
+              <a href="/fr/#download" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+                Télécharger MailVault
+              </a>
+              <a href="/fr/pricing.html" class="inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">
+                Voir les tarifs
+              </a>
+            </div>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            À lire aussi : <a href="/fr/guides/backup-email-before-closing-account.html" class="text-primary-500 hover:text-primary-600 underline">comment sauvegarder son courrier avant de fermer un compte</a>, <a href="/fr/guides/keep-emails-after-server-deletion.html" class="text-primary-500 hover:text-primary-600 underline">comment conserver ses e-mails après les avoir supprimés du serveur</a> et <a href="/fr/guides/imap-backup-tool-checklist.html" class="text-primary-500 hover:text-primary-600 underline">ce qu'il faut vraiment regarder dans un outil de sauvegarde IMAP</a>.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/fr/docs.html" class="hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/fr/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Confidentialité</a>
+          <a href="/fr/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Conditions</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. Tous droits réservés.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="Choisir une langue" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/blog/email-provider-not-a-backup.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/blog/email-provider-not-a-backup.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/blog/email-provider-not-a-backup.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/blog/email-provider-not-a-backup.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/blog/email-provider-not-a-backup.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/blog/email-provider-not-a-backup.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/blog/email-provider-not-a-backup.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/blog/email-provider-not-a-backup.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/blog/email-provider-not-a-backup.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

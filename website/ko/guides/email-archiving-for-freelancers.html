@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>프리랜서와 소규모 사업자를 위한 메일 보관 — MailVault</title>
+  <meta name="description" content="고객 메일은 업무 범위와 승인, 결제 조건에 대한 유일한 기록인 경우가 많습니다. 프리랜서와 소규모 사업자가 고객 메일의 영구적이고 검색 가능한 로컬 보관본을 만드는 방법을 정리했습니다.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ko/guides/email-archiving-for-freelancers.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ko/guides/email-archiving-for-freelancers.html">
+  <meta property="og:title" content="프리랜서와 소규모 사업자를 위한 메일 보관 — MailVault">
+  <meta property="og:description" content="고객 메일은 업무 범위와 승인, 결제 조건에 대한 유일한 기록인 경우가 많습니다. 프리랜서와 소규모 사업자가 고객 메일의 영구적이고 검색 가능한 로컬 보관본을 만드는 방법을 정리했습니다.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ko_KR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="프리랜서와 소규모 사업자를 위한 메일 보관 — MailVault">
+  <meta name="twitter:description" content="고객 메일은 업무 범위와 승인, 결제 조건에 대한 유일한 기록인 경우가 많습니다. 프리랜서와 소규모 사업자가 고객 메일의 영구적이고 검색 가능한 로컬 보관본을 만드는 방법을 정리했습니다.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "프리랜서와 소규모 사업자를 위한 메일 보관: 고객 메일을 영원히 간직하기",
+  "description": "고객 메일은 업무 범위와 승인, 결제 조건에 대한 유일한 기록인 경우가 많습니다. 프리랜서와 소규모 사업자가 고객 메일의 영구적이고 검색 가능한 로컬 보관본을 만드는 방법을 정리했습니다.",
+  "url": "https://mailvaultapp.com/ko/guides/email-archiving-for-freelancers.html",
+  "datePublished": "2026-07-15",
+  "dateModified": "2026-07-15",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "메일 스레드가 고객과의 합의를 입증하는 자료로 법적으로 쓸모가 있습니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "메일 스레드는 분쟁에서 업무 범위, 승인, 합의 조건의 증거로 흔히 쓰이지만, 어느 정도 무게를 갖는지는 관할권과 상황에 따라 다릅니다. 법적 무게와 별개로 가장 중요한 것은 실제 기록이 남아 있느냐입니다 &mdash; 더 이상 찾을 수 없는 것에는 기댈 수 없습니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "소규모 사업체는 얼마나 자주 메일을 보관해야 합니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "계정이 잠기거나, 정지되거나, 용량 한도에 걸렸을 때 최근 고객 연락을 잃을 위험이 없을 만큼 자주 하십시오. 많은 사업체가 매주 또는 매달 수동으로 보관하거나, 아무도 기억하지 않아도 되도록 예약 자동 백업을 설정합니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "메일함을 관리하던 직원이 퇴사하면 고객 메일은 어떻게 됩니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "그 메일함이 해당 직원의 기억이나 개인적인 습관으로만 보관되고 있었다면, 회사는 연속성을 잃을 위험이 있습니다. 특정 개인과 무관하게 실행되는 예약된 계정 단위 보관이 이를 해결합니다 &mdash; 인력이 바뀌어도 보관본은 계속 쌓입니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "수년치 고객 메일 보관본을 빠르게 검색할 수 있습니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "보관본이 하나의 커다란 내보내기 파일이 아니라 개별 파일로 저장되어 있다면 가능합니다. 개별 .eml 파일은 일반 파일 검색 도구나 메일 클라이언트 안에서 검색할 수 있습니다. 어딘가로 먼저 가져와야 하는 하나짜리 묶음 내보내기와는 다릅니다."
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/email-archiving-for-freelancers.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/email-archiving-for-freelancers.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/email-archiving-for-freelancers.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/email-archiving-for-freelancers.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/email-archiving-for-freelancers.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/email-archiving-for-freelancers.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/email-archiving-for-freelancers.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/email-archiving-for-freelancers.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/email-archiving-for-freelancers.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/email-archiving-for-freelancers.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/ko/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/ko/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="테마 전환">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            다운로드
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/ko/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">다운로드</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/ko/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        홈으로 돌아가기
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">프리랜서와 소규모 사업자를 위한 메일 보관</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>7분 분량</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            프리랜서나 소규모 사업자에게 고객 메일은 단순한 연락이 아닙니다 &mdash; 실제로 무엇에 합의했는지에 대한 유일한 문서 기록인 경우가 많습니다. 업무 범위 변경, 승인, 제시한 가격, 마감 연장, 제안에 대한 "네, 진행하세요" 답장 같은 것들은 서명된 계약서가 아니라 메일 스레드에 남습니다. 몇 달, 몇 년 뒤 분쟁이 생기면 그 메일 스레드가 사건 전부인 경우가 잦습니다. 그런데도 대부분의 프리랜서는 메일을 한 번 쓰고 마는 것처럼 다루며, 제공업체의 받은편지함이 늘 그 자리에 있으리라 믿습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">받은편지함에만 기대는 것이 위험한 이유</h3>
+
+          <p>
+            소규모 사업체에 사람들이 생각하는 것보다 자주 일어나는 현실적인 시나리오가 몇 가지 있습니다. 스팸으로 잘못 표시되어 이의를 제기하는 동안 제공업체가 계정을 정지시키는 경우, 개인 Gmail에서 사업용 도메인으로 옮기면서 예전 고객 스레드를 찾기 어려워지는 경우, 4년 전 프로젝트의 기록을 고객이 요청했는데 메일함이 조용히 용량 한도에 걸려 새 메일 동기화가 멈춰 있는 경우, 공용 팀 메일함을 관리하던 직원이 퇴사하며 접근 권한을 잃는 경우입니다. 어느 경우든 실제로 자신을 지켜 주는 것은, 제공업체 서버에 우연히 아직 남아 있는 것이 아니라 독립적인 로컬 메일 사본입니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">"영구 보관"에 실제로 필요한 것</h3>
+
+          <p>
+            고객 메일을 "영원히" 간직하는 일은 어떤 하나의 백업에 달린 문제가 아니라 &mdash; 시간이 지나도 썩지 않는 형식과 작업 흐름의 문제입니다. 세 가지가 중요합니다:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>표준 파일 형식</strong> &mdash; 한 업체의 소프트웨어에 묶인 독점 아카이브가 아니라 개별 <code>.eml</code> 파일입니다. 표준 형식은 십 년 뒤에 어떤 도구가 남아 있든 계속 열립니다.</li>
+            <li><strong>직접 관리하는 저장소</strong> &mdash; 결제를 멈추면 접근할 수 없게 되는 구독형 보관 서비스가 아니라, 사용자가 직접 백업하는 로컬 폴더입니다(외장 드라이브, NAS, 또는 스스로 고른 클라우드 저장소로).</li>
+            <li><strong>실제로 통하는 검색</strong> &mdash; 고객이 몇 년 전 프로젝트를 물어 오면 폴더를 손으로 뒤지는 것이 아니라 몇 초 안에 해당 스레드를 찾아야 합니다.</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1인 프리랜서를 위한 간단한 보관 작업 흐름</h3>
+
+          <p>
+            사업용 메일 계정(Gmail 기반 Google Workspace 계정이든, Outlook이든, IMAP 제공업체의 자체 도메인이든)을 로컬 보관 도구에 연결하고, 모든 고객 스레드의 완전하고 검색 가능한 로컬 사본을 쌓게 하십시오. 주기적으로 실행하거나 자동 보관으로 설정해 두면, 최신 상태를 유지하는 데 기억력에 기대지 않아도 됩니다. 고객과의 관계가 끝나도 그 받은편지함이 살아 있든 아니든 전체 기록은 남아 있습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">소규모 팀으로 확장하기</h3>
+
+          <p>
+            고객 메일을 다루는 사람이 둘 이상이라면 &mdash; 공용 지원 메일함이나, 각자 고객을 맡은 여러 팀원 &mdash; 계정마다 같은 원칙이 적용됩니다. 메일함마다 일정에 따라 로컬에 보관되므로, 회사의 고객 커뮤니케이션 기록이 특정 직원의 받은편지함이 온전한지, 누군가 수동 백업을 기억하는지에 좌우되지 않습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailVault가 여기 맞는 이유</h3>
+
+          <p>
+            MailVault는 바로 이런 로컬 영구 보관본을 중심으로 만든 macOS와 Linux용 무료 오픈소스 데스크톱 메일 앱입니다. 업무용 메일을 IMAP으로 연결하면(Gmail과 Microsoft 기반 Google Workspace 또는 Microsoft 365 계정은 OAuth) MailVault가 모든 메일을 디스크의 표준 Maildir 구조 안에 개별 <code>.eml</code> 파일로 내려받습니다 &mdash; 검색할 수 있고, 옮길 수 있으며, MailVault 자체에 묶이지 않습니다. 수동 보관은 영원히 무료이고 제한이 없어서, 주기적으로 보관하는 1인 프리랜서 대부분은 이것으로 충분합니다.
+          </p>
+
+          <p>
+            여러 계정을 정기적으로 보관하는 사업체라면 MailVault Premium(계정당 $4/월 또는 $25/년, 연간 요금제 14일 무료 체험)이 예약 자동 백업을 더해 줍니다. 누구도 수동 실행을 기억하지 않아도 메일함마다 보관이 유지되며, 활성 받은편지함을 관리하기 좋게 유지하는 메일 정리 규칙과 시점별 기록을 위한 Time Capsule 스냅샷도 함께 제공됩니다 &mdash; 특정 날짜에 고객 메일함이 어떤 상태였는지 보여 줘야 할 때 유용합니다.
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">고객 메일의 영구 기록을 만드십시오</p>
+            <p class="text-sm mb-4">MailVault는 사업용 메일을 검색 가능한 개별 .eml 파일로 사용자의 디스크에 보관합니다. 수동 백업은 무료이고, 예약 백업은 $4/월부터입니다.</p>
+            <div class="flex flex-wrap gap-3">
+              <a href="/ko/#download" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+                MailVault 다운로드
+              </a>
+              <a href="/ko/pricing.html" class="inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">
+                가격 보기
+              </a>
+            </div>
+          </div>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-4">자주 묻는 질문</h3>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">메일 스레드가 고객과의 합의를 입증하는 자료로 법적으로 쓸모가 있습니까?</p>
+            <p>메일 스레드는 분쟁에서 업무 범위, 승인, 합의 조건의 증거로 흔히 쓰이지만, 어느 정도 무게를 갖는지는 관할권과 상황에 따라 다릅니다. 법적 무게와 별개로 가장 중요한 것은 실제 기록이 남아 있느냐입니다 &mdash; 더 이상 찾을 수 없는 것에는 기댈 수 없습니다.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">소규모 사업체는 얼마나 자주 메일을 보관해야 합니까?</p>
+            <p>계정이 잠기거나, 정지되거나, 용량 한도에 걸렸을 때 최근 고객 연락을 잃을 위험이 없을 만큼 자주 하십시오. 많은 사업체가 매주 또는 매달 수동으로 보관하거나, 아무도 기억하지 않아도 되도록 예약 자동 백업을 설정합니다.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">메일함을 관리하던 직원이 퇴사하면 고객 메일은 어떻게 됩니까?</p>
+            <p>그 메일함이 해당 직원의 기억이나 개인적인 습관으로만 보관되고 있었다면, 회사는 연속성을 잃을 위험이 있습니다. 특정 개인과 무관하게 실행되는 예약된 계정 단위 보관이 이를 해결합니다 &mdash; 인력이 바뀌어도 보관본은 계속 쌓입니다.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">수년치 고객 메일 보관본을 빠르게 검색할 수 있습니까?</p>
+            <p>보관본이 하나의 커다란 내보내기 파일이 아니라 개별 파일로 저장되어 있다면 가능합니다. 개별 .eml 파일은 일반 파일 검색 도구나 메일 클라이언트 안에서 검색할 수 있습니다. 어딘가로 먼저 가져와야 하는 하나짜리 묶음 내보내기와는 다릅니다.</p>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            함께 읽기: <a href="/ko/guides/backup-email-before-closing-account.html" class="text-primary-500 hover:text-primary-600 underline">계정을 닫기 전에 메일 백업하기</a>, <a href="/ko/guides/imap-backup-tool-checklist.html" class="text-primary-500 hover:text-primary-600 underline">IMAP 백업 도구에서 살펴볼 것</a>, <a href="/ko/guides/archive-imap-emails-locally.html" class="text-primary-500 hover:text-primary-600 underline">로컬 IMAP 보관이 작동하는 방식</a>. <a href="/ko/pricing.html" class="text-primary-500 hover:text-primary-600 underline">가격</a>도 보십시오.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/ko/docs.html" class="hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="hover:text-primary-500 transition-colors">블로그</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">개인정보</a>
+          <a href="/ko/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">변경 내역</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">약관</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 모든 권리 보유.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="언어 선택" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/guides/email-archiving-for-freelancers.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/guides/email-archiving-for-freelancers.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/guides/email-archiving-for-freelancers.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/guides/email-archiving-for-freelancers.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/guides/email-archiving-for-freelancers.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/guides/email-archiving-for-freelancers.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/guides/email-archiving-for-freelancers.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/guides/email-archiving-for-freelancers.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/guides/email-archiving-for-freelancers.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

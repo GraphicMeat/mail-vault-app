@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MailVault 2.4.0：一次稳定性更新 - MailVault 博客</title>
+  <meta name="description" content="MailVault 2.4.0 的幕后：修复 Outlook 取到错误邮件的问题、消除跨账户串场、驯服沙盒守护进程，并让版本发布可以安全回滚。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/blog/mailvault-240-stability.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/blog/mailvault-240-stability.html">
+  <meta property="og:title" content="MailVault 2.4.0：一次稳定性更新">
+  <meta property="og:description" content="MailVault 2.4.0 的幕后：修复 Outlook 取到错误邮件的问题、消除跨账户串场、驯服沙盒守护进程，并让版本发布可以安全回滚。">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MailVault 2.4.0：一次稳定性更新">
+  <meta name="twitter:description" content="MailVault 2.4.0 的幕后：修复 Outlook 取到错误邮件的问题、消除跨账户串场、驯服沙盒守护进程，并让版本发布可以安全回滚。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/mailvault-240-stability.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/zh/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/zh/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="切换主题">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            下载
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/zh/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">下载</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/zh/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        返回博客
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-04-17" class="text-sm text-primary-500 font-medium">2026 年 4 月 17 日</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">MailVault 2.4.0：一次稳定性更新</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>7 分钟阅读</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            进入 MailVault 2.4.0 的大部分工作都是看不见的。界面几乎一模一样。功能清单也很朴素 &mdash; 可配置的发送延迟、往已发送文件夹复制一份、一些设置项的重排。但在引擎盖底下，这个版本主要是在修那类会悄悄侵蚀你对邮件应用信任的 bug：点开一封邮件却显示另一封，陈旧的邮件在账户之间串场，一个连自己都联系不上的后台助手，以及一套可能发布出坏二进制的发布流程。
+          </p>
+
+          <p>
+            这是一次稳定性更新。下面是当时哪里坏了，以及我们做了什么。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">让我们写下这篇文章的那个 bug</h3>
+
+          <p>
+            在 Outlook 和 Microsoft 365 账户上，点开一封邮件可能显示完全另一封邮件的内容。列表里的主题和查看器顶部的主题是对上的 &mdash; 但正文、发件人和邮件头完全属于另一封。报告不多，也无法按需复现，但第一次见到时相当吓人。
+          </p>
+
+          <p>
+            根本原因出在我们把两种邮件协议桥接起来的方式上。经典 IMAP 给每封邮件一个稳定的 <code>UID</code>，在一个邮箱的整个生命周期里都不变。Microsoft Graph API 没有这个东西 &mdash; 它给的是不透明的字符串邮件 ID。为了让 MailVault 其余的代码保持统一，我们的 Graph 传输层临时合成了按位置排的 UID：把文件夹索引一遍，依次发 <code>1</code>、<code>2</code>、<code>3</code> 这样的号。
+          </p>
+
+          <p>
+            这在顺序不变时是有效的。可是新邮件到达、某个会话移到别的文件夹、服务器端排序差了一毫秒 &mdash; 原本指向邮件 A 的位置型 UID 现在指向了邮件 B。邮件头列表没问题，因为我们每次都重新拉取。但用同一个会漂移的 UID 作键的正文缓存，就交出了错误的内容。
+          </p>
+
+          <p>
+            修法是架构性的：我们把真实的 Graph 消息 ID 直接写进每一条邮件头，并在正文缓存、内容加载器和各类操作路径中都用它作为规范标识。合成的 UID 仍然存在，用于兼容应用内部那些 IMAP 形状的接口，但它不再是「这到底是哪一封邮件」的事实来源。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">跨账户串场</h3>
+
+          <p>
+            另一类相关的「显示错邮件」bug：从账户 A 切到账户 B，打开 B 里一个恰好为空的文件夹，会短暂看到账户 A 的邮件还留在列表里。
+          </p>
+
+          <p>
+            这是缓存失效的问题。切换账户时清掉了一部分邮件状态，但没有全清。排序后的邮件列表、内存中的正文缓存和线程缓存的更新时机略有不同。如果目标文件夹里有新邮件，新数据来得够快，把陈旧条目盖住了。如果目标文件夹是空的，在「空」的结果最终传播过来之前，你看到的就是那份陈旧列表。
+          </p>
+
+          <p>
+            修复本身并不光鲜：现在每一处在切换账户或邮箱时清空邮件状态的地方，都会在新账户的数据开始加载之前，原子地把状态<em>全部</em>清干净。不再有清了一半的缓存，也不再有“空文件夹先到”和“上一个账户的邮件才被淘汰”之间的竞态。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">找不到自己套接字的沙盒守护进程</h3>
+
+          <p>
+            MailVault 有一个后台助手 &mdash; 一个小小的 sidecar 守护进程，即使主窗口关着也让邮件保持同步。在 macOS 上，应用和守护进程都跑在 App Sandbox 里，这意味着它们各自看到的文件系统视图是不同的。它们需要一个共享的会合点，通过 Unix 域套接字通信。
+          </p>
+
+          <p>
+            这个 bug 是：应用用一种方式解析套接字路径，守护进程用另一种方式，而在沙盒构建里，这两条路径指向不同的容器目录。守护进程会启动、绑定套接字，然后就在那儿干等。应用去连，连不上，于是断定守护进程没在跑。
+          </p>
+
+          <p>
+            我们现在两边都用 <code>dirs::home_dir()</code> 来解析 <code>~/.mailvault/mv.sock</code>。在沙箱下，它对两个进程都展开成同一个容器内的相对路径，于是客户端总能找到刚刚由它启动的那个服务。
+          </p>
+
+          <p>
+            辅助进程的权限文件也做了对应的清理。守护进程二进制从应用的签名配置里继承了 <code>app-sandbox</code>，而这会让没有自己 <code>Info.plist</code> 的独立二进制崩溃。<code>application-groups</code> 也设着，是早先打算用 App Group IPC 时留下的 &mdash; 既然两个进程现在共用同一个容器主目录，它就没必要了。两者都被移除。在我们测试过的每一个 macOS 版本上，包括全新安装的沙箱构建，辅助进程都能干净地启动。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">看起来没问题、其实有问题的 entitlements</h3>
+
+          <p>
+            这是最让人不安的一类 bug：一切<em>看上去</em>都对，而它就是悄无声息地不工作。
+          </p>
+
+          <p>
+            macOS 的权限文件允许你用 <code>$(AppIdentifierPrefix)</code> 来引用开发者团队前缀。Xcode 会在把文件交给 <code>codesign</code> 之前展开这个变量。我们的发布流水线不是 Xcode &mdash; 它直接调用 <code>codesign</code> &mdash; 而事实证明 <code>codesign</code> <em>不会</em>展开这个变量。于是字面上的 <code>$(AppIdentifierPrefix)</code> 字符串被嵌进了签好名的二进制里。
+          </p>
+
+          <p>
+            症状是：应用与守护进程之间的钥匙串共享悄悄失效了。应用能从钥匙串读到凭据，守护进程却看不见 &mdash; 因为它请求的访问组标识符是字面的 <code>$(AppIdentifierPrefix).com.mailvault...</code> 字符串，而不是真正带团队前缀的那个标识符。守护进程于是退而去要它根本没有的凭据，然后放弃。
+          </p>
+
+          <p>
+            修复方式是加一步 <code>sed</code> 展开：在调用 <code>codesign</code> 之前，把权限文件里的变量替换成真实的团队前缀再写回去。我们把它和已有的版本一致性检查放在一起，这样“乍一看配置没毛病”这一类 bug 就能在 CI 里被拦下来。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Snap 发布的闸门</h3>
+
+          <p>
+            说到 CI：在 2.4.0 之前，推一个发布 tag 会自动把生成的 snap 发布到 stable 通道。如果在初步冒烟测试之后出了问题 &mdash; 有时确实会，因为 Snap 的隔离行为和开发构建不一样，而这些差异往往只有装上之后才显现 &mdash; 等我们发现时，坏掉的版本已经上线了。
+          </p>
+
+          <p>
+            发布流水线现在停在“snap 已上传”这一步。另有一个单独的 <em>Promote Snaps</em> 工作流负责把某个构建从 edge 频道推到 stable，而且只有在我们从 edge 频道装到一台干净机器上、并验证过基本功能之后才做：添加账户、加载邮件、备份。发布成功时这只多一次点击，发布不成功时回滚就从容得多。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">那些更安静的修复</h3>
+
+          <p>
+            还有一批更小的修复，都属于「别让应用自相矛盾」这个主题。
+          </p>
+
+          <p>
+            <strong>模块级缓存失效。</strong>有几个惰性初始化的模块级缓存 &mdash; 比如记忆化的文件夹查找和描述符查找 &mdash; 在底层数据变化时没有被清掉。现在会清了，而且统一文件夹缓存有了大小上限，不会无限增长。
+          </p>
+
+          <p>
+            <strong>重复写描述符。</strong>账户激活时会把账户描述符往磁盘上写不止一次，快速切换时甚至会自己和自己抢。重复的写入没有了。
+          </p>
+
+          <p>
+            <strong>账户激活中的无限递归。</strong><code>activateAccount</code> 里有一条罕见路径 &mdash; 缓存未命中之后的描述符恢复兜底 &mdash; 如果恢复出来的描述符又触发一次恢复，它就会调回自身。原先靠一个重入保护把它挡住；更干净的修复是彻底去掉这层递归。
+          </p>
+
+          <p>
+            <strong>Store 架构。</strong>我们本来有一组“领域 store”包装层，夹在组件和主 Zustand store 之间，把状态复制成本地副本。它们的初衷是提供更干净的 API，实际上却让每一份状态都有了两个事实来源，还时不时冒出更新顺序的 bug。现在它们变成了薄薄的选择器再导出 &mdash; 用法不变，事实来源只剩一个。
+          </p>
+
+          <p>
+            <strong>后台辅助进程架构。</strong>管理后台辅助进程的那段 Rust 代码在一个模块里干了两件事：决定<em>如何</em>启动守护进程（用哪个二进制、带什么参数、在什么沙箱下），以及在它跑起来之后处理 <em>RPC 传输</em>。我们把这两件事拆开，启动策略放进 <code>helper.rs</code>，传输另起一个模块。排查启动失败不必再在请求/响应代码里到处 grep，反过来也一样。用户看到的文案同时也改了措辞 &mdash; “系统服务”变成了“后台辅助进程”，这更如实地说明了它到底是什么。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">这个版本为什么做了这么久</h3>
+
+          <p>
+            稳定性版本出奇地难规划。每个修复单看都很小，但它们覆盖的面积极大 &mdash; Graph 传输、账户切换、沙盒 IPC、代码签名和发布基础设施全都动过。这些 bug 大多罕见到我们无法按需复现；只能从日志、用户报告和读代码里推理，直到能看清坏状态是怎么产生的，然后写下修复，再等着确认报告不再出现。
+          </p>
+
+          <p>
+            回报是那种你不会注意到的变化，直到某天你突然发现那个过去每周咬你一次的 bug 不见了。如果你遇到过上面任何一种情况 &mdash; Outlook 上显示错误的邮件内容、切换账户时的陈旧邮件、一个连不上的后台助手 &mdash; 2.4.0 就是让它们消失的那个版本。
+          </p>
+
+          <p>
+            接下来的清单：做完<a href="/zh/blog/refactoring-mailvault-from-monolith-to-modules.html" class="text-primary-500 hover:text-primary-600 underline">那个五阶段重构</a>，收尾 v2.4 后续列表上剩下的条目（Hostinger 的 IMAP 单邮箱识别、文件夹切换的边角情况、撰写草稿气泡），并继续把分类器重写推向成型。功能开发照旧 &mdash; 只不过是在一个我们信得过的地基上。
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/zh/docs.html" class="hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="hover:text-primary-500 transition-colors">博客</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">隐私</a>
+          <a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">更新日志</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">条款</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 保留所有权利。
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="选择语言" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

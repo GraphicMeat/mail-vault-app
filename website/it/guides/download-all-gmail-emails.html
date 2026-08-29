@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="it" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Come scaricare tutte le tue email di Gmail: Takeout o archivio IMAP — MailVault</title>
+  <meta name="description" content="Due modi veri per scaricare tutte le email del tuo account Gmail: l'esportazione .mbox unica di Google Takeout, oppure uno strumento di archiviazione IMAP che salva singoli file .eml ricercabili. Ecco come funzionano.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/it/guides/download-all-gmail-emails.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/it/guides/download-all-gmail-emails.html">
+  <meta property="og:title" content="Come scaricare tutte le tue email di Gmail: Takeout o archivio IMAP — MailVault">
+  <meta property="og:description" content="Due modi veri per scaricare tutte le email del tuo account Gmail: l'esportazione .mbox unica di Google Takeout, oppure uno strumento di archiviazione IMAP che salva singoli file .eml ricercabili. Ecco come funzionano.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="it_IT">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Come scaricare tutte le tue email di Gmail: Takeout o archivio IMAP — MailVault">
+  <meta name="twitter:description" content="Due modi veri per scaricare tutte le email del tuo account Gmail: l'esportazione .mbox unica di Google Takeout, oppure uno strumento di archiviazione IMAP che salva singoli file .eml ricercabili. Ecco come funzionano.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Come scaricare tutte le tue email di Gmail: Takeout o archivio IMAP",
+  "description": "Due modi veri per scaricare tutte le email del tuo account Gmail: l'esportazione .mbox unica di Google Takeout, oppure uno strumento di archiviazione IMAP che salva singoli file .eml ricercabili. Ecco come funzionano.",
+  "url": "https://mailvaultapp.com/it/guides/download-all-gmail-emails.html",
+  "datePublished": "2026-07-15",
+  "dateModified": "2026-07-15",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Quanto ci mette Google Takeout a esportare Gmail?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Dipende dalla dimensione della casella, ma di solito Google ti manda un link di download entro qualche ora o un giorno. Gli account molto grandi (decine di GB) possono richiedere più tempo e vengono divisi in più file zip."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Posso aprire un file .mbox direttamente, senza importarlo?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Non facilmente. Mbox è un unico file di testo con tutti i messaggi accodati uno all'altro. Quasi tutti devono importarlo in un client come Thunderbird per poter sfogliare le singole email."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Google Takeout include gli allegati?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sì, gli allegati sono incorporati nel file .mbox esportato insieme al testo del messaggio, esattamente come sono conservati nell'email originale."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Che formato usa invece uno strumento di archiviazione IMAP come MailVault?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "MailVault salva ogni email come singolo file .eml (il formato standard RFC 5322), organizzato in una struttura di cartelle Maildir. Ogni file è un'email completa e autonoma che puoi aprire da sola."
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/download-all-gmail-emails.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/download-all-gmail-emails.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/download-all-gmail-emails.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/download-all-gmail-emails.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/download-all-gmail-emails.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/download-all-gmail-emails.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/download-all-gmail-emails.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/download-all-gmail-emails.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/download-all-gmail-emails.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/download-all-gmail-emails.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/it/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/it/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Funzioni</a>
+          <a href="/it/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Casi d'uso</a>
+          <a href="/it/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="Cambia tema">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Download
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/it/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Funzioni</a>
+          <a href="/it/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Casi d'uso</a>
+          <a href="/it/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/it/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Torna alla home
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Come scaricare tutte le tue email di Gmail</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>7 min di lettura</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Ci sono esattamente due modi pratici per portare una copia completa del tuo account Gmail sul tuo computer: Google Takeout, che è integrato negli strumenti dell'account Google, e uno strumento di archiviazione via IMAP, che si collega a Gmail come farebbe un client di posta e scarica ogni messaggio singolarmente. Producono risultati molto diversi, e quale ti serve dipende da che cosa vuoi davvero farci dopo.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Opzione 1: Google Takeout</h3>
+
+          <p>
+            Vai su <a href="https://takeout.google.com" target="_blank" class="text-primary-500 hover:text-primary-600 underline">takeout.google.com</a>, deseleziona tutto tranne Mail e fai clic su Crea esportazione. Google impacchetta l'intera casella di posta in uno o più file <code>.mbox</code> (divisi in più archivi zip se la casella è grande) e ti manda per email un link per il download, di solito nel giro di qualche ora o di un giorno.
+          </p>
+
+          <p>
+            Quello che ottieni è un unico grande file di testo per etichetta o cartella, nel classico formato Unix mbox &mdash; ogni email accodata all'altra. È un backup legittimo e completo, ma ha limiti concreti:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Non leggibile direttamente</strong> &mdash; Non puoi fare doppio clic su un file .mbox e sfogliare la posta. Devi importarlo in un client di posta come Thunderbird che supporti l'importazione mbox, cosa che con una casella grande può richiedere ore.</li>
+            <li><strong>Tutto o niente</strong> &mdash; Takeout esporta in blocco tutto quello che selezioni. Non c'è modo di prendere solo una cartella, un intervallo di date o conversazioni specifiche senza esportare l'intera etichetta.</li>
+            <li><strong>Un solo momento nel tempo</strong> &mdash; È un'istantanea. Se il mese prossimo vuoi un archivio aggiornato, devi rifare da capo tutta l'esportazione.</li>
+            <li><strong>Fragile perché è un file solo</strong> &mdash; Se il file .mbox si corrompe puoi perdere l'accesso a tutte le email che contiene, non solo a una.</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Opzione 2: archiviazione via IMAP</h3>
+
+          <p>
+            Gmail supporta anche IMAP, il protocollo che ogni vero client di posta usa per sincronizzare la posta. Uno strumento di archiviazione IMAP accede al tuo account Gmail (con OAuth, non con la tua password) come farebbero Apple Mail o Outlook, poi scarica ogni messaggio come file a sé &mdash; di solito un normale file <code>.eml</code>, il formato RFC 5322 che ogni client di posta capisce.
+          </p>
+
+          <p>
+            Questo approccio ribalta ogni limite di Takeout:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Leggibili singolarmente</strong> &mdash; Ogni email è un file a sé. Ne apri una direttamente, la trascini in un altro client di posta o le cerchi con la normale ricerca dei file &mdash; nessun passaggio di importazione.</li>
+            <li><strong>Selettivo</strong> &mdash; Archivi una cartella, un'etichetta o un intervallo di date specifici invece dell'intero account.</li>
+            <li><strong>Ripetibile</strong> &mdash; Lo esegui di nuovo più avanti e viene scaricata solo la posta nuova, così puoi tenere una copia locale aggiornata senza ricominciare da zero.</li>
+            <li><strong>Resistente</strong> &mdash; Un file corrotto riguarda una sola email, non tutto l'archivio.</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Quale conviene usare?</h3>
+
+          <p>
+            Se ti serve una copia legale o di conformità, una tantum e completa, del tuo account esattamente come lo tiene Google &mdash; per esempio prima di eliminare l'account per sempre &mdash; l'esportazione .mbox grezza di Takeout è un ragionevole backup di riserva da tenere in un cassetto. Ma se vuoi davvero <em>usare</em> la tua vecchia posta &mdash; cercarla, leggerla, tenerla aggiornata man mano che arriva posta nuova &mdash; un archivio IMAP è la scelta pratica. Molti fanno entrambe le cose: un'esportazione Takeout una tantum come copia grezza di sicurezza e un archivio IMAP come copia operativa e ricercabile, quella con cui hanno davvero a che fare.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Fare l'archivio IMAP con MailVault</h3>
+
+          <p>
+            MailVault è un'app desktop di posta gratuita e open source per macOS e Linux, costruita esattamente attorno a questo flusso di lavoro. Accedi al tuo account Google con OAuth (niente password per app, niente da armeggiare con le impostazioni IMAP), scegli le cartelle o le etichette che ti interessano e MailVault scarica ogni messaggio come singolo file <code>.eml</code> in una normale struttura Maildir sul tuo disco. Puoi sfogliare, cercare e aprire la posta archiviata direttamente in MailVault, oppure puntare qualunque altro client di posta sugli stessi file. Archiviare a mano è gratuito e senza limiti; pianificare l'archiviazione perché giri automaticamente in background è una funzione premium da $4/mese, se d'ora in poi la vuoi senza pensieri.
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Fatti una copia vera e ricercabile della tua Gmail</p>
+            <p class="text-sm mb-4">MailVault archivia la tua Gmail come singoli file .eml che puoi sfogliare, cercare e aprire in qualsiasi client di posta. Gratuito e open source.</p>
+            <div class="flex flex-wrap gap-3">
+              <a href="/it/#download" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+                Scarica MailVault
+              </a>
+              <a href="/it/pricing.html" class="inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">
+                Vedi i prezzi
+              </a>
+            </div>
+          </div>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Domande frequenti</h3>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Quanto ci mette Google Takeout a esportare Gmail?</p>
+            <p>Dipende dalla dimensione della casella, ma di solito Google ti manda un link di download entro qualche ora o un giorno. Gli account molto grandi (decine di GB) possono richiedere più tempo e vengono divisi in più file zip.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Posso aprire un file .mbox direttamente, senza importarlo?</p>
+            <p>Non facilmente. Mbox è un unico file di testo con tutti i messaggi accodati uno all'altro. Quasi tutti devono importarlo in un client come Thunderbird per poter sfogliare le singole email.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Google Takeout include gli allegati?</p>
+            <p>Sì, gli allegati sono incorporati nel file .mbox esportato insieme al testo del messaggio, esattamente come sono conservati nell'email originale.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Che formato usa invece uno strumento di archiviazione IMAP come MailVault?</p>
+            <p>MailVault salva ogni email come singolo file .eml (il formato standard RFC 5322), organizzato in una struttura di cartelle Maildir. Ogni file è un'email completa e autonoma che puoi aprire da sola.</p>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            Da leggere anche: <a href="/it/guides/archive-imap-emails-locally.html" class="text-primary-500 hover:text-primary-600 underline">come archiviare in locale le email IMAP</a>, <a href="/it/guides/gmail-storage-full.html" class="text-primary-500 hover:text-primary-600 underline">cosa fare quando lo spazio di Gmail è esaurito</a> e <a href="/it/guides/leave-gmail-keep-your-emails.html" class="text-primary-500 hover:text-primary-600 underline">come lasciare Gmail senza perdere le tue email</a>. Guarda <a href="/it/features.html" class="text-primary-500 hover:text-primary-600 underline">tutte le funzioni</a>.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/it/docs.html" class="hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacy</a>
+          <a href="/it/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Termini</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. Tutti i diritti riservati.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="Scegli una lingua" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/guides/download-all-gmail-emails.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/guides/download-all-gmail-emails.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/guides/download-all-gmail-emails.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/guides/download-all-gmail-emails.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/guides/download-all-gmail-emails.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/guides/download-all-gmail-emails.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/guides/download-all-gmail-emails.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/guides/download-all-gmail-emails.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/guides/download-all-gmail-emails.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

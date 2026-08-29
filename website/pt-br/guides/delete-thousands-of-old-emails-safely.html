@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Como apagar milhares de e-mails antigos com segurança (guarde uma cópia antes) — MailVault</title>
+  <meta name="description" content="Encarando uma caixa postal com dezenas de milhares de e-mails antigos? Veja um processo seguro para apagar em massa sem perder nada de que você possa precisar depois.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/pt-br/guides/delete-thousands-of-old-emails-safely.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/pt-br/guides/delete-thousands-of-old-emails-safely.html">
+  <meta property="og:title" content="Como apagar milhares de e-mails antigos com segurança (guarde uma cópia antes) — MailVault">
+  <meta property="og:description" content="Encarando uma caixa postal com dezenas de milhares de e-mails antigos? Veja um processo seguro para apagar em massa sem perder nada de que você possa precisar depois.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="pt_BR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Como apagar milhares de e-mails antigos com segurança (guarde uma cópia antes) — MailVault">
+  <meta name="twitter:description" content="Encarando uma caixa postal com dezenas de milhares de e-mails antigos? Veja um processo seguro para apagar em massa sem perder nada de que você possa precisar depois.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Como apagar milhares de e-mails antigos com segurança (guarde uma cópia antes)",
+  "description": "Encarando uma caixa postal com dezenas de milhares de e-mails antigos? Veja um processo seguro para apagar em massa sem perder nada de que você possa precisar depois.",
+  "url": "https://mailvaultapp.com/pt-br/guides/delete-thousands-of-old-emails-safely.html",
+  "datePublished": "2026-07-15",
+  "dateModified": "2026-07-15",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "É seguro apagar e-mails antigos em massa sem ler cada um antes?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sim, desde que você tenha arquivado e conferido um backup completo antes. Com uma cópia local confirmada de tudo, você pode apagar por remetente, por categoria ou por período em massa, sem revisar milhares de mensagens individualmente."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Como sei que meu backup de e-mail está completo antes de apagar qualquer coisa?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Abra uma amostra aleatória de e-mails arquivados de anos e pastas diferentes, confirme que os anexos abrem corretamente e busque algumas mensagens específicas de que você se lembra para ter certeza de que estão no arquivo."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Apagar um e-mail libera espaço na hora?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Normalmente não. A maioria dos provedores move as mensagens apagadas para uma pasta Lixeira que continua contando na sua cota até ser esvaziada, manualmente ou depois de um período de retenção automático."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Qual é o jeito mais rápido de achar newsletters e e-mails promocionais antigos para apagar?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Busque por remetente pelos domínios conhecidos de newsletter e marketing, ou use os filtros de categoria/marcador do seu provedor, se ele tiver. Esses e-mails costumam ser boa parte de uma caixa postal entulhada e quase sempre podem ser removidos com segurança depois de arquivados."
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/delete-thousands-of-old-emails-safely.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/delete-thousands-of-old-emails-safely.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/delete-thousands-of-old-emails-safely.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/delete-thousands-of-old-emails-safely.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/delete-thousands-of-old-emails-safely.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/delete-thousands-of-old-emails-safely.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/delete-thousands-of-old-emails-safely.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/delete-thousands-of-old-emails-safely.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/delete-thousands-of-old-emails-safely.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/delete-thousands-of-old-emails-safely.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/pt-br/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="Logo do MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/pt-br/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Recursos</a>
+          <a href="/pt-br/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Casos de uso</a>
+          <a href="/pt-br/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/pt-br/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="Alternar tema">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Download
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/pt-br/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Recursos</a>
+          <a href="/pt-br/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Casos de uso</a>
+          <a href="/pt-br/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/pt-br/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/pt-br/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Voltar ao início
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Como apagar milhares de e-mails antigos com segurança</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>7 min de leitura</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Uma caixa postal com 20.000, 50.000 ou mais de 100.000 e-mails acumulados ao longo de uma década é comum, e uma hora vira problema &mdash; busca lenta, avisos de armazenamento ou só o incômodo de não saber mais o que tem ali dentro. Apagar em massa é o instinto certo, mas fazer isso sem cuidado é como as pessoas perdem algo de que precisariam anos depois: um contrato antigo, um recibo para acionar a garantia, uma conversa que acaba importando em uma disputa. Veja um processo que deixa a caixa de entrada limpa sem esse risco.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Passo 1: copie tudo antes de apagar qualquer coisa</h3>
+
+          <p>
+            É este passo que torna todo o resto seguro, e ele não é negociável. Baixe uma cópia completa da caixa postal que você vai limpar para o seu próprio computador antes de apagar uma única mensagem. Com uma cópia local conferida, toda decisão de exclusão abaixo passa a ser de baixo risco &mdash; se você errar ao julgar algo descartável, aquilo continua no seu arquivo.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Passo 2: confirme que o backup funcionou mesmo</h3>
+
+          <p>
+            Não pule isso. Abra uma amostra aleatória de e-mails arquivados de anos e pastas diferentes, confirme que os anexos abrem e busque duas ou três mensagens específicas de que você se lembra, para ter certeza de que estão lá. Um backup que você não conferiu não é um backup em que dá para se apoiar em uma decisão tão definitiva quanto apagar em massa.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Passo 3: apague primeiro o que é fácil e óbvio</h3>
+
+          <p>
+            Com o backup conferido, comece pelo que claramente pode sair da caixa postal ativa: newsletters, e-mails promocionais, notificações automáticas, resumos antigos de listas de discussão. Busque por remetente pelos domínios conhecidos de newsletter e marketing e selecione em massa. Esse costuma ser o maior bloco de qualquer caixa postal antiga e, depois de arquivado, praticamente não tem risco.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Passo 4: apague por idade, não chutando um a um</h3>
+
+          <p>
+            Em vez de revisar milhares de e-mails um por um, busque por período &mdash; por exemplo, tudo com mais de três ou cinco anos &mdash; e selecione em massa dentro desse intervalo. Dê uma olhada rápida em qualquer coisa obviamente importante pelo caminho (anexos grandes, assuntos com palavras como "contrato", "fatura", "recibo", "imposto"), mas não sofra com cada mensagem. Você já tem o arquivo completo como rede de segurança.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Passo 5: esvazie a Lixeira para realmente recuperar o espaço</h3>
+
+          <p>
+            A maioria dos provedores mantém as mensagens apagadas em uma pasta Lixeira por um período antes de removê-las de vez, e elas continuam contando na sua cota até lá. Se você está apagando por causa de espaço, esvazie a Lixeira manualmente quando estiver seguro das suas escolhas, em vez de esperar a limpeza automática.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Fazendo o passo do backup com o MailVault</h3>
+
+          <p>
+            O MailVault é um aplicativo de desktop gratuito e de código aberto, para macOS e Linux, feito para os passos 1 e 2 acima. Conecte a sua conta por IMAP (OAuth para Gmail e Microsoft, entrada padrão para o Yahoo e outros, senha de aplicativo para o iCloud) e arquive a caixa postal inteira como arquivos <code>.eml</code> individuais no seu disco. Como cada e-mail é um arquivo próprio, você pode navegar e buscar no arquivo permanente inteiro depois &mdash; não é uma exportação única que você tem de vasculhar à parte. O arquivamento manual é gratuito e sem limite, então fazer backup de uma caixa postal com dezenas de milhares de e-mails antes de uma grande faxina não custa nada.
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Faça o backup antes de apagar em massa</p>
+            <p class="text-sm mb-4">O MailVault arquiva sua caixa postal completa como arquivos .eml individuais e pesquisáveis, para que apagar milhares de e-mails antigos do servidor não tenha risco nenhum.</p>
+            <div class="flex flex-wrap gap-3">
+              <a href="/pt-br/#download" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+                Baixar o MailVault
+              </a>
+              <a href="/pt-br/pricing.html" class="inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">
+                Ver preços
+              </a>
+            </div>
+          </div>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Perguntas frequentes</h3>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">É seguro apagar e-mails antigos em massa sem ler cada um antes?</p>
+            <p>Sim, desde que você tenha arquivado e conferido um backup completo antes. Com uma cópia local confirmada de tudo, você pode apagar por remetente, por categoria ou por período em massa, sem revisar milhares de mensagens individualmente.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Como sei que meu backup de e-mail está completo antes de apagar qualquer coisa?</p>
+            <p>Abra uma amostra aleatória de e-mails arquivados de anos e pastas diferentes, confirme que os anexos abrem corretamente e busque algumas mensagens específicas de que você se lembra para ter certeza de que estão no arquivo.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Apagar um e-mail libera espaço na hora?</p>
+            <p>Normalmente não. A maioria dos provedores move as mensagens apagadas para uma pasta Lixeira que continua contando na sua cota até ser esvaziada, manualmente ou depois de um período de retenção automático.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Qual é o jeito mais rápido de achar newsletters e e-mails promocionais antigos para apagar?</p>
+            <p>Busque por remetente pelos domínios conhecidos de newsletter e marketing, ou use os filtros de categoria/marcador do seu provedor, se ele tiver. Esses e-mails costumam ser boa parte de uma caixa postal entulhada e quase sempre podem ser removidos com segurança depois de arquivados.</p>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            Leitura relacionada: <a href="/pt-br/guides/free-up-email-storage.html" class="text-primary-500 hover:text-primary-600 underline">como liberar espaço de e-mail</a>, <a href="/pt-br/guides/gmail-storage-full.html" class="text-primary-500 hover:text-primary-600 underline">o que fazer quando o armazenamento do Gmail está cheio</a> e <a href="/pt-br/guides/keep-emails-after-server-deletion.html" class="text-primary-500 hover:text-primary-600 underline">como manter os e-mails a salvo depois de apagá-los do servidor</a>.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="Logo do MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/pt-br/docs.html" class="hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/pt-br/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacidade</a>
+          <a href="/pt-br/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Termos</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. Todos os direitos reservados.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="Escolha um idioma" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/guides/delete-thousands-of-old-emails-safely.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/guides/delete-thousands-of-old-emails-safely.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/guides/delete-thousands-of-old-emails-safely.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/guides/delete-thousands-of-old-emails-safely.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/guides/delete-thousands-of-old-emails-safely.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/guides/delete-thousands-of-old-emails-safely.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/guides/delete-thousands-of-old-emails-safely.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/guides/delete-thousands-of-old-emails-safely.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/guides/delete-thousands-of-old-emails-safely.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

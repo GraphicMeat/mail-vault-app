@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bloqueo de rastreadores de correo — quita los píxeles de seguimiento antes de que carguen | MailVault</title>
+  <meta name="description" content="MailVault detecta los píxeles de seguimiento ocultos en el correo comercial y los quita del HTML antes de mostrar el mensaje. Mira el antes y el después, el propio código de seguimiento y qué le cuenta al remitente un solo píxel de 1×1.">
+  <meta name="robots" content="index, follow">
+  <meta name="keywords" content="email tracking pixel, block email trackers, spy pixel, read receipt blocker, email privacy, tracking pixel blocker mac, stop email tracking, mailchimp tracking pixel, sendgrid open tracking">
+  <link rel="canonical" href="https://mailvaultapp.com/es/features/email-tracker-blocking.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/es/features/email-tracker-blocking.html">
+  <meta property="og:title" content="Bloqueo de rastreadores de correo — quita los píxeles de seguimiento antes de que carguen">
+  <meta property="og:description" content="El correo comercial esconde una imagen de 1×1 que avisa en cuanto lo abres. MailVault la quita del HTML antes de mostrar el mensaje.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="es_ES">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Bloqueo de rastreadores de correo — quita los píxeles de seguimiento antes de que carguen">
+  <meta name="twitter:description" content="El correo comercial esconde una imagen de 1×1 que avisa en cuanto lo abres. MailVault la quita del HTML antes de mostrar el mensaje.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    @keyframes mv-ping { 0% { opacity: 1; transform: scale(1); } 75%, 100% { opacity: 0; transform: scale(2.2); } }
+    .mv-ping { animation: mv-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite; }
+    @media (prefers-reduced-motion: reduce) { .mv-ping { animation: none; } }
+  </style>
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Bloqueo de rastreadores de correo — quita los píxeles de seguimiento antes de que carguen",
+  "description": "MailVault detecta los píxeles de seguimiento ocultos en el correo y los quita del HTML antes de mostrar el mensaje. La detección es gratis; el bloqueo forma parte de MailVault Premium.",
+  "url": "https://mailvaultapp.com/es/features/email-tracker-blocking.html",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "datePublished": "2026-08-28",
+  "dateModified": "2026-08-28",
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "¿Qué es un píxel de seguimiento de correo?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Un píxel de seguimiento es una imagen diminuta, normalmente de 1×1 e invisible, incrustada en un correo HTML. Tu cliente de correo la pide al servidor del remitente en cuanto se muestra el mensaje, lo que le dice al remitente que has abierto el correo, cuándo, cuántas veces, tu dirección IP y tu cliente de correo."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Cómo bloquea MailVault los píxeles de seguimiento?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "MailVault analiza el cuerpo del correo antes de mostrarlo y elimina del HTML los elementos de baliza. No se pide nada, así que no hay ninguna conexión que el remitente pueda registrar. La detección y la eliminación se ejecutan por completo en tu dispositivo: ninguna parte de un correo se envía a ningún sitio."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Puedo ver qué empresa me estaba siguiendo?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sí. Todo mensaje con un rastreador lleva un símbolo junto al asunto. Al pulsarlo se muestran el proveedor de seguimiento, la URL de la petición y por qué se marcó. Esa detección es gratis para todo el mundo que use MailVault; quitar la baliza forma parte de Premium."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿El bloqueo de rastreadores es gratis en MailVault?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "La detección es gratis para siempre: siempre podrás ver que un mensaje te ha rastreado y qué proveedor envió la baliza. Quitar la baliza antes de que cargue forma parte de MailVault Premium, $4/mes o $25/año, con 14 días de prueba gratis en el plan anual."
+      }
+    }
+  ]
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/features/email-tracker-blocking.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/es/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="Logotipo de MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/es/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Funciones</a>
+          <a href="/es/pricing.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Precios</a>
+          <a href="/es/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/es/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="Cambiar tema">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Descargar
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/es/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Funciones</a>
+          <a href="/es/pricing.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Precios</a>
+          <a href="/es/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/es/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Descargar</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-28 pb-16">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <!-- Hero -->
+      <header class="mb-12">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 mb-5">
+          Función Premium
+        </div>
+        <h1 class="text-4xl sm:text-5xl font-extrabold leading-tight mb-5">
+          El píxel que avisa cuando abres un correo
+        </h1>
+        <p class="text-lg text-slate-600 dark:text-slate-400 mb-6">
+          La mayor parte del correo comercial lleva una imagen oculta de 1×1. Tu cliente de correo la pide en cuanto se muestra el mensaje, y esa petición le dice al remitente que lo has leído: cuándo, cuántas veces y desde dónde, más o menos. MailVault encuentra esas balizas y las quita del HTML <strong>antes</strong> de mostrar el mensaje, así que la petición no llega a producirse.
+        </p>
+        <div class="flex flex-wrap gap-3">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="inline-flex lamp-bg text-white px-6 py-3 rounded-lg font-medium hover:opacity-90 transition-opacity">Descargar MailVault</a>
+          <a href="/es/pricing.html" class="inline-flex px-6 py-3 rounded-lg font-medium border border-slate-300 dark:border-slate-700 hover:border-primary-500 transition-colors">Ver precios</a>
+        </div>
+      </header>
+
+      <!-- Before / after -->
+      <section class="mb-14" aria-labelledby="before-after">
+        <h2 id="before-after" class="text-2xl sm:text-3xl font-bold mb-2">Antes y después</h2>
+        <p class="text-slate-600 dark:text-slate-400 mb-6">
+          El mismo boletín, mostrado dos veces. A la izquierda la baliza carga y el remitente se entera. A la derecha MailVault ya la ha quitado, y nada más del mensaje cambia.
+        </p>
+
+        <div class="grid sm:grid-cols-2 gap-4">
+          <!-- BEFORE -->
+          <figure class="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-800">
+            <figcaption class="px-4 py-2 text-xs font-semibold flex items-center gap-2 bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+              Antes: la baliza se dispara
+            </figcaption>
+            <div class="p-4 bg-white">
+              <div class="text-sm font-semibold text-slate-900">Tu resumen semanal</div>
+              <div class="text-xs text-slate-500 mb-3">news@mailer.example.com</div>
+              <p class="text-sm text-slate-700 m-0 mb-3">Hola, esto es lo que te has perdido esta semana.</p>
+              <div class="h-8 rounded bg-slate-100 mb-3"></div>
+              <div class="flex items-center gap-2 text-xs text-red-600">
+                <span class="relative inline-flex w-2 h-2">
+                  <span class="mv-ping absolute inline-flex w-2 h-2 rounded-full bg-red-400"></span>
+                  <span class="relative inline-flex w-2 h-2 rounded-full bg-red-500"></span>
+                </span>
+                Píxel de 1×1 cargando desde mailer.example.com
+              </div>
+            </div>
+            <div class="px-4 py-3 text-xs bg-slate-50 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700">
+              <strong class="text-slate-800 dark:text-slate-200">El panel del remitente dice ahora:</strong>
+              abierto a las 14:32, Vilna, Apple Mail en macOS, tercera apertura de hoy.
+            </div>
+          </figure>
+
+          <!-- AFTER -->
+          <figure class="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-800">
+            <figcaption class="px-4 py-2 text-xs font-semibold flex items-center gap-2 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
+              Después: la baliza ya no está
+            </figcaption>
+            <div class="p-4 bg-white">
+              <div class="text-sm font-semibold text-slate-900">Tu resumen semanal</div>
+              <div class="text-xs text-slate-500 mb-3">news@mailer.example.com</div>
+              <p class="text-sm text-slate-700 m-0 mb-3">Hola, esto es lo que te has perdido esta semana.</p>
+              <div class="h-8 rounded bg-slate-100 mb-3"></div>
+              <div class="flex items-center gap-2 text-xs text-emerald-700">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                1 píxel de seguimiento eliminado antes de mostrar el mensaje
+              </div>
+            </div>
+            <div class="px-4 py-3 text-xs bg-slate-50 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700">
+              <strong class="text-slate-800 dark:text-slate-200">El panel del remitente dice ahora:</strong>
+              nada. No se hizo ninguna petición.
+            </div>
+          </figure>
+        </div>
+      </section>
+
+      <!-- The code -->
+      <section class="mb-14" aria-labelledby="the-code">
+        <h2 id="the-code" class="text-2xl sm:text-3xl font-bold mb-2">Qué aspecto tiene el código de seguimiento</h2>
+        <p class="text-slate-600 dark:text-slate-400 mb-6">
+          Esta es la forma real de una baliza, sacada de una plantilla de marketing. Es una sola línea, es invisible y está al final de un mensaje que te alegraba recibir.
+        </p>
+
+        <div class="space-y-4">
+          <div>
+            <div class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">En el correo que recibiste</div>
+            <pre class="p-4 rounded-xl bg-slate-900 text-slate-100 text-xs sm:text-sm overflow-x-auto"><code>&lt;img src="https://mailer.example.com/o/open.php?u=8f21c0&amp;id=a91f&amp;e=you%40yourdomain.com"
+     width="1" height="1" border="0"
+     style="display:none;height:1px;width:1px" alt=""&gt;</code></pre>
+          </div>
+          <div>
+            <div class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">Después de que MailVault lo limpie</div>
+            <pre class="p-4 rounded-xl bg-slate-900 text-slate-100 text-xs sm:text-sm overflow-x-auto"><code>&lt;span data-mv-tracker-blocked="Mailchimp" hidden&gt;&lt;/span&gt;</code></pre>
+          </div>
+        </div>
+
+        <p class="text-sm text-slate-600 dark:text-slate-400 mt-4">
+          Fíjate en el parámetro <code class="px-1 rounded bg-slate-200 dark:bg-slate-800">e=</code>: tu dirección, dentro de la URL. Así es como una apertura queda ligada a <em>ti</em> y no simplemente a "alguien".
+        </p>
+      </section>
+
+      <!-- What it leaks -->
+      <section class="mb-14" aria-labelledby="what-it-leaks">
+        <h2 id="what-it-leaks" class="text-2xl sm:text-3xl font-bold mb-6">Qué le cuenta ese único píxel al remitente</h2>
+        <ul class="grid sm:grid-cols-2 gap-4">
+          <li class="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <strong class="block mb-1">Que lo has abierto</strong> <span class="text-sm text-slate-600 dark:text-slate-400">Y cada vez que vuelvas a abrirlo después.</span>
+          </li>
+          <li class="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <strong class="block mb-1">Cuándo, al minuto</strong> <span class="text-sm text-slate-600 dark:text-slate-400">Lo que también revela tu horario de trabajo y tu zona horaria.</span>
+          </li>
+          <li class="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <strong class="block mb-1">Tu dirección IP</strong> <span class="text-sm text-slate-600 dark:text-slate-400">O sea, más o menos dónde estabas cuando lo leíste.</span>
+          </li>
+          <li class="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <strong class="block mb-1">Tu dispositivo y tu cliente de correo</strong> <span class="text-sm text-slate-600 dark:text-slate-400">A partir del user agent que acompaña a la petición.</span>
+          </li>
+        </ul>
+      </section>
+
+      <!-- Free vs premium -->
+      <section class="mb-14" aria-labelledby="free-premium">
+        <h2 id="free-premium" class="text-2xl sm:text-3xl font-bold mb-2">Verlo es gratis. Impedirlo es Premium.</h2>
+        <p class="text-slate-600 dark:text-slate-400 mb-6">
+          Todo el mundo que usa MailVault recibe el aviso: un símbolo junto al asunto, al lado de los iconos de phishing y de dominio discordante, que al pulsarlo nombra a la empresa de seguimiento. Quitar la baliza antes de que cargue forma parte de Premium.
+        </p>
+
+        <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-100 dark:bg-slate-800">
+              <tr>
+                <th scope="col" class="text-left font-semibold px-4 py-3">&nbsp;</th>
+                <th scope="col" class="text-left font-semibold px-4 py-3">Gratis</th>
+                <th scope="col" class="text-left font-semibold px-4 py-3">Premium</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200 dark:divide-slate-700 bg-white dark:bg-slate-900/40">
+              <tr>
+                <td class="px-4 py-3 text-slate-700 dark:text-slate-300">Detección de rastreadores en cada mensaje</td>
+                <td class="px-4 py-3 text-emerald-600 dark:text-emerald-400">Sí</td>
+                <td class="px-4 py-3 text-emerald-600 dark:text-emerald-400">Sí</td>
+              </tr>
+              <tr>
+                <td class="px-4 py-3 text-slate-700 dark:text-slate-300">Descubre qué empresa te está siguiendo</td>
+                <td class="px-4 py-3 text-emerald-600 dark:text-emerald-400">Sí</td>
+                <td class="px-4 py-3 text-emerald-600 dark:text-emerald-400">Sí</td>
+              </tr>
+              <tr>
+                <td class="px-4 py-3 text-slate-700 dark:text-slate-300">Baliza eliminada antes de mostrar el mensaje</td>
+                <td class="px-4 py-3 text-slate-500 dark:text-slate-400">—</td>
+                <td class="px-4 py-3 text-emerald-600 dark:text-emerald-400">Sí</td>
+              </tr>
+              <tr>
+                <td class="px-4 py-3 text-slate-700 dark:text-slate-300">Funciona en el panel de lectura, en las conversaciones, en la vista de chat y en las ventanas emergentes</td>
+                <td class="px-4 py-3 text-slate-500 dark:text-slate-400">—</td>
+                <td class="px-4 py-3 text-emerald-600 dark:text-emerald-400">Sí</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="mt-6 p-6 rounded-xl border border-primary-500/30 bg-primary-500/5">
+          <h3 class="text-lg font-semibold mb-1">Actívalo en MailVault Premium</h3>
+          <p class="text-sm text-slate-600 dark:text-slate-400 mb-4">
+            <span data-mv-price="{monthly}/mes o {yearly}/año">$4/mes o $25/año</span>, con 14 días de prueba gratis en el plan anual. Premium incluye además las copias de seguridad programadas, la migración entre cuentas, la limpieza de correo y Time Capsule.
+          </p>
+          <div class="flex flex-wrap gap-3">
+            <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="inline-flex lamp-bg text-white px-5 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">Descargar &amp; empezar la prueba</a>
+            <a href="/es/pricing.html" class="inline-flex px-5 py-2.5 rounded-lg font-medium border border-slate-300 dark:border-slate-700 hover:border-primary-500 transition-colors">Comparar planes</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- How it works -->
+      <section class="mb-14" aria-labelledby="how-it-works">
+        <h2 id="how-it-works" class="text-2xl sm:text-3xl font-bold mb-6">Cómo los encuentra MailVault</h2>
+        <div class="space-y-4 text-slate-700 dark:text-slate-300">
+          <p>
+            <strong>Endpoints conocidos.</strong> MailVault incluye una lista de casi 500 patrones de URL de seguimiento de aperturas: Mailchimp, SendGrid, HubSpot, Mailgun, Klaviyo, Marketo, Salesloft, Superhuman, Mailtrack, Yesware y cientos más. Combina la lista de bloqueo de <a href="https://github.com/apparition47/MailTrackerBlocker" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">MailTrackerBlocker</a> (el plugin contra píxeles espía de Mail en macOS, partido a su vez de las listas de HEY y de Simplify Gmail) con la <a href="https://github.com/OneClickLab/ugly-email-trackers" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">lista pública de Ugly Email</a>, y añade los remitentes que son posteriores a ambas.
+          </p>
+          <p>
+            <strong>¿Y por qué no la lista de Brave o la de Mozilla?</strong> Esas son listas de rastreadores web: los hosts de scripts y balizas que un navegador bloquea en una página. El seguimiento de aperturas de correo pasa por endpoints completamente distintos, así que las listas específicas de correo de arriba son las que de verdad atrapan lo que llega a tu bandeja de entrada.
+          </p>
+          <p>
+            <strong>Forma.</strong> Una baliza que no esté en la lista se delata igual: una imagen declarada como 1×1, u oculta con <code class="px-1 rounded bg-slate-200 dark:bg-slate-800">display:none</code>, o metida dentro de un contenedor colapsado. Las imágenes que sí puedes ver se dejan en paz.
+          </p>
+          <p>
+            <strong>Ruta de la petición.</strong> Las rutas que solo sirven balizas — <code class="px-1 rounded bg-slate-200 dark:bg-slate-800">/open</code>, <code class="px-1 rounded bg-slate-200 dark:bg-slate-800">/pixel</code>, <code class="px-1 rounded bg-slate-200 dark:bg-slate-800">/wf/open</code> — se marcan aunque nadie haya catalogado todavía ese host.
+          </p>
+          <p>
+            <strong>Todo en local.</strong> La lista de bloqueo va incluida en la app y se actualiza con cada versión. MailVault nunca descarga una lista en tiempo de ejecución ni sube ninguna parte de tu correo: una app que llamara a un servidor para preguntar qué píxeles bloquear habría cambiado un rastreador por otro.
+          </p>
+        </div>
+      </section>
+
+      <!-- FAQ -->
+      <section class="mb-14" aria-labelledby="faq">
+        <h2 id="faq" class="text-2xl sm:text-3xl font-bold mb-6">Dudas</h2>
+        <div class="space-y-5">
+          <div>
+            <h3 class="font-semibold mb-1">¿Bloquearlos rompe el correo?</h3>
+            <p class="text-slate-600 dark:text-slate-400 text-sm">
+              No. Un píxel de seguimiento es invisible por diseño: quitarlo no cambia nada de lo que puedas ver. Las imágenes reales, los logotipos y las fotos quedan intactos.
+            </p>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-1">¿Y los enlaces con seguimiento?</h3>
+            <p class="text-slate-600 dark:text-slate-400 text-sm">
+              El análisis de seguridad de enlaces de MailVault, que es gratuito, ya marca los enlaces que redirigen por un dominio de seguimiento y te avisa antes de abrir uno. El bloqueo de rastreadores se ocupa de las balizas que se disparan sin ningún clic.
+            </p>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-1">¿Puedo ver qué se ha bloqueado?</h3>
+            <p class="text-slate-600 dark:text-slate-400 text-sm">
+              Sí: el símbolo cambia a un ojo tachado y lista todas las balizas que se han quitado, con su proveedor y su URL. La pantalla de bloqueo de rastreadores en Ajustes también lleva la cuenta de lo que se ha encontrado en tu correo.
+            </p>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-1">¿Funciona en Linux además de en macOS?</h3>
+            <p class="text-slate-600 dark:text-slate-400 text-sm">
+              Sí. Forma parte del renderizador de mensajes, así que se comporta igual en las dos plataformas.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <p class="text-sm text-slate-500 dark:text-slate-400">
+        Mira <a href="/es/features.html" class="text-primary-500 hover:text-primary-600 underline">todas las funciones</a>, los <a href="/es/pricing.html" class="text-primary-500 hover:text-primary-600 underline">precios</a> o lee las <a href="/es/faq.html" class="text-primary-500 hover:text-primary-600 underline">preguntas frecuentes</a>.
+      </p>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="Logotipo de MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/es/docs.html" class="hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/es/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacidad</a>
+          <a href="/es/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Términos</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. Todos los derechos reservados.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="Elige un idioma" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+  <script defer src="/pricing-localize.js?v=1"></script>
+
+</body>
+</html>

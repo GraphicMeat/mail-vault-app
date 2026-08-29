@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MailVault 2.4.0: uma versão de estabilidade - Blog do MailVault</title>
+  <meta name="description" content="Por dentro do MailVault 2.4.0: corrigir o bug do e-mail errado no Outlook, acabar com o vazamento entre contas, domar o daemon em sandbox e tornar as versões seguras para reverter.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/pt-br/blog/mailvault-240-stability.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/pt-br/blog/mailvault-240-stability.html">
+  <meta property="og:title" content="MailVault 2.4.0: uma versão de estabilidade">
+  <meta property="og:description" content="Por dentro do MailVault 2.4.0: corrigir o bug do e-mail errado no Outlook, acabar com o vazamento entre contas, domar o daemon em sandbox e tornar as versões seguras para reverter.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="pt_BR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MailVault 2.4.0: uma versão de estabilidade">
+  <meta name="twitter:description" content="Por dentro do MailVault 2.4.0: corrigir o bug do e-mail errado no Outlook, acabar com o vazamento entre contas, domar o daemon em sandbox e tornar as versões seguras para reverter.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/mailvault-240-stability.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/pt-br/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="Logo do MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/pt-br/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Recursos</a>
+          <a href="/pt-br/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Casos de uso</a>
+          <a href="/pt-br/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/pt-br/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="Alternar tema">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Download
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/pt-br/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Recursos</a>
+          <a href="/pt-br/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Casos de uso</a>
+          <a href="/pt-br/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/pt-br/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/pt-br/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Voltar ao blog
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-04-17" class="text-sm text-primary-500 font-medium">17 de abril de 2026</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">MailVault 2.4.0: uma versão de estabilidade</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>7 min de leitura</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            A maior parte do trabalho que entrou no MailVault 2.4.0 é invisível. A interface está quase idêntica. A lista de recursos é modesta &mdash; um atraso de envio configurável, uma cópia na pasta Enviados, alguns ajustes nas configurações. Mas, por baixo do capô, esta versão é sobretudo sobre corrigir o tipo de bug que corrói discretamente a confiança em um aplicativo de e-mail: o e-mail errado aparecendo quando você clica, mensagens antigas vazando entre contas, um auxiliar em segundo plano que não conseguia falar consigo mesmo, e uma infraestrutura de lançamento capaz de publicar um binário quebrado.
+          </p>
+
+          <p>
+            Esta é uma versão de estabilidade. Veja o que estava quebrado e o que fizemos a respeito.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">O bug que nos fez escrever este post</h3>
+
+          <p>
+            Em contas do Outlook e do Microsoft 365, clicar em um e-mail podia mostrar o conteúdo de um e-mail completamente diferente. O assunto na lista e o assunto no topo do visualizador batiam &mdash; mas o corpo, o remetente e os cabeçalhos pertenciam a outra mensagem. Relatado poucas vezes, impossível de reproduzir sob demanda, aterrorizante na primeira vez que você vê.
+          </p>
+
+          <p>
+            A causa raiz foi um acidente do jeito como ligamos dois protocolos de e-mail diferentes. O IMAP clássico dá a cada mensagem um <code>UID</code> estável, que nunca muda durante a vida de uma caixa postal. A API do Microsoft Graph não &mdash; ela tem IDs de mensagem opacos, em texto. Para manter o resto da base de código do MailVault uniforme, a nossa camada de transporte do Graph sintetizava UIDs posicionais na hora: indexar a pasta e distribuir <code>1</code>, <code>2</code>, <code>3</code> e assim por diante.
+          </p>
+
+          <p>
+            Isso funciona até a ordem mudar. Chega uma mensagem nova, uma conversa muda de pasta, a ordenação no servidor desloca por um milissegundo &mdash; e o UID posicional que apontava para o e-mail A passa a apontar para o e-mail B. A lista de cabeçalhos ficava certa porque a buscávamos na hora. Mas o cache de corpos, indexado por esse mesmo UID que escorregava, passava a entregar o conteúdo errado.
+          </p>
+
+          <p>
+            A correção é arquitetural: embutimos o ID real da mensagem do Graph diretamente em cada cabeçalho de e-mail e usamos isso como identificador canônico em todo o cache de corpos, no carregador de conteúdo e nos caminhos de ação. O UID sintético continua existindo por compatibilidade com as interfaces em formato IMAP dentro do aplicativo, mas ele não é mais a fonte da verdade sobre "qual mensagem é esta, de verdade".
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Vazamento entre contas</h3>
+
+          <p>
+            Uma classe relacionada de bug de "e-mail errado": trocar da conta A para a conta B, abrir uma pasta em B que estava vazia e ver por um instante e-mails da conta A ainda na lista.
+          </p>
+
+          <p>
+            Era um problema de invalidação de cache. A troca de conta limpava parte do estado de e-mail, mas não todo. A lista ordenada de e-mails, o cache de corpos em memória e o cache de conversas eram atualizados em ritmos ligeiramente diferentes. Se a pasta de destino tinha e-mails novos, os dados frescos chegavam rápido o bastante para mascarar as entradas velhas. Se a pasta de destino estava vazia, a lista velha era o que você via até o resultado "vazio" finalmente se propagar.
+          </p>
+
+          <p>
+            A correção foi sem glamour: todo ponto que limpa o estado dos e-mails ao trocar de conta ou de caixa postal agora limpa <em>tudo</em>, de forma atômica, antes de os dados da nova conta começarem a carregar. Chega de caches limpos pela metade, chega de corrida entre "chegou uma pasta vazia" e "os e-mails da conta anterior foram descartados".
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">O daemon em sandbox que não achava o próprio socket</h3>
+
+          <p>
+            O MailVault tem um auxiliar em segundo plano &mdash; um pequeno daemon sidecar que mantém suas mensagens sincronizadas mesmo com a janela principal fechada. No macOS, tanto o aplicativo quanto o daemon rodam dentro do App Sandbox, o que significa que cada um enxerga uma visão diferente do sistema de arquivos. Eles precisam de um ponto de encontro compartilhado para conversar por um socket de domínio Unix.
+          </p>
+
+          <p>
+            O bug: o aplicativo resolvia o caminho do socket de um jeito, o daemon resolvia de outro e, nas versões em sandbox, esses dois caminhos apontavam para diretórios de contêiner diferentes. O daemon iniciava, criava seu socket e ficava esperando. O aplicativo tentava conectar, não encontrava e concluía que o daemon não estava rodando.
+          </p>
+
+          <p>
+            Agora usamos <code>dirs::home_dir()</code> dos dois lados para resolver <code>~/.mailvault/mv.sock</code>. Sob o sandbox, isso se expande para o mesmo caminho relativo ao contêiner nos dois processos, então o cliente sempre encontra o servidor que acabou de iniciá-lo.
+          </p>
+
+          <p>
+            As permissões do auxiliar passaram por uma limpeza parecida. O binário do daemon herdava o <code>app-sandbox</code> da configuração de assinatura do aplicativo, o que faz binários avulsos sem um <code>Info.plist</code> próprio quebrarem. O <code>application-groups</code> também estava definido, sobra de um plano anterior de usar IPC por App Group &mdash; desnecessário agora que os dois processos compartilham o mesmo diretório de contêiner. Os dois foram removidos. O auxiliar inicia sem problemas em todas as versões do macOS contra as quais testamos, incluindo builds sandboxados recém-instalados.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Os entitlements que pareciam certos, mas não eram</h3>
+
+          <p>
+            Esse é o tipo de bug mais preocupante: tudo <em>parece</em> certo, e caladamente não funciona.
+          </p>
+
+          <p>
+            Os arquivos de permissões do macOS deixam você referenciar o prefixo da equipe de desenvolvimento como <code>$(AppIdentifierPrefix)</code>. O Xcode expande essa variável antes de passar o arquivo para o <code>codesign</code>. O nosso processo de release não é o Xcode &mdash; ele chama o <code>codesign</code> diretamente &mdash; e acontece que o <code>codesign</code> <em>não</em> expande essa variável. A string literal <code>$(AppIdentifierPrefix)</code> estava sendo embutida no binário assinado.
+          </p>
+
+          <p>
+            O sintoma: o compartilhamento de chaveiro entre o aplicativo e o daemon estava quebrado, em silêncio. O aplicativo conseguia ler as credenciais do chaveiro, mas o daemon não as enxergava &mdash; porque o identificador do grupo de acesso que ele pedia era a string literal <code>$(AppIdentifierPrefix).com.mailvault...</code>, e não o identificador real, com o prefixo da equipe. O daemon acabava pedindo credenciais que não tinha e desistia.
+          </p>
+
+          <p>
+            A correção é uma etapa de expansão com <code>sed</code> que reescreve o arquivo de permissões substituindo o prefixo real da equipe antes da chamada ao <code>codesign</code>. Nós a acrescentamos ao lado da nossa verificação de consistência de versão que já existia, para que uma classe parecida de bug do tipo "configuração que parece certa à primeira vista" seja pega na CI.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Publicação controlada do snap</h3>
+
+          <p>
+            Por falar em CI: até a 2.4.0, enviar uma tag de versão publicava automaticamente o snap resultante no canal estável. Se algo quebrasse depois do teste inicial &mdash; e às vezes quebrava, porque o confinamento do Snap se comporta diferente de uma build de desenvolvimento de maneiras que só aparecem depois de instalar &mdash; a versão quebrada já estava no ar quando descobríamos.
+          </p>
+
+          <p>
+            O processo de release agora para na etapa "snap enviado". Um fluxo separado, o <em>Promote Snaps</em>, move um build do canal edge para o stable, e só depois de instalarmos a partir do canal edge em uma máquina limpa e conferirmos o básico: adicionar conta, carregar e-mails, fazer backup. É um clique a mais em um lançamento bem-sucedido e uma reversão bem mais tranquila em um lançamento que dá errado.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">As correções mais discretas</h3>
+
+          <p>
+            Um punhado de correções menores cabe no mesmo tema de "impedir que o aplicativo se contradiga".
+          </p>
+
+          <p>
+            <strong>Invalidação de cache de módulo.</strong> Vários caches em nível de módulo, inicializados de forma preguiçosa &mdash; coisas como buscas memorizadas de pastas e de descritores &mdash;, não eram limpos quando os dados por baixo deles mudavam. Agora são, e o cache de pastas unificadas tem um teto de tamanho, para não crescer sem limite.
+          </p>
+
+          <p>
+            <strong>Gravações redundantes de descritor.</strong> A ativação de conta gravava o descritor da conta no disco mais de uma vez por ativação, às vezes correndo consigo mesma em trocas rápidas. As gravações duplicadas acabaram.
+          </p>
+
+          <p>
+            <strong>Recursão infinita na ativação de conta.</strong> Um caminho raro no <code>activateAccount</code> &mdash; a restauração do descritor como alternativa depois de uma falha de cache &mdash; podia chamar a si mesmo se o descritor restaurado disparasse outra restauração. Isso era contido por uma proteção contra reentrância; uma correção mais limpa elimina a recursão de vez.
+          </p>
+
+          <p>
+            <strong>Arquitetura do store.</strong> Nós tínhamos um conjunto de invólucros de "store de domínio" entre os componentes e o store principal do Zustand, que duplicavam o estado em cópias locais. A ideia era oferecer uma API mais limpa, mas na prática eles criavam duas fontes de verdade por pedaço de estado e bugs ocasionais de ordem de atualização. Agora eles são apenas reexportações finas de seletores &mdash; a mesma ergonomia, uma fonte de verdade só.
+          </p>
+
+          <p>
+            <strong>Arquitetura do auxiliar em segundo plano.</strong> O código Rust que cuidava do auxiliar em segundo plano fazia dois trabalhos em um módulo só: decidir <em>como</em> iniciar o daemon (qual binário, com quais argumentos, sob qual sandbox) e cuidar do <em>transporte de RPC</em> depois que ele estava rodando. Separamos isso em <code>helper.rs</code>, para a estratégia de inicialização, e um módulo de transporte à parte. Depurar uma falha na inicialização não exige mais vasculhar o código de requisição/resposta, e vice-versa. O texto visível para quem usa foi reescrito ao mesmo tempo &mdash; "serviço do sistema" virou "auxiliar em segundo plano", que é mais honesto sobre o que aquilo de fato é.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Por que esta versão demorou</h3>
+
+          <p>
+            Versões de estabilidade são estranhamente difíceis de planejar. Cada correção é pequena, mas a área que elas cobrem é enorme &mdash; o transporte do Graph, a troca de contas, o IPC em sandbox, a assinatura de código e a infraestrutura de lançamento foram todos mexidos. A maioria desses bugs era rara demais para reproduzirmos sob demanda; tivemos que raciocinar a partir de rastros, relatos de usuários e leitura do código até enxergar como o estado ruim surgia, então escrever a correção e esperar para confirmar que os relatos pararam.
+          </p>
+
+          <p>
+            O retorno é o tipo de mudança que você só nota quando, de repente, deixa de ver um bug que te pegava uma vez por semana. Se você foi atingido por qualquer um dos comportamentos acima &mdash; conteúdo de e-mail errado no Outlook, e-mails velhos ao trocar de conta, um auxiliar em segundo plano que não ficava conectado &mdash; a 2.4.0 é a versão que faz isso sumir.
+          </p>
+
+          <p>
+            Os próximos da lista: terminar <a href="/pt-br/blog/refactoring-mailvault-from-monolith-to-modules.html" class="text-primary-500 hover:text-primary-600 underline">a refatoração em cinco fases</a>, fechar os itens que faltam na lista de acompanhamento da v2.4 (detecção de caixa postal única no IMAP para a Hostinger, casos extremos de troca de pasta, o balão de rascunho na composição) e continuar levando a reescrita do classificador a um bom estado. O trabalho de recursos continua &mdash; mas só em cima de uma base em que confiamos.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="Logo do MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/pt-br/docs.html" class="hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/pt-br/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacidade</a>
+          <a href="/pt-br/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Termos</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. Todos os direitos reservados.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="Escolha um idioma" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

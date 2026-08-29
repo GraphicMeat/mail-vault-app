@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>如何把 iCloud 邮件导出到电脑 — MailVault</title>
+  <meta name="description" content="iCloud 邮件没有内置的导出按钮。这里讲如何用 IMAP 和应用专用密码，真正拿到一份可搜索的 @icloud.com 或 @me.com 邮件本地副本。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/guides/export-icloud-mail.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/guides/export-icloud-mail.html">
+  <meta property="og:title" content="如何把 iCloud 邮件导出到电脑 — MailVault">
+  <meta property="og:description" content="iCloud 邮件没有内置的导出按钮。这里讲如何用 IMAP 和应用专用密码，真正拿到一份可搜索的 @icloud.com 或 @me.com 邮件本地副本。">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="如何把 iCloud 邮件导出到电脑 — MailVault">
+  <meta name="twitter:description" content="iCloud 邮件没有内置的导出按钮。这里讲如何用 IMAP 和应用专用密码，真正拿到一份可搜索的 @icloud.com 或 @me.com 邮件本地副本。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "如何把 iCloud 邮件导出到电脑",
+  "description": "iCloud 邮件没有内置的导出按钮。这里讲如何用 IMAP 和应用专用密码，真正拿到一份可搜索的 @icloud.com 或 @me.com 邮件本地副本。",
+  "url": "https://mailvaultapp.com/zh/guides/export-icloud-mail.html",
+  "datePublished": "2026-07-15",
+  "dateModified": "2026-07-15",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "为什么 iCloud 邮件需要应用专用密码？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Apple 要求 Apple ID 开启两步验证，并且不允许第三方邮件客户端用你平常的 Apple ID 密码登录。请在 appleid.apple.com 的「登录与安全」下生成一个独立的应用专用密码，用它来登录。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "iCloud 邮件的 IMAP 服务器设置是什么？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "IMAP 服务器 imap.mail.me.com，端口 993，使用 SSL/TLS。发信用 SMTP 服务器 smtp.mail.me.com，端口 587，SSL/TLS 并需要认证。用户名填你完整的 iCloud 地址。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "iCloud 有类似 Google Takeout 的内置邮件导出功能吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "没有。Apple 不提供针对 iCloud 邮件的一键导出。把邮件取出来的实际办法，是用应用专用密码通过 IMAP 连接一个邮件客户端或备份工具。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "我可以在 Windows 上导出 iCloud 邮件吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "原则上可以，只要用支持 IMAP 的 Windows 邮件客户端，配合应用专用密码。MailVault 本身目前支持 macOS 和 Linux，不支持 Windows。"
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/export-icloud-mail.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/export-icloud-mail.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/export-icloud-mail.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/export-icloud-mail.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/export-icloud-mail.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/export-icloud-mail.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/export-icloud-mail.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/export-icloud-mail.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/export-icloud-mail.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/export-icloud-mail.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/zh/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/zh/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="切换主题">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            下载
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/zh/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">下载</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/zh/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        返回首页
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">如何把 iCloud 邮件导出到电脑</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>6 分钟阅读</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Apple 没有为 iCloud 邮件提供一键「导出我的邮件」按钮，这让很多想备份 @icloud.com、@me.com 或 @mac.com 账户的人很意外。好消息是 iCloud 邮件完整支持标准 IMAP 访问，也就是说任何支持 IMAP 的邮件客户端或备份工具都能把你的邮件下载下来 &mdash; 你只需要正确配置，其中包括一个 Apple 特有的步骤：应用专用密码。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">第 1 步：生成应用专用密码</h3>
+
+          <p>
+            Apple 要求你的 Apple ID 开启两步验证，并且不允许第三方应用用你平常的 Apple ID 密码登录。作为替代，你要专门为邮件访问生成一个独立的应用专用密码：
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li>打开 <a href="https://appleid.apple.com" target="_blank" class="text-primary-500 hover:text-primary-600 underline">appleid.apple.com</a> 并登录。</li>
+            <li>在「登录与安全」下，选择「App 专用密码」。</li>
+            <li>点击「生成 App 专用密码」，起一个像「邮件备份」这样的标签，Apple 会显示一个一次性密码。</li>
+            <li>当你的邮件客户端或备份工具要求登录时，使用这个密码（而不是你平常的 Apple ID 密码）。</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">第 2 步：iCloud 邮件的 IMAP 设置</h3>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>IMAP 服务器</strong>：<code>imap.mail.me.com</code>，端口 993，SSL/TLS。</li>
+            <li><strong>SMTP 服务器</strong>：<code>smtp.mail.me.com</code>，端口 587，SSL/TLS，需要身份验证。</li>
+            <li><strong>用户名</strong>：你完整的 iCloud 邮箱地址（含 @icloud.com、@me.com 或 @mac.com）。</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">第 3 步：连接邮件客户端或归档工具，把一切下载下来</h3>
+
+          <p>
+            有了上面的应用专用密码和 IMAP 设置，任何标准邮件客户端都能连上并同步你的 iCloud 邮件。如果你只是要备份（并不打算日常使用这个客户端），那么专门的归档工具比完整的邮件客户端更合适，因为它就是为了下载并保存一切而做的，而不只是把收件箱显示出来。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">为什么要导出 iCloud 邮件</h3>
+
+          <p>
+            人们专门备份 iCloud 邮件的几个常见理由：iCloud 免费方案的存储档位小得出名（5 GB，由邮件、照片和设备备份共用），邮件常常被夹在中间；有些人想要一份不依赖于留在 Apple 生态内的邮件副本；还有些人打算彻底离开 Apple 硬件，希望邮件历史能跟着走。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">用 MailVault 导出 iCloud 邮件</h3>
+
+          <p>
+            MailVault 是一款免费开源的桌面邮件应用，支持 macOS 和 Linux。用上面的 IMAP 设置和应用专用密码添加你的 iCloud 账户，选好你想要的文件夹，MailVault 就会把每封邮件下载成一个独立的 <code>.eml</code> 文件，按标准 Maildir 结构组织在你的磁盘上。因为每封邮件都是独立文件，你得到的是一份可搜索、可浏览的本地归档 &mdash; 而不是一个非得先导进别处才能用的巨型导出包。
+          </p>
+
+          <p>
+            手动归档免费且不限次数。如果你希望 iCloud 邮件备份按计划自动保持最新，那属于 MailVault Premium（$4/月 或 $25/年；年付含 14 天免费试用）。
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">把 iCloud 邮件放到你自己的磁盘上</p>
+            <p class="text-sm mb-4">只要用应用专用密码连上，MailVault 就会把 iCloud 邮件归档成一个个可搜索的 .eml 文件。免费开源。</p>
+            <div class="flex flex-wrap gap-3">
+              <a href="/zh/#download" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+                下载 MailVault
+              </a>
+              <a href="/zh/pricing.html" class="inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">
+                查看定价
+              </a>
+            </div>
+          </div>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-4">常见问题</h3>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">为什么 iCloud 邮件需要应用专用密码？</p>
+            <p>Apple 要求 Apple ID 开启两步验证，并且不允许第三方邮件客户端用你平常的 Apple ID 密码登录。请在 appleid.apple.com 的「登录与安全」下生成一个独立的应用专用密码，用它来登录。</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">iCloud 邮件的 IMAP 服务器设置是什么？</p>
+            <p>IMAP 服务器 imap.mail.me.com，端口 993，使用 SSL/TLS。发信用 SMTP 服务器 smtp.mail.me.com，端口 587，SSL/TLS 并需要认证。用户名填你完整的 iCloud 地址。</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">iCloud 有类似 Google Takeout 的内置邮件导出功能吗？</p>
+            <p>没有。Apple 不提供针对 iCloud 邮件的一键导出。把邮件取出来的实际办法，是用应用专用密码通过 IMAP 连接一个邮件客户端或备份工具。</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">我可以在 Windows 上导出 iCloud 邮件吗？</p>
+            <p>原则上可以，只要用支持 IMAP 的 Windows 邮件客户端，配合应用专用密码。MailVault 本身目前支持 macOS 和 Linux，不支持 Windows。</p>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            延伸阅读：<a href="/zh/guides/imap-backup-tool-checklist.html" class="text-primary-500 hover:text-primary-600 underline">挑选 IMAP 备份工具该看什么</a>、<a href="/zh/guides/archive-imap-emails-locally.html" class="text-primary-500 hover:text-primary-600 underline">本地 IMAP 归档是怎么运作的</a>，以及 <a href="/zh/compare/mailvault-vs-apple-mail.html" class="text-primary-500 hover:text-primary-600 underline">MailVault 对比 Apple Mail</a>。
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/zh/docs.html" class="hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="hover:text-primary-500 transition-colors">博客</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">隐私</a>
+          <a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">更新日志</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">条款</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 保留所有权利。
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="选择语言" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/guides/export-icloud-mail.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/guides/export-icloud-mail.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/guides/export-icloud-mail.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/guides/export-icloud-mail.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/guides/export-icloud-mail.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/guides/export-icloud-mail.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/guides/export-icloud-mail.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/guides/export-icloud-mail.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/guides/export-icloud-mail.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

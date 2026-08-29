@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="it" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Strumenti di backup IMAP: che cosa guardare davvero — MailVault</title>
+  <meta name="description" content="Una checklist onesta per valutare qualsiasi strumento di backup email via IMAP &mdash; formato dei file, gestione delle cartelle, supporto OAuth e che fine fa il tuo archivio se lo strumento sparisce.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/it/guides/imap-backup-tool-checklist.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/it/guides/imap-backup-tool-checklist.html">
+  <meta property="og:title" content="Strumenti di backup IMAP: che cosa guardare davvero — MailVault">
+  <meta property="og:description" content="Una checklist onesta per valutare qualsiasi strumento di backup email via IMAP &mdash; formato dei file, gestione delle cartelle, supporto OAuth e che fine fa il tuo archivio se lo strumento sparisce.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="it_IT">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Strumenti di backup IMAP: che cosa guardare davvero — MailVault">
+  <meta name="twitter:description" content="Una checklist onesta per valutare qualsiasi strumento di backup email via IMAP &mdash; formato dei file, gestione delle cartelle, supporto OAuth e che fine fa il tuo archivio se lo strumento sparisce.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Strumenti di backup IMAP: che cosa guardare davvero",
+  "description": "Una checklist onesta per valutare qualsiasi strumento di backup email via IMAP &mdash; formato dei file, gestione delle cartelle, supporto OAuth e che fine fa il tuo archivio se lo strumento sparisce.",
+  "url": "https://mailvaultapp.com/it/guides/imap-backup-tool-checklist.html",
+  "datePublished": "2026-07-15",
+  "dateModified": "2026-07-15",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Che differenza c'è tra .eml e .mbox per i backup della posta?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Un file .eml contiene una sola email e può essere aperto singolarmente da quasi tutti i client di posta. Un file .mbox raccoglie molte email in un unico file grande: è standard, ma non è sfogliabile direttamente senza prima importarlo in un client."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Un servizio di archiviazione email nel cloud è la stessa cosa di un backup locale?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. Un servizio di archiviazione cloud conserva la tua posta sui server del fornitore, quindi l'accesso dipende dal restare abbonato e dal fatto che il fornitore resti in attività. Un backup locale salva i file su un disco che controlli tu, indipendentemente da qualsiasi abbonamento."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Perché il supporto OAuth conta in uno strumento di backup IMAP?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Gli account Gmail e Microsoft richiedono sempre più spesso l'accesso OAuth2 invece di una password vera, e alcuni account non supportano più affatto l'accesso IMAP con password. Uno strumento senza un supporto OAuth adeguato può semplicemente non riuscire a collegarsi a questi account."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Uno strumento di backup della posta dovrebbe essere open source?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "È un forte punto a favore, non un requisito assoluto. Poiché i backup della posta riguardano informazioni personali e finanziarie molto delicate, il codice open source permette a te o a qualcuno di cui ti fidi di verificare che cosa fa davvero lo strumento con i tuoi dati, invece di affidarsi solo alla fiducia."
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/imap-backup-tool-checklist.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/imap-backup-tool-checklist.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/imap-backup-tool-checklist.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/imap-backup-tool-checklist.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/imap-backup-tool-checklist.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/imap-backup-tool-checklist.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/imap-backup-tool-checklist.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/imap-backup-tool-checklist.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/imap-backup-tool-checklist.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/imap-backup-tool-checklist.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/it/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/it/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Funzioni</a>
+          <a href="/it/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Casi d'uso</a>
+          <a href="/it/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="Cambia tema">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Download
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/it/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Funzioni</a>
+          <a href="/it/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Casi d'uso</a>
+          <a href="/it/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/it/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Torna alla home
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Strumenti di backup IMAP: che cosa guardare</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>8 min di lettura</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Di strumenti per il backup e l'archiviazione della posta IMAP ce ne sono tanti, dalle utility gratuite e open source alle suite di archiviazione aziendali da migliaia di euro all'anno. Quasi tutte le pagine di marketing si somigliano &mdash; "sicuro", "affidabile", "backup facili". Le differenze che contano davvero stanno sotto il testo pubblicitario, in scelte su formato dei file e proprietà dei dati che di solito scopri solo dopo esserti già legato a uno strumento. Ecco che cosa controllare davvero.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1. In che formato salva, in concreto?</h3>
+
+          <p>
+            È la domanda più importante di tutte, ed è quella che quasi tutti saltano. Chiediti: se domani smettessi di usare questo strumento, potrei aprire le mie email archiviate con qualcos'altro?
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Singoli file .eml (RFC 5322)</strong> &mdash; il risultato migliore. Ogni email è un file standard a sé che qualsiasi client di posta, o persino un editor di testo, può aprire. Non resta legato niente.</li>
+            <li><strong>Mbox</strong> &mdash; un unico file grande per cartella, con tutti i messaggi concatenati. È standard e ampiamente supportato, ma non è sfogliabile direttamente senza importarlo da qualche parte.</li>
+            <li><strong>Formato proprietario, database o contenitore</strong> &mdash; il risultato peggiore. Il tuo archivio è utilizzabile solo attraverso quel preciso strumento. Se l'azienda chiude o smetti di pagare, rischi di perdere l'accesso pratico al tuo stesso backup.</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">2. Dove vive davvero l'archivio?</h3>
+
+          <p>
+            Gli strumenti local-first salvano i file direttamente in una cartella sul tuo disco, che controlli tu. I servizi di archiviazione nel cloud conservano invece la tua posta sui loro server, il che significa che la disponibilità del tuo backup dipende dal fatto che quell'azienda resti in attività e che il tuo abbonamento resti attivo. Nessuno dei due approcci è sbagliato di per sé, ma dovresti sapere quale stai prendendo &mdash; un "backup" che sparisce se smetti di pagare non è davvero un backup, è un abbonamento.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">3. Gestisce l'autenticazione come si deve?</h3>
+
+          <p>
+            Per gli account Gmail e Microsoft in particolare, lo strumento dovrebbe supportare l'accesso OAuth2 invece di chiederti la password vera o una password per app &mdash; entrambi i provider si stanno allontanando dall'accesso IMAP con password per motivi di sicurezza, e alcuni account non lo supportano più affatto. Per provider come Yahoo che non offrono password per app, lo strumento deve supportare la loro procedura di accesso standard; se l'unica opzione Yahoo di uno strumento è "genera una password per app", non è rimasto al passo con il funzionamento reale dell'autenticazione di Yahoo oggi.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">4. Puoi archiviare in modo selettivo, o è tutto o niente?</h3>
+
+          <p>
+            Gli strumenti buoni ti lasciano scegliere cartelle, etichette o intervalli di date specifici. Conta più di quanto sembri &mdash; se vuoi archiviare e ripulire solo la posta più vecchia di due anni, un'esportazione tutto-o-niente ti costringe a scaricare (e poi a smistare a mano) ogni cosa, compresa la posta che non volevi toccare.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">5. Conserva fedelmente allegati e formattazione?</h3>
+
+          <p>
+            Provalo prima di affidare a uno strumento qualcosa di importante: archivia una manciata di email con allegati e formattazione HTML, poi riaprile. Gli allegati devono essere integri e apribili, e le email HTML devono comparire vicine a com'erano in origine, non ridotte a testo semplice.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">6. Il codice sorgente è ispezionabile, o ti stai fidando di una scatola nera?</h3>
+
+          <p>
+            La posta è sensibile per natura &mdash; documenti finanziari, corrispondenza personale, comunicazioni di lavoro. Gli strumenti open source permettono a te (o a qualcuno di cui ti fidi) di verificare davvero che cosa fa il software con i tuoi dati, invece di credere sulla parola a un fornitore. Per uno strumento di backup conta più che per quasi ogni altra categoria di software, perché gli stai consegnando proprio le tue informazioni più private.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">7. Quanto costa continuare a usare il tuo stesso backup?</h3>
+
+          <p>
+            Alcuni servizi di archiviazione chiedono un canone solo per tenere accessibile il backup che hai già, di fatto affittandoti i tuoi stessi dati. Uno strumento che salva su file aperti e standard sul tuo disco non ha questo problema &mdash; il tuo archivio continua a funzionare con o senza lo strumento, una volta salvato.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Dove si inserisce MailVault</h3>
+
+          <p>
+            MailVault è una delle opzioni di questa categoria, e conviene giudicarlo con la lista qui sopra invece che sulla fiducia: è gratuito e open source, salva singoli file <code>.eml</code> in una normale struttura Maildir sul tuo disco (non in un formato proprietario né sul server di qualcun altro), supporta OAuth per Gmail e Microsoft e il normale flusso di accesso di Yahoo, e ti permette di archiviare in modo selettivo cartelle specifiche. Archiviare a mano è gratuito e senza limiti per sempre; i backup automatici pianificati, la migrazione tra account, le regole di pulizia e le istantanee a una data precisa sono funzioni premium a $4/mese o $25/anno, con 14 giorni di prova gratuita sul piano annuale. Al momento gira su macOS e Linux, non su Windows.
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Guarda come se la cava MailVault con questa lista</p>
+            <p class="text-sm mb-4">Singoli file .eml, il tuo disco, open source, OAuth dove conta. Gratis da provare, backup manuali illimitati sempre gratuiti.</p>
+            <div class="flex flex-wrap gap-3">
+              <a href="/it/#download" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+                Scarica MailVault
+              </a>
+              <a href="/it/pricing.html" class="inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">
+                Vedi i prezzi
+              </a>
+            </div>
+          </div>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Domande frequenti</h3>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Che differenza c'è tra .eml e .mbox per i backup della posta?</p>
+            <p>Un file .eml contiene una sola email e può essere aperto singolarmente da quasi tutti i client di posta. Un file .mbox raccoglie molte email in un unico file grande: è standard, ma non è sfogliabile direttamente senza prima importarlo in un client.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Un servizio di archiviazione email nel cloud è la stessa cosa di un backup locale?</p>
+            <p>No. Un servizio di archiviazione cloud conserva la tua posta sui server del fornitore, quindi l'accesso dipende dal restare abbonato e dal fatto che il fornitore resti in attività. Un backup locale salva i file su un disco che controlli tu, indipendentemente da qualsiasi abbonamento.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Perché il supporto OAuth conta in uno strumento di backup IMAP?</p>
+            <p>Gli account Gmail e Microsoft richiedono sempre più spesso l'accesso OAuth2 invece di una password vera, e alcuni account non supportano più affatto l'accesso IMAP con password. Uno strumento senza un supporto OAuth adeguato può semplicemente non riuscire a collegarsi a questi account.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Uno strumento di backup della posta dovrebbe essere open source?</p>
+            <p>È un forte punto a favore, non un requisito assoluto. Poiché i backup della posta riguardano informazioni personali e finanziarie molto delicate, il codice open source permette a te o a qualcuno di cui ti fidi di verificare che cosa fa davvero lo strumento con i tuoi dati, invece di affidarsi solo alla fiducia.</p>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            Da leggere anche: <a href="/it/guides/yahoo-mail-backup.html" class="text-primary-500 hover:text-primary-600 underline">come fare il backup di Yahoo Mail</a>, <a href="/it/guides/archive-imap-emails-locally.html" class="text-primary-500 hover:text-primary-600 underline">come funziona l'archiviazione IMAP locale</a> e <a href="/it/compare/mailvault-vs-thunderbird.html" class="text-primary-500 hover:text-primary-600 underline">MailVault a confronto con Thunderbird</a>. Guarda <a href="/it/features.html" class="text-primary-500 hover:text-primary-600 underline">tutte le funzioni</a>.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/it/docs.html" class="hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacy</a>
+          <a href="/it/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Termini</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. Tutti i diritti riservati.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="Scegli una lingua" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/guides/imap-backup-tool-checklist.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/guides/imap-backup-tool-checklist.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/guides/imap-backup-tool-checklist.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/guides/imap-backup-tool-checklist.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/guides/imap-backup-tool-checklist.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/guides/imap-backup-tool-checklist.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/guides/imap-backup-tool-checklist.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/guides/imap-backup-tool-checklist.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/guides/imap-backup-tool-checklist.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

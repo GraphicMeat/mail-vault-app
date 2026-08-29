@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Outlook.com / Hotmail 邮箱满了？如何归档旧邮件 — MailVault</title>
+  <meta name="description" content="Outlook.com 或 Hotmail 提示空间不足？这里讲如何查看是什么占用了空间、如何安全清理，以及如何把旧邮件归档到本地，而不是花钱买更多存储。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/guides/outlook-hotmail-mailbox-full.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/guides/outlook-hotmail-mailbox-full.html">
+  <meta property="og:title" content="Outlook.com / Hotmail 邮箱满了？如何归档旧邮件 — MailVault">
+  <meta property="og:description" content="Outlook.com 或 Hotmail 提示空间不足？这里讲如何查看是什么占用了空间、如何安全清理，以及如何把旧邮件归档到本地，而不是花钱买更多存储。">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Outlook.com / Hotmail 邮箱满了？如何归档旧邮件 — MailVault">
+  <meta name="twitter:description" content="Outlook.com 或 Hotmail 提示空间不足？这里讲如何查看是什么占用了空间、如何安全清理，以及如何把旧邮件归档到本地，而不是花钱买更多存储。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Outlook.com / Hotmail 邮箱满了？如何归档旧邮件",
+  "description": "Outlook.com 或 Hotmail 提示空间不足？这里讲如何查看是什么占用了空间、如何安全清理，以及如何把旧邮件归档到本地，而不是花钱买更多存储。",
+  "url": "https://mailvaultapp.com/zh/guides/outlook-hotmail-mailbox-full.html",
+  "datePublished": "2026-07-15",
+  "dateModified": "2026-07-15",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Outlook.com 提供多少免费存储？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "15 GB，由邮件和 OneDrive 共用。你可以在 设置 → 常规 → 存储 里看到各自的占用。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "在 Outlook.com 清空「已删除邮件」会立刻腾出空间吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "会。与某些要等固定天数的服务商不同，在 Outlook.com 手动清空「已删除邮件」和「垃圾邮件」文件夹，会立刻释放那部分存储。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Hotmail 和 Outlook.com 是一回事吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "就实际使用而言，是的。Microsoft 多年前把 Hotmail 更名为 Outlook.com；旧的 @hotmail.com 和 @live.com 地址仍然可用，并使用同一套 Outlook.com 存储和设置。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "不买 Microsoft 365，我能归档 Outlook.com 的邮件吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "能。Outlook.com 支持标准 IMAP 访问，所以任何 IMAP 归档工具，包括 MailVault 的免费版，都能在没有 Microsoft 365 订阅的情况下把你的邮件下载到本地。"
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/outlook-hotmail-mailbox-full.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/outlook-hotmail-mailbox-full.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/outlook-hotmail-mailbox-full.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/outlook-hotmail-mailbox-full.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/outlook-hotmail-mailbox-full.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/outlook-hotmail-mailbox-full.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/outlook-hotmail-mailbox-full.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/outlook-hotmail-mailbox-full.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/outlook-hotmail-mailbox-full.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/outlook-hotmail-mailbox-full.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/zh/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/zh/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="切换主题">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            下载
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/zh/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">下载</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/zh/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        返回首页
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Outlook.com / Hotmail 邮箱满了？这样解决</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>6 分钟阅读</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Outlook.com（也就是当年 Hotmail 的现名）给免费账户 15 GB 存储，与 OneDrive 共用。装满之后，新邮件会退信，你会在网页端以及 Outlook 桌面或手机应用里看到存储警告。Microsoft 自己的解法是通过 Microsoft 365 订阅卖给你更多存储 &mdash; 但如果你更想真正解决问题，而不是无限期地租下去，下面是完整的图景。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1. 先看看存储到底花在哪了</h3>
+
+          <p>
+            在 Outlook.com 里，打开 设置 &rarr; 常规 &rarr; 存储，可以看到邮件和 OneDrive 各占多少。如果 OneDrive 是大头，清邮件帮助不大 &mdash; 你得单独处理 OneDrive 文件。如果邮件是大头，那原因几乎总是附件，而不是邮件正文本身。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">2. 清空「已删除邮件」和「垃圾邮件」</h3>
+
+          <p>
+            和多数服务商一样，Outlook.com 会把删除的邮件留在「已删除邮件」文件夹里，直到你清空为止，在那之前它们仍然占用你的配额。在文件夹列表里右键点击「已删除邮件」和「垃圾邮件」，选择「清空文件夹」，就能立刻拿回这部分空间。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">3. 按大小排序，清掉附件很重的旧邮件</h3>
+
+          <p>
+            在 Outlook.com 的搜索里用 <code>hasattachments:yes</code> 并按大小排序，找出你最大的那些邮件。几封带大附件的老邮件 &mdash; PDF、视频、磁盘映像 &mdash; 占的空间通常远远超过上千封短文本邮件加起来的总和。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">4. 想清楚你是不是真的需要 Microsoft 365</h3>
+
+          <p>
+            Microsoft 365 基础版每月价格不高，捆绑了 100 GB 存储和 Office 应用，如果你本来就想要这些应用，那就值。但如果你买它只是为了解决邮箱满的问题，你付的是一笔持续的费用，去推迟一个等新的、更大的配额也装满之后还会回来的问题。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">5. 先归档到本地，再从服务器删除</h3>
+
+          <p>
+            真正能打破循环的做法：把你想留的旧邮件下载一份到自己的电脑上，确认副本完整，然后从 Outlook.com 删掉这些邮件。你的邮箱配额被永久腾了出来，而每一封邮件你都留着，可搜索、可离线访问，保存它们也不用交任何持续费用。
+          </p>
+
+          <p>
+            Outlook.com 和 Hotmail 都支持 IMAP，所以任何基于 IMAP 的归档工具都能做这件事。MailVault 是 macOS 和 Linux 上的一个免费开源选择：用 Microsoft 的 OAuth 登录接入你的 Outlook.com 或 Hotmail 账户（不用折腾密码），选好你想要的文件夹，MailVault 就会把每封邮件下载成你磁盘上一个独立的 <code>.eml</code> 文件，按标准 Maildir 结构组织。等你核对过这份归档 &mdash; 打开几封邮件、检查附件、搜一封你记得的 &mdash; 就可以放心从 Outlook.com 删掉原件，把配额收回来。
+          </p>
+
+          <p>
+            MailVault 里的手动归档免费且不限次数。如果你更希望它按计划自动运行，而不是自己分批归档，那是 $4/月 或 $25/年 的高级功能 —— 年付方案含 14 天免费试用。
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">彻底给你的 Outlook.com 邮箱腾出空间</p>
+            <p class="text-sm mb-4">在你从服务器删除任何东西之前，MailVault 会把 Outlook.com 和 Hotmail 的邮件归档成你自己磁盘上一个个 .eml 文件。</p>
+            <div class="flex flex-wrap gap-3">
+              <a href="/zh/#download" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+                下载 MailVault
+              </a>
+              <a href="/zh/pricing.html" class="inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">
+                查看定价
+              </a>
+            </div>
+          </div>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-4">常见问题</h3>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Outlook.com 提供多少免费存储？</p>
+            <p>15 GB，由邮件和 OneDrive 共用。你可以在 设置 → 常规 → 存储 里看到各自的占用。</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">在 Outlook.com 清空「已删除邮件」会立刻腾出空间吗？</p>
+            <p>会。与某些要等固定天数的服务商不同，在 Outlook.com 手动清空「已删除邮件」和「垃圾邮件」文件夹，会立刻释放那部分存储。</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Hotmail 和 Outlook.com 是一回事吗？</p>
+            <p>就实际使用而言，是的。Microsoft 多年前把 Hotmail 更名为 Outlook.com；旧的 @hotmail.com 和 @live.com 地址仍然可用，并使用同一套 Outlook.com 存储和设置。</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">不买 Microsoft 365，我能归档 Outlook.com 的邮件吗？</p>
+            <p>能。Outlook.com 支持标准 IMAP 访问，所以任何 IMAP 归档工具，包括 MailVault 的免费版，都能在没有 Microsoft 365 订阅的情况下把你的邮件下载到本地。</p>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            延伸阅读：<a href="/zh/guides/gmail-storage-full.html" class="text-primary-500 hover:text-primary-600 underline">Gmail 空间满了怎么办</a>、<a href="/zh/guides/free-up-email-storage.html" class="text-primary-500 hover:text-primary-600 underline">如何腾出邮箱空间</a>，以及<a href="/zh/guides/imap-backup-tool-checklist.html" class="text-primary-500 hover:text-primary-600 underline">挑选 IMAP 备份工具该看什么</a>。
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/zh/docs.html" class="hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="hover:text-primary-500 transition-colors">博客</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">隐私</a>
+          <a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">更新日志</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">条款</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 保留所有权利。
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="选择语言" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/guides/outlook-hotmail-mailbox-full.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/guides/outlook-hotmail-mailbox-full.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/guides/outlook-hotmail-mailbox-full.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/guides/outlook-hotmail-mailbox-full.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/guides/outlook-hotmail-mailbox-full.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/guides/outlook-hotmail-mailbox-full.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/guides/outlook-hotmail-mailbox-full.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/guides/outlook-hotmail-mailbox-full.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/guides/outlook-hotmail-mailbox-full.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

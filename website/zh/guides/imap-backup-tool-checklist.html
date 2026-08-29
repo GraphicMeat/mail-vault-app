@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IMAP 备份工具：到底该看什么 — MailVault</title>
+  <meta name="description" content="一份评估任何 IMAP 邮件备份工具的诚实清单 &mdash; 文件格式、文件夹处理、OAuth 支持，以及这个工具消失之后你的归档会怎么样。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/guides/imap-backup-tool-checklist.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/guides/imap-backup-tool-checklist.html">
+  <meta property="og:title" content="IMAP 备份工具：到底该看什么 — MailVault">
+  <meta property="og:description" content="一份评估任何 IMAP 邮件备份工具的诚实清单 &mdash; 文件格式、文件夹处理、OAuth 支持，以及这个工具消失之后你的归档会怎么样。">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="IMAP 备份工具：到底该看什么 — MailVault">
+  <meta name="twitter:description" content="一份评估任何 IMAP 邮件备份工具的诚实清单 &mdash; 文件格式、文件夹处理、OAuth 支持，以及这个工具消失之后你的归档会怎么样。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "IMAP 备份工具：到底该看什么",
+  "description": "一份评估任何 IMAP 邮件备份工具的诚实清单 &mdash; 文件格式、文件夹处理、OAuth 支持，以及这个工具消失之后你的归档会怎么样。",
+  "url": "https://mailvaultapp.com/zh/guides/imap-backup-tool-checklist.html",
+  "datePublished": "2026-07-15",
+  "dateModified": "2026-07-15",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "做邮件备份时，.eml 和 .mbox 有什么区别？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "一个 .eml 文件装一封邮件，几乎任何邮件客户端都能单独打开它。一个 .mbox 文件把很多封邮件打包成一个大文件，它是标准格式，但不先导入客户端就没法直接浏览。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "基于云的邮件归档服务等同于本地备份吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "不等同。云归档服务把你的邮件存在厂商的服务器上，所以能否访问取决于你是否继续订阅、厂商是否还在经营。本地备份把文件存到你掌控的磁盘上，与任何持续订阅无关。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "对 IMAP 备份工具来说，支持 OAuth 为什么重要？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Gmail 和 Microsoft 账户越来越要求用 OAuth2 登录，而不是明文密码，有些账户甚至完全不支持基于密码的 IMAP 访问。没有正确 OAuth 支持的工具，可能根本连不上这些账户。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "邮件备份工具应该是开源的吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "这是一个很大的加分项，但不是硬性要求。因为邮件备份涉及高度敏感的个人和财务信息，开源代码让你（或你信任的人）能真正核实这个工具拿你的数据做了什么，而不是只能靠信任。"
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/imap-backup-tool-checklist.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/imap-backup-tool-checklist.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/imap-backup-tool-checklist.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/imap-backup-tool-checklist.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/imap-backup-tool-checklist.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/imap-backup-tool-checklist.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/imap-backup-tool-checklist.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/imap-backup-tool-checklist.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/imap-backup-tool-checklist.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/imap-backup-tool-checklist.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/zh/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/zh/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="切换主题">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            下载
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/zh/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">下载</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/zh/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        返回首页
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">IMAP 备份工具：该看哪些地方</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>8 分钟阅读</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            市面上的 IMAP 邮件备份和归档工具很多，从免费的开源小工具到每年上千的企业归档套件都有。多数营销页面看起来几乎一模一样 &mdash;「安全」「可靠」「轻松备份」。真正重要的差别藏在营销文案底下，藏在关于文件格式和数据归属的决定里，而这些你往往要等到已经把身家托付给某个工具之后才会发现。下面是真正该检查的东西。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1. 它到底把邮件存成什么格式？</h3>
+
+          <p>
+            这是最重要的一个问题，也是多数人跳过的一个。问自己：如果我明天不再用这个工具了，还能用别的东西打开我归档的邮件吗？
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>一个个独立的 .eml 文件（RFC 5322）</strong> &mdash; 最好的结果。每封邮件都是自己的标准文件，任何邮件客户端、甚至文本编辑器都能打开。什么都没被锁住。</li>
+            <li><strong>Mbox</strong> &mdash; 每个文件夹一个大文件，把所有邮件串在一起。它是标准格式，支持面也广，但不导进某个客户端就没法直接浏览。</li>
+            <li><strong>专有的数据库或容器格式</strong> &mdash; 最糟的结果。你的归档只有通过那个特定工具才用得了。如果那家公司关门，或者你停止付费，你可能实际上就进不去自己的备份了。</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">2. 归档到底存在哪里？</h3>
+
+          <p>
+            本地优先的工具会把文件直接存到你掌控的磁盘文件夹里。基于云的归档服务则把你的邮件存在它们的服务器上，这意味着你备份的可用性取决于那家公司是否还在经营、你的订阅是否还有效。两种做法本身都没错，但你应该清楚自己拿到的是哪一种 &mdash; 一份停止付费就消失的「备份」，其实不是备份，是订阅。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">3. 它的认证方式做得对吗？</h3>
+
+          <p>
+            尤其是对 Gmail 和 Microsoft 账户，这个工具应该支持 OAuth2 登录，而不是要你的明文密码或应用专用密码 &mdash; 出于安全原因，两家服务商都在逐步远离基于密码的 IMAP 访问，有些账户甚至已经完全不支持了。对于像 Yahoo 这类不提供应用专用密码的服务商，工具需要支持它们的标准登录流程；如果一个工具对 Yahoo 只有「生成一个应用专用密码」这一个选项，说明它没跟上 Yahoo 如今真正的认证方式。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">4. 能有选择地归档，还是只能全有或全无？</h3>
+
+          <p>
+            好的工具让你挑特定的文件夹、标签或日期范围。这比听起来更重要 &mdash; 如果你只想归档并清掉两年以上的邮件，全有或全无的导出会逼你把一切都下载下来（还要手动翻），包括那些你根本不用碰的邮件。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">5. 它能忠实保留附件和排版吗？</h3>
+
+          <p>
+            在把重要东西托付给某个工具之前先测一下：归档几封带附件、带 HTML 排版的邮件，然后再打开它们。附件应当完好且能打开，HTML 邮件的显示效果应当接近原样，而不是被砍成纯文本。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">6. 源代码可审计，还是你在信一个黑箱？</h3>
+
+          <p>
+            邮件天生敏感 &mdash; 财务记录、私人往来、工作沟通。开源工具让你（或你信任的人）真正核实软件拿你的数据做了什么，而不是只听厂商的一面之词。对备份工具来说，这一点比几乎任何其他类别的软件都更重要，因为你交给它的正是你最私密的信息。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">7. 继续用你自己的备份要花多少钱？</h3>
+
+          <p>
+            有些归档服务光是让你能继续访问已有的备份就要持续收费，等于把你自己的数据租回给你。一个把邮件存成你磁盘上开放标准文件的工具没有这个问题 &mdash; 邮件一旦存下来，有没有这个工具你的归档都照样能用。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailVault 在这里的位置</h3>
+
+          <p>
+            MailVault 是这一类里的一个选择，但它值不值得选，应该拿上面那份清单去衡量，而不是听我们一面之词：它免费且开源，把邮件存成你自己磁盘上标准 Maildir 结构里一个个独立的 <code>.eml</code> 文件（不是专有格式，也不在别人的服务器上），支持 Gmail 和 Microsoft 的 OAuth 以及 Yahoo 的标准登录流程，并且允许你有选择地归档指定文件夹。手动归档不限次数、永久免费；定时自动备份、跨账户迁移、清理规则和时间点快照属于 Premium 功能，$4/月 或 $25/年，年付方案含 14 天免费试用。目前它支持 macOS 和 Linux，不支持 Windows。
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">看看 MailVault 在这份清单上的表现</p>
+            <p class="text-sm mb-4">一个个独立的 .eml 文件、你自己的磁盘、开源，关键之处支持 OAuth。免费试用，手动备份永远不限次数、不收费。</p>
+            <div class="flex flex-wrap gap-3">
+              <a href="/zh/#download" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+                下载 MailVault
+              </a>
+              <a href="/zh/pricing.html" class="inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">
+                查看定价
+              </a>
+            </div>
+          </div>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-4">常见问题</h3>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">做邮件备份时，.eml 和 .mbox 有什么区别？</p>
+            <p>一个 .eml 文件装一封邮件，几乎任何邮件客户端都能单独打开它。一个 .mbox 文件把很多封邮件打包成一个大文件，它是标准格式，但不先导入客户端就没法直接浏览。</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">基于云的邮件归档服务等同于本地备份吗？</p>
+            <p>不等同。云归档服务把你的邮件存在厂商的服务器上，所以能否访问取决于你是否继续订阅、厂商是否还在经营。本地备份把文件存到你掌控的磁盘上，与任何持续订阅无关。</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">对 IMAP 备份工具来说，支持 OAuth 为什么重要？</p>
+            <p>Gmail 和 Microsoft 账户越来越要求用 OAuth2 登录，而不是明文密码，有些账户甚至完全不支持基于密码的 IMAP 访问。没有正确 OAuth 支持的工具，可能根本连不上这些账户。</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">邮件备份工具应该是开源的吗？</p>
+            <p>这是一个很大的加分项，但不是硬性要求。因为邮件备份涉及高度敏感的个人和财务信息，开源代码让你（或你信任的人）能真正核实这个工具拿你的数据做了什么，而不是只能靠信任。</p>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            延伸阅读：<a href="/zh/guides/yahoo-mail-backup.html" class="text-primary-500 hover:text-primary-600 underline">如何备份 Yahoo Mail</a>、<a href="/zh/guides/archive-imap-emails-locally.html" class="text-primary-500 hover:text-primary-600 underline">本地 IMAP 归档是怎么运作的</a>，以及 <a href="/zh/compare/mailvault-vs-thunderbird.html" class="text-primary-500 hover:text-primary-600 underline">MailVault 对比 Thunderbird</a>。另见<a href="/zh/features.html" class="text-primary-500 hover:text-primary-600 underline">全部功能</a>。
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/zh/docs.html" class="hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="hover:text-primary-500 transition-colors">博客</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">隐私</a>
+          <a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">更新日志</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">条款</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 保留所有权利。
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="选择语言" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/guides/imap-backup-tool-checklist.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/guides/imap-backup-tool-checklist.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/guides/imap-backup-tool-checklist.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/guides/imap-backup-tool-checklist.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/guides/imap-backup-tool-checklist.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/guides/imap-backup-tool-checklist.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/guides/imap-backup-tool-checklist.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/guides/imap-backup-tool-checklist.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/guides/imap-backup-tool-checklist.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

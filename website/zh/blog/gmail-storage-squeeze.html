@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gmail 存储空间收紧 — 以及你为什么该自己留一份 - MailVault 博客</title>
+  <meta name="description" content="Google 正在测试给新账号 5GB 免费存储而不是 15GB，并会删除闲置两年的账号。这里说明 MailVault 如何在你自己的磁盘上保留一份永久的 Gmail 本地副本。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/blog/gmail-storage-squeeze.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/blog/gmail-storage-squeeze.html">
+  <meta property="og:title" content="Gmail 存储空间收紧——以及你为什么该自己留一份">
+  <meta property="og:description" content="Google 正在测试给新账号 5GB 免费存储而不是 15GB，并会删除闲置两年的账号。这里说明 MailVault 如何在你自己的磁盘上保留一份永久的 Gmail 本地副本。">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Gmail 存储空间收紧——以及你为什么该自己留一份">
+  <meta name="twitter:description" content="Google 正在测试给新账号 5GB 免费存储而不是 15GB，并会删除闲置两年的账号。这里说明 MailVault 如何在你自己的磁盘上保留一份永久的 Gmail 本地副本。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/gmail-storage-squeeze.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/zh/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/zh/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="切换主题">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            下载
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/zh/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">下载</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/zh/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        返回博客
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-07-02" class="text-sm text-primary-500 font-medium">2026 年 7 月 2 日</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Gmail 存储空间收紧——以及你为什么该自己留一份</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>6 分钟阅读</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            多年来这笔交易很简单：注册一个 Google 账号，拿到 15&nbsp;GB 免费存储，由 Gmail、Drive 和 Photos 共用，然后再也不用去想它。这笔交易正在悄悄改变 &mdash; 而这也是个提出一个不太舒服的问题的好时机。如果十年的邮件只有一份副本，而它在 Google 手里，当免费额度从你脚下挪走时会发生什么？
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">到底变了什么</h3>
+
+          <p>
+            2026 年 5 月，用户和媒体注意到 Google 正在某些地区对<em>新注册</em>账户测试一项新的存储政策：默认免费空间是 5&nbsp;GB，而不是 15&nbsp;GB。想“不额外付费”解锁完整的 15&nbsp;GB，系统会提示你给账户绑定一个手机号。Google 自己的措辞也变了 &mdash; 从“你的 Google 账户免费附带 15&nbsp;GB 云存储”改成了“<strong>最多</strong> 15&nbsp;GB”。（<a href="https://9to5google.com/2026/05/14/google-account-free-storage-changes-15gb/" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">9to5Google</a>、<a href="https://www.techradar.com/computing/websites-apps/no-google-is-not-ending-its-15gb-of-free-gmail-storage-policy-its-testing-a-5gb-initial-limit-that-jumps-to-the-full-amount-if-you-add-a-phone-number" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">TechRadar</a>。）
+          </p>
+
+          <p>
+            把话说准确一点，因为那些标题常常没说准：这是一次测试，针对的是<em>特定</em>市场的<em>新</em>账户，如果你已经有一个 15&nbsp;GB 的账户，今天没有任何东西被拿走。Google 说这次试验是为了服务质量和推进账户找回的安全性。而各家报道一致指向同一个底层压力 &mdash; AI 和云基础设施日益上涨的成本（<a href="https://cybernews.com/tech/google-gmail-free-storage-limitations/" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">Cybernews</a>）。
+          </p>
+
+          <p>
+            我们不是来把一次有限的测试说成灾难的。我们是来指出方向的。「最多 15&nbsp;GB」和「15&nbsp;GB」不是同一个承诺。免费额度会变小，或者被一个手机号挡住，或者被一个付费方案挡住 &mdash; 而这个故事的每一个版本都有一个共同点：邮件放在别人的服务器上，依据的条款可以不经你同意就修改。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">没人提的那一部分：不活跃删除</h3>
+
+          <p>
+            存储上限是抢眼的那条，但还有一条更安静的政策，对任何你视为<em>归档</em>的东西来说更要紧。自 2023 年 12 月起，一个消费者账户若两年不使用，Google 就可以把它整个删掉 &mdash; 连同里面的一切，Gmail 邮件、Drive 文件、Photos，以及那个地址本身（见 <a href="https://support.google.com/mail/answer/6374270?hl=en" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">Google 自己的存储管理页面</a>）。
+          </p>
+
+          <p>
+            想想这对那个你「以防万一」留着的旧账号意味着什么。里面有你的大学记录、第一批自由职业发票、某件还在保修期内的东西的收据，还有某个已经离开的人发来的最后几封邮件。如果你不去登录，倒计时就在走。收件箱是邮件抵达的地方。它从来就不是为了当保险柜、存放那些丢了就找不回来的东西而设计的。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailVault 从哪里切入</h3>
+
+          <p>
+            MailVault 是一款桌面应用，它连上你的 Gmail，并在你自己的电脑上保留一份完整、长久的副本。你用 Google 登录 &mdash; 是真正的 OAuth2，不用应用密码，也不用四处找 IMAP 服务器设置（这套流程我们<a href="/zh/blog/gmail-oauth2.html" class="text-primary-500 hover:text-primary-600 underline">在这里写过</a>）&mdash; 然后 MailVault 把你的邮件拉下来，变成你掌控的本地文件。
+          </p>
+
+          <p>
+            关键的设计决定在于存储格式。每封邮件都以标准 <code>.eml</code> 文件的形式，保存在你磁盘上一棵 Maildir 风格的文件夹树里。那不是一个只能在我们应用里打开的专有数据库。<code>.eml</code> 就是原始的 RFC&nbsp;822 邮件格式 &mdash; 地球上每一个邮件客户端都认识的那个东西。你的归档就是一个装着普通文件的普通文件夹：
+          </p>
+
+          <pre>~/MailVault/
+  you@gmail.com/
+    INBOX/
+      1699887342.a1b2c3.eml
+      1699890021.d4e5f6.eml
+    Sent/
+    Receipts/        &larr; your own Gmail labels, preserved as folders
+    Family/
+    ...</pre>
+
+          <p>
+            用 Apple Mail、Thunderbird、Outlook 或一个文本编辑器打开其中一个 &mdash; 它就打开了。把这个文件夹备份到外接硬盘、NAS，或者你自己挑的云文件夹。十年后把它复制到一台新机器上。读你自己的邮件这件事，不取决于 MailVault 是否还存在、订阅是否还有效、或某台服务器是否还在线。这就是全部的意义。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">这如何回应存储收紧</h3>
+
+          <p>
+            把这些担心和本地副本真正能做的事一条条对上：
+          </p>
+
+          <p>
+            <strong>免费额度缩水。</strong>邮件在本地归档之后，那些你不再需要留在 Google 服务器上的邮件，就可以在<em>那边</em>删掉来收回空间 &mdash; 而你磁盘上的副本依然完整。你的收件箱变成一个工作台面，而不是唯一的保险库。你那 5&nbsp;GB（或者 15，或者最后定在多少）不再是一个你束手无策的倒计时。
+          </p>
+
+          <p>
+            <strong>不活跃即删除。</strong>一个已经完整归档过的账户，就算失效也不会把你的历史一并带走。哪怕两年后 Google 回收了这个休眠账户，你失去的是一个地址 &mdash; 不是你的记录。
+          </p>
+
+          <p>
+            <strong>锁定与失去访问。</strong>忘了密码、账户被打上安全标记、和平台起了政策争议，或者单纯有一天想离开 Gmail &mdash; 这些统统碰不到躺在你自己硬盘上的一个 <code>.eml</code> 文件夹。
+          </p>
+
+          <p>
+            我们认为这是关于邮件所有权的诚实版本，所以边界我们也说诚实：MailVault 保留一份副本，它不接管你的邮件。你依然通过 Gmail 收发邮件。变化在于，「删掉以省空间」和「让这个旧账号失效」不再是不可逆的，因为你删掉的并不是归档。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">本地优先，不是只有本地</h3>
+
+          <p>
+            还有一点值得说清楚，因为很容易以为我们的主张是“别信云”。不是的。云确实方便，Gmail 也确实是个好收件箱。问题从来不在于 Google 的服务器上存着一份副本 &mdash; 而在于对多数人来说，那是<em>唯一</em>的一份，且受制于不是他们定的条款。
+          </p>
+
+          <p>
+            MailVault 的答案是把「哪一份副本是锚」翻转过来。权威的、永久的归档，是放在你自己硬件上、格式比任何单一应用活得更久的那一份。云端的冗余和同步，是你为了方便加在上面的东西 &mdash; 而不是你押上自己历史的地基。当免费额度从来就不是你归档所在的地方时，它缩水就是个小得多的故事。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">今天就拿到一份副本</h3>
+
+          <p>
+            如果上面哪一条戳中了你 &mdash; 那个早就该备份的旧账户、那条一路涨到快满的存储条 &mdash; 解决它大概只需要十五分钟的设置。<a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">下载 MailVault</a>，用 Google 登录，让它把你的邮件拉进一个属于你的文件夹。然后去做那件你惦记了好几年的事：趁条款还没再改一次，先给你的邮件留一份副本。
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/zh/docs.html" class="hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="hover:text-primary-500 transition-colors">博客</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">隐私</a>
+          <a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">更新日志</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">条款</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 保留所有权利。
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="选择语言" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

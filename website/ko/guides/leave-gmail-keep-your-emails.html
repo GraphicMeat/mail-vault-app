@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>메일을 잃지 않고 Gmail을 떠나는 방법 — MailVault</title>
+  <meta name="description" content="Gmail에서 떠나려 하십니까? Gmail이 지금 갖고 있는 모든 것의 완전하고 검색 가능한 로컬 사본을 간직한 채 새 메일 제공업체로 옮기는 방법을 정리했습니다.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ko/guides/leave-gmail-keep-your-emails.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ko/guides/leave-gmail-keep-your-emails.html">
+  <meta property="og:title" content="메일을 잃지 않고 Gmail을 떠나는 방법 — MailVault">
+  <meta property="og:description" content="Gmail에서 떠나려 하십니까? Gmail이 지금 갖고 있는 모든 것의 완전하고 검색 가능한 로컬 사본을 간직한 채 새 메일 제공업체로 옮기는 방법을 정리했습니다.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ko_KR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="메일을 잃지 않고 Gmail을 떠나는 방법 — MailVault">
+  <meta name="twitter:description" content="Gmail에서 떠나려 하십니까? Gmail이 지금 갖고 있는 모든 것의 완전하고 검색 가능한 로컬 사본을 간직한 채 새 메일 제공업체로 옮기는 방법을 정리했습니다.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "메일을 잃지 않고 Gmail을 떠나는 방법",
+  "description": "Gmail에서 떠나려 하십니까? Gmail이 지금 갖고 있는 모든 것의 완전하고 검색 가능한 로컬 사본을 간직한 채 새 메일 제공업체로 옮기는 방법을 정리했습니다.",
+  "url": "https://mailvaultapp.com/ko/guides/leave-gmail-keep-your-emails.html",
+  "datePublished": "2026-07-15",
+  "dateModified": "2026-07-15",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "새 메일 제공업체로 옮기면 예전 Gmail 메일을 잃습니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "저절로 사라지지는 않지만, 백업해 두지 않으면 Google이 그 계정을 무기한 열어 두리라는 데 기대는 셈입니다. 무엇을 바꾸기 전에 Gmail을 자기 컴퓨터에 보관해 두면, 이후 Gmail 계정을 어떻게 하든 메일 기록은 안전합니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "제공업체를 옮긴 뒤 Gmail 계정을 지워야 합니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "그럴 필요는 없습니다. 많은 사람이 주 받은편지함으로 쓰지 않으면서도 전달용 주소로 몇 년씩 살려 둡니다. 언젠가 닫고 싶다면 먼저 백업하고 보관본을 확인하십시오 &mdash; 계정 삭제 후에는 Gmail 데이터를 복구할 수 없습니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Gmail 전달은 얼마나 오래 켜 두어야 합니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "중요한 계정과 연락처의 주소를 다 바꿀 때까지입니다 &mdash; 보통 몇 주에서 몇 달이 걸립니다. 다 챙겼는지 확신이 서지 않는다면 더 오래 켜 두어도 손해는 없습니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "예전 Gmail 메일을 새 메일 계정으로 바로 옮길 수 있습니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "새 제공업체가 IMAP을 지원한다면 가능합니다. MailVault Premium에는 보관된 메일을 한 계정에서 다른 계정의 폴더로 복사하는 계정 간 메일함 이전이 포함되어 있습니다."
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/leave-gmail-keep-your-emails.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/leave-gmail-keep-your-emails.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/leave-gmail-keep-your-emails.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/leave-gmail-keep-your-emails.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/leave-gmail-keep-your-emails.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/leave-gmail-keep-your-emails.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/leave-gmail-keep-your-emails.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/leave-gmail-keep-your-emails.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/leave-gmail-keep-your-emails.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/leave-gmail-keep-your-emails.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/ko/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/ko/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="테마 전환">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            다운로드
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/ko/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">다운로드</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/ko/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        홈으로 돌아가기
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">메일을 잃지 않고 Gmail을 떠나는 방법</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>7분 분량</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            사람들이 Gmail을 떠나는 이유는 다양합니다 &mdash; 프라이버시 걱정, 광고나 데이터 수집이 없는 유료 제공업체를 원해서, 자체 도메인으로 옮기려고, 또는 지금껏 받은 모든 메일을 한 회사가 쥐고 있는 상태에서 벗어나고 싶어서입니다. 이유가 무엇이든, 순서만 지키면 전환 자체는 어렵지 않습니다. 사람들이 저지르는 실수는 주소부터 바꾸고 예전 Gmail 기록은 접근이 이미 번거로워진 뒤에야 생각하는 것입니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1단계: 무엇보다 먼저 Gmail 기록을 보관하십시오</h3>
+
+          <p>
+            주소가 바뀐다고 알리기 전에, 전달을 설정하기 전에, Gmail 설정을 건드리기 전에 하십시오. 아직 아무 제약 없이 완전히 접근할 수 있을 때 Gmail 계정의 완전한 사본을 자기 컴퓨터로 내려받으십시오. 사람들이 건너뛰는 단계이자 가장 중요한 단계입니다 &mdash; Gmail에서 새 제공업체로 옮기는 과정의 나머지는 되돌리거나 고칠 수 있지만, 수년치 메일 기록을 잃는 것은 대개 그렇지 않습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">2단계: 전환 중에 놓치는 것이 없도록 전달을 설정하십시오</h3>
+
+          <p>
+            Gmail의 설정 &rarr; 전달 및 POP/IMAP에서 받은 메일을 원하는 기간 동안 새 주소로 전달하면서 Gmail에서도 계속 받을 수 있습니다. 예전 연락처와 메일링 리스트, 각종 서비스가 아직 Gmail 주소를 갖고 있는 몇 주 또는 몇 달 동안 안전망이 되어 줍니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">3단계: 중요한 곳부터 주소를 바꾸십시오</h3>
+
+          <p>
+            정말 중요한 계정부터 처리하십시오 &mdash; 은행, 정부 서비스, 통신사, 주로 쓰는 쇼핑 계정, 2단계 인증 복구용 메일 주소입니다. 어떤 메일 제공업체를 떠나든 보통 여기가 가장 오래 걸리며, 몇 주가 걸려도 괜찮습니다. 그동안 전달은 계속 켜 두십시오.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">4단계: Gmail 계정 자체를 어떻게 할지 정하십시오</h3>
+
+          <p>
+            꼭 지울 필요는 없습니다. 많은 사람이 뒤늦게 오는 메일을 받아 주는 전달용으로만 예전 Gmail 계정을 무기한(또는 1~2년) 살려 둡니다. 언젠가 닫고 싶다면 1단계의 로컬 보관본이 완전한지 먼저 확인하십시오 &mdash; Google 계정이 삭제되면 그 Gmail 데이터는 복구할 수 없습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailVault로 제대로 된 보관본 만들기</h3>
+
+          <p>
+            MailVault는 1단계를 제대로 하려고 만든 macOS와 Linux용 무료 오픈소스 데스크톱 앱입니다. Google의 OAuth 흐름으로 Gmail에 로그인하고(비밀번호도 앱 비밀번호도 필요 없습니다) 원하는 폴더와 라벨을 고르면, MailVault가 모든 메시지를 디스크에 개별 <code>.eml</code> 파일로 내려받습니다 &mdash; 쓰기 전에 어딘가로 가져와야 하는 통짜 내보내기 하나가 아닙니다. 그렇게 해서 Gmail 계정이 살아 있든 아니든 그대로 쓸 수 있는, 검색하고 살펴볼 수 있는 Gmail 기록 전체의 로컬 사본이 남습니다.
+          </p>
+
+          <p>
+            새로운 IMAP 기반 제공업체로도 옮기는 경우라면(Gmail에서 Gmail로, 또는 다른 Google 계정으로 옮기는 것이 아니라면) MailVault Premium이 계정 간 메일함 이전을 더해 줍니다 &mdash; 예전 계정에서 보관한 메일을 새 계정의 폴더로 곧바로 복사하는 기능이며, 무료 무제한 수동 보관에 더해 예약 자동 백업도 함께 제공됩니다.
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">제공업체를 옮기기 전에 Gmail을 보관하십시오</p>
+            <p class="text-sm mb-4">MailVault는 Gmail 기록 전체를 검색 가능한 개별 .eml 파일로 내려받습니다 &mdash; Gmail 계정이 계속 살아 있는지와 무관합니다. 무료 오픈소스입니다.</p>
+            <div class="flex flex-wrap gap-3">
+              <a href="/ko/#download" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+                MailVault 다운로드
+              </a>
+              <a href="/ko/pricing.html" class="inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">
+                가격 보기
+              </a>
+            </div>
+          </div>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-4">자주 묻는 질문</h3>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">새 메일 제공업체로 옮기면 예전 Gmail 메일을 잃습니까?</p>
+            <p>저절로 사라지지는 않지만, 백업해 두지 않으면 Google이 그 계정을 무기한 열어 두리라는 데 기대는 셈입니다. 무엇을 바꾸기 전에 Gmail을 자기 컴퓨터에 보관해 두면, 이후 Gmail 계정을 어떻게 하든 메일 기록은 안전합니다.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">제공업체를 옮긴 뒤 Gmail 계정을 지워야 합니까?</p>
+            <p>그럴 필요는 없습니다. 많은 사람이 주 받은편지함으로 쓰지 않으면서도 전달용 주소로 몇 년씩 살려 둡니다. 언젠가 닫고 싶다면 먼저 백업하고 보관본을 확인하십시오 &mdash; 계정 삭제 후에는 Gmail 데이터를 복구할 수 없습니다.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Gmail 전달은 얼마나 오래 켜 두어야 합니까?</p>
+            <p>중요한 계정과 연락처의 주소를 다 바꿀 때까지입니다 &mdash; 보통 몇 주에서 몇 달이 걸립니다. 다 챙겼는지 확신이 서지 않는다면 더 오래 켜 두어도 손해는 없습니다.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">예전 Gmail 메일을 새 메일 계정으로 바로 옮길 수 있습니까?</p>
+            <p>새 제공업체가 IMAP을 지원한다면 가능합니다. MailVault Premium에는 보관된 메일을 한 계정에서 다른 계정의 폴더로 복사하는 계정 간 메일함 이전이 포함되어 있습니다.</p>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            함께 읽기: <a href="/ko/guides/download-all-gmail-emails.html" class="text-primary-500 hover:text-primary-600 underline">Gmail 메일을 전부 내려받는 방법</a>, <a href="/ko/guides/gmail-storage-full.html" class="text-primary-500 hover:text-primary-600 underline">Gmail 저장 공간이 가득 찼을 때 할 일</a>, <a href="/ko/guides/backup-email-before-closing-account.html" class="text-primary-500 hover:text-primary-600 underline">계정을 닫기 전에 메일 백업하기</a>.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/ko/docs.html" class="hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="hover:text-primary-500 transition-colors">블로그</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">개인정보</a>
+          <a href="/ko/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">변경 내역</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">약관</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 모든 권리 보유.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="언어 선택" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/guides/leave-gmail-keep-your-emails.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/guides/leave-gmail-keep-your-emails.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/guides/leave-gmail-keep-your-emails.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/guides/leave-gmail-keep-your-emails.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/guides/leave-gmail-keep-your-emails.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/guides/leave-gmail-keep-your-emails.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/guides/leave-gmail-keep-your-emails.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/guides/leave-gmail-keep-your-emails.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/guides/leave-gmail-keep-your-emails.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

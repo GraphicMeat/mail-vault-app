@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Outlook OAuth 오디세이: IMAP은 망가졌다, Graph 만세 - MailVault 블로그</title>
+  <meta name="description" content="Microsoft 서버 쪽 IMAP 회귀 버그 때문에 직접 Azure AD 앱을 등록하고, Rust로 Graph API 전송 계층을 통째로 만들고, 그 과정에서 연쇄적으로 터진 일곱 가지 문제를 디버깅해야 했던 이야기입니다.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ko/blog/outlook-oauth-odyssey.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ko/blog/outlook-oauth-odyssey.html">
+  <meta property="og:title" content="Outlook OAuth 오디세이: IMAP은 망가졌다, Graph 만세 - MailVault 블로그">
+  <meta property="og:description" content="Microsoft 서버 쪽 IMAP 회귀 버그 때문에 직접 Azure AD 앱을 등록하고, Rust로 Graph API 전송 계층을 통째로 만들고, 그 과정에서 연쇄적으로 터진 일곱 가지 문제를 디버깅해야 했던 이야기입니다.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ko_KR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Outlook OAuth 오디세이: IMAP은 망가졌다, Graph 만세 - MailVault 블로그">
+  <meta name="twitter:description" content="Microsoft 서버 쪽 IMAP 회귀 버그 때문에 직접 Azure AD 앱을 등록하고, Rust로 Graph API 전송 계층을 통째로 만들고, 그 과정에서 연쇄적으로 터진 일곱 가지 문제를 디버깅해야 했던 이야기입니다.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/outlook-oauth-odyssey.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/outlook-oauth-odyssey.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/outlook-oauth-odyssey.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/outlook-oauth-odyssey.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/outlook-oauth-odyssey.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/outlook-oauth-odyssey.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/outlook-oauth-odyssey.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/outlook-oauth-odyssey.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/outlook-oauth-odyssey.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/outlook-oauth-odyssey.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/ko/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/ko/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="테마 전환">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            다운로드
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/ko/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">다운로드</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/ko/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        블로그로 돌아가기
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-02-28" class="text-sm text-primary-500 font-medium">2026년 2월 28일</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Outlook OAuth 오디세이: IMAP은 망가졌다, Graph 만세</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>8분 분량</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            이 글은 GitHub 이슈 하나 &mdash; "Microsoft 계정 로그인이 안 됩니다" &mdash; 가 어떻게 우리 Azure AD 애플리케이션을 직접 등록하고, Rust로 Microsoft Graph REST API 전송 계층을 통째로 만들고, 메일이 마침내 뜨기까지 연쇄적으로 터진 일곱 가지 문제를 디버깅하는 일로 번졌는지에 대한 이야기입니다. 설정 하나 고치면 될 일이 MailVault가 Microsoft와 대화하는 방식을 바닥부터 다시 만드는 일이 되었습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">버그 신고</h3>
+
+          <p>
+            두 사용자가 서로 다른 각도에서 같은 것을 신고했습니다. 기업용 M365 사용자는 로그인하려 할 때 <code>AADSTS900971: No reply address provided</code>를 보았습니다. 개인 Outlook.com 사용자는 로그인 화면은 지나갔지만 앱이 IMAP으로 연결하려 할 때 <code>AUTHENTICATE failed</code>에 부딪혔습니다. 증상은 같지만 &mdash; "로그인이 안 된다" &mdash; 근본 원인은 완전히 다른 둘이었습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">문제 1: 빌려 쓴 클라이언트 ID</h3>
+
+          <p>
+            MailVault의 초기 Microsoft OAuth2 흐름은 Thunderbird의 널리 알려진 공개 클라이언트 ID를 썼습니다. 흔한 방식입니다 &mdash; Thunderbird가 Microsoft와 Google에 OAuth2 앱을 등록해 두어 다른 메일 클라이언트가 그 위에 얹혀 갈 수 있습니다. 문제가 생기기 전까지는 훌륭하게 작동합니다.
+          </p>
+
+          <p>
+            기업용 M365 테넌트에서는 Thunderbird 앱에 우리 <code>localhost:19876/callback</code> 리디렉션 URI가 등록되어 있지 않습니다. Azure AD는 정확히 일치할 것을 요구하는데, Thunderbird의 앱에는 Thunderbird 자신의 리디렉션 URI만 올라가 있습니다. 해결: MailVault 자체 Azure AD 앱을 우리 리디렉션 URI 그대로 등록하고, 공개 클라이언트(시크릿 없음, PKCE만)로 설정해 조직 계정과 개인 Microsoft 계정을 모두 지원하게 했습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">문제 2: Microsoft가 IMAP을 망가뜨렸다</h3>
+
+          <p>
+            개인 Outlook.com 문제는 더 나빴습니다. 2024년 12월부터 Microsoft에는 개인 계정의 IMAP OAuth2에 영향을 주는 <a href="https://learn.microsoft.com/en-us/answers/questions/5673167/" class="text-primary-500 hover:text-primary-600 underline" target="_blank" rel="noopener">서버 쪽 퇴행</a>이 있습니다. OAuth2 흐름이 성공적으로 끝난 뒤에도 XOAUTH2 SASL 악수가 "User is authenticated but not connected."로 실패합니다. 이것은 클라이언트 버그가 아니라 &mdash; Microsoft의 IMAP 서버가 멀쩡한 토큰을 거부하는 것입니다. Microsoft 지원 포럼의 해당 글은 몇 달째 열려 있고 고쳐질 기미가 없습니다.
+          </p>
+
+          <p>
+            개인 계정에서는 앱 비밀번호가 여전히 작동하지만, 그러면 OAuth2를 쓰는 의미가 사라집니다. 전혀 다른 접근이 필요했습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">최후의 수단: Microsoft Graph API</h3>
+
+          <p>
+            IMAP이 망가졌다면 IMAP을 쓰지 않으면 됩니다. Microsoft Graph는 IMAP을 전혀 거치지 않고 메일함에 바로 접근하게 해 주는 REST API입니다. <code>outlook.office365.com:993</code>에 연결해 IMAP 프로토콜로 말하는 대신, <code>graph.microsoft.com/v1.0/me/messages</code>에 Bearer 토큰을 실어 HTTPS 요청을 보냅니다. 같은 OAuth2 토큰, 완전히 다른 전송입니다.
+          </p>
+
+          <p>
+            Graph 전송 계층을 만든다는 것은 앱의 거의 모든 층을 건드린다는 뜻이었습니다:
+          </p>
+
+          <p>
+            <strong>Rust 백엔드</strong> &mdash; <code>list_folders()</code>, <code>list_messages()</code>, <code>get_message()</code>, <code>delete_message()</code>, <code>set_read_status()</code>, <code>get_mime_content()</code>를 구현한 <code>GraphClient</code> 구조체가 든 새 <code>graph.rs</code> 모듈입니다. Graph의 JSON 응답을 담을 자료 구조(<code>GraphMessage</code>, <code>GraphMailFolder</code> 등)와, Graph 메시지를 기존 <code>EmailHeader</code> 구조체로 옮기는 변환 메서드도 함께 넣었습니다. 이 모두를 프런트엔드에 열어 주는 새 Tauri 명령 여섯 개도 만들었습니다.
+          </p>
+
+          <p>
+            <strong>OAuth2 범위 분기</strong> &mdash; IMAP 계정에는 <code>IMAP.AccessAsUser.All</code>과 <code>SMTP.Send</code> 범위가 필요합니다. Graph 계정에는 <code>Mail.ReadWrite</code>와 <code>Mail.Send</code>가 필요합니다. 범위 선택은 사용자가 "Sign in with Microsoft"를 누르는 순간, 그 메일 도메인이 알려진 개인용 Microsoft 도메인(outlook.com, hotmail.com, live.com과 지역별 변형 12개)인지에 따라 이뤄집니다.
+          </p>
+
+          <p>
+            <strong>프런트엔드 저장소</strong> &mdash; Zustand 저장소의 모든 메일 작업에 &mdash; 헤더 불러오기, 메일 선택, 읽음/안 읽음 표시, 삭제, 검색, 미리 가져오기까지 &mdash; <code>if (isGraphAccount(account))</code> 분기가 필요했습니다. Graph 메시지는 정수 UID 대신 속을 알 수 없는 문자열 ID를 쓰므로, Graph 메시지에 인공적인 연번 UID를 붙였다가 API를 호출할 때 되돌려 주는 매핑 계층(<code>_graphIdMap</code>)을 둡니다.
+          </p>
+
+          <p>
+            <strong>배경 파이프라인</strong> &mdash; 배경 헤더 로딩과 내용 캐싱을 맡는 <code>AccountPipeline</code> 클래스는 두 단계 모두에 Graph 전용 경로가 필요했습니다. 헤더 로딩은 IMAP 페이지 가져오기 대신 <code>graphListMessages</code>를 통한 건너뛰기 기반 페이지 나누기를 씁니다. 내용 캐싱은 IMAP <code>FETCH</code> 대신 <code>graphCacheMime</code>으로 전체 MIME을 내려받습니다(원본 .eml을 가져와 Maildir에 저장하고 파싱하는 Rust 명령 하나입니다).
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">일곱 번의 실패</h3>
+
+          <p>
+            구현을 마치고 실제 Outlook.com 계정으로 배포해 시험을 시작했습니다. 그 뒤로는 수정 하나가 다음 문제를 드러내는 디버깅 마라톤이 이어졌습니다.
+          </p>
+
+          <p>
+            <strong>실패 1: "Invalid client secret provided"</strong> &mdash; CI 빌드가 <code>MAILVAULT_MS_CLIENT_SECRET</code>을 환경 변수로 설정하고 있었습니다. 코드는 그것을 곧이곧대로 Azure에 보냈고, Azure는 우리 앱이 공개 클라이언트(시크릿 사용 불가)로 등록되어 있다는 이유로 거부했습니다. 해결: Microsoft에 대해서는 <code>client_secret: None</code>을 고정값으로 두었습니다 &mdash; 공개 PKCE 클라이언트는 어떤 경우에도 시크릿을 보내서는 안 됩니다.
+          </p>
+
+          <p>
+            <strong>실패 2: 연결 테스트에서 "AUTHENTICATE failed"</strong> &mdash; 시크릿 문제를 고치자 OAuth2 흐름은 정상적으로 끝났습니다. 그런데 앱이 곧바로 IMAP으로 연결을 테스트했습니다 &mdash; 바로 그 망가진 프로토콜로 말입니다. <code>addAccount</code> 함수에는 Graph 분기 없이 IMAP 연결 테스트가 고정되어 있었습니다. 해결: Graph 계정은 IMAP 세션을 여는 대신 <code>graphListFolders</code>를 호출해 테스트하도록 했습니다.
+          </p>
+
+          <p>
+            <strong>실패 3: "Could not load email content"</strong> &mdash; 헤더는 Graph로 잘 불러왔지만 메일을 눌러 읽으려 하면 실패했습니다. 채팅 보기와 스레드 보기 양쪽에서 메일 본문을 점진적으로 불러오는 <code>useChatBodyLoader</code> 훅은 IMAP의 <code>fetchEmailLight</code>로 본문을 가져오는 방법밖에 몰랐습니다. Graph 계정에서는 매핑된 Graph 메시지 ID로 <code>graphGetMessage</code>를 써야 했습니다. 해결: Graph ID를 찾아 Graph API로 가져오는 분기를 추가했습니다.
+          </p>
+
+          <p>
+            <strong>실패 4: 메일이 한 번 열린 뒤 사라짐</strong> &mdash; 처음에는 메일이 잘 열렸지만 다른 곳에 갔다가 돌아오면 스레드가 비어 있었습니다. Graph 분기는 메일 본문을 메모리 LRU 캐시에만 담고 .eml 파일을 디스크에 쓰지 않았습니다. LRU 캐시가 그것을 밀어내면 본문은 사라졌습니다. 해결: 빠른 <code>graphGetMessage</code> JSON 응답으로 메일을 표시한 뒤, 배경에서 <code>graphCacheMime</code>을 호출해 전체 MIME을 내려받고 .eml을 Maildir에 저장하도록 했습니다.
+          </p>
+
+          <p>
+            <strong>실패 5: 메일을 눌러도 스피너가 끝나지 않음</strong> &mdash; 실패 4를 처음 고칠 때는 <code>graphCacheMime</code>을 주된 가져오기 방법으로 썼습니다(MIME 내려받기, 디스크에 저장, 파싱, 반환). 이 방식은 무언가를 보여 주기 전에 첨부파일까지 포함한 원본 메일 전체를 내려받습니다. 첨부파일이 붙은 5 MB짜리 메일이라면 몇 초 동안 스피너만 돕니다. 해결: 즉시 표시할 때는 (HTML 본문만 담긴 빠른 JSON인) <code>graphGetMessage</code>를 쓰고, 디스크 보존은 배경에서 <code>graphCacheMime</code>으로 처리했습니다. 두 단계로 나눈 로딩입니다. 표시는 즉시, 저장은 뒤늦게.
+          </p>
+
+          <p>
+            <strong>실패 6: 스레드 보기에서 접었다 펴야 내용이 보임</strong> &mdash; 스레드 대화 보기의 메일은 직접 접었다 다시 펴기 전까지 "Could not load email content"를 표시했습니다. React 렌더링 경쟁 상태였습니다. <code>useChatBodyLoader</code> 훅은 불러온 본문을 비어 있는 상태로 시작하는 <code>useRef(new Map())</code>에 담았습니다. <code>ThreadEmailItem</code> 컴포넌트는 렌더 도중 이 맵을 동기적으로 읽었지만, 맵을 채우는 <code>useEffect</code>는 첫 렌더 <em>뒤에</em> 실행되었습니다. 본문이 준비되었을 때 컴포넌트는 이미 "Could not load."를 렌더한 뒤였습니다. 접었다 펴면 다시 렌더되면서 그제야 채워진 맵을 찾았습니다. 해결: 메모리 캐시를 확인해, <code>useEffect</code> 안이 아니라 훅 본문에서 동기적으로 본문 맵을 미리 채웠습니다. 캐시에 없는 본문은 여전히 비동기 <code>useEffect</code>가 가져오지만, 캐시에 있는 것은 첫 렌더에서 바로 쓸 수 있습니다.
+          </p>
+
+          <p>
+            <strong>실패 7: 배경 동기화가 여전히 IMAP을 두드림</strong> &mdash; <code>refreshAllAccounts</code> 함수는 타이머에 맞춰 모든 계정을 새로 고칩니다. 활성 상태가 아닌 계정에 대해서는 조건 없이 IMAP으로 헤더를 가져왔고, 그래서 Graph 계정에서 연결 오류와 로그 폭주가 났습니다. 다른 코드 경로는 전부 고쳤는데 이 하나를 놓친 것입니다. 해결: <code>isGraphAccount</code> 분기를 추가해 배경 동기화에 <code>graphListFolders</code> + <code>graphListMessages</code>를 쓰도록 했습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">무엇을 내보냈는가</h3>
+
+          <p>
+            최종 결과는 이렇습니다. 개인용 Microsoft 계정(outlook.com, hotmail.com, live.com과 지역 변형)은 로그인 과정에서 자동으로 감지되어 Graph API 전송 경로로 넘어갑니다. 사용자는 "Microsoft로 로그인"을 누르고 브라우저에서 인증하면 앱이 그대로 동작합니다. IMAP은 개입하지 않고, "User is authenticated but not connected" 오류도 없습니다.
+          </p>
+
+          <p>
+            기업용 M365 계정은 리디렉션 URI가 제대로 등록된 MailVault 자체 Azure AD 앱을 씁니다. OAuth2 정책이 엄격한 조직이라면 계정 설정의 "고급" 항목에서 클라이언트 ID와 테넌트 ID를 직접 지정할 수 있습니다.
+          </p>
+
+          <p>
+            Graph 계정은 메일 읽기, 삭제, 읽음/읽지 않음 표시를 지원합니다. 발송은 여전히 SMTP를 거칩니다(OAuth2 토큰과 문제없이 작동합니다). 메일 본문은 즉시 표시를 위해 빠른 JSON으로 가져오고, 오프라인 접근과 첨부파일 지원을 위해 전체 MIME은 백그라운드에서 내려받습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">배운 것</h3>
+
+          <p>
+            가장 큰 교훈은 이것입니다. 메일 클라이언트에 새 전송 방식을 추가한다는 것은 코드 경로를 하나 늘리는 일이 아니라 &mdash; 모든 코드 경로를 갈라놓는 일입니다. 네트워크를 건드리는 모든 함수가 어느 전송 방식을 쓸지 알아야 합니다. 모든 백그라운드 작업, 모든 미리 가져오기, 모든 동기화 타이머, 모든 연결 테스트가 그렇습니다. 하나만 빠뜨려도 새 전송 방식을 쓰는 사용자에게만 나타나는 버그가 생깁니다.
+          </p>
+
+          <p>
+            두 번째 교훈은, 두 단계 로딩이 복잡함을 감수할 값어치가 있다는 것입니다. 무엇이든 보여 주기 전에 전체 MIME 메시지를 내려받으면 견디기 힘든 지연이 생깁니다. JSON API로 빠른 미리보기를 먼저 보여 주고 전체 내용을 백그라운드에서 천천히 저장하면, 사용자는 즉각적인 반응을 얻으면서도 오프라인 보관본이 차곡차곡 쌓입니다.
+          </p>
+
+          <p>
+            세 번째. React의 <code>useRef</code> + <code>useEffect</code> 패턴은 첫 렌더에서 바로 있어야 하는 데이터에는 함정입니다. 컴포넌트가 렌더 도중 ref를 읽는데 그 ref를 이펙트에서 채운다면, 첫 렌더는 언제나 낡은 데이터를 봅니다. 채우는 로직을 이펙트가 아니라 훅 본문에서 동기적으로 실행하도록 옮기면 렌더를 더 늘리지 않고도 해결됩니다.
+          </p>
+
+          <p>
+            어떤 "로그인이 안 된다" 버그는 설정 하나를 고치면 끝납니다. 어떤 것은 완전히 새로운 API 전송 계층을 요구합니다. 어느 쪽일지는 고를 수 없습니다.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/ko/docs.html" class="hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="hover:text-primary-500 transition-colors">블로그</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">개인정보</a>
+          <a href="/ko/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">변경 내역</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">약관</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 모든 권리 보유.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="언어 선택" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/blog/outlook-oauth-odyssey.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/blog/outlook-oauth-odyssey.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/blog/outlook-oauth-odyssey.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/blog/outlook-oauth-odyssey.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/blog/outlook-oauth-odyssey.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/blog/outlook-oauth-odyssey.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/blog/outlook-oauth-odyssey.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/blog/outlook-oauth-odyssey.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/blog/outlook-oauth-odyssey.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

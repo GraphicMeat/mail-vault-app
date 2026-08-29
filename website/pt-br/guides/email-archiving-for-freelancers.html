@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arquivamento de e-mail para freelancers e pequenas empresas — MailVault</title>
+  <meta name="description" content="O e-mail dos clientes costuma ser seu único registro de escopo, aprovações e condições de pagamento. Veja como freelancers e pequenas empresas podem construir um arquivo local permanente e pesquisável do e-mail dos clientes.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/pt-br/guides/email-archiving-for-freelancers.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/pt-br/guides/email-archiving-for-freelancers.html">
+  <meta property="og:title" content="Arquivamento de e-mail para freelancers e pequenas empresas — MailVault">
+  <meta property="og:description" content="O e-mail dos clientes costuma ser seu único registro de escopo, aprovações e condições de pagamento. Veja como freelancers e pequenas empresas podem construir um arquivo local permanente e pesquisável do e-mail dos clientes.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="pt_BR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Arquivamento de e-mail para freelancers e pequenas empresas — MailVault">
+  <meta name="twitter:description" content="O e-mail dos clientes costuma ser seu único registro de escopo, aprovações e condições de pagamento. Veja como freelancers e pequenas empresas podem construir um arquivo local permanente e pesquisável do e-mail dos clientes.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Arquivamento de e-mail para freelancers e pequenas empresas: guarde o e-mail dos clientes para sempre",
+  "description": "O e-mail dos clientes costuma ser seu único registro de escopo, aprovações e condições de pagamento. Veja como freelancers e pequenas empresas podem construir um arquivo local permanente e pesquisável do e-mail dos clientes.",
+  "url": "https://mailvaultapp.com/pt-br/guides/email-archiving-for-freelancers.html",
+  "datePublished": "2026-07-15",
+  "dateModified": "2026-07-15",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Uma conversa de e-mail serve juridicamente como prova de um acordo com o cliente?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Conversas de e-mail são bastante usadas como prova de escopo, aprovações e termos acordados em disputas, embora o peso que elas têm dependa da sua jurisdição e da situação. Independentemente do valor jurídico, o que mais importa é ter o registro disponível &mdash; você não pode se apoiar em algo que não consegue mais encontrar."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Com que frequência uma pequena empresa deve arquivar o e-mail?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Com frequência suficiente para você nunca correr o risco de perder a comunicação recente com clientes se uma conta for bloqueada, suspensa ou atingir o limite de armazenamento. Muitas empresas arquivam manualmente toda semana ou todo mês, ou configuram backups automáticos agendados para que aconteça sem ninguém precisar lembrar."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "O que acontece com os e-mails dos clientes se a pessoa que cuidava da caixa de entrada sair?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Se a caixa postal só é arquivada na cabeça ou nos hábitos pessoais dessa pessoa, a empresa corre o risco de perder a continuidade. Um arquivamento agendado, no nível da conta, que roda independentemente de qualquer pessoa resolve isso &mdash; o arquivo continua crescendo, não importa quem entre ou saia."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Consigo buscar rápido em anos de e-mails arquivados de clientes?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sim, se o arquivo estiver guardado como arquivos individuais em vez de uma exportação única e grande. Arquivos .eml individuais podem ser pesquisados com as ferramentas normais de busca de arquivos ou dentro de um cliente de e-mail, ao contrário de um pacote único que você precisaria importar em algum lugar antes."
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/email-archiving-for-freelancers.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/email-archiving-for-freelancers.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/email-archiving-for-freelancers.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/email-archiving-for-freelancers.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/email-archiving-for-freelancers.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/email-archiving-for-freelancers.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/email-archiving-for-freelancers.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/email-archiving-for-freelancers.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/email-archiving-for-freelancers.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/email-archiving-for-freelancers.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/pt-br/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="Logo do MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/pt-br/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Recursos</a>
+          <a href="/pt-br/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Casos de uso</a>
+          <a href="/pt-br/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/pt-br/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="Alternar tema">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Download
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/pt-br/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Recursos</a>
+          <a href="/pt-br/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Casos de uso</a>
+          <a href="/pt-br/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/pt-br/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/pt-br/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Voltar ao início
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Arquivamento de e-mail para freelancers e pequenas empresas</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>7 min de leitura</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Para um freelancer ou uma pequena empresa, o e-mail do cliente não é só correspondência &mdash; é muitas vezes o único registro escrito do que foi de fato combinado. Mudanças de escopo, aprovações, preços informados, prorrogações de prazo, um "pode seguir" em resposta a uma proposta: isso costuma viver em uma conversa de e-mail, não em um contrato assinado. Quando surge uma disputa meses ou anos depois, essa conversa costuma ser o caso inteiro. E, mesmo assim, a maioria dos freelancers trata o e-mail como descartável, confiando que a caixa de entrada do provedor vai estar sempre lá.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Por que depender só da sua caixa de entrada é arriscado</h3>
+
+          <p>
+            Alguns cenários realistas que acontecem com pequenas empresas mais do que se imagina: seu provedor de e-mail suspende a conta por um falso positivo de spam enquanto você recorre; você troca um Gmail pessoal por um domínio da empresa e as conversas antigas com clientes ficam mais difíceis de achar; um cliente pede registros de um projeto de quatro anos atrás e sua caixa postal atingiu o limite de armazenamento em silêncio e parou de sincronizar; você perde o acesso a uma caixa de entrada compartilhada quando a pessoa que a administrava sai. Em todos os casos, ter uma cópia local e independente do seu e-mail &mdash; e não só o que por acaso ainda está nos servidores do provedor &mdash; é o que de fato protege você.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">O que "permanente" realmente exige</h3>
+
+          <p>
+            Guardar o e-mail dos clientes "para sempre" não é bem uma questão de um backup só &mdash; é uma questão de formato e de fluxo que não apodrecem com o tempo. Três coisas importam:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Um formato de arquivo padrão</strong> &mdash; arquivos <code>.eml</code> individuais, não um arquivo permanente proprietário preso ao software de um fornecedor. Formatos padrão continuam abríveis, independentemente das ferramentas que existirem daqui a dez anos.</li>
+            <li><strong>Um armazenamento que você controla</strong> &mdash; uma pasta local da qual você mesmo faz backup (em um disco externo, um NAS ou o armazenamento em nuvem que você escolher), e não um serviço de arquivamento dependente de assinatura, que deixa de ser acessível se você parar de pagar.</li>
+            <li><strong>Uma busca que funcione de verdade</strong> &mdash; quando um cliente perguntar sobre um projeto de anos atrás, você precisa achar a conversa certa em segundos, e não vasculhar pastas na mão.</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Um fluxo de arquivamento simples para freelancers autônomos</h3>
+
+          <p>
+            Conecte sua conta de e-mail profissional (seja uma conta do Google Workspace baseada no Gmail, o Outlook ou um domínio próprio em qualquer provedor IMAP) a uma ferramenta de arquivamento local e deixe que ela construa uma cópia local completa e pesquisável de cada conversa com clientes. Rode periodicamente ou configure o arquivamento automático, para nunca depender da memória para manter tudo em dia. Quando uma relação com um cliente terminar, você ainda vai ter o histórico completo, independentemente de aquela caixa de entrada continuar ativa.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Escalando para uma equipe pequena</h3>
+
+          <p>
+            Se mais de uma pessoa cuida do e-mail dos clientes &mdash; uma caixa de entrada de suporte compartilhada, vários membros da equipe com clientes próprios &mdash; o mesmo princípio vale por conta: cada caixa postal é arquivada localmente com uma agenda, para que o registro de comunicação da empresa não dependa de a caixa de entrada de um funcionário continuar intacta nem de alguém lembrar de copiar tudo manualmente.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Como o MailVault se encaixa nisso</h3>
+
+          <p>
+            O MailVault é um aplicativo de e-mail para desktop, gratuito e de código aberto, para macOS e Linux, construído em torno exatamente desse tipo de arquivo local e permanente. Conecte o e-mail da sua empresa por IMAP (OAuth para contas do Gmail e para contas do Google Workspace ou do Microsoft 365 baseadas na Microsoft) e o MailVault baixa cada e-mail como um arquivo <code>.eml</code> individual, em uma estrutura Maildir padrão no seu disco &mdash; pesquisável, portátil e sem ficar preso ao próprio MailVault. O arquivamento manual é ilimitado e gratuito para sempre, o que já atende à maioria dos freelancers autônomos que arquivam de tempos em tempos.
+          </p>
+
+          <p>
+            Para uma empresa que arquiva várias contas com regularidade, o MailVault Premium ($4/mês ou $25/ano por conta; 14 dias de teste grátis no anual) acrescenta backups automáticos agendados, para que cada caixa postal continue arquivada sem ninguém precisar lembrar de rodar, além de regras de limpeza de e-mail para manter a caixa de entrada gerenciável e instantâneos do Time Capsule para registros de um momento específico &mdash; útil se você precisar mostrar como estava a caixa de entrada de um cliente em determinada data.
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Construa um registro permanente do e-mail dos seus clientes</p>
+            <p class="text-sm mb-4">O MailVault arquiva o e-mail da sua empresa como arquivos .eml individuais e pesquisáveis no seu próprio disco. Gratuito para backups manuais; backups agendados a partir de $4/mês.</p>
+            <div class="flex flex-wrap gap-3">
+              <a href="/pt-br/#download" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+                Baixar o MailVault
+              </a>
+              <a href="/pt-br/pricing.html" class="inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">
+                Ver preços
+              </a>
+            </div>
+          </div>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Perguntas frequentes</h3>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Uma conversa de e-mail serve juridicamente como prova de um acordo com o cliente?</p>
+            <p>Conversas de e-mail são bastante usadas como prova de escopo, aprovações e termos acordados em disputas, embora o peso que elas têm dependa da sua jurisdição e da situação. Independentemente do valor jurídico, o que mais importa é ter o registro disponível &mdash; você não pode se apoiar em algo que não consegue mais encontrar.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Com que frequência uma pequena empresa deve arquivar o e-mail?</p>
+            <p>Com frequência suficiente para você nunca correr o risco de perder a comunicação recente com clientes se uma conta for bloqueada, suspensa ou atingir o limite de armazenamento. Muitas empresas arquivam manualmente toda semana ou todo mês, ou configuram backups automáticos agendados para que aconteça sem ninguém precisar lembrar.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">O que acontece com os e-mails dos clientes se a pessoa que cuidava da caixa de entrada sair?</p>
+            <p>Se a caixa postal só é arquivada na cabeça ou nos hábitos pessoais dessa pessoa, a empresa corre o risco de perder a continuidade. Um arquivamento agendado, no nível da conta, que roda independentemente de qualquer pessoa resolve isso &mdash; o arquivo continua crescendo, não importa quem entre ou saia.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Consigo buscar rápido em anos de e-mails arquivados de clientes?</p>
+            <p>Sim, se o arquivo estiver guardado como arquivos individuais em vez de uma exportação única e grande. Arquivos .eml individuais podem ser pesquisados com as ferramentas normais de busca de arquivos ou dentro de um cliente de e-mail, ao contrário de um pacote único que você precisaria importar em algum lugar antes.</p>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            Leitura relacionada: <a href="/pt-br/guides/backup-email-before-closing-account.html" class="text-primary-500 hover:text-primary-600 underline">como fazer backup do e-mail antes de encerrar uma conta</a>, <a href="/pt-br/guides/imap-backup-tool-checklist.html" class="text-primary-500 hover:text-primary-600 underline">o que procurar em uma ferramenta de backup IMAP</a> e <a href="/pt-br/guides/archive-imap-emails-locally.html" class="text-primary-500 hover:text-primary-600 underline">como funciona o arquivamento local por IMAP</a>. Veja os <a href="/pt-br/pricing.html" class="text-primary-500 hover:text-primary-600 underline">preços</a>.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="Logo do MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/pt-br/docs.html" class="hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/pt-br/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacidade</a>
+          <a href="/pt-br/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Termos</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. Todos os direitos reservados.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="Escolha um idioma" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/guides/email-archiving-for-freelancers.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/guides/email-archiving-for-freelancers.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/guides/email-archiving-for-freelancers.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/guides/email-archiving-for-freelancers.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/guides/email-archiving-for-freelancers.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/guides/email-archiving-for-freelancers.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/guides/email-archiving-for-freelancers.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/guides/email-archiving-for-freelancers.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/guides/email-archiving-for-freelancers.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

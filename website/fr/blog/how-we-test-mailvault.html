@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="fr" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Comment nous testons MailVault : plus de 600 tests, de vrais e-mails, de vrais serveurs - Blog MailVault</title>
+  <meta name="description" content="Un aperçu de la stratégie de test de MailVault : plus de 600 tests automatisés sur quatre couches, 500 e-mails d'amorçage, des tests de charge contre de vrais serveurs IMAP, et des scénarios de bout en bout dans l'application de bureau elle-même.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/fr/blog/how-we-test-mailvault.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/fr/blog/how-we-test-mailvault.html">
+  <meta property="og:title" content="Comment nous testons MailVault : plus de 600 tests, de vrais e-mails, de vrais serveurs">
+  <meta property="og:description" content="Un aperçu de la stratégie de test de MailVault : plus de 600 tests automatisés sur quatre couches, 500 e-mails d'amorçage, des tests de charge contre de vrais serveurs IMAP, et des scénarios de bout en bout dans l'application de bureau elle-même.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="fr_FR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Comment nous testons MailVault : plus de 600 tests, de vrais e-mails, de vrais serveurs">
+  <meta name="twitter:description" content="Un aperçu de la stratégie de test de MailVault : plus de 600 tests automatisés sur quatre couches, 500 e-mails d'amorçage, des tests de charge contre de vrais serveurs IMAP, et des scénarios de bout en bout dans l'application de bureau elle-même.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/how-we-test-mailvault.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/how-we-test-mailvault.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/how-we-test-mailvault.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/how-we-test-mailvault.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/how-we-test-mailvault.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/how-we-test-mailvault.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/how-we-test-mailvault.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/how-we-test-mailvault.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/how-we-test-mailvault.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/how-we-test-mailvault.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/fr/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/fr/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Fonctionnalités</a>
+          <a href="/fr/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Cas d'usage</a>
+          <a href="/fr/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/fr/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="Changer de thème">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Télécharger
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/fr/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Fonctionnalités</a>
+          <a href="/fr/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Cas d'usage</a>
+          <a href="/fr/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/fr/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Télécharger</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/fr/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Retour au blog
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-03-11" class="text-sm text-primary-500 font-medium">11 mars 2026</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Comment nous testons MailVault : plus de 600 tests, de vrais e-mails, de vrais serveurs</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>6 min de lecture</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            L'e-mail fait partie de ces choses qui paraissent simples en surface et ne le sont pas du tout. Les serveurs IMAP se comportent différemment. L'encodage MIME a des cas limites plus anciens que la carrière de la plupart des développeurs. Les jetons OAuth2 expirent au mauvais moment. Une pièce jointe peut être imbriquée à trois niveaux dans un message multipart. Quand on construit un client de messagerie, soit on teste de façon obsessionnelle, soit on livre des bugs.
+          </p>
+
+          <p>
+            MailVault compte aujourd'hui plus de 600 tests automatisés répartis sur quatre couches : tests unitaires Rust, tests unitaires JavaScript, tests d'intégration contre de vrais serveurs IMAP, et tests de bout en bout qui pilotent l'application de bureau réelle. Voici comment tout cela s'articule.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Couche 1 : tests unitaires Rust (55 tests)</h3>
+
+          <p>
+            Le cœur de MailVault est écrit en Rust &mdash; toutes les connexions IMAP, les envois SMTP, l'analyse MIME et la gestion des jetons OAuth2 s'exécutent nativement, pas via un sidecar Node.js. La couche Rust a 55 tests unitaires qui couvrent les fonctions les plus difficiles à écrire correctement.
+          </p>
+
+          <p>
+            Un bon exemple est la compression des plages d'UID. Quand MailVault doit récupérer les en-têtes des UID <code>[1, 2, 3, 5, 6, 10]</code>, il les comprime en la chaîne de plages IMAP <code>"1:3,5:6,10"</code> pour réduire la taille de la commande. Les tests couvrent les entrées vides, les UID isolés, les plages consécutives, les trous, les entrées non triées, les doublons, les grandes plages et l'opération inverse (redéployer les plages en UID individuels). Il y a aussi des tests d'aller-retour qui vérifient que <code>compress &rarr; expand</code> rend bien l'ensemble d'origine. Tout cela compte, parce que les commandes UID FETCH découpées en lots cassent si les plages sont fausses.
+          </p>
+
+          <p>
+            Le module de l'API Microsoft Graph a ses propres tests, pour l'analyse des réponses JSON de Graph vers le format interne <code>EmailHeader</code> de MailVault, et les tests du module principal couvrent l'analyse des noms de fichiers Maildir, l'encodage des indicateurs et la recherche de fichier par UID.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Couche 2 : tests unitaires JavaScript (13 suites)</h3>
+
+          <p>
+            Le frontend a 13 suites de tests unitaires dédiées, qui tournent sur <a href="https://vitest.dev" class="text-primary-500 hover:text-primary-600 underline">Vitest</a>, plus des tests supplémentaires au niveau des stores. Elles couvrent la logique qui se trouve entre le backend Rust et l'interface React :
+          </p>
+
+          <p>
+            <strong>L'analyse des e-mails</strong> est le domaine le plus testé. La suite <code>emailParser</code> éprouve l'extraction des correspondants (analyser « John Doe &lt;john@example.com&gt; » en nom et adresse), la normalisation de l'objet (retirer toutes les combinaisons de <code>Re:</code>, <code>Fwd:</code>, <code>FW:</code>, <code>Re[N]:</code>), la détection des signatures et l'identification du niveau de citation. L'algorithme de regroupement en fils &mdash; une version simplifiée de la spécification de Jamie Zawinski &mdash; a des tests pour les chaînes <code>In-Reply-To</code>, le parcours de l'en-tête <code>References</code>, le regroupement de repli par objet et la détection de cycles pour les en-têtes malformés.
+          </p>
+
+          <p>
+            D'autres suites testent le <strong>pipeline d'arrière-plan</strong> (contrôle de la concurrence, réessai avec repli exponentiel, ordre de cascade entre le compte actif et les comptes en arrière-plan), <strong>la gestion des jetons OAuth2</strong> (rafraîchissement anticipé avant expiration, déduplication des tentatives de rafraîchissement simultanées), <strong>les optimisations de synchronisation delta</strong> (l'arbre de décision CONDSTORE à quatre niveaux), <strong>le chargement rapide</strong> (en-têtes en cache affichés immédiatement, synchronisation en arrière-plan qui complète les changements), <strong>le chargement résilient</strong> (dégradation en douceur quand une connexion IMAP tombe en plein transfert) et <strong>les transitions d'état</strong> à travers le store Zustand.
+          </p>
+
+          <p>
+            Les tests du store, eux, vérifient l'éviction du cache LRU (MailVault garde les corps de message en mémoire, avec une limite configurable), le retrait de champs (supprimer <code>rawSource</code> et le contenu des pièces jointes avant la mise en cache, pour économiser de la mémoire) et l'estimation de la taille du cache.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Couche 3 : tests d'intégration contre de vrais serveurs IMAP</h3>
+
+          <p>
+            Des tests unitaires avec des simulacres ne disent qu'une partie de l'histoire. Les tests d'intégration de MailVault se connectent à de vrais serveurs IMAP avec de vrais identifiants et envoient de vrais e-mails. Nous maintenons deux comptes de test dédiés sur un domaine privé, et chaque exécution des tests d'intégration parle à ces comptes en TLS.
+          </p>
+
+          <p>
+            La suite principale <code>email.test.js</code> exécute un cycle complet : se connecter en IMAP, envoyer un e-mail en SMTP (avec <a href="https://nodemailer.com" class="text-primary-500 hover:text-primary-600 underline">Nodemailer</a>), attendre son arrivée, le récupérer et l'analyser avec <a href="https://github.com/nodemailer/mailparser" class="text-primary-500 hover:text-primary-600 underline">mailparser</a>, vérifier les en-têtes et le corps, puis supprimer le message de test pendant le nettoyage. Cela attrape des problèmes réels que les mocks ratent &mdash; bizarreries de négociation TLS, extensions IMAP propres à un serveur, différences d'encodage.
+          </p>
+
+          <p>
+            La <strong>suite d'optimisations IMAP</strong> éprouve les fonctions avancées du protocole utilisées par MailVault contre le serveur réel : la négociation <code>COMPRESS=DEFLATE</code> (le serveur la prend-il vraiment en charge ? la session compressée fonctionne-t-elle ?), la synchronisation delta <code>CONDSTORE</code> (<code>CHANGEDSINCE</code> renvoie-t-il les bons indicateurs modifiés ?) et les réponses compactes <code>ESEARCH</code>.
+          </p>
+
+          <p>
+            La <strong>suite d'e-mails entre comptes</strong> éprouve les scénarios multi-comptes : envoyer du compte A au compte B, vérifier que le message apparaît dans la boîte de B, tester la propagation de l'état lu/non lu, et contrôler que l'algorithme de regroupement relie correctement la conversation entre les deux comptes.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Les 500 e-mails d'amorçage</h3>
+
+          <p>
+            Pour tester de façon réaliste, nous amorçons nos boîtes de test avec 500 e-mails &mdash; 250 dans chaque sens entre les deux comptes. Le script d'amorçage génère des e-mails aux objets réalistes (« Q4 Revenue Report &mdash; Final Numbers », « Re: Bug in checkout flow », « Invoice #4821 &mdash; Due January 15 ») et alterne cinq types MIME : texte brut, HTML, multipart/alternative, HTML avec une pièce jointe, et HTML avec plusieurs pièces jointes (CSV, JSON et PNG).
+          </p>
+
+          <p>
+            Environ un tiers des e-mails d'amorçage sont marqués non lus. Les pièces jointes comprennent des rapports PDF générés, des fichiers de données CSV, des métadonnées JSON et des images PNG. Cela nous donne une boîte qui ressemble et se comporte comme une vraie boîte de réception &mdash; types de contenu mélangés, états de lecture variés, conversations en fils, et assez de volume pour faire remonter les problèmes de performance.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Tests de charge</h3>
+
+          <p>
+            La suite <code>mailbox-stress.test.js</code> va plus loin : elle injecte 500 e-mails dans une même boîte, en passant par les cinq types MIME, puis vérifie que la couche IMAP de MailVault encaisse correctement le volume. Cela attrape les problèmes de UID FETCH découpé (nous scindons les récupérations en lots de 200 pour éviter les limites de longueur des commandes IMAP), de pagination et d'usage mémoire sous charge.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Couche 4 : tests de bout en bout dans l'application réelle</h3>
+
+          <p>
+            La dernière couche pilote la véritable application de bureau Tauri, avec <a href="https://webdriver.io" class="text-primary-500 hover:text-primary-600 underline">WebdriverIO</a> et le WebDriver de Tauri. L'application est compilée avec un drapeau de fonctionnalité <code>webdriver</code>, lancée dans une vraie fenêtre de bureau, et les tests interagissent avec elle comme le ferait un utilisateur &mdash; cliquer sur des boutons, taper dans des champs, attendre le chargement des e-mails.
+          </p>
+
+          <p>
+            Nous avons scindé les tests E2E en deux suites. La <strong>suite UI</strong> (6 fichiers de test) éprouve tout ce qui n'a pas besoin d'une connexion IMAP : panneaux de réglages, interactions avec la barre latérale, raccourcis clavier, mise en page et changement de vue, modèles de rédaction. Elle est rapide, parce qu'elle ne touche pas au réseau.
+          </p>
+
+          <p>
+            La <strong>suite connectée</strong> (11 fichiers de test) éprouve l'application complète avec de vrais comptes &mdash; dont un de plus de 17 000 e-mails. Ce n'est pas un banc d'essai synthétique : c'est une vraie boîte mail, avec des années de messages accumulés, des types MIME mélangés, des fils imbriqués et tous les cas tordus qu'entraînent des comptes de longue durée. Faire tourner les tests E2E sur une boîte de cette taille nous garde honnêtes sur la pagination, l'usage mémoire et la performance perçue à grande échelle. Ces scénarios comprennent :
+          </p>
+
+          <p>
+            <strong>Démarrage à froid</strong> &mdash; l'application se lance sans aucun cache, ajoute un compte, et l'on mesure le temps qu'il faut pour que les e-mails apparaissent. C'est un repère que nous suivons : les premiers e-mails visibles à partir d'un état complètement froid.
+          </p>
+
+          <p>
+            <strong>Gestion des comptes</strong> &mdash; ajouter des comptes, passer de l'un à l'autre, vérifier que l'état propre à chaque compte (dernière boîte sélectionnée, liste d'e-mails en cache) persiste correctement.
+          </p>
+
+          <p>
+            <strong>Liste et lecteur d'e-mails</strong> &mdash; faire défiler la liste, sélectionner des e-mails, vérifier que les corps se chargent correctement (depuis le cache, depuis Maildir, ou depuis IMAP en repli), contrôler que les e-mails voisins sont préchargés.
+          </p>
+
+          <p>
+            <strong>Rédaction, réponse et transfert</strong> &mdash; ouvrir la fenêtre de rédaction, répondre à un e-mail (en contrôlant que le corps cité et les destinataires sont bons), transférer en conservant les pièces jointes.
+          </p>
+
+          <p>
+            <strong>Recherche</strong> &mdash; éprouver la barre de recherche sur la boîte préremplie, en vérifiant la justesse des résultats et les performances.
+          </p>
+
+          <p>
+            <strong>Opérations sur les dossiers</strong> &mdash; déplacer des e-mails d'un dossier à l'autre, archiver, supprimer (ce qui passe par <code>UID EXPUNGE</code>, RFC 4315, pour ne retirer que le message visé).
+          </p>
+
+          <p>
+            <strong>Boîte de réception unifiée</strong> &mdash; éprouver la vue unifiée multi-comptes, qui fusionne les e-mails de tous les comptes en une seule liste chronologique.
+          </p>
+
+          <p>
+            <strong>Mesures de performance</strong> &mdash; temps de démarrage à froid, latence de chargement des e-mails, performance du regroupement en fils. Elles produisent un tableau de synthèse avec les temps p50, p95 et maximum, ce qui nous permet de repérer les régressions.
+          </p>
+
+          <p>
+            Chaque test E2E connecté a un garde-fou : une liste blanche de comptes de test approuvés. Si un test tente par accident de modifier un compte absent de cette liste, il échoue immédiatement. Cela empêche le code de test de toucher de vraies données d'utilisateur pendant le développement.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Pourquoi cela compte</h3>
+
+          <p>
+            MailVault manipule votre courrier. Ce sont des données personnelles et importantes. Quand vous ajoutez un compte, changez de dossier, archivez un message ou cherchez dans votre boîte, cela doit marcher &mdash; pas seulement dans le cas idéal, mais quand le serveur est lent, quand la connexion tombe, quand un e-mail a des en-têtes malformés, quand un jeton OAuth2 expire en pleine récupération.
+          </p>
+
+          <p>
+            L'approche à quatre couches nous donne de la confiance à chaque niveau : les tests Rust vérifient les primitives bas niveau, les tests unitaires JS vérifient la logique applicative, les tests d'intégration vérifient que de vrais serveurs se comportent comme prévu, et les tests E2E vérifient que l'ensemble fonctionne en tant qu'application de bureau. Quand nous publions une version, tous sont passés au vert.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/fr/docs.html" class="hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/fr/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Confidentialité</a>
+          <a href="/fr/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Conditions</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. Tous droits réservés.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="Choisir une langue" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/blog/how-we-test-mailvault.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/blog/how-we-test-mailvault.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/blog/how-we-test-mailvault.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/blog/how-we-test-mailvault.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/blog/how-we-test-mailvault.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/blog/how-we-test-mailvault.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/blog/how-we-test-mailvault.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/blog/how-we-test-mailvault.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/blog/how-we-test-mailvault.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

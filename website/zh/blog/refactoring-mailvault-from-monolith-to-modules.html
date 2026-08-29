@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>重构 MailVault：从单体到模块 - MailVault 博客</title>
+  <meta name="description" content="我们如何重构 MailVault 的代码库——把 4,300 行的 store 拆成职责清晰的模块，把邮件加载重新设计为双流架构，并规划出一套五阶段拆分方案，同时不破坏任何一个功能。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/blog/refactoring-mailvault-from-monolith-to-modules.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/blog/refactoring-mailvault-from-monolith-to-modules.html">
+  <meta property="og:title" content="重构 MailVault：从单体到模块">
+  <meta property="og:description" content="我们如何重构 MailVault 的代码库——把 4,300 行的 store 拆成职责清晰的模块，把邮件加载重新设计为双流架构，并规划出一套五阶段拆分方案，同时不破坏任何一个功能。">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="重构 MailVault：从单体到模块">
+  <meta name="twitter:description" content="我们如何重构 MailVault 的代码库——把 4,300 行的 store 拆成职责清晰的模块，把邮件加载重新设计为双流架构，并规划出一套五阶段拆分方案，同时不破坏任何一个功能。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/refactoring-mailvault-from-monolith-to-modules.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/refactoring-mailvault-from-monolith-to-modules.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/refactoring-mailvault-from-monolith-to-modules.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/refactoring-mailvault-from-monolith-to-modules.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/refactoring-mailvault-from-monolith-to-modules.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/refactoring-mailvault-from-monolith-to-modules.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/refactoring-mailvault-from-monolith-to-modules.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/refactoring-mailvault-from-monolith-to-modules.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/refactoring-mailvault-from-monolith-to-modules.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/refactoring-mailvault-from-monolith-to-modules.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/zh/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/zh/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="切换主题">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            下载
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/zh/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">下载</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/zh/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        返回博客
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-03-13" class="text-sm text-primary-500 font-medium">2026 年 3 月 13 日</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">重构 MailVault：从单体到模块</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>7 分钟阅读</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            MailVault 一直在快速生长。过去几周里我们发布了键盘快捷键、统一收件箱、邮件模板、发件人洞察、自动清理规则、撤销发送、移动到文件夹，以及一整套 Microsoft Graph API 传输层。功能一个接一个落地，用户很满意 &mdash; 而代码库开始被压得吱吱作响。
+          </p>
+
+          <p>
+            中央状态存储 &mdash; 一个叫 <code>mailStore.js</code> 的 Zustand 单文件 &mdash; 已经涨到 4300 多行。它什么都管：账户管理、邮件加载、缓存、搜索、会话归并、Graph API 分支、CONDSTORE 增量同步、批量操作等等。Rust 后端的 <code>main.rs</code> 也在往同一个方向走。<code>SettingsPage</code> 和 <code>EmailViewer</code> 这类组件已经膨胀成一整面 JSX 墙。东西还能用，但想加点新功能就得在迷宫里找路。
+          </p>
+
+          <p>
+            是时候重构了 &mdash; 不是因为哪里坏了，而是因为发布新功能的速度开始慢下来。这篇文章讲我们做了什么、为什么，以及接下来往哪走。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">一个巨型 store 的问题</h3>
+
+          <p>
+            Zustand 很适合做状态管理。但当单个 store 文件超过几千行，实际的麻烦就来了：每个功能都要改同一个文件，合并冲突成了家常便饭，谁依赖谁也说不清楚。我们的 <code>mailStore</code> 里，邮件加载逻辑和 Graph API 传输代码交织在一起，LRU 缓存管理紧挨着搜索状态，会话归并算法又和账户切换混在一处。
+          </p>
+
+          <p>
+            Rust 那边是同样的情形。<code>main.rs</code> 里塞了 Maildir 路径辅助函数、钥匙串操作、缓存管理、附件处理、通知逻辑和系统工具 &mdash; 全在一个文件里。IMAP 模块里，连接池和协议层操作也缠在一起。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">双流邮件加载</h3>
+
+          <p>
+            v2.2.0 里最大的架构变化，是重新设计了切换账户或文件夹时邮件的加载方式。旧做法有六个互相重叠的阶段，按一个脆弱的顺序执行：查缓存、显示缓存数据、连接 IMAP、拉取邮件头、合并结果、更新界面。如果你快速切换账户，这些阶段可能交错，于是你会短暂看到别的账户的邮件 &mdash; 也就是那个「空邮件」bug。
+          </p>
+
+          <p>
+            新设计是一个清爽的双流模型。当你激活一个账户时，两条独立的流并行启动：
+          </p>
+
+          <p>
+            <strong>流 1（本地）</strong>从磁盘加载缓存的邮件头和本地保存的邮件。这几乎是瞬时的 &mdash; 借助 <code>headers.json</code> 缓存和新增的 <code>local-index.json</code>，界面在几毫秒内就填满，不必再去 MIME 解析磁盘上每一个 <code>.eml</code> 文件。
+          </p>
+
+          <p>
+            <strong>流 2（服务器）</strong>连接 IMAP（Microsoft 账户则走 Graph API），获取当前的服务器状态，并把变化合并进本地视图。新邮件出现，已删除的消失，已读/未读标记更新 &mdash; 全程不闪烁，也不会把屏幕上已有的内容整个换掉。
+          </p>
+
+          <p>
+            两条流都包在一个 <code>AbortController</code> 里。如果你在任一条流跑完之前切换了账户，进行中的工作会被干净地取消。没有竞态，没有陈旧数据，也没有“空邮件”。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">模块抽取</h3>
+
+          <p>
+            重构的第一阶段，重点是把那些根本不该待在 store 里或 <code>main.rs</code> 里的代码拆出来。
+          </p>
+
+          <p>
+            里的代码拽出来。JavaScript 这边，我们抽出了：
+          </p>
+
+          <p>
+            <strong>Graph 配置</strong> &mdash; Microsoft Graph 的文件夹名映射（<code>Inbox</code> &rarr; <code>INBOX</code>、<code>Sent Items</code> &rarr; <code>Sent</code> 等等）在代码库里重复了三遍。现在它只住在一个 <code>graphConfig.js</code> 模块里。
+          </p>
+
+          <p>
+            <strong>LRU 缓存</strong> &mdash; 账户缓存（最多保留 8 个账户的邮件状态，用于瞬时切换）和正文缓存（邮件内容，内存上限可配）被抽到了一个专门的缓存模块里，共用同一份 LRU 实现。
+          </p>
+
+          <p>
+            <strong>搜索</strong> &mdash; 搜索状态和逻辑本来就基本独立，却缠在主 store 里。把它拆出来之后，store 和搜索代码都更好读了。
+          </p>
+
+          <p>
+            <strong>性能追踪</strong> &mdash; 加载代码里散落着临时加的 <code>console.time</code> 调用。它们被换成了一个结构化的 <code>perfTrace</code> 工具，可以随时开关，性能调试因此干净得多。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">组件拆分</h3>
+
+          <p>
+            有两个 React 组件管得太多了：<code>SettingsPage</code> 和 <code>EmailViewer</code>。
+          </p>
+
+          <p>
+            <code>SettingsPage</code> 在一个文件里渲染了每一个设置标签页 &mdash; 账户、外观、键盘快捷键、通知、模板、自动清理等等。我们把它拆成了一个个独立的标签页组件，放在 <code>settings/</code> 子目录下。父组件现在只负责切换标签页并渲染当前那一个。
+          </p>
+
+          <p>
+            <code>EmailViewer</code> 一路长到要同时处理单封邮件显示、会话视图、附件渲染、DKIM 验证徽章、发件人洞察，以及回复/转发操作 &mdash; 全在一个组件里。我们把 <code>ThreadView</code>、<code>EmailHeader</code> 和 <code>AttachmentBar</code> 抽成了 <code>email/</code> 子目录下职责单一的组件。
+          </p>
+
+          <p>
+            结果是更小的文件：更好找、更好测，也更容易在不误伤无关部分的前提下修改。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">五阶段计划</h3>
+
+          <p>
+            v2.2.0 里发布的只是开头，不是结尾。我们设计了一份五阶段的重构计划，正在逐步执行：
+          </p>
+
+          <p>
+            <strong>阶段 1：共享基础</strong> &mdash; 抽出共享的常量和工具（Graph 配置、Rust 常量、性能追踪）。已完成。
+          </p>
+
+          <p>
+            <strong>阶段 2：Rust 后端</strong> &mdash; 把 <code>main.rs</code> 拆成职责单一的模块：Maildir 操作、钥匙串访问、缓存管理、附件处理、通知和系统工具。IMAP 模块则拆成协议层操作和连接池管理。
+          </p>
+
+          <p>
+            <strong>阶段 3：Store 拆解</strong> &mdash; 建立专门的 <code>useSearchStore</code> 和 <code>useThreadStore</code>，把 Graph API 传输、缓存管理和邮件加载抽成服务模块。目标：<code>mailStore</code> 从 4300 行缩到 2000 行左右。
+          </p>
+
+          <p>
+            <strong>阶段 4：组件抽取</strong> &mdash; 继续拆分大组件。<code>AccountModal</code> 拆成服务器探测和 OAuth 配置两个子组件。其余过大的组件同样处理。
+          </p>
+
+          <p>
+            <strong>阶段 5：清理</strong> &mdash; 删掉死代码，合并重复的工具函数（比如在好几处都存在的 <code>hasValidCredentials</code>），并把数据库工具模块拆成职责单一的文件。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">重构而不引入回归</h3>
+
+          <p>
+            任何重构最难的部分，都是确保什么都别弄坏。MailVault 处理的是人们的邮件 &mdash; 如果切换账户开始显示错误的邮件，或者加载竞态又冒出来，那就是实打实的问题。
+          </p>
+
+          <p>
+            我们的做法是：一次只重构一个边界，验证一切照常工作，再动下一个边界。横跨四个层次的 <a href="/zh/blog/how-we-test-mailvault.html" class="text-primary-500 hover:text-primary-600 underline">600 多个自动化测试</a>给了我们一张安全网，但每个阶段之后我们还会手动测试 &mdash; 快速切换账户、加载中途断网、拿那个 17000 封邮件的邮箱试、确认 Graph API 账户和普通 IMAP 账户都表现正常。
+          </p>
+
+          <p>
+            在 store 架构上我们也做了一个有意的取舍。与其把所有东西拆成许多个小 store（那本身会带来协调上的麻烦），我们选了混合方案：真正独立的关注点用独立的 store（搜索和会话归并），而账户与邮件状态因为耦合很紧，仍然放在 <code>mailStore</code> 里。目标是清晰，不是纯粹。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">用户得到了什么</h3>
+
+          <p>
+            重构在设计上对用户是不可见的 &mdash; 应用看起来、用起来应该一模一样。但效果是实实在在的：
+          </p>
+
+          <p>
+            <strong>账户切换更快</strong> &mdash; 双流架构意味着切换账户时你几乎立刻就能看到邮件，服务器同步在后台悄悄进行。
+          </p>
+
+          <p>
+            <strong>不再有加载故障</strong> &mdash; 快速切换账户时可能出现的“空邮件”问题没有了，旧的顺序加载代码里的其他竞态也一并消失。
+          </p>
+
+          <p>
+            <strong>功能开发更快</strong> &mdash; 这才是最要紧的。代码库更干净，新功能就能更快做出来、更快发布。即将到来的“全部下载”功能、定时自动备份，以及其他被反复要求的改进，都会因为代码更好动而更早落地。
+          </p>
+
+          <p>
+            我们是奔着长期在做 MailVault。邮件是一项几十年前的技术，现代工具链对它的关照并不多，而现有的备份方案要么太技术、要么太笨重。让代码库可持续，是我们确保这个应用持续变好的方式 &mdash; 不只是这个月，而是长期。
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/zh/docs.html" class="hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="hover:text-primary-500 transition-colors">博客</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">隐私</a>
+          <a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">更新日志</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">条款</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 保留所有权利。
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="选择语言" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/blog/refactoring-mailvault-from-monolith-to-modules.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/blog/refactoring-mailvault-from-monolith-to-modules.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/blog/refactoring-mailvault-from-monolith-to-modules.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/blog/refactoring-mailvault-from-monolith-to-modules.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/blog/refactoring-mailvault-from-monolith-to-modules.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/blog/refactoring-mailvault-from-monolith-to-modules.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/blog/refactoring-mailvault-from-monolith-to-modules.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/blog/refactoring-mailvault-from-monolith-to-modules.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/blog/refactoring-mailvault-from-monolith-to-modules.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

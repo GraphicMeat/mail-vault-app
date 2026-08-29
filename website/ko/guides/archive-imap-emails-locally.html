@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mac과 Linux에서 IMAP 메일을 로컬에 보관하는 방법 — MailVault</title>
+  <meta name="description" content="macOS와 Linux에서 IMAP 메일을 로컬 저장소에 보관하는 방법을 알아보십시오. 메일을 .eml 파일로 영구히 간직하고, 서버 공간을 확보하고, 모든 것을 오프라인에서 이용하십시오.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ko/guides/archive-imap-emails-locally.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ko/guides/archive-imap-emails-locally.html">
+  <meta property="og:title" content="Mac과 Linux에서 IMAP 메일을 로컬에 보관하는 방법 — MailVault">
+  <meta property="og:description" content="macOS와 Linux에서 IMAP 메일을 로컬 저장소에 보관하는 방법을 알아보십시오. 메일을 .eml 파일로 영구히 간직하고, 서버 공간을 확보하고, 모든 것을 오프라인에서 이용하십시오.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ko_KR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Mac과 Linux에서 IMAP 메일을 로컬에 보관하는 방법 — MailVault">
+  <meta name="twitter:description" content="macOS와 Linux에서 IMAP 메일을 로컬 저장소에 보관하는 방법을 알아보십시오. 메일을 .eml 파일로 영구히 간직하고, 서버 공간을 확보하고, 모든 것을 오프라인에서 이용하십시오.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Mac과 Linux에서 IMAP 메일을 로컬에 보관하는 방법",
+  "description": "macOS와 Linux에서 IMAP 메일을 로컬 저장소에 보관하는 방법을 알아보십시오. 메일을 .eml 파일로 영구히 간직하고, 서버 공간을 확보하고, 모든 것을 오프라인에서 이용하십시오.",
+  "url": "https://mailvaultapp.com/ko/guides/archive-imap-emails-locally.html",
+  "datePublished": "2026-03-15",
+  "dateModified": "2026-03-15",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/archive-imap-emails-locally.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/archive-imap-emails-locally.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/archive-imap-emails-locally.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/archive-imap-emails-locally.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/archive-imap-emails-locally.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/archive-imap-emails-locally.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/archive-imap-emails-locally.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/archive-imap-emails-locally.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/archive-imap-emails-locally.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/archive-imap-emails-locally.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/ko/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/ko/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="테마 전환">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            다운로드
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/ko/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">다운로드</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/ko/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        홈으로 돌아가기
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Mac &amp; Linux에서 IMAP 메일을 로컬에 보관하는 방법</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>5분 분량</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            메일은 남의 서버 위에 있습니다. Gmail, Outlook, Yahoo를 비롯한 어떤 IMAP 제공업체를 통해 주고받은 모든 메시지가 사용자가 통제하지 못하는 하드웨어에 놓여 있습니다. 제공업체가 약관을 바꾸거나, 서비스를 닫거나, 계정을 잠그거나, 그저 하루 운이 나쁘면 그 메일은 사라질 수 있습니다. 대부분은 늦기 전까지 이 문제를 생각하지 않습니다.
+          </p>
+
+          <p>
+            로컬 메일 보관은 서버에서 메일을 내려받아 자기 컴퓨터에 파일로 저장함으로써 이 문제를 해결합니다. 로컬에 보관해 두면 그 메일은 사용자의 것입니다 &mdash; 인터넷 연결도, 저장 용량 제한도, 제공업체가 사업을 계속하는지도 상관없습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">메일을 서버에만 두었을 때의 문제</h3>
+
+          <p>
+            IMAP은 서버와 메일 클라이언트 사이에서 메일을 동기화하도록 설계되었습니다. 일상적으로는 편리하지만, 그것은 서버가 유일한 진실의 원천이라는 뜻입니다. 서버가 데이터를 잃으면 사용자도 데이터를 잃습니다. 가장 흔한 위험은 다음과 같습니다:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>저장 용량 한도</strong> &mdash; Gmail(Drive 및 Photos와 함께 쓰는 15 GB), Outlook(15 GB), Yahoo(1 TB)의 무료 요금제는 언젠가 가득 찹니다. 그러면 새 메일을 받지 못하게 됩니다.</li>
+            <li><strong>계정 잠김</strong> &mdash; 비밀번호를 잊거나, 2단계 인증에 문제가 생기거나, 정책을 위반하면 계정에서 영구히 잠길 수 있습니다.</li>
+            <li><strong>제공업체의 변화</strong> &mdash; 서비스는 문을 닫고, 합병되고, 가격을 바꿉니다. Google은 수십 개 제품을 접었습니다. Yahoo Mail은 주인이 여러 번 바뀌었습니다.</li>
+            <li><strong>오프라인 접근 불가</strong> &mdash; 로컬 사본이 없으면 인터넷 연결 없이는 오래된 메일을 검색하거나 읽을 수 없습니다.</li>
+            <li><strong>규정 준수와 법적 요건</strong> &mdash; 어떤 직업은 메일을 몇 년씩 보존해야 합니다. 규정 준수를 남의 서버에 기대는 것은 위험합니다.</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">로컬 보관이 실제로 뜻하는 것</h3>
+
+          <p>
+            메일을 로컬에 보관하면 앱이 메시지 전체 &mdash; 헤더, 본문, 모든 첨부파일 &mdash; 를 내려받아 디스크에 파일로 저장합니다. 그 메일은 더 이상 서버에 매이지 않습니다. 인터넷을 건드리지 않고도 읽고, 검색하고, 전달하고, 외장 드라이브에 백업할 수 있습니다.
+          </p>
+
+          <p>
+            그 파일이 어떤 형식으로 저장되는지가 중요합니다. 어떤 메일 클라이언트는 자사 소프트웨어에 사용자를 묶어 두는 독자 규격 데이터베이스를 씁니다. 그 클라이언트의 개발이 멈추면 보관본을 읽을 수 없게 됩니다. 더 나은 방법은 개방된 표준 형식을 쓰는 것입니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">.eml과 Maildir이 중요한 이유</h3>
+
+          <p>
+            <strong>.eml</strong>은 RFC 5322가 정의한 메일 메시지의 표준 파일 형식입니다. 어떤 플랫폼의 어떤 메일 클라이언트든 .eml 파일을 열 수 있습니다. 헤더, 본문(일반 텍스트와 HTML), MIME으로 인코딩된 첨부파일까지 메시지 전체를 담는 평문 형식입니다. 표준이기 때문에 보관한 메일이 특정 소프트웨어에 묶이지 않습니다.
+          </p>
+
+          <p>
+            <strong>Maildir</strong>은 메일을 저장하는 표준 디렉터리 구조입니다. 메시지 하나하나가 잘 정의된 폴더 계층 안의 별개 파일입니다. 모든 메시지를 파일 하나에 이어 붙이는 mbox와 달리 Maildir은 손상에 강합니다 &mdash; 파일 하나가 망가져도 나머지 보관본은 영향을 받지 않습니다. 검색도 빠르고 증분 백업도 쉽습니다.
+          </p>
+
+          <p>
+            MailVault는 둘 다 씁니다. 메일은 계정과 폴더별로 정리된 Maildir 디렉터리 구조 안에 개별 <code>.eml</code> 파일로 저장됩니다. 즉 보관본은 어떤 도구로든 읽을 수 있는 표준 메일 파일이 든 폴더일 뿐입니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailVault가 메일을 보관하는 방식</h3>
+
+          <p>
+            MailVault는 IMAP 메일 계정에 연결해 메시지를 로컬에 보관하는, macOS와 Linux용 무료 오픈소스 데스크톱 앱입니다. 과정은 다음과 같습니다:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>계정 추가</strong> &mdash; 메일 계정 정보를 입력하거나 OAuth2(Google, Microsoft, Yahoo)로 로그인하십시오. MailVault는 TLS 위의 IMAP으로 연결합니다.</li>
+            <li><strong>메일함 살펴보기</strong> &mdash; MailVault가 메일 헤더를 불러와 받은편지함을 보여 줍니다. 다른 메일 클라이언트와 똑같이 폴더를 오가고, 검색하고, 메일을 읽을 수 있습니다.</li>
+            <li><strong>메일 보관</strong> &mdash; 간직할 메일을 골라 보관하십시오. MailVault가 메시지 전체(헤더, 본문, 첨부파일)를 내려받아 디스크에 <code>.eml</code> 파일로 저장합니다.</li>
+            <li><strong>배경 캐싱</strong> &mdash; MailVault는 배경에서 자동으로 메일을 캐시할 수도 있습니다. 살펴보는 동안 메시지 내용을 내려받아 두므로, 따로 손대지 않아도 보관본이 시간이 지나며 쌓입니다.</li>
+            <li><strong>오프라인 접근</strong> &mdash; 보관한 메일은 인터넷 연결이 없어도 바로 볼 수 있습니다. 언제든 검색하고, 읽고, 내보낼 수 있습니다.</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">로컬 메일 보관의 이점</h3>
+
+          <p>
+            메일을 로컬에 보관해 두면 전부 서버에 두는 것에 비해 몇 가지 이점이 생깁니다:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>오프라인 접근</strong> &mdash; 인터넷 연결 없이 메일 기록 전체를 읽고 검색합니다. 이동 중이거나, 네트워크가 불안정하거나, 그저 더 빠르게 일하고 싶을 때 쓸모가 있습니다.</li>
+            <li><strong>공급업체 종속 없음</strong> &mdash; 메일은 표준 <code>.eml</code> 파일입니다. 다른 메일 클라이언트로 옮기거나, 아무 저장소에나 백업하거나, 스크립트를 짜서 처리할 수 있습니다. MailVault를 비롯한 어떤 소프트웨어에도 매이지 않습니다.</li>
+            <li><strong>서버 저장 공간 확보</strong> &mdash; 로컬에 보관한 뒤에는 아무것도 잃지 않고 <a href="/ko/guides/free-up-email-storage.html" class="text-primary-500 hover:text-primary-600 underline">서버에서 메일을 삭제</a>해 공간을 되찾을 수 있습니다.</li>
+            <li><strong>규정 준수와 보존</strong> &mdash; 제공업체 정책과 상관없이 필요한 기간만큼 메일을 간직하십시오. 보관본을 여러 곳에 백업해 이중으로 대비하십시오.</li>
+            <li><strong>속도</strong> &mdash; 로컬 디스크에서 메일을 읽는 것이 매번 원격 서버에서 가져오는 것보다 빠릅니다.</li>
+            <li><strong>개인정보</strong> &mdash; 보관한 메일은 사용자 컴퓨터에 머무릅니다. 어떤 제3자도 이를 스캔하거나 색인하거나 광고에 쓰지 않습니다.</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">누구에게 로컬 메일 보관이 필요한가?</h3>
+
+          <p>
+            로컬 보관은 자기 메일 기록을 진지하게 여기는 사람이라면 누구에게나 값어치가 있습니다. 고객과의 연락을 남겨야 하는 프리랜서와 컨설턴트. 메일 제공업체와 무관한 백업을 원하는 소규모 사업체. 서신을 보관해야 하는 규제 산업(법률, 의료, 금융) 종사자. 완전한 기록을 간직한 채 메일 제공업체를 옮기려는 사람. 또는 예전에 계정 접근을 잃어 본 적이 있는 모든 사람입니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">시작하기</h3>
+
+          <p>
+            MailVault는 무료 오픈소스입니다. macOS(Intel과 Apple Silicon)와 Linux(x86_64와 aarch64)에서 실행됩니다. 내려받아 IMAP 계정을 추가하고, 몇 분 안에 메일을 로컬에 보관하기 시작하십시오.
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">MailVault 무료로 내려받기</p>
+            <p class="text-sm mb-4">IMAP 메일을 표준 .eml 파일로 로컬에 보관하십시오. 오픈소스이며 계정 가입도 필요 없습니다.</p>
+            <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+              MailVault 다운로드
+            </a>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            궁금한 점이 있습니까? <a href="/ko/faq.html" class="text-primary-500 hover:text-primary-600 underline">자주 묻는 질문</a>을 확인하거나 <a href="/ko/features.html" class="text-primary-500 hover:text-primary-600 underline">전체 기능</a>을 보십시오. 서버에서 지울 때 메일을 잃을까 걱정된다면 <a href="/ko/guides/keep-emails-after-server-deletion.html" class="text-primary-500 hover:text-primary-600 underline">서버에서 삭제한 뒤에도 메일을 간직하는 방법</a> 안내를 읽어 보십시오.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/ko/docs.html" class="hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="hover:text-primary-500 transition-colors">블로그</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">개인정보</a>
+          <a href="/ko/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">변경 내역</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">약관</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 모든 권리 보유.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="언어 선택" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/guides/archive-imap-emails-locally.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/guides/archive-imap-emails-locally.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/guides/archive-imap-emails-locally.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/guides/archive-imap-emails-locally.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/guides/archive-imap-emails-locally.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/guides/archive-imap-emails-locally.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/guides/archive-imap-emails-locally.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/guides/archive-imap-emails-locally.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/guides/archive-imap-emails-locally.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

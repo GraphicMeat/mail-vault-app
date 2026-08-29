@@ -56,6 +56,15 @@ jobs:
           echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
+      - name: Build localized pages
+        # Same reasoning as the CSS below: website/<lang>/ is generated from the
+        # English sources plus website/i18n/locales, and regenerating here means
+        # an edit to an English page can never ship with stale translations.
+        # `build` only reads the English sources; it never rewrites them.
+        run: |
+          node website/i18n/i18n.mjs build
+          node website/i18n/i18n.mjs verify
+
       - name: Build site CSS
         # The site is served as static files; Tailwind is compiled here so the
         # committed website/assets/tailwind.css can never go stale in production.
@@ -66,6 +75,7 @@ jobs:
           rsync -avz --delete \
             --exclude='api/' \
             --exclude='src/' \
+            --exclude='i18n/' \
             --exclude='tailwind.config.js' \
             --exclude='package.json' \
             --exclude='package-lock.json' \

@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="it" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Il backup nel cloud significa che un fornitore può leggere la tua posta per sempre. Il backup locale significa che puoi farlo solo tu. - Blog di MailVault</title>
+  <meta name="description" content="Un servizio di backup cloud di terze parti per la tua casella non elimina il singolo punto di guasto: aggiunge una seconda azienda con accesso continuo a ogni messaggio che hai mai inviato o ricevuto. Ecco la vera differenza di architettura, e perché il backup locale la chiude.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/it/blog/cloud-backup-vendor-reads-your-email.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/it/blog/cloud-backup-vendor-reads-your-email.html">
+  <meta property="og:title" content="Il backup nel cloud significa che un fornitore può leggere la tua posta per sempre. Il backup locale significa che puoi farlo solo tu.">
+  <meta property="og:description" content="Un servizio di backup cloud di terze parti per la tua casella non elimina il singolo punto di guasto: aggiunge una seconda azienda con accesso continuo a ogni messaggio che hai mai inviato o ricevuto. Ecco la vera differenza di architettura, e perché il backup locale la chiude.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="it_IT">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Il backup nel cloud significa che un fornitore può leggere la tua posta per sempre. Il backup locale significa che puoi farlo solo tu.">
+  <meta name="twitter:description" content="Un servizio di backup cloud di terze parti per la tua casella non elimina il singolo punto di guasto: aggiunge una seconda azienda con accesso continuo a ogni messaggio che hai mai inviato o ricevuto. Ecco la vera differenza di architettura, e perché il backup locale la chiude.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/cloud-backup-vendor-reads-your-email.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/cloud-backup-vendor-reads-your-email.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/cloud-backup-vendor-reads-your-email.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/cloud-backup-vendor-reads-your-email.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/cloud-backup-vendor-reads-your-email.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/cloud-backup-vendor-reads-your-email.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/cloud-backup-vendor-reads-your-email.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/cloud-backup-vendor-reads-your-email.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/cloud-backup-vendor-reads-your-email.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/cloud-backup-vendor-reads-your-email.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/it/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/it/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Funzioni</a>
+          <a href="/it/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Casi d'uso</a>
+          <a href="/it/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="Cambia tema">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Download
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/it/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Funzioni</a>
+          <a href="/it/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Casi d'uso</a>
+          <a href="/it/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/it/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Torna al blog
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-08-28" class="text-sm text-primary-500 font-medium">28 agosto 2026</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Il backup nel cloud significa che un fornitore può leggere la tua posta per sempre. Il backup locale significa che puoi farlo solo tu.</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>6 min di lettura</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Una volta accettato che la propria posta in arrivo non è un backup &mdash; e non lo è, ne abbiamo <a href="/it/blog/email-provider-not-a-backup.html" class="text-primary-500 hover:text-primary-600 underline">parlato in dettaglio</a> &mdash; l'istinto successivo è di solito ricorrere a un altro prodotto cloud per rimediare: un servizio di backup di terze parti che si collega a Gmail o a Microsoft 365 e copia di continuo tutto sui propri server. Sembra risolvere il problema. Nella sostanza, lo sposta soltanto.
+          </p>
+
+          <p>
+            Non hai eliminato il singolo punto di guasto. Hai aggiunto una seconda azienda con una copia permanente di ogni email che hai mai inviato o ricevuto, più le credenziali o l'accesso delegato che le servono per continuare a scaricare posta nuova per sempre.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Che cosa ha davvero in mano un fornitore di backup cloud</h3>
+
+          <p>
+            L'architettura dietro la maggior parte dei prodotti di backup email nel cloud è semplice: il servizio si collega direttamente al tuo server di posta via API o a livello di protocollo, duplica ogni messaggio e ogni allegato e conserva quell'archivio su server che gestisce e amministra il fornitore di backup &mdash; non tu. È tutta la sua proposta di valore; è anche tutta la sua superficie di rischio.
+          </p>
+
+          <p>
+            Per tutta la durata dell'abbonamento il fornitore di backup &mdash; e, di riflesso, chiunque riesca a violarne i sistemi &mdash; ha accesso continuo a tutta la tua storia di posta. Non un'istantanea del giorno in cui ti sei iscritto. Un archivio continuo e in crescita, che diventa più prezioso per un attaccante ogni anno che passa. Hai scambiato "il mio provider ha la mia posta" con "il mio provider e un fornitore di backup hanno entrambi la mia posta", che è più esposizione, non meno.
+          </p>
+
+          <p>
+            Niente di tutto questo rende i fornitori di backup cloud negligenti o mal gestiti. Quelli seri investono davvero in sicurezza. Il punto è strutturale, non un giudizio su una singola azienda: concentrare più copie di dati sensibili in più posti controllati da altre organizzazioni aumenta il numero dei modi in cui può andare storto, per quanto bene ciascuna delle parti faccia il suo lavoro.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">La domanda che conta davvero</h3>
+
+          <p>
+            Quando valuti un qualsiasi approccio al backup della posta, la domanda non è solo "esiste una copia da qualche altra parte". È: <strong>chi può leggere quella copia, e per quanto tempo?</strong>
+          </p>
+
+          <p>
+            Una copia che sta sui server di un fornitore può essere letta dai suoi dipendenti nelle giuste condizioni di accesso interno, richiesta da un tribunale che ha giurisdizione su quel fornitore, esposta se il fornitore subisce una violazione, oppure consegnata se il fornitore viene acquisito da un'azienda con criteri di trattamento dei dati diversi da quella di cui ti eri fidato. Nessuno di questi esiti richiede che qualcosa vada storto da parte tua. Sono proprietà del semplice fatto che la copia esista sull'infrastruttura di qualcun altro.
+          </p>
+
+          <p>
+            Una copia che sta sul tuo disco ha esattamente una di quelle categorie di rischio: la sicurezza del tuo dispositivo. È una responsabilità vera &mdash; cifratura dell'intero disco, una macchina blindata, un tuo backup del backup se vuoi ridondanza in più &mdash; ma è un rischio unico e delimitato, che controlli direttamente, non un rischio aperto che affidi a terzi perché lo gestiscano per te a tempo indeterminato.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Il backup locale, semplicemente, sopravvive a più cose</h3>
+
+          <p>
+            Oltre alla questione dell'accesso, una copia locale resiste a una lista precisa di guasti che un backup da cloud a cloud non risolve davvero: il fornitore di backup che alza i prezzi o chiude, il servizio del fornitore che ha un'interruzione proprio quando ti serve ripristinare, un abbonamento che scade perché è scaduta la carta, o il fornitore che cambia le condizioni d'uso in una direzione che oggi non accetteresti. Un file sul tuo disco non ha uno stato di abbonamento. È semplicemente lì.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Come è costruito MailVault, invece</h3>
+
+          <p>
+            MailVault si collega al tuo account di posta IMAP o OAuth esistente e archivia ogni cartella come singoli file <code>.eml</code> &mdash; scritti direttamente sul tuo disco. Non c'è alcun server gestito da MailVault che tenga in mezzo una copia della tua posta. Non possiamo leggere il tuo archivio, perché non lo riceviamo mai; la connessione è tra il tuo dispositivo e il tuo provider, e i file che ne risultano vivono solo dove li metti tu.
+          </p>
+
+          <p>
+            Anche il formato conta: <code>.eml</code> è uno standard aperto e semplice, leggibile da qualsiasi client di posta, non un database proprietario che lega il tuo archivio a un unico software o alla sopravvivenza di un'unica azienda. I backup locali manuali e illimitati sono gratuiti, punto. I backup pianificati, che tengono l'archivio aggiornato in automatico senza che tu debba ricordartene, sono una funzione premium da $4/mese o $25/anno &mdash; il piano annuale comprende 14 giorni di prova.
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Fai il backup della tua posta senza consegnarla a una seconda azienda.</p>
+            <p class="text-sm mb-4">MailVault archivia ogni cartella come file .eml ricercabili e portabili sul tuo disco &mdash; nessun server di terzi in mezzo, gratuito e illimitato per i backup manuali.</p>
+            <div class="flex flex-wrap gap-3">
+              <a href="/it/#download" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+                Scarica MailVault
+              </a>
+              <a href="/it/pricing.html" class="inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">
+                Vedi i prezzi
+              </a>
+            </div>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            Da leggere anche: <a href="/it/guides/imap-backup-tool-checklist.html" class="text-primary-500 hover:text-primary-600 underline">che cosa guardare davvero in uno strumento di backup IMAP</a>, <a href="/it/guides/archive-imap-emails-locally.html" class="text-primary-500 hover:text-primary-600 underline">come archiviare in locale le email IMAP</a> e <a href="/it/guides/mailstore-alternative-mac.html" class="text-primary-500 hover:text-primary-600 underline">un'alternativa a MailStore per Mac</a>.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/it/docs.html" class="hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacy</a>
+          <a href="/it/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Termini</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. Tutti i diritti riservati.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="Scegli una lingua" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/blog/cloud-backup-vendor-reads-your-email.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/blog/cloud-backup-vendor-reads-your-email.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/blog/cloud-backup-vendor-reads-your-email.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/blog/cloud-backup-vendor-reads-your-email.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/blog/cloud-backup-vendor-reads-your-email.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/blog/cloud-backup-vendor-reads-your-email.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/blog/cloud-backup-vendor-reads-your-email.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/blog/cloud-backup-vendor-reads-your-email.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/blog/cloud-backup-vendor-reads-your-email.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

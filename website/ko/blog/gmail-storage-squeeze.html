@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gmail 저장 공간 압박 — 내 사본을 직접 가져야 하는 이유 - MailVault 블로그</title>
+  <meta name="description" content="Google은 신규 계정의 무료 저장 공간을 15GB 대신 5GB로 시험하고 있으며, 2년간 사용하지 않은 계정은 삭제합니다. MailVault가 Gmail의 영구 로컬 사본을 사용자의 디스크에 보관하는 방법을 소개합니다.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ko/blog/gmail-storage-squeeze.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ko/blog/gmail-storage-squeeze.html">
+  <meta property="og:title" content="Gmail 저장 공간 압박 — 내 사본을 직접 가져야 하는 이유">
+  <meta property="og:description" content="Google은 신규 계정의 무료 저장 공간을 15GB 대신 5GB로 시험하고 있으며, 2년간 사용하지 않은 계정은 삭제합니다. MailVault가 Gmail의 영구 로컬 사본을 사용자의 디스크에 보관하는 방법을 소개합니다.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ko_KR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Gmail 저장 공간 압박 — 내 사본을 직접 가져야 하는 이유">
+  <meta name="twitter:description" content="Google은 신규 계정의 무료 저장 공간을 15GB 대신 5GB로 시험하고 있으며, 2년간 사용하지 않은 계정은 삭제합니다. MailVault가 Gmail의 영구 로컬 사본을 사용자의 디스크에 보관하는 방법을 소개합니다.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/gmail-storage-squeeze.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/ko/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/ko/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="테마 전환">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            다운로드
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/ko/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">다운로드</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/ko/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        블로그로 돌아가기
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-07-02" class="text-sm text-primary-500 font-medium">2026년 7월 2일</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Gmail 저장 공간 압박 — 내 사본을 직접 가져야 하는 이유</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>6분 분량</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            몇 년 동안 조건은 단순했습니다. Google 계정을 만들면 Gmail, Drive, Photos가 함께 쓰는 무료 저장 공간 15&nbsp;GB를 받고, 그 뒤로는 신경 쓸 일이 없었습니다. 그 조건이 조용히 바뀌고 있습니다 &mdash; 불편한 질문을 던지기 좋은 때입니다. 10년치 메일의 유일한 사본을 Google이 갖고 있다면, 무료 등급이 발밑에서 바뀔 때 무슨 일이 벌어질까요?
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">실제로 바뀐 것</h3>
+
+          <p>
+            2026년 5월, 사용자와 기자들은 Google이 특정 지역의 <em>새로 만든</em> 계정에 새 저장 정책을 시험하는 것을 발견했습니다. 기본 무료 저장 공간이 15&nbsp;GB가 아니라 5&nbsp;GB인 것입니다. "추가 비용 없이" 15&nbsp;GB를 다 열려면 계정에 전화번호를 추가하라는 안내를 받습니다. Google 자신의 문구도 바뀌었습니다 &mdash; "Google 계정에는 15&nbsp;GB의 클라우드 저장 공간이 무료로 제공됩니다"에서 "<strong>최대</strong> 15&nbsp;GB"로 말입니다. (<a href="https://9to5google.com/2026/05/14/google-account-free-storage-changes-15gb/" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">9to5Google</a>, <a href="https://www.techradar.com/computing/websites-apps/no-google-is-not-ending-its-15gb-of-free-gmail-storage-policy-its-testing-a-5gb-initial-limit-that-jumps-to-the-full-amount-if-you-add-a-phone-number" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">TechRadar</a>.)
+          </p>
+
+          <p>
+            정확히 짚어 두겠습니다. 머리기사들이 늘 그렇지는 않았기 때문입니다. 이것은 시험이고, <em>새</em> 계정을 <em>일부</em> 시장에서 대상으로 하며, 이미 15&nbsp;GB를 쓰는 계정에서 오늘 무언가를 빼앗는 것은 아닙니다. Google은 이 실험이 서비스 품질과 계정 복구 보안을 위한 것이라고 말합니다. 보도는 한결같이 같은 압력을 가리킵니다 &mdash; AI와 클라우드 기반 설비의 비용 상승입니다(<a href="https://cybernews.com/tech/google-gmail-free-storage-limitations/" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">Cybernews</a>).
+          </p>
+
+          <p>
+            제한된 시험을 두고 호들갑을 떨자는 것이 아닙니다. 흐름의 방향을 짚자는 것입니다. "최대 15&nbsp;GB"는 "15&nbsp;GB"와 같은 약속이 아닙니다. 무료 등급은 줄어들거나, 전화번호 뒤로, 또는 유료 요금제 뒤로 넘어갑니다 &mdash; 그리고 이 이야기의 모든 판본에 공통된 한 가지는, 메일이 남의 서버 위에, 사용자의 동의 없이 고칠 수 있는 조건 아래 놓여 있다는 점입니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">아무도 말하지 않는 부분: 휴면 계정 삭제</h3>
+
+          <p>
+            저장 한도가 머리기사지만, <em>보관본</em>으로 여기는 것에는 더 중요한 조용한 정책이 하나 있습니다. 2023년 12월부터 Google은 2년 동안 쓰지 않은 개인 계정 전체를 &mdash; Gmail 메시지, Drive 파일, Photos, 그리고 주소 자체까지 그 안의 모든 것을 &mdash; 지울 수 있습니다(<a href="https://support.google.com/mail/answer/6374270?hl=en" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">Google 자신의 저장 공간 관리 안내</a>).
+          </p>
+
+          <p>
+            "혹시 몰라서" 남겨 둔 예전 계정에 이것이 무슨 뜻인지 생각해 보십시오. 대학 시절 기록, 프리랜서로 처음 보낸 청구서, 아직 보증 기간이 남은 물건의 영수증, 이제는 만날 수 없는 사람이 보낸 마지막 메일이 담긴 계정 말입니다. 로그인하지 않는다면 시계는 돌아가고 있습니다. 받은편지함은 메일이 도착하는 곳입니다. 되찾을 수 없는 것을 넣어 두는 금고로 설계된 적은 없습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">여기서 MailVault가 하는 일</h3>
+
+          <p>
+            MailVault는 Gmail에 연결해 그 완전한 사본을 자기 컴퓨터에 영구히 두는 데스크톱 앱입니다. Google로 로그인하면 됩니다 &mdash; 진짜 OAuth2이고, 앱 비밀번호도, 찾아 헤맬 IMAP 서버 설정도 없습니다(그 흐름은 <a href="/ko/blog/gmail-oauth2.html" class="text-primary-500 hover:text-primary-600 underline">여기에 정리해 두었습니다</a>) &mdash; 그러면 MailVault가 메일을 사용자가 관리하는 로컬 파일로 끌어내립니다.
+          </p>
+
+          <p>
+            중요한 설계 결정은 저장 형식입니다. 모든 메시지는 디스크의 Maildir 방식 폴더 트리 안에 표준 <code>.eml</code> 파일로 저장됩니다. 우리 앱 안에서만 열 수 있는 독점 데이터베이스가 아닙니다. <code>.eml</code>은 날것 그대로의 RFC&nbsp;822 메일 형식입니다 &mdash; 세상의 모든 메일 클라이언트가 이해하는 바로 그것입니다. 보관본은 평범한 파일이 든 평범한 폴더입니다:
+          </p>
+
+          <pre>~/MailVault/
+  you@gmail.com/
+    INBOX/
+      1699887342.a1b2c3.eml
+      1699890021.d4e5f6.eml
+    Sent/
+    Receipts/        &larr; your own Gmail labels, preserved as folders
+    Family/
+    ...</pre>
+
+          <p>
+            그중 하나를 Apple Mail, Thunderbird, Outlook, 또는 텍스트 편집기에서 열어 보십시오 &mdash; 그냥 열립니다. 그 폴더를 외장 드라이브, NAS, 또는 원하는 클라우드 폴더에 백업하십시오. 10년 뒤 새 컴퓨터로 복사해도 됩니다. 자기 메일을 읽는 데 MailVault가 계속 존재하는지, 구독이 유지되는지, 서버가 살아 있는지는 아무 상관이 없습니다. 그것이 핵심입니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">이것이 압박에 어떻게 답하는가</h3>
+
+          <p>
+            걱정거리를 로컬 사본이 실제로 하는 일과 나란히 놓아 보겠습니다:
+          </p>
+
+          <p>
+            <strong>무료 등급이 줄어드는 문제.</strong> 메일을 로컬에 보관해 두면, Google 서버에 더 둘 필요가 없는 메시지는 <em>거기서</em> 지워 공간을 되찾을 수 있습니다 &mdash; 디스크의 사본은 그대로 온전합니다. 받은편지함은 유일한 금고가 아니라 작업 공간이 됩니다. 5&nbsp;GB든(15든, 숫자가 어디로 정해지든) 손쓸 수 없이 줄어드는 카운트다운이 아니게 됩니다.
+          </p>
+
+          <p>
+            <strong>비활성 계정 삭제.</strong> 전부 보관해 둔 계정은 기록까지 데려가지 않고 사라질 수 있습니다. Google이 2년 뒤 잠자는 계정을 회수한다면 잃는 것은 주소이지 &mdash; 기록이 아닙니다.
+          </p>
+
+          <p>
+            <strong>종속과 접근 상실.</strong> 잊어버린 비밀번호, 계정에 걸린 보안 표시, 정책 다툼, 아니면 그저 언젠가 Gmail을 떠나고 싶은 마음 &mdash; 어느 것도 자기 드라이브에 놓인 <code>.eml</code> 파일 폴더에는 닿지 못합니다.
+          </p>
+
+          <p>
+            이것이 메일 소유권의 정직한 판본이라고 생각하기에, 경계도 정직하게 밝히겠습니다. MailVault는 사본을 보관할 뿐, 메일 서비스를 대신 운영하지 않습니다. 메일은 여전히 Gmail을 통해 보내고 받습니다. 달라지는 것은 "공간을 비우려고 지운다"와 "이 예전 계정은 그냥 놔둔다"가 더 이상 되돌릴 수 없는 결정이 아니게 된다는 점입니다. 지우는 대상이 보관본은 아니기 때문입니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">로컬 우선이지, 로컬 전용은 아닙니다</h3>
+
+          <p>
+            한 가지 더 분명히 해 둘 것이 있습니다. 이 이야기를 "클라우드를 믿지 말라"로 받아들이기 쉽기 때문입니다. 그런 뜻이 아닙니다. 클라우드는 정말로 편리하고, Gmail은 정말로 좋은 받은편지함입니다. 문제는 사본이 Google 서버에 있다는 것이 아니었습니다 &mdash; 대부분의 사람에게 그것이 <em>유일한</em> 사본이고, 그 조건을 사용자가 정하지 않는다는 것이었습니다.
+          </p>
+
+          <p>
+            MailVault의 답은 어느 사본이 기준점인지를 뒤집는 것입니다. 권위 있고 영구적인 보관본은 사용자가 소유한 하드웨어에, 어떤 앱보다 오래 남는 형식으로 놓입니다. 클라우드의 이중화와 동기화는 그 위에 편의로 얹는 것이지, 자기 기록을 걸 토대가 아닙니다. 애초에 보관본이 무료 등급에 있지 않았다면, 무료 등급이 줄어드는 일은 훨씬 작은 사건입니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">오늘 사본 만들기</h3>
+
+          <p>
+            이 가운데 무엇이든 마음에 걸렸다면 &mdash; 정말 백업해 두어야 할 옛 계정이나, 가득 차 가는 저장 공간 막대 같은 것 &mdash; 해결에 드는 시간은 설정 15분쯤입니다. <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">MailVault를 내려받아</a> Google로 로그인하고, 메일을 자기 폴더로 끌어내리십시오. 그런 다음 몇 년째 미뤄 온 일을 하십시오. 약관이 또 바뀌기 전에 메일 사본을 만들어 두는 일 말입니다.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/ko/docs.html" class="hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="hover:text-primary-500 transition-colors">블로그</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">개인정보</a>
+          <a href="/ko/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">변경 내역</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">약관</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 모든 권리 보유.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="언어 선택" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

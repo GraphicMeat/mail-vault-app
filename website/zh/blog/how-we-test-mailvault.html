@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>我们如何测试 MailVault：600+ 项测试、真实邮件、真实服务器 - MailVault 博客</title>
+  <meta name="description" content="走进 MailVault 的测试策略：四层共 600+ 项自动化测试、500 封预置邮件、针对真实 IMAP 服务器的压力测试，以及在真实桌面应用中的端到端场景。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/blog/how-we-test-mailvault.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/blog/how-we-test-mailvault.html">
+  <meta property="og:title" content="我们如何测试 MailVault：600+ 项测试、真实邮件、真实服务器">
+  <meta property="og:description" content="走进 MailVault 的测试策略：四层共 600+ 项自动化测试、500 封预置邮件、针对真实 IMAP 服务器的压力测试，以及在真实桌面应用中的端到端场景。">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="我们如何测试 MailVault：600+ 项测试、真实邮件、真实服务器">
+  <meta name="twitter:description" content="走进 MailVault 的测试策略：四层共 600+ 项自动化测试、500 封预置邮件、针对真实 IMAP 服务器的压力测试，以及在真实桌面应用中的端到端场景。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/how-we-test-mailvault.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/how-we-test-mailvault.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/how-we-test-mailvault.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/how-we-test-mailvault.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/how-we-test-mailvault.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/how-we-test-mailvault.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/how-we-test-mailvault.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/how-we-test-mailvault.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/how-we-test-mailvault.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/how-we-test-mailvault.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/zh/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/zh/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="切换主题">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            下载
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/zh/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">下载</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/zh/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        返回博客
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-03-11" class="text-sm text-primary-500 font-medium">2026 年 3 月 11 日</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">我们如何测试 MailVault：600+ 项测试、真实邮件、真实服务器</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>6 分钟阅读</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            邮件属于那种表面上看起来简单、实际完全不是的东西。IMAP 服务器各有各的脾气。MIME 编码里的边界情况比多数开发者的职业生涯还老。OAuth2 令牌总在不合适的时候过期。附件可能嵌在 multipart 邮件里三层深。做邮件客户端，你要么把测试做到偏执，要么就发布 bug。
+          </p>
+
+          <p>
+            MailVault 目前有 600 多项自动化测试，分布在四层：Rust 单元测试、JavaScript 单元测试、针对真实 IMAP 服务器的集成测试，以及驱动真实桌面应用的端到端测试。下面是它们如何拼在一起的。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">第 1 层：Rust 单元测试（55 项）</h3>
+
+          <p>
+            MailVault 的核心用 Rust 写成 &mdash; 所有 IMAP 连接、SMTP 发送、MIME 解析和 OAuth2 令牌管理都是原生运行，不经过 Node.js sidecar。Rust 这一层有 55 项单元测试，覆盖那些最难写对的函数。
+          </p>
+
+          <p>
+            一个很好的例子是 UID 区间压缩。当 MailVault 需要为 UID <code>[1, 2, 3, 5, 6, 10]</code> 获取邮件头时，它会把这些 UID 压缩成 IMAP 区间字符串 <code>"1:3,5:6,10"</code>，好让命令尽可能短。测试覆盖了空输入、单个 UID、连续区间、有空隙的、未排序的、有重复的、超大区间，以及反向操作（把区间展开回单个 UID）。还有往返测试，验证 <code>compress &rarr; expand</code> 能还原出原来的集合。这些之所以要紧，是因为一旦区间算错，分块的 UID FETCH 命令就会出问题。
+          </p>
+
+          <p>
+            Microsoft Graph API 模块有自己的测试，验证把 Graph 的 JSON 响应解析成 MailVault 内部的 <code>EmailHeader</code> 格式；主模块的测试则覆盖 Maildir 文件名解析、标记编码，以及按 UID 查找文件。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">第 2 层：JavaScript 单元测试（13 套）</h3>
+
+          <p>
+            前端有 13 套专门的单元测试跑在 <a href="https://vitest.dev" class="text-primary-500 hover:text-primary-600 underline">Vitest</a> 上，另有若干 store 层面的测试。它们覆盖的是夹在 Rust 后端和 React 界面之间的那部分逻辑：
+          </p>
+
+          <p>
+            <strong>邮件解析</strong>是测试最密集的一块。<code>emailParser</code> 这套测试会检验通信人提取（把“John Doe &lt;john@example.com&gt;”拆成姓名和地址）、主题归一化（剥掉 <code>Re:</code>、<code>Fwd:</code>、<code>FW:</code>、<code>Re[N]:</code> 的各种组合）、签名识别，以及引用层级判定。会话归并算法 &mdash; Jamie Zawinski 那套归并规范的简化版 &mdash; 有针对 <code>In-Reply-To</code> 链、<code>References</code> 头遍历、按主题兜底分组，以及畸形头部的环检测的测试。
+          </p>
+
+          <p>
+            其他几套分别测试<strong>后台流水线</strong>（并发控制、指数退避重试、当前账户与后台账户之间的级联顺序）、<strong>OAuth2 令牌处理</strong>（过期前主动刷新、并发刷新请求去重）、<strong>增量同步优化</strong>（四级 CONDSTORE 判定树）、<strong>快速加载流程</strong>（先立刻显示缓存的邮件头，再由后台同步补上变化）、<strong>抗故障加载</strong>（获取途中 IMAP 连接断开时的优雅降级），以及贯穿 Zustand store 的<strong>状态转换</strong>。
+          </p>
+
+          <p>
+            store 自身的测试则验证 LRU 缓存淘汰（MailVault 在内存里缓存邮件正文，上限可配）、字段剥离（缓存前去掉 <code>rawSource</code> 和附件内容以节省内存），以及缓存大小估算。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">第 3 层：针对真实 IMAP 服务器的集成测试</h3>
+
+          <p>
+            带 mock 的单元测试能告诉你的东西有限。MailVault 的集成测试用真实凭据连接真实的 IMAP 服务器，并发送真实的邮件。我们在一个私有域名下维护两个专用测试账户，每次集成测试都会通过 TLS 与这两个账户通信。
+          </p>
+
+          <p>
+            核心的 <code>email.test.js</code> 会跑一整个闭环：通过 IMAP 连接，用 SMTP 发一封邮件（借助 <a href="https://nodemailer.com" class="text-primary-500 hover:text-primary-600 underline">Nodemailer</a>），等它送达，用 <a href="https://github.com/nodemailer/mailparser" class="text-primary-500 hover:text-primary-600 underline">mailparser</a> 取回并解析，核对邮件头和正文，最后在清理阶段把这封测试邮件删掉。这能抓到 mock 抓不到的真实问题 &mdash; TLS 协商的怪癖、特定服务器的 IMAP 扩展、编码差异。
+          </p>
+
+          <p>
+            <strong>IMAP 优化套件</strong>拿真实服务器测试 MailVault 的高级协议特性：<code>COMPRESS=DEFLATE</code> 协商（服务器到底支不支持？压缩会话能不能正常工作？）、<code>CONDSTORE</code> 增量同步（<code>CHANGEDSINCE</code> 返回的变更标记对不对？），以及 <code>ESEARCH</code> 紧凑响应。
+          </p>
+
+          <p>
+            <strong>跨账户邮件套件</strong>测试多账户场景：从账户 A 发到账户 B，确认邮件出现在 B 的收件箱，检验已读/未读状态的传播，以及会话归并算法能否正确地把这条会话跨两个账户串起来。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">500 封邮件的种子数据</h3>
+
+          <p>
+            为了贴近真实地测试，我们给测试邮箱预置 500 封邮件 &mdash; 两个账户之间每个方向各 250 封。种子脚本生成带真实感主题的邮件（「Q4 Revenue Report &mdash; Final Numbers」「Re: Bug in checkout flow」「Invoice #4821 &mdash; Due January 15」），并轮流使用五种 MIME 类型：纯文本、HTML、multipart/alternative、带单个附件的 HTML，以及带多个附件的 HTML（CSV、JSON 和 PNG）。
+          </p>
+
+          <p>
+            预置邮件中约有三分之一被标记为未读。附件包括生成的 PDF 报告、CSV 数据文件、JSON 元数据和 PNG 图片。这样我们就得到了一个看起来和用起来都像真实收件箱的邮箱 &mdash; 内容类型混杂、已读状态各异、有会话线程，量也足够大，能把性能问题暴露出来。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">压力测试</h3>
+
+          <p>
+            <code>mailbox-stress.test.js</code> 走得更远：它往一个邮箱里灌 500 封邮件（在全部五种 MIME 类型间轮换），然后测试 MailVault 的 IMAP 层能否正确应付这个量。这能抓出分块 UID FETCH（为避开 IMAP 命令长度限制，我们把获取拆成每批 200 封）、分页，以及高负载下内存占用方面的问题。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">第 4 层：真实应用中的端到端测试</h3>
+
+          <p>
+            最后一层用 <a href="https://webdriver.io" class="text-primary-500 hover:text-primary-600 underline">WebdriverIO</a> 配合 Tauri WebDriver，驱动真正的 Tauri 桌面应用。应用带 <code>webdriver</code> 特性标志编译，作为一个真实的桌面窗口启动，测试像用户那样与它交互 &mdash; 点按钮、往输入框里打字、等邮件加载。
+          </p>
+
+          <p>
+            我们把 E2E 测试分成两套。<strong>UI 套件</strong>（6 个测试文件）测试一切不需要 IMAP 连接的部分：设置面板、侧栏交互、键盘快捷键、布局与视图切换，以及撰写模板。它们跑得快，因为完全不碰网络。
+          </p>
+
+          <p>
+            <strong>连线套件</strong>（11 个测试文件）用真实账户测试完整的应用 &mdash; 其中一个账户有 17000 多封邮件。那不是造出来的基准数据；它是一个真实邮箱，攒了好些年的邮件、混杂的 MIME 类型、层层嵌套的会话，以及长期使用的邮箱必然带来的各种脏乱边角情况。拿这样规模的邮箱跑 E2E 测试，能逼着我们在分页、内存占用和大规模下的体感性能上诚实面对自己。这些场景包括：
+          </p>
+
+          <p>
+            <strong>冷启动</strong> &mdash; 应用在没有缓存的情况下启动，添加一个账户，测量邮件出现所需的时间。这是我们持续跟踪的一项基准：从彻底冷的状态到第一批邮件可见。
+          </p>
+
+          <p>
+            <strong>账户管理</strong> &mdash; 添加账户、在账户间切换，确认每个账户各自的状态（上次选中的邮箱、缓存的邮件列表）都被正确保留。
+          </p>
+
+          <p>
+            <strong>邮件列表与查看器</strong> &mdash; 滚动邮件列表、选中邮件、确认正文能正确加载（从缓存、从 Maildir，或者兜底从 IMAP），并检查相邻邮件是否被预取。
+          </p>
+
+          <p>
+            <strong>撰写、回复与转发</strong> &mdash; 打开撰写对话框，回复一封邮件（检查引用正文和收件人是否正确），以及带附件转发时附件是否保留。
+          </p>
+
+          <p>
+            <strong>搜索</strong> &mdash; 拿预置好的邮箱测试搜索栏，验证结果准确性和性能。
+          </p>
+
+          <p>
+            <strong>文件夹操作</strong> &mdash; 在文件夹之间移动邮件、归档、删除（删除用的是 RFC 4315 的 <code>UID EXPUNGE</code>，只移除指定的那封）。
+          </p>
+
+          <p>
+            <strong>统一收件箱</strong> &mdash; 测试把所有账户的邮件合并成单一时间序列表的多账户统一视图。
+          </p>
+
+          <p>
+            <strong>性能基准</strong> &mdash; 冷启动耗时、邮件加载延迟、会话归并性能。它们会输出一张带 p50、p95 和最大值的汇总表，好让我们发现性能回退。
+          </p>
+
+          <p>
+            每一个联网的 E2E 测试都有一道安全机制：一份获准的测试账户白名单。如果某个测试不小心去改一个不在白名单里的账户，它会立即失败。这可以避免开发期间的测试代码碰到真实用户数据。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">这为什么重要</h3>
+
+          <p>
+            MailVault 处理的是你的邮件。那是私人的、重要的数据。当你添加账户、切换文件夹、归档一封邮件或搜索收件箱时，它必须能用 &mdash; 不只是在一切顺利时，还要在服务器很慢、连接断开、邮件头畸形、OAuth2 令牌在拉取途中过期时也能用。
+          </p>
+
+          <p>
+            四层做法让我们在每一层都有底气：Rust 测试验证底层原语，JS 单元测试验证应用逻辑，集成测试验证真实服务器的行为符合预期，E2E 测试验证整套东西作为桌面应用能跑通。我们发布一个版本时，这些全都通过了。
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/zh/docs.html" class="hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="hover:text-primary-500 transition-colors">博客</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">隐私</a>
+          <a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">更新日志</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">条款</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 保留所有权利。
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="选择语言" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/blog/how-we-test-mailvault.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/blog/how-we-test-mailvault.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/blog/how-we-test-mailvault.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/blog/how-we-test-mailvault.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/blog/how-we-test-mailvault.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/blog/how-we-test-mailvault.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/blog/how-we-test-mailvault.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/blog/how-we-test-mailvault.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/blog/how-we-test-mailvault.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

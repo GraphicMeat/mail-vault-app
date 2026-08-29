@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>博客 - MailVault</title>
+  <meta name="description" content="MailVault 开发幕后。开发进展、技术深挖和版本说明。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/blog.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/blog.html">
+  <meta property="og:title" content="博客 - MailVault">
+  <meta property="og:description" content="MailVault 开发幕后。开发进展、技术深挖和版本说明。">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="博客 - MailVault">
+  <meta name="twitter:description" content="MailVault 开发幕后。开发进展、技术深挖和版本说明。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/zh/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/zh/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="切换主题">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            下载
+          </a>
+          <!-- Mobile menu button -->
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile menu -->
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/zh/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">下载</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <h1 class="text-4xl font-bold mb-2">博客</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-12">MailVault 开发幕后</p>
+
+      <div class="space-y-6">
+
+        <!-- Cloud Backup Vendor Reads Your Email -->
+        <a href="/zh/blog/cloud-backup-vendor-reads-your-email.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-08-28" class="text-sm text-primary-500 font-medium">2026 年 8 月 28 日</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">云备份意味着服务商可以永远读你的邮件。本地备份意味着只有你能读。</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">第三方云备份服务并没有消除单点故障——它只是又添了一家公司，持续掌握你收发过的一切。真正的架构差别在哪里，以及本地备份为什么能把这个口子堵上。</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>6 分钟阅读</span>
+          </div>
+        </a>
+
+        <!-- GDPR Fines and Indefinite Retention -->
+        <a href="/zh/blog/gdpr-fines-indefinite-email-retention.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-08-25" class="text-sm text-primary-500 font-medium">2026 年 8 月 25 日</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">GDPR 罚款已达 61.1 亿欧元——「什么都永久保留」算不算合规风险？</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">执法罚款已在 2,685 起案件中累计超过 61.1 亿欧元，监管机构也越来越倾向于把无限期保留邮件本身视为违规。存储限制原则究竟要求什么，以及如何在不违反它的前提下保留一份归档。</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>7 分钟阅读</span>
+          </div>
+        </a>
+
+        <!-- Microsoft 365 100GB Mailbox Price Hike -->
+        <a href="/zh/blog/ms365-100gb-mailbox-price-hike.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-08-20" class="text-sm text-primary-500 font-medium">2026 年 8 月 20 日</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">Microsoft 刚把你的邮箱容量翻倍到 100GB——价格也涨了 8–17%</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Exchange Online 邮箱将在 2026 年 7 月到 9 月之间从 50GB 提升到 100GB，同时附带一次涨价。盒子更大，并不改变是谁在保管你的数据——为什么容量从来都不是真正的问题。</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>6 分钟阅读</span>
+          </div>
+        </a>
+
+        <!-- Your Email Provider Is Not a Backup -->
+        <a href="/zh/blog/email-provider-not-a-backup.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-07-15" class="text-sm text-primary-500 font-medium">2026 年 7 月 15 日</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">你的邮件服务商不是备份</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">账号被锁、误删和服务商政策变动，都可能在几分钟内抹掉多年的邮件。真正的备份是什么样子，如何用任意客户端手动做一份，以及 MailVault 在其中的位置。</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>6 分钟阅读</span>
+          </div>
+        </a>
+
+        <!-- Gmail Storage Squeeze -->
+        <a href="/zh/blog/gmail-storage-squeeze.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-07-02" class="text-sm text-primary-500 font-medium">2026 年 7 月 2 日</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">Gmail 存储空间收紧——以及你为什么该自己留一份</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Google 正在测试给新账号 5GB 免费存储，而不是 15GB，并会删除闲置两年的账号。本文介绍 MailVault 如何把你的 Gmail 以普通 .eml 文件的形式，永久、可迁移地保存在你自己的磁盘上。</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>6 分钟阅读</span>
+          </div>
+        </a>
+
+        <!-- MailVault 2.4.0 Stability -->
+        <a href="/zh/blog/mailvault-240-stability.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-04-17" class="text-sm text-primary-500 font-medium">2026 年 4 月 17 日</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">MailVault 2.4.0：一次稳定性更新</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">2.4.0 的幕后：修复 Outlook 取到错误邮件的问题、消除跨账户串扰、驯服沙盒中的后台助手，并让 snap 版本可以安全回滚。</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>7 分钟阅读</span>
+          </div>
+        </a>
+
+        <!-- Refactoring MailVault -->
+        <a href="/zh/blog/refactoring-mailvault-from-monolith-to-modules.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-03-13" class="text-sm text-primary-500 font-medium">2026 年 3 月 13 日</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">重构 MailVault：从单体到模块</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">我们如何重构 MailVault 的代码库 &mdash; 把 4,300 行的 store 拆成职责清晰的模块，把邮件加载重新设计为双流架构，并规划出一套五阶段拆分方案，同时不破坏任何一个功能。</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>7 分钟阅读</span>
+          </div>
+        </a>
+
+        <!-- How We Test MailVault -->
+        <a href="/zh/blog/how-we-test-mailvault.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-03-11" class="text-sm text-primary-500 font-medium">2026 年 3 月 11 日</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">我们如何测试 MailVault：600+ 项测试、真实邮件、真实服务器</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">深入我们的四层测试策略：55 项 Rust 单元测试、13 套 JavaScript 测试、针对真实 IMAP 服务器并预置 500 封邮件的集成测试，以及驱动真实桌面应用的端到端测试。</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>6 分钟阅读</span>
+          </div>
+        </a>
+
+        <!-- Outlook OAuth Odyssey -->
+        <a href="/zh/blog/outlook-oauth-odyssey.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-02-28" class="text-sm text-primary-500 font-medium">2026 年 2 月 28 日</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">Outlook OAuth 漂流记：IMAP 坏了，Graph 万岁</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">一次 Microsoft 服务端的 IMAP 回归，如何逼着我们注册自己的 Azure AD 应用、用 Rust 写出完整的 Graph API 传输层，并一路排掉七个连环故障。</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>8 分钟阅读</span>
+          </div>
+        </a>
+
+        <!-- Gmail OAuth2 -->
+        <a href="/zh/blog/gmail-oauth2.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-02-20" class="text-sm text-primary-500 font-medium">2026 年 2 月 20 日</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">接入 Gmail OAuth2：一套流程，两家服务商</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">我们如何把 MailVault 已有的 Microsoft OAuth2 PKCE 流程改造成与服务商无关的实现，并加上 Google 登录——不用应用专用密码，也不用去找 IMAP 设置。</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>4 分钟阅读</span>
+          </div>
+        </a>
+
+        <!-- Sandbox Signing Saga -->
+        <a href="/zh/blog/sandbox-signing-saga.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-02-18" class="text-sm text-primary-500 font-medium">2026 年 2 月 18 日</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">macOS 沙盒签名历险记（或者说 v1.4.0 到 v1.4.5 为什么会存在）</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">一天之内发了六个补丁版本。macOS 代码签名、App Sandbox 和 Bun 编译的 sidecar 三者并不相处融洽——这里是我们如何解决它的完整经过。</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>5 分钟阅读</span>
+          </div>
+        </a>
+
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/zh/docs.html" class="hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="hover:text-primary-500 transition-colors">博客</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">隐私</a>
+          <a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">更新日志</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">条款</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 保留所有权利。
+        </p>
+      </div>
+    </div>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+            <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+        <span>在一块 <span class="text-primary-500 font-semibold">开放的 GPU</span> 上烹制，作者</span>
+        <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
+          <img src="/graphicmeat-logo.webp" alt="由 Graphic Meat 制作" class="w-full max-w-[400px] h-auto" width="512" height="512" loading="lazy" decoding="async">
+        </a>
+      </div>
+    </div>
+
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="选择语言" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/blog.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/blog.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/blog.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/blog.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/blog.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/blog.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/blog.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/blog.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/blog.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    // Initialize theme
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

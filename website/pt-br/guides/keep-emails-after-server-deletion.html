@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Como manter e-mails depois de apagá-los do servidor — MailVault</title>
+  <meta name="description" content="Apague e-mails do seu servidor sem perdê-los. O MailVault arquiva as mensagens localmente como arquivos .eml antes da exclusão — pesquisáveis, offline, suas para sempre.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/pt-br/guides/keep-emails-after-server-deletion.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/pt-br/guides/keep-emails-after-server-deletion.html">
+  <meta property="og:title" content="Como manter e-mails depois de apagá-los do servidor — MailVault">
+  <meta property="og:description" content="Apague e-mails do seu servidor sem perdê-los. O MailVault arquiva as mensagens localmente como arquivos .eml antes da exclusão — pesquisáveis, offline, suas para sempre.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="pt_BR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Como manter e-mails depois de apagá-los do servidor — MailVault">
+  <meta name="twitter:description" content="Apague e-mails do seu servidor sem perdê-los. O MailVault arquiva as mensagens localmente como arquivos .eml antes da exclusão — pesquisáveis, offline, suas para sempre.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Como manter e-mails depois de apagá-los do servidor",
+  "description": "Apague e-mails do seu servidor sem perdê-los. O MailVault arquiva as mensagens localmente como arquivos .eml antes da exclusão — pesquisáveis, offline, suas para sempre.",
+  "url": "https://mailvaultapp.com/pt-br/guides/keep-emails-after-server-deletion.html",
+  "datePublished": "2026-03-15",
+  "dateModified": "2026-03-15",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/keep-emails-after-server-deletion.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/keep-emails-after-server-deletion.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/keep-emails-after-server-deletion.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/keep-emails-after-server-deletion.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/keep-emails-after-server-deletion.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/keep-emails-after-server-deletion.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/keep-emails-after-server-deletion.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/keep-emails-after-server-deletion.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/keep-emails-after-server-deletion.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/keep-emails-after-server-deletion.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/pt-br/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="Logo do MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/pt-br/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Recursos</a>
+          <a href="/pt-br/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Casos de uso</a>
+          <a href="/pt-br/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/pt-br/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="Alternar tema">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Download
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/pt-br/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Recursos</a>
+          <a href="/pt-br/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Casos de uso</a>
+          <a href="/pt-br/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/pt-br/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/pt-br/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Voltar ao início
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Como manter e-mails depois de apagá-los do servidor</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>5 min de leitura</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Apagar e-mails do servidor parece definitivo &mdash; e, para a maioria das pessoas, é. Assim que você esvazia a lixeira no Gmail ou no Outlook, aquelas mensagens somem. O servidor não as tem mais. Não há como desfazer depois que o prazo de retenção acaba. Isso faz as pessoas acumularem no servidor e-mails de que não precisam, com medo de apagar qualquer coisa porque um dia podem precisar.
+          </p>
+
+          <p>
+            Mas existem motivos legítimos para apagar e-mails do servidor. Seu armazenamento está cheio e você não quer pagar por mais. Você está deixando um provedor e quer fazer uma faxina antes de sair. A política da sua empresa exige eliminar mensagens antigas do servidor. Ou você simplesmente quer uma caixa de entrada limpa, sem a ansiedade de perder dados.
+          </p>
+
+          <p>
+            A solução é simples: <strong>arquive os e-mails localmente antes de apagá-los do servidor.</strong> Assim que eles existirem como arquivos no seu próprio disco, a cópia do servidor fica redundante. Você pode apagá-la com segurança.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Por que as pessoas têm medo de apagar</h3>
+
+          <p>
+            O medo é racional. O e-mail costuma ser o único registro de conversas, acordos, recibos e documentos importantes. As pessoas se preocupam com:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Precisar de um e-mail antigo depois</strong> &mdash; Um detalhe de contrato, um código de rastreio, uma conversa que se torna relevante meses ou anos depois.</li>
+            <li><strong>Exigências legais ou de conformidade</strong> &mdash; Alguns setores exigem que os e-mails sejam guardados por 3, 5 ou até 7 anos.</li>
+            <li><strong>Anexos</strong> &mdash; A fatura em PDF, o documento assinado, o arquivo do projeto que só existiu enviado por e-mail.</li>
+            <li><strong>Nenhum backup decente</strong> &mdash; Sem uma cópia local, o servidor é o único lugar onde esses e-mails existem. Apagar significa confiar que você nunca mais vai precisar deles.</li>
+          </ul>
+
+          <p>
+            Esse medo leva ao inchaço da caixa postal. As pessoas guardam cada e-mail, o armazenamento enche e elas acabam pagando mensalidades só para não precisar apagar nada. É um ciclo que o arquivamento local quebra por completo.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">O fluxo arquivar-e-depois-apagar</h3>
+
+          <p>
+            O fluxo do MailVault foi feito para tornar segura a exclusão no servidor. Cada passo aumenta a confiança de que seus dados estão preservados antes de qualquer coisa ser removida:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Passo 1: sincronizar</strong> &mdash; Conecte a sua conta IMAP ao MailVault. O aplicativo carrega os cabeçalhos das mensagens e mostra o conteúdo da sua caixa postal, como qualquer cliente de e-mail.</li>
+            <li><strong>Passo 2: arquivar localmente</strong> &mdash; Selecione os e-mails que você quer preservar e arquive-os. O MailVault baixa cada e-mail por inteiro &mdash; cabeçalhos, texto do corpo, formatação HTML e todos os anexos &mdash; e o salva como um arquivo <code>.eml</code> padrão no seu disco.</li>
+            <li><strong>Passo 3: conferir</strong> &mdash; Abra alguns e-mails arquivados no MailVault para confirmar que estão completos. Verifique os anexos. Busque mensagens específicas. Certifique-se de que tudo o que você precisa está no arquivo local.</li>
+            <li><strong>Passo 4: apagar do servidor</strong> &mdash; Agora que você tem uma cópia local conferida, apague os e-mails do servidor. O MailVault usa o <code>UID EXPUNGE</code> da RFC 4315 para remover exatamente só as mensagens escolhidas &mdash; sem risco de apagar os e-mails errados por acidente.</li>
+            <li><strong>Passo 5: acessar quando quiser</strong> &mdash; Os seus e-mails arquivados continuam no seu disco, totalmente pesquisáveis e legíveis. Sem precisar de internet. Sem depender do servidor.</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">O que é preservado</h3>
+
+          <p>
+            Quando o MailVault arquiva um e-mail, ele salva a mensagem completa no formato <code>.eml</code>. Isso inclui:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Todos os cabeçalhos</strong> &mdash; De, Para, Cc, Cco, Data, Assunto, Message-ID, In-Reply-To, References e todos os demais. As relações de conversa são preservadas.</li>
+            <li><strong>O conteúdo do corpo</strong> &mdash; Tanto a versão em texto simples quanto a em HTML. Formatação, links e imagens embutidas são todos mantidos.</li>
+            <li><strong>Os anexos</strong> &mdash; Cada arquivo anexado, seja qual for o tipo ou o tamanho. PDFs, imagens, documentos, planilhas &mdash; todos embutidos no arquivo .eml como partes MIME.</li>
+            <li><strong>Os metadados</strong> &mdash; O estado de lido/não lido, as marcas e a localização da pasta ficam codificados no nome do arquivo Maildir.</li>
+          </ul>
+
+          <p>
+            O formato <code>.eml</code> é um padrão aberto (RFC 5322). Qualquer cliente de e-mail, em qualquer sistema operacional, abre esses arquivos. O seu arquivo permanente não fica preso ao MailVault nem a nenhum outro software.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Cenários comuns</h3>
+
+          <p>
+            <strong>Sair de um provedor de e-mail:</strong> você está trocando o Gmail pelo Outlook (ou o contrário). Antes de encerrar a conta antiga, arquive tudo localmente com o MailVault. Depois apague ou encerre a conta. O seu histórico de e-mails sobrevive à migração.
+          </p>
+
+          <p>
+            <strong>Faxina no e-mail da empresa:</strong> o seu departamento de TI quer reduzir os custos de armazenamento no servidor. Arquive localmente os e-mails antigos dos funcionários e depois elimine-os do servidor. Os e-mails continuam disponíveis para conformidade ou consulta.
+          </p>
+
+          <p>
+            <strong>Higiene da caixa de entrada pessoal:</strong> você quer uma caixa de entrada limpa, só com e-mails recentes e relevantes. Arquive tudo o que tem mais de um ano, apague as cópias do servidor e aproveite uma caixa postal rápida e sem entulho. Se um dia você precisar de um e-mail antigo, ele está no seu arquivo local.
+          </p>
+
+          <p>
+            <strong>Limite de armazenamento atingido:</strong> o seu espaço gratuito no Gmail ou no Outlook está cheio. Em vez de pagar por mais, <a href="/pt-br/guides/free-up-email-storage.html" class="text-primary-500 hover:text-primary-600 underline">arquive e apague os e-mails antigos</a> para recuperar espaço sem perder nada.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Fazendo backup do seu arquivo local</h3>
+
+          <p>
+            Depois que os e-mails estão no seu disco, dá para fazer backup deles como de qualquer outro arquivo. Copie a pasta do arquivo permanente para um disco externo, sincronize com um NAS ou inclua-a na sua rotina de backup habitual. Como o arquivo permanente é só uma pasta de arquivos <code>.eml</code> padrão, qualquer ferramenta de backup serve. Você pode até manter várias cópias em lugares diferentes, por segurança.
+          </p>
+
+          <p>
+            Isso é algo que você não consegue fazer facilmente com e-mails parados em um servidor. O servidor é um ponto único de falha. Um arquivo local com backups dá redundância.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Apague com confiança</h3>
+
+          <p>
+            A ideia central é simples: <strong>os e-mails não precisam viver em um servidor para existir.</strong> Assim que você tem uma cópia local, a versão do servidor é só uma conveniência. Apagá-la libera espaço, simplifica a sua caixa de entrada e não custa nada &mdash; porque o e-mail já está a salvo na sua própria máquina.
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Arquive primeiro, apague com segurança</p>
+            <p class="text-sm mb-4">O MailVault salva seus e-mails como arquivos .eml padrão antes de você apagá-los do servidor. Gratuito, de código aberto, funciona com qualquer provedor IMAP.</p>
+            <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+              Baixar o MailVault
+            </a>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            Novo no arquivamento local de e-mails? Comece pelo nosso guia sobre <a href="/pt-br/guides/archive-imap-emails-locally.html" class="text-primary-500 hover:text-primary-600 underline">como arquivar e-mails IMAP localmente</a>. Procurando um aplicativo de arquivamento de e-mail para Mac? Veja como o <a href="/pt-br/guides/mailstore-alternative-mac.html" class="text-primary-500 hover:text-primary-600 underline">MailVault se compara ao MailStore</a>. Consulte as <a href="/pt-br/faq.html" class="text-primary-500 hover:text-primary-600 underline">perguntas frequentes</a> para mais respostas.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="Logo do MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/pt-br/docs.html" class="hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/pt-br/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacidade</a>
+          <a href="/pt-br/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Termos</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. Todos os direitos reservados.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="Escolha um idioma" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/guides/keep-emails-after-server-deletion.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/guides/keep-emails-after-server-deletion.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/guides/keep-emails-after-server-deletion.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/guides/keep-emails-after-server-deletion.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/guides/keep-emails-after-server-deletion.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/guides/keep-emails-after-server-deletion.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/guides/keep-emails-after-server-deletion.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/guides/keep-emails-after-server-deletion.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/guides/keep-emails-after-server-deletion.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

@@ -22,7 +22,9 @@
 
   function zeroIn(currency) {
     try {
-      return new Intl.NumberFormat('en-US', {
+      // Follow the page's own language: the localized copies quote the same
+      // currency but write it the way their reader does ("0 €", not "€0").
+      return new Intl.NumberFormat(document.documentElement.lang || 'en-US', {
         style: 'currency', currency: currency.toUpperCase(),
         minimumFractionDigits: 0, maximumFractionDigits: 0,
       }).format(0);

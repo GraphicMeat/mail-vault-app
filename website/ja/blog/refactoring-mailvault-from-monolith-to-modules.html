@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="ja" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MailVaultのリファクタリング: モノリスからモジュールへ - MailVaultブログ</title>
+  <meta name="description" content="MailVaultのコードベースをリファクタリングした方法 — 4,300行のストアを役割ごとのモジュールに分割し、メールの読み込みを2ストリーム構成に再設計し、機能を一つも壊さずに5段階の分解を計画するまで。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ja/blog/refactoring-mailvault-from-monolith-to-modules.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ja/blog/refactoring-mailvault-from-monolith-to-modules.html">
+  <meta property="og:title" content="MailVaultのリファクタリング: モノリスからモジュールへ">
+  <meta property="og:description" content="MailVaultのコードベースをリファクタリングした方法 — 4,300行のストアを役割ごとのモジュールに分割し、メールの読み込みを2ストリーム構成に再設計し、機能を一つも壊さずに5段階の分解を計画するまで。">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ja_JP">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MailVaultのリファクタリング: モノリスからモジュールへ">
+  <meta name="twitter:description" content="MailVaultのコードベースをリファクタリングした方法 — 4,300行のストアを役割ごとのモジュールに分割し、メールの読み込みを2ストリーム構成に再設計し、機能を一つも壊さずに5段階の分解を計画するまで。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/refactoring-mailvault-from-monolith-to-modules.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/refactoring-mailvault-from-monolith-to-modules.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/refactoring-mailvault-from-monolith-to-modules.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/refactoring-mailvault-from-monolith-to-modules.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/refactoring-mailvault-from-monolith-to-modules.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/refactoring-mailvault-from-monolith-to-modules.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/refactoring-mailvault-from-monolith-to-modules.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/refactoring-mailvault-from-monolith-to-modules.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/refactoring-mailvault-from-monolith-to-modules.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/refactoring-mailvault-from-monolith-to-modules.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/ja/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVaultのロゴ" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/ja/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">機能</a>
+          <a href="/ja/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">活用例</a>
+          <a href="/ja/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">ドキュメント</a>
+          <a href="/ja/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">ブログ</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="テーマを切り替える">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            ダウンロード
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/ja/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">機能</a>
+          <a href="/ja/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">活用例</a>
+          <a href="/ja/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">ドキュメント</a>
+          <a href="/ja/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">ブログ</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">ダウンロード</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/ja/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        ブログに戻る
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-03-13" class="text-sm text-primary-500 font-medium">2026年3月13日</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">MailVaultのリファクタリング: モノリスからモジュールへ</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>7分で読めます</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            MailVaultは急速に育ってきました。ここ数週間で、キーボードショートカット、統合受信トレイ、メールのテンプレート、送信者の傾向、自動クリーンアップのルール、送信の取り消し、フォルダへの移動、そしてMicrosoft Graph APIのトランスポート層をまるごと出荷しました。機能は次々に着地し、ユーザーは喜んでくれました &mdash; そしてコードベースは、その重みできしみ始めていました。
+          </p>
+
+          <p>
+            中心となる状態のストア &mdash; <code>mailStore.js</code>という1つのZustandのファイル &mdash; は4,300行を超えるまで膨らんでいました。アカウントの管理、メールの読み込み、キャッシュ、検索、スレッド化、Graph APIの分岐、CONDSTOREの差分同期、一括操作など、すべてをここで扱っていました。Rustのバックエンドの<code>main.rs</code>も同じ道をたどっていました。<code>SettingsPage</code>や<code>EmailViewer</code>のようなコンポーネントは、JSXの一枚岩の壁に育っていました。動いてはいましたが、何かを新しく足すには迷路を進むことになっていました。
+          </p>
+
+          <p>
+            リファクタリングの時期でした &mdash; 何かが壊れていたからではなく、新しい機能を出荷する速度が落ち始めていたからです。この記事では、何をしたか、なぜしたか、そしてどこへ向かっているかを書きます。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">巨大なストアが1つあることの問題</h3>
+
+          <p>
+            Zustandは状態の管理に向いています。しかし1つのストアのファイルが数千行を超えると、現実的な問題が出てきます。どの機能も同じファイルに触れ、マージの衝突が日常になり、何が何に依存しているのかを追いにくくなります。私たちの<code>mailStore</code>では、メールの読み込みの処理とGraph APIの通信のコードが交互に並び、LRUキャッシュの管理が検索の状態の隣に置かれ、スレッド化のアルゴリズムがアカウントの切り替えと混ざっていました。
+          </p>
+
+          <p>
+            Rustの側でも同じことが起きていました。<code>main.rs</code>には、Maildirのパスの補助関数、キーチェーンの操作、キャッシュの管理、添付ファイルの処理、通知の処理、システムのユーティリティが入っていました &mdash; すべて1つのファイルにです。IMAPのモジュールでは、接続のプールの管理がプロトコルの水準の操作と絡み合っていました。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">2ストリームのメール読み込み</h3>
+
+          <p>
+            v2.2.0でのいちばん大きなアーキテクチャの変更は、アカウントやフォルダを切り替えたときにメールがどう読み込まれるかの再設計でした。以前のやり方では、6つの重なり合う段階が壊れやすい順序で走っていました。キャッシュを確認し、キャッシュのデータを表示し、IMAPに接続し、ヘッダーを取得し、結果を統合し、UIを更新する、という流れです。素早くアカウントを切り替えると、これらの段階が入り混じり、違うアカウントのメールが一瞬表示されることがありました &mdash; 「メールが空になる」不具合です。
+          </p>
+
+          <p>
+            新しい設計は、すっきりした2ストリームのモデルです。アカウントを有効にすると、独立した2つのストリームが並行して走ります。
+          </p>
+
+          <p>
+            <strong>ストリーム1（ローカル）</strong>は、キャッシュ済みのヘッダーとディスクに保存されたメールを読み込みます。これはほぼ一瞬です &mdash; <code>headers.json</code>のキャッシュと、ディスク上のすべての<code>.eml</code>をMIME解析する必要をなくす新しい<code>local-index.json</code>により、画面はミリ秒の単位で埋まります。
+          </p>
+
+          <p>
+            <strong>ストリーム2（サーバー）</strong>はIMAP（Microsoftのアカウントの場合はGraph API）に接続し、現在のサーバーの状態を取得して、変更をローカルの表示に統合します。新しいメールが現れ、削除されたものは消え、既読と未読のフラグが更新されます &mdash; いずれも、すでに画面にあるものをちらつかせたり置き換えたりすることなく行われます。
+          </p>
+
+          <p>
+            どちらのストリームも<code>AbortController</code>で包まれています。どちらかが終わる前にアカウントを切り替えれば、進行中の作業はきれいに取り消されます。競合状態も、古いデータも、「空のメール」もありません。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">モジュールの切り出し</h3>
+
+          <p>
+            リファクタリングの最初の段階では、ストアや<code>main.rs</code>の中にいる必要のないコードを外に出すことに集中しました。
+          </p>
+
+          <p>
+            JavaScript側で切り出したのは次のものです。
+          </p>
+
+          <p>
+            <strong>Graphの設定</strong> &mdash; Microsoft Graphのフォルダ名の対応付け（<code>Inbox</code> &rarr; <code>INBOX</code>、<code>Sent Items</code> &rarr; <code>Sent</code>など）は、コードベースの3か所に重複していました。今は<code>graphConfig.js</code>という1つのモジュールにまとまっています。
+          </p>
+
+          <p>
+            <strong>LRUキャッシュ</strong> &mdash; アカウントのキャッシュ（即座に切り替えられるよう最大8アカウント分のメールの状態を保持）と本文のキャッシュ（メモリの上限を設定できるメールの内容）は、共通のLRUの実装を持つ専用のキャッシュのモジュールに切り出しました。
+          </p>
+
+          <p>
+            <strong>検索</strong> &mdash; 検索の状態と処理は、ほとんど独立しているにもかかわらず、主となるストアに絡みついていました。これを外に出したことで、ストアも検索のコードも追いやすくなりました。
+          </p>
+
+          <p>
+            <strong>性能のトレース</strong> &mdash; 読み込みのコードのあちこちに、その場しのぎの<code>console.time</code>の呼び出しが散らばっていました。これらは、オンとオフを切り替えられる構造化された<code>perfTrace</code>のユーティリティに置き換え、性能の調査をずっと扱いやすくしました。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">コンポーネントの分解</h3>
+
+          <p>
+            2つのReactのコンポーネントが、あまりに多くを抱えていました。<code>SettingsPage</code>と<code>EmailViewer</code>です。
+          </p>
+
+          <p>
+            <code>SettingsPage</code>は、すべての設定のタブを1つのファイルで描画していました &mdash; アカウント、外観、キーボードショートカット、通知、テンプレート、自動クリーンアップなどです。これをタブごとのコンポーネントに分け、それぞれを<code>settings/</code>のサブディレクトリに置きました。親のコンポーネントは、タブの切り替えと、選ばれているタブの描画だけを担当します。
+          </p>
+
+          <p>
+            <code>EmailViewer</code>は、1通のメールの表示、スレッドの会話の表示、添付ファイルの描画、DKIMの検証のバッジ、送信者の情報、返信と転送の操作まで抱えるようになっていました &mdash; すべて1つのコンポーネントの中にです。ここから<code>ThreadView</code>、<code>EmailHeader</code>、<code>AttachmentBar</code>を、<code>email/</code>のサブディレクトリにある役割の絞られたコンポーネントとして切り出しました。
+          </p>
+
+          <p>
+            結果として、ファイルは小さくなり、たどりやすく、テストしやすく、関係のないところを壊さずに手を入れやすくなりました。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">5段階の計画</h3>
+
+          <p>
+            v2.2.0で出荷したのは始まりであって、終わりではありません。少しずつ進めている5段階のリファクタリングの計画を立てました。
+          </p>
+
+          <p>
+            <strong>フェーズ1: 共通の土台</strong> &mdash; 共通の定数とユーティリティ（Graphの設定、Rustの定数、性能のトレース）を切り出す。完了しました。
+          </p>
+
+          <p>
+            <strong>フェーズ2: Rustのバックエンド</strong> &mdash; <code>main.rs</code>を役割の絞られたモジュールに分割する。Maildirの操作、キーチェーンへのアクセス、キャッシュの管理、添付ファイルの処理、通知、システムのユーティリティです。IMAPのモジュールは、プロトコルの水準の操作と接続のプールの管理に分けます。
+          </p>
+
+          <p>
+            <strong>フェーズ3: ストアの分解</strong> &mdash; 専用の<code>useSearchStore</code>と<code>useThreadStore</code>のストアを作り、Graph APIの通信、キャッシュの管理、メールの読み込みをサービスのモジュールへ切り出す。目標は、<code>mailStore</code>を4,300行から2,000行ほどに縮めることです。
+          </p>
+
+          <p>
+            <strong>フェーズ4: コンポーネントの切り出し</strong> &mdash; 大きなコンポーネントの分解を続ける。<code>AccountModal</code>は、サーバーの検出とOAuthの設定のサブコンポーネントに分けます。大きすぎるコンポーネントが残っていれば、同じように扱います。
+          </p>
+
+          <p>
+            <strong>フェーズ5: 後片付け</strong> &mdash; 使われていないコードを削り、重複したユーティリティ（複数の場所にあった<code>hasValidCredentials</code>など）をまとめ、データベースのユーティリティのモジュールを役割ごとのファイルに分ける。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">後退させないリファクタリング</h3>
+
+          <p>
+            どんなリファクタリングでも、いちばん難しいのは何も壊れないようにすることです。MailVaultは人のメールを扱います &mdash; アカウントの切り替えで違うメッセージが出るようになったり、読み込みの競合状態が再発したりすれば、それは本当の問題です。
+          </p>
+
+          <p>
+            私たちのやり方は、一度に1つの境界だけリファクタリングし、すべてが変わらず動くことを確かめてから、次の境界に移るというものです。4つの層にまたがる<a href="/ja/blog/how-we-test-mailvault.html" class="text-primary-500 hover:text-primary-600 underline">600件を超える自動テスト</a>が安全網になりますが、各段階のあとには手作業のテストもします &mdash; アカウントを素早く切り替える、読み込みの途中でオフラインにする、17,000通のメールボックスで試す、Graph APIのアカウントと通常のIMAPのアカウントの両方が正しく動くことを確かめる、といったことです。
+          </p>
+
+          <p>
+            ストアの構成についても、意識的な判断をしました。すべてを小さなストアに分けきる（それ自体が調整の問題を生みます）のではなく、私たちは折衷的なやり方を選びました。本当に独立している関心事（検索とスレッド化）には独立したストアを与え、密に結びついているアカウントとメールの状態は<code>mailStore</code>にまとめたままにする、というものです。目指すのは純粋さではなく、分かりやすさです。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">ユーザーにとっての利点</h3>
+
+          <p>
+            リファクタリングは、設計上ユーザーには見えません &mdash; アプリの見た目も使い心地も、まったく同じであるべきです。しかし効果は実在します。
+          </p>
+
+          <p>
+            <strong>アカウントの切り替えが速くなります</strong> &mdash; 2つのストリームの構成により、アカウントを切り替えるとほぼ即座にメールが見え、サーバーとの同期は背後で静かに進みます。
+          </p>
+
+          <p>
+            <strong>読み込みの乱れがなくなります</strong> &mdash; アカウントを素早く切り替えたときに出ることのあった「空のメール」の不具合は、以前の逐次的な読み込みのコードにあったほかの競合状態とともに、なくなりました。
+          </p>
+
+          <p>
+            <strong>機能の開発が速くなります</strong> &mdash; これが一番大きい点です。コードベースが整理されていれば、新しい機能をより速く作って出せます。予定している「すべてダウンロード」の機能、スケジュールによる自動のバックアップ、そのほかよく要望される改善は、コードが扱いやすくなったぶん早く届きます。
+          </p>
+
+          <p>
+            私たちは、長く続くものとしてMailVaultを作っています。メールは何十年も前からある技術で、現代的な道具立てからあまり手をかけられておらず、既存のバックアップの手段は技術者向けすぎるか、扱いにくすぎるかのどちらかです。コードベースを持続可能にすることが、アプリが良くなり続けるための方法です &mdash; 今月だけでなく、長い目で見ても。
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVaultのロゴ" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/ja/docs.html" class="hover:text-primary-500 transition-colors">ドキュメント</a>
+          <a href="/ja/blog.html" class="hover:text-primary-500 transition-colors">ブログ</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">プライバシー</a>
+          <a href="/ja/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">変更履歴</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">利用規約</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 無断転載を禁じます。
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="言語を選ぶ" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/blog/refactoring-mailvault-from-monolith-to-modules.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/blog/refactoring-mailvault-from-monolith-to-modules.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/blog/refactoring-mailvault-from-monolith-to-modules.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/blog/refactoring-mailvault-from-monolith-to-modules.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/blog/refactoring-mailvault-from-monolith-to-modules.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/blog/refactoring-mailvault-from-monolith-to-modules.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/blog/refactoring-mailvault-from-monolith-to-modules.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/blog/refactoring-mailvault-from-monolith-to-modules.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/blog/refactoring-mailvault-from-monolith-to-modules.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

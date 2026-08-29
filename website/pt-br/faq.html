@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FAQ - MailVault | Perguntas frequentes</title>
+  <meta name="description" content="Perguntas frequentes sobre o MailVault. Saiba como o MailVault faz backup dos seus e-mails IMAP localmente no macOS, quais provedores são suportados, segurança e mais.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/pt-br/faq.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/pt-br/faq.html">
+  <meta property="og:title" content="FAQ - MailVault | Perguntas frequentes">
+  <meta property="og:description" content="Perguntas frequentes sobre o MailVault. Saiba como o MailVault faz backup dos seus e-mails IMAP localmente no macOS, quais provedores são suportados, segurança e mais.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="pt_BR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="FAQ - MailVault | Perguntas frequentes">
+  <meta name="twitter:description" content="Perguntas frequentes sobre o MailVault. Saiba como o MailVault faz backup dos seus e-mails IMAP localmente no macOS, quais provedores são suportados, segurança e mais.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .faq-chevron { transition: transform var(--mv-state) var(--mv-ease); }
+    .faq-chevron.open { transform: rotate(180deg); }
+  </style>
+
+  <!-- Structured Data: WebPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "FAQ - MailVault",
+  "description": "Perguntas frequentes sobre o MailVault. Saiba como o MailVault faz backup dos seus e-mails IMAP localmente no macOS.",
+  "url": "https://mailvaultapp.com/pt-br/faq.html",
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "MailVault",
+    "url": "https://mailvaultapp.com/pt-br/"
+  }
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "O que é o MailVault?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "O MailVault é um cliente de e-mail de desktop gratuito e de código aberto para macOS e Linux que guarda seus e-mails em um cofre no seu próprio disco. Ele se conecta às suas contas de e-mail por IMAP e salva todas as mensagens como arquivos .eml padrão (RFC 5322) no formato Maildir, no seu computador, o que dá a você um backup permanente e offline, sem ficar preso a nenhum fornecedor."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Como o MailVault faz backup dos e-mails?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "O MailVault se conecta ao seu servidor de e-mail com o protocolo IMAP e baixa cada e-mail para o seu cofre como um arquivo .eml padrão no formato Maildir. Cada e-mail é um arquivo no disco — legível por uma pessoa, portátil e compatível com qualquer cliente de e-mail. Depois que uma mensagem está no seu cofre, você pode apagar a cópia do servidor para liberar espaço; a local não é afetada."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Com quais provedores de e-mail o MailVault funciona?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "O MailVault funciona com qualquer provedor de e-mail que ofereça IMAP, incluindo Gmail, Outlook, Yahoo Mail, iCloud Mail, ProtonMail (com o Bridge), Fastmail, Zoho Mail e qualquer provedor corporativo ou auto-hospedado com acesso IMAP."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "O MailVault é gratuito?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "O MailVault é gratuito nos recursos principais, incluindo leitura, escrita, busca, conversas, arquivamento local e backup manual. Os recursos Premium — backups automáticos agendados, migração de caixas postais entre contas e regras de limpeza automática — custam $4/mês ou $25/ano; o plano anual inclui 14 dias de teste grátis. O código-fonte está disponível no GitHub."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Onde meus e-mails ficam guardados?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Seu cofre é uma pasta de arquivos .eml padrão organizados no formato Maildir — no seu Mac ou na sua máquina Linux — um arquivo por e-mail, sem necessidade de banco de dados. Seus dados nunca saem do seu computador e nunca são enviados para nenhum serviço na nuvem. Como .eml é um padrão universal, seus e-mails podem ser abertos pelo Apple Mail, Thunderbird, Outlook ou qualquer outro cliente de e-mail — você nunca fica preso ao MailVault."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "O que são arquivos .eml e Maildir? Por que isso importa?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": ".eml (RFC 5322) é o formato padrão da internet para mensagens de e-mail. Cada e-mail é guardado como um único arquivo de texto autocontido que pode ser aberto por qualquer cliente de e-mail. Maildir é uma estrutura de diretórios comprovada para guardar e-mails, usada por servidores de e-mail há décadas. Cada e-mail é um arquivo, então não existe um banco de dados único que possa corromper. Juntos, .eml + Maildir fazem com que seus e-mails sejam à prova do futuro, portáteis e nunca presos a um único aplicativo."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Posso acessar meus e-mails offline?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sim. Depois que seus e-mails são sincronizados, eles ficam guardados localmente e você pode ler, buscar e navegar por todos eles sem conexão com a internet. Você só precisa de internet para sincronizar e-mails novos ou enviar mensagens."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "O MailVault consegue bloquear pixels de rastreamento?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sim. Toda mensagem que o MailVault abre é verificada em busca de pixels de rastreamento — as imagens escondidas de 1x1 que o e-mail de marketing usa para avisar o remetente quando você abriu, com que frequência, de qual endereço IP e em qual cliente. Um pequeno olho aparece ao lado do assunto em qualquer mensagem que traga um deles, e clicar nele mostra o nome da empresa de rastreamento e a URL exata que o pixel teria chamado. A detecção é gratuita para todo mundo. O MailVault Premium também remove esses rastreadores do HTML antes de a mensagem ser exibida, então a requisição nunca é feita e o remetente não fica sabendo de nada. Quase 500 endereços de rastreamento conhecidos vêm com o aplicativo; a lista é embutida e atualizada nas versões, nunca buscada em um servidor durante a execução."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Meus dados estão seguros?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "O MailVault foi projetado com a privacidade em primeiro lugar. Suas credenciais de e-mail ficam guardadas no Keychain do macOS ou no Secret Service do Linux, nunca em um arquivo comum. Todos os dados ficam na sua máquina — não há sincronização na nuvem, rastreamento, análise de uso nem mineração de dados. O aplicativo é de código aberto, então você mesmo pode verificar o código."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "O que acontece se eu apagar e-mails do servidor?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Tudo o que você arquivou antes continua no seu cofre, sem sofrer com o que o servidor fizer depois — esse é justamente o propósito do produto. Tudo o que você não arquivou some junto com a cópia do servidor, por isso o MailVault mostra o estado de cada mensagem na própria linha antes de você apagar: no servidor, no seu cofre ou nos dois. O caminho seguro é Arquivar e apagar, que copia cada mensagem para o seu cofre e confere que ela está lá antes de removê-la do servidor."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "O MailVault funciona com Gmail e Outlook?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sim. O MailVault funciona com Gmail, Outlook e qualquer outro serviço de e-mail que ofereça IMAP. No Gmail, entre diretamente com sua conta Google usando OAuth2 — sem precisar de configurações manuais de IMAP. Contas do Microsoft 365 Business e Enterprise podem entrar diretamente com a conta Microsoft usando OAuth2. Contas pessoais do Outlook.com estão atualmente afetadas por um problema conhecido no servidor da Microsoft."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Por que não consigo conectar minha conta do Outlook.com?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Existe um problema conhecido do lado do servidor da Microsoft que afeta contas pessoais do Outlook.com, Hotmail e Live.com desde o fim de 2024. Depois de entrar com sua conta Microsoft, a conexão IMAP falha com 'User is authenticated but not connected.' O serviço IMAP da Microsoft tem uma regressão que impede que sessões autenticadas por OAuth2 se conectem. Contas Microsoft 365 Business/Enterprise não são afetadas. A implementação de OAuth2 do MailVault está pronta e vai funcionar assim que a Microsoft resolver o problema."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Como uso o MailVault com o Proton Mail?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "O Proton Mail criptografa suas mensagens de ponta a ponta, então não expõe IMAP diretamente. Conectá-lo ao MailVault exige o Proton Mail Bridge, um aplicativo de desktop da Proton que roda localmente e expõe sua caixa postal criptografada como IMAP/SMTP padrão em 127.0.0.1. O Bridge exige um plano pago do Proton Mail. Instale o Bridge, entre com sua conta Proton e copie as credenciais IMAP/SMTP geradas pelo Bridge (não a senha da sua conta Proton). No MailVault, escolha Proton Mail Bridge na lista de provedores (ou IMAP personalizado) com o servidor 127.0.0.1, porta IMAP 1143 com STARTTLS, porta SMTP 1025, seu e-mail Proton como usuário e a senha do Bridge. O Bridge precisa estar rodando para o MailVault sincronizar, embora as mensagens arquivadas continuem legíveis no MailVault mesmo com o Bridge desligado. O certificado autoassinado do Bridge é tratado automaticamente pelo MailVault em conexões locais."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Posso enviar de um endereço diferente daquele com que faço login?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sim. Em Configurações → Contas, preencha o campo Enviar e-mail como para essa conta, ou deixe em branco para enviar do endereço de login. Só muda o endereço From das mensagens enviadas — seu usuário e sua senha continuam os mesmos, o MailVault continua entrando no IMAP e no SMTP com a conta que você configurou, e nenhum cabeçalho Reply-To é adicionado. O MailVault sugere endereços que já viu nas suas próprias mensagens, e um botão Verificar envia uma única mensagem de teste a partir do endereço para você confirmar que o provedor aceita. O endereço precisa ser um alias que o seu provedor autorize esse login a usar: o Fastmail aceita qualquer alias da conta, o Gmail exige que ele seja adicionado em \"Enviar e-mail como\" nas configurações do Gmail, e o Microsoft 365 exige a permissão Send As."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Quais são os requisitos de sistema?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "O MailVault exige macOS 11 (Big Sur) ou posterior e roda nativamente em Intel e Apple Silicon. No Linux, ele vem como .deb, AppImage, Snap e Flatpak para Ubuntu 22.04+ / Debian 12+. Ele fica na barra de menus e continua sincronizando com a janela fechada."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Como os anexos são tratados?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Os anexos ficam embutidos dentro de cada arquivo .eml como partes MIME — eles não são guardados como arquivos separados. Quando você abre um e-mail, o backend em Rust do MailVault interpreta a estrutura MIME e extrai os anexos na hora. Você pode Abrir, Salvar como ou Mostrar na pasta qualquer anexo direto do visualizador de e-mail."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "O que acontece quando eu arquivo um e-mail?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Arquivar baixa o e-mail completo do servidor (se ele ainda não estiver em cache) e o guarda como um arquivo .eml no disco com o sinalizador A (Arquivado) no nome do arquivo. Os e-mails arquivados aparecem no modo de visão Local e entram nos backups. O e-mail continua no seu servidor a menos que você o apague explicitamente."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "O que acontece quando eu arquivo e apago do servidor?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Arquivar e apagar executa três etapas em ordem: copia a mensagem para o seu cofre como um arquivo .eml, confere que a cópia está mesmo lá e só então a apaga do servidor. Tudo o que falhar na conferência continua no servidor. Depois disso, a linha mostra o estado de cópia única — o seu cofre é o único lugar onde essa mensagem ainda existe, o que também é o sinal para manter um drive de backup conectado."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Como funcionam o backup e a restauração?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "O MailVault exporta seus e-mails como um arquivo ZIP com todos os arquivos .eml mais um manifest.json que mapeia os e-mails para as contas pelo endereço de e-mail, o que torna os backups portáteis entre instalações. Você pode exportar todos os e-mails ou apenas os arquivados. A importação é idempotente — as duplicatas são puladas. Se um backup contém e-mails de uma conta não reconhecida, o MailVault a cria automaticamente."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Quais são os limites de banda do Gmail e o que acontece quando um backup os atinge?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "O Google limita quanto de dados de e-mail uma conta Gmail ou Google Workspace pode movimentar por dia. Por IMAP os limites são 2500 MB baixados por dia e 500 MB enviados por dia. Os downloads por POP são limitados a 1250 MB por dia. O Gmail na web tem os próprios limites: 750 MB por hora e 1250 MB por dia para baixar, 300 MB por hora e 1500 MB por dia para enviar (os envios incluem SMTP). Todos os clientes de um usuário dividem o mesmo orçamento diário, então Apple Mail, seu celular e o MailVault consomem do mesmo pote. Ultrapassar um limite suspende a conta temporariamente — normalmente por 1 hora, mas pode chegar a 24 horas. Esses limites valem para todas as edições do Google Workspace e o Google pode mudá-los sem aviso. Um primeiro backup grande, de uma caixa postal com mais de 2.5 GB, vai portanto levar mais de um dia. O MailVault detecta a resposta de limite, encerra a execução de forma limpa em vez de martelar o servidor, e conta o que aconteceu. Rode o backup de novo depois que a suspensão passar e ele retoma de onde parou, porque as mensagens já salvas localmente são puladas."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "O que é o local de backup externo (segunda cópia)?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "O MailVault sempre mantém uma cópia de trabalho das suas mensagens no armazenamento do próprio aplicativo — é ela que você lê, busca e abre. Um local de backup externo acrescenta uma segunda cópia, independente, em um drive que você escolhe: um SSD externo, um compartilhamento NAS ou uma pasta sincronizada. Ela é gravada durante as execuções de backup, ao mesmo tempo que a cópia de trabalho, no mesmo layout .eml e Maildir, então qualquer cliente de e-mail consegue lê-la. O aplicativo nunca lê essa cópia no dia a dia, e ela é armazenamento frio: e-mails apagados no servidor, ou removidos dentro do MailVault, continuam na cópia externa. Configure em Configurações, na seção Backup, em 'Segunda cópia — armazenamento frio externo'. No macOS, o MailVault guarda um marcador com escopo de segurança para a pasta, então o acesso sobrevive a reinicializações e a atualizações do aplicativo; o selo de status mostra Pronto, Precisa de nova autorização, Indisponível ou Acesso negado, e reautorizar é um único clique. Se o drive for desconectado durante um backup, a cópia de trabalho ainda é concluída e o MailVault informa quantas mensagens não chegaram à cópia externa; a execução seguinte copia essas mensagens."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Posso guardar minhas mensagens em outro lugar que não a pasta padrão do aplicativo?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sim. O MailVault pode mover seu armazenamento de mensagens — mensagens, caches de cabeçalho, cache de anexos e listas de pastas — para qualquer pasta em qualquer drive, para que um arquivo grande possa ficar em um SSD externo ou em um segundo disco interno, em vez de no disco de inicialização. Só os dados de e-mail se movem: contas, configurações e logs continuam na pasta do próprio aplicativo, para que o aplicativo sempre consiga iniciar e avisar se o drive estiver faltando. A mudança é feita com segurança: o MailVault copia tudo para a nova pasta, verifica se cada arquivo chegou com o tamanho correto, faz a troca e só então apaga os originais. Uma mudança interrompida pode ser executada de novo e continua de onde parou. A nova pasta é marcada com um arquivo marcador, para que o MailVault possa reconhecê-la depois e recusar uma pasta que pertença a outro armazenamento. Se o drive não estiver conectado quando o aplicativo iniciar, o MailVault informa que a pasta está faltando, em vez de começar em silêncio um segundo arquivo divergente no local padrão — reconecte o drive ou aponte o aplicativo para a pasta de novo. Isso é diferente do local de backup externo: a pasta movida é o armazenamento ativo, e um local de backup externo é uma cópia fria extra."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Por que o corretor ortográfico não sublinha nada no Linux?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Porque não há nenhum dicionário de ortografia instalado. No macOS e no Windows o sistema fornece um; no Linux o dicionário vem da sua distribuição, e uma instalação de desktop mínima muitas vezes não tem nenhum. O MailVault verifica a ortografia pelo WebKitGTK, que consulta as palavras através do enchant e do hunspell, então ele só consegue sublinhar quando um dicionário do hunspell está presente. Instale um para o seu idioma e reinicie o MailVault: no Debian, Ubuntu ou Mint rode sudo apt install hunspell-en-us; no Fedora sudo dnf install hunspell-en; no Arch ou Manjaro sudo pacman -S hunspell-en_us; no openSUSE sudo zypper install myspell-en_US. Troque o código de idioma pelo seu — hunspell-de-de, hunspell-fr e assim por diante — e o MailVault vai escolher o dicionário que corresponde ao idioma do sistema. O botão de corretor ortográfico na barra de ferramentas da mensagem diz em qual caso você está: ele liga e desliga os sublinhados quando há um dicionário, e abre estas instruções quando não há. A versão em snap não enxerga os dicionários instalados no sistema porque tem confinamento estrito, então carrega os próprios; se ela informar que não há nenhum, use o pacote .deb."
+      }
+    }
+  ]
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/faq.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/faq.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/faq.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/faq.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/faq.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/faq.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/faq.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/faq.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/pt-br/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="Logo do MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/pt-br/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Recursos</a>
+          <a href="/pt-br/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Casos de uso</a>
+          <a href="/pt-br/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/pt-br/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/>
+            </svg>
+            <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+            </svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Download
+          </a>
+          <!-- Mobile menu button -->
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile menu -->
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/pt-br/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Recursos</a>
+          <a href="/pt-br/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Casos de uso</a>
+          <a href="/pt-br/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/pt-br/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Content -->
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      <h1 class="text-4xl font-bold mb-2">Perguntas frequentes</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">Tudo o que você precisa saber sobre o MailVault.</p>
+
+      <div class="space-y-3">
+
+        <!-- FAQ 1 -->
+        <div id="what-is-mailvault" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">O que é o MailVault?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              O MailVault é um cliente de e-mail para desktop, gratuito e de código aberto, para macOS e Linux, que guarda os seus e-mails em um cofre no seu próprio disco. Ele conecta às suas contas de e-mail por IMAP e salva todas as mensagens como <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">arquivos .eml padrão (RFC 5322)</a> em formato <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> no seu computador, o que dá a você um backup off-line permanente, sem dependência de fornecedor.
+            </p>
+          </div>
+        </div>
+
+        <!-- FAQ 2 -->
+        <div id="how-does-backup-work" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">Como o MailVault faz backup dos e-mails?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              O MailVault conecta ao seu servidor de e-mail pelo protocolo IMAP e baixa cada mensagem como um <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">arquivo .eml</a> padrão, guardado em formato <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> na sua máquina Mac ou Linux. Cada e-mail é um arquivo no disco — legível por gente, portátil e compatível com qualquer cliente de e-mail. Assim que uma mensagem está no seu cofre, você pode apagar a cópia do servidor para liberar espaço; a local não é afetada.
+            </p>
+          </div>
+        </div>
+
+        <!-- FAQ 3 -->
+        <div id="supported-email-providers" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">Com quais provedores de e-mail o MailVault funciona?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              O MailVault funciona com qualquer provedor de e-mail que ofereça IMAP, incluindo Gmail, Outlook, Yahoo Mail, iCloud Mail, ProtonMail (com o Bridge), Fastmail, Zoho Mail e qualquer provedor corporativo ou auto-hospedado com acesso IMAP.
+            </p>
+          </div>
+        </div>
+
+        <!-- FAQ 4 -->
+        <div id="is-mailvault-free" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">O MailVault é gratuito?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              O MailVault é gratuito nos recursos essenciais, incluindo ler e escrever e-mails, buscar, encadear, arquivar localmente e fazer backup manual. Os recursos Premium — backups automáticos agendados, migração de caixa postal entre contas e regras de limpeza automática — saem por <span data-mv-price="{monthly}/mês ou {yearly}/ano">$4/mês ou $25/ano</span>; o plano anual inclui 14 dias de teste grátis. O código-fonte está disponível no <a href="https://github.com/GraphicMeat/mail-vault-app" class="text-primary-500 hover:underline" target="_blank">GitHub</a>. Veja os <a href="/pt-br/pricing.html" class="text-primary-500 hover:underline">preços completos</a> para mais detalhes.
+            </p>
+          </div>
+        </div>
+
+        <!-- FAQ 5 -->
+        <div id="where-are-emails-stored" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">Onde meus e-mails ficam guardados?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4">O seu cofre é uma pasta de <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">arquivos .eml</a> padrão, organizados em formato <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> na sua máquina Mac ou Linux &mdash; um arquivo por e-mail, sem precisar de banco de dados. Os seus dados nunca saem do seu computador e nunca são enviados para nenhum serviço na nuvem. Como o .eml é um padrão universal, os seus e-mails podem ser abertos pelo Apple Mail, pelo Thunderbird, pelo Outlook ou por qualquer outro cliente — você nunca fica preso ao MailVault.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Estrutura de diretórios:</p>
+              <pre class="bg-slate-100 dark:bg-slate-900 rounded-lg p-4 text-sm overflow-x-auto mb-2"><code>~/Library/Application Support/com.mailvault.app/
+└── maildir/
+    └── you@example.com/
+        └── INBOX/
+            ├── headers.json          ← cached list for fast loading
+            └── cur/
+                ├── 1234567890.eml    ← auto-cached email
+                └── 1234567891_AS.eml ← archived + seen email</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- FAQ: .eml and Maildir -->
+        <div id="eml-and-maildir" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">O que são arquivos .eml e Maildir? Por que isso importa?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4"><a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml (RFC 5322)</a> é o formato padrão da internet para mensagens de e-mail. Cada e-mail — cabeçalhos, corpo e anexos — é guardado como um único arquivo de texto autocontido. Diferente dos bancos de dados proprietários, os arquivos .eml podem ser abertos por qualquer cliente de e-mail (Apple Mail, Thunderbird, Outlook) e lidos em qualquer editor de texto.</p>
+              <p class="mb-4"><a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> é uma estrutura de diretórios comprovada para guardar e-mails, usada por servidores de e-mail há décadas. Cada e-mail é um arquivo, então não há um banco de dados único que possa corromper — se um arquivo for danificado, o resto do seu arquivo permanente fica intacto. Juntos, .eml + Maildir fazem com que os seus e-mails resistam ao tempo, sejam portáteis e nunca fiquem presos a um único aplicativo.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Sinalizadores no nome do arquivo:</p>
+              <p>O MailVault acrescenta letras de estado ao nome do arquivo .eml para marcar a situação: <strong>A</strong> = Arquivado, <strong>S</strong> = Lido, <strong>R</strong> = Respondido, <strong>F</strong> = Sinalizado. Por exemplo, <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">1234567890_AS.eml</code> quer dizer que o e-mail foi arquivado e lido.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- FAQ 6 -->
+        <div id="offline-access" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">Posso acessar meus e-mails offline?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              Sim. Depois que seus e-mails são sincronizados, eles ficam guardados localmente e você pode ler, buscar e navegar por todos eles sem conexão com a internet. Você só precisa de internet para sincronizar e-mails novos ou enviar mensagens.
+            </p>
+          </div>
+        </div>
+
+        <!-- FAQ 7 -->
+        <div id="data-security" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">Meus dados estão seguros?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              O MailVault foi projetado com a privacidade em primeiro lugar. Suas credenciais de e-mail ficam guardadas no Keychain do macOS ou no Secret Service do Linux, nunca em um arquivo comum. Todos os dados ficam na sua máquina — não há sincronização na nuvem, rastreamento, análise de uso nem mineração de dados. O aplicativo é de código aberto, então você mesmo pode verificar o código.
+            </p>
+          </div>
+        </div>
+
+        <div id="block-email-trackers" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">O MailVault consegue bloquear pixels de rastreamento?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              Sim. Cada mensagem que o MailVault abre é verificada em busca de pixels de rastreamento — as imagens escondidas de 1x1 que a mala direta usa para avisar quando você abre, com que frequência, de qual endereço IP e em qual cliente. Um pequeno olho aparece ao lado do assunto em qualquer mensagem que carregue um, e clicar nele mostra o nome da empresa de rastreamento e a URL exata que o pixel teria chamado. A detecção é gratuita para todo mundo. O MailVault Premium também retira esses sinalizadores do HTML antes de a mensagem ser exibida, então a requisição nunca é feita e quem enviou não fica sabendo de nada. Quase 500 endpoints de rastreamento conhecidos vêm com o aplicativo; a lista é embutida e atualizada nas versões, nunca buscada em um servidor em tempo de execução. <a href="/pt-br/features/email-tracker-blocking.html" class="text-primary-500 hover:text-primary-600 underline">Veja como funciona, antes e depois</a>.
+            </p>
+          </div>
+        </div>
+
+        <!-- FAQ 8 -->
+        <div id="delete-from-server" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">O que acontece se eu apagar e-mails do servidor?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              Tudo o que você arquivou antes fica no seu cofre, sem ser afetado pelo que o servidor fizer depois — é esse o sentido do produto. Tudo o que você <em>não</em> arquivou se vai junto com a cópia do servidor, então o MailVault mostra o estado de cada mensagem na própria linha dela antes de você apagar: no servidor, no seu cofre ou nos dois. O caminho seguro é <strong>Arquivar &amp; Apagar</strong>, que copia cada mensagem para o seu cofre e a confere lá antes de removê-la do servidor.
+            </p>
+          </div>
+        </div>
+
+        <!-- FAQ 9 -->
+        <div id="gmail-and-outlook" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">O MailVault funciona com Gmail e Outlook?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              Sim. O MailVault funciona com o Gmail, o Outlook e qualquer outro serviço de e-mail que aceite IMAP. No Gmail, entre direto com a sua conta do Google usando OAuth2 — sem precisar de configurações manuais de IMAP. Contas do Microsoft 365 Business e Enterprise podem entrar direto com a conta Microsoft usando OAuth2, e isso funciona sem atrito com a verificação em duas etapas. As contas pessoais do Outlook.com estão atualmente afetadas por um <a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">problema conhecido no servidor da Microsoft</a>.
+            </p>
+          </div>
+        </div>
+
+        <!-- FAQ: Microsoft Outlook OAuth2 -->
+        <div id="microsoft-outlook-oauth2" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">Por que não consigo conectar minha conta do Outlook.com?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4">Há um <strong>problema conhecido do lado do servidor da Microsoft</strong> que afeta contas pessoais do Outlook.com, do Hotmail e do Live.com desde o fim de 2024. Depois de entrar com a conta Microsoft, a conexão IMAP falha com "User is authenticated but not connected." Isso atinge todos os clientes de e-mail de terceiros que usam IMAP com OAuth2 — não só o MailVault.</p>
+              <p class="mb-4">A Microsoft exige OAuth2 para contas pessoais. Infelizmente, o serviço IMAP deles tem uma regressão que impede que sessões autenticadas por OAuth2 se conectem à caixa postal.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">O que você pode fazer:</p>
+              <ul class="list-disc list-inside space-y-2 mb-4">
+                <li><strong>Contas do Microsoft 365 Business/Enterprise</strong> não são afetadas — o OAuth2 funciona normalmente nas contas organizacionais</li>
+                <li><strong>Acompanhe o problema</strong> — Este é um problema do lado do servidor, que só a Microsoft pode resolver. A <a href="https://learn.microsoft.com/en-us/answers/questions/5673167/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">discussão no Microsoft Q&amp;A</a> acompanha o caso</li>
+                <li><strong>Use o Outlook na web</strong> ou os aplicativos oficiais da Microsoft nesse meio-tempo, nas contas pessoais</li>
+                <li><strong>O MailVault está pronto</strong> — Assim que a Microsoft resolver o problema, a entrada por OAuth2 do MailVault vai funcionar imediatamente, sem nenhuma mudança</li>
+              </ul>
+              <p>Detalhes técnicos: o MailVault usa a mesma implementação de OAuth2 do <a href="https://www.thunderbird.net/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Mozilla Thunderbird</a>, seguindo a documentação oficial da Microsoft para IMAP com OAuth2, com autenticação PKCE e XOAUTH2.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- FAQ: Proton Mail Bridge -->
+        <div id="proton-mail-bridge" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">Como uso o MailVault com o Proton Mail?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4">O Proton Mail criptografa as suas mensagens de ponta a ponta, então ele não expõe o IMAP diretamente. Conectá-lo ao MailVault (ou a qualquer cliente de e-mail de terceiros) exige o <a href="https://proton.me/mail/bridge" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton Mail Bridge</a> — um aplicativo de desktop da Proton que roda no seu próprio computador e expõe a sua caixa postal criptografada como IMAP/SMTP padrão em <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code>. O Bridge exige um plano pago do Proton Mail; ele não está disponível no plano gratuito.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Passos da configuração:</p>
+              <ol class="list-decimal list-inside space-y-2 mb-4">
+                <li>Instale o <a href="https://proton.me/mail/bridge" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton Mail Bridge</a> pelo site da Proton</li>
+                <li>Entre no Bridge com sua conta Proton</li>
+                <li>O Bridge mostra <strong>credenciais de IMAP/SMTP</strong> por conta — a senha exibida é uma senha de aplicativo gerada pelo Bridge, <strong>não</strong> a senha normal da sua conta Proton</li>
+                <li>No MailVault, escolha <strong>Proton Mail Bridge</strong> na lista de provedores (ou <strong>IMAP personalizado</strong> se ele não estiver na lista) e informe:
+                  <ul class="list-disc list-inside ml-4 mt-2 space-y-1">
+                    <li>Servidor: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code></li>
+                    <li>Porta IMAP: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">1143</code>, Segurança: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">STARTTLS</code></li>
+                    <li>Porta SMTP: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">1025</code></li>
+                    <li>Usuário: seu endereço de e-mail da Proton</li>
+                    <li>Senha: a senha gerada pelo Bridge no passo 3</li>
+                  </ul>
+                </li>
+              </ol>
+              <p class="mb-4">O Proton Mail Bridge precisa estar rodando em segundo plano sempre que o MailVault sincronizar — se o Bridge estiver fechado, o MailVault não alcança a caixa postal. As mensagens que você já arquivou continuam totalmente legíveis e pesquisáveis no MailVault mesmo com o Bridge fechado, já que o MailVault é local em primeiro lugar e lê do próprio repositório de <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code>, em vez de ler ao vivo do Bridge.</p>
+              <p>O Bridge protege o servidor IMAP/SMTP local dele com um certificado TLS autoassinado. O MailVault lida com isso automaticamente nas conexões locais (<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code>), então não é preciso instalar certificado nenhum na mão.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- FAQ: Send from a different address -->
+        <div id="send-from-different-address" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">Posso enviar de um endereço diferente daquele com que faço login?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4">Sim. Abra <strong>Configurações &rarr; Contas</strong>, escolha a conta e preencha <strong>Enviar e-mail como</strong>. Deixe em branco para enviar do endereço com que você entrou. Isso é comum no Fastmail e em qualquer provedor em que o endereço de login não é o endereço que você divulga.</p>
+              <p class="mb-4">Só muda o endereço no campo <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">De</code> das mensagens que saem. O seu nome de usuário e a sua senha continuam exatamente iguais, o MailVault continua entrando no IMAP e no SMTP como a conta que você configurou, e <strong>nenhum cabeçalho Reply-To é acrescentado</strong> &mdash; as respostas vão para o endereço a partir do qual você envia.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Encontrar e conferir o endereço:</p>
+              <ul class="list-disc list-inside space-y-2 mb-4">
+                <li><strong>Sugestões</strong> &mdash; O MailVault oferece endereços que ele já viu nas suas próprias mensagens: aqueles a partir dos quais você já enviou e aqueles em que chegam mensagens endereçadas a você.</li>
+                <li><strong>Verificar</strong> &mdash; envia uma única mensagem de teste a partir do endereço, para a sua própria caixa postal por padrão, para você confirmar que o seu provedor a aceita antes de contar com ela.</li>
+                <li><strong>Se for recusado</strong> &mdash; o endereço precisa ser um alias ou uma identidade que o seu provedor permite que aquele login use para enviar. O Fastmail aceita qualquer alias da conta; o Gmail exige que o endereço seja adicionado em "Enviar e-mail como" nas configurações do Gmail, e o Microsoft 365 exige a permissão Enviar como, dada por um administrador.</li>
+              </ul>
+              <p>Os aliases são configurados no seu provedor de e-mail, não no MailVault &mdash; o MailVault envia com um endereço que o seu provedor já autorizou.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- FAQ 10 -->
+        <div id="system-requirements" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">Quais são os requisitos de sistema?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              O MailVault exige macOS 11 (Big Sur) ou posterior e roda nativamente em Intel e Apple Silicon. No Linux, ele vem como .deb, AppImage, Snap e Flatpak para Ubuntu 22.04+ / Debian 12+. Ele fica na barra de menus e continua sincronizando com a janela fechada.
+            </p>
+          </div>
+        </div>
+
+        <!-- FAQ: Attachments -->
+        <div id="attachments" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">Como os anexos são tratados?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              Os anexos ficam embutidos dentro de cada arquivo .eml como partes MIME — eles não são guardados como arquivos separados. Quando você abre um e-mail, o backend em Rust do MailVault interpreta a estrutura MIME e extrai os anexos na hora. Você pode <strong>Abrir</strong>, <strong>Salvar como</strong> ou <strong>Mostrar na pasta</strong> qualquer anexo direto do visualizador de e-mail. Os anexos extraídos ficam temporariamente em cache para você acessá-los de novo rapidamente.
+            </p>
+          </div>
+        </div>
+
+        <!-- FAQ: Archive -->
+        <div id="archive-email" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">O que acontece quando eu arquivo um e-mail?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              Arquivar baixa o e-mail completo do seu servidor (se ele ainda não estiver em cache) e o guarda como um arquivo .eml no disco, com a marca <strong>A</strong> (Arquivado) no nome do arquivo. Se o e-mail já estava em cache localmente, o MailVault simplesmente renomeia o arquivo para acrescentar a marca de arquivamento. Os e-mails arquivados aparecem na visão <strong>Cofre</strong> e entram nos backups. A cópia do servidor fica intocada até que você mesmo a apague.
+            </p>
+          </div>
+        </div>
+
+        <!-- FAQ: Archive + Delete -->
+        <div id="archive-and-delete" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">O que acontece quando eu arquivo e apago do servidor?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <strong>Arquivar &amp; Apagar</strong> faz três coisas, nesta ordem: copia a mensagem para o seu cofre como arquivo .eml, confere se a cópia está mesmo lá e só então a apaga do servidor. O que não passa na conferência fica no servidor &mdash; uma cópia que falha nunca custa o original. Depois disso, a linha mostra <strong>a sua única cópia</strong>: o cofre é o único lugar onde aquela mensagem ainda existe, o que também é o aviso para manter um disco de backup conectado.
+            </p>
+          </div>
+        </div>
+
+        <!-- FAQ: Backup & Restore -->
+        <div id="backup-and-restore" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">Como funcionam o backup e a restauração?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              O MailVault exporta seus e-mails como um arquivo ZIP com todos os arquivos .eml mais um <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">manifest.json</code> que associa os e-mails às contas pelo endereço de e-mail (e não por IDs internos), o que torna os backups portáteis entre instalações diferentes. Você pode escolher exportar <strong>todos os e-mails</strong> ou <strong>somente os arquivados</strong>. A importação é idempotente — se um e-mail já existe localmente, ele não é duplicado. Se um backup traz e-mails de uma conta que você ainda não configurou, o MailVault a cria automaticamente (você só precisa digitar a senha de novo em Configurações).
+            </p>
+          </div>
+        </div>
+
+        <!-- FAQ: Gmail bandwidth limits -->
+        <div id="gmail-bandwidth-limits" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">Quais são os limites de banda do Gmail e o que acontece quando um backup os atinge?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                O Google limita quanto de dados de e-mail uma única conta Gmail ou Google Workspace pode movimentar por dia. Os limites valem para a conta, não para o aplicativo — Apple Mail, seu celular e o MailVault consomem do mesmo orçamento diário.
+              </p>
+              <div class="scroll-x overflow-x-auto">
+                <table class="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg">
+                  <thead class="bg-slate-50 dark:bg-slate-900/50">
+                    <tr>
+                      <th class="text-left font-semibold px-3 py-2 border-b border-slate-200 dark:border-slate-700">Método de acesso</th>
+                      <th class="text-left font-semibold px-3 py-2 border-b border-slate-200 dark:border-slate-700">Limite de download</th>
+                      <th class="text-left font-semibold px-3 py-2 border-b border-slate-200 dark:border-slate-700">Limite de upload</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50"><strong>IMAP</strong> (o que o MailVault usa)</td>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">2500 MB / dia</td>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">500 MB / dia</td>
+                    </tr>
+                    <tr>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">POP</td>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">1250 MB / dia</td>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">—</td>
+                    </tr>
+                    <tr>
+                      <td class="px-3 py-2">Gmail na web</td>
+                      <td class="px-3 py-2">750 MB / hora, 1250 MB / dia</td>
+                      <td class="px-3 py-2">300 MB / hora, 1500 MB / dia</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p>
+                Passe de um limite e o Google suspende a conta temporariamente: <strong>em geral cerca de 1 hora, mas pode durar até 24 horas</strong>. Os limites são os mesmos em todas as edições do Google Workspace, e o Google pode mudá-los sem aviso — veja a <a href="https://knowledge.workspace.google.com/admin/gmail/gmail-bandwidth-limits" target="_blank" rel="noopener" class="text-primary-500 hover:underline">documentação do Google sobre limites de banda</a> para os números atuais.
+              </p>
+              <p>
+                <strong>O que isso significa para um primeiro backup.</strong> Uma caixa postal com mais de uns 2,5 GB não pode ser baixada em um único dia por IMAP — nenhum cliente consegue, é um teto do lado do servidor. Espere que um arquivo permanente grande leve vários dias.
+              </p>
+              <p>
+                <strong>O que o MailVault faz.</strong> Ele reconhece a resposta de limite, encerra a execução de forma limpa em vez de insistir e provocar um bloqueio mais longo, e avisa que o limite diário foi atingido. Comece o backup de novo quando a suspensão passar e ele continua de onde parou — as mensagens já salvas localmente são puladas, então nada é baixado duas vezes. Tudo o que já está no disco continua legível e pesquisável enquanto você espera.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- FAQ: External backup location -->
+        <div id="external-backup-location" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">O que é o local de backup externo (segunda cópia)?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                O MailVault sempre mantém uma <strong>cópia de trabalho</strong> das suas mensagens no armazenamento do próprio aplicativo — é ela que você lê, busca e abre. Um local de backup externo acrescenta uma <strong>segunda cópia, independente</strong>, em um disco que você controla: um SSD externo, um compartilhamento em NAS ou uma pasta sincronizada.
+              </p>
+              <ul class="list-disc pl-5 space-y-2">
+                <li><strong>Gravada junto com a cópia de trabalho.</strong> Durante uma execução de backup, cada mensagem é salva nos dois lugares, no mesmo formato <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code> + Maildir — então a segunda cópia abre no Apple Mail, no Thunderbird ou em qualquer outro cliente, sem o MailVault.</li>
+                <li><strong>Armazenamento frio, não um espelho.</strong> O aplicativo nunca o lê no dia a dia. E-mails apagados no servidor, ou removidos dentro do MailVault, permanecem na cópia externa.</li>
+                <li><strong>As marcas de lido e escrito sobrevivem nos dois sentidos.</strong> As cópias são reconciliadas antes de uma execução, então uma mensagem que você leu continua lida.</li>
+                <li><strong>Independente do aplicativo.</strong> Se aquele computador morrer ou você desinstalar o MailVault, a pasta externa continua sendo um arquivo de e-mails completo e autodescritivo.</li>
+              </ul>
+              <p>
+                Defina isso em <strong>Configurações → Backup → “Segunda cópia — armazenamento frio externo”</strong> e escolha qualquer pasta. No macOS, o MailVault salva um marcador com escopo de segurança para essa pasta, de modo que o acesso sobrevive a reinicializações e a atualizações do aplicativo — um caminho puro não sobreviveria. Um selo de estado mostra <strong>Pronto</strong>, <strong>Precisa reautorizar</strong>, <strong>Indisponível</strong> ou <strong>Acesso negado</strong>, e reautorizar é um clique.
+              </p>
+              <p>
+                Se o drive for desconectado no meio do backup, a cópia de trabalho ainda é concluída e o MailVault informa quantas mensagens não chegaram à cópia externa. A execução seguinte copia essas mensagens — nada é perdido, e a falha nunca é silenciosa.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- FAQ: Custom mail storage folder -->
+        <div id="change-mail-storage-folder" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">Posso guardar minhas mensagens em outro lugar que não a pasta padrão do aplicativo?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                Sim. Por padrão, o MailVault mantém seu armazenamento de mensagens dentro da própria pasta Application Support do aplicativo, no disco de inicialização. Você pode mover esse armazenamento para qualquer pasta em qualquer drive — um SSD externo, um segundo disco interno — o que passa a importar quando um arquivo chega a dezenas de gigabytes.
+              </p>
+              <p>
+                <strong>Só os dados de e-mail mudam de lugar:</strong> as mensagens, os caches de cabeçalho, o cache de anexos e as listas de pastas. As contas, as configurações e os logs ficam na pasta do próprio aplicativo, então o MailVault sempre consegue iniciar o suficiente para avisar que falta um disco e pedir a pasta de novo.
+              </p>
+              <p>
+                <strong>A mudança é verificada antes de qualquer coisa ser apagada.</strong> O MailVault copia tudo para a pasta nova, confere se cada arquivo chegou com o tamanho certo, faz a troca e só então remove os originais. Uma mudança interrompida por uma desconexão ou por uma falha deixa o armazenamento atual intacto; rode de novo e ela retoma, em vez de recopiar o que já está lá.
+              </p>
+              <p>
+                <strong>A pasta é marcada e reconhecida.</strong> Um pequeno arquivo marcador identifica o armazenamento, então, se mais tarde você reconectar o disco ou mover a pasta na mão, dá para apontar o MailVault de volta para ela — e o MailVault recusa uma pasta que pertença a outro armazenamento ou que não tenha mensagem nenhuma.
+              </p>
+              <p>
+                <strong>Se o disco não estiver conectado</strong>, o MailVault informa que o armazenamento de e-mails está indisponível, em vez de começar caladamente um segundo arquivo no local padrão e deixar você com duas cópias pela metade. Reconecte o disco ou selecione a pasta de novo. Você também pode voltar ao local padrão quando quiser — as mensagens ficam onde estão até que você as mova.
+              </p>
+              <p class="text-sm">
+                <strong>Não é a mesma coisa que uma segunda cópia.</strong> Isso muda onde fica o armazenamento <em>ativo</em>. Um <a href="#external-backup-location" class="text-primary-500 hover:underline">local de backup externo</a> acrescenta uma cópia fria por cima dele. Usar os dois — o armazenamento de e-mails em um SSD externo rápido e a cópia fria em um NAS — é um arranjo razoável.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- FAQ: Linux spellcheck dictionary -->
+        <div id="linux-spellcheck-dictionary" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
+            <span class="text-lg font-semibold pr-4">Por que o corretor ortográfico não sublinha nada no Linux?</span>
+            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <div class="faq-answer">
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                Porque não há dicionário de ortografia na máquina. O macOS e o Windows já vêm com um; no Linux o dicionário vem da sua distribuição, e uma instalação de desktop mínima muitas vezes não tem nenhum. O MailVault verifica a ortografia pelo WebKitGTK, que consulta as palavras através do enchant e do hunspell — então ele só consegue sublinhar depois que um dicionário do hunspell estiver instalado.
+              </p>
+              <p>
+                <strong>O botão na barra de ferramentas da mensagem diz em qual dos casos você está.</strong> Com um dicionário presente, ele liga e desliga os sublinhados, e o MailVault lembra da escolha. Sem nenhum, ele abre estas mesmas instruções, em vez de fingir que é um interruptor.
+              </p>
+              <p><strong>Instale um dicionário para o seu idioma:</strong></p>
+              <div class="space-y-2 font-mono text-sm">
+                <div><span class="text-slate-500 dark:text-slate-500">Debian, Ubuntu, Mint</span><br><code>sudo apt install hunspell-en-us</code></div>
+                <div><span class="text-slate-500 dark:text-slate-500">Fedora</span><br><code>sudo dnf install hunspell-en</code></div>
+                <div><span class="text-slate-500 dark:text-slate-500">Arch, Manjaro</span><br><code>sudo pacman -S hunspell-en_us</code></div>
+                <div><span class="text-slate-500 dark:text-slate-500">openSUSE</span><br><code>sudo zypper install myspell-en_US</code></div>
+              </div>
+              <p>
+                Troque o código de idioma pelo seu — <code>hunspell-de-de</code>, <code>hunspell-fr</code> e assim por diante. Dá para instalar vários; o MailVault verifica com o que corresponde ao idioma do seu sistema e com todos eles se nenhum corresponder. <strong>Reinicie o MailVault depois</strong> — o corretor é configurado quando o aplicativo inicia.
+              </p>
+              <p>
+                <strong>O pacote snap é um caso à parte.</strong> Um snap com confinamento estrito não enxerga os dicionários instalados no sistema anfitrião, então ele carrega uma cópia própria. Se o snap disser que não há dicionário, instale o pacote .deb — ele usa os dicionários que já estão no seu sistema.
+              </p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- CTA -->
+      <div class="mt-12 text-center">
+        <p class="text-slate-600 dark:text-slate-400 mb-4">Ainda tem dúvidas?</p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" class="lamp-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+            Pergunte no GitHub
+          </a>
+          <a href="/pt-br/#contact" class="px-6 py-3 rounded-xl font-semibold border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-2">
+            Fale conosco
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <a href="/pt-br/" class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="Logo do MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/pt-br/docs.html" class="hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/pt-br/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacidade</a>
+          <a href="/pt-br/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Termos</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. Todos os direitos reservados.
+        </p>
+      </div>
+    </div>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+            <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+        <span>Preparado em uma <span class="text-primary-500 font-semibold">GPU aberta</span> por</span>
+        <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
+          <img src="/graphicmeat-logo.webp" alt="Feito pela Graphic Meat" class="w-full max-w-[400px] h-auto" width="512" height="512" loading="lazy" decoding="async">
+        </a>
+      </div>
+    </div>
+
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="Escolha um idioma" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/faq.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/faq.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/faq.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/faq.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/faq.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/faq.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/faq.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/faq.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/faq.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme Toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const html = document.documentElement;
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      html.classList.add('dark');
+    }
+    themeToggle.addEventListener('click', () => {
+      html.classList.toggle('dark');
+      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+
+    // FAQ Accordion
+    document.querySelectorAll('.faq-toggle').forEach(button => {
+      button.addEventListener('click', () => {
+        const answer = button.nextElementSibling;
+        const chevron = button.querySelector('.faq-chevron');
+        const isOpen = answer.classList.contains('open');
+
+        // Close all others
+        document.querySelectorAll('.faq-answer.open').forEach(a => a.classList.remove('open'));
+        document.querySelectorAll('.faq-chevron.open').forEach(c => c.classList.remove('open'));
+        document.querySelectorAll('.faq-toggle[aria-expanded="true"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
+
+        // Toggle current
+        if (!isOpen) {
+          answer.classList.add('open');
+          chevron.classList.add('open');
+          button.setAttribute('aria-expanded', 'true');
+        }
+      });
+    });
+
+    // Auto-expand FAQ section from URL hash (e.g. #proton-mail-bridge)
+    if (window.location.hash) {
+      const target = document.querySelector(window.location.hash);
+      if (target && target.classList.contains('faq-item')) {
+        const button = target.querySelector('.faq-toggle');
+        const answer = target.querySelector('.faq-answer');
+        const chevron = target.querySelector('.faq-chevron');
+        if (button && answer) {
+          answer.classList.add('open');
+          if (chevron) chevron.classList.add('open');
+          button.setAttribute('aria-expanded', 'true');
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
+    }
+  </script>
+  <script defer src="/pricing-localize.js?v=1"></script>
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

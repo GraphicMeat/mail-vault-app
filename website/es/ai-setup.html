@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Limpieza de correo con IA — Clasificación local de correo con IA | MailVault</title>
+  <meta name="description" content="La limpieza de correo de MailVault usa un modelo de IA local para clasificar tus correos y sugerirte qué se puede borrar del servidor sin riesgo. Todo se ejecuta en tu máquina: ningún dato de tu correo sale de tu dispositivo.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/es/ai-setup.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/es/ai-setup.html">
+  <meta property="og:title" content="Limpieza de correo con IA — Clasificación local de correo con IA | MailVault">
+  <meta property="og:description" content="Clasifica y limpia tu buzón con un modelo de IA local. Ningún dato sale de tu dispositivo.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="es_ES">
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Limpieza de correo con IA — Clasificación local con IA | MailVault">
+  <meta name="twitter:description" content="Clasifica y limpia tu buzón con un modelo de IA local. Ningún dato sale de tu dispositivo.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass { background: rgba(255,255,255,0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+    .dark .glass { background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05); }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/ai-setup.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/ai-setup.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/ai-setup.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/ai-setup.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/ai-setup.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/ai-setup.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/ai-setup.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/ai-setup.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/ai-setup.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/ai-setup.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/es/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="Logotipo de MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/es/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Funciones</a>
+          <a href="/es/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Casos de uso</a>
+          <a href="/es/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/es/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/></svg>
+            <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/></svg>
+          </button>
+          <a href="/es/#download" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">Descargar</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-16">
+    <!-- Hero -->
+    <section class="py-16">
+      <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 text-sm font-medium mb-6">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+          Función Premium
+        </div>
+        <h1 class="text-4xl sm:text-5xl font-bold mb-6">
+          <span class="lamp-text">Limpieza de correo</span> con IA
+        </h1>
+        <p class="text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
+          Un modelo de IA local clasifica tus correos y te sugiere qué se puede quitar del servidor sin riesgo. Todo se ejecuta en tu máquina. Ningún dato de tu correo sale nunca de tu dispositivo.
+        </p>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="py-16 bg-white dark:bg-slate-800/50">
+      <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <h2 class="text-2xl font-bold text-center mb-12">Cómo funciona</h2>
+        <div class="grid md:grid-cols-3 gap-8">
+          <div class="text-center">
+            <div class="w-14 h-14 mx-auto mb-4 rounded-2xl lamp-bg flex items-center justify-center">
+              <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/></svg>
+            </div>
+            <h3 class="font-semibold text-lg mb-2">1. Descarga el modelo</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400">Activa la IA en Ajustes y descarga un modelo (~2-5 GB). Se guarda en local, en la carpeta de datos de la app. Es una descarga única.</p>
+          </div>
+          <div class="text-center">
+            <div class="w-14 h-14 mx-auto mb-4 rounded-2xl lamp-bg flex items-center justify-center">
+              <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+            </div>
+            <h3 class="font-semibold text-lg mb-2">2. Clasificación automática</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400">Después de cada copia de seguridad, la IA clasifica tus correos: boletines, promociones, notificaciones, personales, de trabajo y más.</p>
+          </div>
+          <div class="text-center">
+            <div class="w-14 h-14 mx-auto mb-4 rounded-2xl lamp-bg flex items-center justify-center">
+              <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </div>
+            <h3 class="font-semibold text-lg mb-2">3. Revisa y limpia</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400">Revisa el informe de limpieza, aprueba las acciones en bloque y libera espacio en el servidor. Las copias locales se conservan siempre.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Privacy -->
+    <section class="py-16">
+      <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="grid md:grid-cols-2 gap-12 items-center">
+          <div>
+            <h2 class="text-2xl font-bold mb-4">100 % privado. Cero nube.</h2>
+            <p class="text-slate-600 dark:text-slate-400 mb-6">
+              A diferencia de las herramientas de correo en la nube, la IA de MailVault se ejecuta por completo en tu ordenador. El modelo procesa tus correos en local: no se envía nada a ningún servidor, API o servicio de terceros. Tus correos son tuyos.
+            </p>
+            <ul class="space-y-3">
+              <li class="flex items-start gap-3">
+                <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                <span class="text-slate-700 dark:text-slate-300">El modelo se ejecuta en tu CPU/GPU: no hace falta internet para clasificar</span>
+              </li>
+              <li class="flex items-start gap-3">
+                <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                <span class="text-slate-700 dark:text-slate-300">Ni el contenido, ni los metadatos, ni las direcciones salen de tu máquina</span>
+              </li>
+              <li class="flex items-start gap-3">
+                <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+                <span class="text-slate-700 dark:text-slate-300">Borra el modelo cuando quieras para liberar espacio en disco</span>
+              </li>
+            </ul>
+          </div>
+          <div class="p-6 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+            <h3 class="font-semibold mb-4">Requisitos del sistema</h3>
+            <div class="space-y-3 text-sm">
+              <div class="flex justify-between">
+                <span class="text-slate-600 dark:text-slate-400">RAM</span>
+                <span class="font-medium">16 GB recomendados (8 GB mínimo con el modelo pequeño)</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-600 dark:text-slate-400">Espacio en disco</span>
+                <span class="font-medium">~2-5 GB para el archivo del modelo</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-600 dark:text-slate-400">GPU</span>
+                <span class="font-medium">Opcional: usa Metal en Apple Silicon y la CPU en el resto</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-600 dark:text-slate-400">Internet</span>
+                <span class="font-medium">Solo para la descarga inicial del modelo</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="py-16 bg-white dark:bg-slate-800/50">
+      <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+        <h2 class="text-2xl font-bold text-center mb-12">Preguntas frecuentes</h2>
+        <div class="space-y-6">
+          <div>
+            <h3 class="font-semibold mb-2">¿Qué modelo de IA usa MailVault?</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400">MailVault descarga modelos de código abierto en formato GGUF. El modelo recomendado es Llama 3.1 8B (~4,6 GB), que ofrece el mejor equilibrio entre calidad de clasificación y velocidad. Hay disponible un modelo más pequeño de 3B para máquinas con menos RAM.</p>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-2">¿Puedo usar mi propio modelo?</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400">Sí. Coloca cualquier archivo de modelo en formato GGUF en el directorio de modelos (indicado en Ajustes &gt; IA &amp; limpieza) y aparecerá en el selector de modelos.</p>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-2">¿Qué pasa cuando "borro del servidor"?</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400">El correo se elimina de tu servidor IMAP (con lo que liberas espacio en el servidor), pero la copia local en .eml dentro de MailVault se conserva siempre. Puedes consultar o restaurar cualquier correo desde la función Time Capsule en cualquier momento.</p>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-2">¿La IA aprende de mis correcciones?</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400">Sí. Cuando reclasificas un correo, MailVault registra la corrección. Tras suficientes correcciones sobre un mismo patrón (por ejemplo, el dominio de un remitente concreto), se genera automáticamente una regla local. Estas reglas se aplican antes que la IA, de modo que la clasificación es más rápida y más precisa con el tiempo.</p>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-2">¿Puedo compartir las reglas que ha aprendido?</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400">Sí. Exporta tus reglas como un archivo JSON anonimizado desde Ajustes. La exportación contiene solo patrones de dominio y correspondencias de categoría: ninguna dirección de correo, nombre ni contenido de los mensajes. Otras personas pueden importar tus reglas y aprovechar tus preferencias de clasificación.</p>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-2">¿Hace falta una suscripción?</h3>
+            <p class="text-sm text-slate-600 dark:text-slate-400">La limpieza de correo y Time Capsule son funciones Premium. El archivado y la lectura de correo, que son el núcleo, siguen siendo gratis para siempre.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="Logotipo de MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/es/docs.html" class="hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/es/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacidad</a>
+          <a href="/es/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/es/mentioned-in.html" class="hover:text-primary-500 transition-colors">Aparece en</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Términos</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+        <p class="text-sm text-slate-500 dark:text-slate-400">&copy; 2026 MailVault. Todos los derechos reservados.</p>
+      </div>
+    </div>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+            <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+        <span>Cocinado sobre una <span class="text-primary-500 font-semibold">GPU abierta</span> por</span>
+        <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
+          <img src="/graphicmeat-logo.webp" alt="Hecho por Graphic Meat" class="w-full max-w-[400px] h-auto" width="512" height="512" loading="lazy" decoding="async">
+        </a>
+      </div>
+    </div>
+
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="Elige un idioma" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/ai-setup.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/ai-setup.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/ai-setup.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/ai-setup.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/ai-setup.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/ai-setup.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/ai-setup.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/ai-setup.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/ai-setup.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    const themeToggle = document.getElementById('theme-toggle');
+    const html = document.documentElement;
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      html.classList.add('dark');
+    }
+    themeToggle.addEventListener('click', () => {
+      html.classList.toggle('dark');
+      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
+    });
+  </script>
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

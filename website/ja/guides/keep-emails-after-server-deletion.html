@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="ja" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>サーバーから削除してもメールを残す方法 — MailVault</title>
+  <meta name="description" content="メールを失わずにサーバーから削除しましょう。MailVaultは削除の前にメールを.emlファイルとしてローカルにアーカイブします。検索でき、オフラインでも読め、ずっとあなたのものです。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ja/guides/keep-emails-after-server-deletion.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ja/guides/keep-emails-after-server-deletion.html">
+  <meta property="og:title" content="サーバーから削除してもメールを残す方法 — MailVault">
+  <meta property="og:description" content="メールを失わずにサーバーから削除しましょう。MailVaultは削除の前にメールを.emlファイルとしてローカルにアーカイブします。検索でき、オフラインでも読め、ずっとあなたのものです。">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ja_JP">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="サーバーから削除してもメールを残す方法 — MailVault">
+  <meta name="twitter:description" content="メールを失わずにサーバーから削除しましょう。MailVaultは削除の前にメールを.emlファイルとしてローカルにアーカイブします。検索でき、オフラインでも読め、ずっとあなたのものです。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "サーバーから削除してもメールを残す方法",
+  "description": "メールを失わずにサーバーから削除しましょう。MailVaultは削除の前にメールを.emlファイルとしてローカルにアーカイブします。検索でき、オフラインでも読め、ずっとあなたのものです。",
+  "url": "https://mailvaultapp.com/ja/guides/keep-emails-after-server-deletion.html",
+  "datePublished": "2026-03-15",
+  "dateModified": "2026-03-15",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/keep-emails-after-server-deletion.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/keep-emails-after-server-deletion.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/keep-emails-after-server-deletion.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/keep-emails-after-server-deletion.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/keep-emails-after-server-deletion.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/keep-emails-after-server-deletion.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/keep-emails-after-server-deletion.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/keep-emails-after-server-deletion.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/keep-emails-after-server-deletion.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/keep-emails-after-server-deletion.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/ja/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVaultのロゴ" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/ja/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">機能</a>
+          <a href="/ja/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">活用例</a>
+          <a href="/ja/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">ドキュメント</a>
+          <a href="/ja/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">ブログ</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="テーマを切り替える">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            ダウンロード
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/ja/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">機能</a>
+          <a href="/ja/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">活用例</a>
+          <a href="/ja/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">ドキュメント</a>
+          <a href="/ja/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">ブログ</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">ダウンロード</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/ja/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        ホームに戻る
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">サーバーから削除してもメールを残す方法</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>5分で読めます</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            サーバーからメールを削除するのは、取り返しがつかないことのように感じられます &mdash; そして多くの人にとって、実際そのとおりです。GmailやOutlookでゴミ箱を空にすれば、そのメッセージは消えます。サーバーにはもうありません。保持期間が過ぎれば、取り消しもできません。だから人は、必要のないメールもサーバーに抱え込み、いつか必要になるかもしれないと恐れて何も消せなくなります。
+          </p>
+
+          <p>
+            しかし、サーバーからメールを削除するもっともな理由もあります。容量がいっぱいで、追加の費用は払いたくない。メールプロバイダーを離れるので、去る前に整理したい。会社の方針で古いメッセージをサーバーから消す必要がある。あるいは単に、データを失う不安なしにすっきりした受信トレイが欲しい。
+          </p>
+
+          <p>
+            やり方は単純です。<strong>サーバーから削除する前に、メールをローカルにアーカイブしておくことです。</strong>自分のディスクにファイルとして存在すれば、サーバーの控えは余分なものになります。安心して削除できます。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">人が削除を怖がる理由</h3>
+
+          <p>
+            その恐れには理由があります。メールは、重要なやりとり、合意、領収書、書類の唯一の記録であることが少なくありません。人が心配するのは次のことです。
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>あとで古いメールが必要になること</strong> &mdash; 契約の細かな条件、荷物の追跡番号、何か月あるいは何年か経ってから意味を持つやり取りなど。</li>
+            <li><strong>法務やコンプライアンスの要件</strong> &mdash; 業種によっては、メールを3年、5年、あるいは7年と保管する義務があります。</li>
+            <li><strong>添付ファイル</strong> &mdash; PDFの請求書、署名済みの書類、メールでしか送られなかった案件のファイルなど。</li>
+            <li><strong>まともなバックアップがないこと</strong> &mdash; ローカルにコピーがなければ、そのメールが存在する場所はサーバーだけです。削除するというのは、もう二度と必要にならないと信じることです。</li>
+          </ul>
+
+          <p>
+            この恐れが、メールボックスの肥大を招きます。人はすべてのメールを残し、容量はいっぱいになり、何も消さずに済ませるためだけに毎月の料金を払うようになります。ローカルへのアーカイブは、この循環を完全に断ち切ります。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">アーカイブしてから削除する手順</h3>
+
+          <p>
+            MailVaultでの手順は、サーバーからの削除を安全にするために設計されています。何かを取り除く前に、データが保存されているという確信が一段ずつ積み上がります。
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>手順1: 同期</strong> &mdash; IMAPのアカウントをMailVaultに接続します。アプリがメールのヘッダーを読み込み、ほかのメールクライアントと同じようにメールボックスの中身を表示します。</li>
+            <li><strong>手順2: ローカルにアーカイブ</strong> &mdash; 残しておきたいメールを選んでアーカイブします。MailVaultはそれぞれのメールを丸ごと &mdash; ヘッダー、本文、HTMLの書式、すべての添付ファイルを &mdash; ダウンロードし、ディスクに標準的な<code>.eml</code>ファイルとして保存します。</li>
+            <li><strong>手順3: 確認</strong> &mdash; アーカイブしたメールをいくつかMailVaultで開き、欠けがないことを確かめます。添付ファイルも確認します。特定のメッセージを検索します。必要なものがすべてローカルのアーカイブにあることを確かめてください。</li>
+            <li><strong>手順4: サーバーから削除</strong> &mdash; 確認済みのローカルのコピーができたので、サーバーからメールを削除します。MailVaultはRFC 4315の<code>UID EXPUNGE</code>を使い、対象のメッセージだけを正確に消します &mdash; 誤って別のメールを削除する心配はありません。</li>
+            <li><strong>手順5: いつでもアクセス</strong> &mdash; アーカイブしたメールはディスクに残り、そのまま検索して読めます。インターネットの接続は不要です。サーバーへの依存もありません。</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">何が保存されるのか</h3>
+
+          <p>
+            MailVaultがメールをアーカイブするとき、メッセージの全体を<code>.eml</code>の形式で保存します。これには次のものが含まれます。
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>すべてのヘッダー</strong> &mdash; From、To、CC、BCC、Date、Subject、Message-ID、In-Reply-To、References、そのほかのヘッダーもすべてです。スレッドの関係も保たれます。</li>
+            <li><strong>本文の内容</strong> &mdash; プレーンテキスト版とHTML版の両方です。書式、リンク、埋め込みの画像もすべて残ります。</li>
+            <li><strong>添付ファイル</strong> &mdash; 種類や大きさにかかわらず、添付されたファイルはすべてです。PDF、画像、文書、表計算 &mdash; いずれも.emlファイルの中にMIMEのパートとして収まります。</li>
+            <li><strong>メタデータ</strong> &mdash; 既読と未読の状態、フラグ、フォルダの場所は、Maildirのファイル名に符号化されます。</li>
+          </ul>
+
+          <p>
+            <code>.eml</code>の形式は公開標準です（RFC 5322）。どのOSのどのメールクライアントでも、これらのファイルを開けます。アーカイブがMailVaultにも、ほかのどのソフトウェアにも縛られることはありません。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">よくある場面</h3>
+
+          <p>
+            <strong>メールの提供元を離れるとき:</strong> GmailからOutlookへ（あるいはその逆へ）乗り換えるとします。古いアカウントを閉じる前に、MailVaultですべてをローカルにアーカイブします。そのうえで削除するか、アカウントを閉じます。メールの履歴は移行を越えて残ります。
+          </p>
+
+          <p>
+            <strong>会社のメールの整理:</strong> IT部門がサーバーの保管の費用を減らしたいとします。従業員の古いメールをローカルにアーカイブしてから、サーバー側を消します。メールはコンプライアンスや参照のために、引き続き使えます。
+          </p>
+
+          <p>
+            <strong>個人の受信トレイの衛生:</strong> 最近の必要なメールだけの、すっきりした受信トレイが欲しいとします。1年より古いものをすべてアーカイブし、サーバーのコピーを削除すれば、軽くて散らからないメールボックスになります。古いメールが必要になっても、ローカルのアーカイブの中にあります。
+          </p>
+
+          <p>
+            <strong>保存容量の上限に達したとき:</strong> 無料のGmailやOutlookの容量がいっぱいになったとします。追加の費用を払う代わりに、<a href="/ja/guides/free-up-email-storage.html" class="text-primary-500 hover:text-primary-600 underline">古いメールをアーカイブして削除</a>すれば、何も失わずに容量を取り戻せます。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">ローカルのアーカイブをバックアップする</h3>
+
+          <p>
+            メールがディスクに置かれれば、ほかのファイルと同じようにバックアップできます。アーカイブのフォルダを外付けドライブにコピーする、NASへ同期する、いつものバックアップの手順に含める、といった具合です。アーカイブは標準的な<code>.eml</code>ファイルが入っただけのフォルダなので、どのバックアップのツールでも使えます。念のため、複数の場所にコピーを持っておくこともできます。
+          </p>
+
+          <p>
+            これは、サーバーの上にあるメールでは簡単にできないことです。サーバーは単一障害点です。バックアップを伴うローカルのアーカイブは、冗長性を与えてくれます。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">安心して削除する</h3>
+
+          <p>
+            考え方は単純です。<strong>メールは、存在するためにサーバー上にある必要はありません。</strong>ローカルにコピーがあれば、サーバー側は便宜にすぎません。それを削除すれば容量が空き、受信トレイが簡素になり、何も失いません &mdash; メールはすでに自分のマシンの上で無事だからです。
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">先にアーカイブ、安全に削除</p>
+            <p class="text-sm mb-4">MailVaultは、サーバーから削除する前に、メールを標準的な.emlファイルとして保存します。無料、オープンソース、どのIMAPのプロバイダーでも使えます。</p>
+            <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+              MailVaultをダウンロード
+            </a>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            ローカルでのメールのアーカイブは初めてですか。まずは<a href="/ja/guides/archive-imap-emails-locally.html" class="text-primary-500 hover:text-primary-600 underline">IMAPのメールをローカルにアーカイブする</a>ガイドからどうぞ。Mac向けのメールのアーカイブのアプリをお探しなら、<a href="/ja/guides/mailstore-alternative-mac.html" class="text-primary-500 hover:text-primary-600 underline">MailVaultとMailStoreの比較</a>をご覧ください。ほかの答えは<a href="/ja/faq.html" class="text-primary-500 hover:text-primary-600 underline">よくある質問</a>にあります。
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVaultのロゴ" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/ja/docs.html" class="hover:text-primary-500 transition-colors">ドキュメント</a>
+          <a href="/ja/blog.html" class="hover:text-primary-500 transition-colors">ブログ</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">プライバシー</a>
+          <a href="/ja/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">変更履歴</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">利用規約</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 無断転載を禁じます。
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="言語を選ぶ" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/guides/keep-emails-after-server-deletion.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/guides/keep-emails-after-server-deletion.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/guides/keep-emails-after-server-deletion.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/guides/keep-emails-after-server-deletion.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/guides/keep-emails-after-server-deletion.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/guides/keep-emails-after-server-deletion.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/guides/keep-emails-after-server-deletion.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/guides/keep-emails-after-server-deletion.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/guides/keep-emails-after-server-deletion.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

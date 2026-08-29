@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="ja" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>数千通の古いメールを安全に削除する方法（まずコピーを取る） — MailVault</title>
+  <meta name="description" content="数万通の古いメールを抱えたメールボックスに向き合っていますか。後で必要になるものを失わずに、古いメールを一括削除するための安全な手順を紹介します。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ja/guides/delete-thousands-of-old-emails-safely.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ja/guides/delete-thousands-of-old-emails-safely.html">
+  <meta property="og:title" content="数千通の古いメールを安全に削除する方法（まずコピーを取る） — MailVault">
+  <meta property="og:description" content="数万通の古いメールを抱えたメールボックスに向き合っていますか。後で必要になるものを失わずに、古いメールを一括削除するための安全な手順を紹介します。">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ja_JP">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="数千通の古いメールを安全に削除する方法（まずコピーを取る） — MailVault">
+  <meta name="twitter:description" content="数万通の古いメールを抱えたメールボックスに向き合っていますか。後で必要になるものを失わずに、古いメールを一括削除するための安全な手順を紹介します。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "数千通の古いメールを安全に削除する方法（まずコピーを取る）",
+  "description": "数万通の古いメールを抱えたメールボックスに向き合っていますか。後で必要になるものを失わずに、古いメールを一括削除するための安全な手順を紹介します。",
+  "url": "https://mailvaultapp.com/ja/guides/delete-thousands-of-old-emails-safely.html",
+  "datePublished": "2026-07-15",
+  "dateModified": "2026-07-15",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "1通ずつ読まずに古いメールを一括削除しても大丈夫ですか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "完全なバックアップを先にアーカイブして検証してあるなら、大丈夫です。すべてのローカルのコピーが確認できていれば、数千通を個別に見返すことなく、送信者、カテゴリ、期間でまとめて削除できます。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "何かを削除する前に、メールのバックアップが本当に完全だとどう確かめればよいですか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "年やフォルダの違うアーカイブ済みのメールを無作為にいくつか開き、添付ファイルが正しく開くことを確かめ、覚えている特定のメッセージをいくつか検索して、アーカイブの中にあることを確認してください。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "メールを削除すると、すぐに保存容量が空きますか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "たいていは、すぐには空きません。多くのプロバイダーは削除したメールをゴミ箱のフォルダに移し、手動で空にするか自動の保持期間が過ぎるまでは、容量に数え続けます。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "削除する古いニュースレターや宣伝メールを見つける、いちばん速い方法は何ですか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "既知のニュースレターやマーケティングのドメインを送信者で検索するか、プロバイダーにカテゴリやラベルの絞り込みがあればそれを使ってください。こうしたメールは散らかったメールボックスの大きな割合を占めることが多く、アーカイブさえ済んでいればほぼ確実に消して問題ありません。"
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/delete-thousands-of-old-emails-safely.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/delete-thousands-of-old-emails-safely.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/delete-thousands-of-old-emails-safely.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/delete-thousands-of-old-emails-safely.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/delete-thousands-of-old-emails-safely.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/delete-thousands-of-old-emails-safely.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/delete-thousands-of-old-emails-safely.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/delete-thousands-of-old-emails-safely.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/delete-thousands-of-old-emails-safely.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/delete-thousands-of-old-emails-safely.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/ja/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVaultのロゴ" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/ja/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">機能</a>
+          <a href="/ja/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">活用例</a>
+          <a href="/ja/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">ドキュメント</a>
+          <a href="/ja/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">ブログ</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="テーマを切り替える">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            ダウンロード
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/ja/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">機能</a>
+          <a href="/ja/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">活用例</a>
+          <a href="/ja/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">ドキュメント</a>
+          <a href="/ja/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">ブログ</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">ダウンロード</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/ja/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        ホームに戻る
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">数千通の古いメールを安全に削除する方法</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>7分で読めます</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            10年かけて2万通、5万通、10万通以上たまったメールボックスはよくあるもので、いずれ問題になります &mdash; 検索が遅い、容量の警告が出る、あるいは単に中に何が入っているのか分からない居心地の悪さ。一括削除は正しい直感ですが、雑にやると、何年もあとで必要になるもの &mdash; 古い契約書、保証の申請に使う領収書、争いになったときに効いてくるやりとり &mdash; を失います。そのリスクなしに受信トレイをきれいにする手順を紹介します。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">手順1: 何かを削除する前に、すべてをバックアップする</h3>
+
+          <p>
+            この手順が、以降のすべてを安全にします。譲れない前提です。これから整理するメールボックスの完全なコピーを、1通も削除する前に自分のコンピューターへダウンロードしてください。検証済みのローカルのコピーがあれば、以降のどの削除の判断も低リスクになります &mdash; 削除して大丈夫だという判断が間違っていたとしても、アーカイブの中に残っているからです。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">手順2: バックアップが本当にうまくいったか検証する</h3>
+
+          <p>
+            これを飛ばさないでください。年やフォルダの違うアーカイブ済みのメールを無作為にいくつか開き、添付ファイルが開くことを確かめ、覚えている特定のメッセージを2、3件検索して本当にあることを確認してください。確認していないバックアップは、一括削除のような後戻りできない判断の拠りどころにはできません。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">手順3: まずは簡単で明らかなものから削除する</h3>
+
+          <p>
+            バックアップの検証が済んだら、現役のメールボックスから消しても明らかに安全なものから始めます。ニュースレター、宣伝のメール、自動の通知、古いメーリングリストのまとめなどです。既知のニュースレターやマーケティングのドメインを送信者で検索して、まとめて選択します。これは古いメールボックスで最大のかたまりであることが多く、アーカイブさえ済んでいればリスクはほぼゼロです。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">手順4: 1通ずつ迷わず、期間で削除する</h3>
+
+          <p>
+            数千通を1通ずつ見ていくのではなく、期間で検索して &mdash; たとえば3年より前、5年より前のすべて &mdash; その範囲の中でまとめて選びます。進めながら、明らかに重要そうなもの（大きな添付ファイル、「契約」「請求」「領収」「税」といった語を含む件名）にはざっと目を通しますが、1通ずつ悩む必要はありません。完全なアーカイブという安全網がすでにあるのですから。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">手順5: 実際に容量を取り戻すためにゴミ箱を空にする</h3>
+
+          <p>
+            多くのプロバイダーは、削除したメールを一定期間ゴミ箱のフォルダに置いてから恒久的に消去し、その間も容量に数え続けます。容量のために削除しているなら、自動の消去を待たずに、判断に自信が持てた時点で手動でゴミ箱を空にしてください。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">バックアップの手順をMailVaultで行う</h3>
+
+          <p>
+            MailVaultは、上記の手順1と手順2のために作られた、macOSとLinux向けの無料・オープンソースのデスクトップアプリです。アカウントをIMAPで接続し（GmailとMicrosoftはOAuth、Yahooなどは通常のサインイン、iCloudはApp用パスワード）、メールボックス全体を1通ずつの<code>.eml</code>のファイルとしてディスクにアーカイブします。1通ごとが独立したファイルなので、そのあともアーカイブ全体をたどって検索できます &mdash; 別途掘り返す必要のある一度きりの書き出しではありません。手動のアーカイブは無料で回数の制限もないので、大きな整理の前に数万通のメールボックスをバックアップしても費用はかかりません。
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">一括削除の前にバックアップを</p>
+            <p class="text-sm mb-4">MailVaultは、メールボックス全体を検索できる個別の.emlファイルとしてアーカイブします。だから、数千通の古いメールをサーバーから削除してもリスクはありません。</p>
+            <div class="flex flex-wrap gap-3">
+              <a href="/ja/#download" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+                MailVaultをダウンロード
+              </a>
+              <a href="/ja/pricing.html" class="inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">
+                料金を見る
+              </a>
+            </div>
+          </div>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-4">よくある質問</h3>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">1通ずつ読まずに古いメールを一括削除しても大丈夫ですか？</p>
+            <p>完全なバックアップを先にアーカイブして検証してあるなら、大丈夫です。すべてのローカルのコピーが確認できていれば、数千通を個別に見返すことなく、送信者、カテゴリ、期間でまとめて削除できます。</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">何かを削除する前に、メールのバックアップが本当に完全だとどう確かめればよいですか？</p>
+            <p>年やフォルダの違うアーカイブ済みのメールを無作為にいくつか開き、添付ファイルが正しく開くことを確かめ、覚えている特定のメッセージをいくつか検索して、アーカイブの中にあることを確認してください。</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">メールを削除すると、すぐに保存容量が空きますか？</p>
+            <p>たいていは、すぐには空きません。多くのプロバイダーは削除したメールをゴミ箱のフォルダに移し、手動で空にするか自動の保持期間が過ぎるまでは、容量に数え続けます。</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">削除する古いニュースレターや宣伝メールを見つける、いちばん速い方法は何ですか？</p>
+            <p>既知のニュースレターやマーケティングのドメインを送信者で検索するか、プロバイダーにカテゴリやラベルの絞り込みがあればそれを使ってください。こうしたメールは散らかったメールボックスの大きな割合を占めることが多く、アーカイブさえ済んでいればほぼ確実に消して問題ありません。</p>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            関連する記事: <a href="/ja/guides/free-up-email-storage.html" class="text-primary-500 hover:text-primary-600 underline">メールの保存容量を空ける方法</a>、<a href="/ja/guides/gmail-storage-full.html" class="text-primary-500 hover:text-primary-600 underline">Gmailの容量がいっぱいになったときの対処</a>、<a href="/ja/guides/keep-emails-after-server-deletion.html" class="text-primary-500 hover:text-primary-600 underline">サーバーからの削除後にメールを安全に残す方法</a>。
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVaultのロゴ" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/ja/docs.html" class="hover:text-primary-500 transition-colors">ドキュメント</a>
+          <a href="/ja/blog.html" class="hover:text-primary-500 transition-colors">ブログ</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">プライバシー</a>
+          <a href="/ja/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">変更履歴</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">利用規約</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 無断転載を禁じます。
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="言語を選ぶ" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/guides/delete-thousands-of-old-emails-safely.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/guides/delete-thousands-of-old-emails-safely.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/guides/delete-thousands-of-old-emails-safely.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/guides/delete-thousands-of-old-emails-safely.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/guides/delete-thousands-of-old-emails-safely.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/guides/delete-thousands-of-old-emails-safely.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/guides/delete-thousands-of-old-emails-safely.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/guides/delete-thousands-of-old-emails-safely.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/guides/delete-thousands-of-old-emails-safely.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

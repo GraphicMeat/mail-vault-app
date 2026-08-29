@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="it" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blog - MailVault</title>
+  <meta name="description" content="Dietro le quinte dello sviluppo di MailVault. Aggiornamenti sullo sviluppo, approfondimenti tecnici e note di rilascio.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/it/blog.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/it/blog.html">
+  <meta property="og:title" content="Blog - MailVault">
+  <meta property="og:description" content="Dietro le quinte dello sviluppo di MailVault. Aggiornamenti sullo sviluppo, approfondimenti tecnici e note di rilascio.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="it_IT">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Blog - MailVault">
+  <meta name="twitter:description" content="Dietro le quinte dello sviluppo di MailVault. Aggiornamenti sullo sviluppo, approfondimenti tecnici e note di rilascio.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/it/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/it/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Funzioni</a>
+          <a href="/it/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Casi d'uso</a>
+          <a href="/it/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="Cambia tema">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Download
+          </a>
+          <!-- Mobile menu button -->
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile menu -->
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/it/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Funzioni</a>
+          <a href="/it/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Casi d'uso</a>
+          <a href="/it/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <h1 class="text-4xl font-bold mb-2">Blog</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-12">Dietro le quinte dello sviluppo di MailVault</p>
+
+      <div class="space-y-6">
+
+        <!-- Cloud Backup Vendor Reads Your Email -->
+        <a href="/it/blog/cloud-backup-vendor-reads-your-email.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-08-28" class="text-sm text-primary-500 font-medium">28 agosto 2026</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">Il backup nel cloud significa che un fornitore può leggere la tua posta per sempre. Il backup locale significa che puoi farlo solo tu.</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Un servizio di backup cloud di terze parti non elimina il singolo punto di guasto: aggiunge una seconda azienda con accesso continuo a tutto quello che hai mai inviato o ricevuto. La vera differenza di architettura, e perché il backup locale la chiude.</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>6 min di lettura</span>
+          </div>
+        </a>
+
+        <!-- GDPR Fines and Indefinite Retention -->
+        <a href="/it/blog/gdpr-fines-indefinite-email-retention.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-08-25" class="text-sm text-primary-500 font-medium">25 agosto 2026</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">Le multe GDPR arrivano a 6,11 miliardi di euro — "tenere tutto per sempre" è un rischio di conformità?</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Le sanzioni hanno superato i 6,11 miliardi di euro su 2.685 casi, e le autorità considerano sempre più spesso la conservazione illimitata delle email una violazione a sé stante. Che cosa richiede davvero il principio di limitazione della conservazione, e come tenere un archivio senza infrangerlo.</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>7 min di lettura</span>
+          </div>
+        </a>
+
+        <!-- Microsoft 365 100GB Mailbox Price Hike -->
+        <a href="/it/blog/ms365-100gb-mailbox-price-hike.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-08-20" class="text-sm text-primary-500 font-medium">20 agosto 2026</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">Microsoft ha appena raddoppiato la tua casella a 100GB — e alzato il prezzo dell'8–17%</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Tra luglio e settembre 2026 le caselle di Exchange Online passano da 50GB a 100GB, insieme a un aumento di prezzo. Una casella più grande non cambia chi tiene in mano i tuoi dati: perché la quota non è mai stata il vero problema.</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>6 min di lettura</span>
+          </div>
+        </a>
+
+        <!-- Your Email Provider Is Not a Backup -->
+        <a href="/it/blog/email-provider-not-a-backup.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-07-15" class="text-sm text-primary-500 font-medium">15 luglio 2026</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">Il tuo provider di posta non è un backup</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Blocchi dell'account, cancellazioni accidentali e cambi di policy del provider possono cancellare anni di posta in pochi minuti. Com'è fatto un backup vero, come farlo a mano con qualsiasi client e dove si inserisce MailVault.</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>6 min di lettura</span>
+          </div>
+        </a>
+
+        <!-- Gmail Storage Squeeze -->
+        <a href="/it/blog/gmail-storage-squeeze.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-07-02" class="text-sm text-primary-500 font-medium">2 luglio 2026</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">La stretta sullo spazio di Gmail — e perché ti conviene avere una copia tua</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Google sta sperimentando 5GB di spazio gratuito per i nuovi account invece di 15GB, ed elimina gli account rimasti inattivi per due anni. Ecco come MailVault conserva una copia permanente e portabile della tua posta Gmail, come semplici file .eml sul tuo disco.</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>6 min di lettura</span>
+          </div>
+        </a>
+
+        <!-- MailVault 2.4.0 Stability -->
+        <a href="/it/blog/mailvault-240-stability.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-04-17" class="text-sm text-primary-500 font-medium">17 aprile 2026</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">MailVault 2.4.0: una release di stabilità</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Dietro le quinte della 2.4.0: la correzione del bug dell'email sbagliata su Outlook, la fine delle interferenze tra account, l'addomesticamento dell'helper in background in sandbox e release snap sicure da annullare.</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>7 min di lettura</span>
+          </div>
+        </a>
+
+        <!-- Refactoring MailVault -->
+        <a href="/it/blog/refactoring-mailvault-from-monolith-to-modules.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-03-13" class="text-sm text-primary-500 font-medium">13 marzo 2026</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">Refactoring di MailVault: dal monolite ai moduli</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Come abbiamo rifattorizzato il codice di MailVault &mdash; dividendo uno store da 4.300 righe in moduli mirati, ripensando il caricamento delle email come architettura a due flussi e pianificando una decomposizione in 5 fasi senza rompere una sola funzione.</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>7 min di lettura</span>
+          </div>
+        </a>
+
+        <!-- How We Test MailVault -->
+        <a href="/it/blog/how-we-test-mailvault.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-03-11" class="text-sm text-primary-500 font-medium">11 marzo 2026</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">Come testiamo MailVault: oltre 600 test, email vere, server veri</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Uno sguardo dentro la nostra strategia di test a quattro livelli: 55 unit test in Rust, 13 suite di test JavaScript, test di integrazione contro server IMAP reali con 500 email precaricate e test end-to-end che pilotano l'app desktop vera e propria.</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>6 min di lettura</span>
+          </div>
+        </a>
+
+        <!-- Outlook OAuth Odyssey -->
+        <a href="/it/blog/outlook-oauth-odyssey.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-02-28" class="text-sm text-primary-500 font-medium">28 febbraio 2026</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">L'odissea OAuth di Outlook: IMAP è rotto, lunga vita a Graph</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Come una regressione IMAP lato server di Microsoft ci ha costretti a registrare una nostra app Azure AD, a costruire un intero livello di trasporto Graph API in Rust e a debuggare sette guasti a catena lungo la strada.</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>8 min di lettura</span>
+          </div>
+        </a>
+
+        <!-- Gmail OAuth2 -->
+        <a href="/it/blog/gmail-oauth2.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-02-20" class="text-sm text-primary-500 font-medium">20 febbraio 2026</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">Aggiungere OAuth2 per Gmail: un solo flusso, due provider</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Come abbiamo reso indipendente dal provider il flusso OAuth2 PKCE che MailVault già usava per Microsoft e come abbiamo aggiunto l'accesso con Google — niente password per app, nessuna impostazione IMAP da cercare.</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>4 min di lettura</span>
+          </div>
+        </a>
+
+        <!-- Sandbox Signing Saga -->
+        <a href="/it/blog/sandbox-signing-saga.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
+          <time datetime="2026-02-18" class="text-sm text-primary-500 font-medium">18 febbraio 2026</time>
+          <h2 class="text-xl font-bold mt-1 mb-2 group-hover:text-primary-500 transition-colors">La saga della firma in sandbox su macOS (ovvero perché esistono le versioni dalla 1.4.0 alla 1.4.5)</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Sei release di patch in un solo giorno. Firma del codice su macOS, App Sandbox e sidecar compilati con Bun non vanno d'accordo — ecco la storia completa di come l'abbiamo risolta.</p>
+          <div class="flex items-center gap-2 mt-3 text-xs text-slate-600 dark:text-slate-500">
+            <span>5 min di lettura</span>
+          </div>
+        </a>
+
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/it/docs.html" class="hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacy</a>
+          <a href="/it/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Termini</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. Tutti i diritti riservati.
+        </p>
+      </div>
+    </div>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+            <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+        <span>Cucinato su una <span class="text-primary-500 font-semibold">GPU aperta</span> da</span>
+        <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
+          <img src="/graphicmeat-logo.webp" alt="Fatto da Graphic Meat" class="w-full max-w-[400px] h-auto" width="512" height="512" loading="lazy" decoding="async">
+        </a>
+      </div>
+    </div>
+
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="Scegli una lingua" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/blog.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/blog.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/blog.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/blog.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/blog.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/blog.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/blog.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/blog.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/blog.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    // Initialize theme
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

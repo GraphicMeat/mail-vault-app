@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="it" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Casella Outlook.com / Hotmail piena? Come archiviare la posta vecchia — MailVault</title>
+  <meta name="description" content="Outlook.com o Hotmail ti avvisa che sei senza spazio? Ecco come vedere che cosa lo occupa, ripulirlo senza rischi e archiviare la posta vecchia in locale invece di pagare per averne di più.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/it/guides/outlook-hotmail-mailbox-full.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/it/guides/outlook-hotmail-mailbox-full.html">
+  <meta property="og:title" content="Casella Outlook.com / Hotmail piena? Come archiviare la posta vecchia — MailVault">
+  <meta property="og:description" content="Outlook.com o Hotmail ti avvisa che sei senza spazio? Ecco come vedere che cosa lo occupa, ripulirlo senza rischi e archiviare la posta vecchia in locale invece di pagare per averne di più.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="it_IT">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Casella Outlook.com / Hotmail piena? Come archiviare la posta vecchia — MailVault">
+  <meta name="twitter:description" content="Outlook.com o Hotmail ti avvisa che sei senza spazio? Ecco come vedere che cosa lo occupa, ripulirlo senza rischi e archiviare la posta vecchia in locale invece di pagare per averne di più.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Casella Outlook.com / Hotmail piena? Come archiviare la posta vecchia",
+  "description": "Outlook.com o Hotmail ti avvisa che sei senza spazio? Ecco come vedere che cosa lo occupa, ripulirlo senza rischi e archiviare la posta vecchia in locale invece di pagare per averne di più.",
+  "url": "https://mailvaultapp.com/it/guides/outlook-hotmail-mailbox-full.html",
+  "datePublished": "2026-07-15",
+  "dateModified": "2026-07-15",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Quanto spazio gratuito dà Outlook.com?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "15 GB, condivisi tra Posta e OneDrive. Puoi vedere la ripartizione in Impostazioni → Generali → Spazio di archiviazione."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Svuotare la Posta eliminata in Outlook.com libera subito spazio?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sì. A differenza di alcuni provider che aspettano un certo numero di giorni, svuotare a mano le cartelle Posta eliminata e Posta indesiderata in Outlook.com libera subito quello spazio."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Hotmail e Outlook.com sono la stessa cosa?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sì, a fini pratici. Microsoft ha rinominato Hotmail in Outlook.com anni fa; i vecchi indirizzi @hotmail.com e @live.com funzionano ancora e usano lo stesso spazio e le stesse impostazioni di Outlook.com."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Posso archiviare la posta di Outlook.com senza pagare Microsoft 365?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sì. Outlook.com supporta l'accesso IMAP standard, quindi qualsiasi strumento di archiviazione IMAP, compreso il piano gratuito di MailVault, può scaricare la tua posta in locale senza nessun abbonamento Microsoft 365."
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/outlook-hotmail-mailbox-full.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/outlook-hotmail-mailbox-full.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/outlook-hotmail-mailbox-full.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/outlook-hotmail-mailbox-full.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/outlook-hotmail-mailbox-full.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/outlook-hotmail-mailbox-full.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/outlook-hotmail-mailbox-full.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/outlook-hotmail-mailbox-full.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/outlook-hotmail-mailbox-full.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/outlook-hotmail-mailbox-full.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/it/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/it/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Funzioni</a>
+          <a href="/it/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Casi d'uso</a>
+          <a href="/it/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="Cambia tema">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Download
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/it/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Funzioni</a>
+          <a href="/it/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Casi d'uso</a>
+          <a href="/it/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/it/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Torna alla home
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Casella Outlook.com / Hotmail piena? Ecco la soluzione</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>6 min di lettura</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Outlook.com (il nome attuale di quello che era Hotmail) dà agli account gratuiti 15 GB di spazio, condivisi con OneDrive. Quando lo riempi, la posta in arrivo viene respinta e vedi avvisi di spazio nell'interfaccia web e nelle app Outlook per desktop o cellulare. La soluzione di Microsoft è venderti più spazio con un abbonamento Microsoft 365 &mdash; ma se preferisci risolvere davvero il problema invece di affittare spazio a tempo indeterminato, ecco il quadro completo.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1. Controlla dove è finito il tuo spazio</h3>
+
+          <p>
+            In Outlook.com vai in Impostazioni &rarr; Generali &rarr; Spazio di archiviazione per vedere la ripartizione tra Posta e OneDrive. Se il consumo maggiore è OneDrive, fare pulizia nella posta non aiuterà molto &mdash; dovrai occuparti dei file di OneDrive a parte. Se il grosso è la Posta, la causa sono quasi sempre gli allegati, non il testo delle email.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">2. Svuota Posta eliminata e Posta indesiderata</h3>
+
+          <p>
+            Come quasi tutti i provider, Outlook.com tiene i messaggi cancellati nella cartella Posta eliminata finché non la svuoti, e fino ad allora continuano a occupare la tua quota. Fai clic con il tasto destro su Posta eliminata e su Posta indesiderata nell'elenco delle cartelle e scegli "Svuota cartella" per recuperare subito quello spazio.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">3. Ordina per dimensione e togli la vecchia posta piena di allegati</h3>
+
+          <p>
+            Usa la ricerca di Outlook.com con <code>hasattachments:yes</code> e ordina per dimensione per trovare le email più grandi. Poche email di anni fa con allegati pesanti &mdash; PDF, video, immagini disco &mdash; occupano di solito molto più spazio di migliaia di brevi email di testo messe insieme.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">4. Chiediti se ti serve davvero Microsoft 365</h3>
+
+          <p>
+            Microsoft 365 Basic parte da un prezzo mensile contenuto e include 100 GB di spazio insieme alle app Office, cosa che può valerne la pena se le app le vuoi comunque. Ma se lo compri solo per risolvere una casella piena, stai pagando un canone continuo per rimandare un problema che tornerà quando anche la nuova quota, più grande, si riempirà.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">5. Archivia in locale, poi cancella dal server</h3>
+
+          <p>
+            L'approccio che spezza davvero il ciclo: scarica sul tuo computer una copia delle vecchie email che vuoi tenere, verifica che la copia sia completa, poi cancella quelle email da Outlook.com. La quota della casella si libera per sempre, e tu tieni ogni messaggio, ricercabile e accessibile offline, senza nessun canone ricorrente legato al conservare la tua storia.
+          </p>
+
+          <p>
+            Outlook.com e Hotmail supportano entrambi IMAP, quindi qualsiasi strumento di archiviazione basato su IMAP può farlo. MailVault è un'opzione gratuita e open source per macOS e Linux: collega il tuo account Outlook.com o Hotmail con l'accesso OAuth di Microsoft (niente password da sistemare), seleziona le cartelle che vuoi e MailVault scarica ogni messaggio come singolo file <code>.eml</code> sul tuo disco, organizzato in una normale struttura Maildir. Una volta verificato l'archivio &mdash; apri qualche email, controlla gli allegati, cerca qualcosa che ricordi &mdash; puoi eliminare senza rischi gli originali da Outlook.com e riprenderti la tua quota.
+          </p>
+
+          <p>
+            L'archiviazione manuale in MailVault è gratuita e illimitata. Se preferisci che parta da sola secondo una pianificazione invece di archiviare a lotti, è una funzione premium da $4/mese o $25/anno — 14 giorni di prova gratuita sul piano annuale.
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">Libera la tua casella Outlook.com una volta per tutte</p>
+            <p class="text-sm mb-4">MailVault archivia la posta di Outlook.com e Hotmail come singoli file .eml sul tuo disco prima che tu elimini qualsiasi cosa dal server.</p>
+            <div class="flex flex-wrap gap-3">
+              <a href="/it/#download" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+                Scarica MailVault
+              </a>
+              <a href="/it/pricing.html" class="inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">
+                Vedi i prezzi
+              </a>
+            </div>
+          </div>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-4">Domande frequenti</h3>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Quanto spazio gratuito dà Outlook.com?</p>
+            <p>15 GB, condivisi tra Posta e OneDrive. Puoi vedere la ripartizione in Impostazioni → Generali → Spazio di archiviazione.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Svuotare la Posta eliminata in Outlook.com libera subito spazio?</p>
+            <p>Sì. A differenza di alcuni provider che aspettano un certo numero di giorni, svuotare a mano le cartelle Posta eliminata e Posta indesiderata in Outlook.com libera subito quello spazio.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Hotmail e Outlook.com sono la stessa cosa?</p>
+            <p>Sì, a fini pratici. Microsoft ha rinominato Hotmail in Outlook.com anni fa; i vecchi indirizzi @hotmail.com e @live.com funzionano ancora e usano lo stesso spazio e le stesse impostazioni di Outlook.com.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Posso archiviare la posta di Outlook.com senza pagare Microsoft 365?</p>
+            <p>Sì. Outlook.com supporta l'accesso IMAP standard, quindi qualsiasi strumento di archiviazione IMAP, compreso il piano gratuito di MailVault, può scaricare la tua posta in locale senza nessun abbonamento Microsoft 365.</p>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            Da leggere anche: <a href="/it/guides/gmail-storage-full.html" class="text-primary-500 hover:text-primary-600 underline">cosa fare quando lo spazio di Gmail è esaurito</a>, <a href="/it/guides/free-up-email-storage.html" class="text-primary-500 hover:text-primary-600 underline">come liberare spazio nella posta</a> e <a href="/it/guides/imap-backup-tool-checklist.html" class="text-primary-500 hover:text-primary-600 underline">che cosa guardare in uno strumento di backup IMAP</a>.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/it/docs.html" class="hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacy</a>
+          <a href="/it/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Termini</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. Tutti i diritti riservati.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="Scegli una lingua" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/guides/outlook-hotmail-mailbox-full.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/guides/outlook-hotmail-mailbox-full.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/guides/outlook-hotmail-mailbox-full.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/guides/outlook-hotmail-mailbox-full.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/guides/outlook-hotmail-mailbox-full.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/guides/outlook-hotmail-mailbox-full.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/guides/outlook-hotmail-mailbox-full.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/guides/outlook-hotmail-mailbox-full.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/guides/outlook-hotmail-mailbox-full.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

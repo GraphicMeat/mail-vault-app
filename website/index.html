@@ -19,6 +19,7 @@
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="en_US">
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
@@ -127,6 +128,18 @@
     "url": "https://mailvaultapp.com"
   }
   </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/">
+  <!-- /i18n:alternates -->
 </head>
 
 <body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
@@ -1235,6 +1248,21 @@
       </div>
     </div>
 
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="Choose a language" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
   </footer>
 
   <!-- Contact Modal -->
@@ -1310,6 +1338,30 @@
     </div>
   </div>
 
+  <!-- Strings the scripts below put on screen. Kept out of the JS so the
+       localization pipeline can translate them like any other page text;
+       website/i18n/i18n.mjs treats an application/json block as prose. -->
+  <script type="application/json" id="ui-strings">
+  {
+    "downloadMac": "Download Free for macOS",
+    "downloadLinux": "Download Free for Linux",
+    "subscribing": "Subscribing\u2026",
+    "sending": "Sending\u2026",
+    "saving": "Saving\u2026",
+    "subscribed": "You're on the list. Watch for the welcome email.",
+    "contactSent": "Message sent. We'll reply to the address you gave.",
+    "platformSignedUp": "You're on the list \u2014 we'll email you when Windows ships.",
+    "expandScreenshot": "Expand screenshot:",
+    "offline": "You appear to be offline. Check your connection and try again.",
+    "unreachable": "Couldn't reach the server. Check your connection and try again.",
+    "rateLimited": "Too many attempts. Wait a minute and try again.",
+    "serverError": "Something went wrong on our end. Try again in a moment.",
+    "submitFailed": "That did not go through. Check the details and try again.",
+    "subscribeFailed": "That didn't go through. Check the address and try again.",
+    "contactFailed": "That didn't go through. Check the details and try again."
+  }
+  </script>
+
   <script>
     // ============================================
     // Configuration - Update these for your server
@@ -1373,6 +1425,14 @@
       el.classList.add(className);
     }
 
+    // Localized copies of this page carry a translated #ui-strings block; the
+    // English literal stays as the fallback if it is ever missing or malformed.
+    const UI = (() => {
+      try { return JSON.parse(document.getElementById('ui-strings').textContent); }
+      catch (e) { return {}; }
+    })();
+    const ui = (key, fallback) => UI[key] || fallback;
+
     function setArrivedText(el, text) {
       if (!el) return;
       el.textContent = text;
@@ -1388,9 +1448,9 @@
     const isLinux = /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
 
     if (isMac) {
-      setArrivedText(heroDownloadText, 'Download Free for macOS');
+      setArrivedText(heroDownloadText, ui('downloadMac', 'Download Free for macOS'));
     } else if (isLinux) {
-      setArrivedText(heroDownloadText, 'Download Free for Linux');
+      setArrivedText(heroDownloadText, ui('downloadLinux', 'Download Free for Linux'));
     }
 
     // ============================================
@@ -1486,7 +1546,7 @@
     // One sentence per failure the visitor can actually do something about.
     async function postForm(url, body) {
       if (navigator.onLine === false) {
-        throw new Error('You appear to be offline. Check your connection and try again.');
+        throw new Error(ui('offline', 'You appear to be offline. Check your connection and try again.'));
       }
       let res;
       try {
@@ -1496,18 +1556,18 @@
           body: JSON.stringify(body),
         });
       } catch (networkError) {
-        throw new Error("Couldn't reach the server. Check your connection and try again.");
+        throw new Error(ui('unreachable', "Couldn't reach the server. Check your connection and try again."));
       }
       if (res.ok) return res.json().catch(() => ({}));
 
       if (res.status === 429) {
-        throw new Error('Too many attempts. Wait a minute and try again.');
+        throw new Error(ui('rateLimited', 'Too many attempts. Wait a minute and try again.'));
       }
       if (res.status >= 500) {
-        throw new Error('Something went wrong on our end. Try again in a moment.');
+        throw new Error(ui('serverError', 'Something went wrong on our end. Try again in a moment.'));
       }
       const data = await res.json().catch(() => ({}));
-      throw new Error(data.error || 'That did not go through. Check the details and try again.');
+      throw new Error(data.error || ui('submitFailed', 'That did not go through. Check the details and try again.'));
     }
 
     const NEWSLETTER_STATUS_CLASS = 'mt-4 text-sm';
@@ -1515,10 +1575,10 @@
     newsletterForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (newsletterForm.dataset.busy === '1') return;
-      setBusy(newsletterForm, true, 'Subscribing…');
+      setBusy(newsletterForm, true, ui('subscribing', 'Subscribing…'));
       try {
         await postForm(`${API_BASE}/api/subscribe`, { email: newsletterForm.email.value });
-        showStatus(newsletterMessage, "You're on the list. Watch for the welcome email.", 'ok', NEWSLETTER_STATUS_CLASS);
+        showStatus(newsletterMessage, ui('subscribed', "You're on the list. Watch for the welcome email."), 'ok', NEWSLETTER_STATUS_CLASS);
         newsletterForm.reset();
       } catch (err) {
         showStatus(newsletterMessage, err.message, 'error', NEWSLETTER_STATUS_CLASS);
@@ -1584,7 +1644,7 @@
     contactForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       if (contactForm.dataset.busy === '1') return;
-      setBusy(contactForm, true, 'Sending…');
+      setBusy(contactForm, true, ui('sending', 'Sending…'));
       try {
         await postForm(`${API_BASE}/api/contact`, {
           name: contactForm.name.value,
@@ -1594,7 +1654,7 @@
           website: contactForm.website.value,
           _t: contactForm._t.value,
         });
-        showStatus(contactMessage, "Message sent. We'll reply to the address you gave.", 'ok', CONTACT_STATUS_CLASS);
+        showStatus(contactMessage, ui('contactSent', "Message sent. We'll reply to the address you gave."), 'ok', CONTACT_STATUS_CLASS);
         contactForm.reset();
         // The form is cleared, so the text stays on screen long enough to read
         // before the dialog goes away. Nothing is retried behind it.
@@ -1616,10 +1676,10 @@
     (function reportFormRedirect() {
       const params = new URLSearchParams(window.location.search);
       const results = [
-        ['subscribed', newsletterMessage, "You're on the list. Watch for the welcome email.", 'ok', NEWSLETTER_STATUS_CLASS],
-        ['subscribe_error', newsletterMessage, "That didn't go through. Check the address and try again.", 'error', NEWSLETTER_STATUS_CLASS],
-        ['contacted', contactMessage, "Message sent. We'll reply to the address you gave.", 'ok', CONTACT_STATUS_CLASS],
-        ['contact_error', contactMessage, "That didn't go through. Check the details and try again.", 'error', CONTACT_STATUS_CLASS],
+        ['subscribed', newsletterMessage, ui('subscribed', "You're on the list. Watch for the welcome email."), 'ok', NEWSLETTER_STATUS_CLASS],
+        ['subscribe_error', newsletterMessage, ui('subscribeFailed', "That didn't go through. Check the address and try again."), 'error', NEWSLETTER_STATUS_CLASS],
+        ['contacted', contactMessage, ui('contactSent', "Message sent. We'll reply to the address you gave."), 'ok', CONTACT_STATUS_CLASS],
+        ['contact_error', contactMessage, ui('contactFailed', "That didn't go through. Check the details and try again."), 'error', CONTACT_STATUS_CLASS],
       ];
       let matched = false;
       for (const [flag, el, text, kind, baseClass] of results) {
@@ -1703,10 +1763,10 @@
       platformForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         if (platformForm.dataset.busy === '1') return;
-        setBusy(platformForm, true, 'Saving…');
+        setBusy(platformForm, true, ui('saving', 'Saving…'));
         try {
           await postForm(`${API_BASE}/api/subscribe`, { email: platformForm.email.value });
-          showStatus(platformMessage, "You're on the list — we'll email you when Windows ships.", 'ok', 'mt-2 text-sm');
+          showStatus(platformMessage, ui('platformSignedUp', "You're on the list — we'll email you when Windows ships."), 'ok', 'mt-2 text-sm');
           platformForm.reset();
         } catch (err) {
           showStatus(platformMessage, err.message, 'error', 'mt-2 text-sm');
@@ -1791,7 +1851,7 @@
         el.style.cursor = 'zoom-in';
         el.setAttribute('tabindex', '0');
         el.setAttribute('role', 'button');
-        el.setAttribute('aria-label', 'Expand screenshot: ' + (el.alt || ''));
+        el.setAttribute('aria-label', ui('expandScreenshot', 'Expand screenshot:') + ' ' + (el.alt || ''));
         el.addEventListener('click', function() { open(el.currentSrc || el.src, el.alt); });
         el.addEventListener('keydown', function(e) {
           if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(el.currentSrc || el.src, el.alt); }

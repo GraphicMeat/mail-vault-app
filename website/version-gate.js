@@ -25,8 +25,16 @@
   }
 
   function applyToHomepage(latest, entries, root) {
-    var p = (root || document).querySelector('[data-whats-new]');
+    var doc = root || document;
+    var p = doc.querySelector('[data-whats-new]');
     if (!p) return;
+    // whats-new.json is English only. The localized pages ship the same blurb
+    // already translated, so pulling a newer entry in would swap German prose
+    // for English. A localized homepage lags by one deploy instead — stale
+    // beats half-English, and it can still never announce an unreleased build.
+    var docEl = doc.documentElement || document.documentElement;
+    var lang = (docEl && docEl.getAttribute('lang')) || 'en';
+    if (lang.slice(0, 2).toLowerCase() !== 'en') return;
     // Only ever move forward, and only to copy we actually have.
     if (compareVersions(latest, p.getAttribute('data-version') || '0.0.0') <= 0) return;
     var entry = entries && entries[latest];

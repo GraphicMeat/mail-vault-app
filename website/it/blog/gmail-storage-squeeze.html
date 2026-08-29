@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="it" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>La stretta sullo spazio di Gmail — e perché ti conviene avere una copia tua - Blog di MailVault</title>
+  <meta name="description" content="Google sta sperimentando 5GB di spazio gratuito per i nuovi account invece di 15GB, ed elimina gli account inattivi da due anni. Ecco come MailVault conserva una copia locale permanente della tua posta Gmail sul tuo disco.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/it/blog/gmail-storage-squeeze.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/it/blog/gmail-storage-squeeze.html">
+  <meta property="og:title" content="La stretta sullo spazio di Gmail — e perché ti conviene avere una copia tua">
+  <meta property="og:description" content="Google sta sperimentando 5GB di spazio gratuito per i nuovi account invece di 15GB, ed elimina gli account inattivi da due anni. Ecco come MailVault conserva una copia locale permanente della tua posta Gmail sul tuo disco.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="it_IT">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="La stretta sullo spazio di Gmail — e perché ti conviene avere una copia tua">
+  <meta name="twitter:description" content="Google sta sperimentando 5GB di spazio gratuito per i nuovi account invece di 15GB, ed elimina gli account inattivi da due anni. Ecco come MailVault conserva una copia locale permanente della tua posta Gmail sul tuo disco.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/gmail-storage-squeeze.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/gmail-storage-squeeze.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/it/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/it/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Funzioni</a>
+          <a href="/it/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Casi d'uso</a>
+          <a href="/it/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="Cambia tema">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Download
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/it/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Funzioni</a>
+          <a href="/it/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Casi d'uso</a>
+          <a href="/it/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/it/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Torna al blog
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-07-02" class="text-sm text-primary-500 font-medium">2 luglio 2026</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">La stretta sullo spazio di Gmail — e perché ti conviene avere una copia tua</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>6 min di lettura</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Per anni il patto era semplice: apri un account Google, ottieni 15&nbsp;GB di spazio gratuito condiviso tra Gmail, Drive e Photos, e non ci pensi più. Quel patto sta cambiando in silenzio &mdash; ed è un buon momento per farsi una domanda scomoda. Se Google possiede l'unica copia di dieci anni della tua posta, che cosa succede quando il piano gratuito ti scivola sotto i piedi?
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Che cosa è cambiato davvero</h3>
+
+          <p>
+            A maggio 2026 utenti e giornalisti hanno notato che Google stava sperimentando una nuova policy di spazio per gli account <em>appena creati</em> in certe aree: 5&nbsp;GB di spazio gratuito per impostazione predefinita invece di 15&nbsp;GB. Per sbloccare i 15&nbsp;GB pieni "senza costi aggiuntivi" ti viene chiesto di aggiungere un numero di telefono all'account. È cambiata anche la formulazione di Google &mdash; da "Il tuo account Google include 15&nbsp;GB di spazio cloud gratuito" a "<strong>fino a</strong> 15&nbsp;GB". (<a href="https://9to5google.com/2026/05/14/google-account-free-storage-changes-15gb/" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">9to5Google</a>, <a href="https://www.techradar.com/computing/websites-apps/no-google-is-not-ending-its-15gb-of-free-gmail-storage-policy-its-testing-a-5gb-initial-limit-that-jumps-to-the-full-amount-if-you-add-a-phone-number" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">TechRadar</a>.)
+          </p>
+
+          <p>
+            Per essere precisi, visto che i titoli non sempre lo sono stati: è una sperimentazione, riguarda gli account <em>nuovi</em> in mercati <em>selezionati</em>, e se hai già un account con 15&nbsp;GB oggi non ti viene tolto nulla. Google dice che l'esperimento riguarda la qualità del servizio e la spinta verso una maggiore sicurezza nel recupero dell'account. La stampa indica però sempre la stessa pressione di fondo &mdash; il costo crescente dell'AI e dell'infrastruttura cloud (<a href="https://cybernews.com/tech/google-gmail-free-storage-limitations/" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">Cybernews</a>).
+          </p>
+
+          <p>
+            Non siamo qui a drammatizzare un test limitato. Siamo qui a indicare la direzione di marcia. "Fino a 15&nbsp;GB" non è la stessa promessa di "15&nbsp;GB". I piani gratuiti si restringono, o finiscono dietro un numero di telefono, o dietro un piano a pagamento &mdash; e l'unica cosa che ogni versione di questa storia ha in comune è che la posta vive sul server di qualcun altro, a condizioni che possono essere riviste senza il tuo consenso.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">La parte che nessuno cita: la cancellazione per inattività</h3>
+
+          <p>
+            Il tetto allo spazio fa notizia, ma c'è una policy più silenziosa che conta di più per qualsiasi cosa tu consideri un <em>archivio</em>. Da dicembre 2023 Google può eliminare un intero account consumer &mdash; e tutto quello che contiene: i messaggi di Gmail, i file su Drive, le foto e l'indirizzo stesso &mdash; se resta inutilizzato per due anni (<a href="https://support.google.com/mail/answer/6374270?hl=en" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">pagina di Google sulla gestione dello spazio</a>).
+          </p>
+
+          <p>
+            Pensa a che cosa significa per quel vecchio account che tieni "non si sa mai". Quello con i tuoi documenti universitari, le tue prime fatture da freelance, la ricevuta di qualcosa ancora in garanzia, le ultime email di una persona che hai perso. Se non accedi, il conto alla rovescia è partito. Una casella è un posto in cui arriva la posta. Non è mai stata pensata per essere la cassaforte in cui tieni le cose che non puoi recuperare.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Dove entra MailVault</h3>
+
+          <p>
+            MailVault è un'app desktop che si collega alla tua Gmail e ne tiene una copia completa e permanente sul tuo computer. Accedi con Google &mdash; OAuth2 vero, niente password per app, nessuna impostazione di server IMAP da andare a cercare (<a href="/it/blog/gmail-oauth2.html" class="text-primary-500 hover:text-primary-600 underline">qui abbiamo raccontato quel flusso</a>) &mdash; e MailVault scarica la tua posta in file locali che controlli tu.
+          </p>
+
+          <p>
+            La decisione di progetto che conta è il formato di archiviazione. Ogni messaggio viene salvato come normale file <code>.eml</code> in un albero di cartelle in stile Maildir sul tuo disco. Non è un database proprietario apribile solo dentro la nostra app. <code>.eml</code> è il formato grezzo delle email RFC&nbsp;822 &mdash; lo stesso che capisce ogni client di posta al mondo. Il tuo archivio è una semplice cartella di semplici file:
+          </p>
+
+          <pre>~/MailVault/
+  you@gmail.com/
+    INBOX/
+      1699887342.a1b2c3.eml
+      1699890021.d4e5f6.eml
+    Sent/
+    Receipts/        &larr; your own Gmail labels, preserved as folders
+    Family/
+    ...</pre>
+
+          <p>
+            Aprine uno in Apple Mail, Thunderbird, Outlook o in un editor di testo &mdash; si apre e basta. Fai il backup della cartella su un disco esterno, un NAS o una cartella cloud a tua scelta. Copiala su una macchina nuova tra dieci anni. Leggere la tua posta non dipende dal fatto che MailVault esista ancora, che un abbonamento sia attivo o che un server resti online. È tutto qui il punto.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Come risponde tutto questo alla stretta</h3>
+
+          <p>
+            Mettiamo in fila le preoccupazioni con quello che fa davvero una copia locale:
+          </p>
+
+          <p>
+            <strong>Il piano gratuito si riduce.</strong> Una volta che la tua posta è archiviata in locale, i messaggi che non ti serve più tenere sui server di Google possono essere eliminati <em>lì</em> per recuperare spazio &mdash; mentre la copia sul tuo disco resta completa. La tua posta in arrivo diventa una superficie di lavoro, non l'unico vault. I tuoi 5&nbsp;GB (o 15, o qualunque sia il numero finale) smettono di essere un conto alla rovescia contro cui non puoi nulla.
+          </p>
+
+          <p>
+            <strong>Eliminazione per inattività.</strong> Un account che hai archiviato per intero può decadere senza portarsi via la tua storia. Se fra due anni Google recupera un account inattivo, avrai perso un indirizzo &mdash; non i tuoi documenti.
+          </p>
+
+          <p>
+            <strong>Vincoli e perdita di accesso.</strong> Una password dimenticata, un segnale di sicurezza sull'account, una contestazione sulle policy, o semplicemente la voglia di lasciare Gmail un giorno &mdash; niente di tutto questo tocca una cartella di file <code>.eml</code> che sta sul tuo disco.
+          </p>
+
+          <p>
+            Pensiamo che questa sia la versione onesta della proprietà della posta, quindi saremo onesti anche sul confine: MailVault tiene una copia, non gestisce la tua posta. Continui a inviare e ricevere tramite Gmail. Quello che cambia è che "cancello per liberare spazio" e "lascio decadere questo vecchio account" smettono di essere irreversibili, perché l'archivio non è la cosa che stai cancellando.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Local first, non local only</h3>
+
+          <p>
+            Ancora una cosa su cui vale la pena essere chiari, perché è facile pensare che il discorso sia "diffida del cloud". Non lo è. Il cloud è davvero comodo, e Gmail è davvero una buona casella di posta. Il problema non è mai stato che una copia stia sui server di Google &mdash; è che, per quasi tutti, è l'<em>unica</em> copia, regolata da condizioni che non stabiliscono loro.
+          </p>
+
+          <p>
+            La risposta di MailVault è ribaltare quale copia fa da àncora. L'archivio autorevole e permanente è quello su hardware tuo, in un formato che sopravvive a qualsiasi singola app. La ridondanza e la sincronizzazione nel cloud sono cose che aggiungi sopra per comodità &mdash; non le fondamenta su cui scommetti la tua storia. Un piano gratuito che si restringe è una storia molto più piccola quando il piano gratuito non è mai stato il posto in cui viveva il tuo archivio.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Farsi una copia oggi</h3>
+
+          <p>
+            Se qualcosa di tutto questo ti ha toccato un nervo scoperto &mdash; il vecchio account di cui dovresti davvero fare una copia, la barra dello spazio che striscia verso il pieno &mdash; la soluzione è una quindicina di minuti di configurazione. <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">Scarica MailVault</a>, accedi con Google e lascia che tiri giù la tua posta in una cartella tua. Poi fai la cosa che rimandi da anni: fatti una copia della tua posta prima che le condizioni cambino di nuovo.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/it/docs.html" class="hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacy</a>
+          <a href="/it/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Termini</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. Tutti i diritti riservati.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="Scegli una lingua" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/blog/gmail-storage-squeeze.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

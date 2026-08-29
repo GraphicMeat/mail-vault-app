@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>邮件跟踪拦截 — 在跟踪像素加载之前把它剥掉 | MailVault</title>
+  <meta name="description" content="MailVault 会检测营销邮件里隐藏的跟踪像素，并在邮件渲染之前把它们从 HTML 中剥离。看看前后对比、跟踪代码本身，以及一个 1×1 像素会告诉发件人什么。">
+  <meta name="robots" content="index, follow">
+  <meta name="keywords" content="email tracking pixel, block email trackers, spy pixel, read receipt blocker, email privacy, tracking pixel blocker mac, stop email tracking, mailchimp tracking pixel, sendgrid open tracking">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/features/email-tracker-blocking.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/features/email-tracker-blocking.html">
+  <meta property="og:title" content="邮件跟踪拦截 — 在跟踪像素加载之前把它剥掉">
+  <meta property="og:description" content="营销邮件里藏着一张 1×1 的图片，你一打开它就会回报出去。MailVault 会在邮件被渲染之前把它从 HTML 中移除。">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="邮件跟踪拦截 — 在跟踪像素加载之前把它剥掉">
+  <meta name="twitter:description" content="营销邮件里藏着一张 1×1 的图片，你一打开它就会回报出去。MailVault 会在邮件被渲染之前把它从 HTML 中移除。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    @keyframes mv-ping { 0% { opacity: 1; transform: scale(1); } 75%, 100% { opacity: 0; transform: scale(2.2); } }
+    .mv-ping { animation: mv-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite; }
+    @media (prefers-reduced-motion: reduce) { .mv-ping { animation: none; } }
+  </style>
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "邮件跟踪拦截 — 在跟踪像素加载之前把它剥掉",
+  "description": "MailVault 会检测邮件中隐藏的跟踪像素，并在邮件渲染之前把它们从 HTML 中剥离。检测免费；拦截属于 MailVault Premium。",
+  "url": "https://mailvaultapp.com/zh/features/email-tracker-blocking.html",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "datePublished": "2026-08-28",
+  "dateModified": "2026-08-28",
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "什么是邮件跟踪像素？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "跟踪像素是一张嵌在 HTML 邮件里的极小图片，通常是 1×1 且不可见。邮件一渲染，你的邮件客户端就会向发件人的服务器请求它，这就告诉了发件人你打开过这封邮件、什么时候打开、打开了多少次、你的 IP 地址和你的邮件客户端。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "MailVault 是怎么拦截跟踪像素的？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "MailVault 会在邮件正文被渲染之前解析它，并把信标元素从 HTML 中移除。什么请求都不会发出，发件人也就没有连接可记录。检测和移除全部在你的设备上完成 —— 邮件的任何部分都不会被发到别处。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "我能看到是哪家公司在跟踪我吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "能。每一封带跟踪器的邮件，主题旁边都会出现一个图标。点击它会显示跟踪厂商、请求的 URL，以及它为什么被标记。这项检测对每一位 MailVault 用户都免费；在信标加载前把它移除则属于 Premium。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "MailVault 里的跟踪拦截是免费的吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "检测永久免费 —— 你总是能看到某封邮件在跟踪你，以及是哪家厂商发出的信标。在信标加载之前把它剥掉属于 MailVault Premium，$4/月 或 $25/年，年付方案含 14 天免费试用。"
+      }
+    }
+  ]
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/features/email-tracker-blocking.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/zh/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/zh/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/pricing.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">定价</a>
+          <a href="/zh/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="切换主题">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            下载
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/zh/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/pricing.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">定价</a>
+          <a href="/zh/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">下载</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-28 pb-16">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <!-- Hero -->
+      <header class="mb-12">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 mb-5">
+          Premium 功能
+        </div>
+        <h1 class="text-4xl sm:text-5xl font-extrabold leading-tight mb-5">
+          那个在你打开邮件时回报消息的像素
+        </h1>
+        <p class="text-lg text-slate-600 dark:text-slate-400 mb-6">
+          多数营销邮件里都藏着一张 1×1 的图片。邮件一渲染，你的邮件客户端就会去请求它，而这个请求会告诉发件人你读了 —— 什么时候读的、读了几次、大概在什么地方。MailVault 会找出这些信标，并在邮件渲染<strong>之前</strong>把它们从 HTML 里拿掉，于是那个请求根本不会发生。
+        </p>
+        <div class="flex flex-wrap gap-3">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="inline-flex lamp-bg text-white px-6 py-3 rounded-lg font-medium hover:opacity-90 transition-opacity">下载 MailVault</a>
+          <a href="/zh/pricing.html" class="inline-flex px-6 py-3 rounded-lg font-medium border border-slate-300 dark:border-slate-700 hover:border-primary-500 transition-colors">查看定价</a>
+        </div>
+      </header>
+
+      <!-- Before / after -->
+      <section class="mb-14" aria-labelledby="before-after">
+        <h2 id="before-after" class="text-2xl sm:text-3xl font-bold mb-2">拦截前与拦截后</h2>
+        <p class="text-slate-600 dark:text-slate-400 mb-6">
+          同一封订阅邮件，渲染两次。左边信标加载了，发件人被告知了。右边 MailVault 已经把它移除 —— 邮件的其他部分毫无变化。
+        </p>
+
+        <div class="grid sm:grid-cols-2 gap-4">
+          <!-- BEFORE -->
+          <figure class="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-800">
+            <figcaption class="px-4 py-2 text-xs font-semibold flex items-center gap-2 bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+              之前 —— 信标被触发
+            </figcaption>
+            <div class="p-4 bg-white">
+              <div class="text-sm font-semibold text-slate-900">你的每周摘要</div>
+              <div class="text-xs text-slate-500 mb-3">news@mailer.example.com</div>
+              <p class="text-sm text-slate-700 m-0 mb-3">你好 —— 这是你本周错过的内容。</p>
+              <div class="h-8 rounded bg-slate-100 mb-3"></div>
+              <div class="flex items-center gap-2 text-xs text-red-600">
+                <span class="relative inline-flex w-2 h-2">
+                  <span class="mv-ping absolute inline-flex w-2 h-2 rounded-full bg-red-400"></span>
+                  <span class="relative inline-flex w-2 h-2 rounded-full bg-red-500"></span>
+                </span>
+                正在从 mailer.example.com 加载 1×1 像素
+              </div>
+            </div>
+            <div class="px-4 py-3 text-xs bg-slate-50 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700">
+              <strong class="text-slate-800 dark:text-slate-200">发件人的后台现在显示：</strong>
+              14:32 打开，维尔纽斯，macOS 上的 Apple Mail，今天第 3 次打开。
+            </div>
+          </figure>
+
+          <!-- AFTER -->
+          <figure class="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-800">
+            <figcaption class="px-4 py-2 text-xs font-semibold flex items-center gap-2 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
+              之后 —— 信标没了
+            </figcaption>
+            <div class="p-4 bg-white">
+              <div class="text-sm font-semibold text-slate-900">你的每周摘要</div>
+              <div class="text-xs text-slate-500 mb-3">news@mailer.example.com</div>
+              <p class="text-sm text-slate-700 m-0 mb-3">你好 —— 这是你本周错过的内容。</p>
+              <div class="h-8 rounded bg-slate-100 mb-3"></div>
+              <div class="flex items-center gap-2 text-xs text-emerald-700">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                渲染前已移除 1 个跟踪像素
+              </div>
+            </div>
+            <div class="px-4 py-3 text-xs bg-slate-50 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700">
+              <strong class="text-slate-800 dark:text-slate-200">发件人的后台现在显示：</strong>
+              什么都没有。从来没有发出过任何请求。
+            </div>
+          </figure>
+        </div>
+      </section>
+
+      <!-- The code -->
+      <section class="mb-14" aria-labelledby="the-code">
+        <h2 id="the-code" class="text-2xl sm:text-3xl font-bold mb-2">跟踪代码长什么样</h2>
+        <p class="text-slate-600 dark:text-slate-400 mb-6">
+          这是一个真实形态的信标，取自一份营销模板。它只有一行，它是隐形的，而且它就在一封你本来乐意收到的邮件底部。
+        </p>
+
+        <div class="space-y-4">
+          <div>
+            <div class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">你收到的那封邮件里</div>
+            <pre class="p-4 rounded-xl bg-slate-900 text-slate-100 text-xs sm:text-sm overflow-x-auto"><code>&lt;img src="https://mailer.example.com/o/open.php?u=8f21c0&amp;id=a91f&amp;e=you%40yourdomain.com"
+     width="1" height="1" border="0"
+     style="display:none;height:1px;width:1px" alt=""&gt;</code></pre>
+          </div>
+          <div>
+            <div class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">MailVault 清除之后</div>
+            <pre class="p-4 rounded-xl bg-slate-900 text-slate-100 text-xs sm:text-sm overflow-x-auto"><code>&lt;span data-mv-tracker-blocked="Mailchimp" hidden&gt;&lt;/span&gt;</code></pre>
+          </div>
+        </div>
+
+        <p class="text-sm text-slate-600 dark:text-slate-400 mt-4">
+          注意 <code class="px-1 rounded bg-slate-200 dark:bg-slate-800">e=</code> 这个参数：URL 里就是你的地址。一次打开之所以能被对上<em>你</em>而不只是“某个人”，靠的就是它。
+        </p>
+      </section>
+
+      <!-- What it leaks -->
+      <section class="mb-14" aria-labelledby="what-it-leaks">
+        <h2 id="what-it-leaks" class="text-2xl sm:text-3xl font-bold mb-6">那一个像素会告诉发件人什么</h2>
+        <ul class="grid sm:grid-cols-2 gap-4">
+          <li class="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <strong class="block mb-1">你打开过它</strong> <span class="text-sm text-slate-600 dark:text-slate-400">以及之后你每一次重新打开。</span>
+          </li>
+          <li class="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <strong class="block mb-1">精确到分钟的时间</strong> <span class="text-sm text-slate-600 dark:text-slate-400">这也顺带暴露了你的作息时间和时区。</span>
+          </li>
+          <li class="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <strong class="block mb-1">你的 IP 地址</strong> <span class="text-sm text-slate-600 dark:text-slate-400">也就是说，你读它时大致在哪。</span>
+          </li>
+          <li class="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <strong class="block mb-1">你的设备和邮件客户端</strong> <span class="text-sm text-slate-600 dark:text-slate-400">从请求附带的 user agent 里读出来。</span>
+          </li>
+        </ul>
+      </section>
+
+      <!-- Free vs premium -->
+      <section class="mb-14" aria-labelledby="free-premium">
+        <h2 id="free-premium" class="text-2xl sm:text-3xl font-bold mb-2">看见它是免费的。拦住它属于 Premium。</h2>
+        <p class="text-slate-600 dark:text-slate-400 mb-6">
+          每一位 MailVault 用户都能得到警示：主题旁边的一个小图标，就挨着钓鱼和域名不符的图标，点开它会告诉你是哪家跟踪公司。而在信标加载之前把它移除，属于 Premium。
+        </p>
+
+        <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-100 dark:bg-slate-800">
+              <tr>
+                <th scope="col" class="text-left font-semibold px-4 py-3">&nbsp;</th>
+                <th scope="col" class="text-left font-semibold px-4 py-3">免费</th>
+                <th scope="col" class="text-left font-semibold px-4 py-3">Premium</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200 dark:divide-slate-700 bg-white dark:bg-slate-900/40">
+              <tr>
+                <td class="px-4 py-3 text-slate-700 dark:text-slate-300">对每一封邮件做跟踪器检测</td>
+                <td class="px-4 py-3 text-emerald-600 dark:text-emerald-400">支持</td>
+                <td class="px-4 py-3 text-emerald-600 dark:text-emerald-400">支持</td>
+              </tr>
+              <tr>
+                <td class="px-4 py-3 text-slate-700 dark:text-slate-300">看清是哪家公司在跟踪你</td>
+                <td class="px-4 py-3 text-emerald-600 dark:text-emerald-400">支持</td>
+                <td class="px-4 py-3 text-emerald-600 dark:text-emerald-400">支持</td>
+              </tr>
+              <tr>
+                <td class="px-4 py-3 text-slate-700 dark:text-slate-300">在邮件渲染之前剥离信标</td>
+                <td class="px-4 py-3 text-slate-500 dark:text-slate-400">—</td>
+                <td class="px-4 py-3 text-emerald-600 dark:text-emerald-400">支持</td>
+              </tr>
+              <tr>
+                <td class="px-4 py-3 text-slate-700 dark:text-slate-300">在阅读窗格、会话、聊天视图和弹出窗口中都生效</td>
+                <td class="px-4 py-3 text-slate-500 dark:text-slate-400">—</td>
+                <td class="px-4 py-3 text-emerald-600 dark:text-emerald-400">支持</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="mt-6 p-6 rounded-xl border border-primary-500/30 bg-primary-500/5">
+          <h3 class="text-lg font-semibold mb-1">在 MailVault Premium 中开启</h3>
+          <p class="text-sm text-slate-600 dark:text-slate-400 mb-4">
+            <span data-mv-price="{monthly}/月 或 {yearly}/年">$4/月 或 $25/年</span>，年付方案含 14 天免费试用。Premium 还包含定时备份、跨账户迁移、邮件清理和 Time Capsule。
+          </p>
+          <div class="flex flex-wrap gap-3">
+            <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="inline-flex lamp-bg text-white px-5 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">下载并开始试用</a>
+            <a href="/zh/pricing.html" class="inline-flex px-5 py-2.5 rounded-lg font-medium border border-slate-300 dark:border-slate-700 hover:border-primary-500 transition-colors">对比方案</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- How it works -->
+      <section class="mb-14" aria-labelledby="how-it-works">
+        <h2 id="how-it-works" class="text-2xl sm:text-3xl font-bold mb-6">MailVault 是怎么找到它们的</h2>
+        <div class="space-y-4 text-slate-700 dark:text-slate-300">
+          <p>
+            <strong>已知的端点。</strong>MailVault 内置了一份将近 500 条打开跟踪 URL 模式的列表 —— Mailchimp、SendGrid、HubSpot、Mailgun、Klaviyo、Marketo、Salesloft、Superhuman、Mailtrack、Yesware，还有另外几百个。它把 <a href="https://github.com/apparition47/MailTrackerBlocker" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">MailTrackerBlocker</a>（macOS Mail 的跟踪像素插件，其本身的数据源自 HEY 和 Simplify Gmail 的列表）的拦截列表与公开的 <a href="https://github.com/OneClickLab/ugly-email-trackers" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">Ugly Email 列表</a>合并，并补上了这两份列表出现之后才有的发件方。
+          </p>
+          <p>
+            <strong>为什么不用 Brave 或 Mozilla 的列表？</strong>那些是网页跟踪器列表 —— 浏览器在页面上拦截的脚本和信标域名。邮件的打开跟踪走的完全是另一套端点，所以上面那些专门针对邮件的列表，才真正拦得住进入你收件箱的东西。
+          </p>
+          <p>
+            <strong>形态。</strong>不在列表上的信标照样会露馅：声明为 1×1 的图片、用 <code class="px-1 rounded bg-slate-200 dark:bg-slate-800">display:none</code> 藏起来的，或者塞在一个塌缩容器里的。你真正看得见的图片不会被动。
+          </p>
+          <p>
+            <strong>请求路径。</strong>那些只用来发信标的路径 —— <code class="px-1 rounded bg-slate-200 dark:bg-slate-800">/open</code>、<code class="px-1 rounded bg-slate-200 dark:bg-slate-800">/pixel</code>、<code class="px-1 rounded bg-slate-200 dark:bg-slate-800">/wf/open</code> —— 即便来自一个还没人收录过的域名，也会被标出来。
+          </p>
+          <p>
+            <strong>这一切都在本地完成。</strong>拦截列表随应用一起分发，在版本更新中同步。MailVault 从不在运行时去取列表，也从不上传你邮件的任何部分：一个要打电话问服务器该拦哪些像素的应用，不过是把一个跟踪器换成了另一个。
+          </p>
+        </div>
+      </section>
+
+      <!-- FAQ -->
+      <section class="mb-14" aria-labelledby="faq">
+        <h2 id="faq" class="text-2xl sm:text-3xl font-bold mb-6">问答</h2>
+        <div class="space-y-5">
+          <div>
+            <h3 class="font-semibold mb-1">拦截会把邮件弄坏吗？</h3>
+            <p class="text-slate-600 dark:text-slate-400 text-sm">
+              不会。跟踪像素在设计上就是隐形的 —— 移除它不会改变任何你看得见的东西。真正的图片、徽标和照片都不会被动。
+            </p>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-1">那些被跟踪的链接呢？</h3>
+            <p class="text-slate-600 dark:text-slate-400 text-sm">
+              MailVault 免费的链接安全扫描已经会标记出经由跟踪域名跳转的链接，并在你打开之前给出警告。跟踪拦截处理的是那些完全不用你点击就会触发的信标。
+            </p>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-1">我还能看到被拦掉了什么吗？</h3>
+            <p class="text-slate-600 dark:text-slate-400 text-sm">
+              能 —— 那个图标会变成一只被划掉的眼睛，并列出每一个被移除的信标，含厂商和 URL。设置里的「跟踪拦截」页面还会累计显示在你邮件中一共发现了多少。
+            </p>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-1">这在 Linux 上和 macOS 上一样管用吗？</h3>
+            <p class="text-slate-600 dark:text-slate-400 text-sm">
+              一样。它是邮件渲染器的一部分，所以在两个平台上的行为完全相同。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <p class="text-sm text-slate-500 dark:text-slate-400">
+        查看<a href="/zh/features.html" class="text-primary-500 hover:text-primary-600 underline">全部功能</a>、<a href="/zh/pricing.html" class="text-primary-500 hover:text-primary-600 underline">定价</a>，或读一读<a href="/zh/faq.html" class="text-primary-500 hover:text-primary-600 underline">常见问题</a>。
+      </p>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/zh/docs.html" class="hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="hover:text-primary-500 transition-colors">博客</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">隐私</a>
+          <a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">更新日志</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">条款</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 保留所有权利。
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="选择语言" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+  <script defer src="/pricing-localize.js?v=1"></script>
+
+</body>
+</html>

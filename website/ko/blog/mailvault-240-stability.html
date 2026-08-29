@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MailVault 2.4.0: 안정성 릴리스 - MailVault 블로그</title>
+  <meta name="description" content="MailVault 2.4.0의 뒷이야기: Outlook에서 엉뚱한 메일이 뜨던 버그를 고치고, 계정 간 데이터 새어 나옴을 없애고, 샌드박스 데몬을 길들이고, 릴리스를 안전하게 되돌릴 수 있게 만든 과정입니다.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ko/blog/mailvault-240-stability.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ko/blog/mailvault-240-stability.html">
+  <meta property="og:title" content="MailVault 2.4.0: 안정성 릴리스">
+  <meta property="og:description" content="MailVault 2.4.0의 뒷이야기: Outlook에서 엉뚱한 메일이 뜨던 버그를 고치고, 계정 간 데이터 새어 나옴을 없애고, 샌드박스 데몬을 길들이고, 릴리스를 안전하게 되돌릴 수 있게 만든 과정입니다.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ko_KR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MailVault 2.4.0: 안정성 릴리스">
+  <meta name="twitter:description" content="MailVault 2.4.0의 뒷이야기: Outlook에서 엉뚱한 메일이 뜨던 버그를 고치고, 계정 간 데이터 새어 나옴을 없애고, 샌드박스 데몬을 길들이고, 릴리스를 안전하게 되돌릴 수 있게 만든 과정입니다.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/mailvault-240-stability.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/mailvault-240-stability.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/ko/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/ko/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="테마 전환">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            다운로드
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/ko/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">다운로드</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/ko/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        블로그로 돌아가기
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-04-17" class="text-sm text-primary-500 font-medium">2026년 4월 17일</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">MailVault 2.4.0: 안정성 릴리스</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>7분 분량</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            MailVault 2.4.0에 들어간 작업의 대부분은 눈에 보이지 않습니다. UI는 거의 그대로입니다. 기능 목록도 소박합니다 &mdash; 설정 가능한 발송 지연, 보낸 편지함 복사, 설정 화면 정리 정도입니다. 하지만 내부적으로 이 릴리스는 대체로 메일 앱에 대한 신뢰를 조용히 갉아먹는 종류의 버그를 고치는 데 쓰였습니다. 클릭했는데 엉뚱한 메일이 뜨는 문제, 계정 사이로 낡은 메시지가 새어 나오는 문제, 자기 자신과 통신하지 못하던 백그라운드 헬퍼, 그리고 망가진 바이너리를 그대로 내보낼 수 있었던 릴리스 배관입니다.
+          </p>
+
+          <p>
+            이번은 안정성 릴리스입니다. 무엇이 망가져 있었고 어떻게 손봤는지 정리했습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">이 글을 쓰게 만든 버그</h3>
+
+          <p>
+            Outlook과 Microsoft 365 계정에서 메일 하나를 클릭하면 전혀 다른 메일의 내용이 표시될 수 있었습니다. 목록의 제목과 뷰어 상단의 제목은 일치하지만 &mdash; 본문과 발신자, 헤더는 완전히 다른 메시지의 것이었습니다. 신고는 드물었고, 원할 때 재현하기는 불가능했으며, 처음 보면 오싹한 버그였습니다.
+          </p>
+
+          <p>
+            근본 원인은 서로 다른 두 메일 프로토콜을 이어 붙인 방식에서 생긴 사고였습니다. 고전적인 IMAP은 메시지마다 메일함이 존속하는 동안 절대 바뀌지 않는 <code>UID</code>를 줍니다. Microsoft Graph API는 그러지 않습니다 &mdash; 대신 속을 알 수 없는 문자열 메시지 ID를 씁니다. MailVault의 나머지 코드베이스를 한결같이 유지하려고, 우리 Graph 전송 계층은 위치 기반 UID를 그때그때 만들어 냈습니다. 폴더에 순번을 매겨 <code>1</code>, <code>2</code>, <code>3</code> 하는 식으로 나눠 준 것입니다.
+          </p>
+
+          <p>
+            순서가 바뀌기 전까지는 잘 동작합니다. 새 메시지가 도착하거나, 스레드가 다른 폴더로 옮겨지거나, 서버 쪽 정렬이 밀리초 차이로 달라지면 &mdash; 메일 A를 가리키던 위치 기반 UID가 이제 메일 B를 가리킵니다. 헤더 목록은 매번 새로 가져오므로 문제가 없었습니다. 하지만 같은 UID를 키로 쓰던 본문 캐시가 이제 엉뚱한 내용을 내주게 된 것입니다.
+          </p>
+
+          <p>
+            수정은 구조적인 것이었습니다. 실제 Graph 메시지 ID를 각 메일 헤더에 직접 심고, 이를 본문 캐시와 콘텐츠 로더, 동작 경로 전반에서 정본 식별자로 씁니다. 합성 UID는 앱 내부의 IMAP 형태 인터페이스와의 호환을 위해 여전히 남아 있지만, "이게 정말 어떤 메시지인가"에 대한 진실의 원천은 더 이상 아닙니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">계정 간 데이터 새어 나옴</h3>
+
+          <p>
+            "엉뚱한 메일" 버그의 사촌 격입니다. 계정 A에서 계정 B로 전환하고, 마침 비어 있는 B의 폴더를 열면, 계정 A의 메일이 목록에 잠깐 남아 있는 것이 보였습니다.
+          </p>
+
+          <p>
+            캐시 무효화 문제였습니다. 계정 전환이 일부 메일 상태만 지우고 전부를 지우지는 않았습니다. 정렬된 메일 목록, 메모리 안의 본문 캐시, 스레드 캐시가 조금씩 다른 시점에 갱신되었습니다. 목표 폴더에 새 메일이 있으면 새 데이터가 충분히 빨리 도착해 낡은 항목을 가렸습니다. 목표 폴더가 비어 있으면 "비어 있음" 결과가 전파될 때까지 낡은 목록이 그대로 보였습니다.
+          </p>
+
+          <p>
+            해결책은 화려할 것이 없었습니다. 계정이나 메일함을 전환할 때 메일 상태를 비우는 모든 자리가 이제 새 계정의 데이터를 불러오기 전에 <em>전부</em> 원자적으로 비웁니다. 반쯤 비워진 캐시도, "빈 폴더가 도착했다"와 "이전 계정의 메일이 밀려났다" 사이의 경쟁도 더는 없습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">자기 소켓을 찾지 못한 샌드박스 데몬</h3>
+
+          <p>
+            MailVault에는 백그라운드 헬퍼가 있습니다 &mdash; 메인 창이 닫혀 있어도 메일을 계속 동기화해 주는 작은 사이드카 데몬입니다. macOS에서는 앱과 데몬 모두 App Sandbox 안에서 실행되며, 이는 각자가 파일 시스템을 다르게 본다는 뜻입니다. Unix 도메인 소켓으로 통신하려면 공유된 만남의 지점이 필요합니다.
+          </p>
+
+          <p>
+            버그는 이랬습니다. 앱은 소켓 경로를 한 방식으로 풀고, 데몬은 다른 방식으로 풀었는데, 샌드박스 빌드에서는 그 두 경로가 서로 다른 컨테이너 디렉터리를 가리켰습니다. 데몬은 시작해 소켓을 바인딩한 뒤 그대로 기다렸습니다. 앱은 연결을 시도했다가 실패하고 데몬이 실행 중이 아니라고 결론지었습니다.
+          </p>
+
+          <p>
+            이제 양쪽 모두 <code>dirs::home_dir()</code>로 <code>~/.mailvault/mv.sock</code>을 풀어냅니다. 샌드박스 아래에서는 두 프로세스 모두 같은 컨테이너 기준 경로로 확장되므로, 클라이언트는 방금 자신을 띄운 서버를 언제나 찾아냅니다.
+          </p>
+
+          <p>
+            헬퍼의 권한도 같은 방식으로 정리했습니다. 데몬 바이너리가 앱의 서명 설정에서 <code>app-sandbox</code>를 물려받고 있었는데, 자체 <code>Info.plist</code>가 없는 독립 바이너리는 이 때문에 죽습니다. App Group IPC를 쓰려던 예전 계획에서 남은 <code>application-groups</code>도 설정되어 있었습니다 &mdash; 이제 두 프로세스가 같은 컨테이너 홈을 쓰므로 필요 없습니다. 둘 다 없앴습니다. 헬퍼는 우리가 시험하는 모든 macOS 버전에서, 갓 설치한 샌드박스 빌드에서도 깔끔하게 뜹니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">맞아 보였지만 아니었던 엔타이틀먼트</h3>
+
+          <p>
+            이런 종류가 가장 걱정스러운 버그입니다. 모든 것이 맞아 <em>보이는데</em> 조용히 동작하지 않습니다.
+          </p>
+
+          <p>
+            macOS 권한 파일에서는 개발자 팀 접두사를 <code>$(AppIdentifierPrefix)</code>로 참조할 수 있습니다. Xcode는 파일을 <code>codesign</code>에 넘기기 전에 이 변수를 확장합니다. 우리 릴리스 파이프라인은 Xcode가 아니라 &mdash; <code>codesign</code>을 직접 부릅니다 &mdash; 그리고 <code>codesign</code>은 그 변수를 확장하지 <em>않습니다</em>. <code>$(AppIdentifierPrefix)</code>라는 문자열이 글자 그대로 서명된 바이너리에 박히고 있었습니다.
+          </p>
+
+          <p>
+            증상은 이렇습니다. 앱과 데몬 사이의 키체인 공유가 조용히 망가져 있었습니다. 앱은 키체인에서 인증 정보를 읽을 수 있었지만 데몬은 그것을 보지 못했습니다 &mdash; 데몬이 요구한 접근 그룹 식별자가 진짜 팀 접두사가 붙은 식별자가 아니라 <code>$(AppIdentifierPrefix).com.mailvault...</code>라는 글자 그대로의 문자열이었기 때문입니다. 데몬은 가지고 있지도 않은 인증 정보를 달라고 하다가 포기하곤 했습니다.
+          </p>
+
+          <p>
+            해결책은 <code>codesign</code>을 부르기 전에 진짜 팀 접두사를 넣어 권한 파일을 다시 쓰는 <code>sed</code> 확장 단계입니다. 기존의 버전 일관성 검사 옆에 이것을 붙여, "언뜻 보면 맞아 보이는 설정"류의 버그를 CI에서 잡을 수 있게 했습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Snap 배포 게이트</h3>
+
+          <p>
+            CI 이야기가 나온 김에: 2.4.0 전까지는 릴리스 태그를 푸시하면 결과 snap이 자동으로 stable 채널에 배포되었습니다. 최초 연기 테스트 이후에 무언가 깨지면 &mdash; 실제로 그런 일이 있었습니다. Snap 격리는 설치 후에야 드러나는 방식으로 개발 빌드와 다르게 동작하기 때문입니다 &mdash; 우리가 알아챘을 때는 이미 망가진 버전이 배포된 뒤였습니다.
+          </p>
+
+          <p>
+            릴리스 파이프라인은 이제 "snap 업로드됨" 단계에서 멈춥니다. 별도의 <em>Promote Snaps</em> 워크플로가 빌드를 edge 채널에서 stable로 옮기는데, 깨끗한 컴퓨터에서 edge 채널로 설치해 계정 추가, 메일 로딩, 백업이라는 기본을 확인한 뒤에만 그렇게 합니다. 릴리스가 잘된 날에는 버튼 한 번을 더 누르는 일이고, 잘못된 날에는 훨씬 마음 편한 되돌리기가 됩니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">조용한 수정들</h3>
+
+          <p>
+            "앱이 스스로 모순되지 않게 하기"라는 같은 주제 아래 작은 수정이 몇 가지 더 있습니다.
+          </p>
+
+          <p>
+            <strong>모듈 캐시 무효화.</strong> 지연 초기화되는 모듈 수준 캐시가 몇 개 있었는데 &mdash; 메모된 폴더 조회나 디스크립터 조회 같은 것들입니다 &mdash; 그 밑의 데이터가 바뀌어도 비워지지 않았습니다. 이제는 비워지며, 통합 폴더 캐시에는 크기 상한이 생겨 끝없이 커질 수 없습니다.
+          </p>
+
+          <p>
+            <strong>중복된 디스크립터 저장.</strong> 계정 활성화가 활성화 한 번마다 계정 디스크립터를 디스크에 두 번 이상 쓰고 있었고, 빠르게 전환하면 자기 자신과 경쟁하기도 했습니다. 중복 쓰기는 사라졌습니다.
+          </p>
+
+          <p>
+            <strong>계정 활성화의 무한 재귀.</strong> <code>activateAccount</code>의 드문 경로가 &mdash; 캐시 미스 뒤의 디스크립터 복원 대체 경로입니다 &mdash; 복원된 디스크립터가 또 다른 복원을 부르면 자기 자신을 다시 부를 수 있었습니다. 재진입 가드로 막아 두고 있었는데, 더 깔끔한 수정으로 재귀 자체를 없앴습니다.
+          </p>
+
+          <p>
+            <strong>저장소 구조.</strong> 컴포넌트와 메인 Zustand 저장소 사이에 놓여 상태를 로컬 사본으로 복제하던 "도메인 저장소" 래퍼들이 있었습니다. 더 깔끔한 API를 주려던 것이었지만, 실제로는 상태 하나마다 진실의 근원을 둘로 만들고 이따금 갱신 순서 버그를 낳았습니다. 지금은 얇은 셀렉터 재내보내기입니다 &mdash; 쓰는 느낌은 같고, 진실의 근원은 하나입니다.
+          </p>
+
+          <p>
+            <strong>배경 헬퍼 구조.</strong> 배경 헬퍼를 관리하던 Rust 코드가 한 모듈에서 두 가지 일을 하고 있었습니다. 데몬을 <em>어떻게</em> 띄울지 정하는 일(어느 바이너리를, 어떤 인자로, 어떤 샌드박스 아래에서)과, 일단 돌기 시작한 뒤의 <em>RPC 전송</em>을 다루는 일입니다. 이것을 실행 전략을 맡는 <code>helper.rs</code>와 별도 전송 모듈로 나눴습니다. 시작 실패를 파헤치려고 요청/응답 코드를 뒤질 필요가 더는 없고, 그 반대도 마찬가지입니다. 사용자에게 보이는 문구도 이때 다듬었습니다 &mdash; "시스템 서비스"가 "배경 헬퍼"가 되었는데, 실제 정체에 더 정직한 이름입니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">이번 릴리스가 오래 걸린 이유</h3>
+
+          <p>
+            안정성 릴리스는 이상하리만치 계획하기 어렵습니다. 개별 수정은 작지만 건드리는 면적은 어마어마합니다 &mdash; Graph 전송, 계정 전환, 샌드박스 IPC, 코드 서명, 릴리스 인프라가 전부 손을 탔습니다. 이 버그들 대부분은 원할 때 재현할 수 없을 만큼 드물었기에, 추적 로그와 사용자 신고, 코드 읽기로부터 어떻게 잘못된 상태가 생기는지 짚어 낸 다음, 수정을 쓰고 신고가 멎는지 기다려 확인해야 했습니다.
+          </p>
+
+          <p>
+            그 보상은, 일주일에 한 번씩 물어뜯던 버그가 어느새 보이지 않는다는 것을 뒤늦게 깨닫는 종류의 변화입니다. 위에 적은 동작 중 하나라도 겪으셨다면 &mdash; Outlook에서 엉뚱한 메일 내용이 뜨거나, 계정 전환 시 낡은 메일이 남거나, 백그라운드 헬퍼가 연결을 유지하지 못하거나 &mdash; 2.4.0이 그것들을 없애 주는 릴리스입니다.
+          </p>
+
+          <p>
+            다음 차례는 <a href="/ko/blog/refactoring-mailvault-from-monolith-to-modules.html" class="text-primary-500 hover:text-primary-600 underline">5단계 리팩터링</a>을 끝내는 것, v2.4 후속 목록에 남은 항목(Hostinger용 IMAP 단일 메일함 감지, 폴더 전환 예외 상황, 작성 임시 저장 말풍선)을 닫는 것, 그리고 분류기 재작성을 계속 다듬는 것입니다. 기능 작업은 이어집니다 &mdash; 다만 믿을 수 있는 토대 위에서만 그렇습니다.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/ko/docs.html" class="hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="hover:text-primary-500 transition-colors">블로그</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">개인정보</a>
+          <a href="/ko/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">변경 내역</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">약관</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 모든 권리 보유.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="언어 선택" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/blog/mailvault-240-stability.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

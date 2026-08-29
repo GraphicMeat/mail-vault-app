@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mac 上最好的 MailStore 替代方案 — MailVault（免费开源）</title>
+  <meta name="description" content="在 Mac 上寻找 MailStore 替代方案？MailVault 是一款面向 macOS 和 Linux 的免费开源邮件归档应用。一键把 IMAP 邮件归档到本地。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/guides/mailstore-alternative-mac.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/guides/mailstore-alternative-mac.html">
+  <meta property="og:title" content="Mac 上最好的 MailStore 替代方案 — MailVault（免费开源）">
+  <meta property="og:description" content="在 Mac 上寻找 MailStore 替代方案？MailVault 是一款面向 macOS 和 Linux 的免费开源邮件归档应用。一键把 IMAP 邮件归档到本地。">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Mac 上最好的 MailStore 替代方案 — MailVault（免费开源）">
+  <meta name="twitter:description" content="在 Mac 上寻找 MailStore 替代方案？MailVault 是一款面向 macOS 和 Linux 的免费开源邮件归档应用。一键把 IMAP 邮件归档到本地。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Mac 上最好的 MailStore 替代方案 — MailVault（免费开源）",
+  "description": "在 Mac 上寻找 MailStore 替代方案？MailVault 是一款面向 macOS 和 Linux 的免费开源邮件归档应用。一键把 IMAP 邮件归档到本地。",
+  "url": "https://mailvaultapp.com/zh/guides/mailstore-alternative-mac.html",
+  "datePublished": "2026-03-15",
+  "dateModified": "2026-03-15",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/mailstore-alternative-mac.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/mailstore-alternative-mac.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/mailstore-alternative-mac.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/mailstore-alternative-mac.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/mailstore-alternative-mac.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/mailstore-alternative-mac.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/mailstore-alternative-mac.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/mailstore-alternative-mac.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/mailstore-alternative-mac.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/mailstore-alternative-mac.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/zh/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/zh/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="切换主题">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            下载
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/zh/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">下载</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/zh/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        返回首页
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Mac 上最好的 MailStore 替代方案 &mdash; MailVault</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>6 分钟阅读</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            如果你搜过邮件归档软件，多半见过 <strong>MailStore Home</strong>。它是 Windows 上最流行的本地邮件归档工具之一。问题在于 MailStore 不能在 Mac 上运行。它从来就不能。如果你用的是 macOS（或 Linux），你需要一个替代品。
+          </p>
+
+          <p>
+            <strong>MailVault</strong> 是一款专为 macOS 和 Linux 打造的免费开源邮件归档应用。它做的事和 MailStore 一样 &mdash; 把 IMAP 邮件归档到你的本地磁盘 &mdash; 但它在 Mac（Intel 和 Apple Silicon）与 Linux 上原生运行，以标准开放格式存储邮件，而且分文不取。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailStore 做得好的地方</h3>
+
+          <p>
+            对 Windows 用户来说，MailStore Home 是个扎实的产品。公平地说说它的强项：
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>成熟且经过充分检验</strong> &mdash; MailStore 从 2006 年就有了。它对各种边角情况处理得不错，支持的邮件服务商也很广。</li>
+            <li><strong>全文搜索</strong> &mdash; MailStore 会为归档的邮件建索引，让你在整份归档里做快速全文搜索。</li>
+            <li><strong>多种来源类型</strong> &mdash; 除了 IMAP，MailStore 还能从 Outlook 的 PST 文件、Exchange 服务器和其他本地邮件客户端归档。</li>
+            <li><strong>企业版</strong> &mdash; MailStore Server 面向需要集中式邮件归档的机构，带合规功能、审计轨迹和留存策略。</li>
+          </ul>
+
+          <p>
+            对企业环境里的 Windows 用户来说，MailStore Server 很难被超越。但在 Mac 上做个人使用，它根本就不是一个选项。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailStore 与 MailVault：逐项对比</h3>
+
+          <div class="scroll-x overflow-x-auto -mx-4 sm:mx-0">
+            <table class="w-full text-sm border-collapse">
+              <thead>
+                <tr class="border-b border-slate-300 dark:border-slate-600">
+                  <th class="text-left py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">功能</th>
+                  <th class="text-left py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">MailStore Home</th>
+                  <th class="text-left py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">MailVault</th>
+                </tr>
+              </thead>
+              <tbody class="text-slate-700 dark:text-slate-300">
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">平台</td>
+                  <td class="py-3 px-4">仅 Windows</td>
+                  <td class="py-3 px-4">macOS + Linux</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">价格</td>
+                  <td class="py-3 px-4">免费（Home 版）</td>
+                  <td class="py-3 px-4">免费（开源）</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">源代码</td>
+                  <td class="py-3 px-4">专有</td>
+                  <td class="py-3 px-4">开源（GitHub）</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">存储格式</td>
+                  <td class="py-3 px-4">专有数据库</td>
+                  <td class="py-3 px-4">标准 .eml 文件（Maildir）</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">IMAP 归档</td>
+                  <td class="py-3 px-4">支持</td>
+                  <td class="py-3 px-4">支持</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">OAuth2（Google、Microsoft）</td>
+                  <td class="py-3 px-4">支持</td>
+                  <td class="py-3 px-4">支持（Google、Microsoft、Yahoo）</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">邮件搜索</td>
+                  <td class="py-3 px-4">全文索引搜索</td>
+                  <td class="py-3 px-4">IMAP 服务器搜索 + 本地搜索</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">发送/回复邮件</td>
+                  <td class="py-3 px-4">不支持（仅归档）</td>
+                  <td class="py-3 px-4">支持（完整 SMTP）</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">邮件会话</td>
+                  <td class="py-3 px-4">基础</td>
+                  <td class="py-3 px-4">基于 RFC 的会话（JWZ 算法）</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">多账户</td>
+                  <td class="py-3 px-4">支持</td>
+                  <td class="py-3 px-4">支持</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">PST/Exchange 导入</td>
+                  <td class="py-3 px-4">支持</td>
+                  <td class="py-3 px-4">不支持</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">企业/合规</td>
+                  <td class="py-3 px-4">支持（Server 版，付费）</td>
+                  <td class="py-3 px-4">不支持</td>
+                </tr>
+                <tr class="border-b border-slate-200 dark:border-slate-700">
+                  <td class="py-3 px-4 font-medium">离线访问</td>
+                  <td class="py-3 px-4">支持</td>
+                  <td class="py-3 px-4">支持</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailVault 强在哪里</h3>
+
+          <p>
+            <strong>它能在 Mac 上跑。</strong>这是最明显的差别。如果你用 macOS，MailStore 根本不是一个选项。MailVault 原生支持 macOS（Intel 和 Apple Silicon）以及 Linux。不需要 Wine，不需要虚拟机，也不需要任何变通办法。
+          </p>
+
+          <p>
+            <strong>开放标准的存储。</strong>MailStore 把归档的邮件存在一个专有的数据库格式里。如果 MailStore 停止开发，要拿到那些邮件就变得很麻烦。MailVault 把每封邮件都存成标准的 <code>.eml</code> 文件 &mdash; 任何邮件客户端都能打开的 RFC 5322 格式。你的归档就是一个装着文件的文件夹。你可以用 Apple Mail、Thunderbird，甚至文本编辑器打开它们。
+          </p>
+
+          <p>
+            <strong>开源。</strong>MailVault 的源代码在 GitHub 上。你可以查看、审计、修改它，也可以为它贡献代码。对一个经手你私人邮件的东西来说，清楚地知道这软件到底做了什么，是要紧的。
+          </p>
+
+          <p>
+            <strong>它同时也是一个邮件客户端。</strong>MailStore 纯粹是归档工具 &mdash; 你归档完邮件，还得另外用一个客户端去读。MailVault 两样都是：你可以直接在应用里阅读、搜索、撰写、回复和转发邮件，想永久保留时再把它们归档到本地磁盘。
+          </p>
+
+          <p>
+            <strong>后台缓存。</strong>MailVault 可以在你浏览的同时于后台自动下载邮件内容，让本地归档一点点建起来，不需要你手动干预。MailStore 则要求你明确地去运行归档任务。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailStore 强在哪里</h3>
+
+          <p>
+            诚实地说说差距：
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>全文搜索索引</strong> &mdash; MailStore 为所有归档邮件建立全文索引，在大规模归档里也能即时搜索。MailVault 的搜索在线时用 IMAP 服务器端搜索，本地邮件则按文件访问，面对特别大的归档时不如前者精细。</li>
+            <li><strong>PST 和 Exchange 导入</strong> &mdash; 如果你有 Outlook 的 PST 文件，或者需要直接从 Exchange 服务器归档（而不是走 IMAP），MailStore 支持这些来源。MailVault 只支持 IMAP。</li>
+            <li><strong>企业合规</strong> &mdash; MailStore Server（付费版）提供集中式归档、留存策略、审计轨迹和法律保全功能，这些是机构做合规所需要的。MailVault 面向个人和小企业使用，不面向企业合规。</li>
+            <li><strong>成熟度</strong> &mdash; MailStore 已经存在了将近 20 年。它见过的边角情况、邮件服务商和用户场景，都比 MailVault 目前见过的多。</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">谁更该选 MailVault？</h3>
+
+          <p>
+            如果符合以下情况，MailVault 就是对的选择：
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li>你用 <strong>macOS 或 Linux</strong>，并且需要本地邮件归档。</li>
+            <li>你希望归档的邮件保存为<strong>标准的开放格式</strong>（而不是专有数据库）。</li>
+            <li>你更偏好<strong>免费的开源软件</strong>，可以自己查看、自己判断是否可信。</li>
+            <li>你想要一个<strong>既是邮件客户端又是归档工具</strong>的应用 &mdash; 阅读、发送和归档都在一个地方。</li>
+            <li>你是<strong>自由职业者、顾问或小企业主</strong>，需要一份个人邮件归档，但不想要企业级的复杂度。</li>
+            <li>你想通过归档到本地再从服务器删除来<a href="/zh/guides/free-up-email-storage.html" class="text-primary-500 hover:text-primary-600 underline">腾出邮箱空间</a>。</li>
+          </ul>
+
+          <p>
+            如果你需要企业合规功能、Exchange 集成或 PST 导入，MailStore Server 是更好的工具。但要在 Mac 上做个人邮件归档，MailVault 干得不错 &mdash; 而且它免费。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">其他替代方案</h3>
+
+          <p>
+            为完整起见，这里列出 Mac 用户有时会考虑的其他选项：
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Apple Mail + 本地文件夹</strong> &mdash; 你可以把邮件拖进 Apple Mail 的本地邮箱文件夹，但没有批量归档的流程，没有 Maildir 导出，而且量一大，搜索本地文件夹就很慢。</li>
+            <li><strong>Thunderbird</strong>  &mdash; 免费且跨平台，但 Thunderbird 是邮件客户端，不是归档工具。它没有专门的本地归档流程。它的本地存储用的是 mbox 格式，抗损坏能力不如 Maildir。</li>
+            <li><strong>Google Takeout / 服务商导出</strong> &mdash; 一次性批量导出成 .mbox 文件。不能搜索，不能增量，而且 .mbox 是单文件格式，规模一大就容易损坏。</li>
+          </ul>
+
+          <p>
+            MailVault 补上了这块空缺：一款面向 Mac 和 Linux 的专用邮件归档应用，格式开放，分文不取。
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">试试 MailVault &mdash; Mac 上免费的 MailStore 替代方案</p>
+            <p class="text-sm mb-4">把 IMAP 邮件以标准 .eml 文件归档到本地。开源，原生支持 macOS 和 Linux，无需注册账号。</p>
+            <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+              下载 MailVault
+            </a>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            了解更多关于<a href="/zh/guides/archive-imap-emails-locally.html" class="text-primary-500 hover:text-primary-600 underline">本地 IMAP 归档如何运作</a>，或查看 <a href="/zh/features.html" class="text-primary-500 hover:text-primary-600 underline">MailVault 的全部功能</a>。还有问题？看看<a href="/zh/faq.html" class="text-primary-500 hover:text-primary-600 underline">常见问题</a>。
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/zh/docs.html" class="hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="hover:text-primary-500 transition-colors">博客</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">隐私</a>
+          <a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">更新日志</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">条款</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 保留所有权利。
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="选择语言" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/guides/mailstore-alternative-mac.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/guides/mailstore-alternative-mac.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/guides/mailstore-alternative-mac.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/guides/mailstore-alternative-mac.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/guides/mailstore-alternative-mac.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/guides/mailstore-alternative-mac.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/guides/mailstore-alternative-mac.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/guides/mailstore-alternative-mac.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/guides/mailstore-alternative-mac.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gmail 메일을 전부 내려받는 방법: Takeout과 IMAP 보관 비교 — MailVault</title>
+  <meta name="description" content="Gmail 계정의 모든 메일을 내려받는 두 가지 실제 방법: Google Takeout의 단일 .mbox 내보내기, 또는 검색 가능한 개별 .eml 파일을 저장하는 IMAP 보관 도구입니다. 각각의 작동 방식을 정리했습니다.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ko/guides/download-all-gmail-emails.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ko/guides/download-all-gmail-emails.html">
+  <meta property="og:title" content="Gmail 메일을 전부 내려받는 방법: Takeout과 IMAP 보관 비교 — MailVault">
+  <meta property="og:description" content="Gmail 계정의 모든 메일을 내려받는 두 가지 실제 방법: Google Takeout의 단일 .mbox 내보내기, 또는 검색 가능한 개별 .eml 파일을 저장하는 IMAP 보관 도구입니다. 각각의 작동 방식을 정리했습니다.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ko_KR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Gmail 메일을 전부 내려받는 방법: Takeout과 IMAP 보관 비교 — MailVault">
+  <meta name="twitter:description" content="Gmail 계정의 모든 메일을 내려받는 두 가지 실제 방법: Google Takeout의 단일 .mbox 내보내기, 또는 검색 가능한 개별 .eml 파일을 저장하는 IMAP 보관 도구입니다. 각각의 작동 방식을 정리했습니다.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Gmail 메일을 전부 내려받는 방법: Takeout과 IMAP 보관 비교",
+  "description": "Gmail 계정의 모든 메일을 내려받는 두 가지 실제 방법: Google Takeout의 단일 .mbox 내보내기, 또는 검색 가능한 개별 .eml 파일을 저장하는 IMAP 보관 도구입니다. 각각의 작동 방식을 정리했습니다.",
+  "url": "https://mailvaultapp.com/ko/guides/download-all-gmail-emails.html",
+  "datePublished": "2026-07-15",
+  "dateModified": "2026-07-15",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Google Takeout으로 Gmail을 내보내는 데 얼마나 걸립니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "메일함 크기에 따라 다르지만, Google은 보통 몇 시간에서 하루 안에 다운로드 링크를 메일로 보내 줍니다. 아주 큰 계정(수십 GB)은 더 오래 걸리고 여러 zip 파일로 나뉩니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": ".mbox 파일을 가져오기 없이 바로 열 수 있습니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "쉽지 않습니다. mbox는 모든 메시지가 이어 붙은 하나의 텍스트 파일입니다. 개별 메일을 살펴보려면 대개 Thunderbird 같은 클라이언트로 가져와야 합니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Google Takeout에 첨부파일도 포함됩니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "포함됩니다. 첨부파일은 원본 메일에 담긴 방식 그대로 메시지 본문과 함께 내보낸 .mbox 파일 안에 들어 있습니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "MailVault 같은 IMAP 보관 도구는 대신 어떤 형식을 씁니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "MailVault는 메일마다 개별 .eml 파일(표준 RFC 5322 형식)로 저장하고, 이를 Maildir 폴더 구조로 정리합니다. 파일 하나하나가 그 자체로 완결된 메일이라 따로 열 수 있습니다."
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/download-all-gmail-emails.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/download-all-gmail-emails.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/download-all-gmail-emails.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/download-all-gmail-emails.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/download-all-gmail-emails.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/download-all-gmail-emails.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/download-all-gmail-emails.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/download-all-gmail-emails.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/download-all-gmail-emails.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/download-all-gmail-emails.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/ko/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/ko/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="테마 전환">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            다운로드
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/ko/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">다운로드</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/ko/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        홈으로 돌아가기
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">Gmail 메일을 전부 내려받는 방법</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>7분 분량</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Gmail 계정 전체를 자기 컴퓨터로 가져오는 실용적인 방법은 정확히 두 가지입니다. Google 계정 도구에 내장된 Google Takeout, 그리고 메일 클라이언트와 같은 방식으로 Gmail에 접속해 메시지를 하나씩 내려받는 IMAP 기반 보관 도구입니다. 결과물은 아주 다르며, 내려받은 뒤에 그것으로 무엇을 하려는지에 따라 선택이 갈립니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">선택 1: Google Takeout</h3>
+
+          <p>
+            <a href="https://takeout.google.com" target="_blank" class="text-primary-500 hover:text-primary-600 underline">takeout.google.com</a>에 가서 Mail만 남기고 전부 선택 해제한 다음 Create Export를 누르십시오. Google이 메일함 전체를 하나 이상의 <code>.mbox</code> 파일로 묶고(메일함이 크면 여러 zip 아카이브로 나눕니다) 다운로드 링크를 메일로 보내 주는데, 보통 몇 시간에서 하루 안에 옵니다.
+          </p>
+
+          <p>
+            받게 되는 것은 라벨/폴더마다 하나씩 만들어진 커다란 텍스트 파일이며, 모든 메일이 차례로 이어 붙은 고전적인 Unix mbox 형식입니다. 정당하고 완전한 백업이지만 실제 한계가 있습니다:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>바로 읽을 수 없음</strong> &mdash; .mbox 파일을 더블클릭해서 메일을 살펴볼 수는 없습니다. mbox 가져오기를 지원하는 Thunderbird 같은 메일 클라이언트로 가져와야 하는데, 큰 메일함이라면 몇 시간이 걸릴 수 있습니다.</li>
+            <li><strong>전부 아니면 전무</strong> &mdash; Takeout은 선택한 것을 통째로 내보냅니다. 라벨 전체를 내보내지 않고 폴더 하나, 날짜 범위, 특정 대화만 가져올 방법은 없습니다.</li>
+            <li><strong>한 시점의 사본</strong> &mdash; 스냅샷일 뿐입니다. 다음 달에 최신 보관본을 원한다면 처음부터 내보내기를 다시 돌려야 합니다.</li>
+            <li><strong>파일 하나라 취약함</strong> &mdash; .mbox 파일이 손상되면 그 안의 메일 한 통이 아니라 전부에 접근하지 못할 수 있습니다.</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">선택 2: IMAP 보관</h3>
+
+          <p>
+            Gmail은 모든 실제 메일 클라이언트가 메일을 동기화할 때 쓰는 프로토콜인 IMAP도 지원합니다. IMAP 보관 도구는 Apple Mail이나 Outlook과 똑같은 방식으로 (비밀번호가 아니라 OAuth로) Gmail 계정에 로그인한 다음, 메시지를 각각 하나의 파일로 내려받습니다 &mdash; 보통은 모든 메일 클라이언트가 이해하는 RFC 5322 형식인 표준 <code>.eml</code> 파일입니다.
+          </p>
+
+          <p>
+            이 방식은 Takeout의 한계를 하나씩 뒤집습니다:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>하나씩 읽을 수 있음</strong> &mdash; 메일마다 파일이 하나입니다. 하나를 바로 열거나, 다른 메일 클라이언트로 끌어다 놓거나, 보통의 파일 검색으로 전체를 훑을 수 있습니다 &mdash; 가져오기 과정이 필요 없습니다.</li>
+            <li><strong>골라서 보관</strong> &mdash; 계정 전체가 아니라 특정 폴더, 라벨, 날짜 범위만 보관합니다.</li>
+            <li><strong>반복 가능</strong> &mdash; 나중에 다시 돌리면 새 메일만 내려받으므로, 처음부터 시작하지 않고도 최신 로컬 사본을 유지할 수 있습니다.</li>
+            <li><strong>견고함</strong> &mdash; 파일 하나가 손상되어도 영향을 받는 것은 메일 한 통이지 보관본 전체가 아닙니다.</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">어느 쪽을 써야 할까요?</h3>
+
+          <p>
+            Google이 보관하고 있는 그대로의 계정 사본이 법적 또는 규정 준수 기록으로 한 번만 온전히 필요하다면 &mdash; 예를 들어 계정을 영구히 삭제하기 전에 &mdash; Takeout의 원본 .mbox 내보내기는 서랍에 넣어 둘 만한 이중 안전장치입니다. 하지만 오래된 메일을 실제로 <em>쓰고</em> 싶다면 &mdash; 검색하고, 읽고, 새 메일이 올 때마다 최신으로 유지하고 싶다면 &mdash; IMAP 보관이 현실적인 선택입니다. 많은 사람이 둘 다 합니다. 원본 보험용으로 Takeout을 한 번 내보내고, 실제로 손이 가는 검색 가능한 사본으로 IMAP 보관본을 둡니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailVault로 IMAP 보관하기</h3>
+
+          <p>
+            MailVault는 바로 이 작업 흐름을 중심으로 만든 macOS와 Linux용 무료 오픈소스 데스크톱 메일 앱입니다. Google 계정에 OAuth로 로그인하고(앱 비밀번호도, IMAP 설정 씨름도 없습니다) 원하는 폴더나 라벨을 고르면, MailVault가 모든 메시지를 디스크의 표준 Maildir 구조 안에 개별 <code>.eml</code> 파일로 내려받습니다. 보관한 메일은 MailVault 안에서 바로 살펴보고 검색하고 열 수 있으며, 같은 파일을 다른 메일 클라이언트로 가리켜도 됩니다. 수동 보관은 횟수 제한 없이 무료입니다. 앞으로 손대지 않고 배경에서 자동으로 돌리고 싶다면, 그 예약 기능이 $4/월의 Premium 기능으로 있습니다.
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">검색 가능한 진짜 Gmail 사본을 가지십시오</p>
+            <p class="text-sm mb-4">MailVault는 Gmail을 어떤 메일 클라이언트로도 살펴보고, 검색하고, 열 수 있는 개별 .eml 파일로 보관합니다. 무료 오픈소스입니다.</p>
+            <div class="flex flex-wrap gap-3">
+              <a href="/ko/#download" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+                MailVault 다운로드
+              </a>
+              <a href="/ko/pricing.html" class="inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">
+                가격 보기
+              </a>
+            </div>
+          </div>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-4">자주 묻는 질문</h3>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Google Takeout으로 Gmail을 내보내는 데 얼마나 걸립니까?</p>
+            <p>메일함 크기에 따라 다르지만, Google은 보통 몇 시간에서 하루 안에 다운로드 링크를 메일로 보내 줍니다. 아주 큰 계정(수십 GB)은 더 오래 걸리고 여러 zip 파일로 나뉩니다.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">.mbox 파일을 가져오기 없이 바로 열 수 있습니까?</p>
+            <p>쉽지 않습니다. mbox는 모든 메시지가 이어 붙은 하나의 텍스트 파일입니다. 개별 메일을 살펴보려면 대개 Thunderbird 같은 클라이언트로 가져와야 합니다.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Google Takeout에 첨부파일도 포함됩니까?</p>
+            <p>포함됩니다. 첨부파일은 원본 메일에 담긴 방식 그대로 메시지 본문과 함께 내보낸 .mbox 파일 안에 들어 있습니다.</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">MailVault 같은 IMAP 보관 도구는 대신 어떤 형식을 씁니까?</p>
+            <p>MailVault는 메일마다 개별 .eml 파일(표준 RFC 5322 형식)로 저장하고, 이를 Maildir 폴더 구조로 정리합니다. 파일 하나하나가 그 자체로 완결된 메일이라 따로 열 수 있습니다.</p>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            함께 읽기: <a href="/ko/guides/archive-imap-emails-locally.html" class="text-primary-500 hover:text-primary-600 underline">IMAP 메일을 로컬에 보관하는 방법</a>, <a href="/ko/guides/gmail-storage-full.html" class="text-primary-500 hover:text-primary-600 underline">Gmail 저장 공간이 가득 찼을 때 할 일</a>, <a href="/ko/guides/leave-gmail-keep-your-emails.html" class="text-primary-500 hover:text-primary-600 underline">메일을 잃지 않고 Gmail을 떠나는 방법</a>. <a href="/ko/features.html" class="text-primary-500 hover:text-primary-600 underline">전체 기능</a>도 보십시오.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/ko/docs.html" class="hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="hover:text-primary-500 transition-colors">블로그</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">개인정보</a>
+          <a href="/ko/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">변경 내역</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">약관</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 모든 권리 보유.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="언어 선택" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/guides/download-all-gmail-emails.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/guides/download-all-gmail-emails.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/guides/download-all-gmail-emails.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/guides/download-all-gmail-emails.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/guides/download-all-gmail-emails.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/guides/download-all-gmail-emails.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/guides/download-all-gmail-emails.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/guides/download-all-gmail-emails.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/guides/download-all-gmail-emails.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

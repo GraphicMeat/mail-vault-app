@@ -79,4 +79,17 @@ describe('applyToHomepage', () => {
     expect(para().textContent).toBe(shipped);
     expect(para().dataset.version).toBe('2.10.3');
   });
+
+  it('leaves a localized page alone rather than pasting English over it', () => {
+    // /whats-new.json only ever holds English. On /de/ the shipped copy is
+    // already German, so the update has to be skipped, not applied.
+    document.documentElement.setAttribute('lang', 'de');
+    try {
+      applyToHomepage('2.10.4', { '2.10.4': 'the 2.10.4 copy' });
+      expect(para().textContent).toBe(shipped);
+      expect(para().dataset.version).toBe('2.10.3');
+    } finally {
+      document.documentElement.setAttribute('lang', 'en');
+    }
+  });
 });

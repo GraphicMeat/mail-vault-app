@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>如何在不丢旧邮件的前提下腾出邮件存储空间 — MailVault</title>
+  <meta name="description" content="邮箱满了？用 MailVault 把邮件归档到本地，然后安全地从服务器删除。腾出 Gmail、Outlook 或任意 IMAP 的存储空间，什么也不会丢。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/guides/free-up-email-storage.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/guides/free-up-email-storage.html">
+  <meta property="og:title" content="如何在不丢旧邮件的前提下腾出邮件存储空间 — MailVault">
+  <meta property="og:description" content="邮箱满了？用 MailVault 把邮件归档到本地，然后安全地从服务器删除。腾出 Gmail、Outlook 或任意 IMAP 的存储空间，什么也不会丢。">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="如何在不丢旧邮件的前提下腾出邮件存储空间 — MailVault">
+  <meta name="twitter:description" content="邮箱满了？用 MailVault 把邮件归档到本地，然后安全地从服务器删除。腾出 Gmail、Outlook 或任意 IMAP 的存储空间，什么也不会丢。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "如何在不丢旧邮件的前提下腾出邮件存储空间",
+  "description": "邮箱满了？用 MailVault 把邮件归档到本地，然后安全地从服务器删除。腾出 Gmail、Outlook 或任意 IMAP 的存储空间，什么也不会丢。",
+  "url": "https://mailvaultapp.com/zh/guides/free-up-email-storage.html",
+  "datePublished": "2026-03-15",
+  "dateModified": "2026-03-15",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/free-up-email-storage.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/free-up-email-storage.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/zh/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/zh/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="切换主题">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            下载
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/zh/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">下载</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/zh/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        返回首页
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">如何在不丢旧邮件的前提下腾出邮件存储空间</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>5 分钟阅读</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            某天早上你打开邮箱，看到那条警告：<strong>“你的邮箱快满了。”</strong>Gmail 给你 15 GB，由 Gmail、Google Drive 和 Google Photos 共用。Outlook 给你 15 GB。一旦触到上限，你就收不到新邮件了。这不是假设的情形 &mdash; 它每天都发生在几百万人身上，而通行的建议要么很糟，要么很贵。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">常见（但不好）的解法</h3>
+
+          <p>
+            邮箱满了的时候，多数人会试下面这几种做法。没有一种真的好：
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>花钱买更多空间</strong> &mdash; Google One 100 GB 起步 $1.99/月，Microsoft 365 $6.99/月。这管用，但你是在永远租用空间。邮件在涨，账单也跟着涨。你治的是症状，不是病根。</li>
+            <li><strong>随手删旧邮件</strong> &mdash; 按大小排序，删掉最大的几封，清空回收站。快，但有风险。三年前那个附件，可能是某份重要合同的唯一副本。删掉并彻底清除之后，它就没了。</li>
+            <li><strong>手动导出成 .mbox</strong> &mdash; Google Takeout 能让你把整个 Gmail 下载成一个 .mbox 文件。问题在于：.mbox 是个整块文件，难搜索，而且多数邮件客户端应付不了太大的。它是一份备份，不是一份能用的归档。</li>
+            <li><strong>干脆不用邮件了</strong> &mdash; 这算不上一个选项。</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">更聪明的做法：先归档到本地，再删除</h3>
+
+          <p>
+            有一条更好的路：把你想留的邮件下载到本地磁盘，确认归档完整，然后再把这些邮件从服务器删掉。你腾出了服务器空间，同时每一封邮件都还在，可搜索、可访问，就在你自己的机器上。
+          </p>
+
+          <p>
+            关键在于认清：<strong>本地归档和服务器删除是两个分开的步骤</strong>。你先归档，确认一切都存好了，然后才从服务器删除。不丢数据，也不用提心吊胆。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">用 MailVault 怎么做</h3>
+
+          <p>
+            MailVault 是一款面向 macOS 和 Linux 的免费桌面应用，能让这套流程变得简单。以下是分步过程：
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>连接你的账户</strong> &mdash; 把你的 Gmail、Outlook、Yahoo 或任何 IMAP 账户添加到 MailVault。它通过 TLS 安全连接，Google 和 Microsoft 支持 OAuth2。</li>
+            <li><strong>选择要归档的邮件</strong> &mdash; 浏览你的邮箱，选中想保存到本地的邮件。你可以逐封选，也可以选整条会话，或者按日期范围批量选中。</li>
+            <li><strong>归档到磁盘</strong> &mdash; MailVault 下载完整的邮件 &mdash; 邮件头、正文、HTML 排版和所有附件 &mdash; 并把每封邮件存成你电脑上一个标准的 <code>.eml</code> 文件。这些文件按 Maildir 结构、依账户和文件夹组织。</li>
+            <li><strong>核对你的归档</strong> &mdash; 从服务器删任何东西之前，先在 MailVault 里打开几封归档过的邮件，确认它们是完整的。检查附件是否完好。搜一封具体的邮件，确保它在里面。</li>
+            <li><strong>从服务器删除</strong> &mdash; 确信本地归档完整之后，把已归档的邮件从服务器上删掉。服务器空间腾出来了，而每一封邮件仍然在你的磁盘上。</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">你能腾出多少空间？</h3>
+
+          <p>
+            任何邮箱里最占空间的都是附件。几年下来的邮件，加上常规的 PDF 发票、文档附件和图片文件，轻轻松松就吃掉 5-10 GB。把两年以上的邮件归档并删除，就能拿回相当一部分配额。
+          </p>
+
+          <p>
+            邮件本身（不含附件的文本和 HTML 正文）相对很小。一封典型邮件的正文是 5-50 KB。真正吃你存储的是附件。把一切归档到本地，再把那些附件很重的旧邮件从服务器删掉，就能用最小的力气拿回最多的空间。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">为什么不直接用 Google Takeout 或 IMAP 导出？</h3>
+
+          <p>
+            Google Takeout 和类似的导出工具给你的是一个包含全部邮件的整块 <code>.mbox</code> 文件。这有几个问题：
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>不能搜索</strong> &mdash; .mbox 文件就是一大团文本。不把它导进另一个邮件客户端，你没法方便地搜索，也没法逐封浏览。</li>
+            <li><strong>损坏风险</strong> &mdash; 文件一旦损坏，你可能失去整份归档。而用一个个独立的 <code>.eml</code> 文件（MailVault 的做法），一个文件坏了只影响一封邮件。</li>
+            <li><strong>要么全要，要么不要</strong> &mdash; Takeout 会把一切都导出。你没法有选择地只归档某些文件夹或某段日期范围。</li>
+            <li><strong>没有持续的流程</strong> &mdash; Takeout 是一次性导出。它不能给你一套定期归档、定期腾空间的工作流。</li>
+          </ul>
+
+          <p>
+            MailVault 把每封邮件存成一个独立的 <code>.eml</code> 文件 &mdash; 也就是任何邮件客户端都能打开的 RFC 5322 标准格式。你的归档不会被锁进任何专有格式或工具里。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">后台缓存：让归档自动攒起来</h3>
+
+          <p>
+            如果你想归档整个邮箱，又不想手动一封封选，MailVault 有一个后台缓存功能。它会在你浏览收件箱时在后台下载邮件内容，逐步把整个邮箱的本地归档建起来。等一切都缓存到本地，你就可以放心从服务器删除，因为你手里有一份完整副本。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">最终结果</h3>
+
+          <p>
+            归档并删除旧邮件之后，你得到的是：
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li>服务器上更轻的邮箱 &mdash; 更多空闲空间，不再有警告，也没有每月的存储费。</li>
+            <li>一份完整的本地归档 &mdash; 每封邮件依然可访问、可搜索，附件也完好无损。</li>
+            <li>标准文件 &mdash; <code>.eml</code> 文件，你可以备份到移动硬盘、NAS 或你自己挑的云存储。</li>
+            <li>不被厂商锁定 &mdash; 你的邮件不会被困在任何专有格式里。</li>
+          </ul>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">别再为邮件存储付费</p>
+            <p class="text-sm mb-4">用 MailVault 把邮件归档到本地，然后安全地从服务器删除。免费、开源，无需注册账号。</p>
+            <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+              下载 MailVault
+            </a>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            了解更多关于<a href="/zh/guides/archive-imap-emails-locally.html" class="text-primary-500 hover:text-primary-600 underline">本地 IMAP 归档如何运作</a>，或读一读<a href="/zh/guides/keep-emails-after-server-deletion.html" class="text-primary-500 hover:text-primary-600 underline">服务器删除后如何保住邮件</a>。另见<a href="/zh/features.html" class="text-primary-500 hover:text-primary-600 underline">全部功能</a>或查看<a href="/zh/faq.html" class="text-primary-500 hover:text-primary-600 underline">常见问题</a>。
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/zh/docs.html" class="hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="hover:text-primary-500 transition-colors">博客</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">隐私</a>
+          <a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">更新日志</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">条款</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 保留所有权利。
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="选择语言" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/guides/free-up-email-storage.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

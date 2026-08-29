@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>注销或删除账号前如何备份邮件 — MailVault</title>
+  <meta name="description" content="准备注销邮箱账号、离职，或者要关掉一家公司？这里是一份分步清单，在账号和数据彻底消失之前备份每一封邮件。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/guides/backup-email-before-closing-account.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/guides/backup-email-before-closing-account.html">
+  <meta property="og:title" content="注销或删除账号前如何备份邮件 — MailVault">
+  <meta property="og:description" content="准备注销邮箱账号、离职，或者要关掉一家公司？这里是一份分步清单，在账号和数据彻底消失之前备份每一封邮件。">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="注销或删除账号前如何备份邮件 — MailVault">
+  <meta name="twitter:description" content="准备注销邮箱账号、离职，或者要关掉一家公司？这里是一份分步清单，在账号和数据彻底消失之前备份每一封邮件。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "注销或删除账号前如何备份你的邮件",
+  "description": "准备注销邮箱账号、离职，或者要关掉一家公司？这里是一份分步清单，在账号和数据彻底消失之前备份每一封邮件。",
+  "url": "https://mailvaultapp.com/zh/guides/backup-email-before-closing-account.html",
+  "datePublished": "2026-07-15",
+  "dateModified": "2026-07-15",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+
+  <!-- Structured Data: FAQPage -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "邮箱账号被永久删除之后，还能恢复邮件吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "几乎不能。多数服务商会在账号关闭后的几天到几周内彻底清除账号数据，而且请求恢复已关闭账号的工单很少被受理，免费的个人账号尤其如此。要在关闭之前备份，不是之后。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "我需要备份「已发送」和「草稿」，还是只备份收件箱就行？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "每个文件夹都要备份。已发送邮件往往是你到底写过什么的唯一记录，草稿里也可能有没写完但很重要的内容。只备份收件箱会漏掉你真实邮件历史的很大一部分。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "邮件备份放在哪里最安全？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "放在你掌控的设备上的一个本地文件夹，最好再复制一份到外接硬盘，或一个与你要注销的账号无关的云存储账号。绝不要依赖绑在你即将删除的那个账号上的存储。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "关闭账号前，我怎么知道备份真的成功了？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "打开几封归档邮件确认显示正常，检查附件能否打开，并搜索一封你记得的具体邮件确认它在里面。要在发起账号注销之前做这件事，不是之后。"
+      }
+    }
+  ]
+}
+  </script>
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/guides/backup-email-before-closing-account.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/guides/backup-email-before-closing-account.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/guides/backup-email-before-closing-account.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/guides/backup-email-before-closing-account.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/guides/backup-email-before-closing-account.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/guides/backup-email-before-closing-account.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/guides/backup-email-before-closing-account.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/guides/backup-email-before-closing-account.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/guides/backup-email-before-closing-account.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/guides/backup-email-before-closing-account.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/zh/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/zh/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="切换主题">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            下载
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/zh/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">下载</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/zh/" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        返回首页
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">注销账号前如何备份你的邮件</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>7 分钟阅读</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            注销邮箱账号是互联网上少数真正不可逆的操作之一。一旦服务商删除了账号 &mdash; 不管是你自己注销、公司在你离职后关掉工作邮箱，还是域名到期把上面的邮箱一并带走 &mdash; 这些邮件通常就永久没了，有时只需要几天。没有撤销按钮，请求恢复已关闭账号的工单几乎从不奏效。只要你还在考虑注销一个账号，就先把它备份下来。下面是正确的做法。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">第 1 步：确认账号还有完整访问权</h3>
+
+          <p>
+            在任何回收流程开始之前就做这件事。如果这是一个和你最后工作日挂钩的工作账号，那就在最后一天之前备份，而不是之后 &mdash; IT 常常在下班时就吊销访问权，有时甚至更早。如果是你主动注销的个人账号，就在你发起注销之前备份，因为有些服务商在你确认的那一刻就开始清数据。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">第 2 步：下载每一个文件夹，不只是收件箱</h3>
+
+          <p>
+            人们记得备份收件箱，却忘了已发送、草稿、归档，以及各种自定义文件夹或标签。已发送邮件往往是备份里最有价值的部分 &mdash; 它是你到底说过什么、承诺过什么、同意过什么的唯一记录。把每一个文件夹都有意识地过一遍。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">第 3 步：选一个你以后真的用得上的备份格式</h3>
+
+          <p>
+            多数服务商都提供某种内置导出（Google Takeout、Outlook 的 .pst 导出等），产出一个大的归档文件。作为原始的保险副本没问题，但不先导入到别处，搜索或浏览都很痛苦。更实用的做法是基于 IMAP 的备份，把每封邮件存成独立文件 &mdash; 可以单独打开，用普通的文件搜索就能找，也不会被锁进某家服务商的导出格式里。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">第 4 步：在关掉任何东西之前先验证</h3>
+
+          <p>
+            这是人们会跳过、然后后悔的一步。在你点下「删除账号」或交还公司笔记本之前，真的去打开几封归档邮件，确认附件能正常打开，并搜索一封你记得收到过的具体邮件。没验证过的备份，只是你假设它能用。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">第 5 步：把备份存在你要注销的那个账号之外</h3>
+
+          <p>
+            很显然，但值得说出来：你的备份需要放在你掌控的设备或存储上，而不是绑在你即将删除的那个账号下的 Drive 或云存储里。放在你电脑上的一个本地文件夹，再备份到外接硬盘或你自己选的云存储，是最稳的。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">用 MailVault 来做这件事</h3>
+
+          <p>
+            MailVault 是一款免费开源的桌面应用，支持 macOS 和 Linux，正是为这种情况而做。用 IMAP 连上你即将关闭的账户（Gmail 和 Microsoft 账户走 OAuth，其余用标准连接），选中包括“已发送”和“草稿”在内的每一个文件夹，把整个邮箱归档成磁盘上一个个独立的 <code>.eml</code> 文件。因为每封邮件都是标准、可移植格式的独立文件，之后你可以随意打开、搜索或搬动这份归档 &mdash; 没有专有格式，也不被厂商锁定。这样的手动归档免费且不限次数。如果你要定期备份好几个账户（比如每一位离职员工的邮箱），定时自动备份是 $4/月 的 Premium 功能。
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">没有一份真正的备份，就别注销账号</p>
+            <p class="text-sm mb-4">在你删除任何东西之前，MailVault 会把每个文件夹都归档成一个个可搜索的 .eml 文件。免费、开源，先验证再动手。</p>
+            <div class="flex flex-wrap gap-3">
+              <a href="/zh/#download" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+                下载 MailVault
+              </a>
+              <a href="/zh/pricing.html" class="inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">
+                查看定价
+              </a>
+            </div>
+          </div>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-4">常见问题</h3>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">邮箱账号被永久删除之后，还能恢复邮件吗？</p>
+            <p>几乎不能。多数服务商会在账号关闭后的几天到几周内彻底清除账号数据，而且请求恢复已关闭账号的工单很少被受理，免费的个人账号尤其如此。要在关闭之前备份，不是之后。</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">我需要备份「已发送」和「草稿」，还是只备份收件箱就行？</p>
+            <p>每个文件夹都要备份。已发送邮件往往是你到底写过什么的唯一记录，草稿里也可能有没写完但很重要的内容。只备份收件箱会漏掉你真实邮件历史的很大一部分。</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">邮件备份放在哪里最安全？</p>
+            <p>放在你掌控的设备上的一个本地文件夹，最好再复制一份到外接硬盘，或一个与你要注销的账号无关的云存储账号。绝不要依赖绑在你即将删除的那个账号上的存储。</p>
+          </div>
+
+          <div class="pt-2">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-1">关闭账号前，我怎么知道备份真的成功了？</p>
+            <p>打开几封归档邮件确认显示正常，检查附件能否打开，并搜索一封你记得的具体邮件确认它在里面。要在发起账号注销之前做这件事，不是之后。</p>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            延伸阅读：<a href="/zh/guides/keep-emails-after-server-deletion.html" class="text-primary-500 hover:text-primary-600 underline">服务器删除后如何保住邮件</a>、<a href="/zh/guides/delete-thousands-of-old-emails-safely.html" class="text-primary-500 hover:text-primary-600 underline">如何安全地删掉成千上万封旧邮件</a>，以及<a href="/zh/guides/leave-gmail-keep-your-emails.html" class="text-primary-500 hover:text-primary-600 underline">如何离开 Gmail 而不丢邮件</a>。
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/zh/docs.html" class="hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="hover:text-primary-500 transition-colors">博客</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">隐私</a>
+          <a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">更新日志</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">条款</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 保留所有权利。
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="选择语言" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/guides/backup-email-before-closing-account.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/guides/backup-email-before-closing-account.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/guides/backup-email-before-closing-account.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/guides/backup-email-before-closing-account.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/guides/backup-email-before-closing-account.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/guides/backup-email-before-closing-account.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/guides/backup-email-before-closing-account.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/guides/backup-email-before-closing-account.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/guides/backup-email-before-closing-account.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

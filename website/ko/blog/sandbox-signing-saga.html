@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>macOS 샌드박스 서명 대장정 - MailVault 블로그</title>
+  <meta name="description" content="macOS 코드 서명과 App Sandbox가 MailVault를 거의 무너뜨린 이야기와, 이를 고치는 데 걸린 여섯 번의 패치 릴리스입니다.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ko/blog/sandbox-signing-saga.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ko/blog/sandbox-signing-saga.html">
+  <meta property="og:title" content="macOS 샌드박스 서명 대장정 - MailVault 블로그">
+  <meta property="og:description" content="macOS 코드 서명과 App Sandbox가 MailVault를 거의 무너뜨린 이야기와, 이를 고치는 데 걸린 여섯 번의 패치 릴리스입니다.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ko_KR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="macOS 샌드박스 서명 대장정 - MailVault 블로그">
+  <meta name="twitter:description" content="macOS 코드 서명과 App Sandbox가 MailVault를 거의 무너뜨린 이야기와, 이를 고치는 데 걸린 여섯 번의 패치 릴리스입니다.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/sandbox-signing-saga.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/sandbox-signing-saga.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/sandbox-signing-saga.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/sandbox-signing-saga.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/sandbox-signing-saga.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/sandbox-signing-saga.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/sandbox-signing-saga.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/sandbox-signing-saga.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/sandbox-signing-saga.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/sandbox-signing-saga.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/ko/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/ko/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="테마 전환">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            다운로드
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/ko/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">다운로드</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/ko/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        블로그로 돌아가기
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-02-18" class="text-sm text-primary-500 font-medium">2026년 2월 18일</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">macOS 샌드박스 서명 대장정 (또는 v1.4.0부터 v1.4.5까지가 존재하는 이유)</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>5분 분량</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            오늘 <a href="/changelog.html" class="text-primary-500 hover:text-primary-600 underline">변경 이력</a>을 보고 하루에 패치 릴리스가 여섯 번 올라온 것을 발견했다면 무슨 일이 있었는지 궁금할 것입니다. 짧게 답하면, macOS 코드 서명과 App Sandbox에 우리가 거의 무너질 뻔했습니다. 전말은 이렇습니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailVault의 내부 구조</h3>
+
+          <p>
+            MailVault는 <a href="https://v2.tauri.app" class="text-primary-500 hover:text-primary-600 underline">Tauri v2</a> 데스크톱 앱입니다. 프런트엔드는 네이티브 웹뷰에서 도는 React이고, 백엔드는 <a href="https://bun.sh" class="text-primary-500 hover:text-primary-600 underline">Bun</a>으로 네이티브 바이너리로 컴파일한 Node.js Express 서버입니다. "사이드카"라고 부르는 이 바이너리가 본체 앱과 나란히 돌면서 IMAP/SMTP 통신을 전부 맡습니다.
+          </p>
+
+          <p>
+            macOS로 배포하려면 Apple은 앱이 Developer ID 인증서로 서명되고 공증되기를 요구합니다. 우리는 <strong>App Sandbox</strong>도 켭니다 &mdash; 앱이 시스템에서 무엇에 접근할 수 있는지 제한하는 Apple의 보안 계층입니다. Mac App Store에는 필수이고, 어떤 데스크톱 앱에서든 좋은 관행입니다.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">문제</h3>
+
+          <p>
+            v1.4.0을 내놓은 뒤, 릴리스 빌드에서 사이드카 서버가 시작되지 않는다는 것을 발견했습니다. 앱은 잘 실행되었지만 백엔드가 종료 코드 133(SIGTRAP)으로 조용히 죽고 있었습니다. 개발 환경에서는 완벽하게 동작했고 &mdash; 서명되고 샌드박스가 적용된 릴리스 빌드에서만 문제가 생겼습니다.
+          </p>
+
+          <p>
+            층을 하나씩 벗겨 내는 데 여러 번의 시도가 필요했습니다:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>v1.4.0</strong> &mdash; 서버는 <code>0.0.0.0</code>에 바인딩했는데 프런트엔드는 <code>localhost</code>로 접속해 IPv4/IPv6 불일치가 났습니다. <code>127.0.0.1</code>에 명시적으로 바인딩해 해결했습니다.</li>
+            <li><strong>v1.4.1</strong> &mdash; "Add Account" 모달이 API 헬퍼 대신 <code>fetch('/api/test-connection')</code>을 그대로 썼습니다. Tauri 릴리스 빌드에서 웹뷰 오리진은 <code>http://localhost</code>가 아니라 <code>tauri://localhost</code>입니다 &mdash; 그래서 상대 URL이 엉뚱한 곳으로 풀립니다.</li>
+            <li><strong>v1.4.2</strong> &mdash; <code>com.apple.security.network.server</code> 권한이 빠져 있었습니다. 샌드박스가 사이드카의 포트 수신을 막았습니다.</li>
+            <li><strong>v1.4.3</strong> &mdash; App Sandbox 안에서는 막히는 셸 기반 프로세스 정리(<code>lsof</code>, <code>kill</code>)를 쓰고 있었습니다. Tauri의 <code>CommandChild</code> 핸들로 바꿨습니다.</li>
+            <li><strong>v1.4.4</strong> &mdash; 진짜 범인. <strong>Bun으로 컴파일한 바이너리에는 JIT</strong>(Just-In-Time 컴파일)가 필요합니다. JIT 컴파일러는 실행 시점에 실행 가능한 메모리를 할당합니다. macOS에는 이를 허용하는 권한(<code>com.apple.security.cs.allow-jit</code>)이 있지만, Tauri는 <code>--deep</code>을 써서 앱 번들 안의 모든 바이너리를 <strong>같은 권한</strong>으로 서명합니다. 그 결과 사이드카에 App Sandbox 권한이 붙었고, allow-jit 플래그가 있어도 JIT가 막혔습니다.</li>
+            <li><strong>v1.4.5</strong> &mdash; 서명 파이프라인을 고쳤습니다. 이제 사이드카는 자체 권한(App Sandbox 없음, JIT 허용)으로 따로 서명합니다. 본체 앱은 App Sandbox를 유지합니다. 서명 순서가 중요합니다. 사이드카를 먼저, 그다음 본체 앱 번들을 <code>--deep</code> <em>없이</em> 서명해야 사이드카의 권한이 보존됩니다. 또한 CI 파이프라인이 제대로 서명한 DMG 대신 Tauri가 자동 생성한 서명 없는 DMG를 올리고 있었다는 것도 이때 잡았습니다.</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">해결</h3>
+
+          <p>
+            해법은 두 부분입니다:
+          </p>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li><strong>권한 파일 분리</strong> &mdash; 사이드카는 <code>entitlements-sidecar.plist</code>(JIT + 네트워크, 샌드박스 없음)를 받습니다. 본체 앱은 <code>entitlements.plist</code>(샌드박스 + JIT + 네트워크)를 받습니다.</li>
+            <li><strong>올바른 서명 순서</strong> &mdash; 사이드카를 자체 권한으로 먼저 서명하고, 그다음 본체 <code>.app</code> 번들을 <code>--deep</code> 없이 서명하십시오. <code>--deep</code>을 쓰면 번들 안의 모든 것을 재귀적으로 다시 서명하면서 사이드카의 권한을 덮어씁니다.</li>
+          </ol>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">서명을 직접 확인하는 방법</h3>
+
+          <p>
+            MailVault가 제대로 서명되고 공증되었는지 직접 확인하고 싶다면 터미널을 열고 다음 명령을 실행하십시오:
+          </p>
+
+          <p><strong>1. 앱 서명 확인:</strong></p>
+
+          <pre>codesign --verify --verbose /Applications/MailVault.app</pre>
+
+          <p>다음과 같이 나와야 합니다:</p>
+          <pre>/Applications/MailVault.app: valid on disk
+/Applications/MailVault.app: satisfies its Designated Requirement</pre>
+
+          <p><strong>2. 메인 앱의 엔타이틀먼트 확인:</strong></p>
+
+          <pre>codesign -d --entitlements - /Applications/MailVault.app</pre>
+
+          <p><code>com.apple.security.app-sandbox</code>가 <code>true</code>로 되어 있는지 확인하십시오 &mdash; 앱이 샌드박스에서 돈다는 뜻입니다.</p>
+
+          <p><strong>3. 사이드카의 엔타이틀먼트 확인:</strong></p>
+
+          <pre>codesign -d --entitlements - /Applications/MailVault.app/Contents/MacOS/mailvault-server</pre>
+
+          <p>사이드카에는 <code>com.apple.security.cs.allow-jit</code>이 있어야 하고, <code>com.apple.security.app-sandbox</code>는 <strong>없어야</strong> 합니다.</p>
+
+          <p><strong>4. 공증 확인:</strong></p>
+
+          <pre>spctl --assess --type execute -v /Applications/MailVault.app</pre>
+
+          <p>다음과 같이 나와야 합니다:</p>
+          <pre>/Applications/MailVault.app: accepted
+source=Notarized Developer ID</pre>
+
+          <p><strong>5. DMG 공증 확인(설치 전):</strong></p>
+
+          <pre>spctl --assess --type open --context context:primary-signature -v ~/Downloads/MailVault-v1.4.5.dmg</pre>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">배운 것</h3>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>릴리스 빌드를 일찍 시험하십시오.</strong> 개발 빌드는 코드 서명과 샌드박싱을 아예 건너뜁니다. "개발에서는 된다"와 "릴리스에서도 된다" 사이의 간격은 대단히 클 수 있습니다.</li>
+            <li><strong>사이드카는 따로 다뤄야 합니다.</strong> Tauri 앱 안에 Bun/Node/Deno로 컴파일한 바이너리를 넣는다면 그 바이너리에는 자체 권한이 필요합니다. Tauri는 바이너리별 권한을 기본으로 지원하지 않습니다 &mdash; 빌드가 끝난 뒤 직접 다시 서명해야 합니다.</li>
+            <li><strong><code>--deep</code>은 위험합니다.</strong> 편리하지만 중첩된 서명을 전부 같은 권한으로 덮어씁니다. 바이너리마다 다른 권한이 필요하다면 하나씩 따로 서명하십시오.</li>
+            <li><strong>로컬과 CI가 같은 빌드 스크립트를 쓰게 하십시오.</strong> 로컬 빌드와 CI에 서명 로직이 따로 있었던 탓에 CI가 엉뚱한(서명되지 않은) DMG를 올렸습니다. 지금은 둘 다 같은 스크립트를 씁니다.</li>
+          </ul>
+
+          <p>
+            망가진 릴리스로 불편을 겪으셨다면 사과드립니다. v1.4.5가 제대로 서명된 안정 릴리스입니다. 메일이 위험했던 적은 없습니다 &mdash; 문제는 오로지 앱 바이너리가 백엔드 서버를 띄우지 못한 데 있었습니다.
+          </p>
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/ko/docs.html" class="hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="hover:text-primary-500 transition-colors">블로그</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">개인정보</a>
+          <a href="/ko/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">변경 내역</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">약관</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 모든 권리 보유.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="언어 선택" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/blog/sandbox-signing-saga.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/blog/sandbox-signing-saga.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/blog/sandbox-signing-saga.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/blog/sandbox-signing-saga.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/blog/sandbox-signing-saga.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/blog/sandbox-signing-saga.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/blog/sandbox-signing-saga.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/blog/sandbox-signing-saga.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/blog/sandbox-signing-saga.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

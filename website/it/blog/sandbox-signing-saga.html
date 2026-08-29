@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="it" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>La saga della firma in sandbox su macOS - Blog di MailVault</title>
+  <meta name="description" content="Come la firma del codice su macOS e App Sandbox hanno quasi distrutto MailVault, e le sei release di patch che ci sono volute per rimediare.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/it/blog/sandbox-signing-saga.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/it/blog/sandbox-signing-saga.html">
+  <meta property="og:title" content="La saga della firma in sandbox su macOS - Blog di MailVault">
+  <meta property="og:description" content="Come la firma del codice su macOS e App Sandbox hanno quasi distrutto MailVault, e le sei release di patch che ci sono volute per rimediare.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="it_IT">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="La saga della firma in sandbox su macOS - Blog di MailVault">
+  <meta name="twitter:description" content="Come la firma del codice su macOS e App Sandbox hanno quasi distrutto MailVault, e le sei release di patch che ci sono volute per rimediare.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/sandbox-signing-saga.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/sandbox-signing-saga.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/sandbox-signing-saga.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/sandbox-signing-saga.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/sandbox-signing-saga.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/sandbox-signing-saga.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/sandbox-signing-saga.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/sandbox-signing-saga.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/sandbox-signing-saga.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/sandbox-signing-saga.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/it/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/it/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Funzioni</a>
+          <a href="/it/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Casi d'uso</a>
+          <a href="/it/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="Cambia tema">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Download
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/it/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Funzioni</a>
+          <a href="/it/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Casi d'uso</a>
+          <a href="/it/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/it/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Torna al blog
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-02-18" class="text-sm text-primary-500 font-medium">18 febbraio 2026</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">La saga della firma in sandbox su macOS (ovvero perché esistono le versioni dalla 1.4.0 alla 1.4.5)</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>5 min di lettura</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Se oggi hai guardato il nostro <a href="/changelog.html" class="text-primary-500 hover:text-primary-600 underline">changelog</a> e hai notato sei rilasci di patch in un solo giorno, forse ti stai chiedendo che cosa sia successo. La risposta breve: la firma del codice su macOS e l'App Sandbox ci hanno quasi steso. Ecco la storia completa.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Come funziona MailVault sotto il cofano</h3>
+
+          <p>
+            MailVault è un'app desktop <a href="https://v2.tauri.app" class="text-primary-500 hover:text-primary-600 underline">Tauri v2</a>. Il frontend è React e gira in una webview nativa, mentre il backend è un server Node.js Express compilato in un binario nativo con <a href="https://bun.sh" class="text-primary-500 hover:text-primary-600 underline">Bun</a>. Questo binario (chiamato "sidecar") gira insieme all'app principale e gestisce tutta la comunicazione IMAP/SMTP.
+          </p>
+
+          <p>
+            Per la distribuzione su macOS, Apple richiede che le app siano firmate con un certificato Developer ID e notarizzate. Abilitiamo anche l'<strong>App Sandbox</strong> &mdash; il livello di sicurezza di Apple che limita ciò a cui l'app può accedere sul tuo sistema. È obbligatorio per il Mac App Store ed è buona pratica per qualsiasi app desktop.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Il problema</h3>
+
+          <p>
+            Dopo il rilascio della v1.4.0 abbiamo scoperto che il server sidecar non partiva nelle build di release. L'app si avviava senza problemi, ma il backend crashava in silenzio con codice di uscita 133 (SIGTRAP). In sviluppo funzionava tutto perfettamente &mdash; era colpita solo la build di release, firmata e in sandbox.
+          </p>
+
+          <p>
+            Ci sono volute diverse iterazioni per togliere gli strati:
+          </p>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>v1.4.0</strong> &mdash; Il server si metteva in ascolto su <code>0.0.0.0</code> ma il frontend si collegava a <code>localhost</code>, con un disallineamento IPv4/IPv6. Risolto mettendosi in ascolto esplicitamente su <code>127.0.0.1</code>.</li>
+            <li><strong>v1.4.1</strong> &mdash; La finestra "Aggiungi account" usava una <code>fetch('/api/test-connection')</code> grezza invece dell'helper dell'API. Nelle build di release di Tauri l'origine della webview è <code>tauri://localhost</code>, non <code>http://localhost</code> &mdash; quindi gli URL relativi finiscono nel posto sbagliato.</li>
+            <li><strong>v1.4.2</strong> &mdash; Mancava l'entitlement <code>com.apple.security.network.server</code>. La sandbox impediva al sidecar di mettersi in ascolto su una porta.</li>
+            <li><strong>v1.4.3</strong> &mdash; Avevamo una pulizia dei processi basata sulla shell (<code>lsof</code>, <code>kill</code>) che dentro l'App Sandbox è bloccata. Sostituita con l'handle <code>CommandChild</code> di Tauri.</li>
+            <li><strong>v1.4.4</strong> &mdash; Il vero colpevole: <strong>i binari compilati con Bun hanno bisogno del JIT</strong> (compilazione Just-In-Time). Il compilatore JIT alloca memoria eseguibile a runtime. macOS ha un entitlement che lo consente (<code>com.apple.security.cs.allow-jit</code>), ma Tauri firma tutti i binari del bundle dell'app con gli <strong>stessi entitlement</strong>, usando <code>--deep</code>. Il sidecar si ritrovava con gli entitlement dell'App Sandbox, che bloccavano il JIT anche in presenza del flag allow-jit.</li>
+            <li><strong>v1.4.5</strong> &mdash; Sistemata la catena di firma. Ora il sidecar viene firmato a parte, con i propri entitlement (niente App Sandbox, JIT consentito). L'app principale mantiene l'App Sandbox. L'ordine di firma conta: prima il sidecar, poi il bundle dell'app principale <em>senza</em> <code>--deep</code>, per preservare gli entitlement del sidecar. Abbiamo anche scoperto che la nostra pipeline di CI caricava il DMG non firmato generato automaticamente da Tauri invece del nostro, firmato come si deve.</li>
+          </ul>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">La soluzione</h3>
+
+          <p>
+            La soluzione ha due parti:
+          </p>
+
+          <ol class="list-decimal pl-6 space-y-2">
+            <li><strong>Entitlement separati</strong> &mdash; Il sidecar riceve <code>entitlements-sidecar.plist</code> (JIT + rete, niente sandbox). L'app principale riceve <code>entitlements.plist</code> (sandbox + JIT + rete).</li>
+            <li><strong>Ordine di firma corretto</strong> &mdash; Firma prima il sidecar con i suoi entitlement, poi firma il bundle <code>.app</code> principale senza <code>--deep</code>. Usare <code>--deep</code> rifirmerebbe ricorsivamente tutto quello che c'è dentro il bundle, sovrascrivendo gli entitlement del sidecar.</li>
+          </ol>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Come verificare la firma da solo</h3>
+
+          <p>
+            Se vuoi verificare che MailVault sia firmato e notarizzato correttamente sulla tua macchina, apri il Terminale ed esegui questi comandi:
+          </p>
+
+          <p><strong>1. Verifica la firma dell'app:</strong></p>
+
+          <pre>codesign --verify --verbose /Applications/MailVault.app</pre>
+
+          <p>Dovresti vedere:</p>
+          <pre>/Applications/MailVault.app: valid on disk
+/Applications/MailVault.app: satisfies its Designated Requirement</pre>
+
+          <p><strong>2. Controlla gli entitlement dell'app principale:</strong></p>
+
+          <pre>codesign -d --entitlements - /Applications/MailVault.app</pre>
+
+          <p>Cerca <code>com.apple.security.app-sandbox</code> impostato su <code>true</code> &mdash; conferma che l'app gira in una sandbox.</p>
+
+          <p><strong>3. Controlla gli entitlement del sidecar:</strong></p>
+
+          <pre>codesign -d --entitlements - /Applications/MailVault.app/Contents/MacOS/mailvault-server</pre>
+
+          <p>Il sidecar deve avere <code>com.apple.security.cs.allow-jit</code> ma <strong>non</strong> deve avere <code>com.apple.security.app-sandbox</code>.</p>
+
+          <p><strong>4. Verifica la notarizzazione:</strong></p>
+
+          <pre>spctl --assess --type execute -v /Applications/MailVault.app</pre>
+
+          <p>Dovresti vedere:</p>
+          <pre>/Applications/MailVault.app: accepted
+source=Notarized Developer ID</pre>
+
+          <p><strong>5. Controlla la notarizzazione del DMG (prima di installarlo):</strong></p>
+
+          <pre>spctl --assess --type open --context context:primary-signature -v ~/Downloads/MailVault-v1.4.5.dmg</pre>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Lezioni imparate</h3>
+
+          <ul class="list-disc pl-6 space-y-2">
+            <li><strong>Prova presto le build di release.</strong> Le build di sviluppo saltano del tutto la firma del codice e la sandbox. Lo scarto tra "funziona in sviluppo" e "funziona in release" può essere enorme.</li>
+            <li><strong>I sidecar richiedono un trattamento a parte.</strong> Se dentro un'app Tauri metti un binario compilato con Bun, Node o Deno, gli servono entitlement propri. Tauri non supporta nativamente entitlement per singolo binario &mdash; devi rifirmare dopo la build.</li>
+            <li><strong><code>--deep</code> è pericoloso.</strong> È comodo, ma sovrascrive tutte le firme annidate con gli stessi entitlement. Se binari diversi hanno bisogno di entitlement diversi, firmali uno per uno.</li>
+            <li><strong>Un solo script di build per il locale e per la CI.</strong> Avere una logica di firma separata per le build locali e per la CI ha portato la CI a caricare il DMG sbagliato, quello non firmato. Ora usano entrambe lo stesso script.</li>
+          </ul>
+
+          <p>
+            Se sei stato colpito dalle release rotte, ci scusiamo per il disagio. La v1.4.5 è la release stabile e firmata correttamente. Le tue email non sono mai state a rischio &mdash; il problema riguardava solo il binario dell'app che non avviava il suo server backend.
+          </p>
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/it/docs.html" class="hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacy</a>
+          <a href="/it/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Termini</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. Tutti i diritti riservati.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="Scegli una lingua" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/blog/sandbox-signing-saga.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/blog/sandbox-signing-saga.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/blog/sandbox-signing-saga.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/blog/sandbox-signing-saga.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/blog/sandbox-signing-saga.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/blog/sandbox-signing-saga.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/blog/sandbox-signing-saga.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/blog/sandbox-signing-saga.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/blog/sandbox-signing-saga.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>메일 추적기 차단 — 추적 픽셀이 불러와지기 전에 걷어냅니다 | MailVault</title>
+  <meta name="description" content="MailVault는 마케팅 메일에 숨겨진 추적 픽셀을 찾아 메시지가 그려지기 전에 HTML에서 걷어냅니다. 적용 전후 모습과 추적 코드 자체, 그리고 1×1 픽셀 하나가 발신자에게 무엇을 알려 주는지 확인하십시오.">
+  <meta name="robots" content="index, follow">
+  <meta name="keywords" content="email tracking pixel, block email trackers, spy pixel, read receipt blocker, email privacy, tracking pixel blocker mac, stop email tracking, mailchimp tracking pixel, sendgrid open tracking">
+  <link rel="canonical" href="https://mailvaultapp.com/ko/features/email-tracker-blocking.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ko/features/email-tracker-blocking.html">
+  <meta property="og:title" content="메일 추적기 차단 — 추적 픽셀이 불러와지기 전에 걷어냅니다">
+  <meta property="og:description" content="마케팅 메일에는 여는 순간 알려 주는 1×1 이미지가 숨어 있습니다. MailVault는 메시지가 그려지기 전에 이를 HTML에서 제거합니다.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ko_KR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="메일 추적기 차단 — 추적 픽셀이 불러와지기 전에 걷어냅니다">
+  <meta name="twitter:description" content="마케팅 메일에는 여는 순간 알려 주는 1×1 이미지가 숨어 있습니다. MailVault는 메시지가 그려지기 전에 이를 HTML에서 제거합니다.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    @keyframes mv-ping { 0% { opacity: 1; transform: scale(1); } 75%, 100% { opacity: 0; transform: scale(2.2); } }
+    .mv-ping { animation: mv-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite; }
+    @media (prefers-reduced-motion: reduce) { .mv-ping { animation: none; } }
+  </style>
+
+  <!-- JSON-LD -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "메일 추적기 차단 — 추적 픽셀이 불러와지기 전에 걷어냅니다",
+  "description": "MailVault는 메일에 숨겨진 추적 픽셀을 찾아 메시지가 그려지기 전에 HTML에서 걷어냅니다. 탐지는 무료이며, 차단은 MailVault Premium에 포함됩니다.",
+  "url": "https://mailvaultapp.com/ko/features/email-tracker-blocking.html",
+  "author": {
+    "@type": "Organization",
+    "name": "MailVault"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "MailVault",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://mailvaultapp.com/icon-128.png"
+    }
+  },
+  "datePublished": "2026-08-28",
+  "dateModified": "2026-08-28",
+  "image": "https://mailvaultapp.com/og-image.png"
+}
+  </script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "메일 추적 픽셀이란 무엇입니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "추적 픽셀은 HTML 메일에 심어 둔 아주 작은 이미지로, 대개 1×1 크기이고 눈에 보이지 않습니다. 메시지가 그려지는 순간 메일 클라이언트가 발신자의 서버에 이 이미지를 요청하는데, 그 요청이 발신자에게 사용자가 메일을 열었다는 사실과 시각, 횟수, IP 주소, 사용하는 메일 클라이언트를 알려 줍니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "MailVault는 추적 픽셀을 어떻게 차단합니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "MailVault는 메일 본문이 그려지기 전에 이를 해석해 HTML에서 비컨 요소를 제거합니다. 아무것도 요청되지 않으므로 발신자가 기록할 연결도 없습니다. 탐지와 제거는 전적으로 사용자의 기기에서 이루어지며 &mdash; 메일의 어떤 부분도 어디로도 전송되지 않습니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "어떤 회사가 저를 추적했는지 볼 수 있습니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "볼 수 있습니다. 추적기가 있는 모든 메시지에는 제목 옆에 표시가 붙습니다. 이를 누르면 추적 업체와 요청 URL, 그리고 왜 표시되었는지 알려 줍니다. 이 탐지 기능은 모든 MailVault 사용자에게 무료이며, 비컨을 제거하는 것은 Premium에 포함됩니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "MailVault에서 추적기 차단은 무료입니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "탐지는 영원히 무료입니다 — 어떤 메시지가 나를 추적했는지, 어느 업체가 비컨을 보냈는지는 언제나 볼 수 있습니다. 비컨이 불러와지기 전에 걷어내는 것은 MailVault Premium에 포함되며, $4/월 또는 $25/년이고 연간 요금제에는 14일 무료 체험이 있습니다."
+      }
+    }
+  ]
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/features/email-tracker-blocking.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/features/email-tracker-blocking.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/ko/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/ko/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/pricing.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">가격</a>
+          <a href="/ko/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="테마 전환">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            다운로드
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/ko/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/pricing.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">가격</a>
+          <a href="/ko/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">다운로드</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-28 pb-16">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <!-- Hero -->
+      <header class="mb-12">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 mb-5">
+          Premium 기능
+        </div>
+        <h1 class="text-4xl sm:text-5xl font-extrabold leading-tight mb-5">
+          메일을 여는 순간 알려 주는 그 픽셀
+        </h1>
+        <p class="text-lg text-slate-600 dark:text-slate-400 mb-6">
+          광고 메일 대부분에는 눈에 띄지 않는 1×1 이미지가 들어 있습니다. 메시지가 그려지는 순간 메일 클라이언트가 그 이미지를 요청하고, 그 요청은 보낸 사람에게 당신이 읽었다는 사실을 알려 줍니다 — 언제, 몇 번, 대략 어디에서 읽었는지까지. MailVault는 이런 신호기를 찾아 메시지가 그려지기 <strong>전에</strong> HTML에서 걷어내므로, 요청 자체가 일어나지 않습니다.
+        </p>
+        <div class="flex flex-wrap gap-3">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="inline-flex lamp-bg text-white px-6 py-3 rounded-lg font-medium hover:opacity-90 transition-opacity">MailVault 다운로드</a>
+          <a href="/ko/pricing.html" class="inline-flex px-6 py-3 rounded-lg font-medium border border-slate-300 dark:border-slate-700 hover:border-primary-500 transition-colors">가격 보기</a>
+        </div>
+      </header>
+
+      <!-- Before / after -->
+      <section class="mb-14" aria-labelledby="before-after">
+        <h2 id="before-after" class="text-2xl sm:text-3xl font-bold mb-2">적용 전후</h2>
+        <p class="text-slate-600 dark:text-slate-400 mb-6">
+          같은 뉴스레터를 두 번 그린 것입니다. 왼쪽은 비컨이 불러와져 발신자에게 알려집니다. 오른쪽은 MailVault가 이미 제거한 상태입니다 — 메시지의 다른 부분은 전혀 달라지지 않습니다.
+        </p>
+
+        <div class="grid sm:grid-cols-2 gap-4">
+          <!-- BEFORE -->
+          <figure class="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-800">
+            <figcaption class="px-4 py-2 text-xs font-semibold flex items-center gap-2 bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+              전 — 비컨이 작동합니다
+            </figcaption>
+            <div class="p-4 bg-white">
+              <div class="text-sm font-semibold text-slate-900">주간 소식</div>
+              <div class="text-xs text-slate-500 mb-3">news@mailer.example.com</div>
+              <p class="text-sm text-slate-700 m-0 mb-3">안녕하세요 — 이번 주에 놓치신 소식입니다.</p>
+              <div class="h-8 rounded bg-slate-100 mb-3"></div>
+              <div class="flex items-center gap-2 text-xs text-red-600">
+                <span class="relative inline-flex w-2 h-2">
+                  <span class="mv-ping absolute inline-flex w-2 h-2 rounded-full bg-red-400"></span>
+                  <span class="relative inline-flex w-2 h-2 rounded-full bg-red-500"></span>
+                </span>
+                mailer.example.com에서 1×1 픽셀을 불러오는 중
+              </div>
+            </div>
+            <div class="px-4 py-3 text-xs bg-slate-50 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700">
+              <strong class="text-slate-800 dark:text-slate-200">발신자의 대시보드에는 이제 이렇게 적힙니다:</strong>
+              14:32 열람, 빌뉴스, macOS의 Apple Mail, 오늘 3번째 열람.
+            </div>
+          </figure>
+
+          <!-- AFTER -->
+          <figure class="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-800">
+            <figcaption class="px-4 py-2 text-xs font-semibold flex items-center gap-2 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
+              후 — 비컨이 사라졌습니다
+            </figcaption>
+            <div class="p-4 bg-white">
+              <div class="text-sm font-semibold text-slate-900">주간 소식</div>
+              <div class="text-xs text-slate-500 mb-3">news@mailer.example.com</div>
+              <p class="text-sm text-slate-700 m-0 mb-3">안녕하세요 — 이번 주에 놓치신 소식입니다.</p>
+              <div class="h-8 rounded bg-slate-100 mb-3"></div>
+              <div class="flex items-center gap-2 text-xs text-emerald-700">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                렌더링 전에 추적 픽셀 1개 제거됨
+              </div>
+            </div>
+            <div class="px-4 py-3 text-xs bg-slate-50 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 border-t border-slate-200 dark:border-slate-700">
+              <strong class="text-slate-800 dark:text-slate-200">발신자의 대시보드에는 이제 이렇게 적힙니다:</strong>
+              아무것도 없습니다. 요청은 한 번도 일어나지 않았습니다.
+            </div>
+          </figure>
+        </div>
+      </section>
+
+      <!-- The code -->
+      <section class="mb-14" aria-labelledby="the-code">
+        <h2 id="the-code" class="text-2xl sm:text-3xl font-bold mb-2">추적 코드는 이렇게 생겼습니다</h2>
+        <p class="text-slate-600 dark:text-slate-400 mb-6">
+          마케팅 템플릿에서 그대로 가져온 실제 비컨의 모양입니다. 한 줄이고, 눈에 보이지 않으며, 기꺼이 받아 본 메시지의 맨 아래에 있습니다.
+        </p>
+
+        <div class="space-y-4">
+          <div>
+            <div class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">받은 메일 안에서</div>
+            <pre class="p-4 rounded-xl bg-slate-900 text-slate-100 text-xs sm:text-sm overflow-x-auto"><code>&lt;img src="https://mailer.example.com/o/open.php?u=8f21c0&amp;id=a91f&amp;e=you%40yourdomain.com"
+     width="1" height="1" border="0"
+     style="display:none;height:1px;width:1px" alt=""&gt;</code></pre>
+          </div>
+          <div>
+            <div class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-2">MailVault가 걷어낸 뒤</div>
+            <pre class="p-4 rounded-xl bg-slate-900 text-slate-100 text-xs sm:text-sm overflow-x-auto"><code>&lt;span data-mv-tracker-blocked="Mailchimp" hidden&gt;&lt;/span&gt;</code></pre>
+          </div>
+        </div>
+
+        <p class="text-sm text-slate-600 dark:text-slate-400 mt-4">
+          <code class="px-1 rounded bg-slate-200 dark:bg-slate-800">e=</code> 매개변수를 보십시오. URL 안에 든 당신의 주소입니다. 열람 기록이 그저 "누군가"가 아니라 <em>당신</em>에게 묶이는 방식이 바로 이것입니다.
+        </p>
+      </section>
+
+      <!-- What it leaks -->
+      <section class="mb-14" aria-labelledby="what-it-leaks">
+        <h2 id="what-it-leaks" class="text-2xl sm:text-3xl font-bold mb-6">그 픽셀 하나가 발신자에게 알려 주는 것</h2>
+        <ul class="grid sm:grid-cols-2 gap-4">
+          <li class="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <strong class="block mb-1">당신이 열었다는 사실</strong> <span class="text-sm text-slate-600 dark:text-slate-400">그리고 그 뒤로 다시 열 때마다.</span>
+          </li>
+          <li class="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <strong class="block mb-1">몇 시 몇 분에 열었는지</strong> <span class="text-sm text-slate-600 dark:text-slate-400">덤으로 근무 시간과 시간대까지 드러납니다.</span>
+          </li>
+          <li class="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <strong class="block mb-1">당신의 IP 주소</strong> <span class="text-sm text-slate-600 dark:text-slate-400">즉, 읽을 때 대략 어디에 있었는지.</span>
+          </li>
+          <li class="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+            <strong class="block mb-1">당신의 기기와 메일 클라이언트</strong> <span class="text-sm text-slate-600 dark:text-slate-400">요청에 붙은 사용자 에이전트에서 나옵니다.</span>
+          </li>
+        </ul>
+      </section>
+
+      <!-- Free vs premium -->
+      <section class="mb-14" aria-labelledby="free-premium">
+        <h2 id="free-premium" class="text-2xl sm:text-3xl font-bold mb-2">보는 것은 무료, 막는 것은 Premium.</h2>
+        <p class="text-slate-600 dark:text-slate-400 mb-6">
+          모든 MailVault 사용자에게 경고가 표시됩니다. 제목 옆, 피싱 및 도메인 불일치 아이콘 곁에 놓인 표시를 누르면 어떤 추적 업체인지 알려 줍니다. 비컨이 불러와지기 전에 제거하는 것은 Premium에 포함됩니다.
+        </p>
+
+        <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-100 dark:bg-slate-800">
+              <tr>
+                <th scope="col" class="text-left font-semibold px-4 py-3">&nbsp;</th>
+                <th scope="col" class="text-left font-semibold px-4 py-3">무료</th>
+                <th scope="col" class="text-left font-semibold px-4 py-3">Premium</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200 dark:divide-slate-700 bg-white dark:bg-slate-900/40">
+              <tr>
+                <td class="px-4 py-3 text-slate-700 dark:text-slate-300">모든 메시지에 대한 추적기 탐지</td>
+                <td class="px-4 py-3 text-emerald-600 dark:text-emerald-400">지원</td>
+                <td class="px-4 py-3 text-emerald-600 dark:text-emerald-400">지원</td>
+              </tr>
+              <tr>
+                <td class="px-4 py-3 text-slate-700 dark:text-slate-300">어떤 회사가 추적하는지 확인</td>
+                <td class="px-4 py-3 text-emerald-600 dark:text-emerald-400">지원</td>
+                <td class="px-4 py-3 text-emerald-600 dark:text-emerald-400">지원</td>
+              </tr>
+              <tr>
+                <td class="px-4 py-3 text-slate-700 dark:text-slate-300">메시지가 그려지기 전에 비컨 제거</td>
+                <td class="px-4 py-3 text-slate-500 dark:text-slate-400">—</td>
+                <td class="px-4 py-3 text-emerald-600 dark:text-emerald-400">지원</td>
+              </tr>
+              <tr>
+                <td class="px-4 py-3 text-slate-700 dark:text-slate-300">읽기 창, 스레드, 채팅 보기, 팝업 창에 모두 적용</td>
+                <td class="px-4 py-3 text-slate-500 dark:text-slate-400">—</td>
+                <td class="px-4 py-3 text-emerald-600 dark:text-emerald-400">지원</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="mt-6 p-6 rounded-xl border border-primary-500/30 bg-primary-500/5">
+          <h3 class="text-lg font-semibold mb-1">MailVault Premium에서 켜십시오</h3>
+          <p class="text-sm text-slate-600 dark:text-slate-400 mb-4">
+            <span data-mv-price="{monthly}/월 또는 {yearly}/년">$4/월 또는 $25/년</span>이며, 연간 요금제에는 14일 무료 체험이 있습니다. Premium에는 예약 백업, 계정 간 이전, 메일 정리, Time Capsule도 포함됩니다.
+          </p>
+          <div class="flex flex-wrap gap-3">
+            <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="inline-flex lamp-bg text-white px-5 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">다운로드 &amp; 체험 시작</a>
+            <a href="/ko/pricing.html" class="inline-flex px-5 py-2.5 rounded-lg font-medium border border-slate-300 dark:border-slate-700 hover:border-primary-500 transition-colors">요금제 비교</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- How it works -->
+      <section class="mb-14" aria-labelledby="how-it-works">
+        <h2 id="how-it-works" class="text-2xl sm:text-3xl font-bold mb-6">MailVault가 이를 찾아내는 방법</h2>
+        <div class="space-y-4 text-slate-700 dark:text-slate-300">
+          <p>
+            <strong>알려진 엔드포인트.</strong> MailVault에는 열람 추적 URL 패턴 500개 가까이가 함께 담겨 있습니다 — Mailchimp, SendGrid, HubSpot, Mailgun, Klaviyo, Marketo, Salesloft, Superhuman, Mailtrack, Yesware를 비롯해 수백 개입니다. <a href="https://github.com/apparition47/MailTrackerBlocker" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">MailTrackerBlocker</a>(macOS Mail용 추적 픽셀 플러그인으로, 그 자체가 HEY와 Simplify Gmail의 목록에서 출발했습니다)의 차단 목록과 공개된 <a href="https://github.com/OneClickLab/ugly-email-trackers" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">Ugly Email 목록</a>을 합치고, 그 둘보다 나중에 생긴 발신자를 더했습니다.
+          </p>
+          <p>
+            <strong>Brave나 Mozilla의 목록은 왜 쓰지 않습니까?</strong> 그것들은 웹 추적기 목록입니다 — 브라우저가 페이지에서 막는 스크립트와 신호기 호스트 말입니다. 메일 열람 추적은 전혀 다른 엔드포인트로 이뤄지므로, 받은편지함에 실제로 도착하는 것을 잡아내는 것은 위의 메일 전용 목록입니다.
+          </p>
+          <p>
+            <strong>모양.</strong> 목록에 없는 신호기도 스스로를 드러냅니다. 1×1로 선언된 이미지, <code class="px-1 rounded bg-slate-200 dark:bg-slate-800">display:none</code>으로 감춘 이미지, 접힌 컨테이너 안에 놓인 이미지가 그렇습니다. 눈에 실제로 보이는 이미지는 건드리지 않습니다.
+          </p>
+          <p>
+            <strong>요청 경로.</strong> 신호기만 내보내는 경로는 — <code class="px-1 rounded bg-slate-200 dark:bg-slate-800">/open</code>, <code class="px-1 rounded bg-slate-200 dark:bg-slate-800">/pixel</code>, <code class="px-1 rounded bg-slate-200 dark:bg-slate-800">/wf/open</code> 같은 것들입니다 — 아직 아무도 목록에 올리지 않은 호스트에서 와도 걸러냅니다.
+          </p>
+          <p>
+            <strong>전부 로컬에서.</strong> 차단 목록은 앱에 함께 담겨 릴리스마다 갱신됩니다. MailVault는 실행 중에 목록을 받아 오지 않으며 메일의 어떤 부분도 올리지 않습니다. 어떤 픽셀을 막을지 서버에 물어보는 앱이라면 추적기 하나를 다른 추적기로 바꾼 셈이 될 테니까요.
+          </p>
+        </div>
+      </section>
+
+      <!-- FAQ -->
+      <section class="mb-14" aria-labelledby="faq">
+        <h2 id="faq" class="text-2xl sm:text-3xl font-bold mb-6">질문</h2>
+        <div class="space-y-5">
+          <div>
+            <h3 class="font-semibold mb-1">차단하면 메일이 망가집니까?</h3>
+            <p class="text-slate-600 dark:text-slate-400 text-sm">
+              아닙니다. 추적 픽셀은 애초에 보이지 않도록 만들어졌으므로 &mdash; 제거해도 눈에 보이는 것은 달라지지 않습니다. 실제 이미지와 로고, 사진은 그대로 둡니다.
+            </p>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-1">추적 링크는 어떻습니까?</h3>
+            <p class="text-slate-600 dark:text-slate-400 text-sm">
+              MailVault의 무료 링크 안전성 검사기는 추적 도메인을 거쳐 가는 링크를 이미 표시하고, 열기 전에 경고합니다. 추적기 차단은 클릭조차 없이 작동하는 비컨을 다룹니다.
+            </p>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-1">무엇이 차단되었는지 볼 수 있습니까?</h3>
+            <p class="text-slate-600 dark:text-slate-400 text-sm">
+              볼 수 있습니다 — 표시가 눈에 사선이 그어진 모양으로 바뀌고, 제거된 모든 비컨을 업체와 URL과 함께 나열합니다. 설정의 추적기 차단 화면에서는 메일에서 지금까지 발견된 개수도 계속 보여 줍니다.
+            </p>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-1">macOS뿐 아니라 Linux에서도 작동합니까?</h3>
+            <p class="text-slate-600 dark:text-slate-400 text-sm">
+              작동합니다. 메시지 렌더러의 일부이므로 두 플랫폼에서 똑같이 동작합니다.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <p class="text-sm text-slate-500 dark:text-slate-400">
+        <a href="/ko/features.html" class="text-primary-500 hover:text-primary-600 underline">전체 기능</a>이나 <a href="/ko/pricing.html" class="text-primary-500 hover:text-primary-600 underline">가격</a>을 보고, <a href="/ko/faq.html" class="text-primary-500 hover:text-primary-600 underline">자주 묻는 질문</a>도 읽어 보십시오.
+      </p>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/ko/docs.html" class="hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="hover:text-primary-500 transition-colors">블로그</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">개인정보</a>
+          <a href="/ko/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">변경 내역</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">약관</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 모든 권리 보유.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="언어 선택" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/features/email-tracker-blocking.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+  <script defer src="/pricing-localize.js?v=1"></script>
+
+</body>
+</html>

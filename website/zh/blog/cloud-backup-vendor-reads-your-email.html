@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>云备份意味着服务商可以永远读你的邮件。本地备份意味着只有你能读。 - MailVault 博客</title>
+  <meta name="description" content="给邮箱加一个第三方云备份服务，并没有消除单点故障——它只是又添了一家公司，持续掌握你收发过的每一封邮件。这里说清楚真正的架构差别，以及本地备份为什么能把这个口子堵上。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/blog/cloud-backup-vendor-reads-your-email.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/blog/cloud-backup-vendor-reads-your-email.html">
+  <meta property="og:title" content="云备份意味着服务商可以永远读你的邮件。本地备份意味着只有你能读。">
+  <meta property="og:description" content="给邮箱加一个第三方云备份服务，并没有消除单点故障——它只是又添了一家公司，持续掌握你收发过的每一封邮件。这里说清楚真正的架构差别，以及本地备份为什么能把这个口子堵上。">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="云备份意味着服务商可以永远读你的邮件。本地备份意味着只有你能读。">
+  <meta name="twitter:description" content="给邮箱加一个第三方云备份服务，并没有消除单点故障——它只是又添了一家公司，持续掌握你收发过的每一封邮件。这里说清楚真正的架构差别，以及本地备份为什么能把这个口子堵上。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/cloud-backup-vendor-reads-your-email.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/cloud-backup-vendor-reads-your-email.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/cloud-backup-vendor-reads-your-email.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/cloud-backup-vendor-reads-your-email.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/cloud-backup-vendor-reads-your-email.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/cloud-backup-vendor-reads-your-email.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/cloud-backup-vendor-reads-your-email.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/cloud-backup-vendor-reads-your-email.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/cloud-backup-vendor-reads-your-email.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/cloud-backup-vendor-reads-your-email.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/zh/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/zh/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="切换主题">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            下载
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/zh/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">下载</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/zh/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        返回博客
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-08-28" class="text-sm text-primary-500 font-medium">2026 年 8 月 28 日</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">云备份意味着服务商可以永远读你的邮件。本地备份意味着只有你能读。</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>6 分钟阅读</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            一旦有人接受了“收件箱不是备份”这件事 &mdash; 它确实不是，我们<a href="/zh/blog/email-provider-not-a-backup.html" class="text-primary-500 hover:text-primary-600 underline">详细论证过这一点</a> &mdash; 接下来的本能反应通常是再找一个云产品来补救：一个第三方备份服务，接上 Gmail 或 Microsoft 365，把一切持续复制到它自己的服务器上。感觉像是把问题解决了。从结构上看，这更接近于把问题挪了个地方。
+          </p>
+
+          <p>
+            你并没有消除单点故障。你只是又添了一家公司，它长期持有你收发过的每一封邮件的副本，外加继续永久拉取新邮件所需的凭据或委托授权。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">云备份服务商实际掌握着什么</h3>
+
+          <p>
+            大多数云邮件备份产品背后的架构很直白：服务通过 API 或协议级访问直接连上你的邮件服务器，复制每一封邮件和附件，并把这份归档存在备份服务商自己运营和管理的服务器上 &mdash; 不是你的。这就是它全部的价值主张；同时也是它全部的风险面。
+          </p>
+
+          <p>
+            只要订阅还在续，备份服务商 &mdash; 以及顺带地，任何成功攻破他们系统的人 &mdash; 就能持续访问你完整的邮件历史。不是你注册那天的一张快照，而是一份不断增长的归档，攒得越久，对攻击者就越值钱。你把「我的服务商有我的邮件」换成了「我的服务商和一家备份供应商都有我的邮件」，这严格来说是暴露更多，而不是更少。
+          </p>
+
+          <p>
+            这些都不意味着云备份服务商疏于职守或者做得不好。靠谱的公司在安全上投入很认真。这里说的是结构问题，不是对某家具体公司的评判：把敏感数据的更多副本，集中到更多由其他组织控制的地方，出错的路径就会变多，无论每一方各自执行得多好。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">真正重要的那个问题</h3>
+
+          <p>
+            评估任何一种邮件备份方案时，要问的不只是“别处有没有一份副本”。而是：<strong>谁能读到那份副本，以及能读多久？</strong>
+          </p>
+
+          <p>
+            放在某家服务商服务器上的副本，可能在满足内部访问条件时被该服务商的员工读取，可能被对该服务商有管辖权的法院调取，可能在该服务商被入侵时泄露，也可能在该服务商被一家数据处理规范与你当初信任的那家不同的公司收购时被一并交出。这些结果都不需要你这边出任何问题。它们只是「副本存在于别人基础设施上」这件事本身自带的属性。
+          </p>
+
+          <p>
+            放在你自己磁盘上的副本，只有其中一类风险：你自己的设备安全。这是一份实实在在的责任 &mdash; 全盘加密、一台管好的机器，想要更多冗余的话，再给备份做个备份 &mdash; 但这是一个边界清晰、由你直接掌控的单一风险，而不是无限期地托付给第三方替你管理的开放式风险。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">本地备份还能扛住更多状况</h3>
+
+          <p>
+            除了访问权的问题，本地副本还能扛住一串具体的失败情形，而云到云的备份并没有真正解决它们：备份服务商涨价或者关停，备份服务商自己的服务偏偏在你要恢复时宕机，因为一张卡过期而导致订阅失效，或者服务商把条款改成一个你今天不会同意的方向。你磁盘上的一个文件没有订阅状态。它就在那儿。
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">MailVault 的做法不一样在哪里</h3>
+
+          <p>
+            MailVault 连接你现有的 IMAP 或 OAuth 邮箱账户，把每个文件夹都归档成一个个独立的 <code>.eml</code> 文件 &mdash; 直接写到你自己的磁盘上。中间没有一台由 MailVault 运营、存着你邮件副本的服务器。我们读不到你的归档，因为我们从来就没收到过；连接发生在你的设备和你的服务商之间，产生的文件只存在于你放它们的地方。
+          </p>
+
+          <p>
+            格式在这里同样要紧：<code>.eml</code> 是一种朴素的开放标准，任何邮件客户端都能读，而不是把你的归档绑死在某个软件、或某家公司能否继续存在上的专有数据库。手动的、不限次数的本地备份是免费的，就这么简单。不用你记着去点一下、自动让归档保持最新的定时备份，是 $4/月 或 $25/年 的 Premium 功能 &mdash; 年付方案含 14 天试用。
+          </p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">备份你的邮件，不必把它交给第二家公司。</p>
+            <p class="text-sm mb-4">MailVault 把每个文件夹都归档成你自己磁盘上可搜索、可迁移的 .eml 文件 &mdash; 中间没有服务商的服务器，手动备份免费且不限次数。</p>
+            <div class="flex flex-wrap gap-3">
+              <a href="/zh/#download" class="inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">
+                下载 MailVault
+              </a>
+              <a href="/zh/pricing.html" class="inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">
+                查看定价
+              </a>
+            </div>
+          </div>
+
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">
+            延伸阅读：<a href="/zh/guides/imap-backup-tool-checklist.html" class="text-primary-500 hover:text-primary-600 underline">挑选 IMAP 备份工具究竟该看什么</a>、<a href="/zh/guides/archive-imap-emails-locally.html" class="text-primary-500 hover:text-primary-600 underline">如何把 IMAP 邮件归档到本地</a>，以及<a href="/zh/guides/mailstore-alternative-mac.html" class="text-primary-500 hover:text-primary-600 underline">Mac 上的 MailStore 替代品</a>。
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/zh/docs.html" class="hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="hover:text-primary-500 transition-colors">博客</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">隐私</a>
+          <a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">更新日志</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">条款</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 保留所有权利。
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="选择语言" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/blog/cloud-backup-vendor-reads-your-email.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/blog/cloud-backup-vendor-reads-your-email.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/blog/cloud-backup-vendor-reads-your-email.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/blog/cloud-backup-vendor-reads-your-email.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/blog/cloud-backup-vendor-reads-your-email.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/blog/cloud-backup-vendor-reads-your-email.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/blog/cloud-backup-vendor-reads-your-email.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/blog/cloud-backup-vendor-reads-your-email.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/blog/cloud-backup-vendor-reads-your-email.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="fr" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>L'odyssée OAuth d'Outlook : IMAP est cassé, vive Graph - Blog MailVault</title>
+  <meta name="description" content="Comment une régression IMAP côté serveur chez Microsoft nous a forcés à enregistrer notre propre application Azure AD, à construire une couche de transport Graph API complète en Rust, et à déboguer sept pannes en cascade en chemin.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/fr/blog/outlook-oauth-odyssey.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/fr/blog/outlook-oauth-odyssey.html">
+  <meta property="og:title" content="L'odyssée OAuth d'Outlook : IMAP est cassé, vive Graph - Blog MailVault">
+  <meta property="og:description" content="Comment une régression IMAP côté serveur chez Microsoft nous a forcés à enregistrer notre propre application Azure AD, à construire une couche de transport Graph API complète en Rust, et à déboguer sept pannes en cascade en chemin.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="fr_FR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="L'odyssée OAuth d'Outlook : IMAP est cassé, vive Graph - Blog MailVault">
+  <meta name="twitter:description" content="Comment une régression IMAP côté serveur chez Microsoft nous a forcés à enregistrer notre propre application Azure AD, à construire une couche de transport Graph API complète en Rust, et à déboguer sept pannes en cascade en chemin.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=8">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      line-height: 1.7;
+    }
+    .dark article pre {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.1);
+      color: #6366f1;
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.25rem;
+      font-size: 0.875em;
+    }
+    .dark article code:not(pre code) {
+      background: rgba(99, 102, 241, 0.2);
+      color: #a5b4fc;
+    }
+  </style>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/outlook-oauth-odyssey.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/outlook-oauth-odyssey.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/outlook-oauth-odyssey.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/outlook-oauth-odyssey.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/outlook-oauth-odyssey.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/outlook-oauth-odyssey.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/outlook-oauth-odyssey.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/outlook-oauth-odyssey.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/outlook-oauth-odyssey.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/outlook-oauth-odyssey.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/fr/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/fr/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Fonctionnalités</a>
+          <a href="/fr/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Cas d'usage</a>
+          <a href="/fr/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/fr/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center" title="Changer de thème">
+            <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            <svg id="moon-icon" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Télécharger
+          </a>
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/fr/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Fonctionnalités</a>
+          <a href="/fr/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Cas d'usage</a>
+          <a href="/fr/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/fr/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Télécharger</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <a href="/fr/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+        Retour au blog
+      </a>
+
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-02-28" class="text-sm text-primary-500 font-medium">28 février 2026</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">L'odyssée OAuth d'Outlook : IMAP est cassé, vive Graph</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+            <span>8 min de lecture</span>
+          </div>
+        </header>
+
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+
+          <p>
+            Voici comment un seul ticket GitHub &mdash; « la connexion au compte Microsoft ne marche pas » &mdash; s'est transformé en enregistrement de notre propre application Azure AD, en construction d'une couche de transport REST Microsoft Graph complète en Rust, et en débogage de sept pannes en cascade avant que les e-mails ne se chargent enfin. Ce qui aurait dû être un correctif de configuration est devenu une réimplémentation de fond en comble de la façon dont MailVault parle à Microsoft.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Le signalement</h3>
+
+          <p>
+            Deux utilisateurs ont signalé la même chose sous deux angles différents. Des utilisateurs M365 d'entreprise voyaient <code>AADSTS900971: No reply address provided</code> en tentant de se connecter. Des utilisateurs Outlook.com personnels passaient l'écran de connexion, mais tombaient sur <code>AUTHENTICATE failed</code> quand l'application tentait de se connecter en IMAP. Même symptôme &mdash; « la connexion ne marche pas » &mdash; mais deux causes profondes totalement différentes.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Problème 1 : l'identifiant client emprunté</h3>
+
+          <p>
+            Le flux OAuth2 Microsoft d'origine de MailVault utilisait l'identifiant client public bien connu de Thunderbird. C'est un schéma courant &mdash; Thunderbird enregistre des applications OAuth2 chez Microsoft et Google pour que d'autres clients de messagerie puissent s'y greffer. Cela marche très bien jusqu'au jour où ça ne marche plus.
+          </p>
+
+          <p>
+            Pour les tenants M365 d'entreprise, l'application Thunderbird n'a pas notre URI de redirection <code>localhost:19876/callback</code> enregistrée. Azure AD exige une correspondance exacte, et l'application de Thunderbird ne déclare que les URI de redirection de Thunderbird. Le correctif : enregistrer notre propre application Azure AD pour MailVault, avec notre URI de redirection exacte, configurée comme client public (aucun secret, PKCE seulement), et acceptant à la fois les comptes d'organisation et les comptes Microsoft personnels.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Problème 2 : Microsoft a cassé IMAP</h3>
+
+          <p>
+            Le problème des comptes Outlook.com personnels était pire. Depuis décembre 2024, Microsoft traîne une <a href="https://learn.microsoft.com/en-us/answers/questions/5673167/" class="text-primary-500 hover:text-primary-600 underline" target="_blank" rel="noopener">régression côté serveur</a> qui touche IMAP avec OAuth2 pour les comptes personnels. Après un flux OAuth2 réussi, la poignée de main SASL XOAUTH2 échoue avec « User is authenticated but not connected ». Ce n'est pas un bug client &mdash; ce sont les serveurs IMAP de Microsoft qui rejettent des jetons valides. Le fil sur le forum d'assistance de Microsoft est ouvert depuis des mois, sans correctif en vue.
+          </p>
+
+          <p>
+            Les mots de passe d'application fonctionnent encore pour les comptes personnels, mais cela ruine tout l'intérêt d'OAuth2. Il nous fallait une approche entièrement différente.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">L'option nucléaire : Microsoft Graph API</h3>
+
+          <p>
+            Si IMAP est cassé, n'utilisons pas IMAP. Microsoft Graph est une API REST qui donne un accès direct aux boîtes mail, sans IMAP du tout. Au lieu de nous connecter à <code>outlook.office365.com:993</code> et de parler le protocole IMAP, nous faisons des requêtes HTTPS vers <code>graph.microsoft.com/v1.0/me/messages</code> avec un jeton Bearer. Même jeton OAuth2, transport complètement différent.
+          </p>
+
+          <p>
+            Construire un transport Graph a demandé de toucher presque chaque couche de l'application :
+          </p>
+
+          <p>
+            <strong>Backend Rust</strong> &mdash; un nouveau module <code>graph.rs</code> avec une structure <code>GraphClient</code> qui implémente <code>list_folders()</code>, <code>list_messages()</code>, <code>get_message()</code>, <code>delete_message()</code>, <code>set_read_status()</code> et <code>get_mime_content()</code>. Des structures de données pour les réponses JSON de Graph (<code>GraphMessage</code>, <code>GraphMailFolder</code>, etc.), avec une méthode de conversion pour traduire les messages Graph vers notre structure <code>EmailHeader</code> existante. Et six nouvelles commandes Tauri pour exposer le tout au frontend.
+          </p>
+
+          <p>
+            <strong>Aiguillage des portées OAuth2</strong> &mdash; les comptes IMAP ont besoin des portées <code>IMAP.AccessAsUser.All</code> et <code>SMTP.Send</code>. Les comptes Graph ont besoin de <code>Mail.ReadWrite</code> et <code>Mail.Send</code>. Le choix de la portée se fait au moment où l'utilisateur clique sur « Se connecter avec Microsoft », selon que son domaine de messagerie est un domaine Microsoft personnel connu (outlook.com, hotmail.com, live.com et 12 variantes régionales).
+          </p>
+
+          <p>
+            <strong>Store du frontend</strong> &mdash; chaque opération sur les e-mails dans le store Zustand &mdash; charger les en-têtes, sélectionner un e-mail, marquer lu/non lu, supprimer, chercher, précharger &mdash; a eu besoin d'une branche <code>if (isGraphAccount(account))</code>. Les messages Graph utilisent des identifiants opaques sous forme de chaînes, et non des UID entiers : nous maintenons donc une couche de correspondance (<code>_graphIdMap</code>) qui attribue des UID séquentiels synthétiques aux messages Graph et retraduit dans l'autre sens au moment des appels d'API.
+          </p>
+
+          <p>
+            <strong>Pipeline d'arrière-plan</strong> &mdash; la classe <code>AccountPipeline</code>, qui gère le chargement des en-têtes en arrière-plan et la mise en cache du contenu, avait besoin de chemins propres à Graph pour ces deux phases. Le chargement des en-têtes utilise une pagination par saut via <code>graphListMessages</code> au lieu de la récupération page par page d'IMAP. La mise en cache du contenu télécharge le MIME complet via <code>graphCacheMime</code> (une unique commande Rust qui récupère le .eml brut, l'enregistre dans Maildir et l'analyse) au lieu du <code>FETCH</code> d'IMAP.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Les sept échecs</h3>
+
+          <p>
+            L'implémentation faite, nous avons déployé et commencé à tester avec un vrai compte Outlook.com. Ce qui a suivi fut un marathon de débogage où chaque correctif révélait le problème suivant.
+          </p>
+
+          <p>
+            <strong>Échec 1 : « Invalid client secret provided »</strong> &mdash; notre build CI définissait <code>MAILVAULT_MS_CLIENT_SECRET</code> comme variable d'environnement. Le code l'envoyait consciencieusement à Azure, qui le rejetait parce que notre application est enregistrée comme client public (aucun secret autorisé). Correctif : coder en dur <code>client_secret: None</code> pour Microsoft &mdash; un client PKCE public ne doit jamais envoyer de secret, point final.
+          </p>
+
+          <p>
+            <strong>Échec 2 : « AUTHENTICATE failed » au test de connexion</strong> &mdash; une fois le problème de secret réglé, le flux OAuth2 aboutissait. Mais l'application testait aussitôt la connexion via IMAP &mdash; précisément le protocole qui est cassé. La fonction <code>addAccount</code> contenait un test de connexion IMAP codé en dur, sans branche Graph. Correctif : tester les comptes Graph en appelant <code>graphListFolders</code> au lieu d'ouvrir une session IMAP.
+          </p>
+
+          <p>
+            <strong>Échec 3 : « Could not load email content »</strong> &mdash; les en-têtes se chargeaient bien via Graph, mais l'ouverture d'un e-mail pour le lire échouait. Le hook <code>useChatBodyLoader</code> &mdash; qui charge progressivement les corps de message dans la vue discussion comme dans la vue fil de discussion &mdash; ne savait récupérer les corps que par le <code>fetchEmailLight</code> d'IMAP. Pour les comptes Graph, il fallait utiliser <code>graphGetMessage</code> avec l'identifiant de message Graph correspondant. Correctif : ajouter une branche Graph qui retrouve l'identifiant Graph et récupère le message via l'API Graph.
+          </p>
+
+          <p>
+            <strong>Échec 4 : les e-mails se chargeaient une fois, puis disparaissaient</strong> &mdash; les e-mails se chargeaient bien la première fois, mais en quittant la vue puis en y revenant, les fils étaient vides. La branche Graph mettait les corps de message dans le cache LRU en mémoire, sans jamais écrire de fichiers .eml sur le disque. Dès que le cache LRU les évinçait, ils étaient perdus. Correctif : après l'affichage de l'e-mail via la réponse JSON rapide de <code>graphGetMessage</code>, déclencher en arrière-plan un appel <code>graphCacheMime</code> pour télécharger le MIME complet et enregistrer le .eml dans Maildir.
+          </p>
+
+          <p>
+            <strong>Échec 5 : indicateur de chargement sans fin au clic sur un e-mail</strong> &mdash; le premier correctif de l'échec 4 utilisait <code>graphCacheMime</code> comme méthode de récupération principale (télécharger le MIME, l'enregistrer sur le disque, l'analyser, le retourner). Cela télécharge l'e-mail brut en entier, pièces jointes comprises, avant d'afficher quoi que ce soit. Pour un e-mail de 5 Mo avec pièces jointes, cela fait plusieurs secondes d'attente. Correctif : utiliser <code>graphGetMessage</code> (du JSON rapide, avec le seul corps HTML) pour un affichage immédiat, puis <code>graphCacheMime</code> en arrière-plan pour la persistance sur disque. Chargement en deux temps : affichage instantané, persistance différée.
+          </p>
+
+          <p>
+            <strong>Échec 6 : la vue fil de discussion exigeait de replier puis déplier pour voir le contenu</strong> &mdash; dans la vue conversation d'un fil, les e-mails affichaient « Could not load email content » jusqu'à ce qu'on les replie et les déplie à la main. C'était une situation de concurrence au rendu React. Le hook <code>useChatBodyLoader</code> rangeait les corps chargés dans un <code>useRef(new Map())</code> initialement vide. Le composant <code>ThreadEmailItem</code> lisait cette map de façon synchrone pendant le rendu, mais le <code>useEffect</code> qui la remplissait s'exécutait <em>après</em> le premier rendu. Quand les corps devenaient disponibles, le composant avait déjà affiché « Could not load ». Correctif : pré-remplir la map des corps de façon synchrone dans le corps du hook, et non dans <code>useEffect</code>, en consultant le cache en mémoire. Le <code>useEffect</code> asynchrone continue de récupérer les corps absents du cache, mais ceux qui y sont déjà sont disponibles dès le premier rendu.
+          </p>
+
+          <p>
+            <strong>Échec 7 : la synchronisation en arrière-plan passait encore par IMAP</strong> &mdash; la fonction <code>refreshAllAccounts</code> rafraîchit tous les comptes sur minuterie. Pour les comptes non actifs, elle utilisait systématiquement IMAP pour récupérer les en-têtes, ce qui provoquait des erreurs de connexion et polluait les journaux pour les comptes Graph. Tous les autres chemins de code avaient été mis à jour, celui-ci était passé au travers. Correctif : ajouter une branche <code>isGraphAccount</code> qui utilise <code>graphListFolders</code> + <code>graphListMessages</code> pour la synchronisation en arrière-plan.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Ce que nous avons livré</h3>
+
+          <p>
+            Le résultat final : les comptes Microsoft personnels (outlook.com, hotmail.com, live.com et les variantes régionales) sont détectés automatiquement à la connexion et acheminés par le transport Graph API. L'utilisateur clique sur « Se connecter avec Microsoft », s'authentifie dans son navigateur, et l'application fonctionne. Aucun IMAP en jeu, aucune erreur « User is authenticated but not connected ».
+          </p>
+
+          <p>
+            Les comptes M365 d'entreprise utilisent l'enregistrement d'application Azure AD propre à MailVault, avec une prise en charge correcte de l'URI de redirection. Pour les organisations aux politiques OAuth2 strictes, l'utilisateur peut remplacer l'identifiant client et l'identifiant de tenant dans une section « Avancé » de la configuration du compte.
+          </p>
+
+          <p>
+            Les comptes Graph prennent en charge la lecture, la suppression et le marquage lu/non lu. L'envoi passe toujours par SMTP (qui fonctionne très bien avec des jetons OAuth2). Les corps de message sont récupérés en JSON rapide pour un affichage immédiat, le MIME complet étant téléchargé en arrière-plan pour l'accès hors ligne et les pièces jointes.
+          </p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Les leçons</h3>
+
+          <p>
+            L'enseignement principal : quand vous ajoutez un nouveau transport à un client de messagerie, vous n'ajoutez pas un chemin de code &mdash; vous dédoublez chaque chemin de code. Chaque fonction qui touche au réseau doit savoir quel transport utiliser. Chaque tâche d'arrière-plan, chaque préchargement, chaque minuteur de synchronisation, chaque test de connexion. En oublier un seul crée un bug qui n'apparaît que pour les utilisateurs du nouveau transport.
+          </p>
+
+          <p>
+            Le deuxième enseignement : le chargement en deux temps vaut sa complexité. Télécharger un message MIME complet avant d'afficher quoi que ce soit crée une latence inacceptable. Afficher un aperçu rapide depuis l'API JSON et persister le contenu complet en arrière-plan donne un retour immédiat tout en construisant l'archive hors ligne.
+          </p>
+
+          <p>
+            Le troisième : le duo <code>useRef</code> + <code>useEffect</code> de React est un piège pour les données qui doivent être disponibles dès le premier rendu. Si un composant lit une ref pendant le rendu alors que cette ref est remplie dans un effet, le premier rendu voit toujours des données périmées. Déplacer le remplissage pour qu'il s'exécute de façon synchrone dans le corps du hook, et non dans un effet, règle le problème sans provoquer de rendus supplémentaires.
+          </p>
+
+          <p>
+            Parfois, un bug « la connexion ne marche pas » se règle par une correction de configuration. Parfois, c'est toute une nouvelle couche de transport d'API. On ne choisit pas lequel des deux ce sera.
+          </p>
+
+        </div>
+      </article>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/fr/docs.html" class="hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/fr/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Confidentialité</a>
+          <a href="/fr/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Conditions</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. Tous droits réservés.
+        </p>
+      </div>
+    </div>
+    <!-- i18n:switcher -->
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+      <nav aria-label="Choisir une langue" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">
+          <a data-i18n-abs translate="no" hreflang="en" href="/blog/outlook-oauth-odyssey.html" class="hover:text-primary-500 transition-colors">English</a>
+          <a data-i18n-abs translate="no" hreflang="de" href="/de/blog/outlook-oauth-odyssey.html" class="hover:text-primary-500 transition-colors">Deutsch</a>
+          <a data-i18n-abs translate="no" hreflang="fr" href="/fr/blog/outlook-oauth-odyssey.html" class="hover:text-primary-500 transition-colors">Français</a>
+          <a data-i18n-abs translate="no" hreflang="es" href="/es/blog/outlook-oauth-odyssey.html" class="hover:text-primary-500 transition-colors">Español</a>
+          <a data-i18n-abs translate="no" hreflang="it" href="/it/blog/outlook-oauth-odyssey.html" class="hover:text-primary-500 transition-colors">Italiano</a>
+          <a data-i18n-abs translate="no" hreflang="pt-BR" href="/pt-br/blog/outlook-oauth-odyssey.html" class="hover:text-primary-500 transition-colors">Português (BR)</a>
+          <a data-i18n-abs translate="no" hreflang="ja" href="/ja/blog/outlook-oauth-odyssey.html" class="hover:text-primary-500 transition-colors">日本語</a>
+          <a data-i18n-abs translate="no" hreflang="ko" href="/ko/blog/outlook-oauth-odyssey.html" class="hover:text-primary-500 transition-colors">한국어</a>
+          <a data-i18n-abs translate="no" hreflang="zh-Hans" href="/zh/blog/outlook-oauth-odyssey.html" class="hover:text-primary-500 transition-colors">简体中文</a>
+      </nav>
+    </div>
+    <!-- /i18n:switcher -->
+  </footer>
+
+  <script>
+    // Theme toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const sunIcon = document.getElementById('sun-icon');
+    const moonIcon = document.getElementById('moon-icon');
+
+    function updateThemeIcons() {
+      const isDark = document.documentElement.classList.contains('dark');
+      sunIcon.classList.toggle('hidden', !isDark);
+      moonIcon.classList.toggle('hidden', isDark);
+    }
+
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+    updateThemeIcons();
+
+    themeToggle.addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      updateThemeIcons();
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>
