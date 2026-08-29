@@ -4,6 +4,64 @@
 use tauri::{Emitter, Manager};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+
+/// Localize the menu bar without rebuilding it.
+///
+/// The menu is built in `setup`, before the webview exists. The chosen language
+/// lives in the frontend's zustand store, persisted to the webview's
+/// localStorage — which Rust cannot read. So Rust builds English at startup and
+/// the frontend pushes translated labels down once it knows the locale, and
+/// again on every change.
+///
+/// Setting text on the existing items beats rebuilding the menu: the `#[cfg]`
+/// guards around `check_updates` (absent on MAS builds) and the per-platform
+/// Settings accelerator stay exactly where they are.
+/// Handle to the tray menu, kept because `TrayIcon` exposes no way back to it.
+struct TrayMenu(tauri::menu::Menu<tauri::Wry>);
+
+#[tauri::command]
+fn apply_menu_labels(
+    app: tauri::AppHandle,
+    labels: std::collections::HashMap<String, String>,
+) -> Result<(), String> {
+    fn relabel(
+        items: Vec<tauri::menu::MenuItemKind<tauri::Wry>>,
+        labels: &std::collections::HashMap<String, String>,
+    ) {
+        for item in items {
+            let id = item.id().0.clone();
+            match item {
+                tauri::menu::MenuItemKind::MenuItem(i) => {
+                    if let Some(t) = labels.get(&id) {
+                        let _ = i.set_text(t);
+                    }
+                }
+                tauri::menu::MenuItemKind::Submenu(sub) => {
+                    if let Some(t) = labels.get(&id) {
+                        let _ = sub.set_text(t);
+                    }
+                    if let Ok(children) = sub.items() {
+                        relabel(children, labels);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    if let Some(menu) = app.menu() {
+        if let Ok(items) = menu.items() {
+            relabel(items, &labels);
+        }
+    }
+    if let Some(tray) = app.try_state::<TrayMenu>() {
+        if let Ok(items) = tray.0.items() {
+            relabel(items, &labels);
+        }
+    }
+    Ok(())
+}
+
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -4904,6 +4962,7 @@ fn main() {
 
     let app = builder
         .invoke_handler(tauri::generate_handler![
+            apply_menu_labels,
             spellcheck::spellcheck_status,
             log_from_frontend,
             install_pending_update,
@@ -5244,6 +5303,10 @@ fn main() {
                 &sep2 as &dyn tauri::menu::IsMenuItem<_>,
                 &tray_quit as &dyn tauri::menu::IsMenuItem<_>,
             ])?;
+
+            // TrayIcon exposes no `menu()` accessor, so keep a handle to the tray
+            // menu in state — `apply_menu_labels` relabels it alongside the menu bar.
+            app.manage(TrayMenu(tray_menu.clone()));
 
             let tray_icon_image = tauri::image::Image::from_bytes(include_bytes!("../icons/tray-icon.png"))
                 .expect("Failed to load tray icon");

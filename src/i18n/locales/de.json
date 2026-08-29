@@ -1459,5 +1459,18 @@
   "viewer.stillServer": "Liegt noch auf dem Server, in {{decodeImapUtf7}}.",
   "viewer.stillServer2": "Liegt noch auf dem Server.",
   "viewer.tryAgain": "Erneut versuchen",
-  "viewer.unarchiveEmail": "E-Mail aus dem Archiv holen?"
+  "viewer.unarchiveEmail": "E-Mail aus dem Archiv holen?",
+  "menu.check_updates": "Nach Updates suchen …",
+  "menu.open_settings": "Einstellungen …",
+  "menu.report_bug": "Fehler melden …",
+  "menu.export_logs": "Protokolle exportieren …",
+  "menu.logs_submenu": "Protokolle",
+  "menu.open_website": "MailVault-Website",
+  "menu.open_more_apps": "Mehr Apps von GraphicMeat",
+  "menu.open_shortcuts": "Tastenkürzel",
+  "menu.quit_app": "Beenden",
+  "menu.file_submenu": "Datei",
+  "menu.show": "MailVault anzeigen",
+  "menu.tray_view_logs": "Protokolle ansehen",
+  "menu.quit": "Beenden"
 }

@@ -36,6 +36,7 @@
   "hook.useKeyboardShortcuts.ctrl",
   "hook.useKeyboardShortcuts.meta",
   "hook.useKeyboardShortcuts.shift",
+  "menu.file_submenu",
   "onboarding.mail",
   "onboarding.vault",
   "search.in",

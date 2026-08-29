@@ -57,6 +57,27 @@ const _loaders = {
   'zh-Hans': () => import('./locales/zh-Hans.json'),
 };
 
+// The Tauri menu bar and tray are built in Rust before the webview exists, and
+// the chosen language lives in this store — which Rust cannot read. So we push
+// the translated labels down, keyed by menu item id, after every switch.
+const MENU_IDS = [
+  'check_updates', 'open_settings', 'report_bug', 'export_logs', 'logs_submenu',
+  'open_website', 'open_more_apps', 'open_shortcuts', 'quit_app', 'file_submenu',
+  'show', 'tray_view_logs', 'quit',
+];
+
+async function _pushMenuLabels() {
+  if (typeof window === 'undefined' || !window.__TAURI__) return;
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('apply_menu_labels', {
+      labels: Object.fromEntries(MENU_IDS.map(id => [id, t(`menu.${id}`)])),
+    });
+  } catch {
+    // A menu that stays English is not worth failing a language switch over.
+  }
+}
+
 export const getLocale = () => _locale;
 
 /**
@@ -75,6 +96,7 @@ export async function setLocale(code) {
     _locale = code;
   }
   useSettingsStore.setState({ language: _locale });
+  _pushMenuLabels();
 }
 
 /**

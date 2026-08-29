@@ -1459,5 +1459,18 @@
   "viewer.stillServer": "仍在服务器上，位于 {{decodeImapUtf7}}。",
   "viewer.stillServer2": "仍在服务器上。",
   "viewer.tryAgain": "重试",
-  "viewer.unarchiveEmail": "要取消归档这封邮件吗？"
+  "viewer.unarchiveEmail": "要取消归档这封邮件吗？",
+  "menu.check_updates": "检查更新…",
+  "menu.open_settings": "设置…",
+  "menu.report_bug": "报告问题…",
+  "menu.export_logs": "导出日志…",
+  "menu.logs_submenu": "日志",
+  "menu.open_website": "MailVault 官网",
+  "menu.open_more_apps": "GraphicMeat 的更多应用",
+  "menu.open_shortcuts": "键盘快捷键",
+  "menu.quit_app": "退出",
+  "menu.file_submenu": "文件",
+  "menu.show": "显示 MailVault",
+  "menu.tray_view_logs": "查看日志",
+  "menu.quit": "退出"
 }

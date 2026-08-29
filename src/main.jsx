@@ -3,7 +3,13 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { MotionConfig } from 'framer-motion';
 import App from './App';
+import { setLocale } from './i18n/index.js';
+import { useSettingsStore } from './stores/settingsStore';
 import './styles/index.css';
+
+// Apply the persisted language before first paint, so the UI and the native
+// menu come up in the chosen locale rather than flashing English.
+setLocale(useSettingsStore.getState().language || 'en').catch(() => {});
 import { MAIL_DARK_BG, MAIL_DARK_TEXT } from './utils/mailChrome';
 
 // A row can vanish at four layers — the sidecar cache, `emails`, the filters

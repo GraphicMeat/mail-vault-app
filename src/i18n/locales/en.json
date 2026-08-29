@@ -1459,5 +1459,18 @@
   "list.loadedAllRead_one": "{{count}} loaded message has all been read",
   "list.loadedAllRead_other": "{{count}} loaded messages have all been read",
   "selection.emailsInConversations_one": "{{emails}} emails in {{count}} conversation",
-  "selection.emailsInConversations_other": "{{emails}} emails in {{count}} conversations"
+  "selection.emailsInConversations_other": "{{emails}} emails in {{count}} conversations",
+  "menu.check_updates": "Check for Updates...",
+  "menu.open_settings": "Settings...",
+  "menu.report_bug": "Report Bug...",
+  "menu.export_logs": "Export Logs...",
+  "menu.logs_submenu": "Logs",
+  "menu.open_website": "MailVault Website",
+  "menu.open_more_apps": "More Apps by GraphicMeat",
+  "menu.open_shortcuts": "Keyboard Shortcuts",
+  "menu.quit_app": "Quit",
+  "menu.file_submenu": "File",
+  "menu.show": "Show MailVault",
+  "menu.tray_view_logs": "View Logs",
+  "menu.quit": "Quit"
 }

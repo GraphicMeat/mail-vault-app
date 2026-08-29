@@ -1459,5 +1459,18 @@
   "viewer.stillServer": "서버의 {{decodeImapUtf7}}에 아직 있습니다.",
   "viewer.stillServer2": "서버에 아직 있습니다.",
   "viewer.tryAgain": "다시 시도",
-  "viewer.unarchiveEmail": "메일을 보관 취소할까요?"
+  "viewer.unarchiveEmail": "메일을 보관 취소할까요?",
+  "menu.check_updates": "업데이트 확인…",
+  "menu.open_settings": "설정…",
+  "menu.report_bug": "버그 신고…",
+  "menu.export_logs": "로그 내보내기…",
+  "menu.logs_submenu": "로그",
+  "menu.open_website": "MailVault 웹사이트",
+  "menu.open_more_apps": "GraphicMeat의 다른 앱",
+  "menu.open_shortcuts": "키보드 단축키",
+  "menu.quit_app": "종료",
+  "menu.file_submenu": "파일",
+  "menu.show": "MailVault 표시",
+  "menu.tray_view_logs": "로그 보기",
+  "menu.quit": "종료"
 }

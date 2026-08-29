@@ -1459,5 +1459,18 @@
   "viewer.stillServer": "サーバー上（{{decodeImapUtf7}}）にまだあります。",
   "viewer.stillServer2": "サーバー上にまだあります。",
   "viewer.tryAgain": "もう一度試す",
-  "viewer.unarchiveEmail": "メールをアーカイブから戻しますか？"
+  "viewer.unarchiveEmail": "メールをアーカイブから戻しますか？",
+  "menu.check_updates": "アップデートを確認…",
+  "menu.open_settings": "設定…",
+  "menu.report_bug": "不具合を報告…",
+  "menu.export_logs": "ログを書き出す…",
+  "menu.logs_submenu": "ログ",
+  "menu.open_website": "MailVault のウェブサイト",
+  "menu.open_more_apps": "GraphicMeat の他のアプリ",
+  "menu.open_shortcuts": "キーボードショートカット",
+  "menu.quit_app": "終了",
+  "menu.file_submenu": "ファイル",
+  "menu.show": "MailVault を表示",
+  "menu.tray_view_logs": "ログを表示",
+  "menu.quit": "終了"
 }
