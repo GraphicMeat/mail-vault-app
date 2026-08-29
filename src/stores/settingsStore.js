@@ -154,6 +154,7 @@ export const useSettingsStore = create(
       dateFormat: 'auto', // 'auto' | 'MM/dd/yyyy' | 'dd/MM/yyyy' | 'yyyy-MM-dd' | 'dd MMM yyyy' | 'custom'
       customDateFormat: '', // Only used when dateFormat === 'custom'
       timeFormat: 'auto', // 'auto' (system locale) | '12h' | '24h'
+      language: 'en', // UI language — one of i18n LOCALES codes. Never sniffed from the OS.
       signatureDisplay: 'smart', // 'smart' | 'always-show' | 'always-hide' | 'collapsed'
       actionButtonDisplay: 'icon-only', // 'icon-only' | 'icon-label' | 'text-only'
       emailViewerTheme: 'system', // 'light' | 'dark' | 'system' — default theme for email content rendering
